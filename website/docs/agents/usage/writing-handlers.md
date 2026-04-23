@@ -21,56 +21,82 @@ handler(ctx: HandlerContext, wake: WakeEvent) => void | Promise<void>
 ```ts
 interface HandlerContext<TState extends StateProxy = StateProxy> {
   firstWake: boolean
+  tags: Readonly<EntityTags>
   entityUrl: string
   entityType: string
   args: Readonly<Record<string, unknown>>
   db: EntityStreamDBWithActions
   state: TState
+  events: Array<ChangeEvent>
   actions: Record<string, (...args: unknown[]) => unknown>
   darixTools: AgentTool[]
-  configureAgent: (config: AgentConfig) => AgentHandle
+  useAgent: (config: AgentConfig) => AgentHandle
+  useContext: (config: UseContextConfig) => void
+  timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
+  insertContext: (id: string, entry: ContextEntryInput) => void
+  removeContext: (id: string) => void
+  getContext: (id: string) => ContextEntry | undefined
+  listContext: () => Array<ContextEntry>
   agent: AgentHandle
   spawn: (
     type: string,
     id: string,
     args?: Record<string, unknown>,
-    opts?: { initialMessage?: unknown; wake?: Wake }
+    opts?: {
+      initialMessage?: unknown
+      wake?: Wake
+      tags?: Record<string, string>
+      observe?: boolean
+    }
   ) => Promise<EntityHandle>
-  observe: (entityUrl: string, opts?: { wake?: Wake }) => Promise<EntityHandle>
-  createSharedState: <T extends SharedStateSchemaMap>(
+  observe: (
+    source: ObservationSource,
+    opts?: { wake?: Wake }
+  ) => Promise<EntityHandle | SharedStateHandle | ObservationHandle>
+  mkdb: <T extends SharedStateSchemaMap>(
     id: string,
     schema: T
   ) => SharedStateHandle<T>
-  connectSharedState: <T extends SharedStateSchemaMap>(
-    id: string,
-    schema: T,
-    opts?: { wake?: Wake }
-  ) => SharedStateHandle<T>
-  send: (entityUrl: string, payload: unknown, opts?: { type?: string }) => void
+  send: (
+    entityUrl: string,
+    payload: unknown,
+    opts?: { type?: string; afterMs?: number }
+  ) => void
+  setTag: (key: string, value: string) => Promise<void>
+  removeTag: (key: string) => Promise<void>
   sleep: () => void
 }
 ```
 
 ### Property reference
 
-| Property             | Description                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------- |
-| `firstWake`          | `true` on the entity's first activation ever. Use for initialization.                                   |
-| `entityUrl`          | The entity's URL path, e.g. `"/assistant/my-chat"`.                                                     |
-| `entityType`         | The registered type name, e.g. `"assistant"`.                                                           |
-| `args`               | Arguments passed when the entity was spawned. Immutable.                                                |
-| `db`                 | Direct access to the entity's stream database.                                                          |
-| `state`              | Proxy object for custom state collections. See [Defining entities](./defining-entities).                |
-| `actions`            | Named action functions from the entity definition's `actions` factory.                                  |
-| `darixTools`         | Built-in tools for spawning, observing, sending, and managing entities. Pass to `configureAgent`.       |
-| `configureAgent`     | Configures the LLM agent. Returns an `AgentHandle`.                                                     |
-| `agent`              | The configured agent handle. Call `agent.run()` to start the agent loop.                                |
-| `spawn`              | Creates a child entity. See [Spawning and coordinating](./spawning-and-coordinating).                   |
-| `observe`            | Connects to another entity's stream. See [Reactive observers](../entities/patterns/reactive-observers). |
-| `createSharedState`  | Creates a new shared state stream. See [Shared state](./shared-state).                                  |
-| `connectSharedState` | Connects to an existing shared state stream. See [Shared state](./shared-state).                        |
-| `send`               | Sends a message to another entity's inbox.                                                              |
-| `sleep`              | Returns the entity to idle without re-waking.                                                           |
+| Property           | Description                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `firstWake`        | `true` on the entity's first activation ever. Use for initialization.                                                                                   |
+| `tags`             | Entity tags -- key/value metadata associated with this entity.                                                                                          |
+| `entityUrl`        | The entity's URL path, e.g. `"/assistant/my-chat"`.                                                                                                     |
+| `entityType`       | The registered type name, e.g. `"assistant"`.                                                                                                           |
+| `args`             | Arguments passed when the entity was spawned. Immutable.                                                                                                |
+| `db`               | The entity's stream database. Use `db.actions` for writes and `db.collections` for reads.                                                               |
+| `state`            | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](../reference/state-collection-proxy).                                |
+| `events`           | Change events that triggered this wake.                                                                                                                 |
+| `actions`          | Named action functions from the entity definition's `actions` factory.                                                                                  |
+| `darixTools`       | Built-in tools for spawning, observing, sending, and managing entities. Pass to `useAgent`.                                                             |
+| `useAgent`         | Configures the LLM agent. Returns an `AgentHandle`. See [Configuring the agent](./configuring-the-agent).                                               |
+| `useContext`       | Declares context sources with token budgets and cache tiers. See [Context composition](./context-composition).                                          |
+| `timelineMessages` | Projects the entity timeline into LLM messages. See [Context composition](./context-composition#timelinemessages).                                      |
+| `insertContext`    | Inserts a durable context entry. See [Context composition](./context-composition#context-entries).                                                      |
+| `removeContext`    | Removes a context entry by id.                                                                                                                          |
+| `getContext`       | Gets a context entry by id, or `undefined` if not found.                                                                                                |
+| `listContext`      | Lists all context entries.                                                                                                                              |
+| `agent`            | The configured agent handle. Call `agent.run()` to start the agent loop.                                                                                |
+| `spawn`            | Creates a child entity. See [Spawning and coordinating](./spawning-and-coordinating).                                                                   |
+| `observe`          | Connects to another entity's stream or shared db. See [Reactive observers](../entities/patterns/reactive-observers) and [Shared state](./shared-state). |
+| `mkdb`             | Creates a new shared state stream. See [Shared state](./shared-state).                                                                                  |
+| `send`             | Sends a message to another entity's inbox. Supports delayed delivery via `afterMs`.                                                                     |
+| `setTag`           | Sets a tag on this entity.                                                                                                                              |
+| `removeTag`        | Removes a tag from this entity.                                                                                                                         |
+| `sleep`            | Returns the entity to idle without re-waking.                                                                                                           |
 
 ## WakeEvent
 
@@ -113,10 +139,10 @@ registry.define("assistant", {
 
   async handler(ctx) {
     if (ctx.firstWake) {
-      ctx.state.status.insert({ key: "current", value: "idle" })
+      ctx.db.actions.status_insert({ row: { key: "current", value: "idle" } })
     }
 
-    ctx.configureAgent({
+    ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
       model: "claude-sonnet-4-5-20250929",
       tools: [...ctx.darixTools],
@@ -128,7 +154,7 @@ registry.define("assistant", {
 
 ## AgentConfig
 
-Passed to `ctx.configureAgent()`:
+Passed to `ctx.useAgent()`:
 
 ```ts
 interface AgentConfig {
@@ -147,8 +173,8 @@ interface AgentConfig {
 ```ts
 async handler(ctx) {
   if (ctx.firstWake) {
-    ctx.state.status.insert({ key: 'current', value: 'idle' })
-    ctx.state.counters.insert({ key: 'runs', value: 0 })
+    ctx.db.actions.status_insert({ row: { key: 'current', value: 'idle' } })
+    ctx.db.actions.counters_insert({ row: { key: 'runs', value: 0 } })
   }
   // ...
 }
@@ -168,7 +194,7 @@ async handler(ctx, wake) {
     return
   }
   // Otherwise, run the agent
-  ctx.configureAgent({ ... })
+  ctx.useAgent({ ... })
   await ctx.agent.run()
 }
 ```
@@ -186,7 +212,7 @@ const child = await ctx.spawn('worker', 'analysis-1', {
 // Worker handler
 async handler(ctx) {
   const { systemPrompt } = ctx.args as { systemPrompt: string }
-  ctx.configureAgent({
+  ctx.useAgent({
     systemPrompt,
     model: 'claude-sonnet-4-5-20250929',
     tools: [...ctx.darixTools],
@@ -210,7 +236,7 @@ async handler(ctx) {
     }),
     execute: async (_toolCallId, params) => {
       const { key } = params as { key: string }
-      const row = ctx.state.kv.get(key)
+      const row = ctx.db.collections.kv?.get(key)
       return {
         content: [{ type: 'text', text: row ? JSON.stringify(row) : 'Not found' }],
         details: {},
@@ -218,7 +244,7 @@ async handler(ctx) {
     },
   }
 
-  ctx.configureAgent({
+  ctx.useAgent({
     systemPrompt: 'You are an assistant with lookup capabilities.',
     model: 'claude-sonnet-4-5-20250929',
     tools: [...ctx.darixTools, myTool],

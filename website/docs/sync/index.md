@@ -1,5 +1,6 @@
 ---
-title: Sync
+title: Electric Sync
+titleTemplate: "... - Electric Sync"
 description: >-
   Documentation for Electric Sync — the read-path sync engine for Postgres, syncing data into local clients over HTTP.
 outline: deep
@@ -17,7 +18,7 @@ const linearlite = demos.find(x => x.link === '/sync/demos/linearlite')
     style="width: 72px"
 />
 
-# Sync
+# Electric Sync
 
 Electric Sync is a read-path sync engine for Postgres. It syncs data out of Postgres into local clients over HTTP using a primitive called a [Shape](/docs/sync/guides/shapes).
 

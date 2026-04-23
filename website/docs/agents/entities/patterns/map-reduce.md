@@ -19,20 +19,14 @@ export function registerMapReduce(registry: EntityRegistry) {
   registry.define(`map-reduce`, {
     description: `Map-reduce orchestrator that splits input into chunks, processes them in parallel with worker agents, then synthesizes results`,
     state: {
-      status: { primaryKey: `key` },
       children: { primaryKey: `key` },
     },
 
     async handler(ctx) {
-      if (ctx.firstWake) {
-        ctx.state.status.insert({ key: `current`, value: `idle` })
-      }
-      const mapChunksTool = createMapChunksTool(ctx)
-
-      ctx.configureAgent({
+      ctx.useAgent({
         systemPrompt: MAP_REDUCE_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, mapChunksTool],
+        tools: [...ctx.darixTools, createMapChunksTool(ctx)],
       })
       await ctx.agent.run()
     },
@@ -45,15 +39,13 @@ export function registerMapReduce(registry: EntityRegistry) {
 The agent exposes a `map_chunks` tool. When called:
 
 1. **Map phase** -- spawns one worker per chunk simultaneously. All workers run in parallel.
-2. **Reduce phase** -- collects results from all workers with `Promise.all` and `handle.text()`.
-3. Returns the combined results to the LLM for synthesis.
+2. Returns immediately. The entity is re-invoked as each worker finishes.
+3. The LLM synthesizes results once all workers have reported in via wake events.
 
 ## Core
 
 ```ts
 // Map phase - spawn all workers in parallel
-const children: Array<{ id: string; handle: EntityHandle }> = []
-
 for (let i = 0; i < chunks.length; i++) {
   spawnCounter++
   const id = `chunk-${i}-${Date.now()}-${spawnCounter}`
@@ -66,33 +58,19 @@ for (let i = 0; i < chunks.length; i++) {
       wake: `runFinished`,
     }
   )
-  children.push({ id, handle: child })
-  ctx.state.children.insert({ key: id, url: child.entityUrl, chunk: i })
+  ctx.db.actions.children_insert({
+    row: { key: id, url: child.entityUrl, chunk: i },
+  })
 }
 
-// Reduce phase - collect results
-transition(ctx.state.status, MAP_REDUCE_TRANSITIONS, `reducing`)
-
-const results = await Promise.all(
-  children.map(async ({ id, handle }) => {
-    const fullText = (await handle.text()).join(`\n\n`)
-    return { id, text: fullText || `(chunk "${id}" produced no text output)` }
-  })
-)
-```
-
-## State transitions
-
-```ts
-type MapReduceStatus = "idle" | "mapping" | "reducing"
-
-const MAP_REDUCE_TRANSITIONS: Record<
-  MapReduceStatus,
-  readonly MapReduceStatus[]
-> = {
-  idle: ["mapping"],
-  mapping: ["reducing"],
-  reducing: ["idle"],
+return {
+  content: [
+    {
+      type: `text` as const,
+      text: `Spawned ${chunks.length} parallel workers. You will be woken as each finishes with its output in finished_child.response.`,
+    },
+  ],
+  details: { chunkCount: chunks.length },
 }
 ```
 
@@ -100,5 +78,4 @@ const MAP_REDUCE_TRANSITIONS: Record<
 
 | Collection | Purpose                                        |
 | ---------- | ---------------------------------------------- |
-| `status`   | Current phase (`idle`, `mapping`, `reducing`). |
 | `children` | Spawned chunk workers (key, URL, chunk index). |

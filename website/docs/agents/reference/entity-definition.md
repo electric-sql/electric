@@ -13,7 +13,7 @@ Defines an entity type's schema, state, and handler. Passed to `registry.define(
 **Source:** `@durable-streams/darix-runtime`
 
 ```ts
-interface EntityDefinition<TState extends StateProxy = StateProxy> {
+interface EntityDefinition {
   description?: string
   state?: Record<string, CollectionDefinition>
   actions?: (
@@ -22,7 +22,7 @@ interface EntityDefinition<TState extends StateProxy = StateProxy> {
   creationSchema?: StandardJSONSchemaV1
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   outputSchemas?: Record<string, StandardJSONSchemaV1>
-  handler(ctx: HandlerContext<TState>, wake: WakeEvent): void | Promise<void>
+  handler(ctx: HandlerContext, wake: WakeEvent): void | Promise<void>
 }
 ```
 
@@ -31,7 +31,7 @@ interface EntityDefinition<TState extends StateProxy = StateProxy> {
 | Field            | Type                                                 | Required | Description                                                                                                        |
 | ---------------- | ---------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | `description`    | `string`                                             | No       | Human-readable description of the entity type. Used in type registration.                                          |
-| `state`          | `Record<string, CollectionDefinition>`               | No       | Custom state collections exposed via `ctx.state`.                                                                  |
+| `state`          | `Record<string, CollectionDefinition>`               | No       | Custom state collections exposed via `ctx.db.actions` (writes) and `ctx.db.collections` (reads).                   |
 | `actions`        | `(collections) => Record<string, (...args) => void>` | No       | Factory for custom CRUD actions. Receives TanStack DB collections, returns named action functions.                 |
 | `creationSchema` | `StandardJSONSchemaV1`                               | No       | JSON Schema for spawn arguments validation.                                                                        |
 | `inboxSchemas`   | `Record<string, StandardJSONSchemaV1>`               | No       | JSON Schemas for inbound message types, keyed by message type.                                                     |

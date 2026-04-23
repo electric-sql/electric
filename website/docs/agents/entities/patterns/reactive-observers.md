@@ -14,7 +14,7 @@ Pattern: entities that watch other entities and react to changes.
 
 ## Core mechanism
 
-An entity calls `ctx.observe(entityUrl, { wake: { on: 'change', collections: [...] } })` to start watching another entity. When the observed entity has new activity in the specified collections, the observer is woken.
+An entity calls `ctx.observe(entity(entityUrl), { wake: { on: 'change', collections: [...] } })` to start watching another entity. The `entity()` helper (imported from `@durable-streams/darix-runtime`) wraps a raw URL into the correct observe target. When the observed entity has new activity in the specified collections, the observer is woken.
 
 ## Monitor example
 
@@ -32,18 +32,23 @@ export function registerMonitor(registry: EntityRegistry) {
 
     async handler(ctx) {
       if (ctx.firstWake) {
-        ctx.state.status.insert({ key: `current`, value: `idle` })
+        ctx.db.actions.status_insert({ row: { key: `current`, value: `idle` } })
       }
       const baseObserveTool = createObserveTool(ctx)
       const observeTool = {
         ...baseObserveTool,
         execute: async (toolCallId: string, params: unknown) => {
-          transition(ctx.state.status, MONITOR_TRANSITIONS, `observing`)
+          ctx.db.actions.status_update({
+            key: `current`,
+            updater: (draft) => {
+              draft.value = `observing`
+            },
+          })
           return baseObserveTool.execute(toolCallId, params)
         },
       }
 
-      ctx.configureAgent({
+      ctx.useAgent({
         systemPrompt: MONITOR_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
         tools: [...ctx.darixTools, observeTool],
@@ -61,6 +66,8 @@ The monitor wraps the base observe tool to also transition its own state to `obs
 The `observe_entity` tool lets the LLM decide what to watch:
 
 ```ts
+import { entity } from "@durable-streams/darix-runtime"
+
 export function createObserveTool(ctx: HandlerContext): AgentTool {
   return {
     name: `observe_entity`,
@@ -82,7 +89,7 @@ export function createObserveTool(ctx: HandlerContext): AgentTool {
         collections?: string[]
       }
       try {
-        await ctx.observe(entity_url, {
+        await ctx.observe(entity(entity_url), {
           wake: { on: `change`, collections },
         })
         return {

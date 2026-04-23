@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # SharedStateHandle
 
-Handle for a shared state stream, returned by `ctx.createSharedState()` and `ctx.connectSharedState()`. Provides typed collection proxies keyed by the collection names declared in the schema map.
+Handle for a shared state stream, returned by `ctx.mkdb()` and `await ctx.observe(db(...))`. Provides typed collection proxies keyed by the collection names declared in the schema map.
 
 **Source:** `@durable-streams/darix-runtime`
 
@@ -22,10 +22,10 @@ type SharedStateHandle<
 
 ## Properties
 
-| Property           | Type                                               | Description                                                                 |
-| ------------------ | -------------------------------------------------- | --------------------------------------------------------------------------- |
-| `id`               | `string`                                           | The shared state stream identifier.                                         |
-| `[collectionName]` | [`StateCollectionProxy`](./state-collection-proxy) | One property per collection defined in the schema. Same API as `ctx.state`. |
+| Property           | Type                                               | Description                                                                                   |
+| ------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `id`               | `string`                                           | The shared state stream identifier.                                                           |
+| `[collectionName]` | [`StateCollectionProxy`](./state-collection-proxy) | One property per collection defined in the schema. Provides insert/update/delete/get/toArray. |
 
 ## SharedStateSchemaMap
 
@@ -54,6 +54,8 @@ interface SharedStateCollectionSchema {
 ## Example
 
 ```ts
+import { db } from "@durable-streams/darix-runtime"
+
 const schema = {
   findings: {
     schema: z.object({
@@ -66,6 +68,7 @@ const schema = {
   },
 }
 
-const shared = ctx.createSharedState("research-findings", schema)
+ctx.mkdb("research-findings", schema)
+const shared = await ctx.observe(db("research-findings", schema))
 shared.findings.insert({ key: "f1", domain: "security", finding: "..." })
 ```

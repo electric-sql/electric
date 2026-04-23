@@ -25,7 +25,7 @@ export function registerManagerWorker(registry: EntityRegistry) {
     async handler(ctx) {
       const analyzeTool = createAnalyzeWithPerspectivesTool(ctx)
 
-      ctx.configureAgent({
+      ctx.useAgent({
         systemPrompt: MANAGER_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
         tools: [...ctx.darixTools, analyzeTool],
@@ -76,7 +76,7 @@ for (const perspective of PERSPECTIVES) {
   }
 
   // Subsequent calls: observe existing child and send new question
-  const child = await ctx.observe(existing.url)
+  const child = await ctx.observe(entity(existing.url))
   child.send(question)
   children.update(perspective.id, (draft) => {
     draft.question = question

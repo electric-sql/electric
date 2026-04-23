@@ -15,58 +15,94 @@ The handler context is passed as the first argument to every entity handler. It 
 ```ts
 interface HandlerContext<TState extends StateProxy = StateProxy> {
   firstWake: boolean
+  tags: Readonly<EntityTags>
   entityUrl: string
   entityType: string
   args: Readonly<Record<string, unknown>>
   db: EntityStreamDBWithActions
   state: TState
+  events: Array<ChangeEvent>
   actions: Record<string, (...args: unknown[]) => unknown>
   darixTools: AgentTool[]
-  configureAgent(config: AgentConfig): AgentHandle
+  useAgent(config: AgentConfig): AgentHandle
+  useContext(config: UseContextConfig): void
+  timelineMessages(opts?: TimelineProjectionOpts): Array<TimestampedMessage>
+  insertContext(id: string, entry: ContextEntryInput): void
+  removeContext(id: string): void
+  getContext(id: string): ContextEntry | undefined
+  listContext(): Array<ContextEntry>
   agent: AgentHandle
   spawn(
     type: string,
     id: string,
     args?: Record<string, unknown>,
-    opts?: { initialMessage?: unknown; wake?: Wake }
+    opts?: {
+      initialMessage?: unknown
+      wake?: Wake
+      tags?: Record<string, string>
+      observe?: boolean
+    }
   ): Promise<EntityHandle>
-  observe(entityUrl: string, opts?: { wake?: Wake }): Promise<EntityHandle>
-  createSharedState<T extends SharedStateSchemaMap>(
+  observe(
+    source: ObservationSource & { sourceType: "entity" },
+    opts?: { wake?: Wake }
+  ): Promise<EntityHandle>
+  observe(
+    source: ObservationSource & { sourceType: "db" },
+    opts?: { wake?: Wake }
+  ): Promise<SharedStateHandle & ObservationHandle>
+  observe(
+    source: ObservationSource,
+    opts?: { wake?: Wake }
+  ): Promise<ObservationHandle>
+  mkdb<T extends SharedStateSchemaMap>(
     id: string,
     schema: T
   ): SharedStateHandle<T>
-  connectSharedState<T extends SharedStateSchemaMap>(
-    id: string,
-    schema: T,
-    opts?: { wake?: Wake }
-  ): SharedStateHandle<T>
-  send(entityUrl: string, payload: unknown, opts?: { type?: string }): void
+  send(
+    entityUrl: string,
+    payload: unknown,
+    opts?: { type?: string; afterMs?: number }
+  ): void
+  setTag(key: string, value: string): Promise<void>
+  removeTag(key: string): Promise<void>
   sleep(): void
 }
 ```
+
+> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, and `db()` from `@durable-streams/darix-runtime` to construct `ObservationSource` values for `observe()`.
 
 ## Properties
 
 | Property     | Type                                              | Description                                                                                                   |
 | ------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `firstWake`  | `boolean`                                         | `true` on the entity's first-ever handler invocation.                                                         |
+| `tags`       | `Readonly<EntityTags>`                            | Entity tags — key/value metadata associated with this entity.                                                 |
 | `entityUrl`  | `string`                                          | URL path of this entity (e.g. `"/chat/my-convo"`).                                                            |
 | `entityType` | `string`                                          | Registered type name (e.g. `"chat"`).                                                                         |
 | `args`       | `Readonly<Record<string, unknown>>`               | Spawn arguments passed when the entity was created.                                                           |
 | `db`         | `EntityStreamDBWithActions`                       | The entity's TanStack DB instance with registered actions.                                                    |
 | `state`      | `TState`                                          | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](./state-collection-proxy). |
+| `events`     | `Array<ChangeEvent>`                              | Change events that triggered this wake.                                                                       |
 | `actions`    | `Record<string, (...args: unknown[]) => unknown>` | Auto-generated CRUD actions for custom state collections.                                                     |
 | `darixTools` | `AgentTool[]`                                     | Built-in tools (e.g. `send_message`) to spread into agent config.                                             |
 
 ## Methods
 
-| Method                                  | Return Type               | Description                                                                                        |
-| --------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| `configureAgent(config)`                | `AgentHandle`             | Configure the LLM agent. Must be called before `agent.run()`. See [`AgentConfig`](./agent-config). |
-| `agent.run()`                           | `Promise<AgentRunResult>` | Run the configured agent loop.                                                                     |
-| `spawn(type, id, args?, opts?)`         | `Promise<EntityHandle>`   | Spawn a child entity. See [`EntityHandle`](./entity-handle).                                       |
-| `observe(entityUrl, opts?)`             | `Promise<EntityHandle>`   | Observe another entity's stream.                                                                   |
-| `createSharedState(id, schema)`         | `SharedStateHandle<T>`    | Create a new shared state stream. See [`SharedStateHandle`](./shared-state-handle).                |
-| `connectSharedState(id, schema, opts?)` | `SharedStateHandle<T>`    | Connect to an existing shared state stream.                                                        |
-| `send(entityUrl, payload, opts?)`       | `void`                    | Send a message to another entity.                                                                  |
-| `sleep()`                               | `void`                    | End the handler without running an agent. The entity remains idle until the next wake.             |
+| Method                            | Return Type                                                       | Description                                                                                                                                                                                                                                |
+| --------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `useAgent(config)`                | `AgentHandle`                                                     | Configure the LLM agent. Must be called before `agent.run()`. See [`AgentConfig`](./agent-config).                                                                                                                                         |
+| `useContext(config)`              | `void`                                                            | Declare context sources with token budgets and cache tiers for the agent's context window. See [Context composition](/docs/agents/usage/context-composition).                                                                                     |
+| `timelineMessages(opts?)`         | `Array<TimestampedMessage>`                                       | Project the entity timeline into an ordered array of LLM messages. Typically used as the `content` function of a volatile source. See [Context composition](/docs/agents/usage/context-composition#timelinemessages).                             |
+| `insertContext(id, entry)`        | `void`                                                            | Insert a durable context entry. Persists across wakes. Inserting with an existing `id` replaces the previous entry. See [Context entries](/docs/agents/usage/context-composition#context-entries).                                                |
+| `removeContext(id)`               | `void`                                                            | Remove a context entry by id.                                                                                                                                                                                                              |
+| `getContext(id)`                  | `ContextEntry \| undefined`                                       | Get a context entry by id, or `undefined` if not found.                                                                                                                                                                                    |
+| `listContext()`                   | `Array<ContextEntry>`                                             | List all context entries.                                                                                                                                                                                                                  |
+| `agent.run(input?)`               | `Promise<AgentRunResult>`                                         | Run the configured agent loop. Optional `input` string is appended as a user message before the loop starts.                                                                                                                               |
+| `spawn(type, id, args?, opts?)`   | `Promise<EntityHandle>`                                           | Spawn a child entity. `opts` accepts `tags`, `observe`, `initialMessage`, and `wake`. See [`EntityHandle`](./entity-handle).                                                                                                               |
+| `observe(source, opts?)`          | `Promise<EntityHandle \| SharedStateHandle \| ObservationHandle>` | Observe a source. Return type depends on source type: `EntityHandle` for entities, `SharedStateHandle & ObservationHandle` for db, `ObservationHandle` otherwise. Use `entity()`, `cron()`, `entities()`, `db()` helpers to build sources. |
+| `mkdb(id, schema)`                | `SharedStateHandle<T>`                                            | Create a new shared state stream. See [`SharedStateHandle`](./shared-state-handle).                                                                                                                                                        |
+| `send(entityUrl, payload, opts?)` | `void`                                                            | Send a message to another entity. `opts` accepts `type` and `afterMs` (delay in milliseconds).                                                                                                                                             |
+| `setTag(key, value)`              | `Promise<void>`                                                   | Set a tag on this entity.                                                                                                                                                                                                                  |
+| `removeTag(key)`                  | `Promise<void>`                                                   | Remove a tag from this entity.                                                                                                                                                                                                             |
+| `sleep()`                         | `void`                                                            | End the handler without running an agent. The entity remains idle until the next wake.                                                                                                                                                     |

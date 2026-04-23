@@ -22,7 +22,7 @@ const registry = createEntityRegistry()
 registry.define("assistant", {
   description: "A general-purpose AI assistant",
   async handler(ctx) {
-    ctx.configureAgent({
+    ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
       model: "claude-sonnet-4-5-20250929",
       tools: [...ctx.darixTools],
@@ -37,7 +37,7 @@ Calling `registry.define()` with a name that is already registered throws an err
 ## EntityDefinition
 
 ```ts
-interface EntityDefinition<TState extends StateProxy = StateProxy> {
+interface EntityDefinition {
   description?: string
   state?: Record<string, CollectionDefinition>
   actions?: (
@@ -46,22 +46,19 @@ interface EntityDefinition<TState extends StateProxy = StateProxy> {
   creationSchema?: StandardJSONSchemaV1
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   outputSchemas?: Record<string, StandardJSONSchemaV1>
-  handler: (
-    ctx: HandlerContext<TState>,
-    wake: WakeEvent
-  ) => void | Promise<void>
+  handler: (ctx: HandlerContext, wake: WakeEvent) => void | Promise<void>
 }
 ```
 
-| Field            | Purpose                                                                   |
-| ---------------- | ------------------------------------------------------------------------- |
-| `description`    | Human-readable description. Shown in the UI and CLI.                      |
-| `state`          | Custom persistent collections available on `ctx.state`.                   |
-| `actions`        | Factory that returns named action functions. Receives collection handles. |
-| `creationSchema` | JSON Schema for arguments passed when the entity is spawned.              |
-| `inboxSchemas`   | JSON Schemas for typed inbox message categories.                          |
-| `outputSchemas`  | JSON Schemas for typed output message categories.                         |
-| `handler`        | The function that runs each time the entity wakes. Required.              |
+| Field            | Purpose                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `description`    | Human-readable description. Shown in the Electric Agents UI and CLI.                            |
+| `state`          | Custom persistent collections accessed via `ctx.db.actions` and `ctx.db.collections`. |
+| `actions`        | Factory that returns named action functions. Receives collection handles.             |
+| `creationSchema` | JSON Schema for arguments passed when the entity is spawned.                          |
+| `inboxSchemas`   | JSON Schemas for typed inbox message categories.                                      |
+| `outputSchemas`  | JSON Schemas for typed output message categories.                                     |
+| `handler`        | The function that runs each time the entity wakes. Required.                          |
 
 ## Custom state
 
@@ -81,7 +78,7 @@ interface CollectionDefinition {
 | `type`       | `"state:{name}"` | Event type string used in the durable stream.                           |
 | `primaryKey` | `"key"`          | The field used as the primary key for the collection.                   |
 
-Declared collections become typed properties on `ctx.state`:
+Declared collections become available via `ctx.db.actions` (for writes) and `ctx.db.collections` (for reads):
 
 ```ts
 import { z } from "zod"
@@ -101,48 +98,19 @@ registry.define("coordinator", {
 
   async handler(ctx) {
     if (ctx.firstWake) {
-      ctx.state.status.insert({ key: "current", value: "idle" })
+      ctx.db.actions.status_insert({ row: { key: "current", value: "idle" } })
     }
-    // ctx.state.children.insert(), .get(), .update(), .delete(), .toArray
+    // Writes: ctx.db.actions.children_insert(), .children_update(), .children_delete()
+    // Reads: ctx.db.collections.children?.get(key), .children?.toArray
   },
 })
 ```
 
-Each collection exposes a `StateCollectionProxy`:
+For entity state, writes use `ctx.db.actions.<name>_insert/update/delete` and reads use `ctx.db.collections.<name>?.get(key)` and `ctx.db.collections.<name>?.toArray`.
 
-```ts
-interface StateCollectionProxy<T extends object = Record<string, unknown>> {
-  insert: (row: T) => unknown
-  update: (key: string, updater: (draft: T) => void) => unknown
-  delete: (key: string) => unknown
-  get: (key: string) => T | undefined
-  toArray: Array<T>
-}
-```
-
-## Typed state with generics
-
-Pass a type parameter to `registry.define<TState>()` to get typed access to `ctx.state`:
-
-```ts
-type MyState = {
-  kv: StateCollectionProxy<{ key: string; value: string }>
-  inventory: StateCollectionProxy<{ key: string; count: number }>
-} & Record<string, StateCollectionProxy>
-
-registry.define<MyState>("assistant", {
-  description: "Assistant with typed state",
-  state: {
-    kv: { primaryKey: "key" },
-    inventory: { primaryKey: "key" },
-  },
-
-  async handler(ctx) {
-    // ctx.state.kv and ctx.state.inventory are fully typed
-    ctx.state.kv.insert({ key: "name", value: "Alice" })
-  },
-})
-```
+::: info
+The `StateCollectionProxy` interface (with `.insert()`, `.update()`, `.delete()`, `.get()`, `.toArray`) applies to **shared state handles** only, not entity state collections. See [Shared state](./shared-state) for details.
+:::
 
 ## Registry pattern
 
@@ -167,7 +135,7 @@ export function registerAssistant(registry: EntityRegistry) {
   registry.define("assistant", {
     description: "General-purpose assistant",
     async handler(ctx) {
-      ctx.configureAgent({
+      ctx.useAgent({
         systemPrompt: "You are a helpful assistant.",
         model: "claude-sonnet-4-5-20250929",
         tools: [...ctx.darixTools],
@@ -182,7 +150,7 @@ This keeps each entity type isolated and the registry composition explicit.
 
 ## Schemas
 
-`creationSchema`, `inboxSchemas`, and `outputSchemas` accept [`StandardJSONSchemaV1`](https://github.com/standard-schema/standard-schema) objects. Any schema library implementing the Standard JSON Schema interface works (e.g. Zod v4). These schemas are used for validation and for generating UI and documentation in the dashboard.
+`creationSchema`, `inboxSchemas`, and `outputSchemas` accept [`StandardJSONSchemaV1`](https://github.com/standard-schema/standard-schema) objects. Any schema library implementing the Standard JSON Schema interface works (e.g. Zod v4). These schemas are used for validation and for generating UI and documentation in the Electric Agents dashboard.
 
 ```ts
 import { z } from "zod/v4"
@@ -190,7 +158,7 @@ import { z } from "zod/v4"
 registry.define("processor", {
   description: "Processes structured tasks",
   creationSchema: z.object({
-    priority: z.enum(["low", "medium", "high"]),
+    priority: z.enum(["low", "medium", "high"]).default("medium"),
   }),
   inboxSchemas: {
     task: z.object({

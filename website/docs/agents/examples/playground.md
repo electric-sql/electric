@@ -49,7 +49,7 @@ cp ../../.env.template .env  # Set ANTHROPIC_API_KEY
 pnpm dev
 ```
 
-Requires a running runtime server at `http://localhost:4437` (default).
+Requires a running Electric Agents runtime server at `http://localhost:4437` (default).
 
 ## Project structure
 

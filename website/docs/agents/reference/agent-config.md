@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # AgentConfig
 
-Configuration for the LLM agent loop. Passed to `ctx.configureAgent()`.
+Configuration for the LLM agent loop. Passed to `ctx.useAgent()`.
 
 **Source:** `@durable-streams/darix-runtime`
 
@@ -45,17 +45,23 @@ A function that receives the current conversation and returns a mock response st
 
 ## AgentHandle
 
-Returned by `ctx.configureAgent()`. Also available as `ctx.agent`.
+Returned by `ctx.useAgent()`. Also available as `ctx.agent`.
 
 ```ts
 interface AgentHandle {
-  run(): Promise<AgentRunResult>
+  run(input?: string): Promise<AgentRunResult>
 }
 ```
 
-| Method  | Return Type               | Description                                                                  |
-| ------- | ------------------------- | ---------------------------------------------------------------------------- |
-| `run()` | `Promise<AgentRunResult>` | Execute the agent loop. Runs until the LLM stops or all tool calls complete. |
+| Method        | Return Type               | Description                                                                  |
+| ------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `run(input?)` | `Promise<AgentRunResult>` | Execute the agent loop. Runs until the LLM stops or all tool calls complete. |
+
+**Parameters:**
+
+| Parameter | Type     | Required | Description                                                                      |
+| --------- | -------- | -------- | -------------------------------------------------------------------------------- |
+| `input`   | `string` | No       | Optional user message appended to the conversation before the agent loop starts. |
 
 ## AgentRunResult
 

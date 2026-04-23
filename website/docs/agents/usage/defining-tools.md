@@ -79,18 +79,13 @@ const calculatorTool: AgentTool = {
 
 ## Stateful tools
 
-Use a factory function that receives a `StateCollectionProxy`. The state persists across wakes -- it is backed by the entity's durable stream.
+Use a factory function that receives the `HandlerContext`. The state persists across wakes -- it is backed by the entity's durable stream. Reads go through `ctx.db.collections` and writes go through `ctx.db.actions`.
 
 ```ts
 import { Type } from "@sinclair/typebox"
-import type {
-  AgentTool,
-  StateCollectionProxy,
-} from "@durable-streams/darix-runtime"
+import type { AgentTool, HandlerContext } from "@durable-streams/darix-runtime"
 
-function createMemoryStoreTool(
-  stateProxy: StateCollectionProxy<{ key: string; value: string }>
-): AgentTool {
+function createMemoryStoreTool(ctx: HandlerContext): AgentTool {
   return {
     name: "memory_store",
     label: "Memory Store",
@@ -112,13 +107,16 @@ function createMemoryStoreTool(
         value?: string
       }
       if (operation === "set") {
-        const existing = stateProxy.get(key!)
+        const existing = ctx.db.collections.kv?.get(key!)
         if (existing) {
-          stateProxy.update(key!, (draft) => {
-            draft.value = value!
+          ctx.db.actions.kv_update({
+            key: key!,
+            updater: (draft) => {
+              draft.value = value!
+            },
           })
         } else {
-          stateProxy.insert({ key: key!, value: value! })
+          ctx.db.actions.kv_insert({ row: { key: key!, value: value! } })
         }
         return {
           content: [{ type: "text", text: `Stored "${key}"` }],
@@ -126,19 +124,19 @@ function createMemoryStoreTool(
         }
       }
       if (operation === "get") {
-        const entry = stateProxy.get(key!)
+        const entry = ctx.db.collections.kv?.get(key!)
         const text = entry ? entry.value : `No value found for "${key}"`
         return { content: [{ type: "text", text }], details: {} }
       }
       if (operation === "delete") {
-        stateProxy.delete(key!)
+        ctx.db.actions.kv_delete({ key: key! })
         return {
           content: [{ type: "text", text: `Deleted "${key}"` }],
           details: {},
         }
       }
       // list
-      const entries = stateProxy.toArray
+      const entries = ctx.db.collections.kv?.toArray ?? []
       const text = entries.map((e) => `${e.key}: ${e.value}`).join("\n")
       return {
         content: [{ type: "text", text: text || "(empty)" }],
@@ -149,15 +147,15 @@ function createMemoryStoreTool(
 }
 ```
 
-The `StateCollectionProxy` API:
+The entity state API:
 
-| Method                 | Description                                                 |
-| ---------------------- | ----------------------------------------------------------- |
-| `insert(row)`          | Insert a new row.                                           |
-| `update(key, updater)` | Update a row by key using an Immer-style draft.             |
-| `delete(key)`          | Delete a row by key.                                        |
-| `get(key)`             | Read a single row by key. Returns `undefined` if not found. |
-| `toArray`              | All rows as an array (property, not method).                |
+| Operation | Write (via `ctx.db.actions`)                                       | Read (via `ctx.db.collections`)       |
+| --------- | ------------------------------------------------------------------ | ------------------------------------- |
+| Insert    | `ctx.db.actions.<coll>_insert({ row: {...} })`                     | -                                     |
+| Update    | `ctx.db.actions.<coll>_update({ key, updater: (draft) => {...} })` | -                                     |
+| Delete    | `ctx.db.actions.<coll>_delete({ key })`                            | -                                     |
+| Get       | -                                                                  | `ctx.db.collections.<coll>?.get(key)` |
+| List      | -                                                                  | `ctx.db.collections.<coll>?.toArray`  |
 
 ## Handler-scoped tools
 
@@ -206,7 +204,7 @@ function createDispatchTool(ctx: HandlerContext): AgentTool {
 
 ## Wiring tools together
 
-Tools are constructed in the handler and passed to `configureAgent` alongside `ctx.darixTools`:
+Tools are constructed in the handler and passed to `useAgent` alongside `ctx.darixTools`:
 
 ```ts
 registry.define("assistant", {
@@ -215,10 +213,10 @@ registry.define("assistant", {
     kv: { primaryKey: "key" },
   },
   async handler(ctx) {
-    const memoryTool = createMemoryStoreTool(ctx.state.kv)
+    const memoryTool = createMemoryStoreTool(ctx)
     const dispatchTool = createDispatchTool(ctx)
 
-    ctx.configureAgent({
+    ctx.useAgent({
       systemPrompt: "You are a helpful assistant with persistent memory.",
       model: "claude-sonnet-4-5-20250929",
       tools: [...ctx.darixTools, memoryTool, dispatchTool, calculatorTool],

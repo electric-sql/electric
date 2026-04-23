@@ -2,13 +2,13 @@
 title: Configuring the agent
 titleTemplate: "... - Electric Agents"
 description: >-
-  Set up LLM agents with ctx.configureAgent(), including model selection, system prompts, tools, and test responses.
+  Set up LLM agents with ctx.useAgent(), including model selection, system prompts, tools, and test responses.
 outline: [2, 3]
 ---
 
 # Configuring the agent
 
-Call `ctx.configureAgent()` in your handler to set up the LLM, then `ctx.agent.run()` to execute it.
+Call `ctx.useAgent()` in your handler to set up the LLM, then `ctx.agent.run()` to execute it.
 
 ## AgentConfig
 
@@ -34,7 +34,7 @@ interface AgentConfig {
 
 ```ts
 async handler(ctx) {
-  ctx.configureAgent({
+  ctx.useAgent({
     systemPrompt: 'You are a helpful assistant.',
     model: 'claude-sonnet-4-5-20250929',
     tools: [...ctx.darixTools],
@@ -43,7 +43,9 @@ async handler(ctx) {
 }
 ```
 
-`configureAgent` returns an `AgentHandle` and also sets `ctx.agent`. Both references are equivalent.
+`useAgent` returns an `AgentHandle` and also sets `ctx.agent`. Both references are equivalent.
+
+To control what content fills the agent's context window (token budgets, cache tiers, external sources), use `ctx.useContext()` alongside `useAgent`. See [Context composition](./context-composition).
 
 ## ctx.darixTools
 
@@ -83,7 +85,7 @@ type AgentRunResult = {
 
 ## AgentHandle
 
-Returned by `configureAgent`. Also accessible as `ctx.agent`.
+Returned by `useAgent`. Also accessible as `ctx.agent`.
 
 ```ts
 interface AgentHandle {
@@ -91,7 +93,7 @@ interface AgentHandle {
 }
 ```
 
-You must call `configureAgent` before calling `run()`. Calling `ctx.agent.run()` without prior configuration throws an error.
+You must call `useAgent` before calling `run()`. Calling `ctx.agent.run()` without prior configuration throws an error.
 
 ## Model
 
@@ -108,7 +110,7 @@ For testing handlers without making LLM calls, pass `testResponses`. Two forms a
 **Array of strings** -- returned in order, one per agent turn:
 
 ```ts
-ctx.configureAgent({
+ctx.useAgent({
   systemPrompt: "...",
   model: "claude-sonnet-4-5-20250929",
   tools: [...ctx.darixTools],
@@ -119,7 +121,7 @@ ctx.configureAgent({
 **Function** -- called for each turn with the current message and an `OutboundBridgeHandle`:
 
 ```ts
-ctx.configureAgent({
+ctx.useAgent({
   // ...
   testResponses: async (message, bridge) => {
     if (message.includes("calculate")) {

@@ -18,19 +18,11 @@ Pattern: classify incoming messages and route to the appropriate agent type.
 export function registerDispatcher(registry: EntityRegistry) {
   registry.define(`dispatcher`, {
     description: `Router agent that classifies incoming messages and dispatches to the appropriate specialist agent type`,
-    state: {
-      status: { primaryKey: `key` },
-      counters: { primaryKey: `key` },
-      children: { primaryKey: `key` },
-    },
 
     async handler(ctx) {
-      if (ctx.firstWake) {
-        ctx.state.status.insert({ key: `current`, value: `idle` })
-      }
       const dispatchTool = createDispatchTool(ctx)
 
-      ctx.configureAgent({
+      ctx.useAgent({
         systemPrompt: DISPATCHER_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
         tools: [...ctx.darixTools, dispatchTool],
@@ -40,6 +32,10 @@ export function registerDispatcher(registry: EntityRegistry) {
   })
 }
 ```
+
+::: info No local state
+The dispatcher entity defines no `state` collections. It is stateless -- it relies entirely on the wake mechanism to receive child completion events and forwards specialist output to the user.
+:::
 
 ## How it works
 
@@ -51,15 +47,13 @@ The dispatcher exposes a `dispatch` tool. When the LLM classifies an incoming me
 
 The tool then:
 
-1. Increments the dispatch counter in state.
-2. Transitions through `classifying` -> `dispatching` -> `waiting` -> `idle`.
-3. Spawns the requested entity type with `wake: 'runFinished'`.
-4. Awaits completion and returns the result.
+1. Spawns the requested entity type with `wake: 'runFinished'`.
+2. Returns immediately with a status message. The dispatcher is re-invoked when the specialist finishes.
 
 ## Dispatch tool
 
 ```ts
-const child = await ctx.spawn(
+await ctx.spawn(
   type,
   id,
   { systemPrompt },
@@ -68,33 +62,14 @@ const child = await ctx.spawn(
     wake: `runFinished`,
   }
 )
-ctx.state.children.insert({ key: id, url: child.entityUrl, type })
 
-transition(ctx.state.status, DISPATCHER_TRANSITIONS, `waiting`)
-
-const fullText = (await child.text()).join(`\n\n`)
-```
-
-## State transitions
-
-```ts
-type DispatcherStatus = "idle" | "classifying" | "dispatching" | "waiting"
-
-const DISPATCHER_TRANSITIONS: Record<
-  DispatcherStatus,
-  readonly DispatcherStatus[]
-> = {
-  idle: ["classifying"],
-  classifying: ["dispatching"],
-  dispatching: ["waiting"],
-  waiting: ["idle"],
+return {
+  content: [
+    {
+      type: `text` as const,
+      text: `Dispatched to "${type}" specialist (${id}). You will be woken when it finishes.`,
+    },
+  ],
+  details: { id, type },
 }
 ```
-
-## State collections
-
-| Collection | Purpose                                     |
-| ---------- | ------------------------------------------- |
-| `status`   | Current dispatch phase.                     |
-| `counters` | Tracks total dispatch count.                |
-| `children` | Spawned specialist agents (key, URL, type). |

@@ -13,7 +13,7 @@ outline: [2, 3]
 Test agent handlers without calling the LLM by providing canned responses:
 
 ```ts
-ctx.configureAgent({
+ctx.useAgent({
   systemPrompt: "...",
   model: "claude-sonnet-4-5-20250929",
   tools: [...ctx.darixTools],
@@ -30,16 +30,18 @@ For dynamic test responses, provide a function instead of an array:
 
 ```ts
 testResponses: async (message, bridge) => {
-  bridge.onRunStart()
   bridge.onTextStart()
   bridge.onTextDelta("Test response")
   bridge.onTextEnd()
-  bridge.onRunEnd()
   return "Test response"
 }
 ```
 
-The `bridge` parameter gives full control over the outbound event stream, letting you simulate tool calls, reasoning steps, and multi-turn interactions.
+The `bridge` parameter gives control over text-level events, letting you simulate tool calls, reasoning steps, and multi-turn interactions. Returning a string emits it as a text block automatically.
+
+::: info Runtime-managed lifecycle
+The runtime wraps your `TestResponseFn` with `bridge.onRunStart()` / `bridge.onRunEnd()` and step start/end calls automatically. Do not call these yourself — only use text-level bridge methods (e.g. `onTextStart`, `onTextDelta`, `onTextEnd`) or tool-level methods inside the function.
+:::
 
 ## Unit testing entity registration
 

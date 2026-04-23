@@ -8,7 +8,9 @@ outline: [2, 3]
 
 # StateCollectionProxy
 
-Proxy handle for a custom state collection, accessed via `ctx.state.<name>`. Mutations are routed through auto-generated CRUD actions. Reads delegate to the underlying TanStack DB collection.
+Proxy handle for a shared state collection, accessed via a `SharedStateHandle` returned by `ctx.mkdb()` or `await ctx.observe(db(...))`. Mutations are routed through auto-generated CRUD actions. Reads delegate to the underlying TanStack DB collection.
+
+> **Note:** `StateCollectionProxy` applies to **shared state handles** only. Entity state uses `ctx.db.actions.<coll>_insert/update/delete` for writes and `ctx.db.collections.<coll>?.get/toArray` for reads. See [EntityDefinition](./entity-definition) for details.
 
 **Source:** `@durable-streams/darix-runtime`
 
@@ -36,4 +38,4 @@ interface StateCollectionProxy<T extends object = Record<string, unknown>> {
 
 - Mutating methods (`insert`, `update`, `delete`) return a Transaction. These are fire-and-forget -- the write is persisted to the entity's durable stream asynchronously.
 - The `update` method uses Immer-style drafts. Mutate the draft directly rather than returning a new object.
-- `toArray` is a property, not a method call. Access it without parentheses: `ctx.state.items.toArray`.
+- `toArray` is a property, not a method call. Access it without parentheses: `shared.items.toArray`.

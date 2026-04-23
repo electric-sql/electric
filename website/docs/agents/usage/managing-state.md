@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # Managing state
 
-Entities can declare custom persistent collections. State is accessed via `ctx.state.<name>` in the handler and is backed by the entity's durable stream. Values survive process restarts and are available on every handler invocation.
+Entities can declare custom persistent collections. Writes are performed via `ctx.db.actions.<name>_insert/update/delete` and reads via `ctx.db.collections.<name>` in the handler. State is backed by the entity's durable stream. Values survive process restarts and are available on every handler invocation.
 
 ## Declaring state
 
@@ -33,7 +33,7 @@ registry.define("my-entity", {
 })
 ```
 
-Each key in `state` becomes a collection accessible as `ctx.state.<name>`.
+Each key in `state` becomes a collection accessed via `ctx.db.actions.<name>_insert/update/delete` (for writes) and `ctx.db.collections.<name>` (for reads).
 
 ## CollectionDefinition
 
@@ -47,61 +47,34 @@ interface CollectionDefinition {
 
 All fields are optional. A minimal collection like `{ primaryKey: 'key' }` works without a schema — rows are untyped.
 
-## StateCollectionProxy
+## Writing and reading state
 
-Each collection on `ctx.state` is a `StateCollectionProxy`:
+Writes go through `ctx.db.actions`, where each collection produces action methods named `<collection>_insert`, `<collection>_update`, and `<collection>_delete`. Reads go through `ctx.db.collections`, which exposes TanStack DB collection objects with `.get(key)` and `.toArray`.
 
-```ts
-interface StateCollectionProxy<T extends object = Record<string, unknown>> {
-  insert(row: T): unknown // Returns Transaction
-  update(key: string, updater: (draft: T) => void): unknown
-  delete(key: string): unknown
-  get(key: string): T | undefined
-  toArray: T[] // Getter, not a method
-}
-```
-
-Mutating methods (`insert`, `update`, `delete`) return a Transaction. Reads (`get`, `toArray`) query the underlying TanStack DB collection.
+Write actions return a Transaction. Reads query the underlying TanStack DB collection.
 
 ## CRUD operations
 
 ```ts
 // Insert
-ctx.state.items.insert({ key: "item-1", name: "Widget", count: 5 })
+ctx.db.actions.items_insert({
+  row: { key: "item-1", name: "Widget", count: 5 },
+})
 
 // Read
-const item = ctx.state.items.get("item-1")
-const all = ctx.state.items.toArray
+const item = ctx.db.collections.items?.get("item-1")
+const all = ctx.db.collections.items?.toArray
 
 // Update (Immer-style draft)
-ctx.state.items.update("item-1", (draft) => {
-  draft.count += 1
+ctx.db.actions.items_update({
+  key: "item-1",
+  updater: (draft) => {
+    draft.count += 1
+  },
 })
 
 // Delete
-ctx.state.items.delete("item-1")
-```
-
-## Typed state
-
-Use a generic parameter on `registry.define<TState>()` to get type-safe access to `ctx.state`:
-
-```ts
-type MyState = {
-  kv: StateCollectionProxy<{ key: string; value: string }>
-  items: StateCollectionProxy<{ key: string; name: string }>
-} & Record<string, StateCollectionProxy>
-
-registry.define<MyState>("my-entity", {
-  state: {
-    kv: { primaryKey: "key" },
-    items: { primaryKey: "key" },
-  },
-  async handler(ctx) {
-    // ctx.state.kv and ctx.state.items are fully typed
-    ctx.state.kv.insert({ key: "foo", value: "bar" })
-  },
-})
+ctx.db.actions.items_delete({ key: "item-1" })
 ```
 
 ## Built-in collections

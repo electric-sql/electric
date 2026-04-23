@@ -19,25 +19,14 @@ export function registerPipeline(registry: EntityRegistry) {
   registry.define(`pipeline`, {
     description: `Pipeline orchestrator that chains sequential worker stages, feeding each stage output into the next`,
     state: {
-      status: { primaryKey: `key` },
       children: { primaryKey: `key` },
-      pipeline: { primaryKey: `key` },
     },
 
     async handler(ctx) {
-      if (ctx.firstWake) {
-        ctx.state.status.insert({ key: `current`, value: `idle` })
-        ctx.state.pipeline.insert({
-          key: `state`,
-          currentInput: ``,
-          currentStage: 0,
-        })
-      }
-
-      ctx.configureAgent({
+      ctx.useAgent({
         systemPrompt: PIPELINE_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, createRunPipelineTool(ctx)],
+        tools: [...ctx.darixTools, createRunStageTool(ctx)],
       })
       await ctx.agent.run()
     },
@@ -47,75 +36,66 @@ export function registerPipeline(registry: EntityRegistry) {
 
 ## How it works
 
-The pipeline agent exposes a `run_pipeline` tool. When the LLM calls it with an array of stage instructions and initial input, the tool:
+The pipeline agent exposes a `run_stage` tool. The LLM drives the pipeline one stage at a time:
 
-1. Loops through stages sequentially.
-2. Spawns a worker per stage with the stage instruction as its system prompt.
-3. Sends the current input as `initialMessage` with `wake: 'runFinished'`.
-4. Awaits the worker's output and feeds it as input to the next stage.
-5. Uses state transition guards to track progress through stages.
+1. The LLM calls `run_stage` with an instruction and input for the current stage.
+2. The tool spawns a worker with the instruction as its system prompt and the input as `initialMessage`, using `wake: 'runFinished'`.
+3. The tool returns immediately. The pipeline entity is re-invoked when the worker finishes.
+4. On each re-invocation, the wake event contains `finished_child.response` with the stage's output. The LLM then calls `run_stage` again with the next stage's instruction and the previous output as input.
+5. This repeats until all stages are complete.
 
-## Core loop
+## Stage tool
 
 ```ts
-for (let index = 0; index < stages.length; index++) {
-  const stageNumber = index + 1
-  const stageLabel = stages[index]?.trim() || `stage-${stageNumber}`
+function createRunStageTool(ctx: HandlerContext): AgentTool {
+  let stageCount = 0
 
-  transition(
-    ctx.state.status,
-    PIPELINE_TRANSITIONS,
-    currentPipelineStatus(stageNumber)
-  )
+  return {
+    name: `run_stage`,
+    label: `Run Stage`,
+    description: `Spawns a worker for one pipeline stage.`,
+    parameters: Type.Object({
+      instruction: Type.String({
+        description: `The instruction for this stage.`,
+      }),
+      input: Type.String({ description: `The input for this stage.` }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const { instruction, input } = params as {
+        instruction: string
+        input: string
+      }
 
-  const childId = `${parentId}-stage-${stageNumber}`
-  const child = await ctx.spawn(
-    `worker`,
-    childId,
-    { systemPrompt: stageLabel },
-    { initialMessage: currentInput, wake: `runFinished` }
-  )
+      stageCount++
+      const parentId = entityIdFromUrl(ctx.entityUrl)
+      const id = `${parentId}-stage-${stageCount}`
 
-  ctx.state.children.insert({
-    key: childId,
-    url: child.entityUrl,
-    stage: stageNumber,
-  })
+      const child = await ctx.spawn(
+        `worker`,
+        id,
+        { systemPrompt: instruction },
+        { initialMessage: input, wake: `runFinished` }
+      )
+      ctx.db.actions.children_insert({
+        row: { key: id, url: child.entityUrl, stage: stageCount },
+      })
 
-  currentInput = await readLatestCompletedText(child, stageLabel)
+      return {
+        content: [
+          {
+            type: `text` as const,
+            text: `Stage ${stageCount} spawned. You will be woken when it finishes.`,
+          },
+        ],
+        details: { stage: stageCount },
+      }
+    },
+  }
 }
 ```
-
-## State transitions
-
-```ts
-type PipelineStatus =
-  | "idle"
-  | "stage_1"
-  | "stage_2"
-  | "stage_3"
-  | "stage_4"
-  | "stage_5"
-  | "done"
-
-const PIPELINE_TRANSITIONS: Record<PipelineStatus, readonly PipelineStatus[]> =
-  {
-    idle: ["stage_1"],
-    stage_1: ["stage_2", "done"],
-    stage_2: ["stage_3", "done"],
-    stage_3: ["stage_4", "done"],
-    stage_4: ["stage_5", "done"],
-    stage_5: ["done"],
-    done: ["idle"],
-  }
-```
-
-The `transition()` guard enforces valid state changes. Each stage can transition to the next stage or directly to `done` (for short pipelines).
 
 ## State collections
 
 | Collection | Purpose                                             |
 | ---------- | --------------------------------------------------- |
-| `status`   | Current pipeline status.                            |
 | `children` | Spawned worker references (key, URL, stage number). |
-| `pipeline` | Current input and stage index for resumability.     |

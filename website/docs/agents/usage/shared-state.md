@@ -28,28 +28,30 @@ Each entry requires `schema`, `type`, and `primaryKey`. The `type` is the event 
 
 ## Creating shared state
 
-The parent entity creates the shared state stream, typically on `firstWake`:
+The parent entity creates the shared DB stream, typically on `firstWake`:
 
 ```ts
 if (ctx.firstWake) {
-  ctx.createSharedState("research-123", researchSchema)
+  ctx.mkdb("research-123", researchSchema)
 }
-const shared = ctx.connectSharedState("research-123", researchSchema)
+const shared = await ctx.observe(db("research-123", researchSchema))
 ```
 
-`createSharedState` creates the backing stream. `connectSharedState` returns a handle for reading and writing. The parent usually calls both.
+`mkdb` creates the backing stream. It throws if the DB already exists — creation is always a one-time operation guarded by `firstWake` or your own state checks.
 
-`connectSharedState` accepts an optional third parameter `opts?: { wake?: Wake }` to re-wake the entity when the shared state changes:
+`observe(db(id, schema))` returns a handle for reading and writing. Call it on any wake to get a handle to an existing shared DB.
+
+`observe` accepts an optional `wake` option to re-wake the entity when the shared state changes:
 
 ```ts
-const shared = ctx.connectSharedState("research-123", researchSchema, {
+const shared = await ctx.observe(db("research-123", researchSchema), {
   wake: { on: "change", debounceMs: 500 },
 })
 ```
 
 ## Connecting from children
 
-Pass the shared state config to children via spawn args:
+Pass the shared DB config to children via spawn args:
 
 ```ts
 const child = await ctx.spawn(
@@ -57,7 +59,7 @@ const child = await ctx.spawn(
   "specialist-1",
   {
     systemPrompt: "...",
-    sharedState: { id: "research-123", schema: researchSchema },
+    sharedDb: { id: "research-123", schema: researchSchema },
   },
   { initialMessage: "Research topic X", wake: "runFinished" }
 )
@@ -67,15 +69,15 @@ The child entity connects using the args it receives:
 
 ```ts
 async handler(ctx) {
-  const args = ctx.args as { sharedState: { id: string; schema: SharedStateSchemaMap } }
-  const shared = ctx.connectSharedState(args.sharedState.id, args.sharedState.schema)
+  const args = ctx.args as { sharedDb: { id: string; schema: SharedStateSchemaMap } }
+  const shared = await ctx.observe(db(args.sharedDb.id, args.sharedDb.schema))
   // Use shared.findings to read and write
 }
 ```
 
 ## Using the handle
 
-`SharedStateHandle` exposes the same collection proxy API as `ctx.state`:
+`SharedStateHandle` exposes collection proxies via `StateCollectionProxy` (the same insert/update/delete/get/toArray API):
 
 ```ts
 // Insert
@@ -133,11 +135,10 @@ registry.define("debate", {
 
   async handler(ctx) {
     if (ctx.firstWake) {
-      ctx.createSharedState(`debate-${ctx.entityUrl}`, debateSchema)
+      ctx.mkdb(`debate-${ctx.entityUrl}`, debateSchema)
     }
-    const shared = ctx.connectSharedState(
-      `debate-${ctx.entityUrl}`,
-      debateSchema
+    const shared = await ctx.observe(
+      db(`debate-${ctx.entityUrl}`, debateSchema)
     )
 
     // Spawn pro and con workers with shared state access
@@ -146,7 +147,7 @@ registry.define("debate", {
       "debate-pro",
       {
         systemPrompt: "Argue FOR the topic.",
-        sharedState: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
+        sharedDb: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
       },
       { initialMessage: "The topic is: ...", wake: "runFinished" }
     )
@@ -156,7 +157,7 @@ registry.define("debate", {
       "debate-con",
       {
         systemPrompt: "Argue AGAINST the topic.",
-        sharedState: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
+        sharedDb: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
       },
       { initialMessage: "The topic is: ...", wake: "runFinished" }
     )

@@ -14,10 +14,7 @@ Manages entity type registrations. Create an isolated registry with `createEntit
 
 ```ts
 class EntityRegistry {
-  define<TState extends StateProxy>(
-    name: string,
-    definition: EntityDefinition<TState>
-  ): void
+  define(name: string, definition: EntityDefinition): void
   get(name: string): EntityTypeEntry | undefined
   list(): EntityTypeEntry[]
   clear(): void
@@ -54,10 +51,7 @@ interface EntityTypeEntry {
 These operate on a shared default registry. Use them when you do not need isolated registries.
 
 ```ts
-function defineEntity<TState extends StateProxy>(
-  name: string,
-  definition: EntityDefinition<TState>
-): void
+function defineEntity(name: string, definition: EntityDefinition): void
 
 function getEntityType(name: string): EntityTypeEntry | undefined
 

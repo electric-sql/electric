@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # CLI reference
 
-The Electric Agents CLI (`darix`) manages entity types and entities. Install from `@durable-streams/darix-cli`.
+The `darix` CLI manages entity types and entities. Install from `@durable-streams/darix-cli`.
 
 ```bash
 npm install -g @durable-streams/darix-cli

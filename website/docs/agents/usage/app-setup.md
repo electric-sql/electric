@@ -40,12 +40,17 @@ interface RuntimeRouterConfig {
   registry?: EntityRegistry
   idleTimeout?: number // ms before closing idle wake (default: 20000)
   heartbeatInterval?: number // ms between heartbeats (default: 30000)
+  createDarixTools?: (
+    context: DarixToolsContext
+  ) => AgentTool[] | Promise<AgentTool[]> // factory for extra agent tools
+  onWakeError?: (error: Error) => boolean | void // return true to mark handled
+  registrationConcurrency?: number // max concurrent type registrations (default: 8)
 }
 ```
 
 ## HTTP server
 
-Your app needs an HTTP server to receive webhook callbacks from the runtime server. Forward webhook POSTs to the runtime handler:
+Your app needs an HTTP server to receive webhook callbacks from the Electric Agents runtime server. Forward webhook POSTs to the runtime handler:
 
 ```ts
 import http from "node:http"
@@ -67,7 +72,7 @@ server.listen(PORT, async () => {
 
 ## registerTypes
 
-Registers all entity types with the runtime server and creates webhook subscriptions. Uses upsert semantics — re-registering an existing type updates it rather than erroring.
+Registers all entity types with the Electric Agents runtime server and creates webhook subscriptions. Uses upsert semantics — re-registering an existing type updates it rather than erroring.
 
 Must be called after your app starts listening.
 
@@ -89,6 +94,9 @@ interface RuntimeHandler {
   handleWebhookRequest(request: Request): Promise<Response>
   dispatchWebhookWake(notification: WebhookNotification): void
   drainWakes(): Promise<void>
+  waitForSettled(): Promise<void>
+  abortWakes(): void
+  debugState(): Record<string, unknown>
   readonly typeNames: string[]
   registerTypes(): Promise<void>
 }
@@ -101,7 +109,10 @@ interface RuntimeHandler {
 | `handleWebhookRequest` | Processes a webhook POST directly, without path matching                           |
 | `dispatchWebhookWake`  | Dispatches a pre-parsed notification (fire-and-forget)                             |
 | `drainWakes`           | Waits for all in-flight wake handlers to settle; throws on errors                  |
-| `registerTypes`        | Registers entity types and webhook subscriptions with the runtime server           |
+| `waitForSettled`       | Alias for `drainWakes()` — waits for all in-flight wakes; throws on errors         |
+| `abortWakes`           | Cancels all in-flight wake handlers immediately                                    |
+| `debugState`           | Returns a snapshot of internal runtime state for diagnostics                       |
+| `registerTypes`        | Registers entity types and webhook subscriptions with the Electric Agents runtime server     |
 
 ## createRuntimeRouter
 
@@ -118,8 +129,8 @@ Use this when integrating with non-Node frameworks or edge runtimes.
 
 ## Environment variables
 
-| Variable            | Default                 | Purpose              |
-| ------------------- | ----------------------- | -------------------- |
-| `DARIX_URL`         | `http://localhost:4437` | Runtime server URL   |
-| `PORT`              | `3000`                  | Your app's HTTP port |
-| `ANTHROPIC_API_KEY` | —                       | Claude API key       |
+| Variable            | Default                 | Purpose                  |
+| ------------------- | ----------------------- | ------------------------ |
+| `DARIX_URL`         | `http://localhost:4437` | Electric Agents runtime server URL |
+| `PORT`              | `3000`                  | Your app's HTTP port     |
+| `ANTHROPIC_API_KEY` | —                       | Claude API key           |

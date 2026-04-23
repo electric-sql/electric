@@ -36,6 +36,8 @@ const debateSchema = {
 ### Registration
 
 ```ts
+import { db } from "@durable-streams/darix-runtime"
+
 export function registerDebate(registry: EntityRegistry) {
   registry.define(`debate`, {
     description: `Debate moderator that creates shared state, spawns pro and con workers, and writes a final ruling based on arguments written to shared state`,
@@ -45,17 +47,16 @@ export function registerDebate(registry: EntityRegistry) {
 
     async handler(ctx) {
       if (ctx.firstWake) {
-        ctx.state.status.insert({ key: `current`, value: `idle` })
-        ctx.createSharedState(`debate-${ctx.entityUrl}`, debateSchema)
+        ctx.db.actions.status_insert({ row: { key: `current`, value: `idle` } })
+        ctx.mkdb(`debate-${ctx.entityUrl}`, debateSchema)
       }
-      const shared = ctx.connectSharedState(
-        `debate-${ctx.entityUrl}`,
-        debateSchema
+      const shared = await ctx.observe(
+        db(`debate-${ctx.entityUrl}`, debateSchema)
       )
 
       // ... create tools that reference `shared` ...
 
-      ctx.configureAgent({
+      ctx.useAgent({
         systemPrompt: DEBATE_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
         tools: [...ctx.darixTools, startTool, checkTool, endTool],
@@ -68,8 +69,8 @@ export function registerDebate(registry: EntityRegistry) {
 
 ### How it works
 
-1. On first wake, the moderator creates shared state with `ctx.createSharedState()`.
-2. The moderator connects to the shared state with `ctx.connectSharedState()`.
+1. On first wake, the moderator creates shared state with `ctx.mkdb()`.
+2. The moderator connects to the shared state with `ctx.observe(db(...))`.
 3. The `start_debate` tool spawns pro and con workers, each connected to the same shared state:
 
 ```ts
@@ -78,7 +79,7 @@ const proWorker = await ctx.spawn(
   `debate-pro-${Date.now()}-${spawnCounter}`,
   {
     systemPrompt: PRO_WORKER_PROMPT,
-    sharedState: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
+    sharedDb: { id: `debate-${ctx.entityUrl}`, schema: debateSchema },
   },
   { initialMessage: proInitialMessage, wake: `runFinished` }
 )
@@ -107,4 +108,4 @@ The playground includes several other blackboard implementations:
 - **Peer Review** (`blackboard/peer-review.ts`) -- workers submit reviews with scores and feedback to a shared `reviews` collection. A coordinator summarizes the reviews.
 - **Trading Floor** (`blackboard/trading-floor.ts`) -- trader agents submit buy/sell orders to a shared `orders` collection. Transitions through morning/afternoon sessions.
 
-All follow the same structure: parent creates shared state, spawns workers with `sharedState` in their args, workers use generated CRUD tools to coordinate.
+All follow the same structure: parent creates shared state, spawns workers with `sharedDb` in their args, workers use generated CRUD tools to coordinate.

@@ -18,15 +18,15 @@ The Electric Agents runtime has three key components:
 2. **CLI** — a command-line tool for spawning entities, sending messages, and streaming events.
 3. **GUI** — an Electron app for observing and interacting with entities.
 
-The first step is to get these running, with some built-in agents you can use right away.
+The first step is to get these running, with a built-in agent you can use right away.
 
-You can then define and engineer agents (and agent topologies and coordination patterns, ...) in **your own web app** that use the `@durable-streams/darix-runtime` shim to register with the runtime.
+You can then define and engineer agents (and agent topologies and coordination patterns, ...) in **your own web app** that uses the `@durable-streams/darix-runtime` shim to register with the runtime.
 
 ## Prerequisites
 
 - Node.js 22+
 - [pnpm](https://pnpm.io/installation)
-- [Docker](https://docs.docker.com/get-docker/) (the dev server runs Postgres and ClickHouse in containers)
+- [Docker](https://docs.docker.com/get-docker/) (the dev server runs Postgres and Electric in containers)
 
 ## Clone the repo
 
@@ -54,9 +54,9 @@ cat <<'EOF' > .env
  EOF
 ```
 
-## Try the built-in agents
+## Try the built-in Horton assistant
 
-The runtime server ships with built-in agent types (`chat`, `coder`, `researcher`, `oracle`) so you can try things out before writing any code.
+The runtime server ships with a built-in agent type, `horton` — a friendly capable assistant that can chat, research the web, read and edit code, run shell commands, and dispatch subagents. It's the easiest way to try Electric Agents before writing any code.
 
 ### 1. Start the runtime server
 
@@ -64,16 +64,16 @@ The runtime server ships with built-in agent types (`chat`, `coder`, `researcher
 pnpm start:darix
 ```
 
-This starts Postgres and ClickHouse containers via Docker, then launches the runtime server with the built-in agents registered. The server defaults to `http://localhost:4437` but picks a random port if 4437 is in use — the URL is printed on startup.
+This starts Postgres and Electric containers via Docker, then launches the Electric Agents runtime server with `horton` (and an internal `worker` type it can spawn) registered. The server defaults to `http://localhost:4437` but picks a random port if 4437 is in use — the URL is printed on startup.
 
 ### 2. Interact via CLI
 
-In a separate terminal, spawn a chat entity, send it a message, and observe the output:
+In a separate terminal, spawn a Horton entity, send it a message, and observe the output:
 
 ```sh
-pnpm darix spawn /chat/my-chat
-pnpm darix send /chat/my-chat 'Hello!'
-pnpm darix observe /chat/my-chat
+pnpm darix spawn /horton/my-horton
+pnpm darix send /horton/my-horton 'Hello!'
+pnpm darix observe /horton/my-horton
 ```
 
 - `spawn` creates a new entity instance at the given path.
@@ -129,7 +129,7 @@ const registry = createEntityRegistry()
 registry.define("assistant", {
   description: "A general-purpose AI assistant",
   async handler(ctx) {
-    ctx.configureAgent({
+    ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
       model: "claude-sonnet-4-5-20250929",
       tools: [...ctx.darixTools],
@@ -186,6 +186,6 @@ pnpm darix observe /assistant/my-assistant
 
 ## Next steps
 
-- [About](./index) — understand the mental model.
+- [Overview](./) — understand the mental model.
 - [Defining entities](./usage/defining-entities) — entity types, schemas, and configuration.
 - [Writing handlers](./usage/writing-handlers) — handler lifecycle and context API.

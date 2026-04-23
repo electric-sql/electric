@@ -29,30 +29,37 @@ See [Defining entities](/docs/agents/usage/defining-entities) and [EntityDefinit
 
 The context API passed into the handler:
 
-| Property/Method                      | Purpose                                                 |
-| ------------------------------------ | ------------------------------------------------------- |
-| `ctx.firstWake`                      | Boolean -- is this the entity's first activation?       |
-| `ctx.entityUrl`                      | Identity -- `/type/id`                                  |
-| `ctx.entityType`                     | Type name string                                        |
-| `ctx.args`                           | Readonly spawn arguments                                |
-| `ctx.state.<name>`                   | Proxy to custom state collections                       |
-| `ctx.db`                             | Full TanStack DB with all built-in + custom collections |
-| `ctx.configureAgent()`               | Set up the LLM agent                                    |
-| `ctx.agent.run()`                    | Execute the agent loop                                  |
-| `ctx.darixTools`                     | Runtime-provided tools to spread into agent config      |
-| `ctx.spawn(type, id, args, opts)`    | Create child entity                                     |
-| `ctx.observe(url, opts)`             | Subscribe to another entity                             |
-| `ctx.send(url, payload, opts)`       | Send message to an entity                               |
-| `ctx.sleep()`                        | Return to idle                                          |
-| `ctx.createSharedState(id, schema)`  | Create cross-entity shared state                        |
-| `ctx.connectSharedState(id, schema)` | Join existing shared state                              |
+| Property/Method                     | Purpose                                                               |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `ctx.firstWake`                     | Boolean -- is this the entity's first activation?                     |
+| `ctx.entityUrl`                     | Identity -- `/type/id`                                                |
+| `ctx.entityType`                    | Type name string                                                      |
+| `ctx.args`                          | Readonly spawn arguments                                              |
+| `ctx.tags`                          | Entity tags -- key/value metadata                                     |
+| `ctx.db`                            | Full TanStack DB: `db.actions` for writes, `db.collections` for reads |
+| `ctx.state`                         | Proxy object keyed by collection name                                 |
+| `ctx.events`                        | Change events that triggered this wake                                |
+| `ctx.useAgent()`                    | Set up the LLM agent                                                  |
+| `ctx.useContext()`                  | Declare context sources with token budgets and cache tiers            |
+| `ctx.timelineMessages()`            | Project the entity timeline into LLM messages                         |
+| `ctx.insertContext(id, entry)`      | Insert a durable context entry                                        |
+| `ctx.agent.run()`                   | Execute the agent loop                                                |
+| `ctx.darixTools`                    | Runtime-provided tools to spread into agent config                    |
+| `ctx.spawn(type, id, args, opts)`   | Create child entity                                                   |
+| `ctx.observe(source, opts)`         | Subscribe to a source via `entity()`, `cron()`, `entities()`, `db()`  |
+| `ctx.send(url, payload, opts)`      | Send message to an entity                                             |
+| `ctx.sleep()`                       | Return to idle                                                        |
+| `ctx.mkdb(id, schema)`              | Create cross-entity shared state                                      |
+| `ctx.observe(db(id, schema), opts)` | Join existing shared state                                            |
+| `ctx.setTag(key, value)`            | Set a tag on this entity                                              |
+| `ctx.removeTag(key)`                | Remove a tag from this entity                                         |
 
 See [Writing handlers](/docs/agents/usage/writing-handlers) and [HandlerContext reference](/docs/agents/reference/handler-context).
 
 ## 3. Agent configuration
 
 ```ts
-ctx.configureAgent({
+ctx.useAgent({
   systemPrompt: string,
   model: string,           // e.g. 'claude-sonnet-4-5-20250929'
   tools: AgentTool[],      // [...ctx.darixTools, ...custom]
@@ -80,14 +87,14 @@ const myTool: AgentTool = {
 }
 ```
 
-**Stateful tools** are factories receiving `StateCollectionProxy`:
+**Stateful tools** are factories receiving `ctx` for state access:
 
 ```ts
-function createMemoryTool(stateProxy: StateCollectionProxy<Row>): AgentTool {
+function createMemoryTool(ctx: HandlerContext): AgentTool {
   return {
     name: "memory_store",
     execute: async (_, params) => {
-      stateProxy.insert({ key, value }) // writes to entity state
+      ctx.db.actions.memory_insert({ row: { key, value } }) // writes to entity state
     },
   }
 }
@@ -109,24 +116,29 @@ function createDispatchTool(ctx: HandlerContext): AgentTool {
 
 See [Defining tools](/docs/agents/usage/defining-tools) and [AgentTool reference](/docs/agents/reference/agent-tool).
 
-## 5. State collections (`ctx.state`)
+## 5. State collections (`ctx.db`)
 
-Each collection is a `StateCollectionProxy<T>`:
+Custom state is accessed through `ctx.db`:
 
-- `.insert(row)` -- add new row
-- `.update(key, draft => { ... })` -- Immer-style mutation
-- `.delete(key)` -- remove by primary key
-- `.get(key)` -- read one
-- `.toArray` -- read all (getter, not method)
+**Writes** via `ctx.db.actions`:
 
-See [Managing state](/docs/agents/usage/managing-state) and [StateCollectionProxy reference](/docs/agents/reference/state-collection-proxy).
+- `.<name>_insert({ row })` -- add new row
+- `.<name>_update({ key, updater: (draft) => { ... } })` -- Immer-style mutation
+- `.<name>_delete({ key })` -- remove by primary key
+
+**Reads** via `ctx.db.collections`:
+
+- `.<name>?.get(key)` -- read one
+- `.<name>?.toArray` -- read all (getter, not method)
+
+See [Managing state](/docs/agents/usage/managing-state).
 
 ## 6. Entity coordination primitives
 
 - **`spawn(type, id, args, opts)`** -> `EntityHandle` -- create child
   - `opts.initialMessage` -- first message to deliver
   - `opts.wake` -- `'runFinished'`, `{ on: 'runFinished', includeResponse? }`, or `{ on: 'change', collections?, debounceMs?, timeoutMs? }`
-- **`observe(url, opts)`** -> `EntityHandle` -- subscribe to existing entity
+- **`observe(source, opts)`** -> `EntityHandle | ObservationHandle` -- subscribe via `entity()`, `cron()`, `entities()`, `db()`
 - **`send(url, payload, opts)`** -- fire-and-forget message
 - **`sleep()`** -- go idle
 
@@ -136,7 +148,7 @@ See [Managing state](/docs/agents/usage/managing-state) and [StateCollectionProx
 - `.run` -- Promise that resolves when child completes
 - `.text()` -- get all completed text output
 - `.send(msg)` -- send follow-up message
-- `.status()` -- `'spawning' | 'running' | 'idle' | 'stopped'`
+- `.status()` -- `ChildStatus | undefined` (object with `.status`, `.entity_url`, `.entity_type`)
 
 See [Spawning & coordinating](/docs/agents/usage/spawning-and-coordinating) and [EntityHandle reference](/docs/agents/reference/entity-handle).
 
@@ -153,9 +165,9 @@ const schema = {
   },
 }
 // Parent creates:
-ctx.createSharedState("research-123", schema)
+ctx.mkdb("research-123", schema)
 // Children connect:
-const shared = ctx.connectSharedState("research-123", schema)
+const shared = await ctx.observe(db("research-123", schema))
 shared.findings.insert({ key: "f1", text: "..." })
 ```
 
@@ -163,24 +175,27 @@ See [Shared state](/docs/agents/usage/shared-state) and [SharedStateHandle refer
 
 ## 8. Built-in collections
 
-Every entity automatically has the following `ctx.db.collections`:
+Every entity automatically has 17 `ctx.db.collections`:
 
-| Collection         | Purpose                   | Key fields                                             |
-| ------------------ | ------------------------- | ------------------------------------------------------ |
-| `runs`             | Agent run lifecycle       | `status: started/completed/failed`                     |
-| `steps`            | LLM call steps            | `step_number, model_id, duration_ms`                   |
-| `texts`            | Text message blocks       | `status: streaming/completed`                          |
-| `textDeltas`       | Incremental text chunks   | `text_id, delta`                                       |
-| `toolCalls`        | Tool invocation lifecycle | `tool_name, status, args, result`                      |
-| `reasoning`        | Extended thinking blocks  | `status: streaming/completed`                          |
-| `errors`           | Diagnostic errors         | `error_code, message`                                  |
-| `inbox`            | Received messages         | `from, payload, message_type`                          |
-| `wakes`            | Wake event history        | `source, timeout, changes`                             |
-| `entityCreated`    | Bootstrap metadata        | `entity_type, args, parent_url`                        |
-| `entityStopped`    | Shutdown signal           | `timestamp, reason`                                    |
-| `childStatus`      | Child entity status       | `entity_url, status`                                   |
-| `manifests`        | Wiring declarations       | discriminated union: child/observe/shared-state/effect |
-| `replayWatermarks` | Replay offset tracking    | `source_id, offset`                                    |
+| Collection         | Purpose                   | Key fields                                                             |
+| ------------------ | ------------------------- | ---------------------------------------------------------------------- |
+| `runs`             | Agent run lifecycle       | `status: started/completed/failed`                                     |
+| `steps`            | LLM call steps            | `step_number, model_id, duration_ms`                                   |
+| `texts`            | Text message blocks       | `status: streaming/completed`                                          |
+| `textDeltas`       | Incremental text chunks   | `text_id, delta`                                                       |
+| `toolCalls`        | Tool invocation lifecycle | `tool_name, status, args, result`                                      |
+| `reasoning`        | Extended thinking blocks  | `status: streaming/completed`                                          |
+| `errors`           | Diagnostic errors         | `error_code, message`                                                  |
+| `inbox`            | Received messages         | `from, payload, message_type`                                          |
+| `wakes`            | Wake event history        | `source, timeout, changes`                                             |
+| `entityCreated`    | Bootstrap metadata        | `entity_type, args, parent_url`                                        |
+| `entityStopped`    | Shutdown signal           | `timestamp, reason`                                                    |
+| `childStatus`      | Child entity status       | `entity_url, status`                                                   |
+| `manifests`        | Wiring declarations       | discriminated union: child/source/shared-state/effect/context/schedule |
+| `replayWatermarks` | Replay offset tracking    | `source_id, offset`                                                    |
+| `tags`             | Entity tags/labels        | `key, value`                                                           |
+| `contextInserted`  | Context additions         | `context_id, content`                                                  |
+| `contextRemoved`   | Context removals          | `context_id`                                                           |
 
 See [Built-in collections](/docs/agents/reference/built-in-collections).
 

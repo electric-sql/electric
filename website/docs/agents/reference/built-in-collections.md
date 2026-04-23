@@ -2,13 +2,13 @@
 title: Built-in collections
 titleTemplate: "... - Electric Agents"
 description: >-
-  Reference for the 14 runtime-managed collections: runs, steps, texts, toolCalls, inbox, errors, and more.
+  Reference for the 17 runtime-managed collections: runs, steps, texts, toolCalls, inbox, errors, and more.
 outline: [2, 3]
 ---
 
 # Built-in collections
 
-Every entity automatically has these 14 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
+Every entity automatically has these 17 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
 
 **Source:** `@durable-streams/darix-runtime` -- `entity-schema.ts`
 
@@ -28,6 +28,9 @@ Every entity automatically has these 14 collections, populated by the runtime as
 | `entityCreated`    | `entity_created`   | `EntityCreated`    | Entity bootstrap metadata    |
 | `entityStopped`    | `entity_stopped`   | `EntityStopped`    | Entity shutdown signal       |
 | `childStatus`      | `child_status`     | `ChildStatusEntry` | Child/observed entity status |
+| `tags`             | `tags`             | `TagEntry`         | Entity tags                  |
+| `contextInserted`  | `context_inserted` | `ContextInserted`  | Context additions            |
+| `contextRemoved`   | `context_removed`  | `ContextRemoved`   | Context removals             |
 | `manifests`        | `manifest`         | `Manifest`         | Durable resource manifests   |
 | `replayWatermarks` | `replay_watermark` | `ReplayWatermark`  | Replay progress tracking     |
 
@@ -171,7 +174,7 @@ interface EntityCreated {
   key: string
   entity_type: string
   timestamp: string
-  args: JsonValue
+  args: Record<string, JsonValue>
   parent_url?: string
 }
 ```
@@ -197,6 +200,39 @@ interface ChildStatusEntry {
 }
 ```
 
+### TagEntry
+
+```ts
+interface TagEntry {
+  key: string
+  value: string
+}
+```
+
+### ContextInserted
+
+```ts
+interface ContextInserted {
+  key: string
+  id: string
+  name: string
+  attrs: Record<string, string | number | boolean>
+  content: string
+  timestamp: string
+}
+```
+
+### ContextRemoved
+
+```ts
+interface ContextRemoved {
+  key: string
+  id: string
+  name: string
+  timestamp: string
+}
+```
+
 ### Manifest
 
 Discriminated union by `kind`:
@@ -204,9 +240,12 @@ Discriminated union by `kind`:
 ```ts
 type Manifest =
   | ManifestChildEntry
-  | ManifestEffectEntry
-  | ManifestObserveEntry
+  | ManifestSourceEntry
   | ManifestSharedStateEntry
+  | ManifestEffectEntry
+  | ManifestContextEntry
+  | ManifestCronScheduleEntry
+  | ManifestFutureSendScheduleEntry
 
 interface ManifestChildEntry {
   key: string
@@ -214,16 +253,17 @@ interface ManifestChildEntry {
   id: string
   entity_type: string
   entity_url: string
-  wake?: Wake
+  wake?: WakeConfig
   observed: boolean
 }
 
-interface ManifestObserveEntry {
+interface ManifestSourceEntry {
   key: string
-  kind: "observe"
-  id: string
-  entity_url: string
-  wake?: Wake
+  kind: "source"
+  sourceType: string
+  sourceRef: string
+  wake?: WakeConfig
+  config: Record<string, unknown>
 }
 
 interface ManifestSharedStateEntry {
@@ -232,7 +272,7 @@ interface ManifestSharedStateEntry {
   id: string
   mode: "create" | "connect"
   collections: Record<string, { type: string; primaryKey: string }>
-  wake?: Wake
+  wake?: WakeConfig
 }
 
 interface ManifestEffectEntry {
@@ -240,7 +280,45 @@ interface ManifestEffectEntry {
   kind: "effect"
   id: string
   function_ref: string
-  config: JsonValue
+  config: unknown
+}
+
+interface ManifestContextEntry {
+  key: string
+  kind: "context"
+  id: string
+  name: string
+  attrs: Record<string, string | number | boolean>
+  content: string
+  insertedAt: number
+}
+
+interface ManifestCronScheduleEntry {
+  key: string
+  kind: "schedule"
+  id: string
+  scheduleType: "cron"
+  expression: string
+  timezone?: string
+  payload?: unknown
+  wake?: WakeConfig
+}
+
+interface ManifestFutureSendScheduleEntry {
+  key: string
+  kind: "schedule"
+  id: string
+  scheduleType: "future_send"
+  fireAt: string
+  targetUrl: string
+  payload: unknown
+  producerId: string
+  from?: string
+  messageType?: string
+  status?: "pending" | "sent" | "failed"
+  sentAt?: string
+  failedAt?: string
+  lastError?: string
 }
 ```
 

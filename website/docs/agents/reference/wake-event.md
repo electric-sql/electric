@@ -27,20 +27,76 @@ type WakeEvent = {
 
 ## Fields
 
-| Field        | Type      | Description                                                          |
-| ------------ | --------- | -------------------------------------------------------------------- |
-| `source`     | `string`  | URL or identifier of the stream that triggered the wake.             |
-| `type`       | `string`  | Wake type (e.g. `"message_received"`, `"child_status"`, `"change"`). |
-| `fromOffset` | `number`  | Start offset of new events in the source stream.                     |
-| `toOffset`   | `number`  | End offset (exclusive) of new events.                                |
-| `eventCount` | `number`  | Number of new events in this wake.                                   |
-| `payload`    | `unknown` | Optional payload data associated with the wake.                      |
-| `summary`    | `string`  | Optional human-readable summary of the wake reason.                  |
-| `fullRef`    | `string`  | Optional full reference identifier for the wake source.              |
+| Field        | Type      | Description                                                              |
+| ------------ | --------- | ------------------------------------------------------------------------ |
+| `source`     | `string`  | URL or identifier of the stream that triggered the wake.                 |
+| `type`       | `string`  | Wake type — one of `"message_received"` or `"wake"`. See catalog.        |
+| `fromOffset` | `number`  | Start offset of new events in the source stream.                         |
+| `toOffset`   | `number`  | End offset (exclusive) of new events.                                    |
+| `eventCount` | `number`  | Number of new events in this wake.                                       |
+| `payload`    | `unknown` | Optional payload data associated with the wake. Shape depends on `type`. |
+| `summary`    | `string`  | Optional human-readable summary of the wake reason.                      |
+| `fullRef`    | `string`  | Optional full reference identifier for the wake source.                  |
+
+## Wake-type catalog
+
+Handlers see exactly two values for `wake.type`. Everything that isn't a direct inbox message is flattened into `"wake"`, with the specifics carried on `wake.payload`.
+
+### `"message_received"`
+
+An external message landed in the entity's inbox — from `ctx.send()`, the CLI's `darix send`, or any direct `/send` HTTP call.
+
+| Field          | Shape                                                                             |
+| -------------- | --------------------------------------------------------------------------------- |
+| `wake.source`  | The `from` field of the message (sender identifier), or the entity URL if absent. |
+| `wake.payload` | The message payload (any JSON-serialisable value).                                |
+| `wake.summary` | The `message_type` if the sender set one.                                         |
+
+### `"wake"`
+
+A synthesised wake for any non-message trigger. `wake.payload` is a `WakeMessage`:
+
+```ts
+type WakeMessage = {
+  timestamp: string
+  source: string
+  timeout: boolean
+  changes: Array<{
+    collection: string
+    kind: "insert" | "update" | "delete"
+    key: string
+  }>
+  finished_child?: {
+    url: string
+    type: string
+    run_status: "completed" | "failed"
+    response?: string
+    error?: string
+  }
+  other_children?: Array<{
+    url: string
+    type: string
+    status: "spawning" | "running" | "idle" | "stopped"
+  }>
+}
+```
+
+Inspect the payload to distinguish the sub-kind:
+
+| Sub-kind            | Producer                                                                    | Payload marker                                                                            |
+| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Child finished      | `ctx.spawn(..., { wake: 'runFinished' })` when the child completes or fails | `payload.finished_child` is set (with `run_status` and optional `response`)               |
+| Observed change     | `ctx.observe(..., { wake: { on: 'change' } })` or `observe(db(...))`        | `payload.changes` is non-empty                                                            |
+| Shared-state change | `await ctx.observe(db(...), { wake: { on: 'change' } })`                    | `payload.changes` is non-empty, `payload.source` identifies the shared-state stream       |
+| Cron fired          | A cron schedule entry on the entity's manifest                              | `payload.source` identifies the schedule; `payload.changes` is empty                      |
+| Scheduled send      | A `future_send` schedule fires                                              | Arrives as `"message_received"` (not `"wake"`) — the schedule produces a message delivery |
+| Timeout             | `timeoutMs` on a `change` wake config elapsed with no changes               | `payload.timeout === true`, `payload.changes` is empty                                    |
+
+For the narrative on how these are produced, see [Waking entities](../usage/waking-entities).
 
 ## Wake
 
-The `Wake` type configures when a parent should be woken in response to a child, observed entity, or shared state change. Used in `ctx.spawn()`, `ctx.observe()`, and `ctx.connectSharedState()` options.
+The `Wake` type configures when a parent should be woken in response to a child, observed entity, or shared state change. Used in `ctx.spawn()`, `ctx.observe()`, and `ctx.observe(db(...))` options.
 
 ```ts
 type Wake =

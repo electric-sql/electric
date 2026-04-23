@@ -55,7 +55,7 @@ Each tile agent:
 
 ### `src/server.ts`
 
-Entry point. Creates the registry, runtime handler, and two HTTP servers (one for the webhook, one for the canvas viewer).
+Entry point. Creates the registry, runtime handler, and two HTTP servers (one for the Electric Agents webhook, one for the canvas viewer).
 
 ```ts
 const registry = createEntityRegistry()
@@ -94,7 +94,7 @@ cp ../../.env.template .env  # Set ANTHROPIC_API_KEY
 pnpm dev
 ```
 
-Requires a running runtime server at `http://localhost:4437`.
+Requires a running Electric Agents runtime server at `http://localhost:4437`.
 
 Then in another terminal:
 

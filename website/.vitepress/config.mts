@@ -173,6 +173,10 @@ const agentsDocsSidebar = [
         link: '/docs/agents/usage/configuring-the-agent',
       },
       {
+        text: 'Context composition',
+        link: '/docs/agents/usage/context-composition',
+      },
+      {
         text: 'Defining tools',
         link: '/docs/agents/usage/defining-tools',
       },
@@ -181,8 +185,12 @@ const agentsDocsSidebar = [
         link: '/docs/agents/usage/managing-state',
       },
       {
-        text: 'Spawning and coordinating',
+        text: 'Spawning & coordinating',
         link: '/docs/agents/usage/spawning-and-coordinating',
+      },
+      {
+        text: 'Waking entities',
+        link: '/docs/agents/usage/waking-entities',
       },
       { text: 'Shared state', link: '/docs/agents/usage/shared-state' },
       { text: 'App setup', link: '/docs/agents/usage/app-setup' },
@@ -195,41 +203,41 @@ const agentsDocsSidebar = [
     items: [
       { text: 'CLI', link: '/docs/agents/reference/cli' },
       {
-        text: 'Handler context',
+        text: 'HandlerContext',
         link: '/docs/agents/reference/handler-context',
       },
       {
-        text: 'Entity definition',
+        text: 'EntityDefinition',
         link: '/docs/agents/reference/entity-definition',
       },
       {
-        text: 'Agent config',
+        text: 'AgentConfig',
         link: '/docs/agents/reference/agent-config',
       },
-      { text: 'Agent tool', link: '/docs/agents/reference/agent-tool' },
+      { text: 'AgentTool', link: '/docs/agents/reference/agent-tool' },
       {
-        text: 'State collection proxy',
+        text: 'StateCollectionProxy',
         link: '/docs/agents/reference/state-collection-proxy',
       },
       {
-        text: 'Entity handle',
+        text: 'EntityHandle',
         link: '/docs/agents/reference/entity-handle',
       },
       {
-        text: 'Shared state handle',
+        text: 'SharedStateHandle',
         link: '/docs/agents/reference/shared-state-handle',
       },
-      { text: 'Wake event', link: '/docs/agents/reference/wake-event' },
+      { text: 'WakeEvent', link: '/docs/agents/reference/wake-event' },
       {
         text: 'Built-in collections',
         link: '/docs/agents/reference/built-in-collections',
       },
       {
-        text: 'Entity registry',
+        text: 'EntityRegistry',
         link: '/docs/agents/reference/entity-registry',
       },
       {
-        text: 'Runtime handler',
+        text: 'RuntimeHandler',
         link: '/docs/agents/reference/runtime-handler',
       },
     ],
@@ -241,12 +249,7 @@ const agentsDocsSidebar = [
       {
         text: 'Agents',
         items: [
-          { text: 'Chat', link: '/docs/agents/entities/agents/chat' },
-          {
-            text: 'Researcher',
-            link: '/docs/agents/entities/agents/researcher',
-          },
-          { text: 'Coder', link: '/docs/agents/entities/agents/coder' },
+          { text: 'Horton', link: '/docs/agents/entities/agents/horton' },
           {
             text: 'Worker',
             link: '/docs/agents/entities/agents/worker',
@@ -258,7 +261,7 @@ const agentsDocsSidebar = [
         text: 'Patterns',
         items: [
           {
-            text: 'Manager / worker',
+            text: 'Manager-Worker',
             link: '/docs/agents/entities/patterns/manager-worker',
           },
           {
@@ -266,7 +269,7 @@ const agentsDocsSidebar = [
             link: '/docs/agents/entities/patterns/pipeline',
           },
           {
-            text: 'Map / reduce',
+            text: 'Map-Reduce',
             link: '/docs/agents/entities/patterns/map-reduce',
           },
           {
@@ -274,7 +277,7 @@ const agentsDocsSidebar = [
             link: '/docs/agents/entities/patterns/dispatcher',
           },
           {
-            text: 'Blackboard',
+            text: 'Blackboard (shared state)',
             link: '/docs/agents/entities/patterns/blackboard',
           },
           {
@@ -290,10 +293,8 @@ const agentsDocsSidebar = [
     text: 'Examples',
     collapsed: false,
     items: [
-      { text: 'Overview', link: '/docs/agents/examples/' },
       { text: 'Playground', link: '/docs/agents/examples/playground' },
       { text: 'Mega Draw', link: '/docs/agents/examples/mega-draw' },
-      { text: 'Grid app', link: '/docs/agents/examples/grid-app' },
     ],
   },
 ]

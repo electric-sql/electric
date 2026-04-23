@@ -1,11 +1,12 @@
 ---
-title: Overview
+title: Electric Streams
+titleTemplate: "... - Electric Streams"
 description: >-
   An overview of Electric Streams and the Durable Streams protocol: streams, offsets, content types, producers, consumers, live modes, stream lifecycle, and CDN caching.
 outline: [2, 3]
 ---
 
-# Overview
+# Electric Streams
 
 **Electric Streams** is a hosted, fully-managed implementation of the open [Durable&nbsp;Streams](https://durablestreams.com/) protocol &mdash; durable, append-only, replayable HTTP streams for events, agent loops and real-time&nbsp;data.
 
