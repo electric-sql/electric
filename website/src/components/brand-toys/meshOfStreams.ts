@@ -1006,6 +1006,11 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         inLen: number
         outLen: number
         tanHalf: number
+        // True for ~45° chamfer corners (chamferZShapes produces these). At
+        // these corners we don't try to be concentric: we just give every
+        // lane a fixed small radius (= laneSpacing) so the chamfer reads as
+        // a softened diagonal regardless of bundle width.
+        isChamfer: boolean
         // Whether this corner sits at the FIRST or LAST interior corner; if
         // so, the segment toward the wheel-side guide can use its full length
         // (no neighboring corner consuming part of it).
@@ -1031,11 +1036,15 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
           // External turn angle (0 = straight, π = U-turn).
           const turnExt = Math.atan2(Math.abs(cross), dot)
           const tanHalf = Math.tan(turnExt / 2)
+          // 45° chamfer detection: external turn angle is π/4 (~0.785 rad).
+          // Use a generous band so floating-point drift doesn't slip through.
+          const isChamfer = Math.abs(turnExt - Math.PI / 4) < 0.05
           return {
             turnSign,
             inLen,
             outLen,
             tanHalf,
+            isChamfer,
             isFirstInterior: idx === 1,
             isLastInterior: idx === chosen.core.length - 2,
           }
@@ -1207,10 +1216,20 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
               lane.corners[k] = { radius: 0 }
               continue
             }
-            // Lanes whose offset puts them on the OUTSIDE of the turn (sign
-            // opposite to turnSign) get the larger radius; INSIDE lanes get
-            // smaller (and may clamp to minR for very wide bundles or short
-            // segments).
+            if (geom.isChamfer) {
+              // Simplification at 45° chamfer corners: don't try to be
+              // concentric (the diagonal segment is too short to fit
+              // meaningfully different per-lane radii). Give every lane the
+              // same small radius equal to the lane spacing — enough to
+              // visibly soften the corner and stay consistent with the
+              // 90° corners' visual weight.
+              lane.corners[k] = { radius: laneSpacing }
+              continue
+            }
+            // Standard 90°-ish corner: lanes whose offset puts them on the
+            // OUTSIDE of the turn (sign opposite to turnSign) get the larger
+            // radius; INSIDE lanes get smaller (and may clamp to minR for
+            // very wide bundles or short segments).
             const r = virtualCenterR[k] - geom.turnSign * lane.offset
             lane.corners[k] = { radius: Math.max(minR, r) }
           }
