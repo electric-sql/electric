@@ -75,34 +75,6 @@ OR id IN (
 
 Direct ownership is a column filter. Sharing is a subquery. OR combines them. When a share is granted or revoked, only that document moves.
 
-### Hierarchical access
-
-Tasks in projects belonging to my teams. Two levels of indirection, one WHERE clause.
-
-```sql
-project_id IN (
-  SELECT id FROM projects WHERE team_id IN (
-    SELECT team_id FROM team_members WHERE user_id = $1
-  )
-)
-```
-
-Nested subqueries follow the org hierarchy. When a user joins a team, they get all the tasks in all that team's projects.
-
-### Role-scoped access
-
-Billing data visible only to admins and billing managers.
-
-```sql
-org_id IN (
-  SELECT org_id FROM org_members
-  WHERE user_id = $1
-  AND role IN ('admin', 'billing_manager')
-)
-```
-
-The role filter narrows which memberships grant access. Different roles sync different data from the same shape definition.
-
 ### Project scoping
 
 Sync comments for a specific project, traversing through tasks and issues.
