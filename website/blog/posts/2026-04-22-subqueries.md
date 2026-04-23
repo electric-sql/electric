@@ -1,9 +1,9 @@
 ---
-title: 'Subqueries - complete access-control with Sync'
+title: Relational access control for sync with subqueries
 description: >-
-  ...
+  Electric now supports subqueries in shape WHERE clauses. Define access-control logic in SQL and Electric syncs only the matching rows to each client, incrementally.
 excerpt: >-
-  ...
+  Subqueries extend shape WHERE clauses with relational logic. Define who sees what in SQL — membership checks, role lookups, shared documents — and Electric syncs only the matching rows, incrementally.
 authors: [rob]
 image: /img/blog/subqueries/header.jpg
 tags: [shapes, postgres-sync]
@@ -12,13 +12,11 @@ post: true
 published: false
 ---
 
+With Electric&nbsp;1.6, subqueries in shape WHERE clauses are production-ready. Complex expressions now sync incrementally — no tradeoff between expressiveness and performance.
+
 Sync makes apps fast, resilient, and collaborative. You declare a shape — a table and a WHERE clause — and Electric streams the matching rows into your app, keeps them current, handles reconnection. No fetch logic, no loading states, no stale data. If you haven't seen the pitch: [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and it's [how you build real-time, collaborative apps](/blog/2025/04/09/building-ai-apps-on-sync).
 
 Subqueries extend shape WHERE clauses with relational logic. Sync rows where a membership exists, a role matches, a share is granted. Sync the line items for an invoice, the comments on an issue, the messages in a thread. Relational filtering defined in SQL, evaluated server-side, synced incrementally.
-
-:::info
-Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pro, Scale, and Enterprise plans](/pricing).
-:::
 
 
 ## Shapes and relational data
@@ -71,20 +69,25 @@ The shape syncs all comments reachable from the project root. When a new task or
 
 See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference on supported operators and subquery patterns.
 
+:::info
+Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pro, Scale, and Enterprise plans](/pricing).
+:::
+
 
 ## Ready for general use
 
-We've kept subqueries experimental while we built out the sync engine support. With the release of Electric 1.6, subqueries are going mainstream. For us to be confident in saying this we needed shapes to be responsive no matter the situation. Before 1.6 we supported subqueries with complex sql expressions, large shapes, and low latency update, but you couldn't have all three at the same time - shapes with subqueries combined with AND/OR/NOT would trigger a full resync on subquery value changes, which for a large dataset would cause a noticeable delay. With 1.6 we incrementally sync only the affected rows, even for complex subquery expressions.
+We've kept subqueries experimental while we built out the sync engine support. With Electric&nbsp;1.6, they're production-ready.
 
-We've also optimised "OR" expressions in version 1.6 so that processing the replication stream is fast no matter how many shapes you have. All the SQL expressions mentioned in this artical are now optimised - see the docs for the full list of supported expressions.
+Before 1.6, subqueries worked with complex SQL expressions, large shapes, and low-latency updates — but you couldn't have all three at the same time. Shapes with subqueries combined with AND/OR/NOT would trigger a full resync on subquery value changes, which for a large dataset would cause a noticeable delay.
 
-We've battle tested subqueries in our test evnvironments and in production with key customers and are confident in their performance and reliability. Now we want to see what you can build with them!
+With 1.6, the sync engine incrementally syncs only the affected rows, even for complex subquery expressions. No more tradeoff between expressiveness and performance.
+
+We've also optimised OR expressions so that processing the replication stream is fast no matter how many shapes you have. All the SQL expressions mentioned in this article are now optimised — see the docs for the full list of supported expressions.
+
+We've battle-tested subqueries in our test environments and in production and are confident in their performance and reliability.
 
 
 ## Get started
-
-<!-- Lead with the TanStack integration example — this is what the reader
-     will actually write. Then setup steps. -->
 
 ```ts
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
@@ -117,17 +120,17 @@ Update to the latest packages:
 npm install @tanstack/db@latest @tanstack/electric-db-collection@latest
 ```
 
-Subqueries are behind feature flags while we finalise the API. Enable them on your sync service:
+Subqueries are behind a feature flag while we ensure all clients have updated to the new protocol. Enable them on your sync service:
 
 ```sh
 ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
 :::warning
-Subquery with complex expression support in Electric 1.6 required a client protocol update. Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
+Subquery with complex expression support in Electric&nbsp;1.6 required a client protocol update. Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
 :::
 
-Subqueries will graduate from the feature flag and be enabled by default in a future release. The docs are being updated to reflect production-ready status.
+Once clients have migrated to the updated protocol, the feature flag will be removed and subqueries will be enabled by default.
 
 See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference.
 
