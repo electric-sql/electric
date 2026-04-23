@@ -12,7 +12,7 @@ post: true
 published: false
 ---
 
-Electric syncs Postgres data into local apps. You declare a shape — a table and a WHERE clause — and Electric streams the matching rows, keeps them current, handles reconnection. Your app reads from a local store. No fetch logic, no loading states, no stale data. If you haven't seen the pitch: [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and it's [how you build real-time, collaborative apps](/blog/2025/04/09/building-ai-apps-on-sync).
+Sync makes apps fast, resilient, and collaborative. You declare a shape — a table and a WHERE clause — and Electric streams the matching rows into your app, keeps them current, handles reconnection. No fetch logic, no loading states, no stale data. If you haven't seen the pitch: [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and it's [how you build real-time, collaborative apps](/blog/2025/04/09/building-ai-apps-on-sync).
 
 Subqueries extend shape WHERE clauses with relational logic. Sync rows where a membership exists, a role matches, a share is granted. Sync the line items for an invoice, the comments on an issue, the messages in a thread. Relational filtering defined in SQL, evaluated server-side, synced incrementally.
 
