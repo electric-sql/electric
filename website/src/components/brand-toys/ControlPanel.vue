@@ -334,9 +334,32 @@ const _ = renderControl
             <em v-if="c.description" class="bt-hint-inline">{{ c.description }}</em>
           </div>
 
-          <!-- Number -->
+          <!-- Number — renders an extra range slider above the
+               numeric input when both min and max are defined, so
+               density / activity / speed multipliers can be
+               scrubbed live while still allowing precise typed
+               values. The slider and the number input are bound to
+               the same value via `setValue`. -->
           <label v-else-if="c.type === 'number'" class="bt-field">
-            <span>{{ c.label ?? c.name }}</span>
+            <span class="bt-num-row">
+              <span>{{ c.label ?? c.name }}</span>
+              <span class="bt-num-readout">{{ values[c.name] }}</span>
+            </span>
+            <input
+              v-if="c.min !== undefined && c.max !== undefined"
+              type="range"
+              class="bt-range"
+              :value="values[c.name] as number"
+              :min="c.min"
+              :max="c.max"
+              :step="c.step ?? 1"
+              @input="
+                setValue(
+                  c.name,
+                  parseFloat(($event.target as HTMLInputElement).value)
+                )
+              "
+            />
             <input
               type="number"
               :value="values[c.name] as number"
@@ -513,6 +536,41 @@ const _ = renderControl
 }
 .bt-field input[type="number"] {
   font-family: var(--vp-font-family-mono, ui-monospace, monospace);
+}
+
+/* Number control with min/max gets a slider above the typed input.
+   The label sits in a row with the live numeric value on the right
+   so you can see what the slider is doing without taking your eye
+   off the canvas. */
+.bt-num-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.bt-num-readout {
+  font-family: var(--vp-font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--vp-c-text-1, rgba(255, 255, 245, 0.92));
+  background: var(--vp-c-bg, #111318);
+  border: 1px solid var(--vp-c-divider, #2a2d38);
+  border-radius: 3px;
+  padding: 1px 5px;
+  min-width: 28px;
+  text-align: right;
+}
+.bt-field input.bt-range[type="range"] {
+  /* Override the generic `.bt-field input` background/border/padding
+     — range inputs render a track + thumb chrome and need to be
+     left to the browser styling for legibility. */
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  height: 18px;
+  accent-color: var(--vp-c-brand-1, #00d2be);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .bt-field-row {

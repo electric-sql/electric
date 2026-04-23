@@ -34,6 +34,15 @@ export interface ControlDef {
   label?: string
   /** Optional tooltip text. */
   description?: string
+  /**
+   * When true, changing this control's value triggers a debounced
+   * remount of the toy. Use for "structural" props that the
+   * underlying component only reads at mount / layout time (e.g.
+   * grid cell density, node count caps), where a live re-render
+   * would otherwise leave the canvas using the old value until the
+   * user clicks "Remount" or resizes the stage.
+   */
+  remountOnChange?: boolean
 }
 
 export type ToyGroup =
@@ -120,15 +129,62 @@ export const TOYS: readonly ToyDef[] = [
     description: `The composable sync-primitives hero canvas. Shapes fan out to clients.`,
     component: () =>
       import(`../sync-home/SyncFanOutBg.vue`).then((m) => m.default),
+    // Defaults below mirror the live `/sync` landing-page hero
+    // (`<SyncFanOutBg :labels-on-hover="true" />`). All density /
+    // activity / speed / overlap dials default to 1 / 2, which is
+    // exactly the behaviour shipped in the component when no
+    // explicit prop is passed.
     controls: [
       PAUSED,
       {
         name: `labelsOnHover`,
         type: `boolean`,
-        default: false,
-        description: `Hide entity labels until hovered.`,
+        default: true,
+        description: `Hide entity labels until hovered (matches live /sync hero).`,
       },
       NO_EDGE_FADE,
+      {
+        name: `density`,
+        type: `number`,
+        default: 1,
+        min: 0.25,
+        max: 6,
+        step: 0.1,
+        label: `Row density`,
+        description: `Multiplier on table grid density. 1 = live hero (46×38 cell). Higher packs more rows in.`,
+        remountOnChange: true,
+      },
+      {
+        name: `activity`,
+        type: `number`,
+        default: 1,
+        min: 0,
+        max: 10,
+        step: 0.1,
+        label: `Activity`,
+        description: `Multiplier on auto-spawn rate. 1 = live cadence; 0 freezes ambient spawns (in-flight tokens still arrive).`,
+      },
+      {
+        name: `tokenSpeed`,
+        type: `number`,
+        default: 1,
+        min: 0.1,
+        max: 10,
+        step: 0.1,
+        label: `Token speed`,
+        description: `Multiplier on per-token flight speed.`,
+      },
+      {
+        name: `overlapShapes`,
+        type: `number`,
+        default: 2,
+        min: 0,
+        max: 12,
+        step: 1,
+        label: `Overlap shapes`,
+        description: `Extra shapes added on top of the 1-per-quadrant base layer.`,
+        remountOnChange: true,
+      },
     ],
     fullBleed: true,
     background: `dark`,
@@ -142,7 +198,67 @@ export const TOYS: readonly ToyDef[] = [
     description: `Wakeful agent-mesh hero canvas — nodes wake and cascade messages.`,
     component: () =>
       import(`../agents-home/HeroNetworkBg.vue`).then((m) => m.default),
-    controls: [PAUSED, NO_EDGE_FADE],
+    // Defaults below mirror the live `/agents` landing-page hero
+    // (`<HeroNetworkBg />` — no explicit props). Density 1 / max 60
+    // reproduces the `(w*h)/12000` clamped-25-60 formula; activity
+    // 1 / cascadeChance 0.5 / tokenSpeed 1 are the in-component
+    // constants that ship today.
+    controls: [
+      PAUSED,
+      NO_EDGE_FADE,
+      {
+        name: `density`,
+        type: `number`,
+        default: 1,
+        min: 0.1,
+        max: 10,
+        step: 0.1,
+        label: `Node density`,
+        description: `Multiplier on nodes-per-area. 1 = live hero ((w·h)/12000 clamped 25–60).`,
+        remountOnChange: true,
+      },
+      {
+        name: `maxNodes`,
+        type: `number`,
+        default: 60,
+        min: 10,
+        max: 500,
+        step: 5,
+        label: `Max nodes`,
+        description: `Upper cap on node count. Live hero clamps at 60.`,
+        remountOnChange: true,
+      },
+      {
+        name: `activity`,
+        type: `number`,
+        default: 1,
+        min: 0,
+        max: 10,
+        step: 0.1,
+        label: `Activity`,
+        description: `Multiplier on ambient wake rate. 1 = live cadence; 0 freezes spawns.`,
+      },
+      {
+        name: `cascadeChance`,
+        type: `number`,
+        default: 0.5,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        label: `Cascade chance`,
+        description: `Probability a chained hop fires when a message arrives. 0.5 = live default. (Capped at 1 — it's a probability.)`,
+      },
+      {
+        name: `tokenSpeed`,
+        type: `number`,
+        default: 1,
+        min: 0.1,
+        max: 10,
+        step: 0.1,
+        label: `Token speed`,
+        description: `Multiplier on per-message flight speed.`,
+      },
+    ],
     fullBleed: true,
     background: `dark`,
     defaultSize: { w: 1280, h: 720 },
@@ -155,7 +271,66 @@ export const TOYS: readonly ToyDef[] = [
     description: `Durable-streams hero rails with comet tokens.`,
     component: () =>
       import(`../streams-home/StreamFlowBg.vue`).then((m) => m.default),
-    controls: [PAUSED, NO_EDGE_FADE],
+    // Defaults below mirror the live `/streams` landing-page hero
+    // (`<StreamFlowBg />` — no explicit props). Density 1 / max 8
+    // reproduces the `h/70` clamped-5-8 formula; activity / speed /
+    // branchActivity 1 are the in-component constants.
+    controls: [
+      PAUSED,
+      NO_EDGE_FADE,
+      {
+        name: `density`,
+        type: `number`,
+        default: 1,
+        min: 0.1,
+        max: 8,
+        step: 0.1,
+        label: `Rail density`,
+        description: `Multiplier on rails-per-height. 1 = live hero (h/70 clamped 5–8).`,
+        remountOnChange: true,
+      },
+      {
+        name: `maxRails`,
+        type: `number`,
+        default: 8,
+        min: 2,
+        max: 60,
+        step: 1,
+        label: `Max rails`,
+        description: `Upper cap on rail count. Live hero clamps at 8.`,
+        remountOnChange: true,
+      },
+      {
+        name: `activity`,
+        type: `number`,
+        default: 1,
+        min: 0,
+        max: 10,
+        step: 0.1,
+        label: `Activity`,
+        description: `Multiplier on per-rail spawn rate. 1 = live cadence; 0 freezes ambient spawns.`,
+      },
+      {
+        name: `tokenSpeed`,
+        type: `number`,
+        default: 1,
+        min: 0.1,
+        max: 10,
+        step: 0.1,
+        label: `Token speed`,
+        description: `Multiplier on per-token rail speed.`,
+      },
+      {
+        name: `branchActivity`,
+        type: `number`,
+        default: 1,
+        min: 0,
+        max: 10,
+        step: 0.1,
+        label: `Branch activity`,
+        description: `Multiplier on consumer-branch spawn rate. 1 = live cadence.`,
+      },
+    ],
     fullBleed: true,
     background: `dark`,
     defaultSize: { w: 1280, h: 720 },

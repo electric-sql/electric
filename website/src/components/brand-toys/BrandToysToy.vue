@@ -210,6 +210,10 @@ onBeforeUnmount(() => {
     clearTimeout(resizeRemountTimer)
     resizeRemountTimer = null
   }
+  if (propRemountTimer) {
+    clearTimeout(propRemountTimer)
+    propRemountTimer = null
+  }
   if (typeof document !== "undefined") {
     document.body.classList.remove("bt-toy-fixed")
     document.body.classList.remove("bt-recording")
@@ -225,6 +229,30 @@ watch([width, height], () => {
   if (resizeRemountTimer) clearTimeout(resizeRemountTimer)
   resizeRemountTimer = setTimeout(() => {
     resizeRemountTimer = null
+    mountKey.value += 1
+    nextTick(() => dispatchScrollSignal())
+  }, 250)
+})
+
+// Some controls are "structural" — the underlying component only
+// reads them at mount / layout time (e.g. grid-cell density, node
+// count caps, rail count). We watch those specific values and
+// auto-remount, debounced, so dragging a slider through several
+// values produces one remount at the end rather than one per tick.
+let propRemountTimer: ReturnType<typeof setTimeout> | null = null
+const remountPropNames = computed(() =>
+  (props.toy.controls ?? [])
+    .filter((c) => c.remountOnChange)
+    .map((c) => c.name),
+)
+const remountPropValues = computed(() =>
+  remountPropNames.value.map((n) => values.value[n]),
+)
+watch(remountPropValues, () => {
+  if (!mounted) return
+  if (propRemountTimer) clearTimeout(propRemountTimer)
+  propRemountTimer = setTimeout(() => {
+    propRemountTimer = null
     mountKey.value += 1
     nextTick(() => dispatchScrollSignal())
   }, 250)

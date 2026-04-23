@@ -12,19 +12,44 @@ import { ref, onMounted, onUnmounted } from "vue"
 //   - radial fade so the headline copy sits on a quiet centre
 //   - hover tooltips + click-to-burst for tactile life
 
-const props = defineProps<{
-  excludeEl?: HTMLElement
-  // When true, no new comet tokens auto-spawn on rails. Existing
-  // tokens still finish their travel, hover labels still appear,
-  // and clicking still produces a burst. Used by the homepage
-  // section graphics to dial back ambient activity.
-  paused?: boolean
-  // When true, the radial edge-fade that softens rails near the
-  // canvas borders is disabled, so the rails fill the whole frame
-  // at full intensity. Used by the homepage iso-stack hero where
-  // the canvas already sits inside a crisp bordered card.
-  noEdgeFade?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    excludeEl?: HTMLElement
+    // When true, no new comet tokens auto-spawn on rails. Existing
+    // tokens still finish their travel, hover labels still appear,
+    // and clicking still produces a burst. Used by the homepage
+    // section graphics to dial back ambient activity.
+    paused?: boolean
+    // When true, the radial edge-fade that softens rails near the
+    // canvas borders is disabled, so the rails fill the whole frame
+    // at full intensity. Used by the homepage iso-stack hero where
+    // the canvas already sits inside a crisp bordered card.
+    noEdgeFade?: boolean
+    // Multiplier on rail count. 1 reproduces the live `h/70`
+    // formula (5–8 rails). 2 packs in twice as many; 0.5 halves.
+    density?: number
+    // Hard cap on the rail count regardless of density. The live
+    // hero clamps at 8.
+    maxRails?: number
+    // Multiplier on ambient token spawn rate per rail. 1 keeps the
+    // live 2.8–5.2 s spawn interval; 2 doubles the rate, 0.5 halves
+    // it. 0 freezes ambient spawns.
+    activity?: number
+    // Multiplier on per-token rail speed. 1 reproduces the live
+    // 55–110 px/s base range; raise for snappier comets.
+    tokenSpeed?: number
+    // Multiplier on branch (consumer fan-out) frequency. 1 keeps
+    // the live 3–8 s interval per rail; raise for more branching.
+    branchActivity?: number
+  }>(),
+  {
+    density: 1,
+    maxRails: 8,
+    activity: 1,
+    tokenSpeed: 1,
+    branchActivity: 1,
+  },
+)
 
 const canvas = ref<HTMLCanvasElement>()
 const tooltip = ref<HTMLDivElement>()
@@ -188,16 +213,23 @@ onMounted(() => {
 
   function buildRails() {
     rails = []
-    // Comfortably spaced, ~70px apart — fewer rails, more breathing room.
-    const target = Math.max(5, Math.min(8, Math.floor(h / 70)))
+    // Comfortably spaced, ~70px apart — fewer rails, more breathing
+    // room. `density` scales the rail count produced by `h/70` (and
+    // `maxRails` overrides the upper clamp). Floor at 2 so a tiny
+    // canvas still has rails to draw.
+    const densityMul = Math.max(0.1, props.density)
+    const cap = Math.max(2, Math.floor(props.maxRails))
+    const target = Math.max(2, Math.min(cap, Math.floor((h * densityMul) / 70)))
     const padTop = 32
     const padBottom = 40
     const usable = h - padTop - padBottom
     const shuffled = [...STREAM_NAMES].sort(() => Math.random() - 0.5)
+    const speedMul = Math.max(0.05, props.tokenSpeed)
+    const branchMul = Math.max(0.05, props.branchActivity)
     for (let i = 0; i < target; i++) {
       const y = padTop + (usable * (i + 0.5)) / target
       // Each rail has its own personality: faster ones spawn more often.
-      const speed = 55 + Math.random() * 55
+      const speed = (55 + Math.random() * 55) * speedMul
       const spawnInterval = 2800 + Math.random() * 2400
       const rail: Rail = {
         y,
@@ -208,7 +240,10 @@ onMounted(() => {
         name: shuffled[i % shuffled.length],
         offsetCounter: Math.floor(Math.random() * 0xffff),
         branches: [],
-        nextBranch: 2000 + Math.random() * 5000,
+        // Pre-divide by `branchMul` so a high branchActivity makes
+        // the very first branch appear sooner too, not just future
+        // ones.
+        nextBranch: (2000 + Math.random() * 5000) / branchMul,
       }
       // Pre-seed 3–5 tokens at random positions across the rail so the
       // hero looks already-streaming rather than filling from the left.
@@ -491,12 +526,19 @@ onMounted(() => {
       drawRail(rail, dark, hoveredRail === ri)
     }
 
+    // `activity` and `branchActivity` scale dt accumulation toward
+    // each rail's next spawn / branch — the rates scale linearly
+    // without skewing the random jitter. 0 freezes the channel
+    // (in-flight tokens / branches still finish).
+    const activityMul = Math.max(0, props.activity)
+    const branchActivityMul = Math.max(0, props.branchActivity)
+
     for (let ri = 0; ri < rails.length; ri++) {
       const rail = rails[ri]
 
       // Spawn
-      rail.nextSpawn -= dt
-      if (!props.paused && rail.nextSpawn <= 0) {
+      if (activityMul > 0) rail.nextSpawn -= dt * activityMul
+      if (!props.paused && activityMul > 0 && rail.nextSpawn <= 0) {
         rail.tokens.push({
           x: -16,
           speed: rail.speed * (0.85 + Math.random() * 0.4),
@@ -529,8 +571,13 @@ onMounted(() => {
       }
 
       // Branch life
-      rail.nextBranch -= dt
-      if (!props.paused && rail.nextBranch <= 0 && rail.tokens.length > 0) {
+      if (branchActivityMul > 0) rail.nextBranch -= dt * branchActivityMul
+      if (
+        !props.paused &&
+        branchActivityMul > 0 &&
+        rail.nextBranch <= 0 &&
+        rail.tokens.length > 0
+      ) {
         const seed = rail.tokens[Math.floor(Math.random() * rail.tokens.length)]
         const dir = Math.random() < 0.5 ? 1 : -1
         const offset = 26 + Math.random() * 30
@@ -549,7 +596,7 @@ onMounted(() => {
             dir,
           })
         }
-        rail.nextBranch = 3000 + Math.random() * 5000
+        rail.nextBranch = (3000 + Math.random() * 5000) / branchActivityMul
       }
 
       for (let i = rail.branches.length - 1; i >= 0; i--) {

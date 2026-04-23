@@ -1,20 +1,49 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue"
 
-const props = defineProps<{
-  excludeEl?: HTMLElement
-  // When true, no random wakes or chained messages are auto-spawned;
-  // the canvas still renders the static mesh, hover labels still
-  // appear, and a user click still wakes a node + cascades. Used by
-  // the homepage section graphics so the page doesn't feel busy.
-  paused?: boolean
-  // When true, the radial edge-fade that softens geometry near the
-  // canvas borders is disabled, so the mesh fills the whole frame at
-  // full intensity. Used by the homepage iso-stack hero where each
-  // canvas already lives inside a crisp bordered card and the fade
-  // would otherwise leave the corners empty.
-  noEdgeFade?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    excludeEl?: HTMLElement
+    // When true, no random wakes or chained messages are auto-spawned;
+    // the canvas still renders the static mesh, hover labels still
+    // appear, and a user click still wakes a node + cascades. Used by
+    // the homepage section graphics so the page doesn't feel busy.
+    paused?: boolean
+    // When true, the radial edge-fade that softens geometry near the
+    // canvas borders is disabled, so the mesh fills the whole frame at
+    // full intensity. Used by the homepage iso-stack hero where each
+    // canvas already lives inside a crisp bordered card and the fade
+    // would otherwise leave the corners empty.
+    noEdgeFade?: boolean
+    // Multiplier on the area-driven node count formula. 1
+    // reproduces the live `(w*h)/12000` density (clamped 25–60);
+    // 2 packs in twice as many points, 0.5 halves them.
+    density?: number
+    // Hard cap on the number of nodes regardless of density. The
+    // live hero clamps at 60.
+    maxNodes?: number
+    // Multiplier on ambient wake/cascade cadence. 1 keeps the live
+    // 800–2800 ms between auto-wakes; 2 doubles the rate, 0.5
+    // halves it. 0 freezes ambient spawns (existing in-flight
+    // messages still arrive and may chain).
+    activity?: number
+    // Probability of a chained cascade firing when a message
+    // arrives at a node (0–1). The live hero ships with 0.5 — half
+    // of arrivals trigger another hop.
+    cascadeChance?: number
+    // Multiplier on token flight speed. 1 reproduces the live
+    // 1.0–1.7 progress/s range used across all three hero
+    // canvases.
+    tokenSpeed?: number
+  }>(),
+  {
+    density: 1,
+    maxNodes: 60,
+    activity: 1,
+    cascadeChance: 0.5,
+    tokenSpeed: 1,
+  },
+)
 
 const canvas = ref<HTMLCanvasElement>()
 const tooltip = ref<HTMLDivElement>()
@@ -159,10 +188,17 @@ function hitsExclusion(
 }
 
 function createNodes(
-  w: number, h: number, exclusions: ExcludeRect[]
+  w: number, h: number, exclusions: ExcludeRect[],
+  density: number, maxNodes: number,
 ): Node[] {
   const nodes: Node[] = []
-  const count = Math.min(60, Math.max(25, Math.floor((w * h) / 12000)))
+  // Live hero formula: `(w*h)/12000` clamped 25–60. `density` scales
+  // the area divisor (lower divisor → more nodes per unit area), and
+  // `maxNodes` overrides the upper clamp. Floor at 8 so a tiny canvas
+  // still has enough nodes to triangulate.
+  const d = Math.max(0.1, density)
+  const cap = Math.max(8, Math.floor(maxNodes))
+  const count = Math.min(cap, Math.max(8, Math.floor((w * h * d) / 12000)))
   const padding = 30
   const minDist = 50
   const excludeMargin = 4
@@ -290,7 +326,7 @@ onMounted(() => {
     if (DEBUG) {
       console.log('Hero exclusion zones:', exclusions.length, exclusions, 'canvas size:', w, h)
     }
-    nodes = createNodes(w, h, exclusions)
+    nodes = createNodes(w, h, exclusions, props.density, props.maxNodes)
     const raw = delaunay(nodes)
     edges = pruneEdges(raw, nodes, 200)
     messages = []
@@ -374,7 +410,7 @@ onMounted(() => {
   // the same way". The visible pixel velocity will differ where edges
   // are physically shorter, but the motion law itself is the match.
   function tokenSpeed(): number {
-    return 1.0 + Math.random() * 0.7
+    return (1.0 + Math.random() * 0.7) * Math.max(0.05, props.tokenSpeed)
   }
 
   function wakeAndSend(idx: number) {
@@ -635,7 +671,7 @@ onMounted(() => {
         nodes[arrivedAt].awake = Math.min(1, nodes[arrivedAt].awake + 0.85)
         messages.splice(i, 1)
 
-        if (Math.random() < 0.5) {
+        if (Math.random() < Math.max(0, Math.min(1, props.cascadeChance))) {
           const neighbors = getNeighbors(arrivedAt, edges).filter(
             (n) => n !== arrivedFrom
           )
@@ -661,8 +697,13 @@ onMounted(() => {
     }
 
     // --- Spawn random wakes & messages ---
-    nextSend -= dt
-    if (!props.paused && nextSend <= 0) {
+    // `activity` scales the dt accumulation toward the next ambient
+    // wake, so rate scales linearly without skewing the random
+    // jitter window. 0 freezes ambient spawns (in-flight messages
+    // still arrive and may chain via `cascadeChance`).
+    const activity = Math.max(0, props.activity)
+    if (activity > 0) nextSend -= dt * activity
+    if (!props.paused && activity > 0 && nextSend <= 0) {
       nextSend = 800 + Math.random() * 2000
       const startNode = Math.floor(Math.random() * nodes.length)
       nodes[startNode].awake = Math.min(1, nodes[startNode].awake + 0.95)

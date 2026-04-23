@@ -11,25 +11,51 @@ import { ref, onMounted, onUnmounted } from "vue"
 //   - text-rect exclusions so geometry never lands on the text
 //   - hover tooltips + click-to-fire for tactile life
 
-const props = defineProps<{
-  excludeEl?: HTMLElement
-  // When true, persistent shape and client labels are hidden until
-  // their entity is hovered. The sync landing-page hero leaves this
-  // off to keep its identifying labels always-on; the homepage opts
-  // in so the framed scenes read as cleanly as the agents/streams
-  // canvases (which never draw labels at rest).
-  labelsOnHover?: boolean
-  // When true, no random update tokens auto-spawn. Existing tokens
-  // continue to flight, hover labels still work, and clicking a
-  // shape or client still fires updates manually. Used by the
-  // homepage section graphic to suppress ambient activity.
-  paused?: boolean
-  // When true, the radial edge-fade that softens shapes near the
-  // canvas borders is disabled, so the grid fills the whole frame
-  // at full intensity. Used by the homepage iso-stack hero where
-  // the canvas already sits inside a crisp bordered card.
-  noEdgeFade?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    excludeEl?: HTMLElement
+    // When true, persistent shape and client labels are hidden until
+    // their entity is hovered. The sync landing-page hero leaves this
+    // off to keep its identifying labels always-on; the homepage opts
+    // in so the framed scenes read as cleanly as the agents/streams
+    // canvases (which never draw labels at rest).
+    labelsOnHover?: boolean
+    // When true, no random update tokens auto-spawn. Existing tokens
+    // continue to flight, hover labels still work, and clicking a
+    // shape or client still fires updates manually. Used by the
+    // homepage section graphic to suppress ambient activity.
+    paused?: boolean
+    // When true, the radial edge-fade that softens shapes near the
+    // canvas borders is disabled, so the grid fills the whole frame
+    // at full intensity. Used by the homepage iso-stack hero where
+    // the canvas already sits inside a crisp bordered card.
+    noEdgeFade?: boolean
+    // Multiplier on the table grid density. 1 reproduces the
+    // 46×38 cell grid we ship; >1 packs more rows in (denser table),
+    // <1 spreads them out (airier).
+    density?: number
+    // Multiplier on ambient spawn rate. 1 keeps the live cadence
+    // (220–720 ms between auto-fires); 2 doubles the rate, 0.5
+    // halves it. Set to 0 to suppress all ambient spawns (same as
+    // `paused` but lets existing tokens keep moving).
+    activity?: number
+    // Multiplier on token flight speed. 1 reproduces the live
+    // 1.0–1.7 progress/s range; raise for snappier comets, lower
+    // for slow-mo.
+    tokenSpeed?: number
+    // Number of additional overlapping shapes added in pass 2 (on
+    // top of the 1-per-quadrant base layer). The live hero ships
+    // with up to 2 extras for a bit more activity; raise for a
+    // busier table, drop to 0 for a clean 4-shape layout.
+    overlapShapes?: number
+  }>(),
+  {
+    density: 1,
+    activity: 1,
+    tokenSpeed: 1,
+    overlapShapes: 2,
+  },
+)
 
 const canvas = ref<HTMLCanvasElement>()
 const tooltip = ref<HTMLDivElement>()
@@ -198,8 +224,13 @@ onMounted(() => {
   function buildRows() {
     rows = []
     // Jittered grid so the table reads as "data" not "decoration".
-    const cellW = 46
-    const cellH = 38
+    // `density` shrinks the cell as it grows: density 1 → 46×38
+    // (the live hero), density 2 → ~33×27 (twice as many rows).
+    // Clamp the multiplier so absurd inputs don't explode the cell
+    // count or collapse it to negative.
+    const densityScale = 1 / Math.sqrt(Math.max(0.25, props.density))
+    const cellW = Math.max(18, Math.round(46 * densityScale))
+    const cellH = Math.max(16, Math.round(38 * densityScale))
     const cols = Math.max(8, Math.floor(w / cellW))
     const rowsCount = Math.max(5, Math.floor(h / cellH))
     const padX = (w - cols * cellW) / 2
@@ -440,14 +471,16 @@ onMounted(() => {
     // existing ones. This gives the canvas ~50% more activity (extra
     // shapes → extra spawn targets → more tokens flying around) and
     // visually conveys that multiple where-clauses can share rows
-    // from the same table. We attempt one extra shape per quadrant
-    // and stop when we've added two so the scene doesn't get noisy.
+    // from the same table. The cap is `overlapShapes` (default 2).
+    // Quadrants are reshuffled and we stop once we've placed that
+    // many extras, so the scene doesn't get noisy unbidden.
+    const extrasTarget = Math.max(0, Math.floor(props.overlapShapes))
     let added = 0
     const extraOrder = quadrants
       .map((q, i) => ({ q, i }))
       .sort(() => Math.random() - 0.5)
     for (const { q } of extraOrder) {
-      if (added >= 2) break
+      if (added >= extrasTarget) break
       const placed = tryPlaceShapeInRegion(q, 3, 4, 60, true)
       if (placed && placeShape(placed)) added++
     }
@@ -814,6 +847,7 @@ onMounted(() => {
         : row.shapeIds.length
           ? row.shapeIds
           : []
+    const speedMul = Math.max(0.05, props.tokenSpeed)
     for (const sid of shapeIds) {
       const shape = shapes[sid]
       if (!shape) continue
@@ -827,7 +861,7 @@ onMounted(() => {
           toX: client.x,
           toY: client.y,
           progress: 0,
-          speed: 1.0 + Math.random() * 0.7,
+          speed: (1.0 + Math.random() * 0.7) * speedMul,
         })
       }
     }
@@ -892,10 +926,18 @@ onMounted(() => {
     // a busy, lively sync engine. Combined with the bumped per-token
     // speed above, the canvas now feels actively flowing rather than
     // gently dripping.
-    nextSpawn -= dt
-    if (!props.paused && nextSpawn <= 0) {
-      spawnRandomUpdate()
-      nextSpawn = 220 + Math.random() * 500
+    // `activity` is a multiplier on auto-spawn rate. We scale dt
+    // (time accumulation toward the next spawn) and the next-spawn
+    // delay together so the rate scales linearly without skewing
+    // the random jitter window. Activity 0 freezes ambient spawns
+    // entirely (existing tokens still finish their flight).
+    const activity = Math.max(0, props.activity)
+    if (activity > 0) {
+      nextSpawn -= dt * activity
+      if (!props.paused && nextSpawn <= 0) {
+        spawnRandomUpdate()
+        nextSpawn = 220 + Math.random() * 500
+      }
     }
 
     raf = requestAnimationFrame(tick)
