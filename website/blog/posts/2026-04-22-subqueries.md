@@ -74,15 +74,11 @@ See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full 
 
 ## Ready for general use
 
-We've kept subqueries experimental while we built out the sync engine support. With the release of Electric 1.6, subqueries are going mainstream. Incremental sync is now supported for all subquery expressions — fast, expressive shapes no matter how large the dataset.
+We've kept subqueries experimental while we built out the sync engine support. With the release of Electric 1.6, subqueries are going mainstream. For us to be confident in saying this we needed shapes to be responsive no matter the situation. Before 1.6 we supported subqueries with complex sql expressions, large shapes, and low latency update, but you couldn't have all three at the same time - shapes with subqueries combined with AND/OR/NOT would trigger a full resync on subquery value changes, which for a large dataset would cause a noticeable delay. With 1.6 we incrementally sync only the affected rows, even for complex subquery expressions.
 
-<!-- The Venn diagram. Short and punchy. -->
+We've also optimised "OR" expressions in version 1.6 so that processing the replication stream is fast no matter how many shapes you have. All the SQL expressions mentioned in this artical are now optimised - see the docs for the full list of supported expressions.
 
-Shapes can be large — millions of rows. Expressive — subqueries with AND, OR, NOT, nesting, composite keys. And fast — incremental sync, only affected rows move. No tradeoff.
-
-When a membership changes, a share is revoked, or a role is updated, the sync engine identifies exactly which rows are affected. Only those rows move in or out. No full resync, regardless of shape size or WHERE clause complexity.
-
-<!-- ASSET: Venn diagram — large / fast / expressive, all three overlapping -->
+We've battle tested subqueries in our test evnvironments and in production with key customers and are confident in their performance and reliability. Now we want to see what you can build with them!
 
 
 ## Get started
@@ -128,7 +124,7 @@ ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
 :::warning
-Subquery support required a client protocol update. Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
+Subquery with complex expression support in Electric 1.6 required a client protocol update. Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
 :::
 
 Subqueries will graduate from the feature flag and be enabled by default in a future release. The docs are being updated to reflect production-ready status.
