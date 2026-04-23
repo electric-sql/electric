@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { basename, resolve as resolvePath } from 'node:path'
+import { resolve as resolvePath } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
@@ -11,6 +11,7 @@ import type {
 
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
 const DEFAULT_BUILTIN_AGENTS_PORT = 4448
+const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
 )
@@ -162,15 +163,8 @@ export function getStartedBuiltinAgentsMessage(
   ].join(`\n`)
 }
 
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, `-`)
-    .replace(/^-+|-+$/g, ``)
-}
-
 export function resolveComposeProjectName(
-  cwd: string = process.cwd(),
+  _cwd: string = process.cwd(),
   env: NodeJS.ProcessEnv = process.env
 ): string {
   const explicit = env.ELECTRIC_AGENTS_COMPOSE_PROJECT?.trim()
@@ -178,8 +172,7 @@ export function resolveComposeProjectName(
     return explicit
   }
 
-  const base = slugify(basename(cwd)) || `workspace`
-  return `electric-agents-${base}`
+  return DEFAULT_COMPOSE_PROJECT_NAME
 }
 
 async function runDockerCompose(
