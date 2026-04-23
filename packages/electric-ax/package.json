@@ -1,0 +1,91 @@
+{
+  "name": "electric-ax",
+  "version": "0.1.0",
+  "description": "CLI for Electric Agents",
+  "author": "ElectricSQL team and contributors",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "electric": "./dist/index.js",
+    "electric-ax": "./dist/index.js",
+    "electric-dev": "./bin/electric-dev.mjs"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./entity-stream-db": {
+      "import": {
+        "types": "./dist/entity-stream-db.d.ts",
+        "default": "./dist/entity-stream-db.js"
+      },
+      "require": {
+        "types": "./dist/entity-stream-db.d.cts",
+        "default": "./dist/entity-stream-db.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "stylecheck": "eslint . --quiet"
+  },
+  "dependencies": {
+    "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.0",
+    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
+    "@electric-ax/agent-runtime": "workspace:*",
+    "@electric-sql/client": "^1.5.14",
+    "@tanstack/db": "^0.6.4",
+    "@tanstack/react-db": "^0.1.82",
+    "commander": "^13.1.0",
+    "ink": "^6.8.0",
+    "omelette": "^0.4.17",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "@types/omelette": "^0.4.5",
+    "@types/react": "^19.2.14",
+    "ink-testing-library": "^4.0.0",
+    "tsdown": "^0.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.0"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "docker-compose.full.yml"
+  ],
+  "keywords": [
+    "agents",
+    "cli",
+    "electric",
+    "electric-agents"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/electric-ax"
+  },
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric/issues"
+  },
+  "sideEffects": false
+}
