@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { VPButton } from 'vitepress/theme'
 
 // We deliberately reuse the canvas hero backgrounds from each
@@ -103,13 +103,51 @@ const demo = computed(() => {
   }
 })
 
-// Per-product props passed through to the demo component. Streams
-// trims to two columns (one human + one agent) so the snapshot
-// fits comfortably alongside the section text.
+// Track whether we have desktop width available for the streams
+// snapshot. On wide viewports the scene column comfortably fits all
+// three CollabSession panes (Alice + agent + Bob); below that the
+// 5fr scene column starts squeezing the panes and the section's own
+// 2-col / stacked transitions kick in, so we trim to two panes
+// (one human + one agent) so the snapshot reads cleanly.
+//
+// 1100px matches the section's `@media (max-width: 1099px)` tablet
+// breakpoint — above it we're in the desktop layout where the demo
+// renders at its full 0.95 desktop scale and has the room to show
+// all three clients.
+//
+// SSR-safe: default to true so the initial server-rendered markup
+// matches the most common (desktop) case; we re-evaluate on mount
+// and on every media-query change.
+const isStreamsDesktop = ref(true)
+
+let streamsMql: MediaQueryList | null = null
+function syncStreamsMql() {
+  if (streamsMql) isStreamsDesktop.value = streamsMql.matches
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined' || !window.matchMedia) return
+  streamsMql = window.matchMedia('(min-width: 1100px)')
+  syncStreamsMql()
+  streamsMql.addEventListener('change', syncStreamsMql)
+})
+
+onBeforeUnmount(() => {
+  if (streamsMql) {
+    streamsMql.removeEventListener('change', syncStreamsMql)
+    streamsMql = null
+  }
+})
+
+// Per-product props passed through to the demo component.
 const demoBindings = computed<Record<string, unknown>>(() => {
   switch (props.product) {
     case 'streams':
-      return { clients: ['Alice', 'agent'] }
+      return {
+        clients: isStreamsDesktop.value
+          ? ['Alice', 'agent', 'Bob']
+          : ['Alice', 'agent'],
+      }
     default:
       return {}
   }
@@ -352,6 +390,11 @@ const demoBindings = computed<Record<string, unknown>>(() => {
 }
 .home-product--streams .home-product-scene-frame {
   --demo-scale: 0.95;
+  /* Wider than the default 540px so three CollabSession panes
+     (Alice + agent + Bob) have enough horizontal room for their
+     message text. The two-pane fallback below 1100px reverts to
+     the standard frame width via the tablet/mobile rules. */
+  max-width: 640px;
 }
 .home-product--sync .home-product-scene-frame {
   --demo-scale: 0.82;
