@@ -48,19 +48,6 @@ When the underlying data changes — a membership added, a user removed — the 
 
 ## Patterns
 
-### Tenant scoping
-
-Sync resources that belong to my workspace.
-
-```sql
-workspace_id IN (
-  SELECT workspace_id FROM workspace_members
-  WHERE user_id = $1
-)
-```
-
-Every member of the workspace gets the same resources. When someone joins, the resources sync in. When they leave, the resources sync out.
-
 ### Ownership + sharing
 
 My files, plus files shared with me. Two paths to access in one shape.
