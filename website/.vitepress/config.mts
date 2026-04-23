@@ -341,39 +341,19 @@ const streamsDocsSidebar = [
         link: '/docs/streams/integrations/vercel-ai-sdk',
       },
       { text: 'Yjs', link: '/docs/streams/integrations/yjs' },
-      {
-        text: 'AnyCable',
-        link: 'https://docs.anycable.io/anycable-go/durable_streams',
-      },
     ],
   },
+  // "Open Protocol" — single outbound link to durablestreams.com.
+  // Omitting `collapsed` (and only providing one item) keeps this
+  // group rendered open with no collapse chevron, since the
+  // protocol material lives on a separate site and there's nothing
+  // to expand into.
   {
-    text: 'Protocol',
-    collapsed: false,
+    text: 'Open Protocol',
     items: [
       {
         text: 'durablestreams.com',
         link: 'https://durablestreams.com',
-      },
-      {
-        text: 'Building a client',
-        link: 'https://durablestreams.com/building-a-client',
-      },
-      {
-        text: 'Building a server',
-        link: 'https://durablestreams.com/building-a-server',
-      },
-      {
-        text: 'Deployment',
-        link: 'https://durablestreams.com/deployment',
-      },
-      {
-        text: 'Benchmarking',
-        link: 'https://durablestreams.com/benchmarking',
-      },
-      {
-        text: 'PROTOCOL.md',
-        link: 'https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md',
       },
     ],
   },

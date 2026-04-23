@@ -40,7 +40,7 @@ import { data as demoData } from "../../../data/demos.data.ts"
 
 const featuredDemos = demoData.homepage_demos.slice(0, 3)
 
-const installCommand = "npx @electric-sql/start my-app"
+const installCommand = "npx @electric-sql/start my-electric-app"
 
 const heroInnerRef = ref<HTMLElement>()
 
@@ -67,6 +67,10 @@ const syncBlogPosts = [
         <p class="sh-hero-text">
           Composable sync primitives for multi-agent&nbsp;systems
         </p>
+
+        <div class="sh-hero-install-row">
+          <InstallPill :command="installCommand" tone="raised" />
+        </div>
 
         <div class="sh-hero-row">
           <VPButton
@@ -593,6 +597,16 @@ const syncBlogPosts = [
   max-width: 720px;
   line-height: 1.35;
   text-wrap: balance;
+}
+
+/* Two-row CTA stack mirroring the Agents hero: the copyable install
+   pill always sits on its own line above the Quickstart / Docs
+   buttons so it reads as a distinct, scannable affordance rather
+   than a peer of the buttons. */
+.sh-hero-install-row {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
 }
 
 .sh-hero-row {
