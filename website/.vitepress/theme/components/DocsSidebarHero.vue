@@ -40,39 +40,48 @@ const PRODUCTS = [
     id: "agents",
     label: "Electric Agents",
     href: "/agents",
-    matches: (p) => p.startsWith("/docs/agents"),
+    // The agents hero also appears on the agents demos page at
+    // /agents/demos — that page renders with the docs sidebar so
+    // Demos lives in the top-of-sidebar primary list below.
+    matches: (p) =>
+      p.startsWith("/docs/agents") || p.startsWith("/agents/demos"),
     primary: [
       { text: "Overview", link: "/docs/agents" },
       { text: "Quickstart", link: "/docs/agents/quickstart" },
+      { text: "Demos", link: "/agents/demos" },
     ],
   },
   {
     id: "streams",
     label: "Electric Streams",
     href: "/streams",
-    matches: (p) => p.startsWith("/docs/streams"),
+    matches: (p) =>
+      p.startsWith("/docs/streams") || p.startsWith("/streams/demos"),
     primary: [
       { text: "Overview", link: "/docs/streams/" },
       { text: "Quickstart", link: "/docs/streams/quickstart" },
+      { text: "Demos", link: "/streams/demos" },
     ],
   },
   {
     id: "sync",
     label: "Electric Sync",
     href: "/sync",
-    // The sync hero appears on /docs/sync/* AND on the three primitive
-    // pages at /sync/{postgres-sync,tanstack-db,pglite} — all of which
-    // share the same docs sidebar (see `syncDocsSidebar` in
-    // .vitepress/config.mts).
+    // The sync hero appears on /docs/sync/*, on the three primitive
+    // pages at /sync/{postgres-sync,tanstack-db,pglite}, AND on the
+    // sync demos under /sync/demos/* — all of which share the same
+    // docs sidebar (see `syncDocsSidebar` in .vitepress/config.mts).
     matches: (p) =>
       p.startsWith("/docs/sync") ||
       p === "/sync/postgres-sync" ||
       p === "/sync/tanstack-db" ||
-      p === "/sync/pglite",
+      p === "/sync/pglite" ||
+      p.startsWith("/sync/demos"),
     primary: [
       { text: "Overview", link: "/docs/sync" },
       { text: "Quickstart", link: "/docs/sync/quickstart" },
       { text: "Stacks", link: "/docs/sync/stacks" },
+      { text: "Demos", link: "/sync/demos/" },
     ],
   },
   {

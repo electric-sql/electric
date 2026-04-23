@@ -147,6 +147,238 @@ const syncDocsSidebar = [
   },
 ]
 
+// Shared sidebar for the Agents docs section AND the agents demos
+// page at /agents/demos. Demo pages live at marketing URLs but are
+// conceptually part of the docs — they render with the docs sidebar
+// so users can navigate sideways into Usage / Reference / Entities.
+// Title-button + primary links (Overview, Quickstart, Demos) are
+// rendered by `DocsSidebarHero.vue` (mounted via `sidebar-nav-before`
+// in Layout.vue).
+const agentsDocsSidebar = [
+  {
+    text: 'Usage',
+    collapsed: false,
+    items: [
+      { text: 'Overview', link: '/docs/agents/usage/overview' },
+      {
+        text: 'Defining entities',
+        link: '/docs/agents/usage/defining-entities',
+      },
+      {
+        text: 'Writing handlers',
+        link: '/docs/agents/usage/writing-handlers',
+      },
+      {
+        text: 'Configuring the agent',
+        link: '/docs/agents/usage/configuring-the-agent',
+      },
+      {
+        text: 'Defining tools',
+        link: '/docs/agents/usage/defining-tools',
+      },
+      {
+        text: 'Managing state',
+        link: '/docs/agents/usage/managing-state',
+      },
+      {
+        text: 'Spawning and coordinating',
+        link: '/docs/agents/usage/spawning-and-coordinating',
+      },
+      { text: 'Shared state', link: '/docs/agents/usage/shared-state' },
+      { text: 'App setup', link: '/docs/agents/usage/app-setup' },
+      { text: 'Testing', link: '/docs/agents/usage/testing' },
+    ],
+  },
+  {
+    text: 'Reference',
+    collapsed: false,
+    items: [
+      { text: 'CLI', link: '/docs/agents/reference/cli' },
+      {
+        text: 'Handler context',
+        link: '/docs/agents/reference/handler-context',
+      },
+      {
+        text: 'Entity definition',
+        link: '/docs/agents/reference/entity-definition',
+      },
+      {
+        text: 'Agent config',
+        link: '/docs/agents/reference/agent-config',
+      },
+      { text: 'Agent tool', link: '/docs/agents/reference/agent-tool' },
+      {
+        text: 'State collection proxy',
+        link: '/docs/agents/reference/state-collection-proxy',
+      },
+      {
+        text: 'Entity handle',
+        link: '/docs/agents/reference/entity-handle',
+      },
+      {
+        text: 'Shared state handle',
+        link: '/docs/agents/reference/shared-state-handle',
+      },
+      { text: 'Wake event', link: '/docs/agents/reference/wake-event' },
+      {
+        text: 'Built-in collections',
+        link: '/docs/agents/reference/built-in-collections',
+      },
+      {
+        text: 'Entity registry',
+        link: '/docs/agents/reference/entity-registry',
+      },
+      {
+        text: 'Runtime handler',
+        link: '/docs/agents/reference/runtime-handler',
+      },
+    ],
+  },
+  {
+    text: 'Entities',
+    collapsed: false,
+    items: [
+      {
+        text: 'Agents',
+        items: [
+          { text: 'Chat', link: '/docs/agents/entities/agents/chat' },
+          {
+            text: 'Researcher',
+            link: '/docs/agents/entities/agents/researcher',
+          },
+          { text: 'Coder', link: '/docs/agents/entities/agents/coder' },
+          {
+            text: 'Worker',
+            link: '/docs/agents/entities/agents/worker',
+          },
+        ],
+        collapsed: false,
+      },
+      {
+        text: 'Patterns',
+        items: [
+          {
+            text: 'Manager / worker',
+            link: '/docs/agents/entities/patterns/manager-worker',
+          },
+          {
+            text: 'Pipeline',
+            link: '/docs/agents/entities/patterns/pipeline',
+          },
+          {
+            text: 'Map / reduce',
+            link: '/docs/agents/entities/patterns/map-reduce',
+          },
+          {
+            text: 'Dispatcher',
+            link: '/docs/agents/entities/patterns/dispatcher',
+          },
+          {
+            text: 'Blackboard',
+            link: '/docs/agents/entities/patterns/blackboard',
+          },
+          {
+            text: 'Reactive observers',
+            link: '/docs/agents/entities/patterns/reactive-observers',
+          },
+        ],
+        collapsed: false,
+      },
+    ],
+  },
+  {
+    text: 'Examples',
+    collapsed: false,
+    items: [
+      { text: 'Overview', link: '/docs/agents/examples/' },
+      { text: 'Playground', link: '/docs/agents/examples/playground' },
+      { text: 'Mega Draw', link: '/docs/agents/examples/mega-draw' },
+      { text: 'Grid app', link: '/docs/agents/examples/grid-app' },
+    ],
+  },
+]
+
+// Shared sidebar for the Streams docs section AND the streams demos
+// page at /streams/demos — same rationale as `agentsDocsSidebar`.
+const streamsDocsSidebar = [
+  {
+    text: 'Usage',
+    collapsed: false,
+    items: [
+      { text: 'CLI', link: '/docs/streams/cli' },
+      {
+        text: 'Clients',
+        collapsed: false,
+        items: [
+          {
+            text: 'TypeScript',
+            link: '/docs/streams/clients/typescript',
+          },
+          { text: 'Python', link: '/docs/streams/clients/python' },
+          {
+            text: 'Other clients',
+            link: '/docs/streams/clients/other',
+          },
+        ],
+      },
+      { text: 'JSON mode', link: '/docs/streams/json-mode' },
+      { text: 'Durable Proxy', link: '/docs/streams/durable-proxy' },
+      { text: 'Durable State', link: '/docs/streams/durable-state' },
+      { text: 'StreamDB', link: '/docs/streams/stream-db' },
+      { text: 'StreamFS', link: '/docs/streams/stream-fs' },
+    ],
+  },
+  {
+    text: 'Integrations',
+    collapsed: false,
+    items: [
+      {
+        text: 'TanStack AI',
+        link: '/docs/streams/integrations/tanstack-ai',
+      },
+      {
+        text: 'Vercel AI SDK',
+        link: '/docs/streams/integrations/vercel-ai-sdk',
+      },
+      { text: 'Yjs', link: '/docs/streams/integrations/yjs' },
+      {
+        text: 'AnyCable',
+        link: 'https://docs.anycable.io/anycable-go/durable_streams',
+      },
+    ],
+  },
+  {
+    text: 'Protocol',
+    collapsed: false,
+    items: [
+      {
+        text: 'durablestreams.com',
+        link: 'https://durablestreams.com',
+      },
+      {
+        text: 'Building a client',
+        link: 'https://durablestreams.com/building-a-client',
+      },
+      {
+        text: 'Building a server',
+        link: 'https://durablestreams.com/building-a-server',
+      },
+      {
+        text: 'Deployment',
+        link: 'https://durablestreams.com/deployment',
+      },
+      {
+        text: 'Benchmarking',
+        link: 'https://durablestreams.com/benchmarking',
+      },
+      {
+        text: 'PROTOCOL.md',
+        link: 'https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md',
+      },
+    ],
+  },
+]
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
@@ -322,15 +554,21 @@ export default defineConfig({
       '/sync/postgres-sync': syncDocsSidebar,
       '/sync/tanstack-db': syncDocsSidebar,
       '/sync/pglite': syncDocsSidebar,
-      // Marketing-style /sync/* pages: the Electric Sync landing page
-      // and the demos under /sync/demos/*.
+      // Demo pages live at marketing URLs (/sync/demos/*) but
+      // conceptually belong to the docs — they render with the docs
+      // sidebar so users can navigate sideways into Guides / API /
+      // Integrations. Same insertion-order rule as the primitives
+      // above: this MUST come before `/sync/` so it wins the prefix
+      // match.
+      '/sync/demos': syncDocsSidebar,
+      // Marketing-style /sync/* fallback. The /sync landing page
+      // itself sets `sidebar: false`, so this only catches anything
+      // under /sync/* that doesn't have a more specific sidebar key
+      // above (currently nothing — but kept as a safety net).
       '/sync/': [
         {
           text: 'Electric Sync',
-          items: [
-            { text: 'Overview', link: '/sync' },
-            { text: 'Demos', link: '/sync/demos/' },
-          ],
+          items: [{ text: 'Overview', link: '/sync' }],
         },
         {
           text: 'Sync primitives',
@@ -341,236 +579,13 @@ export default defineConfig({
           ],
         },
       ],
+      // Agents and Streams demo pages — same pattern as /sync/demos:
+      // marketing URL but rendered with the docs sidebar.
+      '/agents/demos': agentsDocsSidebar,
+      '/streams/demos': streamsDocsSidebar,
       '/docs/sync': syncDocsSidebar,
-      '/docs/agents': [
-        // Title-button + primary links (Overview, Quickstart) at the
-        // top of the sidebar are rendered by `DocsSidebarHero.vue`
-        // (mounted via `sidebar-nav-before` in Layout.vue), so the
-        // sidebar starts directly with `Usage`.
-        {
-          text: 'Usage',
-          collapsed: false,
-          items: [
-            { text: 'Overview', link: '/docs/agents/usage/overview' },
-            {
-              text: 'Defining entities',
-              link: '/docs/agents/usage/defining-entities',
-            },
-            {
-              text: 'Writing handlers',
-              link: '/docs/agents/usage/writing-handlers',
-            },
-            {
-              text: 'Configuring the agent',
-              link: '/docs/agents/usage/configuring-the-agent',
-            },
-            {
-              text: 'Defining tools',
-              link: '/docs/agents/usage/defining-tools',
-            },
-            {
-              text: 'Managing state',
-              link: '/docs/agents/usage/managing-state',
-            },
-            {
-              text: 'Spawning and coordinating',
-              link: '/docs/agents/usage/spawning-and-coordinating',
-            },
-            { text: 'Shared state', link: '/docs/agents/usage/shared-state' },
-            { text: 'App setup', link: '/docs/agents/usage/app-setup' },
-            { text: 'Testing', link: '/docs/agents/usage/testing' },
-          ],
-        },
-        {
-          text: 'Reference',
-          collapsed: false,
-          items: [
-            { text: 'CLI', link: '/docs/agents/reference/cli' },
-            {
-              text: 'Handler context',
-              link: '/docs/agents/reference/handler-context',
-            },
-            {
-              text: 'Entity definition',
-              link: '/docs/agents/reference/entity-definition',
-            },
-            {
-              text: 'Agent config',
-              link: '/docs/agents/reference/agent-config',
-            },
-            { text: 'Agent tool', link: '/docs/agents/reference/agent-tool' },
-            {
-              text: 'State collection proxy',
-              link: '/docs/agents/reference/state-collection-proxy',
-            },
-            {
-              text: 'Entity handle',
-              link: '/docs/agents/reference/entity-handle',
-            },
-            {
-              text: 'Shared state handle',
-              link: '/docs/agents/reference/shared-state-handle',
-            },
-            { text: 'Wake event', link: '/docs/agents/reference/wake-event' },
-            {
-              text: 'Built-in collections',
-              link: '/docs/agents/reference/built-in-collections',
-            },
-            {
-              text: 'Entity registry',
-              link: '/docs/agents/reference/entity-registry',
-            },
-            {
-              text: 'Runtime handler',
-              link: '/docs/agents/reference/runtime-handler',
-            },
-          ],
-        },
-        {
-          text: 'Entities',
-          collapsed: false,
-          items: [
-            {
-              text: 'Agents',
-              items: [
-                { text: 'Chat', link: '/docs/agents/entities/agents/chat' },
-                {
-                  text: 'Researcher',
-                  link: '/docs/agents/entities/agents/researcher',
-                },
-                { text: 'Coder', link: '/docs/agents/entities/agents/coder' },
-                {
-                  text: 'Worker',
-                  link: '/docs/agents/entities/agents/worker',
-                },
-              ],
-              collapsed: false,
-            },
-            {
-              text: 'Patterns',
-              items: [
-                {
-                  text: 'Manager / worker',
-                  link: '/docs/agents/entities/patterns/manager-worker',
-                },
-                {
-                  text: 'Pipeline',
-                  link: '/docs/agents/entities/patterns/pipeline',
-                },
-                {
-                  text: 'Map / reduce',
-                  link: '/docs/agents/entities/patterns/map-reduce',
-                },
-                {
-                  text: 'Dispatcher',
-                  link: '/docs/agents/entities/patterns/dispatcher',
-                },
-                {
-                  text: 'Blackboard',
-                  link: '/docs/agents/entities/patterns/blackboard',
-                },
-                {
-                  text: 'Reactive observers',
-                  link: '/docs/agents/entities/patterns/reactive-observers',
-                },
-              ],
-              collapsed: false,
-            },
-          ],
-        },
-        {
-          text: 'Examples',
-          collapsed: false,
-          items: [
-            { text: 'Overview', link: '/docs/agents/examples/' },
-            { text: 'Playground', link: '/docs/agents/examples/playground' },
-            { text: 'Mega Draw', link: '/docs/agents/examples/mega-draw' },
-            { text: 'Grid app', link: '/docs/agents/examples/grid-app' },
-          ],
-        },
-      ],
-      '/docs/streams': [
-        // Title-button + primary links (Overview, Quickstart) at the
-        // top of the sidebar are rendered by `DocsSidebarHero.vue`
-        // (mounted via `sidebar-nav-before` in Layout.vue), so the
-        // sidebar starts directly with `Usage`.
-        {
-          text: 'Usage',
-          collapsed: false,
-          items: [
-            { text: 'CLI', link: '/docs/streams/cli' },
-            {
-              text: 'Clients',
-              collapsed: false,
-              items: [
-                {
-                  text: 'TypeScript',
-                  link: '/docs/streams/clients/typescript',
-                },
-                { text: 'Python', link: '/docs/streams/clients/python' },
-                {
-                  text: 'Other clients',
-                  link: '/docs/streams/clients/other',
-                },
-              ],
-            },
-            { text: 'JSON mode', link: '/docs/streams/json-mode' },
-            { text: 'Durable Proxy', link: '/docs/streams/durable-proxy' },
-            { text: 'Durable State', link: '/docs/streams/durable-state' },
-            { text: 'StreamDB', link: '/docs/streams/stream-db' },
-            { text: 'StreamFS', link: '/docs/streams/stream-fs' },
-          ],
-        },
-        {
-          text: 'Integrations',
-          collapsed: false,
-          items: [
-            {
-              text: 'TanStack AI',
-              link: '/docs/streams/integrations/tanstack-ai',
-            },
-            {
-              text: 'Vercel AI SDK',
-              link: '/docs/streams/integrations/vercel-ai-sdk',
-            },
-            { text: 'Yjs', link: '/docs/streams/integrations/yjs' },
-            {
-              text: 'AnyCable',
-              link: 'https://docs.anycable.io/anycable-go/durable_streams',
-            },
-          ],
-        },
-        {
-          text: 'Protocol',
-          collapsed: false,
-          items: [
-            {
-              text: 'durablestreams.com',
-              link: 'https://durablestreams.com',
-            },
-            {
-              text: 'Building a client',
-              link: 'https://durablestreams.com/building-a-client',
-            },
-            {
-              text: 'Building a server',
-              link: 'https://durablestreams.com/building-a-server',
-            },
-            {
-              text: 'Deployment',
-              link: 'https://durablestreams.com/deployment',
-            },
-            {
-              text: 'Benchmarking',
-              link: 'https://durablestreams.com/benchmarking',
-            },
-            {
-              text: 'PROTOCOL.md',
-              link: 'https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md',
-            },
-          ],
-        },
-      ],
+      '/docs/agents': agentsDocsSidebar,
+      '/docs/streams': streamsDocsSidebar,
       '/about': resourcesSidebar,
       '/llms': resourcesSidebar,
     },

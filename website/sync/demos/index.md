@@ -1,7 +1,7 @@
 ---
 title: Demos
 description: >-
-  Demos and example applications build with ElectricSQL.
+  Demos and example applications build with Electric Sync.
 image: /img/demos/demos-header.jpg
 ---
 
@@ -15,7 +15,7 @@ const { demos, examples } = data
 
 # Demos
 
-Demos and example applications built with ElectricSQL.
+Demos and example applications built with Electric Sync.
 
 ## Demo apps
 
