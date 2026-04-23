@@ -31,6 +31,14 @@ function isTabVisible(): boolean {
   return document.visibilityState !== `hidden`
 }
 
+// On the internal `/brand-toys` recording stage we want demos to start
+// animating immediately on mount — there's no scroll context to wait
+// for. Treat that route as if the user had already scrolled.
+function isBrandToysContext(): boolean {
+  if (typeof window === `undefined`) return false
+  return window.location.pathname.startsWith(`/brand-toys`)
+}
+
 function ensureObserver() {
   if (observer || typeof IntersectionObserver === `undefined`) return
   observer = new IntersectionObserver(
@@ -78,7 +86,7 @@ function pickActive() {
   // every demo paused on initial page load even when one is partly in
   // the IO "active" band, so animations only start once the user
   // scrolls them into view.
-  if (!hasScrolled || !isTabVisible()) {
+  if ((!hasScrolled && !isBrandToysContext()) || !isTabVisible()) {
     for (const d of demos) d.active.value = false
     return
   }

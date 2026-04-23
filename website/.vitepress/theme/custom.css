@@ -2102,3 +2102,63 @@ ul.demo-actions li .VPButton {
 .VPFooter .ea-footer-appearance .VPSwitchAppearance {
   margin: 0;
 }
+
+/* ── Brand Toys (internal recording stage) ──────────────────────────────
+   `/brand-toys` is an unlinked internal page for capturing clean
+   recordings of marketing-site animations. We hide the site chrome —
+   nav, release banner and footer — so only the stage and control drawer
+   are visible. The page itself takes full viewport ownership via
+   `position: fixed` on its root, so we also kill vitepress's default
+   page padding + max-width. */
+
+.brand-toys-page .VPNav,
+.brand-toys-page .VPNavBar,
+.brand-toys-page .VPLocalNav,
+.brand-toys-page .VPFooter,
+.brand-toys-page .VPBackdrop,
+.brand-toys-page .release-banner {
+  display: none !important;
+}
+
+.brand-toys-page .VPContent {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.brand-toys-page .VPPage {
+  padding: 0 !important;
+}
+.brand-toys-page .VPDoc,
+.brand-toys-page .VPDoc .container,
+.brand-toys-page .VPDoc .content,
+.brand-toys-page .VPDoc .content-container {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+}
+.brand-toys-page main .vp-doc {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+}
+
+.brand-toys-page {
+  --vp-layout-max-width: 100vw;
+}
+html:has(.brand-toys-page),
+body:has(.brand-toys-page) {
+  /* Match the toy + index dark surface so the chrome-less page doesn't
+     flash a different background colour during loads. We force the
+     `.dark` class on `<html>` from `BrandToysPage.vue` so this resolves
+     to the dark page bg (`#111318`) regardless of the visitor's theme
+     preference. The index page scrolls naturally; only the toy stage
+     locks scroll (see below). */
+  background: var(--vp-c-bg, #111318);
+}
+
+/* The single-toy view mounts a fixed-position stage and adds this class
+   to <body>; we kill page scroll only while it's active so the index
+   grid above can scroll on its own. */
+body.bt-toy-fixed {
+  overflow: hidden;
+}
+

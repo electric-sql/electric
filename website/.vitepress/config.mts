@@ -403,6 +403,9 @@ export default defineConfig({
           'blog/posts/2024-04-*',
           'blog/posts/2024-05-*',
           'blog/posts/2024-06-*',
+          // Internal recording stage — not linked from any nav, not
+          // indexed in llms.txt. See `website/brand-toys.md`.
+          'brand-toys*',
         ],
       }),
     ],

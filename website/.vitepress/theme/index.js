@@ -31,6 +31,11 @@ import SyncHomePage from '../../src/components/sync-home/SyncHomePage.vue'
 // Durable Streams homepage.
 import StreamsHomePage from '../../src/components/streams-home/StreamsHomePage.vue'
 
+// Internal `/brand-toys` recording-stage page (not linked from any
+// nav). Uses `?id=<slug>` to switch between a searchable index and
+// a single-toy viewer.
+import BrandToysPage from '../../src/components/brand-toys/BrandToysPage.vue'
+
 // Electric Agents homepage (ported from darix-docs).
 import AgentGridDemo from '../../src/components/agents-home/AgentGridDemo.vue'
 import AgentsHomePage from '../../src/components/agents-home/HomePage.vue'
@@ -82,6 +87,7 @@ export default {
     app.component(`SyncHomePage`, SyncHomePage)
     app.component(`StreamsHomePage`, StreamsHomePage)
     app.component(`SystemMonitorDemo`, SystemMonitorDemo)
+    app.component(`BrandToysPage`, BrandToysPage)
     enhanceAppWithTabs(app)
   },
   extends: DefaultTheme,
