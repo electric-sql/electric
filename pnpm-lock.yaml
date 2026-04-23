@@ -1523,263 +1523,7 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@22.19.17)(lightningcss@1.30.1)(terser@5.44.0)
 
-  packages/agent-runtime:
-    dependencies:
-      '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
-      '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
-        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
-      '@mariozechner/pi-agent-core':
-        specifier: ^0.57.1
-        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
-      '@mariozechner/pi-ai':
-        specifier: ^0.57.1
-        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
-      '@standard-schema/spec':
-        specifier: ^1.1.0
-        version: 1.1.0
-      '@tanstack/db':
-        specifier: ^0.6.4
-        version: 0.6.5(typescript@5.8.3)
-      '@tanstack/react-db':
-        specifier: '>=0.1.78'
-        version: 0.1.83(react@19.2.0)(typescript@5.8.3)
-      cron-parser:
-        specifier: ^5.5.0
-        version: 5.5.0
-      pino:
-        specifier: ^10.3.1
-        version: 10.3.1
-      pino-pretty:
-        specifier: ^13.0.0
-        version: 13.1.3
-      react:
-        specifier: '>=18'
-        version: 19.2.0
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-      zod-to-json-schema:
-        specifier: ^3.25.2
-        version: 3.25.2(zod@4.3.6)
-    devDependencies:
-      '@durable-streams/server':
-        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.0
-        version: '@electric-ax/durable-streams-server-beta@0.3.0(typescript@5.8.3)'
-      '@vitest/coverage-v8':
-        specifier: ^3.2.4
-        version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.17)(jsdom@28.1.0(@noble/hashes@2.0.1))(lightningcss@1.30.1)(terser@5.44.0))
-      tsdown:
-        specifier: ^0.9.0
-        version: 0.9.9(typescript@5.8.3)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.8.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.17)(jsdom@28.1.0(@noble/hashes@2.0.1))(lightningcss@1.30.1)(terser@5.44.0)
-
-  packages/agent-server:
-    dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.78.0
-        version: 0.78.0(zod@4.3.6)
-      '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
-      '@durable-streams/server':
-        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.0
-        version: '@electric-ax/durable-streams-server-beta@0.3.0(typescript@5.8.3)'
-      '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
-        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
-      '@electric-ax/agent-runtime':
-        specifier: workspace:*
-        version: link:../agent-runtime
-      '@electric-sql/client':
-        specifier: ^1.5.14
-        version: link:../typescript-client
-      '@mariozechner/pi-agent-core':
-        specifier: ^0.57.1
-        version: 0.57.1(zod@4.3.6)
-      '@mozilla/readability':
-        specifier: ^0.6.0
-        version: 0.6.0
-      '@opentelemetry/api':
-        specifier: ^1.9.1
-        version: 1.9.1
-      '@sinclair/typebox':
-        specifier: ^0.34.48
-        version: 0.34.49
-      ajv:
-        specifier: ^8.18.0
-        version: 8.18.0
-      cron-parser:
-        specifier: ^5.5.0
-        version: 5.5.0
-      drizzle-orm:
-        specifier: ^0.44.0
-        version: 0.44.3(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.15.4)(better-sqlite3@11.10.0)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
-      fastq:
-        specifier: ^1.20.1
-        version: 1.20.1
-      jsdom:
-        specifier: ^28.1.0
-        version: 28.1.0(@noble/hashes@2.0.1)
-      lmdb:
-        specifier: ^3.5.1
-        version: 3.5.4
-      pino:
-        specifier: ^10.3.1
-        version: 10.3.1
-      pino-pretty:
-        specifier: ^13.0.0
-        version: 13.1.3
-      postgres:
-        specifier: ^3.4.0
-        version: 3.4.7
-      turndown:
-        specifier: ^7.2.2
-        version: 7.2.4
-      turndown-plugin-gfm:
-        specifier: ^1.0.2
-        version: 1.0.2
-      undici:
-        specifier: ^7.24.7
-        version: 7.25.0
-    devDependencies:
-      '@electric-ax/agent-server-ui':
-        specifier: workspace:*
-        version: link:../agent-server-ui
-      '@electric-ax/agent-srever-conformance-tests':
-        specifier: workspace:*
-        version: link:../agent-server-conformance-tests
-      '@electric-ax/builtin-agents':
-        specifier: workspace:*
-        version: link:../builtin-agents
-      '@types/jsdom':
-        specifier: ^27.0.0
-        version: 27.0.0
-      '@types/node':
-        specifier: ^22.19.15
-        version: 22.19.17
-      '@types/turndown':
-        specifier: ^5.0.6
-        version: 5.0.6
-      '@vitest/coverage-v8':
-        specifier: ^4.1.0
-        version: 4.1.5(vitest@4.1.5)
-      drizzle-kit:
-        specifier: ^0.31.0
-        version: 0.31.4
-      tsdown:
-        specifier: ^0.9.0
-        version: 0.9.9(typescript@5.8.3)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.8.3
-      vitest:
-        specifier: ^4.1.0
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
-
-  packages/agent-server-conformance-tests:
-    dependencies:
-      '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
-      '@electric-sql/client':
-        specifier: ^1.5.14
-        version: link:../typescript-client
-      fast-check:
-        specifier: ^4.6.0
-        version: 4.6.0
-      vitest:
-        specifier: ^4.1.0
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
-    devDependencies:
-      '@electric-ax/agent-server':
-        specifier: workspace:*
-        version: link:../agent-server
-      '@mariozechner/pi-agent-core':
-        specifier: ^0.57.1
-        version: 0.57.1
-      tsdown:
-        specifier: ^0.9.0
-        version: 0.9.9(typescript@5.8.3)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.8.3
-
-  packages/agent-server-ui:
-    dependencies:
-      '@electric-ax/agent-runtime':
-        specifier: workspace:*
-        version: link:../agent-runtime
-      '@radix-ui/themes':
-        specifier: ^3.3.0
-        version: 3.3.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@tanstack/db':
-        specifier: ^0.6.4
-        version: 0.6.5(typescript@5.8.3)
-      '@tanstack/electric-db-collection':
-        specifier: ^0.3.2
-        version: 0.3.3(typescript@5.8.3)
-      '@tanstack/react-db':
-        specifier: ^0.1.82
-        version: 0.1.83(react@19.2.0)(typescript@5.8.3)
-      '@tanstack/react-router':
-        specifier: ^1.167.4
-        version: 1.168.23(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@tanstack/react-virtual':
-        specifier: ^3.13.23
-        version: 3.13.24(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      lucide-react:
-        specifier: ^0.561.0
-        version: 0.561.0(react@19.2.0)
-      nanoid:
-        specifier: ^3.3.11
-        version: 3.3.11
-      react:
-        specifier: ^19.2.0
-        version: 19.2.0
-      react-dom:
-        specifier: ^19.2.0
-        version: 19.2.0(react@19.2.0)
-      shiki:
-        specifier: ^4.0.2
-        version: 4.0.2
-      streamdown:
-        specifier: ^2.5.0
-        version: 2.5.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@types/react':
-        specifier: ^19.2.14
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19.2.0
-        version: 19.2.3(@types/react@19.2.14)
-      '@vitejs/plugin-react':
-        specifier: ^5.2.0
-        version: 5.2.0(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
-      '@vitest/coverage-v8':
-        specifier: ^4.1.0
-        version: 4.1.5(vitest@4.1.5)
-      typescript:
-        specifier: ^5.7.2
-        version: 5.8.3
-      vite:
-        specifier: ^7.1.7
-        version: 7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1)
-      vitest:
-        specifier: ^4.1.0
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
-
-  packages/builtin-agents:
+  packages/agents:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.78.0
@@ -1787,9 +1531,9 @@ importers:
       '@durable-streams/state':
         specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
         version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
-      '@electric-ax/agent-runtime':
+      '@electric-ax/agents-runtime':
         specifier: workspace:*
-        version: link:../agent-runtime
+        version: link:../agents-runtime
       '@mariozechner/pi-agent-core':
         specifier: ^0.57.1
         version: 0.57.1(ws@8.18.3)(zod@4.3.6)
@@ -1852,6 +1596,262 @@ importers:
         specifier: ^4.1.0
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
 
+  packages/agents-runtime:
+    dependencies:
+      '@durable-streams/client':
+        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
+        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+      '@durable-streams/state':
+        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
+        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+      '@mariozechner/pi-agent-core':
+        specifier: ^0.57.1
+        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
+      '@mariozechner/pi-ai':
+        specifier: ^0.57.1
+        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
+      '@standard-schema/spec':
+        specifier: ^1.1.0
+        version: 1.1.0
+      '@tanstack/db':
+        specifier: ^0.6.4
+        version: 0.6.5(typescript@5.8.3)
+      '@tanstack/react-db':
+        specifier: '>=0.1.78'
+        version: 0.1.83(react@19.2.0)(typescript@5.8.3)
+      cron-parser:
+        specifier: ^5.5.0
+        version: 5.5.0
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      pino-pretty:
+        specifier: ^13.0.0
+        version: 13.1.3
+      react:
+        specifier: '>=18'
+        version: 19.2.0
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+      zod-to-json-schema:
+        specifier: ^3.25.2
+        version: 3.25.2(zod@4.3.6)
+    devDependencies:
+      '@durable-streams/server':
+        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.0
+        version: '@electric-ax/durable-streams-server-beta@0.3.0(typescript@5.8.3)'
+      '@vitest/coverage-v8':
+        specifier: ^3.2.4
+        version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.17)(jsdom@28.1.0(@noble/hashes@2.0.1))(lightningcss@1.30.1)(terser@5.44.0))
+      tsdown:
+        specifier: ^0.9.0
+        version: 0.9.9(typescript@5.8.3)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.17)(jsdom@28.1.0(@noble/hashes@2.0.1))(lightningcss@1.30.1)(terser@5.44.0)
+
+  packages/agents-server:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.78.0
+        version: 0.78.0(zod@4.3.6)
+      '@durable-streams/client':
+        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
+        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+      '@durable-streams/server':
+        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.0
+        version: '@electric-ax/durable-streams-server-beta@0.3.0(typescript@5.8.3)'
+      '@durable-streams/state':
+        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
+        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+      '@electric-ax/agents-runtime':
+        specifier: workspace:*
+        version: link:../agents-runtime
+      '@electric-sql/client':
+        specifier: ^1.5.14
+        version: link:../typescript-client
+      '@mariozechner/pi-agent-core':
+        specifier: ^0.57.1
+        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
+      '@mozilla/readability':
+        specifier: ^0.6.0
+        version: 0.6.0
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@sinclair/typebox':
+        specifier: ^0.34.48
+        version: 0.34.49
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
+      cron-parser:
+        specifier: ^5.5.0
+        version: 5.5.0
+      drizzle-orm:
+        specifier: ^0.44.0
+        version: 0.44.3(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.15.4)(better-sqlite3@11.10.0)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
+      fastq:
+        specifier: ^1.20.1
+        version: 1.20.1
+      jsdom:
+        specifier: ^28.1.0
+        version: 28.1.0(@noble/hashes@2.0.1)
+      lmdb:
+        specifier: ^3.5.1
+        version: 3.5.4
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      pino-pretty:
+        specifier: ^13.0.0
+        version: 13.1.3
+      postgres:
+        specifier: ^3.4.0
+        version: 3.4.7
+      turndown:
+        specifier: ^7.2.2
+        version: 7.2.4
+      turndown-plugin-gfm:
+        specifier: ^1.0.2
+        version: 1.0.2
+      undici:
+        specifier: ^7.24.7
+        version: 7.25.0
+    devDependencies:
+      '@electric-ax/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@electric-ax/agents-server-conformance-tests':
+        specifier: workspace:*
+        version: link:../agents-server-conformance-tests
+      '@electric-ax/agents-server-ui':
+        specifier: workspace:*
+        version: link:../agents-server-ui
+      '@types/jsdom':
+        specifier: ^27.0.0
+        version: 27.0.0
+      '@types/node':
+        specifier: ^22.19.15
+        version: 22.19.17
+      '@types/turndown':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@vitest/coverage-v8':
+        specifier: ^4.1.0
+        version: 4.1.5(vitest@4.1.5)
+      drizzle-kit:
+        specifier: ^0.31.0
+        version: 0.31.4
+      tsdown:
+        specifier: ^0.9.0
+        version: 0.9.9(typescript@5.8.3)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
+
+  packages/agents-server-conformance-tests:
+    dependencies:
+      '@durable-streams/client':
+        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
+        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+      '@electric-sql/client':
+        specifier: ^1.5.14
+        version: link:../typescript-client
+      fast-check:
+        specifier: ^4.6.0
+        version: 4.6.0
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
+    devDependencies:
+      '@electric-ax/agents-server':
+        specifier: workspace:*
+        version: link:../agents-server
+      '@mariozechner/pi-agent-core':
+        specifier: ^0.57.1
+        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
+      tsdown:
+        specifier: ^0.9.0
+        version: 0.9.9(typescript@5.8.3)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+
+  packages/agents-server-ui:
+    dependencies:
+      '@electric-ax/agents-runtime':
+        specifier: workspace:*
+        version: link:../agents-runtime
+      '@radix-ui/themes':
+        specifier: ^3.3.0
+        version: 3.3.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@tanstack/db':
+        specifier: ^0.6.4
+        version: 0.6.5(typescript@5.8.3)
+      '@tanstack/electric-db-collection':
+        specifier: ^0.3.2
+        version: 0.3.3(typescript@5.8.3)
+      '@tanstack/react-db':
+        specifier: ^0.1.82
+        version: 0.1.83(react@19.2.0)(typescript@5.8.3)
+      '@tanstack/react-router':
+        specifier: ^1.167.4
+        version: 1.168.23(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@tanstack/react-virtual':
+        specifier: ^3.13.23
+        version: 3.13.24(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      lucide-react:
+        specifier: ^0.561.0
+        version: 0.561.0(react@19.2.0)
+      nanoid:
+        specifier: ^3.3.11
+        version: 3.3.11
+      react:
+        specifier: ^19.2.0
+        version: 19.2.0
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.0(react@19.2.0)
+      shiki:
+        specifier: ^4.0.2
+        version: 4.0.2
+      streamdown:
+        specifier: ^2.5.0
+        version: 2.5.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^5.2.0
+        version: 5.2.0(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
+      '@vitest/coverage-v8':
+        specifier: ^4.1.0
+        version: 4.1.5(vitest@4.1.5)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.8.3
+      vite:
+        specifier: ^7.1.7
+        version: 7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1)
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
+
   packages/electric-ax:
     dependencies:
       '@durable-streams/client':
@@ -1860,12 +1860,12 @@ importers:
       '@durable-streams/state':
         specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
         version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
-      '@electric-ax/agent-runtime':
+      '@electric-ax/agents':
         specifier: workspace:*
-        version: link:../agent-runtime
-      '@electric-ax/builtin-agents':
+        version: link:../agents
+      '@electric-ax/agents-runtime':
         specifier: workspace:*
-        version: link:../builtin-agents
+        version: link:../agents-runtime
       '@electric-sql/client':
         specifier: ^1.5.14
         version: link:../typescript-client
@@ -23279,18 +23279,6 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.0': {}
 
-  '@mariozechner/pi-agent-core@0.57.1':
-    dependencies:
-      '@mariozechner/pi-ai': 0.57.1
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
   '@mariozechner/pi-agent-core@0.57.1(ws@8.18.3)(zod@4.3.6)':
     dependencies:
       '@mariozechner/pi-ai': 0.57.1(ws@8.18.3)(zod@4.3.6)
@@ -23303,67 +23291,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-agent-core@0.57.1(zod@4.3.6)':
-    dependencies:
-      '@mariozechner/pi-ai': 0.57.1(zod@4.3.6)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@mariozechner/pi-ai@0.57.1':
-    dependencies:
-      '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
-      '@aws-sdk/client-bedrock-runtime': 3.1034.0
-      '@google/genai': 1.50.1
-      '@mistralai/mistralai': 1.14.1
-      '@sinclair/typebox': 0.34.49
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.18.3)(zod@4.3.6)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      undici: 7.25.0
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
   '@mariozechner/pi-ai@0.57.1(ws@8.18.3)(zod@4.3.6)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
-      '@aws-sdk/client-bedrock-runtime': 3.1034.0
-      '@google/genai': 1.50.1
-      '@mistralai/mistralai': 1.14.1
-      '@sinclair/typebox': 0.34.49
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.18.3)(zod@4.3.6)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      undici: 7.25.0
-      zod-to-json-schema: 3.25.2(zod@4.3.6)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@mariozechner/pi-ai@0.57.1(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
       '@aws-sdk/client-bedrock-runtime': 3.1034.0
@@ -33024,7 +32952,7 @@ snapshots:
 
   istanbul-lib-instrument@5.2.1:
     dependencies:
-      '@babel/core': 7.28.5
+      '@babel/core': 7.29.0
       '@babel/parser': 7.29.2
       '@istanbuljs/schema': 0.1.3
       istanbul-lib-coverage: 3.2.2
@@ -33741,8 +33669,8 @@ snapshots:
 
   magicast@0.3.5:
     dependencies:
-      '@babel/parser': 7.28.5
-      '@babel/types': 7.28.5
+      '@babel/parser': 7.29.2
+      '@babel/types': 7.29.0
       source-map-js: 1.2.1
 
   magicast@0.5.1:
@@ -34123,7 +34051,7 @@ snapshots:
 
   metro-babel-transformer@0.82.5:
     dependencies:
-      '@babel/core': 7.28.5
+      '@babel/core': 7.29.0
       flow-enums-runtime: 0.0.6
       hermes-parser: 0.29.1
       nullthrows: 1.1.1
@@ -34220,7 +34148,7 @@ snapshots:
 
   metro-transform-plugins@0.82.5:
     dependencies:
-      '@babel/core': 7.28.5
+      '@babel/core': 7.29.0
       '@babel/generator': 7.29.1
       '@babel/template': 7.28.6
       '@babel/traverse': 7.28.5
@@ -34231,7 +34159,7 @@ snapshots:
 
   metro-transform-worker@0.82.5:
     dependencies:
-      '@babel/core': 7.28.5
+      '@babel/core': 7.29.0
       '@babel/generator': 7.29.1
       '@babel/parser': 7.29.2
       '@babel/types': 7.29.0

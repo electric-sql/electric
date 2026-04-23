@@ -1,4 +1,4 @@
-name: Publish agent-server image to Docker Hub
+name: Publish agents-server image to Docker Hub
 
 on:
   workflow_call:
@@ -23,7 +23,7 @@ on:
         type: string
 
 env:
-  DOCKERHUB_REPO: electricax/agent-server
+  DOCKERHUB_REPO: electricax/agents-server
 
 jobs:
   derive_build_vars:
@@ -64,7 +64,7 @@ jobs:
           INPUT_DOCKER_TAG: ${{ inputs.docker_tag }}
         run: |
           AGENT_SERVER_VERSION=$(
-            git describe --abbrev=7 --tags --always --first-parent --match '@electric-ax/agent-server@*' | sed -En 's|^@electric-ax/agent-server@||p'
+            git describe --abbrev=7 --tags --always --first-parent --match '@electric-ax/agents-server@*' | sed -En 's|^@electric-ax/agents-server@||p'
           )
 
           if [ -n "$INPUT_DOCKER_TAG" ]; then
@@ -89,7 +89,7 @@ jobs:
     secrets: inherit
     with:
       git_ref: ${{ needs.derive_build_vars.outputs.git_ref }}
-      image_repo: electricax/agent-server
+      image_repo: electricax/agents-server
       context: .
-      file: packages/agent-server/Dockerfile
+      file: packages/agents-server/Dockerfile
       tags: ${{ needs.derive_build_vars.outputs.image_tags }}
