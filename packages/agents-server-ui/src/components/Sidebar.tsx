@@ -65,11 +65,15 @@ export function Sidebar({
   )
 
   const doSpawn = useCallback(
-    (typeName: string, args?: Record<string, unknown>) => {
+    (
+      typeName: string,
+      args?: Record<string, unknown>,
+      initialMessage?: unknown
+    ) => {
       if (!spawnEntity) return
       setSpawnError(null)
       const name = nanoid(10)
-      const tx = spawnEntity({ type: typeName, name, args })
+      const tx = spawnEntity({ type: typeName, name, args, initialMessage })
       onSelectEntity(`/${typeName}/${name}`)
       tx.isPersisted.promise.catch((err: Error) => {
         setSpawnError(
@@ -288,7 +292,7 @@ export function Sidebar({
         open={codingDialogOpen}
         onOpenChange={setCodingDialogOpen}
         onSpawn={(args) => {
-          doSpawn(CODING_SESSION_TYPE, args)
+          doSpawn(CODING_SESSION_TYPE, args, { text: `` })
           setCodingDialogOpen(false)
         }}
       />

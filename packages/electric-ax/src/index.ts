@@ -28,6 +28,7 @@ export interface ElectricCliEnv {
 
 export interface SpawnCommandOptions {
   args?: string
+  initialMessage?: string
 }
 
 export interface SendCommandOptions {
@@ -323,9 +324,18 @@ async function spawnEntity(
     }
   }
 
+  const body: Record<string, unknown> = { args: spawnArgs }
+  if (options.initialMessage !== undefined) {
+    try {
+      body.initialMessage = JSON.parse(options.initialMessage)
+    } catch {
+      body.initialMessage = { text: options.initialMessage }
+    }
+  }
+
   const res = await electricAgentsFetch(env, urlPath, {
     method: `PUT`,
-    body: JSON.stringify({ args: spawnArgs }),
+    body: JSON.stringify(body),
   })
 
   const data = await parseJsonResponse(res)
@@ -610,6 +620,10 @@ export function createElectricProgram({
     .command(`spawn <url-path>`)
     .description(`Spawn an entity from a typed URL path`)
     .option(`--args <json>`, `Spawn arguments as JSON`)
+    .option(
+      `--initial-message <text-or-json>`,
+      `Send an initial message on spawn (triggers handler immediately)`
+    )
     .action(async (...actionArgs: Array<unknown>) => {
       const urlPath = actionArgs[0] as string
       const command = getCommandActionArg(actionArgs)
