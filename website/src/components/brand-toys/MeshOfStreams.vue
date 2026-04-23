@@ -569,8 +569,12 @@ function debugCellPath() {
 }
 
 .mesh-blade {
-  fill: rgba(117, 251, 253, 0.07);
-  stroke: rgba(117, 251, 253, 0.22);
+  /* Opaque base colour — alpha is controlled exclusively via fill-opacity /
+     stroke-opacity below. Previously the base used rgba(..., 0.07) AND the
+     "on" state set fill-opacity: 0.84, multiplying down to ~6% effective
+     alpha and rendering the wheels as washed-out grey. */
+  fill: var(--vp-c-brand-1, #75fbfd);
+  stroke: var(--vp-c-brand-1, #75fbfd);
   stroke-width: 0.6;
   fill-opacity: 0.07;
   stroke-opacity: 0.22;
@@ -581,10 +585,10 @@ function debugCellPath() {
 }
 
 .mesh-blade--on {
-  fill-opacity: calc(0.84 * var(--mesh-blade-strength, 1));
-  stroke-opacity: calc(0.95 * var(--mesh-blade-strength, 1));
+  fill-opacity: calc(0.95 * var(--mesh-blade-strength, 1));
+  stroke-opacity: var(--mesh-blade-strength, 1);
   filter: drop-shadow(
-    0 0 4px rgba(117, 251, 253, calc(0.35 * var(--mesh-blade-strength, 1)))
+    0 0 4px rgba(117, 251, 253, calc(0.55 * var(--mesh-blade-strength, 1)))
   );
 }
 
@@ -617,24 +621,24 @@ function debugCellPath() {
 @keyframes mesh-blade-cycle {
   0%,
   74.999% {
-    fill-opacity: 0.84;
-    stroke-opacity: 0.95;
-    filter: drop-shadow(0 0 4px rgba(117, 251, 253, 0.35));
+    fill-opacity: 0.95;
+    stroke-opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(117, 251, 253, 0.55));
   }
   81.25% {
-    fill-opacity: 0.63;
-    stroke-opacity: 0.74;
-    filter: drop-shadow(0 0 4px rgba(117, 251, 253, 0.24));
+    fill-opacity: 0.7;
+    stroke-opacity: 0.78;
+    filter: drop-shadow(0 0 4px rgba(117, 251, 253, 0.36));
   }
   87.5% {
-    fill-opacity: 0.42;
-    stroke-opacity: 0.52;
-    filter: drop-shadow(0 0 3px rgba(117, 251, 253, 0.14));
+    fill-opacity: 0.45;
+    stroke-opacity: 0.55;
+    filter: drop-shadow(0 0 3px rgba(117, 251, 253, 0.2));
   }
   93.75% {
-    fill-opacity: 0.21;
-    stroke-opacity: 0.29;
-    filter: drop-shadow(0 0 2px rgba(117, 251, 253, 0.07));
+    fill-opacity: 0.22;
+    stroke-opacity: 0.32;
+    filter: drop-shadow(0 0 2px rgba(117, 251, 253, 0.1));
   }
   100% {
     fill-opacity: 0.07;

@@ -1244,10 +1244,13 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
   }
 
   const tracks: MeshTrack[] = []
-  const maxBundleHalfWidth = Math.max(
-    1,
-    1 + Math.round(connectionDensity * 1.5)
-  )
+  // Hard cap on per-side bundle expansion. Real expansion is gated by
+  // conflict detection (sibling lanes and previously-accepted tracks); this
+  // ceiling just stops runaway growth on completely empty canvases. Each
+  // side of the bundle expands INDEPENDENTLY against this cap, so a bundle
+  // can be e.g. 1 lane on one side and 12 on the other if that's where the
+  // free space happens to be.
+  const maxBundleHalfWidth = Math.max(6, Math.round(6 + connectionDensity * 18))
   const laneSpacing = Math.max(8, grid * 0.38)
   const acceptedTrackPointSets: MeshPoint[][] = []
   const wheelDegree = wheels.map(() => 0)
@@ -1558,8 +1561,13 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         }
 
         if (!validateTrackPoints(lanePoints, fromWheel, toWheel)) return null
+        // Enforce the global lane-spacing rule against every previously
+        // accepted track. Anything closer than ~one lane spacing visually
+        // crowds the rendered tracks together (stripes start to merge), so
+        // candidate lanes that would violate this are simply rejected and
+        // the bundle expansion will try the next outer band instead.
         for (const existing of acceptedTrackPointSets) {
-          if (tracksConflict(lanePoints, existing, laneSpacing * 0.2)) {
+          if (tracksConflict(lanePoints, existing, laneSpacing * 0.95)) {
             return null
           }
         }
@@ -1575,34 +1583,69 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
 
       const bundleLanes: Lane[] = [centerLane]
       let expansionScore = 0
+      // Asymmetric bundle expansion. Each side grows independently, so a
+      // single-track corridor with empty space on one side will keep adding
+      // lanes on that side even after the other side has been blocked by
+      // an existing bundle. Symmetric "break on first failure" expansion
+      // was leaving lots of obvious gaps where extra tracks would clearly
+      // have fit.
+      let negBlocked = false
+      let posBlocked = false
       for (let band = 1; band <= maxBundleHalfWidth; band++) {
+        if (negBlocked && posBlocked) break
         const offset = band * laneSpacing
-        const negLane = buildLane(-offset)
-        const posLane = buildLane(offset)
-        if (!negLane || !posLane) break
-        let siblingConflict = false
-        for (const sibling of bundleLanes) {
-          if (
-            tracksConflict(
-              negLane.points,
-              sibling.points,
-              laneSpacing * 0.88
-            ) ||
-            tracksConflict(posLane.points, sibling.points, laneSpacing * 0.88)
-          ) {
-            siblingConflict = true
-            break
+        if (!negBlocked) {
+          const negLane = buildLane(-offset)
+          if (!negLane) {
+            negBlocked = true
+          } else {
+            let conflict = false
+            for (const sibling of bundleLanes) {
+              if (
+                tracksConflict(
+                  negLane.points,
+                  sibling.points,
+                  laneSpacing * 0.88
+                )
+              ) {
+                conflict = true
+                break
+              }
+            }
+            if (conflict) {
+              negBlocked = true
+            } else {
+              bundleLanes.unshift(negLane)
+              expansionScore += offset
+            }
           }
         }
-        if (
-          siblingConflict ||
-          tracksConflict(negLane.points, posLane.points, laneSpacing * 1.76)
-        ) {
-          break
+        if (!posBlocked) {
+          const posLane = buildLane(offset)
+          if (!posLane) {
+            posBlocked = true
+          } else {
+            let conflict = false
+            for (const sibling of bundleLanes) {
+              if (
+                tracksConflict(
+                  posLane.points,
+                  sibling.points,
+                  laneSpacing * 0.88
+                )
+              ) {
+                conflict = true
+                break
+              }
+            }
+            if (conflict) {
+              posBlocked = true
+            } else {
+              bundleLanes.push(posLane)
+              expansionScore += offset
+            }
+          }
         }
-        bundleLanes.unshift(negLane)
-        bundleLanes.push(posLane)
-        expansionScore += offset
       }
 
       // Now that the bundle is finalized, assign concentric arc radii at each
@@ -1619,8 +1662,6 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       // center from the angle bisector, and the bisector is shared across
       // parallel offsets).
       {
-        const halfBundleCount = (bundleLanes.length - 1) / 2
-        const halfBundleOffset = halfBundleCount * laneSpacing
         const niceWide = Math.max(cornerRadius, grid * 1.4)
         const minR = 0.5
         // virtualCenterR[idx] is the (possibly negative) centerline radius
@@ -1639,11 +1680,26 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
           // Largest radius the OUTERMOST lane can wear without its tangent
           // point overshooting the segment.
           const maxOuterR = headroom * geom.tanHalf
+          // Bundles can be ASYMMETRIC about the centerline (see expansion
+          // loop above). Compute the maximum outer-side extent for THIS
+          // particular corner — the outer side of a turn is where
+          // turnSign*offset < 0 (the per-lane formula below subtracts
+          // turnSign*offset, so negative values produce LARGER radii =
+          // outer arcs). Different corners along the same bundle may see
+          // different outer extents because turnSign flips between left
+          // and right turns.
+          let maxOuterOffsetForCorner = 0
+          for (const lane of bundleLanes) {
+            const sideOffset = -geom.turnSign * lane.offset
+            if (sideOffset > maxOuterOffsetForCorner) {
+              maxOuterOffsetForCorner = sideOffset
+            }
+          }
           // Desired outer radius if we got our way: a nice wide centerline
-          // arc plus the bundle's outward expansion.
-          const desiredOuterR = niceWide + halfBundleOffset
+          // arc plus the bundle's outward expansion on this side.
+          const desiredOuterR = niceWide + maxOuterOffsetForCorner
           const outerR = Math.min(desiredOuterR, maxOuterR)
-          virtualCenterR[idx] = outerR - halfBundleOffset
+          virtualCenterR[idx] = outerR - maxOuterOffsetForCorner
         }
         for (const lane of bundleLanes) {
           for (let k = 1; k < lane.points.length - 1; k++) {
