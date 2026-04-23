@@ -1,0 +1,87 @@
+{
+  "name": "@electric-ax/agents-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Electric Agents entity runtime server",
+  "author": "Durable Stream contributors",
+  "bin": {
+    "electric-agents-server": "./dist/entrypoint.js",
+    "durable-streams-electric-agents-server": "./dist/entrypoint.js"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/agents-server"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "coverage": "pnpm exec vitest run --coverage $(find test -name '*.test.ts' ! -name 'conformance.test.ts' | sort) && pnpm exec vitest run test/conformance.test.ts",
+    "typecheck": "tsc --noEmit",
+    "stylecheck": "eslint . --quiet"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.0",
+    "@durable-streams/server": "npm:@electric-ax/durable-streams-server-beta@^0.3.0",
+    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
+    "@electric-ax/agents-runtime": "workspace:*",
+    "@electric-sql/client": "^1.5.14",
+    "@mariozechner/pi-agent-core": "^0.57.1",
+    "@mozilla/readability": "^0.6.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@sinclair/typebox": "^0.34.48",
+    "ajv": "^8.18.0",
+    "cron-parser": "^5.5.0",
+    "drizzle-orm": "^0.44.0",
+    "fastq": "^1.20.1",
+    "jsdom": "^28.1.0",
+    "lmdb": "^3.5.1",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.0.0",
+    "postgres": "^3.4.0",
+    "turndown": "^7.2.2",
+    "turndown-plugin-gfm": "^1.0.2",
+    "undici": "^7.24.7"
+  },
+  "devDependencies": {
+    "@electric-ax/agents": "workspace:*",
+    "@electric-ax/agents-server-ui": "workspace:*",
+    "@electric-ax/agents-server-conformance-tests": "workspace:*",
+    "@types/jsdom": "^27.0.0",
+    "@types/node": "^22.19.15",
+    "@types/turndown": "^5.0.6",
+    "@vitest/coverage-v8": "^4.1.0",
+    "drizzle-kit": "^0.31.0",
+    "tsdown": "^0.9.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.0"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
