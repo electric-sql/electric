@@ -78,6 +78,13 @@ const props = withDefaults(
     // with no text. Click-to-wake / hover-glow behaviour still
     // works; only the label text is hidden. Off by default.
     hideLabels?: boolean
+    // Override the initial node count. -1 (the default) means use
+    // the density formula `(w*h*density)/12000` clamped to 8..maxNodes.
+    // 0 means start with an empty canvas (combine with `spawnOnClick`
+    // and/or `spawnRate` to build the mesh from scratch). Any positive
+    // integer is used directly as the seed count, still capped at
+    // `maxNodes`.
+    initialNodes?: number
   }>(),
   {
     density: 1,
@@ -92,6 +99,7 @@ const props = withDefaults(
     repositionOnSpawn: false,
     labelsOnHover: true,
     hideLabels: false,
+    initialNodes: -1,
   },
 )
 
@@ -270,16 +278,23 @@ function hitsExclusion(
 
 function createNodes(
   w: number, h: number, exclusions: ExcludeRect[],
-  density: number, maxNodes: number,
+  density: number, maxNodes: number, initialNodes: number,
 ): Node[] {
   const nodes: Node[] = []
-  // Live hero formula: `(w*h)/12000` clamped 25–60. `density` scales
-  // the area divisor (lower divisor → more nodes per unit area), and
-  // `maxNodes` overrides the upper clamp. Floor at 8 so a tiny canvas
-  // still has enough nodes to triangulate.
-  const d = Math.max(0.1, density)
+  // When the caller passes a non-negative `initialNodes`, honour it
+  // directly (still clamped to `maxNodes`). 0 is allowed and yields
+  // an empty canvas — used to grow the mesh from scratch via
+  // spawnOnClick / spawnRate. The default sentinel `-1` means
+  // "use the live hero formula" — `(w*h)/12000` clamped 8..maxNodes,
+  // with `density` scaling the area divisor.
   const cap = Math.max(8, Math.floor(maxNodes))
-  const count = Math.min(cap, Math.max(8, Math.floor((w * h * d) / 12000)))
+  let count: number
+  if (initialNodes >= 0) {
+    count = Math.min(cap, Math.floor(initialNodes))
+  } else {
+    const d = Math.max(0.1, density)
+    count = Math.min(cap, Math.max(8, Math.floor((w * h * d) / 12000)))
+  }
   const padding = 30
   const minDist = 50
   const excludeMargin = 4
@@ -436,7 +451,9 @@ onMounted(() => {
     if (DEBUG) {
       console.log('Hero exclusion zones:', exclusions.length, exclusions, 'canvas size:', w, h)
     }
-    nodes = createNodes(w, h, exclusions, props.density, props.maxNodes)
+    nodes = createNodes(
+      w, h, exclusions, props.density, props.maxNodes, props.initialNodes,
+    )
     const raw = delaunay(nodes)
     edges = pruneEdges(raw, nodes, 200)
     rebuildEdgeSet()
