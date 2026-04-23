@@ -7,6 +7,8 @@ import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { Agent } from 'undici'
 import {
+  createEntityRegistry,
+  createRuntimeHandler,
   getCronStreamPathFromSpec,
   parseCronStreamPath,
   resolveCronScheduleSpec,
@@ -44,6 +46,7 @@ import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { DurableStreamTestServer } from '@durable-streams/server'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { EntityRegistry, RuntimeHandler } from '@electric-ax/agent-runtime'
 
 function isPrematureCloseError(err: unknown): boolean {
   return (
@@ -63,6 +66,7 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): T {
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const AGENT_UI_DIST_DIR = path.resolve(MODULE_DIR, `../../agent-server-ui/dist`)
+const MOCK_AGENT_HANDLER_PATH = `/_electric/mock-agent-handler`
 
 function contentTypeForStaticFile(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase()
@@ -103,6 +107,47 @@ export interface ElectricAgentsServerOptions {
   electricUrl?: string
 }
 
+interface MockAgentBootstrap {
+  handler: RuntimeHandler[`onEnter`]
+  runtime: RuntimeHandler
+  registry: EntityRegistry
+}
+
+function createMockAgentBootstrap(options: {
+  agentServerUrl: string
+  workingDirectory?: string
+  streamFn: StreamFn
+}): MockAgentBootstrap {
+  const registry = createEntityRegistry()
+
+  registry.define(`chat`, {
+    description: `Mock chat entity for conformance and end-to-end tests.`,
+    handler: async (ctx) => {
+      ctx.useAgent({
+        systemPrompt: `You are a concise test assistant.`,
+        model: `mock-chat`,
+        tools: [],
+        streamFn: options.streamFn,
+      })
+      await ctx.agent.run()
+    },
+  })
+
+  const runtime = createRuntimeHandler({
+    baseUrl: options.agentServerUrl,
+    serveEndpoint: `${options.agentServerUrl}${MOCK_AGENT_HANDLER_PATH}`,
+    registry,
+    subscriptionPathForType: (name) => `/${name}/*/main`,
+    idleTimeout: 5_000,
+  })
+
+  return {
+    handler: runtime.onEnter,
+    runtime,
+    registry,
+  }
+}
+
 export class ElectricAgentsServer {
   private server: Server | null = null
   private electricAgentsManager: ElectricAgentsManager | null = null
@@ -115,6 +160,7 @@ export class ElectricAgentsServer {
   private scheduler: Scheduler | null = null
   private entityBridgeManager: EntityBridgeManager | null = null
   private tagStreamOutboxDrainer: TagStreamOutboxDrainer | null = null
+  private mockAgentBootstrap: MockAgentBootstrap | null = null
   private _url: string | null = null
   private shuttingDown = false
   private streamsAgent: Agent | null = null
@@ -343,6 +389,18 @@ export class ElectricAgentsServer {
           this.electricAgentsEntityTypeRoutes =
             new ElectricAgentsEntityTypeRoutes(this.electricAgentsManager)
 
+          if (this.options.mockStreamFn) {
+            this.mockAgentBootstrap = createMockAgentBootstrap({
+              agentServerUrl: this._url,
+              workingDirectory: this.options.workingDirectory,
+              streamFn: this.options.mockStreamFn,
+            })
+            await this.mockAgentBootstrap.runtime.registerTypes()
+            serverLog.info(
+              `[agent-server] mock chat agent registered at ${MOCK_AGENT_HANDLER_PATH}`
+            )
+          }
+
           resolve(this._url)
         } catch (err) {
           await this.stop().catch(() => {})
@@ -368,6 +426,15 @@ export class ElectricAgentsServer {
 
     if (this.options.durableStreamsServer) {
       await this.options.durableStreamsServer.stop()
+    }
+
+    if (this.mockAgentBootstrap) {
+      this.mockAgentBootstrap.runtime.abortWakes()
+      await Promise.race([
+        this.mockAgentBootstrap.runtime.drainWakes().catch(() => {}),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ])
+      this.mockAgentBootstrap = null
     }
 
     if (this.electricAgentsManager) {
@@ -567,6 +634,15 @@ export class ElectricAgentsServer {
     if (path === `/_electric/health` && method === `GET`) {
       res.writeHead(200, { 'content-type': `application/json` })
       res.end(JSON.stringify({ status: `ok` }))
+      return
+    }
+
+    if (
+      path === MOCK_AGENT_HANDLER_PATH &&
+      method === `POST` &&
+      this.mockAgentBootstrap
+    ) {
+      await this.mockAgentBootstrap.handler(req, res)
       return
     }
 

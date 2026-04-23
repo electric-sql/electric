@@ -6,7 +6,10 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite dev",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests",
+    "coverage": "pnpm exec vitest run --coverage --passWithNoTests",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@electric-ax/agent-runtime": "workspace:*",
@@ -25,10 +28,12 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^5.7.2",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "vitest": "^4.1.0"
   }
 }
