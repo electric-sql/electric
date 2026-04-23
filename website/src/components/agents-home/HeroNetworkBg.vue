@@ -69,8 +69,15 @@ const props = withDefaults(
     // (via the existing tooltip). When false, every node renders
     // its label below the dot at all times. Default is `true` to
     // match the live homepage hero, which leaves the canvas quiet
-    // until the user investigates.
+    // until the user investigates. Has no effect when `hideLabels`
+    // is set — that overrides everything.
     labelsOnHover?: boolean
+    // When true, suppress *all* labels — both the always-on canvas
+    // labels and the DOM hover tooltip. Useful for clean recordings
+    // / brand stills where the mesh should read as pure geometry
+    // with no text. Click-to-wake / hover-glow behaviour still
+    // works; only the label text is hidden. Off by default.
+    hideLabels?: boolean
   }>(),
   {
     density: 1,
@@ -84,6 +91,7 @@ const props = withDefaults(
     spawnMaxDist: 0,
     repositionOnSpawn: false,
     labelsOnHover: true,
+    hideLabels: false,
   },
 )
 
@@ -738,13 +746,19 @@ onMounted(() => {
     hoveredNode = idx
 
     if (idx >= 0) {
-      const node = nodes[idx]
-      const state = node.awake > 0.1 ? "active" : "idle"
-      tt!.textContent = `/${node.entityType}/${node.instanceId}  ·  ${state}`
-      tt!.style.opacity = "1"
-      tt!.style.left = `${node.x}px`
-      tt!.style.top = `${node.y - 28}px`
+      // Cursor stays "pointer" so click-to-wake / spawn-on-click
+      // still feel interactive even when labels are off.
       el!.style.cursor = "pointer"
+      if (props.hideLabels) {
+        tt!.style.opacity = "0"
+      } else {
+        const node = nodes[idx]
+        const state = node.awake > 0.1 ? "active" : "idle"
+        tt!.textContent = `/${node.entityType}/${node.instanceId}  ·  ${state}`
+        tt!.style.opacity = "1"
+        tt!.style.left = `${node.x}px`
+        tt!.style.top = `${node.y - 28}px`
+      }
     } else {
       tt!.style.opacity = "0"
       el!.style.cursor = ""
@@ -979,7 +993,7 @@ onMounted(() => {
     // (it's higher contrast and won't collide with neighbouring
     // labels), so we skip drawing the canvas label for the hovered
     // node to avoid double-stacking the same string.
-    if (!props.labelsOnHover) {
+    if (!props.labelsOnHover && !props.hideLabels) {
       c!.font = `11px var(--vp-font-family-mono)`
       c!.textAlign = "center"
       c!.textBaseline = "top"

@@ -312,6 +312,13 @@ export const TOYS: readonly ToyDef[] = [
         label: `Labels on hover only`,
         description: `When on, per-node /entity/id labels are hidden until hover. When off, every node renders its label permanently.`,
       },
+      {
+        name: `hideLabels`,
+        type: `boolean`,
+        default: false,
+        label: `Hide all labels`,
+        description: `Suppress every label — both the always-on canvas labels and the DOM hover tooltip. Use for clean recordings where the mesh should read as pure geometry. Overrides "Labels on hover only".`,
+      },
     ],
     fullBleed: true,
     background: `dark`,
