@@ -440,8 +440,12 @@ function chamferZShapes(points: MeshPoint[], maxStep: number): MeshPoint[] {
       i += 1
       continue
     }
-    const half = bcLen
-    if (half >= abLen || half >= cdLen) {
+    // True 45° chamfer: shift back/forward along the run by HALF the
+    // perpendicular step so the diagonal is at 45° (equal along & perp
+    // components). Shifting by the full step would produce a shallower
+    // ~27° turn (2:1 along:perp), which gives less corner headroom.
+    const shift = bcLen / 2
+    if (shift >= abLen || shift >= cdLen) {
       i += 1
       continue
     }
@@ -449,8 +453,8 @@ function chamferZShapes(points: MeshPoint[], maxStep: number): MeshPoint[] {
     const inDirY = abDy / abLen
     const outDirX = cdDx / cdLen
     const outDirY = cdDy / cdLen
-    out[i] = { x: B.x - inDirX * half, y: B.y - inDirY * half }
-    out[i + 1] = { x: C.x + outDirX * half, y: C.y + outDirY * half }
+    out[i] = { x: B.x - inDirX * shift, y: B.y - inDirY * shift }
+    out[i + 1] = { x: C.x + outDirX * shift, y: C.y + outDirY * shift }
     i += 2
   }
   return out
@@ -1038,9 +1042,7 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         }
       )
 
-      function buildLane(
-        offset: number
-      ): {
+      function buildLane(offset: number): {
         points: MeshPoint[]
         corners: MeshCornerArc[]
         offset: number
@@ -1159,10 +1161,12 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       }
 
       // Now that the bundle is finalized, assign concentric arc radii at each
-      // corridor corner. The widest-possible centerline radius is bounded by
-      // segment headroom (so the OUTERMOST lane's tangent point still fits in
-      // its segments). The innermost lane is allowed to go very tight (down to
-      // ~0) when a bundle is wide or a segment is short, exactly as requested:
+      // corridor corner. The widest-possible OUTER lane radius is bounded by
+      // segment headroom (so its tangent point still fits in its segments).
+      // The implied centerline radius is `outerR - halfBundleOffset` and may
+      // be NEGATIVE when the bundle is wider than the available headroom —
+      // that's fine: it just means the inside lanes will hit the per-lane
+      // floor and become near-sharp, exactly as requested:
       //   "few tracks → nice wide radii; short segments or many tracks → tight
       //    inside corner."
       // All lanes share the same arc center per corner because they're
@@ -1174,7 +1178,10 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         const halfBundleOffset = halfBundleCount * laneSpacing
         const niceWide = Math.max(cornerRadius, grid * 1.4)
         const minR = 0.5
-        const corneRadii: number[] = chosen.core.map(() => 0)
+        // virtualCenterR[idx] is the (possibly negative) centerline radius
+        // that, combined with the per-lane offset, gives each lane a
+        // concentric arc. Per-lane floor is applied below.
+        const virtualCenterR: number[] = chosen.core.map(() => 0)
         for (let idx = 1; idx < chosen.core.length - 1; idx++) {
           const geom = cornerGeometry[idx]
           if (!geom) continue
@@ -1191,10 +1198,7 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
           // arc plus the bundle's outward expansion.
           const desiredOuterR = niceWide + halfBundleOffset
           const outerR = Math.min(desiredOuterR, maxOuterR)
-          // Centerline = outer minus the bundle's outward offset. Inner lane
-          // = centerline minus the bundle's inward offset; that's allowed to
-          // go tight (clamped per-lane below).
-          corneRadii[idx] = Math.max(minR * 0.5, outerR - halfBundleOffset)
+          virtualCenterR[idx] = outerR - halfBundleOffset
         }
         for (const lane of bundleLanes) {
           for (let k = 1; k < lane.points.length - 1; k++) {
@@ -1203,7 +1207,11 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
               lane.corners[k] = { radius: 0 }
               continue
             }
-            const r = corneRadii[k] - geom.turnSign * lane.offset
+            // Lanes whose offset puts them on the OUTSIDE of the turn (sign
+            // opposite to turnSign) get the larger radius; INSIDE lanes get
+            // smaller (and may clamp to minR for very wide bundles or short
+            // segments).
+            const r = virtualCenterR[k] - geom.turnSign * lane.offset
             lane.corners[k] = { radius: Math.max(minR, r) }
           }
         }
