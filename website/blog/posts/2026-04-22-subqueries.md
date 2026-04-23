@@ -6,7 +6,7 @@ excerpt: >-
   Subqueries extend shape WHERE clauses with relational logic. Define who sees what in SQL — membership checks, role lookups, shared documents — and Electric syncs only the matching rows, incrementally.
 authors: [rob]
 image: /img/blog/subqueries/header.jpg
-tags: [shapes, postgres-sync]
+tags: [shapes, postgres-sync, release]
 outline: [2, 3]
 post: true
 published: false
@@ -74,7 +74,7 @@ Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pr
 :::
 
 
-## Ready for general use
+## Production-ready in Electric&nbsp;1.6
 
 We've kept subqueries experimental while we built out the sync engine support. With Electric&nbsp;1.6, they're production-ready.
 
@@ -82,7 +82,7 @@ Before 1.6, subqueries worked with complex SQL expressions, large shapes, and lo
 
 With 1.6, the sync engine incrementally syncs only the affected rows, even for complex subquery expressions. No more tradeoff between expressiveness and performance.
 
-We've also optimised OR expressions so that processing the replication stream is fast no matter how many shapes you have. All the SQL expressions mentioned in this article are now optimised — see the docs for the full list of supported expressions.
+We've also optimised how OR expressions are evaluated against the replication stream. Previously, processing time scaled with the number of active shapes. Now it's constant — adding more shapes doesn't slow down replication processing. All the SQL expressions mentioned in this article are now optimised — see the docs for the full list of supported expressions.
 
 We've battle-tested subqueries in our test environments and in production and are confident in their performance and reliability.
 
@@ -127,7 +127,7 @@ ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
 :::warning
-Subquery with complex expression support in Electric&nbsp;1.6 required a client protocol update. Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
+Subquery with complex expression support in Electric&nbsp;1.6 required a [client protocol update](https://github.com/electric-sql/electric/blob/main/packages/sync-service/CHANGELOG.md). Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
 :::
 
 Once clients have migrated to the updated protocol, the feature flag will be removed and subqueries will be enabled by default.
