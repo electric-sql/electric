@@ -77,6 +77,8 @@ const PRODUCTS = [
     primary: [
       { text: "Usage", link: "/cloud/usage" },
       { text: "CLI", link: "/cloud/cli" },
+      { text: "Pricing", link: "/pricing" },
+      { text: "Dashboard", link: "https://dashboard.electric-sql.cloud" },
     ],
   },
 ]

@@ -173,10 +173,19 @@ export default defineConfig({
     },
     sidebar: {
       '/cloud/': [
-        // Title-button + primary links (Usage, CLI) at the top of
-        // the sidebar are rendered by `DocsSidebarHero.vue` (mounted
-        // via the `sidebar-nav-before` slot in Layout.vue), so the
-        // sidebar has no further groups for Cloud.
+        // Title-button + primary links (Usage, CLI, Pricing, Dashboard)
+        // at the top of the sidebar are rendered by `DocsSidebarHero.vue`
+        // (mounted via the `sidebar-nav-before` slot in Layout.vue), so
+        // the sidebar starts directly with the products Electric Cloud
+        // hosts.
+        {
+          text: 'Hosted products',
+          collapsed: false,
+          items: [
+            { text: 'Electric Streams', link: '/streams' },
+            { text: 'Electric Sync', link: '/sync' },
+          ],
+        },
       ],
       '/sync/': [
         {

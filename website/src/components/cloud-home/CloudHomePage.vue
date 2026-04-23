@@ -3,6 +3,7 @@ import { ref } from "vue"
 import { VPButton } from "vitepress/theme"
 
 import EaSection from "../agents-home/Section.vue"
+import BottomCtaStrap from "../BottomCtaStrap.vue"
 import CloudHexBg from "./CloudHexBg.vue"
 
 const heroInnerRef = ref<HTMLElement>()
@@ -27,7 +28,7 @@ const heroInnerRef = ref<HTMLElement>()
             tag="a"
             size="medium"
             theme="brand"
-            text="Start building now »"
+            text="Start building now"
             href="https://dashboard.electric-sql.cloud/"
           />
           <VPButton
@@ -35,13 +36,13 @@ const heroInnerRef = ref<HTMLElement>()
             size="medium"
             theme="alt"
             text="Docs"
-            href="/cloud"
+            href="/cloud/usage"
           />
           <VPButton
             tag="a"
             size="medium"
             theme="alt"
-            text="See pricing"
+            text="Pricing"
             href="/pricing"
           />
         </div>
@@ -52,7 +53,7 @@ const heroInnerRef = ref<HTMLElement>()
     <EaSection
       id="scalable-infrastructure"
       title="Scalable data&nbsp;infrastructure"
-      subtitle="Electric Cloud is a reactive data platform designed for running multi-user, multi-agent systems that provides turnkey hosting of Durable Streams and Postgres&nbsp;Sync."
+      subtitle="Electric Cloud is a reactive data platform for multi-user, multi-agent systems. It provides turnkey, fully-managed hosting of Electric&nbsp;Streams and Electric&nbsp;Sync."
     >
       <div class="cl-product-grid">
         <a class="cl-product-card" href="/streams">
@@ -62,39 +63,40 @@ const heroInnerRef = ref<HTMLElement>()
               alt=""
               class="cl-product-icon"
             />
-            <h3>Durable&nbsp;Streams</h3>
+            <h3>Electric&nbsp;Streams</h3>
           </div>
           <p>
             We host
-            <a href="/streams" @click.stop>Durable&nbsp;Streams</a>
-            with
-            <a href="#protocols" @click.stop>multiple protocols</a>,
-            from raw binary streams, to JSON mode, to protocol specific
-            transports and user-defined sync protocols using Durable State.
+            <a href="/streams" @click.stop>Electric&nbsp;Streams</a>
+            &mdash; a fully-managed implementation of the open
+            <a href="https://durablestreams.com/" @click.stop>Durable&nbsp;Streams</a>
+            protocol &mdash; with
+            <a href="#protocols" @click.stop>multiple transports</a>,
+            from raw binary streams, to JSON mode, to protocol-specific
+            adapters and user-defined sync protocols.
             See the
             <a
               href="/blog/2026/01/22/announcing-hosted-durable-streams"
               @click.stop
-            >
-              announcement blog post here</a>.
+            >announcement blog post here</a>.
           </p>
-          <span class="cl-product-cta">Explore Durable Streams →</span>
+          <span class="cl-product-cta">Explore Electric Streams →</span>
         </a>
 
         <a class="cl-product-card" href="/sync">
           <div class="cl-product-card-head">
             <img src="/img/icons/electric.svg" alt="" class="cl-product-icon" />
-            <h3>Postgres&nbsp;Sync</h3>
+            <h3>Electric&nbsp;Sync</h3>
           </div>
           <p>
             We provision, run and operate the
-            <a href="/sync" @click.stop>Postgres sync engine</a>
-            for you. This connects to your Postgres, consumes changes over
-            logical replication and provides a service endpoint for
-            <a href="/docs/guides/shapes" @click.stop>syncing shapes</a>
+            <a href="/sync" @click.stop>Electric&nbsp;Sync</a>
+            engine for you. It connects to your Postgres, consumes changes
+            over logical replication and provides a service endpoint for
+            <a href="/docs/sync/guides/shapes" @click.stop>syncing shapes</a>
             into your client.
           </p>
-          <span class="cl-product-cta">Explore Postgres Sync →</span>
+          <span class="cl-product-cta">Explore Electric Sync →</span>
         </a>
       </div>
     </EaSection>
@@ -108,7 +110,7 @@ const heroInnerRef = ref<HTMLElement>()
     >
       <p class="cl-ddn-prose">
         This allows you to scale out real-time data to
-        <a href="/docs/reference/benchmarks#cloud">millions of concurrent users</a>.
+        <a href="/docs/sync/reference/benchmarks#cloud">millions of concurrent users</a>.
         With fast load times, low latency, and consistently low resource use.
       </p>
 
@@ -132,28 +134,42 @@ const heroInnerRef = ref<HTMLElement>()
     <EaSection
       id="protocols"
       title="Protocols"
-      subtitle="Electric Cloud supports multiple sync protocols. Electric syncs data over plain HTTP, which lets it integrate with CDN infrastructure for global, cached&nbsp;delivery."
+      subtitle="Electric Cloud supports multiple sync protocols. Both Electric&nbsp;Streams and Electric&nbsp;Sync run over plain&nbsp;HTTP, which lets them integrate with CDN infrastructure for global, cached&nbsp;delivery."
     >
       <p class="cl-protocols-prose">
         See the
-        <a href="/docs/api/http">HTTP API reference</a>
-        for details.
+        <a href="/docs/sync/api/http">HTTP API reference</a>
+        for Electric&nbsp;Sync, and the
+        <a href="/docs/streams/">Electric&nbsp;Streams docs</a>
+        for the streaming&nbsp;API.
       </p>
 
       <div class="cl-protocols-grid">
         <div class="cl-protocols-card">
           <h3>Clients</h3>
-          <p>Electric provides clients for consuming sync data:</p>
+          <p>Official clients for both Electric&nbsp;Streams and Electric&nbsp;Sync:</p>
           <ul class="cl-protocol-list">
             <li>
-              <a href="/docs/api/clients/typescript">
-                <span class="cl-protocol-name">TypeScript client</span>
+              <a href="/docs/streams/clients/typescript">
+                <span class="cl-protocol-name">Streams &mdash; TypeScript client</span>
                 <span class="cl-protocol-arrow">→</span>
               </a>
             </li>
             <li>
-              <a href="/docs/api/clients/elixir">
-                <span class="cl-protocol-name">Elixir client</span>
+              <a href="/docs/streams/clients/python">
+                <span class="cl-protocol-name">Streams &mdash; Python client</span>
+                <span class="cl-protocol-arrow">→</span>
+              </a>
+            </li>
+            <li>
+              <a href="/docs/sync/api/clients/typescript">
+                <span class="cl-protocol-name">Sync &mdash; TypeScript client</span>
+                <span class="cl-protocol-arrow">→</span>
+              </a>
+            </li>
+            <li>
+              <a href="/docs/sync/api/clients/elixir">
+                <span class="cl-protocol-name">Sync &mdash; Elixir client</span>
                 <span class="cl-protocol-arrow">→</span>
               </a>
             </li>
@@ -163,20 +179,30 @@ const heroInnerRef = ref<HTMLElement>()
         <div class="cl-protocols-card">
           <h3>Integrations</h3>
           <p>
-            See our
-            <a href="/docs/integrations/react">integrations</a>
-            for framework-specific guides.
+            Framework and platform integrations across both products:
           </p>
           <ul class="cl-protocol-list">
             <li>
-              <a href="/docs/integrations/react">
+              <a href="/docs/sync/integrations/react">
                 <span class="cl-protocol-name">React, Vue, Svelte, Solid&hellip;</span>
                 <span class="cl-protocol-arrow">→</span>
               </a>
             </li>
             <li>
-              <a href="/docs/integrations/tanstack">
+              <a href="/docs/sync/integrations/tanstack">
                 <span class="cl-protocol-name">TanStack DB &amp; Query</span>
+                <span class="cl-protocol-arrow">→</span>
+              </a>
+            </li>
+            <li>
+              <a href="/docs/streams/integrations/tanstack-ai">
+                <span class="cl-protocol-name">TanStack AI</span>
+                <span class="cl-protocol-arrow">→</span>
+              </a>
+            </li>
+            <li>
+              <a href="/docs/streams/integrations/vercel-ai-sdk">
+                <span class="cl-protocol-name">Vercel AI SDK</span>
                 <span class="cl-protocol-arrow">→</span>
               </a>
             </li>
@@ -185,38 +211,44 @@ const heroInnerRef = ref<HTMLElement>()
       </div>
     </EaSection>
 
-    <!-- ───────────── §5 — Next steps / final CTA ───────────── -->
-    <EaSection id="next-steps">
-      <div class="cl-cta">
-        <div class="cl-cta-eyebrow mono">
-          <span class="dot"></span>
-          Hosted &middot; usage-based &middot; built on open&nbsp;protocols
-        </div>
-        <h2 class="cl-cta-title">
-          Start building on&nbsp;<span class="cl-cta-accent">Electric&nbsp;Cloud</span>.
-        </h2>
-        <p class="cl-cta-tagline">
-          Sign up and start building with Electric Cloud&nbsp;today.
-        </p>
-
-        <div class="cl-cta-buttons">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Start building now »"
-            href="https://dashboard.electric-sql.cloud/"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="See pricing"
-            href="/pricing"
-          />
-        </div>
-      </div>
-    </EaSection>
+    <!-- ───────────── §5 — Next steps / final CTA ─────────────
+         Restyled from the boxed `.cl-cta` panel to the shared
+         `<BottomCtaStrap>` so the page-close visual matches the
+         agents / streams / sync landing pages. -->
+    <BottomCtaStrap id="get-started">
+      <template #eyebrow>
+        Hosted &middot; usage-based &middot; built on open&nbsp;protocols
+      </template>
+      <template #title>
+        Start building on&nbsp;<span class="bottom-cta-accent">Electric&nbsp;Cloud</span>.
+      </template>
+      <template #tagline>
+        Hosted Electric&nbsp;Streams and Electric&nbsp;Sync, with a generous free&nbsp;tier.
+      </template>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Start building now"
+          href="https://dashboard.electric-sql.cloud/"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Docs"
+          href="/cloud/usage"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Pricing"
+          href="/pricing"
+        />
+      </template>
+    </BottomCtaStrap>
   </div>
 </template>
 
@@ -590,112 +622,12 @@ const heroInnerRef = ref<HTMLElement>()
   }
 }
 
-/* ────────────────────── Final CTA ────────────────────── */
-/* Mirrors the `.ds-cta` panel pattern from streams-home: framed card
-   with a subtle brand glow, eyebrow pill, gradient-accent title,
-   tagline and a row of CTAs. */
-
-.cl-cta {
-  position: relative;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 56px 32px 48px;
-  background: var(--ea-surface, var(--vp-c-bg));
-  border: 1px solid var(--ea-divider, var(--vp-c-divider));
-  border-radius: 12px;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.cl-cta::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 70% 90% at 50% 0%,
-    color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent) 0%,
-    transparent 55%
-  );
-  z-index: -1;
-  opacity: 0.85;
-}
-
-.cl-cta-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ea-text-3, var(--vp-c-text-3));
-  padding: 4px 10px;
-  background: var(--ea-surface-alt, var(--vp-c-bg-alt));
-  border: 1px solid var(--ea-divider, var(--vp-c-divider));
-  border-radius: 999px;
-  margin-bottom: 22px;
-}
-
-.cl-cta-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-}
-
-.cl-cta-title {
-  font-size: 38px;
-  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
-     the page's H1. Was 800 which inverted the hierarchy. */
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  color: var(--ea-text-1, var(--vp-c-text-1));
-  margin: 0;
-  max-width: 580px;
-  text-wrap: balance;
-}
-
-.cl-cta-accent {
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
-}
-
-.cl-cta-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--ea-text-2, var(--vp-c-text-2));
-  margin: 14px auto 0;
-  max-width: 460px;
-}
-
-.cl-cta-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 28px;
-  justify-content: center;
-}
-
-@media (max-width: 768px) {
-  .cl-cta {
-    padding: 40px 20px 36px;
-  }
-  .cl-cta-title {
-    font-size: 28px;
-  }
-}
+/* §5 bottom CTA is now rendered by the shared `<BottomCtaStrap>`
+   component (see `src/components/BottomCtaStrap.vue`). All visual
+   styles for that strap live with the component — nothing extra is
+   needed here. */
 
 .no-wrap {
   white-space: nowrap;
-}
-
-.mono {
-  font-family: var(--vp-font-family-mono);
 }
 </style>
