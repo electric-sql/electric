@@ -19,6 +19,9 @@ import { Sidebar } from './components/Sidebar'
 import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
+import { CodingSessionView } from './components/CodingSessionView'
+
+const CODING_SESSION_TYPE = `coding-session`
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
@@ -80,23 +83,7 @@ function EntityPage(): React.ReactElement {
   const isSpawning = selectedEntity?.status === `spawning`
   const entityStopped = selectedEntity?.status === `stopped`
 
-  // Defer stream connection while the entity is still in its optimistic
-  // `spawning` state — the server streams don't exist yet. Once Electric
-  // syncs the real entity (status: 'idle'|'running'|'stopped'), the hook
-  // re-runs and connects.
-  const { entries, db, loading, error } = useEntityTimeline(
-    activeServer?.url ?? null,
-    isSpawning ? null : entityUrl
-  )
-
   const [killError, setKillError] = useState<string | null>(null)
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (error && !isSpawning) {
-      navigate({ to: `/` })
-    }
-  }, [error, navigate, isSpawning])
 
   const handleKill = useCallback(() => {
     if (!killEntity) return
@@ -117,6 +104,10 @@ function EntityPage(): React.ReactElement {
     )
   }
 
+  const baseUrl = activeServer?.url ?? ``
+  // Hide the body while spawning — server streams don't exist yet.
+  const connectUrl = isSpawning ? null : entityUrl
+
   return (
     <Flex direction="column" flexGrow="1">
       <EntityHeader
@@ -126,20 +117,63 @@ function EntityPage(): React.ReactElement {
         onKill={handleKill}
         killError={killError}
       />
+      {selectedEntity.type === CODING_SESSION_TYPE && connectUrl ? (
+        <CodingSessionView
+          baseUrl={baseUrl}
+          entityUrl={connectUrl}
+          entityStopped={entityStopped}
+        />
+      ) : (
+        <GenericEntityBody
+          baseUrl={baseUrl}
+          entityUrl={connectUrl}
+          entityStopped={entityStopped}
+          isSpawning={isSpawning}
+        />
+      )}
+    </Flex>
+  )
+}
+
+function GenericEntityBody({
+  baseUrl,
+  entityUrl,
+  entityStopped,
+  isSpawning,
+}: {
+  baseUrl: string
+  entityUrl: string | null
+  entityStopped: boolean
+  isSpawning: boolean
+}): React.ReactElement {
+  const { entries, db, loading, error } = useEntityTimeline(
+    baseUrl || null,
+    entityUrl
+  )
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (error && !isSpawning) {
+      navigate({ to: `/` })
+    }
+  }, [error, navigate, isSpawning])
+
+  return (
+    <>
       <EntityTimeline
         entries={entries}
         loading={loading}
         error={error}
         entityStopped={entityStopped}
-        cacheKey={activeServer ? `${activeServer.url}${entityUrl}` : entityUrl}
+        cacheKey={`${baseUrl}${entityUrl ?? ``}`}
       />
       <MessageInput
         db={db}
-        baseUrl={activeServer?.url ?? ``}
-        entityUrl={entityUrl}
+        baseUrl={baseUrl}
+        entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
       />
-    </Flex>
+    </>
   )
 }
 

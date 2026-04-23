@@ -75,6 +75,22 @@ export function entity(entityUrl: string): EntityObservationSource {
   }
 }
 
+/** Entity type name for the built-in coding-session entity. */
+export const CODING_SESSION_ENTITY_TYPE = `coding-session`
+
+export function codingSessionEntityUrl(sessionId: string): string {
+  return `/${CODING_SESSION_ENTITY_TYPE}/${sessionId}`
+}
+
+/**
+ * Observation source for a coding-session entity (Claude Code / Codex
+ * CLI session). Sugar for `entity(codingSessionEntityUrl(sessionId))`
+ * so callers don't have to hard-code the type-name prefix.
+ */
+export function codingSession(sessionId: string): EntityObservationSource {
+  return entity(codingSessionEntityUrl(sessionId))
+}
+
 export function cron(
   expression: string,
   opts?: { timezone?: string }
