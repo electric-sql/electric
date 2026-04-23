@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createHortonDocsSupport } from '../src/electric-agents/docs/knowledge-base'
+import { createHortonDocsSupport } from '../src/docs/knowledge-base'
 
 const tempDirs = new Set<string>()
 

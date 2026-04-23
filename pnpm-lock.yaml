@@ -1604,9 +1604,6 @@ importers:
       '@mariozechner/pi-agent-core':
         specifier: ^0.57.1
         version: 0.57.1(ws@8.18.3)(zod@4.3.6)
-      '@mariozechner/pi-ai':
-        specifier: ^0.57.1
-        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
@@ -1619,9 +1616,6 @@ importers:
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
-      better-sqlite3:
-        specifier: ^11.10.0
-        version: 11.10.0
       cron-parser:
         specifier: ^5.5.0
         version: 5.5.0
@@ -1637,9 +1631,6 @@ importers:
       lmdb:
         specifier: ^3.5.1
         version: 3.5.4
-      nanoid:
-        specifier: ^3.3.11
-        version: 3.3.11
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -1649,9 +1640,6 @@ importers:
       postgres:
         specifier: ^3.4.0
         version: 3.4.7
-      sqlite-vec:
-        specifier: ^0.1.9
-        version: 0.1.9
       turndown:
         specifier: ^7.2.2
         version: 7.2.4
@@ -1668,9 +1656,9 @@ importers:
       '@electric-ax/agent-srever-conformance-tests':
         specifier: workspace:*
         version: link:../agent-server-conformance-tests
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
+      '@electric-ax/builtin-agents':
+        specifier: workspace:*
+        version: link:../builtin-agents
       '@types/jsdom':
         specifier: ^27.0.0
         version: 27.0.0
@@ -1785,6 +1773,79 @@ importers:
         specifier: ^7.1.7
         version: 7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1)
 
+  packages/builtin-agents:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.78.0
+        version: 0.78.0(zod@4.3.6)
+      '@durable-streams/state':
+        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
+        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+      '@electric-ax/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@mariozechner/pi-agent-core':
+        specifier: ^0.57.1
+        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
+      '@mariozechner/pi-ai':
+        specifier: ^0.57.1
+        version: 0.57.1(ws@8.18.3)(zod@4.3.6)
+      '@mozilla/readability':
+        specifier: ^0.6.0
+        version: 0.6.0
+      '@sinclair/typebox':
+        specifier: ^0.34.48
+        version: 0.34.49
+      better-sqlite3:
+        specifier: ^11.10.0
+        version: 11.10.0
+      jsdom:
+        specifier: ^28.1.0
+        version: 28.1.0(@noble/hashes@2.0.1)
+      nanoid:
+        specifier: ^3.3.11
+        version: 3.3.11
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      pino-pretty:
+        specifier: ^13.0.0
+        version: 13.1.3
+      sqlite-vec:
+        specifier: ^0.1.9
+        version: 0.1.9
+      turndown:
+        specifier: ^7.2.2
+        version: 7.2.4
+      turndown-plugin-gfm:
+        specifier: ^1.0.2
+        version: 1.0.2
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/jsdom':
+        specifier: ^27.0.0
+        version: 27.0.0
+      '@types/node':
+        specifier: ^22.19.15
+        version: 22.19.17
+      '@types/turndown':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@vitest/coverage-v8':
+        specifier: ^4.1.0
+        version: 4.1.5(vitest@4.1.5)
+      tsdown:
+        specifier: ^0.9.0
+        version: 0.9.9(typescript@5.8.3)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
+
   packages/electric-ax:
     dependencies:
       '@durable-streams/client':
@@ -1796,6 +1857,9 @@ importers:
       '@electric-ax/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
+      '@electric-ax/builtin-agents':
+        specifier: workspace:*
+        version: link:../builtin-agents
       '@electric-sql/client':
         specifier: ^1.5.14
         version: link:../typescript-client
@@ -19773,8 +19837,8 @@ snapshots:
 
   '@babel/generator@7.28.5':
     dependencies:
-      '@babel/parser': 7.28.5
-      '@babel/types': 7.28.5
+      '@babel/parser': 7.29.2
+      '@babel/types': 7.29.0
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
       jsesc: 3.1.0
@@ -20139,7 +20203,7 @@ snapshots:
   '@babel/helpers@7.28.4':
     dependencies:
       '@babel/template': 7.27.2
-      '@babel/types': 7.28.5
+      '@babel/types': 7.29.0
 
   '@babel/helpers@7.29.2':
     dependencies:
@@ -20167,7 +20231,7 @@ snapshots:
 
   '@babel/parser@7.28.5':
     dependencies:
-      '@babel/types': 7.28.5
+      '@babel/types': 7.29.0
 
   '@babel/parser@7.29.2':
     dependencies:
@@ -21245,9 +21309,9 @@ snapshots:
       '@babel/code-frame': 7.27.1
       '@babel/generator': 7.28.5
       '@babel/helper-globals': 7.28.0
-      '@babel/parser': 7.28.5
+      '@babel/parser': 7.29.2
       '@babel/template': 7.27.2
-      '@babel/types': 7.28.5
+      '@babel/types': 7.29.0
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
@@ -26811,7 +26875,7 @@ snapshots:
       '@babel/plugin-syntax-typescript': 7.27.1(@babel/core@7.28.5)
       '@babel/template': 7.27.2
       '@babel/traverse': 7.28.5
-      '@babel/types': 7.28.5
+      '@babel/types': 7.29.0
       '@tanstack/directive-functions-plugin': 1.139.0(vite@7.1.7(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))
       babel-dead-code-elimination: 1.0.10
       tiny-invariant: 1.3.3
@@ -28935,7 +28999,7 @@ snapshots:
 
   ast-kit@1.4.3:
     dependencies:
-      '@babel/parser': 7.28.5
+      '@babel/parser': 7.29.2
       pathe: 2.0.3
 
   ast-types@0.13.4:

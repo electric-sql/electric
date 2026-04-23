@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createEntityRegistry } from '@electric-ax/agent-runtime'
-import { registerWorker } from '../src/electric-agents/agents/worker'
+import { registerWorker } from '../src/agents/worker'
 
 describe(`worker tool-list assembly`, () => {
   it(`grants only the tools the spawner asked for; never includes ctx.electricTools`, async () => {

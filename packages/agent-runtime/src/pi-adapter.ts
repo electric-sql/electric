@@ -197,7 +197,7 @@ export function createPiAgentAdapter(
                   bridge.onTextDelta(assistantEvent.delta ?? ``)
                   textDeltaCount++
                 } else {
-                  runtimeLog.info(
+                  runtimeLog.debug(
                     logPrefix,
                     `pi-adapter message_update non-text type=${assistantEvent?.type ?? `undefined`}`
                   )
@@ -225,7 +225,7 @@ export function createPiAgentAdapter(
                       `errorMessage=${msg.errorMessage ?? `none`}`
                   )
                 } else {
-                  runtimeLog.info(
+                  runtimeLog.debug(
                     logPrefix,
                     `pi-adapter message_end stopReason=${msg?.stopReason ?? `none`} ` +
                       `contentTypes=${(msg?.content ?? []).map((c) => c.type).join(`,`) || `none`} ` +
@@ -280,7 +280,7 @@ export function createPiAgentAdapter(
 
               case `agent_end`: {
                 bridge.onRunEnd({ finishReason: `stop` })
-                runtimeLog.info(
+                runtimeLog.debug(
                   logPrefix,
                   `pi-adapter agent_end textDeltas=${textDeltaCount} ` +
                     `eventCounts=${JSON.stringify(eventCounts)}`

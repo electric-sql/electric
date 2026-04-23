@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSpawnWorkerTool } from '../src/electric-agents/tools/spawn-worker'
+import { createSpawnWorkerTool } from '../src/tools/spawn-worker'
 
 describe(`spawn_worker tool`, () => {
   it(`spawns a worker entity with runFinished + includeResponse and forwards the initial message`, async () => {

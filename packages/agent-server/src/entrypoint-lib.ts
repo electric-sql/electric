@@ -9,7 +9,7 @@ const DEFAULT_STREAMS_HOST = `127.0.0.1`
 type EnvSource = Record<string, string | undefined>
 
 export interface ElectricAgentsEntrypointOptions
-  extends ElectricAgentsServerOptions { }
+  extends ElectricAgentsServerOptions {}
 
 export interface ElectricAgentsEntrypointServer {
   start: () => Promise<string>
@@ -190,7 +190,7 @@ export async function runElectricAgentsEntrypoint({
 export async function main(): Promise<void> {
   try {
     process.loadEnvFile()
-  } catch { }
+  } catch {}
 
   let server: ElectricAgentsEntrypointServer | null = null
   let stopping: Promise<void> | null = null
@@ -241,7 +241,7 @@ export async function main(): Promise<void> {
   } catch (error) {
     console.error(error)
     if (server) {
-      await server.stop().catch(() => { })
+      await server.stop().catch(() => {})
     }
     process.exit(1)
   }
