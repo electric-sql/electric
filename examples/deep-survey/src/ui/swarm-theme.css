@@ -1,0 +1,53 @@
+:root {
+  margin: 0;
+  padding: 0;
+  background: #0a0a0a;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.swarm-root {
+  --swarm-bg-primary: #0a0a0a;
+  --swarm-bg-panel: #111111;
+  --swarm-bg-topbar: #080808;
+  --swarm-bg-chip: rgba(255, 255, 255, 0.06);
+  --swarm-accent-orange: #e08860;
+  --swarm-accent-orange-hot: #f4a37e;
+  --swarm-accent-blue: #8ab4f8;
+  --swarm-accent-green: #34c759;
+  --swarm-accent-red: #ef4444;
+  --swarm-text-primary: #eeebe6;
+  --swarm-text-muted: rgba(255, 255, 255, 0.55);
+  --swarm-text-subtle: rgba(255, 255, 255, 0.38);
+  --swarm-border-default: rgba(255, 255, 255, 0.12);
+  --swarm-border-subtle: rgba(255, 255, 255, 0.08);
+  --swarm-font: ui-monospace, 'JetBrains Mono', Menlo, monospace;
+
+  font-family: var(--swarm-font);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--swarm-text-primary);
+  background: var(--swarm-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes swarm-blink {
+  to {
+    opacity: 0.2;
+  }
+}
+
+@keyframes swarm-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
