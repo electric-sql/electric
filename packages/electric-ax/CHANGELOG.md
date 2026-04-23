@@ -1,5 +1,11 @@
 # electric-ax
 
+## 0.1.3
+
+### Patch Changes
+
+- 196d55b: Fix postgres 18 docker volume mount path to use `/var/lib/postgresql` instead of `/var/lib/postgresql/data`
+
 ## 0.1.2
 
 ### Patch Changes
