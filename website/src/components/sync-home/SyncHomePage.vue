@@ -512,7 +512,7 @@ const syncBlogPosts = [
         Open source &middot; Apache&nbsp;2.0 &middot; ★&nbsp;9.5k
       </template>
       <template #title>
-        Start syncing in&nbsp;<span class="bottom-cta-accent">minutes</span>.
+        Start syncing in&nbsp;minutes
       </template>
       <template #tagline>
         Spin up the starter, point it at Postgres, and ship a real-time app

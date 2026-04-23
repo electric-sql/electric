@@ -220,10 +220,10 @@ const heroInnerRef = ref<HTMLElement>()
         Hosted &middot; usage-based &middot; built on open&nbsp;protocols
       </template>
       <template #title>
-        Start building on&nbsp;<span class="bottom-cta-accent">Electric&nbsp;Cloud</span>.
+        Start building on&nbsp;Electric&nbsp;Cloud
       </template>
       <template #tagline>
-        Hosted Electric&nbsp;Streams and Electric&nbsp;Sync, with a generous free&nbsp;tier.
+        Hosted Electric&nbsp;Streams and Electric&nbsp;Sync, with&nbsp;a&nbsp;generous&nbsp;free&nbsp;tier.
       </template>
       <template #actions>
         <VPButton

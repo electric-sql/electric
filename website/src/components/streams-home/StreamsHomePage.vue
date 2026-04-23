@@ -164,7 +164,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         Ship your first durable stream in&nbsp;minutes
       </template>
       <template #tagline>
-        Install the client, open a stream, and start appending events.
+        Install the client, create a stream, and start appending events.
         Subscribe live from anywhere on the&nbsp;network.
       </template>
       <template #actions>
@@ -582,10 +582,10 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         Apache&nbsp;2.0 · open&nbsp;source
       </template>
       <template #title>
-        Start streaming&nbsp;<span class="bottom-cta-accent">today</span>.
+        Start streaming&nbsp;today
       </template>
       <template #tagline>
-        One package. Open a stream, append events, subscribe&nbsp;live.
+        Create a stream, append events, subscribe&nbsp;live.
       </template>
       <template #install>
         <InstallPill :command="installCommand" tone="sunken" />

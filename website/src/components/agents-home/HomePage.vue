@@ -202,11 +202,10 @@ const installCommand = "npx electric-ax agents quickstart"
     <MidPageStrap id="get-started-mid">
       <template #eyebrow>Ready to&nbsp;build</template>
       <template #title>
-        Ship your first durable agent in&nbsp;minutes
+        Ship your first durable&nbsp;agent
       </template>
       <template #tagline>
-        Install the SDK, define an entity, deploy it on your stack &mdash;
-        on top of Electric&nbsp;Streams.
+        Install the SDK, define an entity, deploy it on your stack.
       </template>
       <template #actions>
         <VPButton
@@ -582,7 +581,7 @@ const installCommand = "npx electric-ax agents quickstart"
         Open source · Apache&nbsp;2.0 · built on Electric&nbsp;Streams
       </template>
       <template #title>
-        Bring your agents&nbsp;<span class="bottom-cta-accent">online</span>.
+        Bring your agents&nbsp;online
       </template>
       <template #tagline>
         Install the SDK, define an entity, and ship a durable agent on top of
