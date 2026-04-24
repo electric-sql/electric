@@ -11,7 +11,8 @@ import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
 } from '@tanstack/react-virtual'
-import { Flex, ScrollArea, Text } from '@radix-ui/themes'
+import { Flex, IconButton, ScrollArea, Text } from '@radix-ui/themes'
+import { ArrowDown } from 'lucide-react'
 import {
   loadTimelineRowHeights,
   persistTimelineRowHeights,
@@ -99,6 +100,7 @@ export function EntityTimeline({
   const [viewportWidth, setViewportWidth] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
   const isNearBottom = useRef(true)
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const cachedSizeMapRef = useRef(new Map<string, number>())
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
@@ -229,7 +231,16 @@ export function EntityTimeline({
     if (!viewport) return
 
     const updateViewportWidth = () => {
-      setViewportWidth(Math.round(viewport.clientWidth))
+      const w = Math.round(viewport.clientWidth)
+      setViewportWidth((prev) => {
+        if (prev !== w && prev > 0) {
+          // Container resized (e.g. state explorer toggled) — clear settled
+          // cache so virtualizer re-measures all rows at the new width.
+          settledKeysRef.current = new Set()
+          cachedSizeMapRef.current = new Map()
+        }
+        return w
+      })
     }
 
     updateViewportWidth()
@@ -270,9 +281,11 @@ export function EntityTimeline({
     if (!viewport) return
 
     const handleScroll = () => {
-      isNearBottom.current =
+      const nearBottom =
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
         SCROLL_THRESHOLD
+      isNearBottom.current = nearBottom
+      setShowJumpToBottom(!nearBottom)
     }
 
     handleScroll()
@@ -300,6 +313,12 @@ export function EntityTimeline({
     []
   )
 
+  const jumpToBottom = useCallback(() => {
+    if (rows.length > 0) {
+      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+    }
+  }, [rowVirtualizer, rows.length])
+
   if (loading) {
     return (
       <Flex align="center" justify="center" flexGrow="1">
@@ -321,74 +340,102 @@ export function EntityTimeline({
   }
 
   return (
-    <ScrollArea ref={scrollAreaRef} style={{ flex: 1 }}>
-      <div
-        ref={contentRef}
-        style={{
-          padding: `32px 40px`,
-          maxWidth: `72ch`,
-          margin: `0 auto`,
-          overflowAnchor: `none`,
-        }}
+    <div style={{ position: `relative`, flex: 1, overflow: `hidden` }}>
+      <ScrollArea
+        ref={scrollAreaRef}
+        style={{ height: `100%`, overflow: `hidden` }}
+        scrollbars="vertical"
       >
-        <Flex justify="center">
-          <Text size="1" color="gray" style={statusPillStyle}>
-            spawned{spawnTime ? ` · ${formatTime(spawnTime)}` : ``}
-          </Text>
-        </Flex>
-
-        {rows.length === 0 ? (
-          <Flex justify="center" py="6">
-            <Text color="gray" size="2" style={{ opacity: 0.5 }}>
-              Waiting for events...
-            </Text>
-          </Flex>
-        ) : (
-          <div
-            style={{
-              height: rowVirtualizer.getTotalSize(),
-              position: `relative`,
-              marginTop: ROW_GAP,
-              overflowAnchor: `none`,
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const row = rows[virtualRow.index]
-
-              return (
-                <div
-                  key={virtualRow.key}
-                  ref={rowVirtualizer.measureElement}
-                  data-index={virtualRow.index}
-                  data-item-key={row.key}
-                  style={{
-                    position: `absolute`,
-                    top: 0,
-                    left: 0,
-                    width: `100%`,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  <TimelineRow
-                    row={row}
-                    entityStopped={entityStopped}
-                    isStreaming={row.key === lastStreamingAgentKey}
-                    renderWidth={contentWidth}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {entityStopped && (
-          <Flex justify="center" style={{ marginTop: ROW_GAP }}>
+        <div
+          ref={contentRef}
+          style={{
+            padding: `32px 40px`,
+            maxWidth: `72ch`,
+            margin: `0 auto`,
+            overflowAnchor: `none`,
+            boxSizing: `border-box`,
+            width: `100%`,
+          }}
+        >
+          <Flex justify="center">
             <Text size="1" color="gray" style={statusPillStyle}>
-              stopped
+              spawned{spawnTime ? ` · ${formatTime(spawnTime)}` : ``}
             </Text>
           </Flex>
-        )}
-      </div>
-    </ScrollArea>
+
+          {rows.length === 0 ? (
+            <Flex justify="center" py="6">
+              <Text color="gray" size="2" style={{ opacity: 0.5 }}>
+                Waiting for events...
+              </Text>
+            </Flex>
+          ) : (
+            <div
+              style={{
+                height: rowVirtualizer.getTotalSize(),
+                position: `relative`,
+                marginTop: ROW_GAP,
+                overflowAnchor: `none`,
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = rows[virtualRow.index]
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    data-item-key={row.key}
+                    style={{
+                      position: `absolute`,
+                      top: 0,
+                      left: 0,
+                      width: `100%`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <TimelineRow
+                      row={row}
+                      entityStopped={entityStopped}
+                      isStreaming={row.key === lastStreamingAgentKey}
+                      renderWidth={contentWidth}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {entityStopped && (
+            <Flex justify="center" style={{ marginTop: ROW_GAP }}>
+              <Text size="1" color="gray" style={statusPillStyle}>
+                stopped
+              </Text>
+            </Flex>
+          )}
+        </div>
+      </ScrollArea>
+
+      {showJumpToBottom && (
+        <IconButton
+          size="2"
+          color="gray"
+          variant="solid"
+          radius="full"
+          onClick={jumpToBottom}
+          style={{
+            position: `absolute`,
+            bottom: 24,
+            left: `50%`,
+            transform: `translateX(-50%)`,
+            cursor: `pointer`,
+            zIndex: 10,
+          }}
+        >
+          <ArrowDown size={16} />
+        </IconButton>
+      )}
+    </div>
   )
 }

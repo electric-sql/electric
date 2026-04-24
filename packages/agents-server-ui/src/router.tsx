@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Outlet,
   createHashHistory,
@@ -19,6 +19,7 @@ import { Sidebar } from './components/Sidebar'
 import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
+import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
@@ -80,23 +81,10 @@ function EntityPage(): React.ReactElement {
   const isSpawning = selectedEntity?.status === `spawning`
   const entityStopped = selectedEntity?.status === `stopped`
 
-  // Defer stream connection while the entity is still in its optimistic
-  // `spawning` state — the server streams don't exist yet. Once Electric
-  // syncs the real entity (status: 'idle'|'running'|'stopped'), the hook
-  // re-runs and connects.
-  const { entries, db, loading, error } = useEntityTimeline(
-    activeServer?.url ?? null,
-    isSpawning ? null : entityUrl
-  )
-
+  const [stateExplorerOpen, setStateExplorerOpen] = useState(false)
+  const [statePanelWidth, setStatePanelWidth] = useState(0.5)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [killError, setKillError] = useState<string | null>(null)
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (error && !isSpawning) {
-      navigate({ to: `/` })
-    }
-  }, [error, navigate, isSpawning])
 
   const handleKill = useCallback(() => {
     if (!killEntity) return
@@ -117,29 +105,128 @@ function EntityPage(): React.ReactElement {
     )
   }
 
+  const baseUrl = activeServer?.url ?? ``
+  // Hide the body while spawning — server streams don't exist yet.
+  const connectUrl = isSpawning ? null : entityUrl
+
   return (
-    <Flex direction="column" flexGrow="1">
+    <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
       <EntityHeader
         entity={selectedEntity}
         pinned={pinnedUrls.includes(entityUrl)}
         onTogglePin={() => togglePin(entityUrl)}
         onKill={handleKill}
         killError={killError}
+        stateExplorerOpen={stateExplorerOpen}
+        onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
       />
+      <Flex
+        ref={containerRef}
+        style={{ flex: 1, minHeight: 0, overflow: `hidden` }}
+      >
+        <Flex
+          direction="column"
+          style={{ flex: 1, minWidth: 0, overflow: `hidden` }}
+        >
+          <GenericEntityBody
+            baseUrl={baseUrl}
+            entityUrl={connectUrl}
+            entityStopped={entityStopped}
+            isSpawning={isSpawning}
+          />
+        </Flex>
+        {stateExplorerOpen && (
+          <>
+            <div
+              style={{
+                width: 4,
+                cursor: `col-resize`,
+                flexShrink: 0,
+                background: `var(--gray-a5)`,
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                const container = containerRef.current
+                if (!container) return
+                const startX = e.clientX
+                const startWidth = statePanelWidth
+                const rect = container.getBoundingClientRect()
+                const onMouseMove = (ev: MouseEvent) => {
+                  const dx = startX - ev.clientX
+                  const newWidth = Math.min(
+                    0.7,
+                    Math.max(0.2, startWidth + dx / rect.width)
+                  )
+                  setStatePanelWidth(newWidth)
+                }
+                const onMouseUp = () => {
+                  document.removeEventListener(`mousemove`, onMouseMove)
+                  document.removeEventListener(`mouseup`, onMouseUp)
+                  document.body.style.cursor = ``
+                  document.body.style.userSelect = ``
+                }
+                document.body.style.cursor = `col-resize`
+                document.body.style.userSelect = `none`
+                document.addEventListener(`mousemove`, onMouseMove)
+                document.addEventListener(`mouseup`, onMouseUp)
+              }}
+            />
+            <Flex
+              direction="column"
+              style={{
+                flex: `0 0 ${statePanelWidth * 100}%`,
+                minWidth: 0,
+                overflow: `hidden`,
+              }}
+            >
+              <StateExplorerPanel baseUrl={baseUrl} entityUrl={entityUrl} />
+            </Flex>
+          </>
+        )}
+      </Flex>
+    </Flex>
+  )
+}
+
+function GenericEntityBody({
+  baseUrl,
+  entityUrl,
+  entityStopped,
+  isSpawning,
+}: {
+  baseUrl: string
+  entityUrl: string | null
+  entityStopped: boolean
+  isSpawning: boolean
+}): React.ReactElement {
+  const { entries, db, loading, error } = useEntityTimeline(
+    baseUrl || null,
+    entityUrl
+  )
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (error && !isSpawning) {
+      navigate({ to: `/` })
+    }
+  }, [error, navigate, isSpawning])
+
+  return (
+    <>
       <EntityTimeline
         entries={entries}
         loading={loading}
         error={error}
         entityStopped={entityStopped}
-        cacheKey={activeServer ? `${activeServer.url}${entityUrl}` : entityUrl}
+        cacheKey={`${baseUrl}${entityUrl ?? ``}`}
       />
       <MessageInput
         db={db}
-        baseUrl={activeServer?.url ?? ``}
-        entityUrl={entityUrl}
+        baseUrl={baseUrl}
+        entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
       />
-    </Flex>
+    </>
   )
 }
 
