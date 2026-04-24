@@ -1,9 +1,13 @@
 ---
-title: Subqueries — complete access control for sync
+title: Subqueries — making sync work in practice
 description: >-
-  Electric now supports subqueries in shape WHERE clauses. Define access-control logic in SQL and Electric syncs only the matching rows to each client, incrementally.
+  Subqueries let Electric shapes express relational filtering in SQL.
+  Electric 1.6 keeps complex AND/OR/NOT expressions incremental too, so
+  large shapes stay fast.
 excerpt: >-
-  Subqueries extend shape WHERE clauses with relational logic. Define who sees what in SQL — membership checks, role lookups, shared documents — and Electric syncs only the matching rows, incrementally.
+  Sync only works in real apps if it can follow relationships.
+  Subqueries let Electric sync the right rows for each user using SQL,
+  and Electric 1.6 keeps complex expressions incremental too.
 authors: [rob]
 image: /img/blog/subqueries/header.jpg
 tags: [shapes, postgres-sync, release]
@@ -12,24 +16,31 @@ post: true
 published: true
 ---
 
-Sync makes apps fast, resilient, and collaborative. You declare a shape — a table and a WHERE clause — and Electric streams the matching rows into your app, keeps them current, handles reconnection. No fetch logic, no loading states, no stale data. If you haven't seen the pitch: [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and it's [how you build real-time, collaborative apps](/blog/2025/04/09/building-ai-apps-on-sync).
+Sync is what makes apps feel instant. The data is already there when a screen renders. Another user changes something and your UI stays current. You can refresh, reconnect, switch devices, and keep going.
 
-Subqueries extend shape WHERE clauses with relational logic. Sync rows where a membership exists, a role matches, a share is granted. Sync the line items for an invoice, the comments on an issue, the messages in a thread. Relational filtering defined in SQL, evaluated server-side, synced incrementally.
+That is the broad pitch. We have written more about how [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and why it is the right foundation for [collaborative, real-time apps](/blog/2025/04/09/building-ai-apps-on-sync).
 
-With Electric&nbsp;1.6, subqueries in shape WHERE clauses are going mainstream. Complex expressions now sync incrementally — no tradeoff between expressiveness and performance.
+But there is a more practical question underneath all of it:
 
-## Shapes and relational data
+Which rows should this client actually receive?
 
-Shapes are the primitive for declaring what data syncs to each client. A table and a WHERE clause. Declare the subset, sync it. This makes shapes fast to sync and means users only have access to the data they should see.
+In simple demos, a column filter is enough. In real systems, the rule usually lives in other tables. A document is visible because you own it, or because it was shared with you, or because you belong to the workspace that contains it. Comments sync because their issue belongs to a project you can access. Invoice line items sync because their parent invoice does.
 
-But real data is relational. Access control depends on memberships, roles, and shares in other tables. Hierarchical data — invoice line items, issue comments, thread messages — lives in child tables linked by foreign keys. "Sync tasks where this user is a project member", "sync the items for this invoice" — the data you need to filter on lives in a different table. Column filters can't reach it.
+This is where subqueries matter.
 
-You need relational logic in your shape WHERE clause.
+## Sync the right rows
 
+Shapes are Electric's primitive for partial replication: a table and a `WHERE` clause. Define the subset once and Electric keeps that subset synced.
 
-## Subqueries
+For flat cases, the filter is simple:
 
-A subquery in a shape WHERE clause filters rows based on data in another table. You write SQL. The sync engine evaluates it server-side and syncs only the matching rows to each client.
+```sql
+owner_id = $1
+```
+
+Real apps do not stay flat for long. Access control, tenant membership, and parent-child data all pull in related tables. Subqueries let you express those rules directly in SQL.
+
+Sync documents for workspaces this user belongs to:
 
 ```sql
 workspace_id IN (
@@ -38,11 +49,9 @@ workspace_id IN (
 )
 ```
 
-Parameters (`$1`) are bound per client — the same shape definition serves different data to different users.
+Parameters (`$1`) are bound per client, so the same shape definition can serve different data to different users.
 
-When the underlying data changes — a membership added, a user removed — the sync engine re-evaluates and moves only the affected rows in or out. No full resync, no refetch.
-
-Subqueries can be combined with OR. My files, plus files shared with me — two paths to access in one shape:
+You can combine relational checks with ordinary predicates. For example, sync documents that I own, plus documents shared with me:
 
 ```sql
 owner_id = $1
@@ -52,9 +61,7 @@ OR id IN (
 )
 ```
 
-Direct ownership is a column filter. Sharing is a subquery. OR combines them. When a share is granted or revoked, only that document moves.
-
-Subqueries can also be nested. Sync comments for a specific project, traversing through tasks and issues:
+You can also traverse multiple hops. Sync comments for a project by walking from comments to issues to tasks:
 
 ```sql
 issue_id IN (
@@ -64,29 +71,41 @@ issue_id IN (
 )
 ```
 
-The shape syncs all comments reachable from the project root. When a new task or issue is created under the project, its comments sync in automatically.
+This is mundane SQL. That is the point.
 
-See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference on supported operators and subquery patterns.
+The rule stays close to the data, where you already reason about memberships, shares, and relationships. Electric evaluates it server-side and keeps only the matching rows on each client.
+
+See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full reference on supported operators and subquery patterns.
 
 :::info
 Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pro, Scale, and Enterprise plans](/pricing).
 :::
 
+## Why this matters
 
-## What's new in Electric&nbsp;1.6
+The interesting part of sync is not a nicer `fetch()`. It is what you get once the right data is already local: live UIs, collaboration, resilient apps, instant navigation, fewer loading states.
 
-We've kept subqueries experimental while we built out the sync engine support. With Electric&nbsp;1.6, they're ready for widescale use.
+But none of that survives contact with production unless sync can follow your actual data model. The moment you have shared documents, org membership, private projects, child records, or exclusions, a simple column filter stops being enough.
 
-Before 1.6, subqueries worked with complex SQL expressions, large shapes, and low-latency updates — but you couldn't have all three at the same time. Shapes with subqueries combined with AND/OR/NOT would trigger a full resync on subquery value changes, which for a large dataset would cause a noticeable delay.
+Subqueries are what make shapes fit real applications. They let you describe who can see a row, which child rows come along with a parent, how multiple access paths compose, and how exclusions or overrides work.
 
-With 1.6, the sync engine incrementally syncs only the affected rows, even for complex subquery expressions. No more tradeoff between expressiveness and performance.
+## What changed in Electric 1.6
 
-We've also optimised how OR expressions are evaluated against the replication stream. Previously, processing time scaled with the number of active shapes. Now it's constant — adding more shapes doesn't slow down replication processing. All the SQL expressions mentioned in this article are now optimised — see the docs for the full list of supported expressions.
+Subqueries are not new. We have supported them for a while, behind feature flags, and they have already been battle tested by customers in production.
 
-We've battle-tested subqueries in our test environments and in production and are confident in their performance and reliability.
+Electric 1.6 is the release that closes one of the last awkward cases.
 
+Subqueries already supported incremental sync for simple expressions. Complex expressions using `AND`, `OR`, and `NOT` also worked, but when the subquery result changed Electric could fall back to a full resync. On small shapes you might never notice. On large ones you would feel it as lag between a write and the UI catching up.
 
-## Get started
+With 1.6, those complex expressions stay incremental too. When memberships change, shares are granted, or related rows move in or out of scope, Electric now syncs only the affected rows. Large shapes keep the low-latency behavior that makes sync useful in the first place.
+
+That is why we now consider subqueries suitable for general use.
+
+This release also includes a client protocol update needed for the new incremental behavior. The feature flags are unchanged for now and we will remove them once we are confident clients have moved onto the newer protocol.
+
+## Using it now
+
+Here is the shared-documents example wired into a TanStack DB collection:
 
 ```ts
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
@@ -119,98 +138,20 @@ Update to the latest packages:
 npm install @tanstack/db@latest @tanstack/electric-db-collection@latest
 ```
 
-Subqueries are behind a feature flag while we ensure all clients have updated to the new protocol. Enable them on your sync service:
+Subqueries remain behind the same feature flags as before:
 
 ```sh
 ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
 :::warning
-Subquery with complex expression support in Electric&nbsp;1.6 required a [client protocol update](https://github.com/electric-sql/electric/blob/main/packages/sync-service/CHANGELOG.md). Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
+Incremental sync for complex subquery expressions in Electric 1.6 requires a client protocol update. Make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. Those versions have been available since April 3, 2026.
 :::
 
-Once clients have migrated to the updated protocol, the feature flag will be removed and subqueries will be enabled by default.
+If you were waiting for shapes to handle more realistic access-control logic without giving up the fast path, this is the point to try it.
 
-See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference.
+See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full reference.
 
 ***
 
 [Docs](/docs/guides/shapes#where-clause) · [Cloud](/cloud) · [Discord](https://discord.electric-sql.com)
-
-
-<!-- DELETE EVERYTHING BELOW THIS LINE BEFORE PUBLISHING -->
-<!--
-==========================================================
-META
-==========================================================
-
-## Intent
-
-- **What is this post about?** Electric supports subqueries in shape
-  WHERE clauses. Define who sees what with SQL — membership checks,
-  role lookups, exclusions — and Electric syncs the right rows to each
-  client, incrementally.
-- **What's interesting about it?** Shapes are how you declare what data
-  syncs. Subqueries make shapes expressive enough to handle real
-  access-control patterns. And with this release, they're ready for
-  widescale use — complex expressions now sync incrementally, so
-  there's no tradeoff between expressiveness and performance.
-- **Reader takeaway:** "I can write real access-control logic directly
-  in my shape WHERE clauses, and Electric handles the sync —
-  incrementally, even for complex expressions."
-- **CTAs:** Update packages, enable feature flags, try it. Docs for
-  full reference.
-- **Why us:** We built it. This is the culmination of the subquery
-  work in the sync engine.
-
-## Title brief
-
-Should name subqueries and connect to sync/access control. Sentence
-case. Direction: "Relational access control for sync with subqueries"
-or similar — leads with the concept, explains the mechanism. "Subqueries"
-is meaningful to enough of the audience to include, but pair it with
-a plain-language framing for readers who don't know the term.
-
-## Description brief
-
-For SEO. Mention: subqueries, shape WHERE clauses, access control,
-incremental sync. One or two sentences, no HTML.
-
-## Excerpt brief
-
-For the blog listing card. Max 3 short sentences. Land the concept
-(subqueries in shapes) and the benefit (relational access control
-with incremental sync). Match word length of existing post excerpts.
-
-## Image prompt
-
-Dark background. Abstract representation of data flowing through a
-filter with relational connections — like a graph or tree narrowing
-to a subset. Brand colours: #D0BCFF (purple), #00d2a0 (green),
-#75fbfd (cyan). 16:9, ~1536x950px, centre-centre composition.
-Use /blog-image-brief for a detailed prompt.
-
-## Asset checklist
-
-- [ ] Header image (needs creating)
-- [ ] Venn diagram: large / fast / expressive (needs creating — SVG or image)
-- [x] SQL code blocks (in outline)
-- [x] TypeScript code block (in outline)
-- [x] Links to existing blog posts (untangling LLM spaghetti, building AI apps on sync)
-
-## Open questions
-
-- Venn diagram: simple SVG inline, or a designed image asset?
-- Any social proof / community quotes to include?
-- Valter: docs update to remove "experimental" — happening in a separate PR
-
-## Typesetting checklist
-
-- [ ] Non-breaking spaces where appropriate (WHERE clauses, version numbers)
-- [ ] Sentence case on title
-- [ ] Check title, image, and post at different screen widths
-- [ ] No LLM tells: "it's worth noting", "importantly", "in conclusion",
-      "let's dive in", "at its core", "in today's landscape"
-
-==========================================================
--->
