@@ -38,7 +38,27 @@ For flat cases, the filter is simple:
 owner_id = $1
 ```
 
-Real apps do not stay flat for long. Access control, tenant membership, and parent-child data all pull in related tables. Subqueries let you express those rules directly in SQL.
+And here is how that looks in TanStack DB:
+
+```ts
+const documentsCollection = createCollection(
+  electricCollectionOptions({
+    id: 'my-documents',
+    shapeOptions: {
+      url: `${ELECTRIC_URL}/v1/shape`,
+      params: {
+        table: 'documents',
+        where: 'owner_id = $1',
+        params: { '1': currentUserId },
+      },
+    },
+  })
+)
+```
+
+Parameters (`$1`) are bound per client, so the same shape definition can serve different data to different users.
+
+But real apps do not stay flat for long. Access control, tenant membership, and parent-child data all pull in related tables. Subqueries let you express those rules directly in SQL.
 
 Sync documents for workspaces this user belongs to:
 
@@ -49,7 +69,6 @@ workspace_id IN (
 )
 ```
 
-Parameters (`$1`) are bound per client, so the same shape definition can serve different data to different users.
 
 You can combine relational checks with ordinary predicates. For example, sync documents that I own, plus documents shared with me:
 
