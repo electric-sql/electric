@@ -4,7 +4,7 @@ import { VPButton } from "vitepress/theme"
 
 import EaSection from "../agents-home/Section.vue"
 import BottomCtaStrap from "../BottomCtaStrap.vue"
-import CloudHexBg from "./CloudHexBg.vue"
+import MeshOfStreams from "../brand-toys/MeshOfStreams.vue"
 
 const heroInnerRef = ref<HTMLElement>()
 </script>
@@ -13,7 +13,26 @@ const heroInnerRef = ref<HTMLElement>()
   <div class="cl-home">
     <!-- ─────────────────── §1 — Hero ─────────────────── -->
     <section class="cl-hero">
-      <CloudHexBg />
+      <!-- Procedural "mesh of streams" backdrop. Mirrors the streams hero
+           pattern: pass `excludeEl` so the headline / tagline / CTA row
+           punches a soft hole in the rails so the copy is always
+           readable. The mesh is decorative, so we set `pointer-events:
+           none` on the wrapper via the `cl-hero-mesh` class. -->
+      <MeshOfStreams
+        class="cl-hero-mesh"
+        seed="cloud-hero"
+        layout="wide"
+        :wheel-count="14"
+        :connection-density="0.85"
+        :grid-size="24"
+        :corner-radius="14"
+        :track-width="1"
+        edge-connections
+        no-edge-fade
+        :exclude-el="heroInnerRef"
+        :exclude-margin="20"
+        :exclude-feather="18"
+      />
       <div ref="heroInnerRef" class="cl-hero-inner">
         <h1 class="cl-hero-name">
           Electric&nbsp;<span class="cl-hero-accent">Cloud</span>
@@ -271,9 +290,23 @@ const heroInnerRef = ref<HTMLElement>()
   padding: 72px 24px 56px;
   text-align: center;
   overflow: hidden;
-  /* The hero now sits on a dark hex-viewer panel, so anchor a dark
-     fallback in case the bg component hasn't laid out yet. */
+  /* The hero sits on a dark "mesh of streams" canvas, so anchor a dark
+     fallback in case the canvas hasn't laid out yet. */
   background: #0d1117;
+  /* Floor the height so the mesh has room to read as a network of
+     wheels, not just a thin band of tracks. The hero text + CTAs
+     normally measure ~280px tall; bumping the floor to 460px gives
+     the mesh ~180px of breathing room above and below. Caps on
+     narrower viewports below. */
+  min-height: 460px;
+}
+
+.cl-hero-mesh {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* Decorative — never intercept clicks meant for the CTAs above. */
+  pointer-events: none;
 }
 
 .cl-hero-inner {
@@ -340,6 +373,7 @@ const heroInnerRef = ref<HTMLElement>()
     /* Bumped horizontal padding from 20 → 24 for more breathing room
        from the viewport edge on tablets / large phones. */
     padding: 56px 24px 40px;
+    min-height: 380px;
   }
   .cl-hero-name {
     font-size: 36px;
@@ -353,6 +387,7 @@ const heroInnerRef = ref<HTMLElement>()
   .cl-hero {
     /* Bumped horizontal padding from 16 → 20 for breathing room. */
     padding: 44px 20px 32px;
+    min-height: 320px;
   }
   .cl-hero-name {
     font-size: 28px;

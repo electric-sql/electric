@@ -39,6 +39,22 @@ const props = withDefaults(
     edgeConnections?: boolean
     paused?: boolean
     showDebug?: boolean
+    // Optional element whose visible text should be punched out of the
+    // mesh so the headline / copy never has rails / wheels running
+    // through it. Mirrors the StreamFlowBg `excludeEl` pattern used by
+    // the streams hero. The component samples the text rects of every
+    // descendant text node (plus link / button bounding boxes) and
+    // applies a soft destination-out fade over each rect on every
+    // frame.
+    excludeEl?: HTMLElement | null
+    // Soft padding (in px) added around every measured exclusion rect
+    // before it is feathered into the mesh. Larger values produce a
+    // gentler halo around the headline.
+    excludeMargin?: number
+    // Blur radius (in px) used when feathering the exclusion punch.
+    // The combination of margin + blur controls how far from the text
+    // the mesh starts to reappear.
+    excludeFeather?: number
   }>(),
   {
     seed: "mesh-of-streams",
@@ -63,6 +79,9 @@ const props = withDefaults(
     edgeConnections: false,
     paused: false,
     showDebug: false,
+    excludeEl: null,
+    excludeMargin: 18,
+    excludeFeather: 14,
   }
 )
 
@@ -80,10 +99,66 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const size = ref({ w: 1600, h: 900 })
 const nowMs = ref(0)
 
+interface ExcludeRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+const exclusions = ref<ExcludeRect[]>([])
+
 let resizeObserver: ResizeObserver | null = null
+let excludeObserver: ResizeObserver | null = null
 let frame = 0
 let running = false
 let ctx: CanvasRenderingContext2D | null = null
+
+// Walk the excludeEl subtree and build a flat list of bounding rects for
+// every text node + visible interactive child (anchors, buttons, svg).
+// Mirrors the helper StreamFlowBg uses on the streams hero so the two
+// hero backgrounds have the same exclusion semantics.
+function getTextRects(element: Element): DOMRect[] {
+  const rects: DOMRect[] = []
+  const range = document.createRange()
+  const walk = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+  let textNode: Text | null = null
+  while ((textNode = walk.nextNode() as Text | null)) {
+    if (!textNode.textContent?.trim()) continue
+    range.selectNodeContents(textNode)
+    const nodeRects = range.getClientRects()
+    for (let i = 0; i < nodeRects.length; i++) {
+      rects.push(nodeRects[i])
+    }
+  }
+  element.querySelectorAll("a, button, svg, img, input").forEach((child) => {
+    const r = child.getBoundingClientRect()
+    if (r.width > 0 && r.height > 0) rects.push(r)
+  })
+  return rects
+}
+
+function measureExclusions() {
+  const host = root.value
+  const target = props.excludeEl
+  if (!host || !target) {
+    if (exclusions.value.length > 0) exclusions.value = []
+    return
+  }
+  const origin = host.getBoundingClientRect()
+  const rects = getTextRects(target)
+  const next: ExcludeRect[] = []
+  for (const r of rects) {
+    if (r.width <= 0 || r.height <= 0) continue
+    next.push({
+      left: r.left - origin.left,
+      top: r.top - origin.top,
+      right: r.right - origin.left,
+      bottom: r.bottom - origin.top,
+    })
+  }
+  exclusions.value = next
+}
 
 const scene = computed(() =>
   createMeshScene({
@@ -126,6 +201,8 @@ function syncSize() {
   if (nextW !== size.value.w || nextH !== size.value.h) {
     size.value = { w: nextW, h: nextH }
   }
+  // Text rects move with layout; re-measure on every size change.
+  measureExclusions()
 }
 
 function ensureCanvasSize() {
@@ -176,16 +253,39 @@ onMounted(() => {
   if (typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(() => syncSize())
     if (root.value) resizeObserver.observe(root.value)
+    excludeObserver = new ResizeObserver(() => measureExclusions())
+    if (props.excludeEl) excludeObserver.observe(props.excludeEl)
   }
   window.addEventListener("resize", syncSize)
-  drawCanvas(sceneTime.value)
+  // Two rAFs: first frame ensures the canvas is in the DOM with its real
+  // size; second waits for the excludeEl's text to lay out (font load /
+  // late hydration) before we measure.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      measureExclusions()
+      drawCanvas(sceneTime.value)
+    })
+  })
 })
 
 onBeforeUnmount(() => {
   stopLoop()
   resizeObserver?.disconnect()
+  excludeObserver?.disconnect()
   window.removeEventListener("resize", syncSize)
 })
+
+// Re-attach the exclude observer if the consumer swaps the element.
+watch(
+  () => props.excludeEl,
+  (next, prev) => {
+    if (excludeObserver) {
+      if (prev) excludeObserver.unobserve(prev)
+      if (next) excludeObserver.observe(next)
+    }
+    measureExclusions()
+  }
+)
 
 const sceneTime = computed(() => (props.paused ? 0 : nowMs.value / 1000))
 
@@ -485,6 +585,26 @@ function drawCanvas(timeSec: number) {
       }
     }
   }
+
+  // Punch a soft hole through the mesh wherever the excludeEl text sits.
+  // We do this AFTER everything has drawn so wheels / tracks / messages
+  // all get faded uniformly. `destination-out` clears the destination
+  // alpha; combined with `ctx.filter = blur(...)` we get a feathered
+  // mask without having to rebuild the geometry per frame.
+  if (exclusions.value.length > 0) {
+    const margin = props.excludeMargin
+    const feather = Math.max(0, props.excludeFeather)
+    ctx.save()
+    ctx.globalCompositeOperation = "destination-out"
+    if (feather > 0) ctx.filter = `blur(${feather}px)`
+    ctx.fillStyle = "rgba(0, 0, 0, 1)"
+    for (const z of exclusions.value) {
+      const w = z.right - z.left + margin * 2
+      const h = z.bottom - z.top + margin * 2
+      ctx.fillRect(z.left - margin, z.top - margin, w, h)
+    }
+    ctx.restore()
+  }
 }
 
 watch(
@@ -505,6 +625,11 @@ watch(
     props.wheelRotationSpeed,
     props.animateSegments,
     props.segmentPulse,
+    // Re-paint when the punched-out text region changes (font load,
+    // viewport resize, late-mounted excludeEl, etc).
+    exclusions.value,
+    props.excludeMargin,
+    props.excludeFeather,
   ],
   () => {
     if (!running) drawCanvas(sceneTime.value)
