@@ -116,6 +116,7 @@ export function resolveElectricAgentsEntrypointOptions(
     `ELECTRIC_AGENTS_ELECTRIC_URL`,
     `ELECTRIC_URL`,
   ])
+  const electricSecret = readEnv(env, [`ELECTRIC_AGENTS_ELECTRIC_SECRET`])
   const baseUrl = readEnv(env, [`ELECTRIC_AGENTS_BASE_URL`, `BASE_URL`])
 
   return {
@@ -127,6 +128,7 @@ export function resolveElectricAgentsEntrypointOptions(
     electricUrl: electricUrl
       ? validateUrl(`Electric URL`, electricUrl)
       : undefined,
+    electricSecret,
     host: readEnv(env, [`ELECTRIC_AGENTS_HOST`, `HOST`]) ?? DEFAULT_HOST,
     port: readPort(env),
     workingDirectory:

@@ -40,6 +40,10 @@ import { ATTR, extractTraceContext, tracer } from './tracing.js'
 import { EntityBridgeManager } from './entity-bridge-manager.js'
 import { TagStreamOutboxDrainer } from './tag-stream-outbox-drainer.js'
 import { rewriteLoopbackWebhookUrl } from './webhook-url.js'
+import {
+  applyElectricUrlQueryParams,
+  electricUrlWithPath,
+} from './electric-url.js'
 import type { WakeRegistration } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
@@ -111,6 +115,7 @@ export interface ElectricAgentsServerOptions {
   mockStreamFn?: StreamFn
   postgresUrl: string
   electricUrl?: string
+  electricSecret?: string
 }
 
 interface MockAgentBootstrap {
@@ -264,7 +269,8 @@ export class ElectricAgentsServer {
           this.entityBridgeManager = new EntityBridgeManager(
             this.registry,
             this.streamClient,
-            this.options.electricUrl
+            this.options.electricUrl,
+            this.options.electricSecret
           )
           this.electricAgentsManager.setEntityBridgeManager(
             this.entityBridgeManager
@@ -377,7 +383,8 @@ export class ElectricAgentsServer {
 
           serverLog.info(`[agent-server] rebuilding wake registry...`)
           await this.electricAgentsManager.rebuildWakeRegistry(
-            this.options.electricUrl
+            this.options.electricUrl,
+            this.options.electricSecret
           )
           serverLog.info(`[agent-server] rehydrating cron schedules...`)
           await this.rehydrateCronSchedules()
@@ -1782,7 +1789,11 @@ export class ElectricAgentsServer {
       return
     }
     const incomingUrl = new URL(req.url ?? `/`, `http://localhost`)
-    const target = this.buildElectricProxyTarget(incomingUrl, electricUrl)
+    const target = this.buildElectricProxyTarget(
+      incomingUrl,
+      electricUrl,
+      this.options.electricSecret
+    )
 
     let upstream: Response
     try {
@@ -1810,15 +1821,24 @@ export class ElectricAgentsServer {
     }
   }
 
-  private buildElectricProxyTarget(incomingUrl: URL, electricUrl: string): URL {
+  private buildElectricProxyTarget(
+    incomingUrl: URL,
+    electricUrl: string,
+    electricSecret?: string
+  ): URL {
     const targetPath = incomingUrl.pathname.replace(`/_electric/electric`, ``)
-    const target = new URL(targetPath, electricUrl)
+    const target = electricUrlWithPath(electricUrl, targetPath)
     incomingUrl.searchParams.forEach((value, key) => {
       target.searchParams.append(key, value)
     })
+    applyElectricUrlQueryParams(target, electricUrl)
 
     if (targetPath !== `/v1/shape`) {
       return target
+    }
+
+    if (electricSecret) {
+      target.searchParams.set(`secret`, electricSecret)
     }
 
     const table = incomingUrl.searchParams.get(`table`)

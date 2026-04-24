@@ -94,9 +94,12 @@ export class ElectricAgentsManager {
     })
   }
 
-  async rebuildWakeRegistry(electricUrl?: string): Promise<void> {
+  async rebuildWakeRegistry(
+    electricUrl?: string,
+    electricSecret?: string
+  ): Promise<void> {
     if (electricUrl) {
-      await this.wakeRegistry.startSync(electricUrl)
+      await this.wakeRegistry.startSync(electricUrl, electricSecret)
       return
     }
 

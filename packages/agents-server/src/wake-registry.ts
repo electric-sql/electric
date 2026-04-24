@@ -6,6 +6,7 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { wakeRegistrations } from './db/schema.js'
 import { serverLog } from './log.js'
+import { electricUrlWithPath } from './electric-url.js'
 import type { DrizzleDB } from './db/index.js'
 import type { Message, Row, Value } from '@electric-sql/client'
 
@@ -101,6 +102,7 @@ export class WakeRegistry {
   private onTimeout: WakeTimeoutCallback | null = null
   private onDebounce: WakeDebounceCallback | null = null
   private syncElectricUrl: string | null = null
+  private syncElectricSecret: string | undefined
   private syncAbortController: AbortController | null = null
   private syncUnsubscribe: (() => void) | null = null
   private syncReadyPromise: Promise<void> | null = null
@@ -131,19 +133,21 @@ export class WakeRegistry {
     ].join(`:`)
   }
 
-  async startSync(electricUrl: string): Promise<void> {
+  async startSync(electricUrl: string, electricSecret?: string): Promise<void> {
     if (this.syncReadyPromise) {
       await this.syncReadyPromise
       return
     }
 
     this.syncElectricUrl = electricUrl
+    this.syncElectricSecret = electricSecret
 
     const abortController = new AbortController()
     const stream = new ShapeStream<WakeRegistrationShapeRow>({
-      url: new URL(`/v1/shape`, electricUrl).toString(),
+      url: electricUrlWithPath(electricUrl, `/v1/shape`).toString(),
       params: {
         table: `wake_registrations`,
+        ...(electricSecret ? { secret: electricSecret } : {}),
         columns: [
           `id`,
           `subscriber_url`,
@@ -258,7 +262,7 @@ export class WakeRegistry {
       await this.loadRegistrations()
 
       try {
-        await this.startSync(electricUrl)
+        await this.startSync(electricUrl, this.syncElectricSecret)
         serverLog.info(`[wake-registry] Electric sync recovered`)
       } catch (recoveryError) {
         serverLog.error(
