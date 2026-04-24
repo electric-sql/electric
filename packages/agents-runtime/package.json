@@ -2,6 +2,11 @@
   "name": "@electric-ax/agents-runtime",
   "version": "0.0.2",
   "description": "Electric agent runtime — behavioral stack for agent entities over durable streams",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/agents-runtime"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
