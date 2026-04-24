@@ -1,0 +1,71 @@
+.sidebar {
+  overflow: hidden;
+}
+
+.header {
+  border-bottom: 1px solid var(--gray-a5);
+}
+
+.headerLabel {
+  text-transform: uppercase;
+}
+
+.eventListScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.eventRow {
+  cursor: pointer;
+  border-radius: var(--radius-2);
+  background: transparent;
+  overflow: hidden;
+  padding: var(--space-1) var(--space-2);
+  box-sizing: border-box;
+}
+
+.eventRow[data-selected='true'] {
+  background: var(--accent-a3);
+}
+
+.eventRow[data-dimmed='true'] {
+  opacity: 0.4;
+}
+
+.eventRowHeader {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.eventKey {
+  font-family: var(--code-font-family);
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.expandButton {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.expandButton svg {
+  transition: transform 0.15s ease;
+}
+
+.expandButton[data-open='true'] svg {
+  transform: rotate(45deg);
+}
+
+.eventValue {
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  font-size: var(--font-size-1);
+}

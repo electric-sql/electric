@@ -1,0 +1,108 @@
+.header {
+  border-bottom: 1px solid var(--gray-a5);
+}
+
+.scrollContainer {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  width: 0;
+  min-width: 100%;
+}
+
+.gridTable {
+  font-size: var(--font-size-1);
+}
+
+.gridHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--gray-3);
+}
+
+.gridRow {
+  display: flex;
+}
+
+.gridTh {
+  position: relative;
+  border-right: 1px solid var(--gray-a4);
+  border-bottom: 1px solid var(--gray-a5);
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.gridTh:hover {
+  background-color: var(--gray-a2);
+}
+
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+@media (hover: hover) {
+  .resizer {
+    opacity: 0;
+  }
+
+  *:hover > .resizer {
+    opacity: 1;
+    background: var(--gray-a5);
+  }
+}
+
+.resizer[data-resizing] {
+  background: var(--accent-9);
+  opacity: 1;
+}
+
+.gridBody {
+  position: relative;
+}
+
+.gridBodyRow {
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.gridBodyRow:hover {
+  background: var(--gray-a2);
+}
+
+.gridCell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: var(--space-1) var(--space-2);
+  border-right: 1px solid var(--gray-a3);
+  border-bottom: 1px solid var(--gray-a3);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.highlightedRow {
+  background: var(--accent-a3);
+  box-shadow: inset 2px 0 0 var(--accent-9);
+  animation: pulse 0.6s ease-out;
+}
+
+@keyframes pulse {
+  0% {
+    background: var(--accent-a5);
+  }
+  100% {
+    background: var(--accent-a3);
+  }
+}

@@ -7,7 +7,15 @@ import {
   Flex,
   Text,
 } from '@radix-ui/themes'
-import { Copy, Eye, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react'
+import {
+  Copy,
+  Database,
+  Eye,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Trash2,
+} from 'lucide-react'
 import { getEntityInstanceName } from '../lib/types'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
@@ -25,12 +33,16 @@ export function EntityHeader({
   onTogglePin,
   onKill,
   killError,
+  stateExplorerOpen,
+  onToggleStateExplorer,
 }: {
   entity: ElectricEntity
   pinned: boolean
   onTogglePin: () => void
   onKill: () => void
   killError?: string | null
+  stateExplorerOpen?: boolean
+  onToggleStateExplorer?: () => void
 }): React.ReactElement {
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
@@ -66,6 +78,20 @@ export function EntityHeader({
           {entity.status}
         </Badge>
 
+        {onToggleStateExplorer && (
+          <Button
+            variant="ghost"
+            size="1"
+            onClick={onToggleStateExplorer}
+            title="Toggle state explorer"
+            style={
+              stateExplorerOpen ? { background: `var(--accent-a4)` } : undefined
+            }
+          >
+            <Database size={14} />
+          </Button>
+        )}
+
         <Button variant="ghost" size="1" onClick={onTogglePin}>
           {pinned ? <PinOff size={14} /> : <Pin size={14} />}
         </Button>
@@ -83,6 +109,18 @@ export function EntityHeader({
                 <Text size="2">Inspect</Text>
               </Flex>
             </DropdownMenu.Item>
+            {onToggleStateExplorer && (
+              <DropdownMenu.Item onSelect={onToggleStateExplorer}>
+                <Flex align="center" gap="2">
+                  <Database size={14} />
+                  <Text size="2">
+                    {stateExplorerOpen
+                      ? `Hide State Explorer`
+                      : `State Explorer`}
+                  </Text>
+                </Flex>
+              </DropdownMenu.Item>
+            )}
             <DropdownMenu.Item
               onSelect={() => navigator.clipboard.writeText(entity.url)}
             >
