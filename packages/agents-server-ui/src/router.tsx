@@ -131,12 +131,20 @@ function EntityPage(): React.ReactElement {
           direction="column"
           style={{ flex: 1, minWidth: 0, overflow: `hidden` }}
         >
-          <GenericEntityBody
-            baseUrl={baseUrl}
-            entityUrl={connectUrl}
-            entityStopped={entityStopped}
-            isSpawning={isSpawning}
-          />
+          {selectedEntity.type === CODING_SESSION_TYPE && connectUrl ? (
+            <CodingSessionView
+              baseUrl={baseUrl}
+              entityUrl={connectUrl}
+              entityStopped={entityStopped}
+            />
+          ) : (
+            <GenericEntityBody
+              baseUrl={baseUrl}
+              entityUrl={connectUrl}
+              entityStopped={entityStopped}
+              isSpawning={isSpawning}
+            />
+          )}
         </Flex>
         {stateExplorerOpen && (
           <>
