@@ -41,18 +41,26 @@ function restoreDarkMode() {
   prevDarkClass = null
 }
 
-// The back-button fires `popstate`; clicking an anchor fires a
-// full navigation (which re-mounts this page anyway), so we only
-// need to cover `popstate` here.
+// `popstate` covers browser back/forward. Anchor clicks inside the
+// brand-toys index don't navigate to a different *path* (only the
+// `?id=…` query changes), so VitePress' SPA router does a
+// `pushState` without re-mounting this page. To plug that gap, the
+// index dispatches a `brand-toys:navigate` custom event after it
+// pushes the new URL — we re-sync on both.
+function onNavigate() {
+  syncSearch()
+}
 onMounted(() => {
   forceDarkMode()
   syncSearch()
   window.addEventListener("popstate", syncSearch)
+  window.addEventListener("brand-toys:navigate", onNavigate)
 })
 onBeforeUnmount(() => {
   restoreDarkMode()
   if (typeof window !== "undefined") {
     window.removeEventListener("popstate", syncSearch)
+    window.removeEventListener("brand-toys:navigate", onNavigate)
   }
 })
 

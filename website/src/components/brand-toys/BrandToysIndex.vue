@@ -53,6 +53,36 @@ function hrefFor(t: ToyDef) {
   return `/brand-toys?id=${encodeURIComponent(t.id)}`
 }
 
+// Handle the in-page navigation ourselves rather than letting
+// VitePress' SPA router intercept the anchor click. Both URLs are
+// `/brand-toys` (only the query string differs), so VitePress fires
+// `history.pushState` but does *not* re-mount the page component —
+// `BrandToysPage` would never see the new `?id=…` and we'd appear
+// stuck on the index. We push the new URL ourselves and dispatch a
+// custom event that `BrandToysPage` listens for.
+//
+// Modifier-clicks (cmd/ctrl/shift/middle-click) fall through to the
+// browser so "open in new tab" still works.
+function onCardClick(e: MouseEvent, t: ToyDef) {
+  if (
+    e.defaultPrevented ||
+    e.button !== 0 ||
+    e.metaKey ||
+    e.ctrlKey ||
+    e.shiftKey ||
+    e.altKey
+  ) {
+    return
+  }
+  e.preventDefault()
+  const url = hrefFor(t)
+  if (typeof window !== "undefined") {
+    window.history.pushState({}, "", url)
+    window.dispatchEvent(new CustomEvent("brand-toys:navigate"))
+    window.scrollTo(0, 0)
+  }
+}
+
 function groupClass(g: string) {
   return `group-${g}`
 }
@@ -139,7 +169,11 @@ function shortPath(source: string): string {
 
     <ul v-else class="bt-index-grid">
       <li v-for="t in filtered" :key="t.id" class="bt-index-card">
-        <a :href="hrefFor(t)" class="bt-index-card-link">
+        <a
+          :href="hrefFor(t)"
+          class="bt-index-card-link"
+          @click="onCardClick($event, t)"
+        >
           <div class="bt-index-card-head">
             <span class="bt-index-card-group mono" :class="groupClass(t.group)">
               {{ GROUP_LABELS[t.group] }}
