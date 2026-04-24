@@ -1,0 +1,30 @@
+{
+  "name": "@electric-ax/coding-session-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone viewer for an Electric Agents coding-session entity — renders the normalized event timeline and lets viewers post prompts.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-ax/agents-runtime": "workspace:*",
+    "@tanstack/db": "^0.6.4",
+    "@tanstack/react-db": "^0.1.82",
+    "markdown-it": "^14.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "shiki": "^1.24.4"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.9.3",
+    "vite": "^6.0.7"
+  }
+}
