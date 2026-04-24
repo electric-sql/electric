@@ -355,7 +355,13 @@ export function registerCodingSession(
       },
     },
     async handler(ctx: HandlerContext, _wake: WakeEvent) {
-      if (ctx.firstWake) {
+      // Seed sessionMeta / cursorState on the very first wake, once and
+      // only once. `ctx.firstWake` is derived from "manifest is empty" —
+      // this entity never writes a manifest entry (no mkdb/observe/spawn/
+      // effect), so firstWake stays true on every wake. Guard by reading
+      // state instead, per the define-entity review checklist.
+      const existingMeta = ctx.db.collections.sessionMeta.get(`current`)
+      if (!existingMeta) {
         const args = creationArgsSchema.parse(ctx.args)
         const cwd = args.cwd ?? defaultCwd
         const electricSessionId =
@@ -384,6 +390,8 @@ export function registerCodingSession(
             status: hasNative ? `idle` : `initializing`,
           } satisfies SessionMetaRow,
         })
+      }
+      if (!ctx.db.collections.cursorState.get(`current`)) {
         ctx.db.actions.cursorState_insert({
           row: {
             key: `current`,
@@ -400,7 +408,7 @@ export function registerCodingSession(
         | undefined
       if (!metaRow || !cursorRow) {
         throw new Error(
-          `[coding-session] expected sessionMeta and cursorState rows to exist after firstWake`
+          `[coding-session] expected sessionMeta and cursorState rows to exist after init`
         )
       }
 
