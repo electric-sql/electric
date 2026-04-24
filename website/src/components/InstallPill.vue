@@ -159,7 +159,7 @@ function copy() {
 
 .install-pill-prompt {
   color: var(--vp-c-brand-1);
-  margin-right: 4px;
+  margin-right: 0.5em;
 }
 
 /* Positional syntax highlighting for the command tokens — reuses the

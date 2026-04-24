@@ -374,6 +374,24 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
   }
 }
 
+/* Between the stacked-tablet and larger-phone ranges, lift the bled
+   composition a touch further so it sits slightly closer to the navbar
+   before the narrower-phone typography rules take over below 500px. */
+@media (max-width: 860px) and (min-width: 501px) {
+  .home-hero-scene {
+    margin-top: -112vw;
+  }
+  .home-hero-text {
+    margin-top: 22px;
+  }
+}
+
+@media (max-width: 860px) and (min-width: 701px) {
+  .home-hero-scene {
+    transform: translateY(-18px);
+  }
+}
+
 @media (max-width: 768px) {
   .home-hero {
     padding: 0 20px 48px;
@@ -400,6 +418,12 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
   }
   .home-hero-sub {
     font-size: 16px;
+  }
+}
+
+@media (max-width: 370px) {
+  .home-hero-name {
+    font-size: clamp(28px, 9.2vw, 34px);
   }
 }
 </style>

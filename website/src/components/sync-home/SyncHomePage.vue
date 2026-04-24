@@ -69,7 +69,16 @@ const syncBlogPosts = [
         </p>
 
         <div class="sh-hero-install-row">
-          <InstallPill :command="installCommand" tone="raised" />
+          <!-- Single-accent highlighting to match the agents and
+               streams hero pills: every other token (`npx`, the
+               `my-electric-app` placeholder name) renders muted and
+               only `@electric-sql/start` — the actual Electric
+               package — picks up the brand colour. -->
+          <InstallPill
+            :command="installCommand"
+            tone="raised"
+            accent="@electric-sql/start"
+          />
         </div>
 
         <div class="sh-hero-row">
@@ -519,7 +528,11 @@ const syncBlogPosts = [
         on top of your existing&nbsp;stack.
       </template>
       <template #install>
-        <InstallPill :command="installCommand" tone="sunken" />
+        <InstallPill
+          :command="installCommand"
+          tone="sunken"
+          accent="@electric-sql/start"
+        />
       </template>
       <template #actions>
         <VPButton
