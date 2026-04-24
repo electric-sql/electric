@@ -14,6 +14,7 @@ import type {
   HandlerContext,
   WakeEvent,
 } from '@electric-ax/agents-runtime'
+import type { McpIntegration } from '@electric-ax/agents-mcp'
 import type { ChangeEvent } from '@durable-streams/state'
 
 const TITLE_MODEL = `claude-haiku-4-5-20251001`
@@ -143,7 +144,7 @@ export async function generateTitle(
 
 export function buildHortonSystemPrompt(
   workingDirectory: string,
-  opts: { hasDocsSupport?: boolean } = {}
+  opts: { hasDocsSupport?: boolean; mcpSummary?: string } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
     ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
@@ -151,6 +152,7 @@ export function buildHortonSystemPrompt(
   const docsGuidance = opts.hasDocsSupport
     ? `\n- You have built-in Durable Agents docs context plus a docs search tool. Use that before broad web search when the question is about this repo, Electric Agents, or Durable Agents.\n- The docs TOC and docs search results include concrete file paths under the docs tree. Use the normal read tool with those returned paths.\n- Use repo read/bash tools for non-doc files or when you need to inspect exact implementation code in the workspace.`
     : ``
+  const mcpSection = opts.mcpSummary ? `\n${opts.mcpSummary}\n` : ``
   return `You are Horton, a friendly and capable assistant. You can chat, research the web, read and edit code, run shell commands, and dispatch subagents (workers) for isolated subtasks. Be warm and engaging in conversation; be precise and concrete when working with code.
 
 # Tools
@@ -190,7 +192,7 @@ After spawning, end your turn (optionally with a brief "I've dispatched a worker
 
 # Reporting
 Report outcomes faithfully. If a command failed, say so with the relevant output. If you didn't run a verification step, say that rather than implying you did. Don't hedge confirmed results with unnecessary disclaimers.
-
+${mcpSection}
 Working directory: ${workingDirectory}
 The current year is ${new Date().getFullYear()}.`
 }
@@ -236,6 +238,7 @@ function createAssistantHandler(options: {
   streamFn?: StreamFn
   docsSupport: HortonDocsSupport | null
   docsSearchTool?: AgentTool
+  mcp?: McpIntegration
 }) {
   const { workingDirectory, streamFn, docsSupport, docsSearchTool } = options
 
@@ -244,9 +247,13 @@ function createAssistantHandler(options: {
     wake: WakeEvent
   ): Promise<void> {
     const readSet = new Set<string>()
+    const mcpTools = options.mcp ? await options.mcp.getTools() : []
+    const mcpSummary = options.mcp ? await options.mcp.getServerSummary() : ``
     const tools = [
       ...ctx.electricTools,
       ...createHortonTools(workingDirectory, ctx, readSet, { docsSearchTool }),
+      ...(options.mcp?.configTools ?? []),
+      ...mcpTools,
     ]
 
     if (docsSupport) {
@@ -279,6 +286,7 @@ function createAssistantHandler(options: {
     ctx.useAgent({
       systemPrompt: buildHortonSystemPrompt(workingDirectory, {
         hasDocsSupport: Boolean(docsSupport),
+        mcpSummary: mcpSummary || undefined,
       }),
       model: HORTON_MODEL,
       tools,
@@ -314,9 +322,9 @@ function createAssistantHandler(options: {
 
 export function registerHorton(
   registry: EntityRegistry,
-  options: { workingDirectory: string; streamFn?: StreamFn }
+  options: { workingDirectory: string; streamFn?: StreamFn; mcp?: McpIntegration }
 ): Array<string> {
-  const { workingDirectory, streamFn } = options
+  const { workingDirectory, streamFn, mcp } = options
   const docsSupport = createHortonDocsSupport(workingDirectory)
   const docsSearchTool = docsSupport?.createSearchTool()
 
@@ -331,6 +339,7 @@ export function registerHorton(
     streamFn,
     docsSupport,
     docsSearchTool,
+    mcp,
   })
 
   registry.define(`horton`, {

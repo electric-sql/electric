@@ -6,6 +6,7 @@ import {
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
+import { createMcpIntegration } from '@electric-ax/agents-mcp'
 import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
@@ -15,6 +16,7 @@ import type {
   EntityStreamDBWithActions,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
+import type { McpIntegration } from '@electric-ax/agents-mcp'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -26,6 +28,7 @@ export interface AgentHandlerResult {
   runtime: RuntimeHandler
   registry: EntityRegistry
   typeNames: Array<string>
+  mcp: McpIntegration
 }
 
 export interface BuiltinAgentHandlerOptions {
@@ -78,10 +81,12 @@ export function createBuiltinAgentHandler(
   }
 
   const cwd = workingDirectory ?? process.cwd()
+  const mcp = createMcpIntegration({ workingDirectory: cwd })
   const registry = createEntityRegistry()
   const typeNames = registerHorton(registry, {
     workingDirectory: cwd,
     streamFn,
+    mcp,
   })
 
   registerWorker(registry, { workingDirectory: cwd, streamFn })
@@ -101,6 +106,7 @@ export function createBuiltinAgentHandler(
     runtime,
     registry,
     typeNames,
+    mcp,
   }
 }
 
