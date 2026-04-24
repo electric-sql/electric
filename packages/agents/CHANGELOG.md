@@ -1,5 +1,11 @@
 # @electric-ax/agents
 
+## 0.1.2
+
+### Patch Changes
+
+- 1786ee6: feat: add shared state (sharedDb) support to built-in worker agent
+
 ## 0.1.1
 
 ### Patch Changes
