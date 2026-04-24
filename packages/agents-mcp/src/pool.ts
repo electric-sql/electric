@@ -26,7 +26,7 @@ interface PoolEntry {
 
 export interface McpClientPoolOptions {
   workingDirectory: string
-  onAuthUrl?: (url: string) => void
+  onAuthUrl?: (serverName: string, url: string) => void
 }
 
 // ── McpClientPool ──────────────────────────────────────────
@@ -35,7 +35,7 @@ export class McpClientPool {
   private readonly entries: Map<string, PoolEntry> = new Map()
   private readonly tokenStore: TokenStore
   private readonly workingDirectory: string
-  private readonly onAuthUrl?: (url: string) => void
+  private readonly onAuthUrl?: (serverName: string, url: string) => void
 
   constructor(config: McpConfig, options: McpClientPoolOptions) {
     this.workingDirectory = options.workingDirectory
@@ -80,7 +80,9 @@ export class McpClientPool {
         config: entry.config,
         tokenStore: this.tokenStore,
         workingDirectory: this.workingDirectory,
-        onAuthUrl: this.onAuthUrl,
+        onAuthUrl: this.onAuthUrl
+          ? (url: string) => this.onAuthUrl!(serverName, url)
+          : undefined,
       })
 
       await client.connect()

@@ -74,6 +74,8 @@ export class TokenStore {
 
   private writeAll(data: AuthData): void {
     mkdirSync(this.configDir, { recursive: true })
-    writeFileSync(this.authPath, JSON.stringify(data, null, 2) + `\n`)
+    writeFileSync(this.authPath, JSON.stringify(data, null, 2) + `\n`, {
+      mode: 0o600,
+    })
   }
 }

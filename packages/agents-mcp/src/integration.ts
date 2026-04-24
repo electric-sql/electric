@@ -13,9 +13,7 @@ export function createMcpIntegration(opts: {
 
   const pool = new McpClientPool(config, {
     workingDirectory: opts.workingDirectory,
-    onAuthUrl: opts.onAuthUrl
-      ? (url: string) => opts.onAuthUrl!(``, url)
-      : undefined,
+    onAuthUrl: opts.onAuthUrl,
   })
 
   const configTools = createConfigTools(configStore, pool)

@@ -29,8 +29,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "zod": "^4.3.6"
+    "@modelcontextprotocol/sdk": "^1.12.1"
   },
   "peerDependencies": {
     "@mariozechner/pi-agent-core": ">=0.57.0"
