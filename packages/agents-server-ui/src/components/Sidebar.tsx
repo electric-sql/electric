@@ -10,7 +10,7 @@ import { EntityListItem, getEntityDisplayTitle } from './EntityListItem'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
 import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
 
-const CODING_SESSION_TYPE = `coding-session`
+const CODING_SESSION_TYPE = `coder`
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 200
@@ -125,7 +125,15 @@ export function Sidebar({
       if (!spawnEntity) return
       setSpawnError(null)
       const name = nanoid(10)
-      const tx = spawnEntity({ type: typeName, name, args })
+      // Coder entities need a fresh-input event on the first wake to
+      // actually invoke the handler — `entity_created` alone is a
+      // management event and the runtime skips the initial handler
+      // pass when only management events are present. A sentinel inbox
+      // message delivers that fresh input; the coder handler ignores
+      // non-prompt payloads. Covers create, attach, and import modes.
+      const initialMessage =
+        typeName === CODING_SESSION_TYPE ? { __bootstrap: true } : undefined
+      const tx = spawnEntity({ type: typeName, name, args, initialMessage })
       onSelectEntity(`/${typeName}/${name}`)
       tx.isPersisted.promise.catch((err: Error) => {
         setSpawnError(

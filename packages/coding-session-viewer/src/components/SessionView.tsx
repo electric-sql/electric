@@ -68,7 +68,7 @@ export function SessionView({ baseUrl, entityUrl }: Props): React.ReactElement {
   return (
     <section className="embedded-session">
       <div className="embedded-session-header">
-        <h2>{meta?.agent ? `${meta.agent} session` : `Coding session`}</h2>
+        <h2>{meta?.agent ? `${meta.agent} coder` : `Coder`}</h2>
         <span className={`badge ${statusCls}`}>{statusLabel}</span>
         <span className="embedded-session-count">{events.length} events</span>
         {meta?.nativeSessionId && (

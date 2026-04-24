@@ -331,7 +331,7 @@ export function registerCodingSession(
   const runner = options.cliRunner ?? defaultCliRunner
   const defaultCwd = options.defaultWorkingDirectory ?? process.cwd()
 
-  registry.define(`coding-session`, {
+  registry.define(`coder`, {
     description: `Runs a Claude Code / Codex CLI session and mirrors its normalized event stream into a durable store. Prompts arrive via message_received (type: "prompt") and are executed serially.`,
     creationSchema: creationArgsSchema,
     inboxSchemas: {

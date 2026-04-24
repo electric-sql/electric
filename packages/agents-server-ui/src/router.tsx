@@ -22,7 +22,7 @@ import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { CodingSessionView } from './components/CodingSessionView'
 
-const CODING_SESSION_TYPE = `coding-session`
+const CODING_SESSION_TYPE = `coder`
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()

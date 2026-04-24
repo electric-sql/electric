@@ -60,7 +60,7 @@ export function CodingSessionSpawnDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content maxWidth="480px">
-        <Dialog.Title>New coding session</Dialog.Title>
+        <Dialog.Title>New coder</Dialog.Title>
         <Dialog.Description size="2" color="gray" mb="4">
           Start a fresh Claude Code / Codex session, attach to an existing local
           session, or import a session (optionally across agents).

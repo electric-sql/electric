@@ -91,7 +91,7 @@ describe(`registerCodingSession`, () => {
   it(`registers the coding-session entity type`, () => {
     const registry = createEntityRegistry()
     registerCodingSession(registry)
-    const def = registry.get(`coding-session`)
+    const def = registry.get(`coder`)
     expect(def).toBeDefined()
     expect(def!.definition.state).toBeDefined()
     expect(def!.definition.state!.sessionMeta).toBeDefined()
@@ -102,7 +102,7 @@ describe(`registerCodingSession`, () => {
   it(`seeds sessionMeta and cursorState on firstWake with no prompts`, async () => {
     const registry = createEntityRegistry()
     registerCodingSession(registry, { defaultWorkingDirectory: `/tmp/x` })
-    const def = registry.get(`coding-session`)!
+    const def = registry.get(`coder`)!
 
     const { ctx, state } = makeFakeCtx({
       firstWake: true,
@@ -132,7 +132,7 @@ describe(`registerCodingSession`, () => {
   it(`starts as idle when attaching to an existing nativeSessionId`, async () => {
     const registry = createEntityRegistry()
     registerCodingSession(registry, { defaultWorkingDirectory: `/tmp/x` })
-    const def = registry.get(`coding-session`)!
+    const def = registry.get(`coder`)!
 
     const { state } = makeFakeCtx({
       firstWake: true,
@@ -177,7 +177,7 @@ describe(`registerCodingSession`, () => {
       defaultWorkingDirectory: `/tmp/x`,
       cliRunner: runner,
     })
-    const def = registry.get(`coding-session`)!
+    const def = registry.get(`coder`)!
 
     const { ctx, state, calls } = makeFakeCtx({
       firstWake: false,
@@ -247,7 +247,7 @@ describe(`registerCodingSession`, () => {
       defaultWorkingDirectory: `/tmp/x`,
       cliRunner: runner,
     })
-    const def = registry.get(`coding-session`)!
+    const def = registry.get(`coder`)!
 
     const { ctx } = makeFakeCtx({
       firstWake: false,

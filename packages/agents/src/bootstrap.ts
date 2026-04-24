@@ -117,7 +117,7 @@ export async function createBuiltinAgentHandler(
   typeNames.push(`worker`)
 
   registerCodingSession(registry, { defaultWorkingDirectory: cwd })
-  typeNames.push(`coding-session`)
+  typeNames.push(`coder`)
 
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,

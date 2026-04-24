@@ -75,8 +75,8 @@ export function entity(entityUrl: string): EntityObservationSource {
   }
 }
 
-/** Entity type name for the built-in coding-session entity. */
-export const CODING_SESSION_ENTITY_TYPE = `coding-session`
+/** Entity type name for the built-in coder entity. */
+export const CODING_SESSION_ENTITY_TYPE = `coder`
 
 export function codingSessionEntityUrl(sessionId: string): string {
   return `/${CODING_SESSION_ENTITY_TYPE}/${sessionId}`
