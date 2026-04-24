@@ -286,7 +286,21 @@
 }
 
 .Layout {
-  overflow-x: hidden;
+  /* `overflow-x: clip` (not `hidden`) is important: `hidden` on one
+     axis silently forces the other axis to compute to `auto`, which
+     turns `.Layout` into a scroll container. That scroll container
+     then clips any upward (negative-margin-top) bleed at its own top
+     edge — which is the bug that was hiding the homepage hero's
+     mobile iso scene bleed: the scene was correctly shifted up by
+     -100vw, but `.Layout`'s implicit scroll container was cropping
+     the visible portion at the navbar's bottom edge instead of
+     letting it extend up under the (translucent) navbar. `clip`
+     leaves `overflow-y: visible` untouched so the bleed renders
+     naturally above the hero, while still preventing horizontal
+     overflow scrollbars from elements that intentionally bleed
+     past the viewport sides (the homepage hero's 140vw scene,
+     etc.). */
+  overflow-x: clip;
 }
 
 .vpi-electric-icon {
@@ -603,6 +617,63 @@ span.no-visual {
   .ds-homepage .VPNavBar .divider-line,
   .sync-page .VPNavBar .divider,
   .sync-page .VPNavBar .divider-line,
+  .home-page .VPNavBar .divider,
+  .home-page .VPNavBar .divider-line {
+    background-color: transparent !important;
+  }
+}
+
+/* Mobile (< 960px) on the site root homepage: replace the default
+   opaque mobile navbar background with a *semi-transparent + blurred*
+   one so the hero's iso composition can bleed upward past the hero's
+   top edge and remain partially visible behind the navbar — but
+   knocked back enough that the navbar's logo / hamburger / nav items
+   still read clearly against it.
+
+   Why semi-transparent rather than fully transparent: the iso
+   composition's labelled bands extend up under the navbar area, and
+   without any backdrop the brand-coloured borders / labels compete
+   with the navbar text and reduce legibility. The translucent fill +
+   blur softens the bled iso into an out-of-focus background while
+   keeping the bleed effect visible. (Without *any* background, the
+   default VitePress mobile navbar would otherwise be opaque once
+   scrolled, which would crop the bleed entirely at the navbar's
+   bottom edge — visually erasing the bleed effect.)
+
+   The navbar elements themselves stay fully opaque and tappable on
+   top of the iso composition (which has `pointer-events: none`).
+   Scoped to `.home-page` only so other mobile pages keep their solid
+   navbar for content readability while scrolling. */
+@media (max-width: 959px) {
+  .home-page .VPNavBar {
+    /* ~70% of the page background + a small blur. Uses
+       `color-mix` against `--vp-c-bg` so the navbar tint
+       follows the active theme (light / dark) without
+       hard-coding rgba values.
+
+       The fill is intentionally applied *only* to `.VPNavBar` and
+       not to its inner `.content-body`. VitePress only paints a
+       `.content-body` background at ≥960px (see VPNavBar.vue
+       scoped styles), so at mobile the inner element is transparent
+       by default and inherits the navbar tint behind it — applying
+       the fill here too is redundant and visibly broken: the
+       `.content-body` is the full nav-height tall and sits inside
+       `.VPNavBar`'s box, so its bg paints across the bottom 1px
+       where the `.VPNavBar.screen-open` `border-bottom` lives,
+       cropping the open-menu divider line on the right portion of
+       the bar (where `.content-body` extends) but leaving it
+       visible on the left (under the wrapper's left padding and
+       the `.title` cell, neither of which has a fill). Letting the
+       navbar provide the only fill keeps the open-menu border
+       continuous across the full width. */
+    background-color: color-mix(
+      in srgb,
+      var(--vp-c-bg) 70%,
+      transparent
+    ) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+  }
   .home-page .VPNavBar .divider,
   .home-page .VPNavBar .divider-line {
     background-color: transparent !important;
@@ -1708,6 +1779,12 @@ ul.demo-actions li .VPButton {
   gap: 4px;
 }
 
+/* Give the `More v` trigger a touch more breathing room before the
+   signup button on the right. */
+.MegaNav .mega-nav-trigger-wrap[data-id='resources'] {
+  margin-right: 8px;
+}
+
 .MegaNav .mega-nav-chevron {
   width: 12px;
   height: 12px;
@@ -1866,49 +1943,47 @@ ul.demo-actions li .VPButton {
   min-width: 0;
 }
 
-/* Resources panel: two columns on wide, one column on narrow */
-.mega-nav-panel-resources {
-  min-width: 480px;
+/* Resources panel uses the same `.mega-nav-panel-grid-2col` layout as
+   the product panels (LEFT = text links, RIGHT = social icons +
+   AGENTS.md), but with a compact single-line item style — no
+   sublabels, no brand header. */
+.mega-nav-panel-item.mega-nav-panel-item-compact {
+  flex-direction: row;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 10px;
 }
-.mega-nav-panel-cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 8px;
-}
-@media (max-width: 599px) {
-  .mega-nav-panel-resources {
-    min-width: 0;
-  }
-  .mega-nav-panel-cols {
-    grid-template-columns: 1fr;
-  }
+.mega-nav-panel-item.mega-nav-panel-item-compact .mega-nav-panel-label {
+  font-weight: 500;
 }
 
-.mega-nav-panel-social {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--vp-c-divider);
+/* The resources panel only contains compact (single-line, no-sublabel)
+   items, so its columns can shrink down a lot from the wide product
+   panels. Override both the panel min-width and the grid template. */
+.mega-nav-panel.mega-nav-panel-resources {
+  min-width: 0;
 }
-.mega-nav-panel-social-item {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+.mega-nav-panel.mega-nav-panel-resources .mega-nav-panel-grid-2col {
+  grid-template-columns: minmax(120px, auto) minmax(180px, auto);
+}
+
+/* RHS items: leading icon (or invisible spacer for AGENTS.md so the
+   text labels still align with the icon labels above). */
+.mega-nav-panel-item-rhs-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
   color: var(--vp-c-text-2);
-  text-decoration: none;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
 }
-.mega-nav-panel-social-item:hover {
-  background-color: var(--vp-c-bg-soft);
+.mega-nav-panel-item-rhs:hover .mega-nav-panel-item-rhs-icon {
   color: var(--vp-c-brand-1);
 }
+.mega-nav-panel-item-rhs-icon-spacer {
+  background: transparent;
+}
+
 .mega-nav-social-icon {
   display: inline-block;
   width: 18px;
@@ -1932,6 +2007,11 @@ ul.demo-actions li .VPButton {
 }
 .vpi-social-bluesky {
   --icon: url('https://api.iconify.design/simple-icons/bluesky.svg');
+}
+/* Document/markdown icon for the AGENTS.md entry in the resources
+   dropdown — line-style to read as "a doc" rather than a brand. */
+.vpi-social-agents {
+  --icon: url('https://api.iconify.design/lucide/file-text.svg');
 }
 
 /* Open/close transition */
@@ -2077,6 +2157,24 @@ ul.demo-actions li .VPButton {
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 .MegaNavMobile .mega-nav-mobile-social-link:hover {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+}
+.MegaNavMobile .mega-nav-mobile-social-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--vp-font-family-mono);
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-social-text:hover {
   background-color: var(--vp-c-bg-soft);
   color: var(--vp-c-brand-1);
 }

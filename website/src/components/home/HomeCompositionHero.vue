@@ -325,7 +325,56 @@ onBeforeUnmount(() => {
   .hch-band--sync    { transform: translateZ(-60px); }
 }
 
-/* Below 861px the homepage hero hides the iso scene entirely (see
-   `HomeHero.vue`), so no further breakpoints are needed here — the
-   composition only renders at side-by-side widths. */
+/* Mobile (≤860): the homepage hero renders the iso scene larger than
+   the viewport (140vw × 140vw) and bleeds 100vw of it off the top of
+   the screen, leaving only a ~40vw-tall strip of the scene visible at
+   the top of the hero — see `HomeHero.vue` for the full bleed math.
+   Two important consequences for the iso composition:
+
+   1. The visible window is short (~40vw) and wide (~100vw). We
+      `align-items: flex-end` so the stage anchors to the scene's
+      bottom edge — putting the stage (and its bands) inside the
+      visible strip rather than in the bled-off upper region — and
+      the stage is sized to roughly fit that 40vw vertical budget.
+   2. The Z-spread that gives the stack its layered depth has to be
+      tightened correspondingly: with the large desktop spread the
+      `+Z` agents/streams bands would project upward off the top of
+      the visible strip and disappear into the bled region. The vw
+      units keep what remains scaling proportionally with viewport
+      width across phones and small tablets. */
+@media (max-width: 860px) {
+  .hch {
+    /* No padding-top — `align-items: flex-end` below positions the
+       stage at the bottom of the scene, inside the visible strip. */
+    padding-top: 0;
+    align-items: flex-end;
+  }
+  .hch-stage {
+    /* Width intentionally inherits from the base rule (64% of the
+       .hch wrapper). With the wrapper at 140vw × 140vw on mobile,
+       that gives a ~90vw-wide stage — large enough that the iso
+       composition reads as the visual anchor of the page rather
+       than a small icon, with most of the labelled bands landing
+       inside the visible strip after the upward bleed crops the
+       top of the scene.
+
+       The slightly steeper rotateX (66° vs the base's 64°) flattens
+       the iso a touch so the bands' vertical footprint is more
+       compact — useful when the visible strip itself is short. */
+    transform:
+      translateY(var(--hch-shift-y, 0px))
+      rotateX(66deg)
+      rotateZ(-30deg);
+  }
+  /* Z-spread expressed in vw so the separation scales with viewport
+     width. Sync sits well below the page (-12vw) so its protruding
+     bottom-front edge anchors the stack visually inside the cropped
+     strip; agents stays high (+6vw) so its front face is the
+     dominant top plane; streams is placed at the geometric midpoint
+     between the two ((-12 + 6) / 2 = -3vw) so the three bands read
+     as evenly stratified rather than top- or bottom-heavy. */
+  .hch-band--agents  { transform: translateZ(6vw); }
+  .hch-band--streams { transform: translateZ(-3vw); }
+  .hch-band--sync    { transform: translateZ(-12vw); }
+}
 </style>

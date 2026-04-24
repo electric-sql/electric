@@ -114,6 +114,14 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
   color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
+  /* Cap the headline so it never tries to use more horizontal space
+     than is needed to carry the two intended lines. Without this, at
+     intermediate widths the heading column was wide enough that
+     "The agent platform" would intermittently break into "The /
+     agent platform" before the next breakpoint kicked in. The cap
+     forces a stable line-break shape across the whole side-by-side
+     range. */
+  max-width: 600px;
 }
 
 .home-hero-accent {
@@ -127,6 +135,10 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
   color: var(--ea-text-1);
   margin: 22px 0 0;
   line-height: 1.4;
+  /* Mirror the headline cap so the supporting copy stays at a
+     comfortable measure (~50–60ch) once the iso scene drops out
+     and the text column otherwise expands to fill the full row. */
+  max-width: 560px;
 }
 
 .home-hero-sub-primary {
@@ -136,9 +148,12 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
 .home-hero-sub-secondary {
   /* Match the primary supporting paragraph size — keeps the two-block
      supporting copy as a single visual stratum below the headline
-     instead of tapering into a smaller "punchline" line. */
+     instead of tapering into a smaller "punchline" line. The colour
+     intentionally stays at full text-1 (not the muted text-2) because
+     this is the headline's punchline and should read as strongly as
+     the primary line above it. */
   font-size: 1.04em;
-  color: var(--ea-text-2);
+  color: var(--ea-text-1);
 }
 
 .home-hero-actions {
@@ -176,64 +191,197 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
   }
 }
 
-/* Intermediate (tablet-ish) widths: keep the side-by-side layout for as
-   long as possible, but trim the iso scene so it doesn't dominate the
-   text column once the cell narrows. The hero is taller than at full
-   width so add a bit more vertical breathing room — matching the
-   pattern we use once the scene drops out below 860px. */
-@media (max-width: 1099px) and (min-width: 861px) {
-  .home-hero {
-    padding: 40px 24px 56px;
-  }
+/* Tablet shared (≈861–1199): swap the fr-based 7fr/5fr (or 8fr/4fr)
+   split for a fixed-width text column + flex scene cell. The fr-based
+   layouts tied the scene cell to a fraction of the grid width, so as
+   the viewport narrowed the scene cell collapsed to the right edge of
+   the hero — but the headline's visible text only takes ~457px of its
+   column even at the widest tablet sizes, leaving a large empty gap
+   *inside* the text column that visually stranded the iso
+   composition against the page's right edge. Capping the text column
+   at 480px (just above the headline's natural wrap point) keeps the
+   headline shape stable while giving the scene cell a much wider
+   footprint, which pulls the iso composition's centre closer to the
+   centre of the hero's right portion (between the headline's right
+   edge and the viewport's right edge). Gap is unified to 24px across
+   both tablet sub-ranges.
+
+   The scene cell additionally gets a small leftward translate so the
+   iso's *visual* centre lands closer to the midpoint between the
+   headline's natural right edge (~480px) and the page's right edge,
+   rather than the geometric midpoint of the scene cell (which sits a
+   touch right of that — the rotated iso bands extend further right
+   than the cell's nominal right boundary, while the cell's left side
+   has the wide text column padding it). 24px gives a balanced look
+   without the iso visibly drifting past the right edge of its
+   column. */
+@media (max-width: 1199px) and (min-width: 861px) {
   .home-hero-grid {
-    /* Bias the split further toward the text — the iso scene only needs
-       enough room to read as a stacked diagram, while the headline +
-       supporting copy benefit from every extra px. */
-    grid-template-columns: 8fr 4fr;
+    grid-template-columns: 480px 1fr;
     gap: 24px;
   }
-  /* Knock the headline down a touch so "The agent platform" still fits
-     on one line — at the full 56px the narrower text column was forcing
-     a third line in this range. */
+  .home-hero-scene {
+    transform: translateX(-24px);
+  }
+}
+
+/* Medium (≈1000–1199): step the headline down a notch so it never
+   drifts into a "The / agent platform" break, and trim the iso
+   scene's max footprint a touch. The scene stays at the wider 5/4
+   aspect at this range — collapsing it to a square here was causing
+   the graphic to feel disproportionately small relative to the copy
+   block. (The grid template itself is set in the shared tablet rule
+   above.) */
+@media (max-width: 1199px) and (min-width: 1000px) {
   .home-hero-name {
     font-size: 48px;
   }
   .home-hero-scene {
-    /* Trim the scene's footprint at this breakpoint so it sits as a
-       supporting visual rather than competing with the copy. */
-    aspect-ratio: 1 / 1;
-    min-height: 300px;
-    max-height: 380px;
+    aspect-ratio: 5 / 4;
+    min-height: 380px;
+    max-height: 520px;
   }
 }
 
-/* Below ~860px the side-by-side layout stops working. Rather than
-   stacking the iso scene under the copy (which both pushed the page
-   down and gave the scene awkward proportions), just drop it entirely
-   and let the copy own the hero. With the scene gone we also need to
-   add vertical breathing room — the iso composition was previously
-   shaping the hero's height — so the copy gets generous top/bottom
-   padding to feel like an intentional hero band rather than a
-   collapsed sliver. */
+/* Compact (≈861–999): collapse the iso scene to a square,
+   supporting-illustration size. This is the narrowest range where
+   the scene still reads as a distinct three-layer stack beside the
+   copy. (The grid template itself is set in the shared tablet rule
+   above.) */
+@media (max-width: 999px) and (min-width: 861px) {
+  .home-hero {
+    /* The iso scene is taller than the copy at this width, so add
+       generous top padding so the headline doesn't crowd the navbar
+       once the layout tightens. Bumped from 40px to make the scene
+       feel anchored at ~959 specifically. */
+    padding: 56px 24px 56px;
+  }
+  .home-hero-name {
+    font-size: 48px;
+  }
+  .home-hero-scene {
+    aspect-ratio: 1 / 1;
+    min-height: 320px;
+    max-height: 400px;
+  }
+}
+
+/* Mobile-stacked (≤860): rather than a small icon-sized graphic, the
+   iso scene goes BIG — it's rendered larger than the viewport itself,
+   bleeding off the top, left and right edges. The bleed is aggressive
+   on the top axis: only the lower-front strip of the scene stays on
+   screen, where the iso composition's labelled layers concentrate
+   their visual mass.
+
+   Sizing summary:
+     scene width   W = 140vw
+     scene height  H = 140vw  (aspect 1/1)
+     side bleed    = 20vw per side  (visible width 100vw)
+     top bleed     = 100vw          (visible height 40vw)
+
+   With this aggressive top bleed the visible window is a 100vw ×
+   40vw rectangle at the top of the hero, so the iso composition's
+   stage and Z-spread inside `HomeCompositionHero.vue` are tuned
+   specifically to land inside that window — the stage is anchored
+   *near* (not at) the scene's bottom, and the Z-spread is
+   compressed so all three labelled bands fit in the 40vw visible
+   strip rather than getting bled off above it. */
 @media (max-width: 860px) {
   .home-hero {
-    padding: 56px 24px 64px;
+    /* Top padding goes to 0 so the bled scene can hug the navbar.
+       The horizontal padding stays so the *text* respects the page
+       gutter — the scene escapes those gutters via its own
+       wider-than-viewport width and viewport-relative margins below.
+       `overflow: visible` (inherited from base) is critical: it lets
+       the scene's negative margin-top render *above* the hero's top
+       edge so the navbar can visually crop it. The Layout's
+       `overflow-x: clip` (set in `custom.css`) is what prevents
+       horizontal scrolling from the side bleeds without turning
+       the page into a scroll container, so the upward bleed isn't
+       clipped by an ancestor before it reaches the viewport top. */
+    padding: 0 24px 48px;
   }
   .home-hero-grid {
-    grid-template-columns: 1fr;
+    /* Switch from grid to flex column at mobile. CSS Grid's
+       auto-track sizing interacts awkwardly with negative margins
+       on items (browsers vary on whether the track shrinks to fit
+       the outer-margin-box or stays at content size, which can
+       leave a visible gap below the bled scene). Flex column
+       reliably places the next item right after the bled scene's
+       outer-end, which is what we want here. */
+    display: flex;
+    flex-direction: column;
     gap: 0;
   }
   .home-hero-scene {
-    display: none;
+    display: block;
+    order: -1;
+    /* 140vw width — wider than the viewport so the scene bleeds 20vw
+       past each side. The negative inline margins use the standard
+       "wider-than-100vw bleed inside a padded container" trick:
+       margin-left = 50% (centre of parent) − 70vw (half scene width)
+       puts the scene's left edge 20vw past the viewport's left edge,
+       independent of the section's horizontal padding.
+
+       Height is set explicitly (140vw, square footprint) rather than
+       via `aspect-ratio: 1/1 + height: auto`. Both should produce the
+       same result, but the explicit height avoids a Chromium quirk
+       where an aspect-ratio-derived height occasionally collapses to
+       0 inside a flex column with negative margin-top on the same
+       item — which was making the bleed silently no-op. */
+    width: 140vw;
+    height: 140vw;
+    margin-left: calc(50% - 70vw);
+    margin-right: calc(50% - 70vw);
+    aspect-ratio: auto;
+    min-height: 0;
+    /* Don't constrain height — combined with `width: 140vw` and the
+       1/1 footprint, a max-height would crop the iso layers. */
+    max-height: none;
+    /* Aggressive top bleed: the scene sits 100vw above its
+       natural position, leaving only the lower ~40vw strip of the
+       scene visible inside the hero — see the sizing summary
+       above. The iso composition's stage anchor and Z-spread in
+       `HomeCompositionHero.vue` are tuned to land the labelled
+       bands inside that 40vw visible strip.
+
+       For the bleed to be *visible* off the top of the screen, the
+       mobile navbar needs to be transparent so the iso scene shows
+       through behind the logo / hamburger (the scene stays at the
+       base `z-index: 2`, below the navbar's z-index of 30, so the
+       navbar elements stay tappable on top of it). That mobile
+       navbar transparency rule is in `custom.css` under
+       `.home-page .VPNavBar` — without it, the opaque mobile
+       navbar crops the bleed at its bottom edge and the bleed
+       effect disappears. */
+    margin-top: -100vw;
+    margin-bottom: 0;
+    /* Restored to full opacity — the scene is the visual anchor at
+       the top of the page rather than a supporting illustration. */
+    opacity: 1;
+  }
+  .home-hero-text {
+    /* Centre the constrained copy block under the bled scene above,
+       and add a tight top margin so the headline sits just under the
+       scene's visible lower edge. */
+    margin: 16px auto 0;
+  }
+  /* Keep the headline at the same 48px used at the medium/compact
+     widths above instead of letting it jump back up to the base
+     56px once the scene falls away. */
+  .home-hero-name {
+    font-size: 48px;
   }
 }
 
 @media (max-width: 768px) {
   .home-hero {
-    padding: 48px 20px 56px;
+    padding: 0 20px 48px;
   }
+  /* Step the headline down a notch at narrow phones — 48px crowds
+     the column once the gutter shrinks. */
   .home-hero-name {
-    font-size: 40px;
+    font-size: 44px;
   }
   .home-hero-sub {
     font-size: 17px;
@@ -245,10 +393,10 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
 
 @media (max-width: 480px) {
   .home-hero {
-    padding: 40px 20px 48px;
+    padding: 0 20px 40px;
   }
   .home-hero-name {
-    font-size: 32px;
+    font-size: 36px;
   }
   .home-hero-sub {
     font-size: 16px;

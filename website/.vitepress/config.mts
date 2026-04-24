@@ -13,25 +13,28 @@ const caddyfileLanguage: LanguageRegistration = {
   aliases: ['caddy', 'Caddyfile'],
 }
 
+// Order mirrors the `More` nav dropdown (left column then right
+// column, omitting the external Discord/GitHub/X social icons and
+// Blog — Blog has its own top-level nav entry and listing page).
+// Rendered as a flat list with no group heading.
 const resourcesSidebar = [
+      // Trailing slash is required for the active state to match —
+      // VitePress normalizes index-page paths to include the trailing
+      // slash (`/about/index.md` → `/about/`), so the sidebar link
+      // must too. See `INDEX_OR_EXT_RE` in vitepress/dist/client/shared.js.
+      { text: 'About', link: '/about/' },
+  { text: 'Community', link: '/about/community' },
+  { text: 'Team', link: '/about/team' },
+  { text: 'Contact', link: '/about/contact' },
   {
-    text: 'Resources',
+    text: 'Legal',
     items: [
-      { text: 'Blog', link: '/blog' },
-      { text: 'Community', link: '/about/community' },
-      { text: 'Team', link: '/about/team' },
-      { text: 'LLMs / AGENTS.md', link: '/llms' },
-      {
-        text: 'Legal',
-        items: [
-          { text: 'Terms', link: '/about/legal/terms' },
-          { text: 'Privacy', link: '/about/legal/privacy' },
-        ],
-        collapsed: false,
-      },
-      { text: 'Contact', link: '/about/contact' },
+      { text: 'Terms', link: '/about/legal/terms' },
+      { text: 'Privacy', link: '/about/legal/privacy' },
     ],
+    collapsed: false,
   },
+  { text: 'LLMs / AGENTS.md', link: '/llms' },
 ]
 
 // Shared sidebar for the Sync docs section AND the three sync primitive

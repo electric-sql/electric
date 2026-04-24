@@ -121,53 +121,46 @@ const NAV = [
 ]
 
 const RESOURCES = {
-  columns: [
-    [
-      {
-        label: 'Team',
-        sublabel: 'Meet the team behind Electric',
-        link: '/about/team',
-      },
-      {
-        label: 'Contact',
-        sublabel: 'Get in touch',
-        link: '/about/contact',
-      },
-    ],
-    [
-      {
-        label: 'Blog',
-        sublabel: 'Latest posts and updates',
-        link: '/blog',
-        className: 'mega-nav-fallback-blog',
-      },
-      {
-        label: 'Community',
-        sublabel: 'Discord, GitHub and more',
-        link: '/about/community',
-      },
-      {
-        label: 'LLMs / AGENTS.md',
-        sublabel: 'Coding agent instructions',
-        link: '/llms',
-      },
-    ],
+  links: [
+    { label: 'About', link: '/about' },
+    { label: 'Community', link: '/about/community' },
+    { label: 'Team', link: '/about/team' },
+    { label: 'Contact', link: '/about/contact' },
+    { label: 'Legal', link: '/about/legal/terms' },
   ],
-  social: [
+  // Blog falls into here when the top-level `Blog` link gets squished
+  // out at narrow widths. Hidden by default on wide screens — see the
+  // `.mega-nav-fallback-blog` rule in custom.css.
+  fallbackLinks: [
+    {
+      label: 'Blog',
+      link: '/blog',
+      className: 'mega-nav-fallback-blog',
+    },
+  ],
+  rhs: [
     {
       icon: 'discord',
       label: 'Discord',
       link: 'https://discord.electric-sql.com',
+      external: true,
     },
     {
       icon: 'github',
       label: 'GitHub',
       link: 'https://github.com/electric-sql/electric',
+      external: true,
     },
     {
       icon: 'x',
       label: 'X',
       link: 'https://x.com/ElectricSQL',
+      external: true,
+    },
+    {
+      icon: 'agents',
+      label: 'AGENTS.md',
+      link: '/llms',
     },
   ],
 }

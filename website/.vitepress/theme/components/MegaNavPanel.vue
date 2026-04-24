@@ -147,53 +147,59 @@ defineEmits(['navigate'])
       </div>
     </template>
     <template v-else-if="resources">
-      <div class="mega-nav-panel-section mega-nav-panel-cols">
-        <div
-          v-for="(column, index) in resources.columns"
-          :key="index"
-          class="mega-nav-panel-col"
-          :class="{ 'mega-nav-panel-col-divider': index > 0 }"
-        >
+      <div class="mega-nav-panel-grid mega-nav-panel-grid-2col">
+        <div class="mega-nav-panel-section">
           <a
-            v-for="link in column"
+            v-for="link in resources.links"
             :key="link.link"
-            class="mega-nav-panel-item"
+            class="mega-nav-panel-item mega-nav-panel-item-compact"
             :class="link.className"
             :href="link.link"
             role="menuitem"
             @click="$emit('navigate')"
           >
             <span class="mega-nav-panel-label">{{ link.label }}</span>
-            <span
-              v-if="link.sublabel"
-              class="mega-nav-panel-sublabel"
-              >{{ link.sublabel }}</span
-            >
+          </a>
+          <a
+            v-for="link in resources.fallbackLinks || []"
+            :key="link.link"
+            class="mega-nav-panel-item mega-nav-panel-item-compact"
+            :class="link.className"
+            :href="link.link"
+            role="menuitem"
+            @click="$emit('navigate')"
+          >
+            <span class="mega-nav-panel-label">{{ link.label }}</span>
           </a>
         </div>
-      </div>
-      <div
-        v-if="resources.social && resources.social.length"
-        class="mega-nav-panel-section mega-nav-panel-social"
-      >
-        <a
-          v-for="s in resources.social"
-          :key="s.link"
-          class="mega-nav-panel-social-item"
-          :href="s.link"
-          target="_blank"
-          rel="noopener noreferrer"
-          role="menuitem"
-          :aria-label="s.label"
-          :title="s.label"
-          @click="$emit('navigate')"
+        <div
+          v-if="resources.rhs && resources.rhs.length"
+          class="mega-nav-panel-section mega-nav-panel-secondary"
         >
-          <span
-            class="mega-nav-social-icon"
-            :class="`vpi-social-${s.icon}`"
-            aria-hidden="true"
-          ></span>
-        </a>
+          <a
+            v-for="item in resources.rhs"
+            :key="item.link"
+            class="mega-nav-panel-item mega-nav-panel-item-compact mega-nav-panel-item-rhs"
+            :href="item.link"
+            :target="item.external ? '_blank' : undefined"
+            :rel="item.external ? 'noopener noreferrer' : undefined"
+            role="menuitem"
+            @click="$emit('navigate')"
+          >
+            <span
+              v-if="item.icon"
+              class="mega-nav-social-icon mega-nav-panel-item-rhs-icon"
+              :class="`vpi-social-${item.icon}`"
+              aria-hidden="true"
+            ></span>
+            <span
+              v-else
+              class="mega-nav-panel-item-rhs-icon mega-nav-panel-item-rhs-icon-spacer"
+              aria-hidden="true"
+            ></span>
+            <span class="mega-nav-panel-label">{{ item.label }}</span>
+          </a>
+        </div>
       </div>
     </template>
   </div>

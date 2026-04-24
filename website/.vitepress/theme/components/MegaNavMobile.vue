@@ -58,23 +58,32 @@ const NAV = [
 
 const RESOURCES = {
   links: [
+    { label: 'About', link: '/about' },
+    { label: 'Community', link: '/about/community' },
     { label: 'Team', link: '/about/team' },
     { label: 'Contact', link: '/about/contact' },
-    { label: 'Community', link: '/about/community' },
-    { label: 'LLMs / AGENTS.md', link: '/llms' },
+    { label: 'Legal', link: '/about/legal/terms' },
   ],
-  social: [
+  rhs: [
     {
       icon: 'discord',
       label: 'Discord',
       link: 'https://discord.electric-sql.com',
+      external: true,
     },
     {
       icon: 'github',
       label: 'GitHub',
       link: 'https://github.com/electric-sql/electric',
+      external: true,
     },
-    { icon: 'x', label: 'X', link: 'https://x.com/ElectricSQL' },
+    {
+      icon: 'x',
+      label: 'X',
+      link: 'https://x.com/ElectricSQL',
+      external: true,
+    },
+    { icon: 'agents', label: 'AGENTS.md', link: '/llms' },
   ],
 }
 
@@ -145,22 +154,36 @@ watch(
               >{{ link.label }}</a
             >
             <div class="mega-nav-mobile-social-row">
-              <a
-                v-for="s in RESOURCES.social"
-                :key="s.link"
-                class="mega-nav-mobile-social-link"
-                :href="s.link"
-                target="_blank"
-                rel="noopener noreferrer"
-                :aria-label="s.label"
-                :title="s.label"
-              >
-                <span
-                  class="mega-nav-social-icon"
-                  :class="`vpi-social-${s.icon}`"
-                  aria-hidden="true"
-                ></span>
-              </a>
+              <template v-for="s in RESOURCES.rhs" :key="s.link">
+                <a
+                  v-if="s.external"
+                  class="mega-nav-mobile-social-link"
+                  :href="s.link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :aria-label="s.label"
+                  :title="s.label"
+                >
+                  <span
+                    class="mega-nav-social-icon"
+                    :class="`vpi-social-${s.icon}`"
+                    aria-hidden="true"
+                  ></span>
+                </a>
+                <a
+                  v-else
+                  class="mega-nav-mobile-social-text"
+                  :href="s.link"
+                >
+                  <span
+                    v-if="s.icon"
+                    class="mega-nav-social-icon"
+                    :class="`vpi-social-${s.icon}`"
+                    aria-hidden="true"
+                  ></span>
+                  {{ s.label }}
+                </a>
+              </template>
             </div>
           </template>
           <template v-else>
