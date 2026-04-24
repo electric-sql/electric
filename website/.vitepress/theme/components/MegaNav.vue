@@ -63,7 +63,7 @@ const NAV = [
     base: '/sync',
     docsBase: '/docs/sync',
     homeLabel: 'Electric Sync',
-    homeSublabel: 'The magic behind fast apps',
+    homeSublabel: 'The core sync engine technology',
     secondary: {
       heading: 'Primitives',
       items: [

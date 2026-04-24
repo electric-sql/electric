@@ -32,7 +32,7 @@ const NAV = [
     base: '/sync',
     docsBase: '/docs/sync',
     homeLabel: 'Electric Sync',
-    homeSublabel: 'The magic behind fast apps',
+    homeSublabel: 'The core sync engine technology',
     extras: [
       { label: 'TanStack DB', link: '/sync/tanstack-db' },
       { label: 'PGlite', link: '/sync/pglite' },

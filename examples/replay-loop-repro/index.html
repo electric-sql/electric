@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Replay Loop Bug Repro</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 20px;
+        background: #1a1a1a;
+        color: #fff;
+      }
+      h1 { color: #ffd700; }
+      .status { 
+        padding: 20px; 
+        border-radius: 8px; 
+        margin: 20px 0;
+        font-size: 24px;
+        font-weight: bold;
+      }
+      .status.syncing { background: #2563eb; }
+      .status.success { background: #16a34a; }
+      .status.stuck { background: #dc2626; animation: pulse 0.5s infinite; }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .counter {
+        font-size: 48px;
+        font-weight: bold;
+        color: #ffd700;
+      }
+      .instructions {
+        background: #333;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+      .instructions ol { margin: 10px 0; padding-left: 20px; }
+      .instructions li { margin: 8px 0; }
+      code {
+        background: #444;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .config {
+        background: #333;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+      input {
+        width: 100%;
+        padding: 10px;
+        font-size: 16px;
+        border-radius: 4px;
+        border: 1px solid #555;
+        background: #222;
+        color: #fff;
+        margin: 5px 0;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        border-radius: 4px;
+        border: none;
+        background: #2563eb;
+        color: #fff;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+      button:hover { background: #1d4ed8; }
+      .log {
+        background: #000;
+        padding: 15px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 12px;
+        max-height: 300px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .log-entry { margin: 2px 0; }
+      .log-entry.request { color: #60a5fa; }
+      .log-entry.uptodate { color: #34d399; }
+      .log-entry.suppressed { color: #f87171; }
+      .log-entry.error { color: #ef4444; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
