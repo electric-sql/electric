@@ -79,39 +79,25 @@ The orchestrator creates the shared DB, and each explorer receives a handle to i
 From the repository root:
 
 ```bash
-pnpm install
-```
-
-Then build the agents-runtime package (the example links to it via the monorepo workspace):
-
-```bash
-pnpm --filter @electric-ax/agents-runtime build
+pnpm install && pnpm --filter @electric-ax/agents-runtime build
 ```
 
 ### 2. Configure environment
 
-Create a `.env` file in the `examples/deep-survey/` directory:
+Create a `.env` file in this directory:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...
-BRAVE_SEARCH_API_KEY=...  # optional
+ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/
+BRAVE_SEARCH_API_KEY=...           # https://brave.com/search/api/ (optional)
 ```
 
 ### 3. Start the Electric Agents server
-
-This starts the Electric Agents server and its backing infrastructure (Postgres, Electric) via Docker:
 
 ```bash
 npx electric-ax agent quickstart
 ```
 
-Or from the monorepo root using the dev CLI:
-
-```bash
-node packages/electric-ax/bin/electric-dev.mjs agent quickstart
-```
-
-The agents server will be available at `http://localhost:4437`.
+This starts the agents server and its backing infrastructure (Postgres, Electric) via Docker. The agents server will be available at `http://localhost:4437`.
 
 ### 4. Run the example
 
@@ -129,13 +115,21 @@ The UI will be available at `http://localhost:5175`.
 
 ### Stopping
 
-To stop the Electric Agents infrastructure:
-
 ```bash
 npx electric-ax agent stop
 ```
 
 Add `--remove-volumes` to also delete persisted data.
+
+### Local CLI
+
+You can also use the dev CLI directly from the monorepo instead of `npx`:
+
+```bash
+node packages/electric-ax/bin/electric-dev.mjs agent quickstart
+node packages/electric-ax/bin/electric-dev.mjs agent run
+node packages/electric-ax/bin/electric-dev.mjs agent stop
+```
 
 ## Tech Stack
 

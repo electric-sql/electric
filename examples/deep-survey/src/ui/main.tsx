@@ -4,15 +4,30 @@ import { useSwarm } from './hooks/useSwarm'
 import { SwarmView } from './components/SwarmView'
 import './swarm-theme.css'
 
+function getSwarmFromHash(): {
+  name: string
+  orchestratorUrl: string
+} | null {
+  const hash = window.location.hash.slice(1)
+  if (!hash) return null
+  return { name: hash, orchestratorUrl: `/orchestrator/${hash}` }
+}
+
 function App() {
   const [config, setConfig] = useState<{ darixUrl: string } | null>(null)
   const [swarm, setSwarm] = useState<{
     name: string
     orchestratorUrl: string
-  } | null>(null)
+  } | null>(getSwarmFromHash)
   const [inputValue, setInputValue] = useState(``)
   const [starting, setStarting] = useState(false)
   const [launchError, setLaunchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onHashChange = () => setSwarm(getSwarmFromHash())
+    window.addEventListener(`hashchange`, onHashChange)
+    return () => window.removeEventListener(`hashchange`, onHashChange)
+  }, [])
 
   useEffect(() => {
     fetch(`/api/config`)
@@ -53,6 +68,7 @@ function App() {
         name: string
         orchestratorUrl: string
       }
+      window.location.hash = data.name
       setSwarm(data)
     } catch (err) {
       setLaunchError(err instanceof Error ? err.message : String(err))
