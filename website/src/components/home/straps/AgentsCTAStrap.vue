@@ -38,16 +38,11 @@ onUnmounted(() => {
     <div class="ac-inner">
       <div class="ac-eyebrow mono">
         <span class="dot"></span>
-        Build with&nbsp;Electric &middot; ship&nbsp;agents
+        Build with&nbsp;Electric
       </div>
       <h2 class="ac-title">
-        Build your next agent on&nbsp;Electric
+        Bring your agents&nbsp;online
       </h2>
-      <p class="ac-tagline">
-        Spin up a durable, synced agent in minutes &mdash; on your stack,
-        on your terms. Start with the
-        <a href="/docs/agents/quickstart">Agents&nbsp;quickstart</a>.
-      </p>
       <div class="ac-actions">
         <VPButton
           tag="a"

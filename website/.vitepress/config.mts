@@ -417,7 +417,7 @@ export default defineConfig({
   title: 'Electric',
   description:
     "Electric provides the data primitives and infra to build collaborative, multi-agent systems. Including Postgres Sync, Durable Streams, TanStack DB and PGlite.",
-  appearance: 'dark',
+  appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
   head: [

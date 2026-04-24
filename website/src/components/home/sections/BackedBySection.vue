@@ -17,15 +17,16 @@ function select(slug) {
 }
 
 // Order leads with Paul (Supabase) as the most recognisable
-// Postgres-platform backer, then runs through the AI / agent
-// adjacent names (Mehdi at DeepMind, José behind Elixir/Phoenix)
-// and the rest of the database / devtools cohort. Spencer sits at
-// the end near Chris so the row closes on the more general
-// distributed-systems crowd rather than leading with it.
+// Postgres-platform backer, then Jordan (Motherduck) as the next
+// data-platform CEO, before stepping into the AI / agent adjacent
+// names (Mehdi at AI71, José behind Elixir/Phoenix) and the rest
+// of the database / devtools cohort. Spencer sits at the end near
+// Chris so the row closes on the more general distributed-systems
+// crowd rather than leading with it.
 select('copple')
+select('jordan')
 select('mehdi')
 select('jose')
-select('jordan')
 select('monica')
 select('sriram')
 select('adam')

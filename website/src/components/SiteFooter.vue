@@ -1,5 +1,7 @@
 <script setup>
-import VPSwitchAppearance from 'vitepress/dist/client/theme-default/components/VPSwitchAppearance.vue'
+/* Footer is intentionally empty of script — the appearance switcher
+   was removed when the site was forced to dark-only via
+   `appearance: 'force-dark'` in `.vitepress/config.mts`. */
 </script>
 
 <template>
@@ -46,10 +48,6 @@ import VPSwitchAppearance from 'vitepress/dist/client/theme-default/components/V
           <span class="social-name">GitHub</span>
         </a>
       </nav>
-
-      <div class="footer-appearance">
-        <VPSwitchAppearance />
-      </div>
 
       <p class="copyright">
         © {{ new Date().getFullYear() }} Electric DB Inc. Released under the
@@ -164,13 +162,6 @@ import VPSwitchAppearance from 'vitepress/dist/client/theme-default/components/V
   .footer-social {
     gap: 18px;
   }
-}
-
-/* Appearance toggle — compact and centred */
-.footer-appearance {
-  display: flex;
-  justify-content: center;
-  margin: 16px 0 14px;
 }
 
 /* Copyright — smallest, faintest line */

@@ -2190,15 +2190,22 @@ ul.demo-actions li .VPButton {
   content: none !important;
 }
 
-/* ── Footer appearance toggle (used by SiteFooter) ──────────────────── */
+/* ── Home page footer spacing ──────────────────────────────────────────
+   The strap immediately above the footer (AgentsCTAStrap) has its own
+   `border-bottom`, which already provides a clean visual close to the
+   page content. Drop the footer's own `border-top` on the home page
+   and add some breathing room above it so the footer reads as a
+   distinct sign-off block rather than a tightly-attached extension
+   of the CTA strap. */
 
-.VPFooter .ea-footer-appearance {
-  display: flex;
-  justify-content: center;
-  margin: 12px 0 4px;
+.home-page .VPFooter {
+  border-top: none;
+  margin-top: 64px;
 }
-.VPFooter .ea-footer-appearance .VPSwitchAppearance {
-  margin: 0;
+@media (max-width: 768px) {
+  .home-page .VPFooter {
+    margin-top: 40px;
+  }
 }
 
 /* ── Brand Toys (internal recording stage) ──────────────────────────────
