@@ -1,13 +1,14 @@
-import { readFileSync } from 'node:fs'
-import { resolve as resolvePath } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
+import { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 import type {
   StartCommandOptions,
   StartBuiltinCommandOptions,
   StopCommandOptions,
 } from './index.js'
+
+export { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
 const DEFAULT_BUILTIN_AGENTS_PORT = 4448
@@ -38,71 +39,6 @@ interface WaitForServerOptions {
   fetchImpl?: typeof globalThis.fetch
   timeoutMs?: number
   intervalMs?: number
-}
-
-function parseDotEnvValue(raw: string): string {
-  const trimmed = raw.trim()
-  if (
-    (trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) ||
-    (trimmed.startsWith(`'`) && trimmed.endsWith(`'`))
-  ) {
-    return trimmed.slice(1, -1)
-  }
-  const hashIndex = trimmed.indexOf(`#`)
-  return hashIndex === -1 ? trimmed : trimmed.slice(0, hashIndex).trim()
-}
-
-export function readDotEnvFile(
-  cwd: string = process.cwd()
-): Record<string, string> {
-  const envPath = resolvePath(cwd, `.env`)
-
-  try {
-    const content = readFileSync(envPath, `utf8`)
-    const values: Record<string, string> = {}
-
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith(`#`)) {
-        continue
-      }
-
-      const equalsIndex = trimmed.indexOf(`=`)
-      if (equalsIndex <= 0) {
-        continue
-      }
-
-      const key = trimmed.slice(0, equalsIndex).trim()
-      const value = parseDotEnvValue(trimmed.slice(equalsIndex + 1))
-      values[key] = value
-    }
-
-    return values
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === `ENOENT`) {
-      return {}
-    }
-    throw error
-  }
-}
-
-export function resolveAnthropicApiKey(
-  options: StartBuiltinCommandOptions,
-  env: NodeJS.ProcessEnv = process.env,
-  fileEnv: Record<string, string> = readDotEnvFile()
-): string {
-  const candidate =
-    options.anthropicApiKey?.trim() ||
-    env.ANTHROPIC_API_KEY?.trim() ||
-    fileEnv.ANTHROPIC_API_KEY?.trim()
-
-  if (!candidate) {
-    throw new Error(
-      `ANTHROPIC_API_KEY is required. Pass --anthropic-api-key, export it in your shell, or set it in .env.`
-    )
-  }
-
-  return candidate
 }
 
 export function resolveBuiltinAgentsPort(

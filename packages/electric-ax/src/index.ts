@@ -6,6 +6,7 @@ import { basename, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
+import { resolveAnthropicApiKey } from './env.js'
 import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,
@@ -514,6 +515,7 @@ export function createElectricCliHandlers(
       return stopped
     },
     quickstart: async (options) => {
+      resolveAnthropicApiKey(options)
       const { startBuiltinAgentsServer, startElectricAgentsDevEnvironment } =
         await loadStartModule()
       const started = await startElectricAgentsDevEnvironment()

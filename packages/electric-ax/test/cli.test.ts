@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createElectricProgram, resolveCommandPrefix, run } from '../src/index'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  createElectricCliHandlers,
+  createElectricProgram,
+  resolveCommandPrefix,
+  run,
+} from '../src/index'
 import type {
   ElectricCliEnv,
   ElectricCliHandlers,
@@ -239,6 +247,28 @@ describe(`createElectricProgram`, () => {
         anthropicApiKey: `sk-ant-test`,
       })
     )
+  })
+
+  it(`blocks quickstart when no Anthropic API key is available`, async () => {
+    const originalCwd = process.cwd()
+    const originalKey = process.env.ANTHROPIC_API_KEY
+    const tmpDir = mkdtempSync(join(tmpdir(), `electric-ax-quickstart-`))
+
+    try {
+      process.chdir(tmpDir)
+      delete process.env.ANTHROPIC_API_KEY
+
+      await expect(
+        createElectricCliHandlers(TEST_ENV).quickstart({})
+      ).rejects.toThrow(/ANTHROPIC_API_KEY/)
+    } finally {
+      process.chdir(originalCwd)
+      if (originalKey === undefined) {
+        delete process.env.ANTHROPIC_API_KEY
+      } else {
+        process.env.ANTHROPIC_API_KEY = originalKey
+      }
+    }
   })
 
   it(`registers the nested completion command`, async () => {
