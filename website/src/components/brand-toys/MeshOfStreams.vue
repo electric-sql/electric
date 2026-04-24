@@ -36,6 +36,7 @@ const props = withDefaults(
     wheelRotationSpeed?: number
     animateSegments?: boolean
     segmentPulse?: number
+    edgeConnections?: boolean
     paused?: boolean
     showDebug?: boolean
   }>(),
@@ -59,6 +60,7 @@ const props = withDefaults(
     wheelRotationSpeed: 1,
     animateSegments: true,
     segmentPulse: 1,
+    edgeConnections: false,
     paused: false,
     showDebug: false,
   }
@@ -94,6 +96,7 @@ const scene = computed(() =>
     gridSize: props.gridSize,
     routePadding: props.routePadding,
     cornerRadius: props.cornerRadius,
+    edgeConnections: props.edgeConnections,
   })
 )
 

@@ -78,6 +78,10 @@ export interface MeshSceneOptions {
   gridSize: number
   routePadding: number
   cornerRadius: number
+  // Optional: emit additional tracks that enter/leave via the left and right
+  // canvas edges. Adds a sense of the mesh being part of a larger system.
+  // Off by default to keep the existing visual unchanged.
+  edgeConnections?: boolean
 }
 
 interface CandidateEdge {
@@ -1861,6 +1865,133 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       if (placeBundleForEdge(edge)) placedInPass += 1
     }
     if (placedInPass === 0) break
+  }
+
+  // Phase 3: STRAIGHTEN — a final pass that stitches in straight horizontal
+  // tracks between any two wheels whose vertical extents overlap and whose
+  // line of sight is clear. The corridor-based phases above prefer
+  // L-shaped / HVH routes, so even pairs that COULD be connected with a
+  // simple cross-canvas stripe usually weren't. This pass goes through
+  // every left-to-right wheel pair and tries multiple Y values within the
+  // shared vertical band, letting tracksConflict gate density. The result
+  // is a much denser horizontal-flow look — which is the dominant motion
+  // axis of the visualisation anyway.
+  function tryPlaceStraightHorizontal(
+    start: MeshPoint,
+    end: MeshPoint,
+    fromWheelId: string,
+    toWheelId: string,
+    ignoreWheelIds: Set<string>
+  ): boolean {
+    // Reject if the line passes through any wheel that isn't an explicit
+    // endpoint. The margin matches the routing padding used elsewhere.
+    const obstacleMargin = Math.max(8, routePadding * grid * 0.5)
+    for (const wheel of wheels) {
+      if (ignoreWheelIds.has(wheel.id)) continue
+      if (pointToSegmentDistance(wheel, start, end) < wheel.r + obstacleMargin)
+        return false
+    }
+    const points: MeshPoint[] = [start, end]
+    for (const existing of acceptedTrackPointSets) {
+      if (tracksConflict(points, existing, laneSpacing * 0.95)) return false
+    }
+    const trackCorners: MeshCornerArc[] = [{ radius: 0 }, { radius: 0 }]
+    const segments = buildRenderedPathSegments(
+      points,
+      trackCorners,
+      cornerRadius
+    )
+    tracks.push({
+      id: `track-${tracks.length}`,
+      fromWheelId,
+      toWheelId,
+      points,
+      corners: trackCorners,
+      segments,
+      length: renderedPathLength(segments),
+    })
+    acceptedTrackPointSets.push(points)
+    return true
+  }
+
+  const orderByX = wheels
+    .map((_, i) => i)
+    .sort((a, b) => wheels[a].x - wheels[b].x)
+  for (let i = 0; i < orderByX.length; i++) {
+    for (let j = i + 1; j < orderByX.length; j++) {
+      const wA = wheels[orderByX[i]]
+      const wB = wheels[orderByX[j]]
+      // Wheels need real horizontal separation for a stripe to fit between
+      // them; if the bounding circles overlap horizontally, the
+      // wheel-to-wheel segment is essentially zero length.
+      if (wB.x - wA.x < (wA.r + wB.r) * 0.6) continue
+      // Vertical band where a horizontal line can simultaneously enter the
+      // left side of B and exit the right side of A. The 0.85 factor keeps
+      // the stripe away from the very top/bottom of each wheel (where the
+      // entry point would sit at a glancing angle).
+      const yMin = Math.max(wA.y - wA.r * 0.85, wB.y - wB.r * 0.85)
+      const yMax = Math.min(wA.y + wA.r * 0.85, wB.y + wB.r * 0.85)
+      if (yMax - yMin < laneSpacing * 0.5) continue
+      const ignore = new Set([wA.id, wB.id])
+      // Walk the band in lane-spacing increments, with a small offset so we
+      // don't always hit dead-on the same Y other phases used.
+      const yStep = laneSpacing
+      for (let y = yMin + yStep / 2; y <= yMax; y += yStep) {
+        const dyA = y - wA.y
+        const dyB = y - wB.y
+        const xA = wA.x + Math.sqrt(Math.max(0, wA.r * wA.r - dyA * dyA))
+        const xB = wB.x - Math.sqrt(Math.max(0, wB.r * wB.r - dyB * dyB))
+        if (xB - xA < grid * 1.2) continue
+        tryPlaceStraightHorizontal(
+          { x: xA, y },
+          { x: xB, y },
+          wA.id,
+          wB.id,
+          ignore
+        )
+      }
+    }
+  }
+
+  // Phase 4 (optional): EDGE CONNECTIONS — add straight horizontal tracks
+  // that come in from the left edge of the canvas and leave from the
+  // right edge. Only wheels close to each respective edge are considered,
+  // otherwise we'd draw very long stripes across the whole canvas which
+  // visually dominate. The edge fade naturally hides the off-canvas end.
+  if (options.edgeConnections) {
+    const edgeProximity = width * 0.4
+    for (const wheel of wheels) {
+      const yStep = laneSpacing
+      const yMin = wheel.y - wheel.r * 0.75
+      const yMax = wheel.y + wheel.r * 0.75
+      const ignore = new Set([wheel.id])
+      const tryLeft = wheel.x < edgeProximity
+      const tryRight = wheel.x > width - edgeProximity
+      if (!tryLeft && !tryRight) continue
+      for (let y = yMin + yStep / 2; y <= yMax; y += yStep) {
+        const dy = y - wheel.y
+        const xRadius = Math.sqrt(Math.max(0, wheel.r * wheel.r - dy * dy))
+        if (xRadius < grid * 0.2) continue
+        if (tryLeft) {
+          tryPlaceStraightHorizontal(
+            { x: 0, y },
+            { x: wheel.x - xRadius, y },
+            `edge-left`,
+            wheel.id,
+            ignore
+          )
+        }
+        if (tryRight) {
+          tryPlaceStraightHorizontal(
+            { x: wheel.x + xRadius, y },
+            { x: width, y },
+            wheel.id,
+            `edge-right`,
+            ignore
+          )
+        }
+      }
+    }
   }
 
   return { width, height, wheels, tracks }

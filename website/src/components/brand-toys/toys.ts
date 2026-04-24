@@ -783,6 +783,12 @@ export const TOYS: readonly ToyDef[] = [
         label: `Track padding`,
       },
       {
+        name: `edgeConnections`,
+        type: `boolean`,
+        default: false,
+        label: `Off-canvas connections`,
+      },
+      {
         name: `trackWidth`,
         type: `number`,
         default: 1,
