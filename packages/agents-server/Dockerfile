@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim
+# syntax=docker/dockerfile:1.7
+
+FROM node:22-bookworm-slim AS build
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -28,7 +30,8 @@ COPY packages/agents/package.json ./packages/agents/package.json
 COPY packages/agents-server-conformance-tests/package.json ./packages/agents-server-conformance-tests/package.json
 COPY packages/agents-server-ui/package.json ./packages/agents-server-ui/package.json
 COPY packages/agents-server/package.json ./packages/agents-server/package.json
-RUN pnpm install --filter @electric-ax/agents-server... --filter @electric-sql/client --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+  pnpm install --filter @electric-ax/agents-server... --filter @electric-sql/client --frozen-lockfile
 
 COPY tsconfig.base.json tsconfig.build.json ./
 COPY packages/typescript-client ./packages/typescript-client
@@ -43,7 +46,19 @@ RUN pnpm --filter @electric-ax/agents-server-ui build
 COPY packages/agents-server ./packages/agents-server
 RUN pnpm --filter @electric-ax/agents-server build
 
-WORKDIR /app/packages/agents-server
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+  pnpm deploy --legacy --filter @electric-ax/agents-server --prod /prod/agents-server \
+  && mkdir -p /prod/agents-server-ui \
+  && cp -R packages/agents-server-ui/dist /prod/agents-server-ui/dist \
+  && cp -R packages/agents-server/drizzle /prod/agents-server/drizzle
+
+FROM node:22-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+
+COPY --from=build /prod /prod
+
+WORKDIR /prod/agents-server
 
 EXPOSE 4437
 
