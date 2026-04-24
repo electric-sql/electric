@@ -83,7 +83,17 @@ export function TopBar({
         background: `var(--swarm-bg-topbar)`,
       }}
     >
-      <div style={{ display: `flex`, alignItems: `center`, gap: 9 }}>
+      <div
+        style={{
+          display: `flex`,
+          alignItems: `center`,
+          gap: 9,
+          cursor: `pointer`,
+        }}
+        onClick={() => {
+          window.location.hash = ``
+        }}
+      >
         <div
           style={{
             width: 16,

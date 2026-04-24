@@ -1,10 +1,17 @@
 import path from 'node:path'
 
-try {
-  process.loadEnvFile(path.resolve(import.meta.dirname, `../../../../.env`))
-} catch (err) {
-  if ((err as NodeJS.ErrnoException).code !== `ENOENT`) {
-    console.error(`Failed to load .env file:`, err)
+// Load repo root .env first, then local .env (local values take precedence)
+const envPaths = [
+  path.resolve(import.meta.dirname, `../../../../.env`),
+  path.resolve(import.meta.dirname, `../../.env`),
+]
+for (const envPath of envPaths) {
+  try {
+    process.loadEnvFile(envPath)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== `ENOENT`) {
+      console.error(`Failed to load .env file:`, err)
+    }
   }
 }
 
