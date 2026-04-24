@@ -159,10 +159,16 @@ pnpm dev  # starts both server (tsx watch) and UI (vite) in parallel
 
 It requires the agents-server backing services (Postgres + Electric) to be running.
 
+## Local state
+
+- **Postgres** (docker volume) — entity types, entities, wake registrations, scheduling state.
+- **Durable streams** — in-memory by default in dev. Data resets on server restart. Set `ELECTRIC_AGENTS_STREAMS_DATA_DIR` to persist streams to disk (uses lmdb + log files).
+
+To clear all state: stop the servers and run `docker compose down -v` to remove the Postgres volume.
+
 ## Teardown
 
 ```sh
-cd packages/agents-server
-docker compose -f docker-compose.dev.yml down    # stop services
-docker compose -f docker-compose.dev.yml down -v  # stop + remove volumes
+docker compose -f packages/agents-server/docker-compose.dev.yml down    # stop services
+docker compose -f packages/agents-server/docker-compose.dev.yml down -v  # stop + remove volumes
 ```
