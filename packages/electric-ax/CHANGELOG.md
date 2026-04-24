@@ -1,5 +1,15 @@
 # electric-ax
 
+## 0.1.4
+
+### Patch Changes
+
+- 097f2c4: Fix postgres 18 docker volume mount path to use `/var/lib/postgresql` instead of `/var/lib/postgresql/data`
+- Updated dependencies [097f2c4]
+- Updated dependencies [46e0a75]
+  - @electric-ax/agents-runtime@0.0.2
+  - @electric-ax/agents@0.1.1
+
 ## 0.1.3
 
 ### Patch Changes
