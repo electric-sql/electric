@@ -51,7 +51,7 @@ Shapes are defined by:
 A shape contains all of the rows in the table that match the where clause, if provided. If a columns clause is provided, the synced rows will only contain those selected columns.
 
 > [!Warning] Limitations
-> Shapes are currently [single table](#single-table), though you can use [subqueries](#subqueries-experimental) to filter based on related data. Shape definitions are [immutable](#immutable).
+> Shapes are currently [single table](#single-table), though you can use [subqueries](#subqueries) to filter based on related data. Shape definitions are [immutable](#immutable).
 
 > [!Warning] Security
 > Production apps should request shapes through your backend API for authorization and security. See the [auth guide](/docs/guides/auth).
@@ -116,9 +116,12 @@ Where clauses have the following constraints:
 
 1. can't use non-deterministic SQL functions like `count()` or `now()`
 
-#### Subqueries (experimental)
+<a id="subqueries-experimental"></a>
+#### Subqueries
 
-Electric supports subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables cross-table filtering patterns—for example, syncing only users who belong to a specific organization:
+Electric supports subqueries in where clauses, allowing you to filter rows based on data in other tables. This makes shapes suitable for general-use relational filtering, such as memberships, sharing rules, parent-child traversal, and exclusions.
+
+For example, you can sync only users who belong to a specific organization:
 
 ```ts
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
@@ -133,6 +136,30 @@ const usersCollection = createCollection(
         table: 'users',
         where: `id IN (SELECT user_id FROM memberships WHERE org_id = $1)`,
         params: { '1': 'org_123' },
+      },
+    },
+  })
+)
+```
+
+Or combine subqueries with boolean logic to express more realistic access rules:
+
+```ts
+const documentsCollection = createCollection(
+  electricCollectionOptions({
+    id: 'visible-documents',
+    shapeOptions: {
+      url: 'http://localhost:3000/v1/shape',
+      params: {
+        table: 'documents',
+        where: `
+          owner_id = $1
+          OR id IN (
+            SELECT document_id FROM document_shares
+            WHERE shared_with = $1
+          )
+        `,
+        params: { '1': 'user_123' },
       },
     },
   })
@@ -154,10 +181,16 @@ const stream = new ShapeStream({
 const shape = new Shape(stream)
 ```
 
-When a shape uses a subquery, Electric tracks the dependency between tables. If the data in the subquery changes (e.g., a project becomes archived), rows will automatically move in or out of the shape without the row itself being modified.
+When a shape uses a subquery, Electric tracks the dependency between tables. If the data in the subquery changes (for example, a project becomes archived or a membership row is added), rows will automatically move in or out of the shape without the root row itself being modified.
 
-:::warning Experimental feature
-Subqueries require enabling feature flags. Set `ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries` to enable. See the [configuration docs](/docs/api/config#allow_subqueries) for details.
+Electric 1.6 keeps these moves incremental even for compound expressions that use `AND`, `OR`, and `NOT` around subqueries. In older releases those cases could return `409` and force a full resync of the shape.
+
+:::info Feature flags
+Subqueries are currently enabled using `ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries`. The flags are unchanged; they gate rollout rather than a separate syntax or API. See the [configuration docs](/docs/api/config#allow_subqueries) for details.
+:::
+
+:::warning Client compatibility
+The incremental behavior for compound subquery expressions in Electric 1.6 requires updated clients. TanStack DB clients need `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`. Upgrade clients before rolling out the server update.
 :::
 
 When constructing a where clause with user input as a filter, it's recommended to use a positional placeholder (`$1`) to avoid
@@ -399,8 +432,9 @@ With non-optimized where clauses, throughput is inversely proportional to the nu
 
 With optimized where clauses, Electric can evaluate millions of clauses at once and maintain a consistent throughput of ~5,000 row changes per second **no matter how many shapes you have**. If you have 10 shapes, Electric can process 5,000 changes per second. If you have 1,000 shapes, throughput remains at 5,000 changes per second.
 
-For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throughput-with-optimized-where-clauses) and [this blog post](/blog/2025/08/13/electricsql-v1.1-released) about our storage engine.
+For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throughput-with-optimised-where-clauses) and [this blog post](/blog/2025/08/13/electricsql-v1.1-released) about our storage engine.
 
+<a id="optimised-where-clauses"></a>
 ### Optimized where clauses
 
 We currently optimize the evaluation of the following clauses:
@@ -411,6 +445,7 @@ We currently optimize the evaluation of the following clauses:
   Note that this index is internal to Electric and unrelated to Postgres indexes.
 - `field = constant AND another_condition` - the `field = constant` part of the where clause is optimized as above, and any shapes that match are iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast. If however `field = const` matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
 - `a_non_optimized_condition AND field = constant` - as above. The order of the clauses is not important (Electric will filter by optimized clauses first).
+- `field = constant OR field = other_constant` - if both `OR` branches are individually indexable, Electric indexes both sides and unions the matching shapes instead of evaluating every shape. If one side of the `OR` is not optimizable, Electric falls back to normal per-shape evaluation for that clause.
 
 > [!Warning] Need additional where clause optimization?
 > We plan to optimize a much larger subset of Postgres where clauses. If you need a particular clause optimized, please [raise an issue on GitHub](https://github.com/electric-sql/electric) or [let us know on Discord](https://discord.electric-sql.com).
@@ -419,7 +454,7 @@ We currently optimize the evaluation of the following clauses:
 
 ### Single table
 
-Shapes sync data from a single table. While you can use [subqueries](#subqueries-experimental) to filter rows based on data in other tables, the shape only contains rows from the root table—not the related data itself.
+Shapes sync data from a single table. While you can use [subqueries](#subqueries) to filter rows based on data in other tables, the shape only contains rows from the root table—not the related data itself.
 
 For syncing related data across tables, you currently need to use multiple shapes. In the [old version of Electric](https://legacy.electric-sql.com/docs/usage/data-access/shapes), Shapes had an include tree that allowed you to sync nested relations. The new Electric has not yet implemented support for include trees.
 
