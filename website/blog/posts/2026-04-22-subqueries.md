@@ -6,7 +6,7 @@ description: >-
   large shapes stay fast.
 excerpt: >-
   Sync only works in real apps if it can follow relationships.
-  Subqueries let Electric sync the right rows for each user using SQL,
+  Subqueries let Electric express relational filters for each user in SQL,
   and Electric 1.6 keeps complex expressions incremental too.
 authors: [rob]
 image: /img/blog/subqueries/header.jpg
@@ -28,7 +28,7 @@ In simple demos, a column filter is enough. In real systems, the rule usually li
 
 This is where subqueries matter.
 
-## Sync the right rows
+## Query-driven sync
 
 Shapes are Electric's primitive for partial replication: a table and a `WHERE` clause. Define the subset once and Electric keeps that subset synced.
 
