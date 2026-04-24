@@ -11,7 +11,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-COMPOSE_FILE="$REPO_ROOT/packages/agents-server/docker-compose.full.yml"
+COMPOSE_FILE="$REPO_ROOT/packages/agents-server/docker-compose.dev.yml"
 COMPOSE_PROJECT="electric-agents-dev"
 AGENTS_SERVER_PORT="${ELECTRIC_AGENTS_PORT:-4437}"
 BUILTIN_PORT="${ELECTRIC_AGENTS_BUILTIN_PORT:-4448}"
@@ -19,6 +19,8 @@ UI_PORT="${UI_PORT:-5173}"
 VIEWER_PORT="${VIEWER_PORT:-5174}"
 WORK_DIR="${ELECTRIC_AGENTS_WORKING_DIRECTORY:-/tmp/coding-session-test}"
 AGENTS_SERVER_URL="http://localhost:$AGENTS_SERVER_PORT"
+PG_PORT="${PG_HOST_PORT:-5432}"
+ELECTRIC_PORT="${ELECTRIC_HOST_PORT:-3060}"
 
 # ── Stop mode ──────────────────────────────────────────────────────
 if [[ "${1:-}" == "stop" ]]; then
@@ -57,12 +59,29 @@ fi
 echo "==> Building packages..."
 pnpm --filter @electric-ax/agents-runtime build --silent
 pnpm --filter @electric-ax/agents build --silent
+pnpm --filter @electric-ax/agents-server build --silent
 
-# ── Infrastructure (docker) ────────────────────────────────────────
-echo "==> Starting infrastructure (postgres + electric + agents-server)..."
+# ── Infrastructure (docker: postgres + electric only) ──────────────
+# We run the agents-server from local source (see next block) so code
+# changes under packages/agents-server/ take effect on the next script
+# run. The "full" compose would pull electricax/agents-server:latest
+# and ignore our local build.
+echo "==> Starting infrastructure (postgres + electric)..."
 COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT" \
-  ELECTRIC_AGENTS_PORT="$AGENTS_SERVER_PORT" \
-  docker compose -f "$COMPOSE_FILE" up -d --wait 2>&1 | tail -5
+  PG_HOST_PORT="$PG_PORT" \
+  ELECTRIC_HOST_PORT="$ELECTRIC_PORT" \
+  docker compose -f "$COMPOSE_FILE" up -d --wait postgres electric 2>&1 | tail -5
+
+# ── Agents server (local, from source) ─────────────────────────────
+echo "==> Starting agents-server from source on port $AGENTS_SERVER_PORT..."
+ELECTRIC_AGENTS_DATABASE_URL="postgres://electric_agents:electric_agents@localhost:$PG_PORT/electric_agents" \
+ELECTRIC_AGENTS_ELECTRIC_URL="http://localhost:$ELECTRIC_PORT" \
+ELECTRIC_AGENTS_PORT="$AGENTS_SERVER_PORT" \
+ELECTRIC_AGENTS_BASE_URL="$AGENTS_SERVER_URL" \
+  node packages/agents-server/dist/entrypoint.js &
+AGENTS_SERVER_PID=$!
+echo "$AGENTS_SERVER_PID" > /tmp/coding-session-dev-agents-server.pid
+echo "    PID $AGENTS_SERVER_PID"
 
 echo "    Waiting for agents-server at $AGENTS_SERVER_URL..."
 for i in $(seq 1 30); do
@@ -126,5 +145,5 @@ echo "╚═══════════════════════�
 echo ""
 
 # Keep this terminal alive; forward Ctrl-C to children
-trap 'kill $BUILTIN_PID $UI_PID $VIEWER_PID 2>/dev/null; rm -f /tmp/coding-session-dev-*.pid' EXIT INT TERM
+trap 'kill $AGENTS_SERVER_PID $BUILTIN_PID $UI_PID $VIEWER_PID 2>/dev/null; rm -f /tmp/coding-session-dev-*.pid' EXIT INT TERM
 wait

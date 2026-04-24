@@ -412,6 +412,45 @@ export function registerCodingSession(
         )
       }
 
+      // Initial mirror. When the session already exists on disk (imported
+      // or attached) but the cursor is still empty, pull every existing
+      // event into the durable stream so the viewer shows the full history
+      // without waiting for a first prompt.
+      if (metaRow.nativeSessionId && !cursorRow.cursor) {
+        const mirrorCtx: LiveMirrorCtx = {
+          events: {
+            get: (k) => ctx.db.collections.events.get(k),
+          },
+          actions: {
+            events_insert: ctx.db.actions.events_insert,
+          },
+        }
+        try {
+          const initial = await loadSession({
+            sessionId: metaRow.nativeSessionId,
+            agent: metaRow.agent,
+          })
+          for (const ev of initial.events) appendIfNew(mirrorCtx, ev)
+          const serialized = serializeCursor(initial.cursor)
+          ctx.db.actions.cursorState_update({
+            key: `current`,
+            updater: (d: CursorStateRow) => {
+              d.cursor = JSON.stringify(serialized)
+            },
+          })
+        } catch (e) {
+          // Non-fatal: the session will still work on the next prompt,
+          // we just won't have the pre-prompt history mirrored.
+          const message = e instanceof Error ? e.message : String(e)
+          ctx.db.actions.sessionMeta_update({
+            key: `current`,
+            updater: (d: SessionMetaRow) => {
+              d.error = `initial mirror failed: ${message}`
+            },
+          })
+        }
+      }
+
       // Every inbox entry is treated as a prompt. `message_type === "prompt"`
       // is the preferred tag (see inboxSchemas) but is not required — a bare
       // `/send` with `{ payload: { text } }` from the generic UI MessageInput

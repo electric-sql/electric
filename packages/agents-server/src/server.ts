@@ -638,7 +638,10 @@ export class ElectricAgentsServer {
       `access-control-allow-methods`,
       `GET, POST, PUT, PATCH, DELETE, OPTIONS`
     )
-    res.setHeader(`access-control-allow-headers`, `content-type, authorization`)
+    res.setHeader(
+      `access-control-allow-headers`,
+      `content-type, authorization, ngrok-skip-browser-warning`
+    )
     if (method === `OPTIONS`) {
       res.writeHead(204)
       res.end()
@@ -1967,6 +1970,12 @@ export class ElectricAgentsServer {
       }
       headers[key] = value
     })
+    // Ensure CORS headers survive on proxied responses (e.g. shape stream
+    // reads that get forwarded to the durable-streams upstream). Cross-origin
+    // browser clients (the coding-session-viewer deployed to CF, etc.) need
+    // these on every response, not just the top-level routes.
+    headers[`access-control-allow-origin`] = `*`
+    headers[`access-control-expose-headers`] = `*`
     return headers
   }
 }
