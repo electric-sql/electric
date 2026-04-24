@@ -1,0 +1,55 @@
+{
+  "name": "@electric-ax/agents-mcp",
+  "version": "0.0.1",
+  "description": "MCP server integration for Electric Agents — tools, resources, OAuth auth",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "pnpm exec vitest --coverage",
+    "typecheck": "tsc --noEmit",
+    "stylecheck": "eslint . --quiet"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-agent-core": ">=0.57.0"
+  },
+  "peerDependenciesMeta": {
+    "@mariozechner/pi-agent-core": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@mariozechner/pi-agent-core": "^0.57.1",
+    "@vitest/coverage-v8": "^4.1.0",
+    "tsdown": "^0.9.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "license": "Apache-2.0"
+}
