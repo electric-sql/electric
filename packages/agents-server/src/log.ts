@@ -2,19 +2,27 @@ import path from 'node:path'
 import fs from 'node:fs'
 import pino from 'pino'
 
-const LOG_DIR =
-  process.env.ELECTRIC_AGENTS_LOG_DIR ?? path.resolve(process.cwd(), `logs`)
-fs.mkdirSync(LOG_DIR, { recursive: true })
-
-const LOG_FILE = path.join(LOG_DIR, `agent-server-${Date.now()}.jsonl`)
-
-export const LOG_FILE_PATH = LOG_FILE
 const LOG_LEVEL = process.env.ELECTRIC_AGENTS_LOG_LEVEL ?? `info`
+const USE_FILE_LOGS = process.env.ELECTRIC_AGENTS_LOG_FILE !== `false`
 const USE_PRETTY_LOGS = LOG_LEVEL !== `silent` && !process.env.VITEST
 
-const streams: Array<pino.StreamEntry> = [
-  { stream: pino.destination(LOG_FILE) },
-]
+const LOG_DIR = USE_FILE_LOGS
+  ? (process.env.ELECTRIC_AGENTS_LOG_DIR ?? path.resolve(process.cwd(), `logs`))
+  : undefined
+const LOG_FILE = LOG_DIR
+  ? path.join(LOG_DIR, `agent-server-${Date.now()}.jsonl`)
+  : undefined
+
+if (LOG_DIR) {
+  fs.mkdirSync(LOG_DIR, { recursive: true })
+}
+
+export const LOG_FILE_PATH = LOG_FILE
+
+const streams: Array<pino.StreamEntry> = []
+if (LOG_FILE) {
+  streams.push({ stream: pino.destination(LOG_FILE) })
+}
 if (USE_PRETTY_LOGS) {
   streams.push({
     stream: pino.transport({
@@ -28,13 +36,20 @@ if (USE_PRETTY_LOGS) {
   })
 }
 
-const logger = pino(
-  {
-    base: undefined,
-    level: LOG_LEVEL,
-  },
-  pino.multistream(streams)
-)
+const logger =
+  streams.length > 0
+    ? pino(
+        {
+          base: undefined,
+          level: LOG_LEVEL,
+        },
+        pino.multistream(streams)
+      )
+    : pino({
+        base: undefined,
+        enabled: false,
+        level: LOG_LEVEL,
+      })
 
 function formatArgs(args: Array<unknown>): { err?: Error; msg: string } {
   const errors: Array<Error> = []

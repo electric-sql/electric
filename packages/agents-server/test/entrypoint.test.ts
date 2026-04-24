@@ -33,6 +33,7 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
           ELECTRIC_AGENTS_DURABLE_STREAMS_URL: `http://streams:8787`,
           DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
           ELECTRIC_URL: `http://electric:3000`,
+          ELECTRIC_AGENTS_ELECTRIC_SECRET: `electric-secret`,
           ELECTRIC_AGENTS_BASE_URL: `https://electric-agents.example.com`,
           HOST: `0.0.0.0`,
           PORT: `8080`,
@@ -43,6 +44,7 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
     ).toEqual({
       baseUrl: `https://electric-agents.example.com`,
       durableStreamsUrl: `http://streams:8787`,
+      electricSecret: `electric-secret`,
       electricUrl: `http://electric:3000`,
       host: `0.0.0.0`,
       port: 8080,
@@ -63,6 +65,7 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
     ).toEqual({
       baseUrl: undefined,
       durableStreamsUrl: `http://streams:8787`,
+      electricSecret: undefined,
       electricUrl: undefined,
       host: `0.0.0.0`,
       port: 4437,
@@ -116,6 +119,7 @@ describe(`runElectricAgentsEntrypoint`, () => {
         ELECTRIC_AGENTS_DURABLE_STREAMS_URL: `http://streams:8787`,
         ELECTRIC_AGENTS_DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
         ELECTRIC_AGENTS_ELECTRIC_URL: `http://electric:3000`,
+        ELECTRIC_AGENTS_ELECTRIC_SECRET: `electric-secret`,
         ELECTRIC_AGENTS_PORT: `7777`,
       },
       cwd: `/workspace/app`,
@@ -125,6 +129,7 @@ describe(`runElectricAgentsEntrypoint`, () => {
     expect(createServer).toHaveBeenCalledWith({
       baseUrl: undefined,
       durableStreamsUrl: `http://streams:8787`,
+      electricSecret: `electric-secret`,
       electricUrl: `http://electric:3000`,
       host: `0.0.0.0`,
       port: 7777,

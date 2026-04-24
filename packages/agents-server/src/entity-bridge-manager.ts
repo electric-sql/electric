@@ -12,6 +12,7 @@ import {
   isControlMessage,
 } from '@electric-sql/client'
 import { serverLog } from './log.js'
+import { electricUrlWithPath } from './electric-url.js'
 import type {
   EntityBridgeRow,
   PostgresRegistry,
@@ -117,7 +118,8 @@ class EntityBridge {
     row: EntityBridgeRow,
     private registry: PostgresRegistry,
     private streamClient: StreamClient,
-    private electricUrl: string
+    private electricUrl: string,
+    private electricSecret?: string
   ) {
     this.sourceRef = row.sourceRef
     this.tags = normalizeTags(row.tags)
@@ -283,10 +285,11 @@ class EntityBridge {
     signal?: AbortSignal
   }): ShapeStreamInterface<EntityShapeRow> {
     return new ShapeStream<EntityShapeRow>({
-      url: new URL(`/v1/shape`, this.electricUrl).toString(),
+      url: electricUrlWithPath(this.electricUrl, `/v1/shape`).toString(),
       params: {
         table: `entities`,
         where: buildTagsWhereClause(this.tags),
+        ...(this.electricSecret ? { secret: this.electricSecret } : {}),
         columns: [...ENTITY_SHAPE_COLUMNS],
         replica: `full`,
       },
@@ -476,7 +479,8 @@ export class EntityBridgeManager {
   constructor(
     private registry: PostgresRegistry,
     private streamClient: StreamClient,
-    private electricUrl?: string
+    private electricUrl?: string,
+    private electricSecret?: string
   ) {}
 
   async start(): Promise<void> {
@@ -601,7 +605,8 @@ export class EntityBridgeManager {
         row,
         this.registry,
         this.streamClient,
-        this.electricUrl!
+        this.electricUrl!,
+        this.electricSecret
       )
       await bridge.start()
       this.bridges.set(row.sourceRef, bridge)
