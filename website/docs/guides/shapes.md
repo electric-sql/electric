@@ -443,9 +443,15 @@ We currently optimize the evaluation of the following clauses:
   We optimize this by indexing shapes by their constant, allowing a single lookup to retrieve all
   shapes for that constant instead of evaluating the where clause for each shape.
   Note that this index is internal to Electric and unrelated to Postgres indexes.
-- `field = constant AND another_condition` - the `field = constant` part of the where clause is optimized as above, and any shapes that match are iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast. If however `field = const` matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
-- `a_non_optimized_condition AND field = constant` - as above. The order of the clauses is not important (Electric will filter by optimized clauses first).
-- `field = constant OR field = other_constant` - if both `OR` branches are individually indexable, Electric indexes both sides and unions the matching shapes instead of evaluating every shape. If one side of the `OR` is not optimizable, Electric falls back to normal per-shape evaluation for that clause.
+- `constant = field` - as above, the order of the field and constant is not important (Electric will index by the field either way).
+- `array_field @> array_constant` - for array fields, we optimize the "contains" operator.
+- `array_constant <@ array_field` - as above, the reverse notation is also optimized.
+- `field IN list_constant` - so for example `status IN ('backlog', 'todo')` is optimized
+- `const = ANY(array_field)` - so for example `'todo' = ANY(statuses)` is optimized
+- `optimized_condition AND another_optimized_condition` - any of the optimized conditions can be combined with `AND` and still be optimised.
+- `optimized_condition OR another_optimized_condition` - the same for `OR`. This combining with `AND` and `OR` can be repeated to create complex binary expressions.
+- `optimized_condition AND non_optimized_condition` - the optimized condition will as above, and any shapes that match are iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast. If however if the optimized condition matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
+- `non_optimized_condition AND optimized_condition` - as above. The order of the clauses is not important (Electric will filter by optimized clauses first).
 
 > [!Warning] Need additional where clause optimization?
 > We plan to optimize a much larger subset of Postgres where clauses. If you need a particular clause optimized, please [raise an issue on GitHub](https://github.com/electric-sql/electric) or [let us know on Discord](https://discord.electric-sql.com).
