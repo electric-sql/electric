@@ -1,5 +1,11 @@
 # electric-ax
 
+## 0.1.6
+
+### Patch Changes
+
+- 7652bdc: Block `electric agent quickstart` before startup when no Anthropic API key is available.
+
 ## 0.1.5
 
 ### Patch Changes
