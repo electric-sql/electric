@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cf:deploy": "pnpm build && wrangler deploy",
+    "cf:dev": "pnpm build && wrangler dev"
   },
   "dependencies": {
     "@electric-ax/agents-runtime": "workspace:*",
@@ -25,6 +27,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "wrangler": "^3.99.0"
   }
 }

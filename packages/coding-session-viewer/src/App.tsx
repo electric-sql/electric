@@ -51,7 +51,7 @@ export function App(): React.ReactElement {
       <header className="viewer-top">
         <div className="brand">
           <span className="brand-dot"></span>
-          <span>Electric Agents · coding session</span>
+          <span>Electric Agent Runtime</span>
         </div>
         <div className="viewer-top-right">
           <code
@@ -106,7 +106,7 @@ function Landing({
         <span className="brand-dot"></span>
         <span>Electric Agents</span>
       </div>
-      <h1>Coding session viewer</h1>
+      <h1>Electric Agent Runtime</h1>
       <p className="lede">
         Point this viewer at an Electric Agents server and a{` `}
         <code>coding-session</code> entity. The browser tab streams normalized
