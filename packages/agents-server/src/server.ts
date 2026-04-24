@@ -1917,7 +1917,8 @@ export class ElectricAgentsServer {
         key === `content-encoding` ||
         key === `content-length` ||
         key === `transfer-encoding` ||
-        key === `connection`
+        key === `connection` ||
+        key.startsWith(`access-control-`)
       ) {
         return
       }
