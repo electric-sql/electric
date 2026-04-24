@@ -18,12 +18,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN corepack enable
 
-COPY . .
+# Copy only dependency manifests first so source-only changes do not invalidate
+# the pnpm install layer.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
+COPY packages/typescript-client/package.json ./packages/typescript-client/package.json
+COPY packages/agents-runtime/package.json ./packages/agents-runtime/package.json
+COPY packages/agents/package.json ./packages/agents/package.json
+COPY packages/agents-server-conformance-tests/package.json ./packages/agents-server-conformance-tests/package.json
+COPY packages/agents-server-ui/package.json ./packages/agents-server-ui/package.json
+COPY packages/agents-server/package.json ./packages/agents-server/package.json
+RUN pnpm install --filter @electric-ax/agents-server... --filter @electric-sql/client --frozen-lockfile
 
-RUN pnpm install --filter @electric-ax/agents-server... --frozen-lockfile
+COPY tsconfig.base.json tsconfig.build.json ./
+COPY packages/typescript-client ./packages/typescript-client
 RUN pnpm --filter @electric-sql/client build
+
+COPY packages/agents-runtime ./packages/agents-runtime
 RUN pnpm --filter @electric-ax/agents-runtime build
+
+COPY packages/agents-server-ui ./packages/agents-server-ui
 RUN pnpm --filter @electric-ax/agents-server-ui build
+
+COPY packages/agents-server ./packages/agents-server
 RUN pnpm --filter @electric-ax/agents-server build
 
 WORKDIR /app/packages/agents-server
