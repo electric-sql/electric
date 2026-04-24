@@ -448,6 +448,8 @@ We currently optimize the evaluation of the following clauses:
 - `array_constant <@ array_field` - as above, the reverse notation is also optimized.
 - `field IN list_constant` - so for example `status IN ('backlog', 'todo')` is optimized
 - `const = ANY(array_field)` - so for example `'todo' = ANY(statuses)` is optimized
+- `field IN (subquery)` - so for example `project_id IN (SELECT id FROM projects WHERE archived = false)` is optimized
+- `field_list IN (subquery)` - so for example `(project_id, status) IN (SELECT project_id, status FROM projects WHERE archived = false)` is optimized
 - `optimized_condition AND another_optimized_condition` - any of the optimized conditions can be combined with `AND` and still be optimised.
 - `optimized_condition OR another_optimized_condition` - the same for `OR`. This combining with `AND` and `OR` can be repeated to create complex binary expressions.
 - `optimized_condition AND non_optimized_condition` - the optimized condition will as above, and any shapes that match are iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast. If however if the optimized condition matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
