@@ -6,7 +6,7 @@ excerpt: >-
   Hosted durable streams are live on Electric Cloud. You can now sync and stream AI sessions and low-latency real-time data alongside structured database changes.
 authors: [kyle]
 image: /img/blog/announcing-hosted-durable-streams/hero.png
-tags: [durable-streams, cloud, agentic, AI]
+tags: [agents, durable-streams, cloud, agentic, AI]
 outline: [2, 3]
 post: true
 ---

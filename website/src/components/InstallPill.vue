@@ -20,7 +20,14 @@ import { computed, ref } from "vue"
                sunken — pill bg = --ea-bg            (use on
                         --ea-surface-alt backgrounds, e.g. the
                         bottom CTA straps which sit on alt-surface)
-             Defaults to `raised`. */
+             Defaults to `raised`.
+   accent    Optional single-token accent mode. When provided, the
+             positional 4-colour palette is dropped: every token
+             renders in the muted `--ea-text-2` text colour except
+             the matching token, which gets the brand colour. Use
+             this when the multi-colour highlighting reads as noisy
+             and you only want to draw the eye to one keyword (e.g.
+             `accent="agents"` on the agents landing pill). */
 type Tone = "raised" | "sunken"
 
 const props = withDefaults(
@@ -28,12 +35,16 @@ const props = withDefaults(
     command: string
     clipboard?: string
     tone?: Tone
+    accent?: string
   }>(),
-  { clipboard: "", tone: "raised" }
+  { clipboard: "", tone: "raised", accent: "" }
 )
 
 const tokens = computed(() => props.command.trim().split(/\s+/))
 const copyText = computed(() => props.clipboard || props.command)
+const accentIndex = computed(() =>
+  props.accent ? tokens.value.indexOf(props.accent) : -1
+)
 
 const copied = ref(false)
 let resetTimer: ReturnType<typeof setTimeout> | null = null
@@ -62,7 +73,17 @@ function copy() {
         <!-- Inline space text node between tokens — `display: inline`
              on each `<span>` means a literal space here is rendered. -->
         <span v-if="i > 0">&nbsp;</span>
-        <span :class="`install-pill-tok install-pill-tok-${i}`">{{ tok }}</span>
+        <span
+          :class="[
+            'install-pill-tok',
+            accentIndex >= 0
+              ? i === accentIndex
+                ? 'install-pill-tok--accent'
+                : 'install-pill-tok--muted'
+              : `install-pill-tok-${i}`,
+          ]"
+          >{{ tok }}</span
+        >
       </template>
     </span>
     <span class="install-pill-copy" aria-hidden="true">
@@ -143,7 +164,8 @@ function copy() {
 
 /* Positional syntax highlighting for the command tokens — reuses the
    .tk-* event-colour palette used by the larger code blocks so the
-   styling reads as part of one system.
+   styling reads as part of one system. Used when the caller does
+   not pass an `accent` prop.
      tok-0 — runner (npx, npm, pnpm, …)        → muted grey
      tok-1 — package / main name               → brand
      tok-2 — sub-command / first arg           → amber
@@ -163,6 +185,18 @@ function copy() {
 .install-pill-tok-5,
 .install-pill-tok-6 {
   color: var(--ea-event-tool-result);
+}
+
+/* Single-token accent mode (caller passes `accent="<token>"`). The
+   whole command renders muted; only the matching token picks up the
+   brand colour, so the eye is drawn to one keyword instead of the
+   four-colour positional palette above. */
+.install-pill-tok--muted {
+  color: var(--ea-text-2);
+}
+.install-pill-tok--accent {
+  color: var(--vp-c-brand-1);
+  font-weight: 500;
 }
 
 .install-pill-copy {

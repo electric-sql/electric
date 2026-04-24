@@ -482,12 +482,17 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
 }
 
+/* Keep a single accent in the syntax highlighting: only string
+   literals (URLs, mode names, package paths) render in the brand
+   colour. Keywords drop down to a slightly muted text-1 so each
+   card reads as ordinary code with one meaningful value popping —
+   instead of every `import`/`for`/`const`/`with` shouting in
+   primary, which made the cards feel over-coloured. */
 .pl-line-content :deep(.kw) {
-  color: var(--vp-c-brand-1);
-  font-weight: 600;
+  color: color-mix(in srgb, var(--ea-text-1) 75%, transparent);
 }
 .pl-line-content :deep(.str) {
-  color: color-mix(in srgb, var(--ea-text-1) 80%, transparent);
+  color: var(--vp-c-brand-1);
 }
 .pl-line-content :deep(.cm) {
   color: color-mix(in srgb, var(--ea-text-2) 85%, transparent);

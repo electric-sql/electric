@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, computed } from "vue"
 import { VPButton } from "vitepress/theme"
 import Section from "./Section.vue"
 import EntityStreamDemo from "./EntityStreamDemo.vue"
@@ -12,11 +12,38 @@ import SystemMonitorDemo from "./SystemMonitorDemo.vue"
 import InstallPill from "../InstallPill.vue"
 import MidPageStrap from "../MidPageStrap.vue"
 import BottomCtaStrap from "../BottomCtaStrap.vue"
+import CuratedBlogPosts from "../CuratedBlogPosts.vue"
+// VitePress data loader: the file exports `default { load }` at compile
+// time and VitePress synthesises a named `data` export at runtime. The
+// TS plugin can't see that synthesis, so we import the module untyped
+// and pluck `data` off it. Same trick is used by other landing pages
+// that need raw access to the posts list (the `<CuratedBlogPosts>`
+// component does the same internally).
+import * as postsModule from "../../../data/posts.data.ts"
+const allPosts = (postsModule as unknown as { data: Array<{ tags?: unknown }> })
+  .data
 
 const stackTab = ref<"server" | "entities">("server")
 const heroInnerRef = ref<HTMLElement>()
 
 const installCommand = "npx electric-ax agents quickstart"
+
+/* "From the blog" panel — sits just before the bottom CTA. Source list
+   is the global `posts.data.ts` filtered by the `agents` tag, so any
+   future agent-tagged post (launch post, follow-ups, deep-dives) shows
+   up automatically without touching this file. The whole `<Section>`
+   is wrapped in `v-if="hasAgentBlogPosts"` so on a fresh repo with no
+   tagged posts the panel disappears entirely rather than rendering an
+   empty header / actions row. */
+const hasAgentBlogPosts = computed(() =>
+  allPosts.some(
+    (p) =>
+      Array.isArray(p.tags) &&
+      (p.tags as unknown[]).some(
+        (t) => String(t).toLowerCase() === "agents"
+      )
+  )
+)
 </script>
 
 <template>
@@ -30,7 +57,7 @@ const installCommand = "npx electric-ax agents quickstart"
           The durable runtime for long-lived&nbsp;agents
         </p>
         <div class="ea-hero-install-row">
-          <InstallPill :command="installCommand" tone="raised" />
+          <InstallPill :command="installCommand" tone="raised" accent="agents" />
         </div>
 
         <div class="ea-hero-row">
@@ -137,7 +164,7 @@ const installCommand = "npx electric-ax agents quickstart"
 
         <div class="ea-runtime-text">
           <h2 class="ea-section-title">Inside the&nbsp;runtime</h2>
-          <p class="ea-prose">Electric Agents is two pieces:</p>
+          <p class="ea-prose">The runtime has two parts:</p>
           <ul class="ea-runtime-list">
             <li>
               An <strong>SDK</strong> in your app, where you define
@@ -202,7 +229,7 @@ const installCommand = "npx electric-ax agents quickstart"
     <MidPageStrap id="get-started-mid">
       <template #eyebrow>Ready to&nbsp;build</template>
       <template #title>
-        Ship your first durable&nbsp;agent
+        Ship your first&nbsp;agent
       </template>
       <template #tagline>
         Install the SDK, define an entity, deploy it on your stack.
@@ -565,6 +592,39 @@ const installCommand = "npx electric-ax agents quickstart"
       </div>
     </Section>
 
+    <!-- ───────────────── From the blog ─────────────────
+         Curated reading list filtered by the `agents` tag in the
+         post frontmatter. Sits between the deep tour above and the
+         bottom CTA below as a "now go deeper" panel for readers who
+         have made it through the page. The wrapping <Section> is
+         wrapped in v-if so the strap disappears entirely when no
+         tagged posts exist — see `hasAgentBlogPosts` computed in the
+         script setup for the filter. -->
+    <Section
+      v-if="hasAgentBlogPosts"
+      id="from-the-blog"
+      title="From the&nbsp;blog"
+      subtitle="Go deeper on Electric Agents — the runtime, the patterns, and what teams are building on&nbsp;them."
+    >
+      <CuratedBlogPosts :tags="['agents']" :limit="4" />
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Electric Blog"
+          href="/blog"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Follow @ElectricSQL"
+          href="https://x.com/ElectricSQL"
+        />
+      </template>
+    </Section>
+
     <!-- Section 8: Get started CTA -->
     <!--
       Bottom CTA strap. Restyled from the boxed `.ea-cta` panel to
@@ -588,7 +648,7 @@ const installCommand = "npx electric-ax agents quickstart"
         your existing&nbsp;stack.
       </template>
       <template #install>
-        <InstallPill :command="installCommand" tone="sunken" />
+        <InstallPill :command="installCommand" tone="sunken" accent="agents" />
       </template>
       <template #actions>
         <VPButton

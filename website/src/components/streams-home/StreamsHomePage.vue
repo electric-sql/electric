@@ -48,11 +48,20 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           Electric&nbsp;<span class="ds-hero-accent">Streams</span>
         </h1>
         <p class="ds-hero-text">
-          Composable sync primitives for multi-agent&nbsp;systems
+          The data primitive for the agent&nbsp;loop
         </p>
 
         <div class="ds-hero-install-row">
-          <InstallPill :command="installCommand" tone="raised" />
+          <!-- Accent the package name only: every other token (`npm`,
+               `i`) renders muted and just `@durable-streams/client`
+               picks up the brand colour. Reads lighter than the
+               default positional 4-colour palette and points the eye
+               at the actual product name in the command. -->
+          <InstallPill
+            :command="installCommand"
+            tone="raised"
+            accent="@durable-streams/client"
+          />
         </div>
 
         <div class="ds-hero-row">

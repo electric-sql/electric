@@ -6,7 +6,7 @@ excerpt: >-
   We've released Durable Streams based transport and session integrations for TanStack AI and the Vercel AI SDK. With turnkey hosting on Electric Cloud.
 authors: [thruflo]
 image: /img/blog/durable-transport-ai-sdks/header.jpg
-tags: [durable-streams, cloud, agentic, AI]
+tags: [agents, durable-streams, cloud, agentic, AI]
 outline: [2, 3]
 homepageSolution: true
 homepageOrder: 30

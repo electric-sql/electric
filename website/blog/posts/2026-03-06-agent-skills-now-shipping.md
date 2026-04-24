@@ -8,7 +8,7 @@ authors: [kyle]
 image: /img/blog/agent-skills-now-shipping/hero.png
 imageWidth: 2752
 imageHeight: 1536
-tags: [agentic, AI, development]
+tags: [agents, agentic, AI, development]
 outline: [2, 3]
 post: true
 ---

@@ -6,7 +6,7 @@ excerpt: >-
   Fork adds branching to Durable Streams. Branch any stream at any point — rewind history, fan out agents, or probe without polluting context.
 authors: [balegas, samwillis]
 image: /img/blog/fork-branching-for-durable-streams/header.jpg
-tags: [release, durable-streams, cloud, agentic, AI]
+tags: [release, durable-streams, cloud, agents, agentic, AI]
 outline: [2, 3]
 post: true
 published: true

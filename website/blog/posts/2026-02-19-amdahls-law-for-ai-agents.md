@@ -6,7 +6,7 @@ excerpt: >-
   Multi-agent systems are delivering real throughput gains — but the teams seeing the biggest speedups share a pattern. A law from 1967 explains why.
 authors: [kyle]
 image: /img/blog/amdahls-law-for-ai-agents/hero.png
-tags: [agentic, AI, development]
+tags: [agents, agentic, AI, development]
 outline: [2, 3]
 post: true
 ---
