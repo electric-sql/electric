@@ -215,6 +215,41 @@ const bootstrapTodoListAction = createOptimisticAction<string>({
 })
 ```
 
+## Developing Electric Agents
+
+The agents subsystem spans five packages: `agents-runtime`, `agents-server`, `agents` (built-in Horton & Worker), `agents-server-ui`, and `agents-server-conformance-tests`.
+
+**Quick start** (all commands from project root, ensure `.env` has `ANTHROPIC_API_KEY`):
+
+```sh
+# 1. Install deps + build prerequisites (fresh checkout/worktree only)
+pnpm install && pnpm -C packages/typescript-client build
+
+# 2. Backing services (Postgres, Electric, Jaeger)
+docker compose -f packages/agents-server/docker-compose.dev.yml up -d
+
+# 3. Build agents-runtime first (other packages depend on it)
+pnpm -C packages/agents-runtime dev             # wait for "Build complete"
+
+# 4. Build agents-server + agents in parallel
+pnpm -C packages/agents-server dev              # terminal 2
+pnpm -C packages/agents dev                     # terminal 3
+
+# 5. Start server processes (run from root to pick up .env)
+DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents \
+  ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 \
+  ELECTRIC_INSECURE=true \
+  node packages/agents-server/dist/entrypoint.js  # terminal 4
+
+ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+  node packages/agents/dist/entrypoint.js         # terminal 5
+
+# 6. UI dashboard
+pnpm -C packages/agents-server-ui dev             # terminal 6
+```
+
+See **[docs/agents-development.md](docs/agents-development.md)** for the full guide: env vars, testing, iteration workflows, and teardown.
+
 ## Working on the TypeScript client
 
 Before making changes to `packages/typescript-client`, **always read `packages/typescript-client/SPEC.md` first**. It is the single source of truth for the ShapeStream state machine — invariants, constraints, state transitions, and how they're enforced. Design fixes and features around the spec's invariants rather than patching symptoms ad-hoc.
