@@ -610,7 +610,10 @@ export class ElectricAgentsServer {
       `access-control-allow-methods`,
       `GET, POST, PUT, PATCH, DELETE, OPTIONS`
     )
-    res.setHeader(`access-control-allow-headers`, `content-type, authorization`)
+    res.setHeader(
+      `access-control-allow-headers`,
+      `content-type, authorization, if-none-match, traceparent`
+    )
     if (method === `OPTIONS`) {
       res.writeHead(204)
       res.end()
@@ -1891,6 +1894,7 @@ export class ElectricAgentsServer {
     body: Uint8Array
   ): void {
     const headers = this.responseHeaders(upstream)
+    this.replaceOverlappingHeaders(res, headers)
     res.writeHead(upstream.status, headers)
     res.end(body)
   }
@@ -1900,6 +1904,7 @@ export class ElectricAgentsServer {
     upstream: Response
   ): Promise<void> {
     const headers = this.responseHeaders(upstream)
+    this.replaceOverlappingHeaders(res, headers)
     res.writeHead(upstream.status, headers)
 
     if (!upstream.body) {
@@ -1908,6 +1913,24 @@ export class ElectricAgentsServer {
     }
 
     await pipeline(Readable.fromWeb(upstream.body as any), res)
+  }
+
+  /**
+   * Remove headers previously set via `res.setHeader()` when the upstream
+   * response provides the same header, so that `writeHead` replaces rather
+   * than duplicates them.  This is critical for CORS headers: the upstream
+   * streams server may send its own `access-control-allow-origin` which must
+   * replace the default `*` set earlier, not coexist with it.
+   */
+  private replaceOverlappingHeaders(
+    res: ServerResponse,
+    upstreamHeaders: Record<string, string>
+  ): void {
+    for (const key of Object.keys(upstreamHeaders)) {
+      if (res.hasHeader(key)) {
+        res.removeHeader(key)
+      }
+    }
   }
 
   private responseHeaders(upstream: Response): Record<string, string> {
