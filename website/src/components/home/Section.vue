@@ -79,7 +79,7 @@ onUnmounted(() => {
 .section-head :deep(h1),
 .section-head :deep(h2) {
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
   color: var(--vp-c-text-1);

@@ -77,7 +77,7 @@ const markdownUrl = computed(() => {
 
 .markdown-link-aside .title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--vp-c-text-2);
 }
 

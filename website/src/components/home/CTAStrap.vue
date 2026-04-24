@@ -62,7 +62,7 @@ onUnmounted(() => {
 .cta-head :deep(h1),
 .cta-head :deep(h2) {
   font-size: 34px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--vp-c-text-1);

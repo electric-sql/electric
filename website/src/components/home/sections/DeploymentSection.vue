@@ -246,7 +246,7 @@ const cloudUrl = '/cloud'
 
 .dp-card h4 {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0;
   color: var(--ea-text-1);
   line-height: 1.3;

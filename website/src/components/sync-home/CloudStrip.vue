@@ -91,7 +91,7 @@ const secondaryCards = [
 .cloud-primary-title {
   margin: 0;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ea-text-1);
   line-height: 1.3;
 }

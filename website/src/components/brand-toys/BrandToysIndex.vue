@@ -228,7 +228,7 @@ function shortPath(source: string): string {
 }
 .bt-index-title {
   font-size: 44px;
-  font-weight: 700;
+  font-weight: 600;
   margin: 8px 0 10px;
   letter-spacing: -0.01em;
   color: var(--ea-text-1);

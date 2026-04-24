@@ -470,7 +470,7 @@ const planNote = computed(() => {
 
 .result-plan-name {
   font-size: 1.75rem;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0;
   color: var(--vp-c-text-1);
 }

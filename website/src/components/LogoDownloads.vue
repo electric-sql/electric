@@ -105,7 +105,7 @@
 
 .ld-title {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ea-text-1);
   margin: 0;
   line-height: 1.3;

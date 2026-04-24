@@ -80,7 +80,7 @@ const products = computed(() =>
 .compose-title {
   margin: 0;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ea-text-1);
   line-height: 1.3;
 }

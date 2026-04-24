@@ -144,7 +144,7 @@ const label = plan.shortName || plan.name
 
 .card-hero-name {
   font-size: 1.75rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--vp-c-text-1);
   line-height: 1.2;
 }

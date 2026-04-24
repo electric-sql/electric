@@ -411,7 +411,7 @@ const demoBindings = computed<Record<string, unknown>>(() => {
 
 .home-product-name {
   font-size: 42px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.05;
   letter-spacing: -0.02em;
   color: var(--ea-text-1);
@@ -420,7 +420,7 @@ const demoBindings = computed<Record<string, unknown>>(() => {
 
 .home-product-title {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);

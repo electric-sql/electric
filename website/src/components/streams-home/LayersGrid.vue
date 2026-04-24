@@ -112,7 +112,7 @@ const layers: Layer[] = [
 .lg-title {
   font-family: var(--vp-font-family-mono);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ea-text-1);
   margin: 0 0 8px;
   letter-spacing: 0.005em;

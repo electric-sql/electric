@@ -126,9 +126,12 @@ onUnmounted(() => {
 
 .ns-title {
   font-size: 38px;
-  /* Strap heading — matches the 700 weight of the home hero name so it
-     doesn't out-bold the page's H1. Was 800. */
-  font-weight: 700;
+  /* Strap heading sits a step under the page hero in the type
+     hierarchy: hero names stay at 700, every other section/strap
+     title (here, ManagedCloud, AgentsCTA, MidPage, BottomCta,
+     CTAStrap, Section, HomeProduct…) renders at 600 so the
+     hero remains the dominant on-page H1. */
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);

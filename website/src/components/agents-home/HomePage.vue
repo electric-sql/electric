@@ -874,7 +874,7 @@ const installCommand = "npx electric-ax agents quickstart"
 
 .ea-problem-card h3 {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ea-text-1);
   margin: 0 0 2px;
 }
@@ -1741,7 +1741,7 @@ const installCommand = "npx electric-ax agents quickstart"
 }
 .ea-way-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.3;
   color: var(--ea-text-1);
   margin: 0;

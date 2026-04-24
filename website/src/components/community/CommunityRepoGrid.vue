@@ -203,7 +203,7 @@ onMounted(async () => {
 
 .cg-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ea-text-1);
   margin: 0 0 6px;
   line-height: 1.3;

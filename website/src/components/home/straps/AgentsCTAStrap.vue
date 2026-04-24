@@ -123,7 +123,7 @@ onUnmounted(() => {
 
 .ac-title {
   font-size: 42px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.12;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);

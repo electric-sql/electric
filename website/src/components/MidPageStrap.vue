@@ -104,7 +104,7 @@ defineProps<{
 
 .mid-strap-title {
   font-size: 34px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);
