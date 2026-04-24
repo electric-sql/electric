@@ -10,10 +10,10 @@ import { exec, execFile } from 'node:child_process'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import { swarmSharedSchema, type WikiEntry, type Xref } from './schema.js'
 import { explorerSpawnArgs } from './explorer.js'
+import { SURVEY_WORKER_ENTITY_TYPE } from './survey-worker.js'
+import { createSharedWikiTools, createWebSearchTool } from './shared-tools.js'
 
 type SwarmSharedState = SharedStateHandle<typeof swarmSharedSchema>
-
-const BRAVE_API_URL = `https://api.search.brave.com/res/v1/web/search`
 
 const ORCHESTRATOR_SYSTEM_PROMPT = `You are the orchestrator of a deep survey. You coordinate dozens of explorer agents that analyze a target corpus in parallel.
 
@@ -25,72 +25,9 @@ Rules:
 5. If the user asks for status, call get_swarm_status.
 6. When you receive WAKE EVENTs (JSON payloads with finished_child), these are internal progress signals. Give concise updates about how many explorers have finished.
 7. Do not say the swarm is complete unless all explorers have finished (check via get_swarm_status or wake data showing no running children).
-8. When answering questions, synthesize information from multiple wiki entries and note which cross-references connect them.
+8. You also have write_wiki, read_wiki, and write_xrefs. Use them to inspect or correct the shared knowledge base when useful.
+9. When answering questions, synthesize information from multiple wiki entries and note which cross-references connect them.
 `
-
-function createWebSearchTool(): AgentTool {
-  return {
-    name: `web_search`,
-    label: `Web Search`,
-    description: `Search the web for current information. Returns titles, URLs, and snippets.`,
-    parameters: Type.Object({
-      query: Type.String({ description: `The search query` }),
-    }),
-    execute: async (_toolCallId, params) => {
-      const apiKey = process.env.BRAVE_SEARCH_API_KEY
-      if (!apiKey) {
-        return {
-          content: [
-            {
-              type: `text` as const,
-              text: `Search failed: BRAVE_SEARCH_API_KEY not set`,
-            },
-          ],
-          details: { resultCount: 0 },
-        }
-      }
-      const { query } = params as { query: string }
-      const url = `${BRAVE_API_URL}?q=${encodeURIComponent(query)}&count=5`
-      const res = await fetch(url, {
-        headers: { 'X-Subscription-Token': apiKey },
-      })
-      if (!res.ok) {
-        return {
-          content: [
-            {
-              type: `text` as const,
-              text: `Search failed: ${res.status} ${res.statusText}`,
-            },
-          ],
-          details: { resultCount: 0 },
-        }
-      }
-      const data = (await res.json()) as {
-        web?: {
-          results?: Array<{ title: string; url: string; description: string }>
-        }
-      }
-      const results = data.web?.results ?? []
-      if (results.length === 0) {
-        return {
-          content: [
-            { type: `text` as const, text: `No results found for "${query}"` },
-          ],
-          details: { resultCount: 0 },
-        }
-      }
-      const formatted = results
-        .map(
-          (r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description}`
-        )
-        .join(`\n\n`)
-      return {
-        content: [{ type: `text` as const, text: formatted }],
-        details: { resultCount: results.length },
-      }
-    },
-  }
-}
 
 const VALID_REPO_URL = /^https?:\/\/[a-zA-Z0-9._\-]+\/[a-zA-Z0-9._\-/]+$/
 
@@ -207,7 +144,7 @@ function createExploreCorpusTool(
         q.from({ manifests: ctx.db.collections.manifests })
       )
       const hasChildren = existing.some(
-        (m) => m.kind === `child` && m.entity_type === `worker`
+        (m) => m.kind === `child` && m.entity_type === SURVEY_WORKER_ENTITY_TYPE
       )
       if (hasChildren) {
         throw new Error(
@@ -220,15 +157,9 @@ function createExploreCorpusTool(
 
       for (const topic of topics) {
         const childId = `${swarmId}-${slugify(topic)}`
-        const args = explorerSpawnArgs(
-          topic,
-          corpus,
-          sharedStateId,
-          swarmSharedSchema,
-          childId
-        )
+        const args = explorerSpawnArgs(topic, corpus, sharedStateId, childId)
 
-        await ctx.spawn(`worker`, childId, args, {
+        await ctx.spawn(SURVEY_WORKER_ENTITY_TYPE, childId, args, {
           initialMessage: `Explore your assigned topic and write a wiki entry.`,
           wake: `runFinished`,
           tags: {
@@ -237,7 +168,7 @@ function createExploreCorpusTool(
           },
         })
 
-        childUrls.push(`/worker/${childId}`)
+        childUrls.push(`/${SURVEY_WORKER_ENTITY_TYPE}/${childId}`)
       }
 
       return {
@@ -399,6 +330,7 @@ export function registerOrchestrator(registry: EntityRegistry) {
           createWebSearchTool(),
           createCloneRepoTool(),
           createExploreCorpusTool(ctx, sharedStateId),
+          ...createSharedWikiTools(shared),
           createQueryWikiTool(shared),
           createSwarmStatusTool(ctx, shared),
         ],

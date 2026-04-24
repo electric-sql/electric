@@ -1,5 +1,3 @@
-import type { SharedStateSchemaMap } from '@electric-ax/agents-runtime'
-
 export const EXPLORER_SYSTEM_PROMPT = (
   topic: string,
   corpus: string,
@@ -36,13 +34,10 @@ export function explorerSpawnArgs(
   topic: string,
   corpus: string,
   sharedStateId: string,
-  sharedSchema: SharedStateSchemaMap,
   childId: string
 ) {
   return {
     systemPrompt: EXPLORER_SYSTEM_PROMPT(topic, corpus, childId),
-    tools: [`brave_search`, `fetch_url`],
-    sharedDb: { id: sharedStateId, schema: sharedSchema },
-    sharedDbToolMode: `full` as const,
+    sharedStateId,
   }
 }
