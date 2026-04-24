@@ -21,6 +21,7 @@ import {
 } from '@electric-ax/agents-runtime'
 import http from 'node:http'
 import { registerOrchestrator } from './orchestrator.js'
+import { registerSurveyWorker } from './survey-worker.js'
 
 const DARIX_URL = process.env.DARIX_URL ?? `http://localhost:4437`
 const PORT = Number(process.env.PORT ?? 4700)
@@ -28,6 +29,7 @@ const SERVE_URL = process.env.SERVE_URL ?? `http://localhost:${PORT}`
 
 const registry = createEntityRegistry()
 registerOrchestrator(registry)
+registerSurveyWorker(registry)
 
 const runtime = createRuntimeHandler({
   baseUrl: DARIX_URL,

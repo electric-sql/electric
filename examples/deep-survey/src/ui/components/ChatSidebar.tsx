@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import {
   createEntityStreamDB,
   createEntityIncludesQuery,
@@ -26,6 +26,7 @@ export function ChatSidebar({
   const [orchDb, setOrchDb] = useState<EntityStreamDB | null>(null)
   const [input, setInput] = useState(``)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const pinnedToBottomRef = useRef(true)
 
   useEffect(() => {
     if (!orchestratorUrl || !darixUrl) return
@@ -70,13 +71,25 @@ export function ChatSidebar({
     return buildTimelineEntries(td.runs, td.inbox)
   }, [timelineRows])
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [entries.length])
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el || !pinnedToBottomRef.current) return
+
+    el.scrollTo({ top: el.scrollHeight })
+  }, [entries])
+
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    pinnedToBottomRef.current = distanceFromBottom < 32
+  }
 
   const handleSubmit = () => {
     const trimmed = input.trim()
     if (!trimmed || !orchestratorUrl) return
+    pinnedToBottomRef.current = true
     onSendMessage(trimmed)
     setInput(``)
   }
@@ -121,6 +134,7 @@ export function ChatSidebar({
 
       <div
         ref={scrollRef}
+        onScroll={handleScroll}
         style={{
           flex: 1,
           overflow: `auto`,

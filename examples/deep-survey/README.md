@@ -37,14 +37,15 @@ Once the swarm completes, you can ask follow-up questions in the chat sidebar. T
   Agent 1  Agent 2  Agent N ─────────┘
      │        │        │        read/write
      └────────┴────────┘
-       brave_search
+       web_search
        fetch_url
+       write_wiki / read_wiki / write_xrefs
 ```
 
 **Backend** — Two entity types registered with the Electric Agents runtime:
 
 - **Orchestrator**: Receives the user's target, performs initial web research via the Brave Search API, then calls `explore_corpus` to decompose the target into topics and spawn N explorer agents. Uses shared state to query the accumulated wiki and answer follow-up questions.
-- **Explorer workers**: Each explorer gets `brave_search` and `fetch_url` tools, plus auto-generated CRUD tools (`write_wiki`, `read_wiki`, `write_xrefs`, etc.) for the shared knowledge base. After researching their topic and writing an entry, they scan other entries and record cross-references.
+- **Explorer workers**: Each explorer is a `survey_worker` entity with `web_search`, `fetch_url`, `write_wiki`, `read_wiki`, and `write_xrefs` tools. After researching their topic and writing an entry, they scan other entries and record cross-references in the shared knowledge base.
 
 **Frontend** — Real-time reactive UI built with React 19 and TanStack DB:
 
@@ -162,6 +163,8 @@ src/
 │   ├── index.ts          # HTTP server, API endpoints, entity registration
 │   ├── orchestrator.ts   # Orchestrator entity: prompts, tools, spawn logic
 │   ├── explorer.ts       # Explorer agent blueprint and spawn args
+│   ├── survey-worker.ts  # Explorer worker entity and tool wiring
+│   ├── shared-tools.ts   # Shared wiki/xref tools and web fetch/search tools
 │   └── schema.ts         # Shared state Zod schemas (wiki + xrefs)
 └── ui/
     ├── main.tsx           # App entry point, swarm lifecycle
