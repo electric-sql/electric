@@ -6,6 +6,7 @@
 /website/.netlify
 /website/.vitepress/cache
 /website/.vitepress/dist
+/website/.vitepress/dist-markdown
 /website/public/openapi.html
 build
 caching/nginx_cache
