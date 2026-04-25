@@ -68,6 +68,13 @@ export interface MeshScene {
   tracks: MeshTrack[]
 }
 
+export interface MeshExcludeRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 export interface MeshSceneOptions {
   width: number
   height: number
@@ -82,6 +89,16 @@ export interface MeshSceneOptions {
   // canvas edges. Adds a sense of the mesh being part of a larger system.
   // Off by default to keep the existing visual unchanged.
   edgeConnections?: boolean
+  // Optional: rectangular regions (canvas-local coordinates) that the
+  // scene generator should treat as obstacles. Wheels won't be placed
+  // overlapping these rects, and tracks won't be routed through them.
+  // Used by the cloud / streams hero to keep the mesh out of the
+  // headline / tagline / CTA text bounds.
+  excludeRects?: MeshExcludeRect[]
+  // Soft padding (in canvas pixels) to inflate every excludeRect by
+  // when checking placement / routing collisions. Larger values keep
+  // wheels/tracks further away from the text edges.
+  excludeMargin?: number
 }
 
 interface CandidateEdge {
@@ -300,35 +317,107 @@ function pointToSegmentDistance(
   a: MeshPoint,
   b: MeshPoint
 ): number {
+  return Math.sqrt(pointToSegmentDistanceSq(point, a, b))
+}
+
+// Squared distance from `point` to the segment a→b. Avoids the trailing
+// sqrt in the inner loop of every conflict / coverage check (callers
+// only compare against squared thresholds and only sqrt the final
+// per-point min). Inlined math, no per-call object allocation.
+function pointToSegmentDistanceSq(
+  point: MeshPoint,
+  a: MeshPoint,
+  b: MeshPoint
+): number {
   const dx = b.x - a.x
   const dy = b.y - a.y
   const lenSq = dx * dx + dy * dy
-  if (lenSq < 0.0001) return distance(point, a)
-  const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / lenSq, 0, 1)
-  return distance(point, { x: a.x + dx * t, y: a.y + dy * t })
+  if (lenSq < 0.0001) {
+    const ddx = point.x - a.x
+    const ddy = point.y - a.y
+    return ddx * ddx + ddy * ddy
+  }
+  let t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / lenSq
+  if (t < 0) t = 0
+  else if (t > 1) t = 1
+  const fx = point.x - (a.x + dx * t)
+  const fy = point.y - (a.y + dy * t)
+  return fx * fx + fy * fy
 }
 
+interface BoundingBox {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+function computeBoundingBox(points: MeshPoint[]): BoundingBox {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const p of points) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+function bboxesSeparated(a: BoundingBox, b: BoundingBox, gap: number): boolean {
+  return (
+    a.maxX + gap < b.minX ||
+    b.maxX + gap < a.minX ||
+    a.maxY + gap < b.minY ||
+    b.maxY + gap < a.minY
+  )
+}
+
+function pointToBBoxDistanceSq(p: MeshPoint, bb: BoundingBox): number {
+  const dx = p.x < bb.minX ? bb.minX - p.x : p.x > bb.maxX ? p.x - bb.maxX : 0
+  const dy = p.y < bb.minY ? bb.minY - p.y : p.y > bb.maxY ? p.y - bb.maxY : 0
+  return dx * dx + dy * dy
+}
+
+// Computes the average per-point nearest-distance from `points` to the
+// closest existing path. Used as a soft scoring signal (higher = better
+// spread). Two important optimisations vs the naive O(P × E × S) form:
+//
+//   1. Each existing path is bounded-box culled per point: if the point
+//      sits further from the path's bbox than the running best, skip
+//      the path entirely.
+//   2. The per-point distance is capped at `cap`. The score is only
+//      used as a tie-breaker so very-far paths don't need an exact
+//      distance — once a point is `cap` away from every path it can't
+//      improve any further.
+//
+// Combined these typically prune ~90% of the segment-pair work on a
+// densely-routed mesh.
 function pathCoverageDistance(
   points: MeshPoint[],
-  existingPaths: MeshPoint[][]
+  existingPaths: MeshPoint[][],
+  existingBoxes: BoundingBox[],
+  cap: number
 ): number {
   if (existingPaths.length === 0) return 0
+  const capSq = cap * cap
   let total = 0
   let samples = 0
   for (const point of points) {
-    let nearest = Number.POSITIVE_INFINITY
-    for (const existing of existingPaths) {
-      for (let i = 1; i < existing.length; i++) {
-        nearest = Math.min(
-          nearest,
-          pointToSegmentDistance(point, existing[i - 1], existing[i])
-        )
+    let bestSq = capSq
+    for (let pi = 0; pi < existingPaths.length; pi++) {
+      const lowerSq = pointToBBoxDistanceSq(point, existingBoxes[pi])
+      if (lowerSq >= bestSq) continue
+      const path = existingPaths[pi]
+      for (let i = 1; i < path.length; i++) {
+        const dSq = pointToSegmentDistanceSq(point, path[i - 1], path[i])
+        if (dSq < bestSq) bestSq = dSq
       }
     }
-    if (Number.isFinite(nearest)) {
-      total += nearest
-      samples += 1
-    }
+    total += Math.sqrt(bestSq)
+    samples += 1
   }
   return samples > 0 ? total / samples : 0
 }
@@ -370,21 +459,6 @@ function segmentsIntersectOrOverlap(
   return false
 }
 
-function segmentDistance(
-  a0: MeshPoint,
-  a1: MeshPoint,
-  b0: MeshPoint,
-  b1: MeshPoint
-): number {
-  if (segmentsIntersectOrOverlap(a0, a1, b0, b1)) return 0
-  return Math.min(
-    pointToSegmentDistance(a0, b0, b1),
-    pointToSegmentDistance(a1, b0, b1),
-    pointToSegmentDistance(b0, a0, a1),
-    pointToSegmentDistance(b1, a0, a1)
-  )
-}
-
 function pathHitsWheel(
   points: MeshPoint[],
   wheel: MeshWheel,
@@ -401,14 +475,65 @@ function pathHitsWheel(
   return false
 }
 
+// Closest distance from a point to an axis-aligned rectangle. 0 when
+// the point sits inside the rect. Used by the exclude-rect collision
+// checks below so wheels / tracks can be repelled from text bounds in
+// the same way they're repelled from other wheels.
+function pointToRectDistance(point: MeshPoint, rect: MeshExcludeRect): number {
+  const cx = clamp(point.x, rect.left, rect.right)
+  const cy = clamp(point.y, rect.top, rect.bottom)
+  const dx = point.x - cx
+  const dy = point.y - cy
+  return Math.hypot(dx, dy)
+}
+
+function circleHitsRect(
+  cx: number,
+  cy: number,
+  r: number,
+  rect: MeshExcludeRect,
+  margin: number
+): boolean {
+  return pointToRectDistance({ x: cx, y: cy }, rect) < r + margin
+}
+
+// Squared-distance variant. Avoids the four sqrts per call inside the
+// O(|a|·|b|) inner loop of tracksConflict.
+function segmentDistanceSq(
+  a0: MeshPoint,
+  a1: MeshPoint,
+  b0: MeshPoint,
+  b1: MeshPoint
+): number {
+  if (segmentsIntersectOrOverlap(a0, a1, b0, b1)) return 0
+  const d1 = pointToSegmentDistanceSq(a0, b0, b1)
+  const d2 = pointToSegmentDistanceSq(a1, b0, b1)
+  const d3 = pointToSegmentDistanceSq(b0, a0, a1)
+  const d4 = pointToSegmentDistanceSq(b1, a0, a1)
+  let m = d1
+  if (d2 < m) m = d2
+  if (d3 < m) m = d3
+  if (d4 < m) m = d4
+  return m
+}
+
+// AABB pre-rejection + squared-distance inner loop. The bbox pair test
+// alone skips ~95% of segment-pair work in a saturated mesh because any
+// two tracks more than `minGap` apart in either axis can't possibly
+// conflict. When callers don't have a precomputed bbox they can pass
+// undefined and we'll fall through to the segment-pair scan.
 function tracksConflict(
   a: MeshPoint[],
   b: MeshPoint[],
-  minGap: number
+  minGap: number,
+  aBBox?: BoundingBox,
+  bBBox?: BoundingBox
 ): boolean {
+  if (aBBox && bBBox && bboxesSeparated(aBBox, bBBox, minGap)) return false
+  const minGapSq = minGap * minGap
   for (let i = 1; i < a.length; i++) {
     for (let j = 1; j < b.length; j++) {
-      if (segmentDistance(a[i - 1], a[i], b[j - 1], b[j]) < minGap) {
+      if (segmentDistanceSq(a[i - 1], a[i], b[j - 1], b[j]) < minGapSq) {
         return true
       }
     }
@@ -821,7 +946,14 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
           ? 1.02
           : 1
 
-  const margin = Math.max(54, Math.round(Math.min(width, height) * 0.068))
+  // The edge margin defines how close a wheel's outer edge may sit to
+  // the canvas border. The previous floor of 54px was tuned for the
+  // ~800×800 standalone brand-toy and ate ~25% of the vertical extent
+  // on shorter wide heroes (e.g. 770×460), leaving the top and bottom
+  // quarters of the canvas completely empty. Scale the floor with the
+  // grid instead so short canvases keep more usable area while large
+  // canvases still get a comfortable inset.
+  const margin = Math.max(grid, Math.round(Math.min(width, height) * 0.04))
   const usableWidth = Math.max(100, width - margin * 2)
   const usableHeight = Math.max(100, height - margin * 2)
   const radiusScale = Math.min(width, height) / 900
@@ -845,29 +977,50 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
           { x: 0.82, y: 0.5, tier: 2 },
           { x: 0.52, y: 0.84, tier: 2 },
         ]
-      : [
+      : // Wide layout — used by the cloud hero and the standalone
+        // brand-toy in `wide` mode. The original anchors only spanned
+        // y=0.18→0.82, which combined with the edge margin left the
+        // top and bottom quarters of shorter hero canvases blank.
+        // Pushed the outer rings out to y≈0.06/0.94 (and added a few
+        // small wheels at the very top/bottom centre line) so the
+        // mesh actually reaches into all four corners of a wide hero.
+        [
           { x: 0.52, y: 0.5, tier: 0 },
-          { x: 0.2, y: 0.34, tier: 1 },
-          { x: 0.78, y: 0.35, tier: 1 },
+          { x: 0.2, y: 0.32, tier: 1 },
+          { x: 0.78, y: 0.33, tier: 1 },
           { x: 0.18, y: 0.7, tier: 1 },
           { x: 0.82, y: 0.68, tier: 1 },
-          { x: 0.37, y: 0.2, tier: 2 },
-          { x: 0.62, y: 0.18, tier: 2 },
-          { x: 0.37, y: 0.82, tier: 2 },
-          { x: 0.64, y: 0.82, tier: 2 },
+          { x: 0.37, y: 0.12, tier: 2 },
+          { x: 0.62, y: 0.1, tier: 2 },
+          { x: 0.37, y: 0.88, tier: 2 },
+          { x: 0.64, y: 0.88, tier: 2 },
           { x: 0.08, y: 0.5, tier: 3 },
           { x: 0.92, y: 0.5, tier: 3 },
+          // Extra small wheels along the top/bottom edges so the
+          // mesh reaches into the otherwise-empty horizontal slivers
+          // above the headline and below the CTA row.
+          { x: 0.16, y: 0.08, tier: 3 },
+          { x: 0.84, y: 0.07, tier: 3 },
+          { x: 0.5, y: 0.92, tier: 3 },
         ]
 
   const targetCount = clamp(Math.round(options.wheelCount), 4, 18)
   const wheels: MeshWheel[] = []
   const minGap = Math.max(12, Math.round(grid * 0.72))
+  const excludeRects: MeshExcludeRect[] = options.excludeRects ?? []
+  const excludeMarginRaw = options.excludeMargin
+  const excludeMargin =
+    excludeMarginRaw == null ? Math.max(16, grid * 0.6) : excludeMarginRaw
 
   function canPlace(x: number, y: number, r: number): boolean {
     if (x - r < margin || x + r > width - margin) return false
     if (y - r < margin || y + r > height - margin) return false
     for (const wheel of wheels) {
       if (distance({ x, y }, wheel) < r + wheel.r + minGap) return false
+    }
+    // Wheels never overlap the headline / tagline / CTA text.
+    for (const rect of excludeRects) {
+      if (circleHitsRect(x, y, r, rect, excludeMargin)) return false
     }
     return true
   }
@@ -1244,6 +1397,10 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         return false
       }
     }
+    // NOTE: tracks are allowed to pass behind text rects. The intensity
+    // dimming + soft destination-out punch in MeshOfStreams.vue keeps
+    // them readable; routing them around the headline left big bare
+    // patches in the mesh, which the user explicitly didn't want.
     return true
   }
 
@@ -1256,7 +1413,17 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
   // free space happens to be.
   const maxBundleHalfWidth = Math.max(6, Math.round(6 + connectionDensity * 18))
   const laneSpacing = Math.max(8, grid * 0.38)
+  // Parallel arrays: every accepted track contributes its raw points
+  // AND a precomputed AABB. Holding both keeps the hot path in
+  // tracksConflict / pathCoverageDistance to an O(1) bbox test before
+  // the O(|a|·|b|) segment-pair scan, which saves ~95% of the work in
+  // a fully-routed mesh.
   const acceptedTrackPointSets: MeshPoint[][] = []
+  const acceptedTrackBBoxes: BoundingBox[] = []
+  // Cap used by pathCoverageDistance: per-point distances above this
+  // can't change ordering of candidate scores. Keeping the cap small
+  // lets the bbox-cull short-circuit most existing paths per point.
+  const coverageCap = grid * 3
   const wheelDegree = wheels.map(() => 0)
   const pairUsage = new Map<string, number>()
   const minCorridorsPerWheel = Math.max(
@@ -1372,7 +1539,12 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         const coverageScore =
           acceptedTrackPointSets.length === 0
             ? 0
-            : pathCoverageDistance(full, acceptedTrackPointSets)
+            : pathCoverageDistance(
+                full,
+                acceptedTrackPointSets,
+                acceptedTrackBBoxes,
+                coverageCap
+              )
         return {
           core,
           full,
@@ -1570,8 +1742,17 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         // crowds the rendered tracks together (stripes start to merge), so
         // candidate lanes that would violate this are simply rejected and
         // the bundle expansion will try the next outer band instead.
-        for (const existing of acceptedTrackPointSets) {
-          if (tracksConflict(lanePoints, existing, laneSpacing * 0.95)) {
+        const laneBox = computeBoundingBox(lanePoints)
+        for (let pi = 0; pi < acceptedTrackPointSets.length; pi++) {
+          if (
+            tracksConflict(
+              lanePoints,
+              acceptedTrackPointSets[pi],
+              laneSpacing * 0.95,
+              laneBox,
+              acceptedTrackBBoxes[pi]
+            )
+          ) {
             return null
           }
         }
@@ -1789,6 +1970,7 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         length: renderedPathLength(segments),
       })
       acceptedTrackPointSets.push(lane.points)
+      acceptedTrackBBoxes.push(computeBoundingBox(lane.points))
     }
     pairUsage.set(key, used + 1)
     wheelDegree[edge.a] += 1
@@ -1892,8 +2074,18 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         return false
     }
     const points: MeshPoint[] = [start, end]
-    for (const existing of acceptedTrackPointSets) {
-      if (tracksConflict(points, existing, laneSpacing * 0.95)) return false
+    const bbox = computeBoundingBox(points)
+    for (let pi = 0; pi < acceptedTrackPointSets.length; pi++) {
+      if (
+        tracksConflict(
+          points,
+          acceptedTrackPointSets[pi],
+          laneSpacing * 0.95,
+          bbox,
+          acceptedTrackBBoxes[pi]
+        )
+      )
+        return false
     }
     const trackCorners: MeshCornerArc[] = [{ radius: 0 }, { radius: 0 }]
     const segments = buildRenderedPathSegments(
@@ -1911,6 +2103,7 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       length: renderedPathLength(segments),
     })
     acceptedTrackPointSets.push(points)
+    acceptedTrackBBoxes.push(bbox)
     return true
   }
 

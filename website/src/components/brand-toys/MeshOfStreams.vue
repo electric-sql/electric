@@ -12,6 +12,7 @@ import {
   hashSeed,
   mulberry32,
   sampleAlongTrack,
+  type MeshScene,
   type MeshWheel,
 } from "./meshOfStreams"
 
@@ -55,6 +56,11 @@ const props = withDefaults(
     // The combination of margin + blur controls how far from the text
     // the mesh starts to reappear.
     excludeFeather?: number
+    // Global multiplier applied to every track / wheel / dot alpha
+    // value. 1 = the standalone brand-toy look; values < 1 dim the
+    // mesh so it can sit behind copy as a background (the cloud hero
+    // uses ~0.55). Doesn't affect geometry, just visual weight.
+    intensity?: number
   }>(),
   {
     seed: "mesh-of-streams",
@@ -82,6 +88,7 @@ const props = withDefaults(
     excludeEl: null,
     excludeMargin: 18,
     excludeFeather: 14,
+    intensity: 1,
   }
 )
 
@@ -160,19 +167,96 @@ function measureExclusions() {
   exclusions.value = next
 }
 
-const scene = computed(() =>
-  createMeshScene({
-    width: size.value.w,
-    height: size.value.h,
-    seed: props.seed,
-    wheelCount: props.wheelCount,
-    layout: props.layout,
-    connectionDensity: props.connectionDensity,
-    gridSize: props.gridSize,
-    routePadding: props.routePadding,
-    cornerRadius: props.cornerRadius,
-    edgeConnections: props.edgeConnections,
-  })
+// Scene generation is heavy (O(N²)-ish corridor planning + lane bundling)
+// and used to run synchronously inside a `computed`, so it would block
+// the first paint of any page that mounted the component. We now drive
+// it through a `ref` populated from a debounced `requestIdleCallback`
+// (with a `setTimeout` fallback). The component first paints with an
+// empty scene — letting the page become interactive immediately — and
+// the canvas fades in as soon as the worker's done. The fade is driven
+// by `sceneReady` below.
+const emptyScene = (): MeshScene => ({
+  width: 0,
+  height: 0,
+  wheels: [],
+  tracks: [],
+})
+const scene = ref<MeshScene>(emptyScene())
+const sceneReady = ref(false)
+
+let scenePending: number | null = null
+function cancelPendingScene() {
+  if (scenePending == null) return
+  if (
+    typeof window !== "undefined" &&
+    typeof (window as any).cancelIdleCallback === "function"
+  ) {
+    ;(window as any).cancelIdleCallback(scenePending)
+  } else {
+    clearTimeout(scenePending)
+  }
+  scenePending = null
+}
+
+function scheduleSceneRebuild() {
+  cancelPendingScene()
+  const run = () => {
+    scenePending = null
+    if (size.value.w < 1 || size.value.h < 1) return
+    scene.value = createMeshScene({
+      width: size.value.w,
+      height: size.value.h,
+      seed: props.seed,
+      wheelCount: props.wheelCount,
+      layout: props.layout,
+      connectionDensity: props.connectionDensity,
+      gridSize: props.gridSize,
+      routePadding: props.routePadding,
+      cornerRadius: props.cornerRadius,
+      edgeConnections: props.edgeConnections,
+      // Feed the measured text exclusion rects into scene generation
+      // so wheels are never placed under the headline / CTAs. The
+      // destination-out punch in drawCanvas continues to soften any
+      // remaining geometry near the text.
+      excludeRects: exclusions.value,
+      excludeMargin: props.excludeMargin,
+    })
+    sceneReady.value = true
+  }
+  if (
+    typeof window !== "undefined" &&
+    typeof (window as any).requestIdleCallback === "function"
+  ) {
+    // 150ms deadline keeps the scene appearing snappily even on a
+    // freshly-loaded page where the idle queue is empty, while still
+    // yielding to higher-priority work (paint, layout, hydration).
+    scenePending = (window as any).requestIdleCallback(run, { timeout: 150 })
+  } else {
+    scenePending = window.setTimeout(run, 0) as unknown as number
+  }
+}
+
+// Trigger a rebuild whenever any input that affects the scene changes.
+// Width / height come from `size`; the rest are reactive props or
+// reactive refs (exclusions). Debouncing happens implicitly via the
+// idle-callback queue: rapid resize bursts coalesce into one rebuild.
+watch(
+  () => [
+    size.value.w,
+    size.value.h,
+    props.seed,
+    props.wheelCount,
+    props.layout,
+    props.connectionDensity,
+    props.gridSize,
+    props.routePadding,
+    props.cornerRadius,
+    props.edgeConnections,
+    exclusions.value,
+    props.excludeMargin,
+  ],
+  () => scheduleSceneRebuild(),
+  { deep: true }
 )
 
 // Animated when ANY of the per-frame visual elements need to update.
@@ -259,10 +343,13 @@ onMounted(() => {
   window.addEventListener("resize", syncSize)
   // Two rAFs: first frame ensures the canvas is in the DOM with its real
   // size; second waits for the excludeEl's text to lay out (font load /
-  // late hydration) before we measure.
+  // late hydration) before we measure. We then kick off the deferred
+  // scene build so the page has already painted by the time the heavy
+  // routing work runs on the idle queue.
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       measureExclusions()
+      scheduleSceneRebuild()
       drawCanvas(sceneTime.value)
     })
   })
@@ -270,6 +357,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopLoop()
+  cancelPendingScene()
   resizeObserver?.disconnect()
   excludeObserver?.disconnect()
   window.removeEventListener("resize", syncSize)
@@ -368,15 +456,34 @@ function wheelRotationAt(wheel: MeshWheel, timeSec: number): number {
   )
 }
 
+// Rectangular edge feather. The previous radial-max-axis fade was much
+// too aggressive on the SHORT axis: a 460px hero canvas saw the top
+// and bottom quarters get >50% transparent before the fade even
+// started in the centre, leaving the cloud hero with an empty band
+// above the headline. A simple per-edge feather (smaller of the two
+// distances to the nearest edge along each axis) keeps the centre at
+// full strength and only softens the outermost ~10% of each side, so
+// the canvas reads as filled corner-to-corner without abrupt edges.
 function radialFade(x: number, y: number): number {
   if (props.noEdgeFade) return 1
-  const cx = size.value.w / 2
-  const cy = size.value.h / 2
-  const dx = Math.abs(x - cx) / (size.value.w / 2)
-  const dy = Math.abs(y - cy) / (size.value.h / 2)
-  const d = Math.max(dx, dy)
-  if (d < 0.3) return 1
-  return Math.max(0, 1 - (d - 0.3) / 0.7)
+  const w = size.value.w
+  const h = size.value.h
+  if (w < 1 || h < 1) return 1
+  // Cap the feather at 64px so on tall heroes the fade band doesn't
+  // dominate the visual; clamp to a 6% minimum so even very small
+  // canvases get a hint of softening at the edge.
+  const featherX = Math.max(w * 0.06, Math.min(64, w * 0.1))
+  const featherY = Math.max(h * 0.06, Math.min(64, h * 0.1))
+  const distX = Math.min(x, w - x)
+  const distY = Math.min(y, h - y)
+  const fx = distX / featherX
+  const fy = distY / featherY
+  let f = fx < fy ? fx : fy
+  if (f >= 1) return 1
+  if (f <= 0) return 0
+  // Smooth-step the feather so the seam into the page background
+  // doesn't read as a hard gradient line.
+  return f * f * (3 - 2 * f)
 }
 
 interface CornerArcInfo {
@@ -467,7 +574,7 @@ function drawGlowDot(
 ) {
   if (!ctx || alpha <= 0.01) return
   const fade = radialFade(x, y)
-  const a = alpha * fade
+  const a = alpha * fade * props.intensity
   if (a <= 0.01) return
   if (props.glow) {
     const glowR = radius * 4.4
@@ -520,8 +627,8 @@ function drawWheels(timeSec: number) {
         if (age < cutoff) strength = 1
         else strength = Math.max(0, (cycle - age) / DURABLE_STREAMS_FADE_TAIL)
       }
-      const fillAlpha = (0.07 + 0.88 * strength) * fade
-      const strokeAlpha = (0.22 + 0.78 * strength) * fade
+      const fillAlpha = (0.07 + 0.88 * strength) * fade * props.intensity
+      const strokeAlpha = (0.22 + 0.78 * strength) * fade * props.intensity
       ctx!.fillStyle = `rgba(${teal}, ${fillAlpha})`
       ctx!.strokeStyle = `rgba(${teal}, ${strokeAlpha})`
       ctx!.fill(blades[bladeIndex])
@@ -544,12 +651,12 @@ function drawCanvas(timeSec: number) {
     traceLineArcPath(ctx, track.points, track.corners, props.cornerRadius)
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
-    ctx.strokeStyle = `rgba(117, 251, 253, ${0.12 * fade})`
+    ctx.strokeStyle = `rgba(117, 251, 253, ${0.12 * fade * props.intensity})`
     ctx.lineWidth = props.trackWidth + 1.15
     ctx.stroke()
 
     traceLineArcPath(ctx, track.points, track.corners, props.cornerRadius)
-    ctx.strokeStyle = `rgba(117, 251, 253, ${0.58 * fade})`
+    ctx.strokeStyle = `rgba(117, 251, 253, ${0.58 * fade * props.intensity})`
     ctx.lineWidth = props.trackWidth
     ctx.stroke()
   }
@@ -630,6 +737,7 @@ watch(
     exclusions.value,
     props.excludeMargin,
     props.excludeFeather,
+    props.intensity,
   ],
   () => {
     if (!running) drawCanvas(sceneTime.value)
@@ -656,7 +764,11 @@ function debugCellPath() {
     class="mesh-streams"
     :class="{ 'mesh-streams--edge-fade': !noEdgeFade }"
   >
-    <canvas ref="canvas" class="mesh-canvas" />
+    <canvas
+      ref="canvas"
+      class="mesh-canvas"
+      :class="{ 'mesh-canvas--ready': sceneReady }"
+    />
     <svg
       v-if="showDebug"
       class="mesh-debug-layer"
@@ -683,21 +795,45 @@ function debugCellPath() {
   overflow: hidden;
 }
 
+/* Rectangular edge feather. Two crossed linear gradients composited
+   with `intersect` produce a soft picture-frame fade that only eats
+   the outermost ~10% on each side, so the centre of the canvas reads
+   as fully covered. The old radial-ellipse mask was too tight on the
+   short axis: it transparentised the top/bottom quarters of the cloud
+   hero before the fade even started near the middle. Mirrors the
+   per-edge feather used by the canvas-side `radialFade` so the two
+   layers stay visually consistent. */
 .mesh-streams--edge-fade {
-  -webkit-mask-image: radial-gradient(
-    ellipse 72% 64% at 50% 50%,
-    rgba(255, 255, 255, 1) 0 38%,
-    rgba(255, 255, 255, 0.92) 55%,
-    rgba(255, 255, 255, 0.52) 78%,
-    transparent 100%
-  );
-  mask-image: radial-gradient(
-    ellipse 72% 64% at 50% 50%,
-    rgba(255, 255, 255, 1) 0 38%,
-    rgba(255, 255, 255, 0.92) 55%,
-    rgba(255, 255, 255, 0.52) 78%,
-    transparent 100%
-  );
+  -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 8%,
+      #000 92%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 8%,
+      #000 92%,
+      transparent 100%
+    );
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 8%,
+      #000 92%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 8%,
+      #000 92%,
+      transparent 100%
+    );
+  mask-composite: intersect;
 }
 
 .mesh-canvas,
@@ -707,6 +843,17 @@ function debugCellPath() {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* Scene generation runs off the critical paint via requestIdleCallback,
+   so the canvas mounts empty and pops in once the mesh is ready. A
+   short fade smooths the transition rather than a hard flash. */
+.mesh-canvas {
+  opacity: 0;
+  transition: opacity 320ms ease-out;
+}
+.mesh-canvas--ready {
+  opacity: 1;
 }
 
 .mesh-debug-layer {

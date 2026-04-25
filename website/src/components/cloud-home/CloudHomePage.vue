@@ -27,11 +27,11 @@ const heroInnerRef = ref<HTMLElement>()
         :grid-size="24"
         :corner-radius="14"
         :track-width="1"
+        :intensity="0.55"
         edge-connections
-        no-edge-fade
         :exclude-el="heroInnerRef"
-        :exclude-margin="20"
-        :exclude-feather="18"
+        :exclude-margin="28"
+        :exclude-feather="44"
       />
       <div ref="heroInnerRef" class="cl-hero-inner">
         <h1 class="cl-hero-name">
@@ -290,9 +290,10 @@ const heroInnerRef = ref<HTMLElement>()
   padding: 72px 24px 56px;
   text-align: center;
   overflow: hidden;
-  /* The hero sits on a dark "mesh of streams" canvas, so anchor a dark
-     fallback in case the canvas hasn't laid out yet. */
-  background: #0d1117;
+  /* No bg colour — the hero inherits the page surface (light or dark
+     theme) so the four product pages share the same look. The mesh
+     paints transparent except for the brand-teal tracks / wheels and
+     fades to the page bg via the canvas's built-in radial mask. */
   /* Floor the height so the mesh has room to read as a network of
      wheels, not just a thin band of tracks. The hero text + CTAs
      normally measure ~280px tall; bumping the floor to 460px gives
@@ -331,7 +332,10 @@ const heroInnerRef = ref<HTMLElement>()
   -webkit-background-clip: border-box;
   background-clip: border-box;
   -webkit-text-fill-color: currentColor;
-  color: #f3f7ff;
+  /* Inherit the page text colour so the headline reads correctly on
+     both the light and dark themes (was hard-coded #f3f7ff back when
+     the hero forced a dark bg). */
+  color: var(--vp-c-text-1);
   margin: 0;
   padding-bottom: 4px;
   text-wrap: balance;
@@ -350,9 +354,9 @@ const heroInnerRef = ref<HTMLElement>()
      consistent across the matched set. */
   font-size: 22px;
   font-weight: 500;
-  /* The hero panel is always dark, so use a light tone regardless
-     of the global theme. */
-  color: rgba(231, 238, 248, 0.85);
+  /* Inherit the muted page text colour (was hard-coded light back
+     when the hero forced a dark bg). */
+  color: var(--vp-c-text-2);
   margin: 24px auto 0;
   max-width: 720px;
   line-height: 1.4;
