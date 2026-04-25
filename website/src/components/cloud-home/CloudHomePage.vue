@@ -5,8 +5,10 @@ import { VPButton } from "vitepress/theme"
 import EaSection from "../agents-home/Section.vue"
 import BottomCtaStrap from "../BottomCtaStrap.vue"
 import MeshOfStreams from "../brand-toys/MeshOfStreams.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
 
 const heroInnerRef = ref<HTMLElement>()
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
@@ -19,7 +21,7 @@ const heroInnerRef = ref<HTMLElement>()
            readable. The mesh is decorative, so we set `pointer-events:
            none` on the wrapper via the `cl-hero-mesh` class. -->
       <MeshOfStreams
-        class="cl-hero-mesh"
+        class="cl-hero-mesh md-exclude"
         seed="cloud-hero"
         layout="wide"
         :wheel-count="14"
@@ -75,12 +77,16 @@ const heroInnerRef = ref<HTMLElement>()
       subtitle="Electric Cloud is a reactive data platform for multi-user, multi-agent systems. It provides turnkey, fully-managed hosting of Electric&nbsp;Streams and Electric&nbsp;Sync."
     >
       <div class="cl-product-grid">
-        <a class="cl-product-card" href="/streams">
+        <component
+          :is="isMarkdownExport ? 'div' : 'a'"
+          class="cl-product-card"
+          :href="isMarkdownExport ? undefined : '/streams'"
+        >
           <div class="cl-product-card-head">
             <img
               src="/img/icons/durable-streams.svg"
               alt=""
-              class="cl-product-icon"
+              class="cl-product-icon md-exclude"
             />
             <h3>Electric&nbsp;Streams</h3>
           </div>
@@ -99,12 +105,22 @@ const heroInnerRef = ref<HTMLElement>()
               @click.stop
             >announcement blog post here</a>.
           </p>
-          <span class="cl-product-cta">Explore Electric Streams →</span>
-        </a>
+          <component
+            :is="isMarkdownExport ? 'a' : 'span'"
+            class="cl-product-cta"
+            :href="isMarkdownExport ? '/streams' : undefined"
+          >
+            Explore Electric Streams<span class="md-exclude"> →</span>
+          </component>
+        </component>
 
-        <a class="cl-product-card" href="/sync">
+        <component
+          :is="isMarkdownExport ? 'div' : 'a'"
+          class="cl-product-card"
+          :href="isMarkdownExport ? undefined : '/sync'"
+        >
           <div class="cl-product-card-head">
-            <img src="/img/icons/electric.svg" alt="" class="cl-product-icon" />
+            <img src="/img/icons/electric.svg" alt="" class="cl-product-icon md-exclude" />
             <h3>Electric&nbsp;Sync</h3>
           </div>
           <p>
@@ -115,8 +131,14 @@ const heroInnerRef = ref<HTMLElement>()
             <a href="/docs/sync/guides/shapes" @click.stop>syncing shapes</a>
             into your client.
           </p>
-          <span class="cl-product-cta">Explore Electric Sync →</span>
-        </a>
+          <component
+            :is="isMarkdownExport ? 'a' : 'span'"
+            class="cl-product-cta"
+            :href="isMarkdownExport ? '/sync' : undefined"
+          >
+            Explore Electric Sync<span class="md-exclude"> →</span>
+          </component>
+        </component>
       </div>
     </EaSection>
 
@@ -133,7 +155,12 @@ const heroInnerRef = ref<HTMLElement>()
         With fast load times, low latency, and consistently low resource use.
       </p>
 
-      <div class="cl-stat-row">
+      <ul v-if="isMarkdownExport" class="cl-stat-list-md">
+        <li><strong>Millions.</strong> of concurrent users per shape.</li>
+        <li><strong>Global.</strong> CDN delivery, edge cached.</li>
+        <li><strong>HTTP.</strong> Just standard, cacheable HTTP.</li>
+      </ul>
+      <div v-else class="cl-stat-row">
         <div class="cl-stat">
           <div class="cl-stat-value">Millions</div>
           <div class="cl-stat-label">of concurrent users per&nbsp;shape</div>
@@ -171,25 +198,25 @@ const heroInnerRef = ref<HTMLElement>()
             <li>
               <a href="/docs/streams/clients/typescript">
                 <span class="cl-protocol-name">Streams &mdash; TypeScript client</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/streams/clients/python">
                 <span class="cl-protocol-name">Streams &mdash; Python client</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/sync/api/clients/typescript">
                 <span class="cl-protocol-name">Sync &mdash; TypeScript client</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/sync/api/clients/elixir">
                 <span class="cl-protocol-name">Sync &mdash; Elixir client</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
           </ul>
@@ -204,25 +231,25 @@ const heroInnerRef = ref<HTMLElement>()
             <li>
               <a href="/docs/sync/integrations/react">
                 <span class="cl-protocol-name">React, Vue, Svelte, Solid&hellip;</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/sync/integrations/tanstack">
                 <span class="cl-protocol-name">TanStack DB &amp; Query</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/streams/integrations/tanstack-ai">
                 <span class="cl-protocol-name">TanStack AI</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/streams/integrations/vercel-ai-sdk">
                 <span class="cl-protocol-name">Vercel AI SDK</span>
-                <span class="cl-protocol-arrow">→</span>
+                <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
           </ul>
@@ -236,7 +263,9 @@ const heroInnerRef = ref<HTMLElement>()
          agents / streams / sync landing pages. -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        Hosted &middot; usage-based &middot; built on open&nbsp;protocols
+        <span v-if="!isMarkdownExport">
+          Hosted &middot; usage-based &middot; built on open&nbsp;protocols
+        </span>
       </template>
       <template #title>
         Start building on&nbsp;Electric&nbsp;Cloud

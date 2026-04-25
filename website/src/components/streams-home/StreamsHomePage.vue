@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { computed, ref } from "vue"
 import { VPButton } from "vitepress/theme"
 
 import EaSection from "../agents-home/Section.vue"
@@ -18,6 +18,9 @@ import InstallPill from "../InstallPill.vue"
 import MidPageStrap from "../MidPageStrap.vue"
 import BottomCtaStrap from "../BottomCtaStrap.vue"
 import CuratedBlogPosts from "../CuratedBlogPosts.vue"
+import MarkdownContent from "../MarkdownContent.vue"
+import MdExportExplicit from "../MdExportExplicit.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
 
 /* Curated list of Streams-relevant blog posts that fill the panel
    below the 30-second tour. Order matters — first item appears
@@ -34,7 +37,102 @@ const heroInnerRef = ref<HTMLElement>()
 
 const installCommand = "npm i @durable-streams/client"
 
-const stackTab = ref<"producer" | "consumer" | "curl">("producer")
+const isMarkdownExport = useMarkdownExport()
+
+const liveDemos = [
+  {
+    title: "Durable AI Chat",
+    description:
+      "Multi-user, multi-agent AI chat with resumable sessions across tabs and devices.",
+    href: "/streams/demos",
+    thumbClass: "ds-demo-thumb-chat",
+    glyph: "💬",
+  },
+  {
+    title: "Background Jobs",
+    description:
+      "Real-time job dashboard built on State Protocol. Live progress events into StreamDB.",
+    href: "/streams/demos",
+    thumbClass: "ds-demo-thumb-jobs",
+    glyph: "⚙",
+  },
+  {
+    title: "Yjs Collab Editor",
+    description:
+      "Multi-user collaborative editor over Yjs CRDTs and Electric Streams. No WebSocket server needed.",
+    href: "/streams/demos",
+    thumbClass: "ds-demo-thumb-yjs",
+    glyph: "✎",
+  },
+] as const
+
+const liveDemosMarkdown = computed(() =>
+  liveDemos.map((demo) => `- [${demo.title}](${demo.href}): ${demo.description}`).join("\n")
+)
+
+const stackExamples = [
+  {
+    id: "producer",
+    filename: "producer.ts",
+    language: "ts",
+    code: `import { DurableStream, IdempotentProducer } from "@durable-streams/client"
+
+const handle = await DurableStream.create({
+  url: STREAM_URL,
+  contentType: "application/json",
+})
+
+const producer = new IdempotentProducer(
+  handle, "llm-relay-1", { autoClaim: true }
+)
+
+for await (const chunk of llm.stream(prompt))
+  producer.append(chunk)
+
+await producer.flush()`,
+  },
+  {
+    id: "consumer",
+    filename: "consumer.ts",
+    language: "ts",
+    code: `import { stream } from "@durable-streams/client"
+
+const res = await stream<ChatMessage>({
+  url: STREAM_URL,
+  offset: lastSeen ?? "-1",
+  live: "sse",
+})
+
+res.subscribeJson(async (batch) => {
+  for (const msg of batch.items) render(msg)
+  lastSeen = batch.nextOffset
+})`,
+  },
+  {
+    id: "curl",
+    filename: "curl.sh",
+    language: "sh",
+    code: `curl -X POST $URL \\
+  -H 'Content-Type: application/json' \\
+  -d '{"event":"click"}'
+
+curl -N "$URL?offset=-1&live=sse"`,
+  },
+] as const
+
+const stackTab = ref<(typeof stackExamples)[number]["id"]>("producer")
+
+const stackExamplesMarkdown = computed(() =>
+  stackExamples
+    .map(
+      (example) => `### ${example.filename}
+
+\`\`\`${example.language}
+${example.code}
+\`\`\``
+    )
+    .join("\n\n")
+)
 
 </script>
 
@@ -42,7 +140,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   <div class="ds-home">
     <!-- ───────────────── §1 — Hero ───────────────── -->
     <section class="ds-hero">
-      <StreamFlowBg :exclude-el="heroInnerRef" />
+      <StreamFlowBg class="md-exclude" :exclude-el="heroInnerRef" />
       <div ref="heroInnerRef" class="ds-hero-inner">
         <h1 class="ds-hero-name">
           Electric&nbsp;<span class="ds-hero-accent">Streams</span>
@@ -98,7 +196,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             over plain&nbsp;HTTP.
           </p>
         </div>
-        <div class="ds-split-demo">
+        <div class="ds-split-demo md-exclude">
           <AgentLoopFillDemo />
         </div>
       </div>
@@ -114,7 +212,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
          the page pivots to the general streaming pain. -->
     <EaSection id="multi-agent-coordination" :dark="true">
       <div class="ds-split ds-split--demo-2x">
-        <div class="ds-split-demo">
+        <div class="ds-split-demo md-exclude">
           <CollabSessionDemo />
         </div>
         <div class="ds-split-text">
@@ -168,7 +266,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       `tone="bg"` (deep) for the inverse effect.
     -->
     <MidPageStrap id="ship-streams" tone="surface">
-      <template #eyebrow>Ready to&nbsp;build</template>
+      <template #eyebrow><span class="md-exclude">Ready to&nbsp;build</span></template>
       <template #title>
         Ship your first durable stream in&nbsp;minutes
       </template>
@@ -241,7 +339,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         and agents read and write the same conversation. That's what an
         <strong>Electric&nbsp;Stream</strong>&nbsp;is.
       </p>
-      <ConnectionDropDemo />
+      <ConnectionDropDemo class="md-exclude" />
     </EaSection>
 
     <!-- ───────────────── §4 — Three properties ───────────────── -->
@@ -256,7 +354,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <!-- ───────────────── §5 — Replay from any offset ───────────────── -->
     <EaSection id="offset-replay" :dark="true">
       <div class="ds-split ds-split--demo-wide">
-        <div class="ds-split-demo">
+        <div class="ds-split-demo md-exclude">
           <OffsetReplayDemo />
         </div>
         <div class="ds-split-text">
@@ -300,7 +398,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       all live on durablestreams.com.
     -->
     <MidPageStrap id="open-protocol-strap">
-      <template #eyebrow>Open protocol · Apache&nbsp;2.0</template>
+      <template #eyebrow><span class="md-exclude">Open protocol · Apache&nbsp;2.0</span></template>
       <template #title>
         Built on the open Durable&nbsp;Streams protocol
       </template>
@@ -349,7 +447,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       subtitle="Self-host the server with one binary, or run it on Electric Cloud. Producers and consumers are anything that speaks&nbsp;HTTP."
     >
       <div class="ds-stack-layout">
-        <div class="ds-stack-diagram">
+        <div class="ds-stack-diagram md-exclude">
           <div class="stack-box producer-box">
             <div class="stack-label">Your producer</div>
             <div class="stack-examples">Anthropic · Express · FastAPI · cron</div>
@@ -373,24 +471,20 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         </div>
 
         <div class="ds-stack-code">
-          <div class="code-tabs">
-            <button
-              class="code-tab"
-              :class="{ active: stackTab === 'producer' }"
-              @click="stackTab = 'producer'"
-            >producer.ts</button>
-            <button
-              class="code-tab"
-              :class="{ active: stackTab === 'consumer' }"
-              @click="stackTab = 'consumer'"
-            >consumer.ts</button>
-            <button
-              class="code-tab"
-              :class="{ active: stackTab === 'curl' }"
-              @click="stackTab = 'curl'"
-            >curl.sh</button>
-          </div>
-          <pre v-show="stackTab === 'producer'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">DurableStream</span>, <span class="tk-v">IdempotentProducer</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
+          <MdExportExplicit v-if="isMarkdownExport">
+            <MarkdownContent>{{ stackExamplesMarkdown }}</MarkdownContent>
+          </MdExportExplicit>
+          <template v-else>
+            <div class="code-tabs md-exclude">
+              <button
+                v-for="example in stackExamples"
+                :key="example.id"
+                class="code-tab"
+                :class="{ active: stackTab === example.id }"
+                @click="stackTab = example.id"
+              >{{ example.filename }}</button>
+            </div>
+            <pre v-show="stackTab === 'producer'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">DurableStream</span>, <span class="tk-v">IdempotentProducer</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
 
 <span class="tk-kw">const</span> <span class="tk-v">handle</span> = <span class="tk-kw">await</span> <span class="tk-v">DurableStream</span>.<span class="tk-fn">create</span>({
   <span class="tk-prop">url</span>: <span class="tk-v">STREAM_URL</span>,
@@ -406,7 +500,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 <span class="tk-kw">await</span> <span class="tk-v">producer</span>.<span class="tk-fn">flush</span>()</code></pre>
 
-          <pre v-show="stackTab === 'consumer'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">stream</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
+            <pre v-show="stackTab === 'consumer'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">stream</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
 
 <span class="tk-kw">const</span> <span class="tk-v">res</span> = <span class="tk-kw">await</span> <span class="tk-fn">stream</span>&lt;<span class="tk-v">ChatMessage</span>&gt;({
   <span class="tk-prop">url</span>: <span class="tk-v">STREAM_URL</span>,
@@ -419,11 +513,12 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   <span class="tk-v">lastSeen</span> = <span class="tk-v">batch</span>.<span class="tk-v">nextOffset</span>
 })</code></pre>
 
-          <pre v-show="stackTab === 'curl'" class="code-block tabbed"><code><span class="tk-prop">curl</span> -X POST <span class="tk-v">$URL</span> \
+            <pre v-show="stackTab === 'curl'" class="code-block tabbed"><code><span class="tk-prop">curl</span> -X POST <span class="tk-v">$URL</span> \
   -H <span class="tk-str">'Content-Type: application/json'</span> \
   -d <span class="tk-str">'{"event":"click"}'</span>
 
 <span class="tk-prop">curl</span> -N <span class="tk-str">"$URL?offset=-1&amp;live=sse"</span></code></pre>
+          </template>
         </div>
       </div>
     </EaSection>
@@ -539,32 +634,22 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       title="Live&nbsp;demos"
       subtitle="See Electric Streams in action. Every demo is open source — fork it, run it, learn from&nbsp;it."
     >
-      <div class="ds-demo-strip">
-        <a href="/streams/demos" class="ds-demo-card">
-          <div class="ds-demo-thumb ds-demo-thumb-chat">
-            <span class="ds-demo-glyph">💬</span>
+      <MdExportExplicit>
+        <MarkdownContent>{{ liveDemosMarkdown }}</MarkdownContent>
+      </MdExportExplicit>
+      <div class="ds-demo-strip md-exclude">
+        <a
+          v-for="demo in liveDemos"
+          :key="demo.title"
+          :href="demo.href"
+          class="ds-demo-card"
+        >
+          <div class="ds-demo-thumb" :class="demo.thumbClass">
+            <span class="ds-demo-glyph">{{ demo.glyph }}</span>
           </div>
           <div class="ds-demo-body">
-            <h3>Durable AI&nbsp;Chat</h3>
-            <p>Multi-user, multi-agent AI chat with resumable sessions across tabs and devices.</p>
-          </div>
-        </a>
-        <a href="/streams/demos" class="ds-demo-card">
-          <div class="ds-demo-thumb ds-demo-thumb-jobs">
-            <span class="ds-demo-glyph">⚙</span>
-          </div>
-          <div class="ds-demo-body">
-            <h3>Background&nbsp;Jobs</h3>
-            <p>Real-time job dashboard built on State Protocol. Live progress events into StreamDB.</p>
-          </div>
-        </a>
-        <a href="/streams/demos" class="ds-demo-card">
-          <div class="ds-demo-thumb ds-demo-thumb-yjs">
-            <span class="ds-demo-glyph">✎</span>
-          </div>
-          <div class="ds-demo-body">
-            <h3>Yjs Collab&nbsp;Editor</h3>
-            <p>Multi-user collaborative editor over Yjs CRDTs and Electric Streams. No WebSocket server needed.</p>
+            <h3>{{ demo.title }}</h3>
+            <p>{{ demo.description }}</p>
           </div>
         </a>
       </div>
@@ -588,7 +673,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
          was removed to keep one clear end-of-page action. -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        Apache&nbsp;2.0 · open&nbsp;source
+        <span class="md-exclude">Apache&nbsp;2.0 · open&nbsp;source</span>
       </template>
       <template #title>
         Start streaming&nbsp;today

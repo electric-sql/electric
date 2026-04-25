@@ -1,37 +1,54 @@
 <script setup>
 import EaSection from '../../agents-home/Section.vue'
+import MarkdownContent from '../../MarkdownContent.vue'
+import MdExportExplicit from '../../MdExportExplicit.vue'
 import ScalabilityChart from '../../ScalabilityChart.vue'
+import { useMarkdownExport } from '../../../lib/useMarkdownExport'
+
+const isMarkdownExport = useMarkdownExport()
+const section = {
+  title: 'Scales to millions of users.',
+  body: 'Electric streams over plain HTTP, so standard CDNs fan out high-throughput data delivery without ever touching your database.',
+  bodyLink: { text: 'standard CDNs', href: '/docs/api/http#caching' },
+  stats: [
+    { value: '1M+', label: 'concurrent readers' },
+    { value: '99%', label: 'CDN cache hit rate' },
+    { value: '∞', label: 'DB load stays flat' },
+  ],
+  link: { text: 'Read the benchmarks', href: '/docs/reference/benchmarks' },
+}
+const markdown = `## ${section.title}
+
+Electric streams over plain HTTP, so [${section.bodyLink.text}](${section.bodyLink.href}) fan out high-throughput data delivery without ever touching your database.
+
+${section.stats.map((stat) => `- \`${stat.value}\` ${stat.label}`).join('\n')}
+
+[${section.link.text}](${section.link.href})`
 </script>
 
 <template>
-  <EaSection id="scales">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <EaSection v-else id="scales">
     <div class="st-grid">
       <div class="st-prose-col">
         <h2 class="st-title">
-          Scales to millions of&nbsp;users.
+          {{ section.title }}
         </h2>
         <p class="st-prose">
           Electric streams over plain HTTP, so
-          <a href="/docs/api/http#caching">standard CDNs</a>
-          fan&nbsp;out high‑throughput data delivery without ever touching
-          your&nbsp;database.
+          <a :href="section.bodyLink.href">{{ section.bodyLink.text }}</a>
+          fan out high-throughput data delivery without ever touching your database.
         </p>
         <ul class="st-stats">
-          <li>
-            <span class="st-stat-num">1M+</span>
-            <span class="st-stat-label mono">concurrent readers</span>
-          </li>
-          <li>
-            <span class="st-stat-num">99%</span>
-            <span class="st-stat-label mono">CDN cache hit rate</span>
-          </li>
-          <li>
-            <span class="st-stat-num">∞</span>
-            <span class="st-stat-label mono">DB load stays flat</span>
+          <li v-for="stat in section.stats" :key="stat.label">
+            <span class="st-stat-num">{{ stat.value }}</span>
+            <span class="st-stat-label mono">{{ stat.label }}</span>
           </li>
         </ul>
         <div class="st-foot mono">
-          <a href="/docs/reference/benchmarks">Read the benchmarks →</a>
+          <a :href="section.link.href">{{ section.link.text }} →</a>
         </div>
       </div>
       <div class="st-visual-col">

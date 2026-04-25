@@ -42,7 +42,7 @@ select('spencer')
       <a href="/about/team">devtools and database experts</a>. Backed by
       <a href="/about/team#investors">industry leading founders</a>.
     </template>
-    <div class="backers">
+    <div class="backers md-exclude">
       <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />
     </div>
     <template #actions>

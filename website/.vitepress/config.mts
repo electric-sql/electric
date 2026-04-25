@@ -4,8 +4,11 @@ import llmstxt from 'vitepress-plugin-llms'
 import type { LanguageRegistration } from 'shiki'
 
 import caddyfileGrammar from './theme/syntax/caddyfile.json'
+import { exportMarkedPagesToMarkdown } from './markdown-export'
 
 import { buildMetaImageUrl } from '../src/lib/meta-image'
+
+const MARKDOWN_EXPORT = process.env.MARKDOWN_EXPORT === '1'
 
 const caddyfileLanguage: LanguageRegistration = {
   ...caddyfileGrammar,
@@ -371,6 +374,7 @@ export default defineConfig({
       'import.meta.env.DEPLOY_PRIME_URL': JSON.stringify(
         process.env.DEPLOY_PRIME_URL || ''
       ),
+      __MARKDOWN_EXPORT__: JSON.stringify(MARKDOWN_EXPORT),
     },
     // PGlite ships a precompiled WASM build + a binary FS data bundle
     // (`pglite.data`). Vite's dependency optimizer rewrites these as
@@ -420,6 +424,7 @@ export default defineConfig({
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
+  outDir: MARKDOWN_EXPORT ? './.vitepress/dist-markdown' : './.vitepress/dist',
   head: [
     [
       'link',
@@ -615,5 +620,10 @@ export default defineConfig({
   },
   transformPageData(pageData) {
     pageData.frontmatter.editLink = pageData.relativePath.startsWith('docs')
+  },
+  async buildEnd(siteConfig) {
+    if (MARKDOWN_EXPORT) {
+      await exportMarkedPagesToMarkdown(siteConfig.outDir)
+    }
   },
 })

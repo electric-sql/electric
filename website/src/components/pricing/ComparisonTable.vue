@@ -1,4 +1,9 @@
 <script setup>
+import { computed } from 'vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+
 const { comparisonPlans, config } = defineProps(['comparisonPlans', 'config'])
 
 function formatNumber(num) {
@@ -91,6 +96,8 @@ const serviceList =
     ? Object.entries(config.serviceCosts).map(([id, svc]) => ({ id, ...svc }))
     : []
 
+const isMarkdownExport = useMarkdownExport()
+
 function formatServiceAdditional(plan, service) {
   if (plan.type === 'enterprise') return 'Custom'
   const discount = (plan.discountPercent || 0) / 100
@@ -122,10 +129,44 @@ function computeScenarioCost(plan, scenario) {
     maximumFractionDigits: 2,
   }).format(total)
 }
+
+const comparisonMarkdown = computed(() => {
+  const sections = comparisonPlans.map((plan) => {
+    const lines = [
+      `### ${plan.name}`,
+      `- Monthly fee: ${formatFee(plan)}`,
+      `- Usage discount: ${formatDiscount(plan)}`,
+      `- Writes: ${formatWriteRate(plan)}`,
+      `- Retention: ${formatRetentionRate(plan)}`,
+      `- Billing behavior: ${getBillingBehavior(plan)}`,
+      `- Commitment: ${getCommitment(plan)}`,
+      `- Max databases: ${getLimitValue(plan, 'maxDatabases')}`,
+      `- Max users / workspace: ${getLimitValue(plan, 'maxUsersPerWorkspace')}`,
+      `- Postgres subqueries: ${getFeatureGate(plan, 'postgresSubqueries')}`,
+      `- Support: ${getSupport(plan)}`,
+      ...serviceList.map(
+        (service) =>
+          `- ${service.label} additional cost: ${formatServiceAdditional(plan, service)}`
+      ),
+      `[${plan.ctaText}](${plan.ctaHref})`,
+    ]
+
+    return lines.join('\n')
+  })
+
+  const footnote = serviceList.length
+    ? `\n\n* Additional cost for incremental writes emitted to the shape log from the Postgres replication stream. Initial sync and subsets are billed at the base write rate only.`
+    : ''
+
+  return sections.join('\n\n') + footnote
+})
 </script>
 
 <template>
-  <div class="comparison-table">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ comparisonMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="comparison-table">
     <div class="table-header">
       <div class="metric-column header-spacer"></div>
       <div

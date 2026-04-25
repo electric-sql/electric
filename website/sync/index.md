@@ -5,6 +5,10 @@ titleTemplate: false
 description: Composable sync primitives for multi-agent systems — Postgres Sync, TanStack DB and PGlite.
 sidebar: false
 pageClass: sync-page
+mdExport:
+  mode: parse-html
 ---
 
-<SyncHomePage />
+<MdExportParseHtml>
+  <SyncHomePage />
+</MdExportParseHtml>

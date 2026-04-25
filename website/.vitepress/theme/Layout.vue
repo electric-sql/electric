@@ -49,9 +49,9 @@ const { frontmatter, page } = useData()
 const { hasSidebar } = useSidebar()
 const { headers } = useLocalNav()
 
-// Show markdown link on docs pages (same pages that show edit link)
+// Show markdown link in the doc footer on all sidebar pages.
 const showMarkdownLink = computed(() => {
-  return page.value.relativePath?.startsWith('docs') ?? false
+  return hasSidebar.value
 })
 
 // Local nav height for dropdown positioning

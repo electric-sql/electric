@@ -50,7 +50,7 @@ const hasAgentBlogPosts = computed(() =>
   <div class="ea-home">
     <!-- Section 1: Hero -->
     <section class="ea-hero">
-      <HeroNetworkBg :exclude-el="heroInnerRef" />
+      <HeroNetworkBg class="md-exclude" :exclude-el="heroInnerRef" />
       <div ref="heroInnerRef" class="ea-hero-inner">
         <h1 class="ea-hero-name">Electric&nbsp;<span class="ea-hero-accent">Agents</span></h1>
         <p class="ea-hero-text">
@@ -97,7 +97,7 @@ const hasAgentBlogPosts = computed(() =>
             survives&nbsp;restarts.
           </p>
         </div>
-        <div class="ea-come-online-visual">
+        <div class="ea-come-online-visual md-exclude">
           <SystemMonitorDemo />
         </div>
       </div>
@@ -106,7 +106,7 @@ const hasAgentBlogPosts = computed(() =>
     <!-- Section 2: Inside the runtime -->
     <Section id="inside-runtime" :dark="true">
       <div class="ea-runtime">
-        <div class="ea-runtime-diagram" aria-hidden="true">
+        <div class="ea-runtime-diagram md-exclude" aria-hidden="true">
           <div class="rt-box rt-box-app">
             <div class="stack-label">SDK</div>
             <div class="stack-examples">Lives in your app process</div>
@@ -192,13 +192,13 @@ const hasAgentBlogPosts = computed(() =>
         <p>You define <strong>entity types</strong> — like <code>assistant</code> or <code>researcher</code> — then spawn instances on&nbsp;demand.</p>
         <p>Each instance is backed by its own <strong>durable stream</strong>: an append-only log that serves as the agent's memory, its inbox, and a complete audit trail of everything it&nbsp;did.</p>
       </div>
-      <EntityStreamDemo />
+      <EntityStreamDemo class="md-exclude" />
     </Section>
 
     <!-- Section 4: Durable State -->
     <Section id="durable-state" :dark="true">
       <div class="ea-durable-layout">
-        <div class="ea-durable-demo">
+        <div class="ea-durable-demo md-exclude">
           <CrashRecoveryDemo />
         </div>
         <div class="ea-durable-text">
@@ -227,7 +227,9 @@ const hasAgentBlogPosts = computed(() =>
       this one rather than something new.
     -->
     <MidPageStrap id="get-started-mid">
-      <template #eyebrow>Ready to&nbsp;build</template>
+      <template #eyebrow>
+        <span class="md-exclude">Ready to&nbsp;build</span>
+      </template>
       <template #title>
         Ship your first&nbsp;agent
       </template>
@@ -277,7 +279,7 @@ const hasAgentBlogPosts = computed(() =>
             from the stream, and&nbsp;continues.
           </p>
         </div>
-        <div class="ea-scale-grid">
+        <div class="ea-scale-grid md-exclude">
           <AgentGridDemo />
         </div>
       </div>
@@ -286,7 +288,7 @@ const hasAgentBlogPosts = computed(() =>
     <!-- Section 7: Context Composition -->
     <Section id="context" :dark="true">
       <div class="ea-context-layout">
-        <div class="ea-context-demo">
+        <div class="ea-context-demo md-exclude">
           <ContextCompositionDemo />
         </div>
         <div class="ea-context-text">
@@ -310,7 +312,7 @@ const hasAgentBlogPosts = computed(() =>
       subtitle="Runs on your infrastructure. Express, Next.js, Hono, TanStack Start — agents are webhook handlers. No vendor&nbsp;lock-in."
     >
       <div class="ea-stack-layout">
-        <div class="ea-stack-diagram">
+        <div class="ea-stack-diagram md-exclude">
           <div class="stack-box app-box">
             <div class="stack-label">Your App</div>
             <div class="stack-examples">Express · Next.js · Hono · Fastify</div>
@@ -333,7 +335,7 @@ const hasAgentBlogPosts = computed(() =>
           </div>
         </div>
         <div class="ea-stack-code">
-          <div class="code-tabs">
+          <div class="code-tabs md-exclude">
             <button
               class="code-tab"
               :class="{ active: stackTab === 'server' }"
@@ -388,7 +390,7 @@ const hasAgentBlogPosts = computed(() =>
       <div class="ea-ways">
         <div class="ea-way">
           <div class="ea-way-header">
-            <span class="ea-way-eyebrow mono">CLI</span>
+            <span class="ea-way-eyebrow mono md-exclude">CLI</span>
             <h3 class="ea-way-title">From the&nbsp;terminal</h3>
           </div>
           <p class="ea-way-prose">
@@ -397,7 +399,7 @@ const hasAgentBlogPosts = computed(() =>
             inline.
           </p>
           <div class="ea-way-preview cli-preview">
-            <div class="cli-header">Terminal</div>
+            <div class="cli-header md-exclude">Terminal</div>
             <div class="cli-body">
               <div class="cli-line"><span class="cli-prompt">$</span> electric-agents spawn /assistant/research-1</div>
               <div class="cli-output">✓ Spawned /assistant/research-1</div>
@@ -411,7 +413,7 @@ const hasAgentBlogPosts = computed(() =>
 
         <div class="ea-way">
           <div class="ea-way-header">
-            <span class="ea-way-eyebrow mono">Desktop app</span>
+            <span class="ea-way-eyebrow mono md-exclude">Desktop app</span>
             <h3 class="ea-way-title">Observe and&nbsp;chat</h3>
           </div>
           <p class="ea-way-prose">
@@ -445,7 +447,7 @@ const hasAgentBlogPosts = computed(() =>
 
         <div class="ea-way">
           <div class="ea-way-header">
-            <span class="ea-way-eyebrow mono">TypeScript</span>
+            <span class="ea-way-eyebrow mono md-exclude">TypeScript</span>
             <h3 class="ea-way-title">From your&nbsp;app</h3>
           </div>
           <p class="ea-way-prose">
@@ -500,7 +502,7 @@ const hasAgentBlogPosts = computed(() =>
 })</code></pre>
             </div>
             <div class="ea-cli-panel">
-              <div class="cli-header">Terminal</div>
+              <div class="cli-header md-exclude">Terminal</div>
               <div class="cli-body">
                 <div class="cli-line"><span class="cli-prompt">$</span> electric-agents spawn assistant my-agent<span class="ann-marker" data-n="6"></span></div>
                 <div class="cli-output">✓ Spawned /assistant/my-agent</div>
@@ -606,7 +608,7 @@ const hasAgentBlogPosts = computed(() =>
       title="From the&nbsp;blog"
       subtitle="Go deeper on Electric Agents — the runtime, the patterns, and what teams are building on&nbsp;them."
     >
-      <CuratedBlogPosts :tags="['agents']" :limit="4" />
+      <CuratedBlogPosts class="md-exclude" :tags="['agents']" :limit="4" />
       <template #actions>
         <VPButton
           tag="a"
@@ -638,7 +640,9 @@ const hasAgentBlogPosts = computed(() =>
     -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        Open source · Apache&nbsp;2.0 · built on Electric&nbsp;Streams
+        <span class="md-exclude">
+          Open source · Apache&nbsp;2.0 · built on Electric&nbsp;Streams
+        </span>
       </template>
       <template #title>
         Bring your agents&nbsp;online

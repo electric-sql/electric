@@ -1,5 +1,8 @@
 <script setup>
 import { computed } from 'vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 import { data as primitives } from '../../../data/primitives.data.ts'
 
 const props = defineProps({
@@ -19,10 +22,29 @@ const products = computed(() =>
     .map((slug) => primitives.find((p) => p.slug === slug))
     .filter(Boolean)
 )
+
+const productsMarkdown = computed(() =>
+  products.value
+    .map(
+      (product) => `### ${product.title}
+
+${String(product.body).replace(/<[^>]+>/g, '')}.
+
+${String(product.detail).replace(/<[^>]+>/g, '')}.
+
+[Learn more](${product.href})`
+    )
+    .join('\n\n')
+)
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
-  <div class="compose-stack">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ productsMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="compose-stack">
     <a
       v-for="product in products"
       :key="product.slug"

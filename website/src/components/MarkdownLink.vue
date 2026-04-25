@@ -11,10 +11,21 @@ const props = defineProps({
 
 const { page } = useData()
 
+function toMarkdownUrl(relativePath) {
+  const normalized = String(relativePath ?? '')
+    .replace(/^\//, '')
+    .replace(/\.html$/, '')
+    .replace(/\.md$/, '')
+
+  if (!normalized || normalized === 'index') {
+    return '/index.md'
+  }
+
+  return `/${normalized}.md`
+}
+
 const markdownUrl = computed(() => {
-  // Get current path and append .md
-  const path = (page.value.relativePath ?? '').replace(/\.md$/, '')
-  return `/${path}.md`
+  return toMarkdownUrl(page.value.relativePath)
 })
 </script>
 

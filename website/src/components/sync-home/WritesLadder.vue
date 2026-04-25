@@ -3,6 +3,10 @@
 // A short ladder showing the spectrum of write patterns. Electric reads
 // sync, but writes stay in your stack — and you can pick how much sync
 // you want on top.
+import { computed } from 'vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 
 interface Tile {
   id: string
@@ -35,10 +39,24 @@ const tiles: Tile[] = [
     href: "/sync/tanstack-db",
   },
 ]
+
+const isMarkdownExport = useMarkdownExport()
+
+const markdown = computed(() =>
+  tiles
+    .map((tile, index) => {
+      const link = tile.href ? ` [Learn more](${tile.href})` : ''
+      return `${index + 1}. **${tile.title}** (${tile.label}). ${tile.body}${link}`
+    })
+    .join('\n')
+)
 </script>
 
 <template>
-  <div class="writes-ladder">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="writes-ladder">
     <div
       v-for="(tile, i) in tiles"
       :key="tile.id"

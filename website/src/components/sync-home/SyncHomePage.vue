@@ -29,6 +29,9 @@ import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
 import InstallPill from "../InstallPill.vue"
 import BottomCtaStrap from "../BottomCtaStrap.vue"
 import CuratedBlogPosts from "../CuratedBlogPosts.vue"
+import MarkdownContent from "../MarkdownContent.vue"
+import MdExportExplicit from "../MdExportExplicit.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
 
 // PGlite REPL is browser-only (WASM + DOM access at script-setup
 // time), so lazy-load it on the client and render inside <ClientOnly>.
@@ -36,13 +39,26 @@ const PGliteReplDemo = defineClientComponent(() => {
   return import("./PGliteReplDemo.vue")
 })
 
-import { data as demoData } from "../../../data/demos.data.ts"
+import * as demoModule from "../../../data/demos.data.ts"
 
-const featuredDemos = demoData.homepage_demos.slice(0, 3)
+const featuredDemos = (
+  demoModule as unknown as {
+    data: {
+      homepage_demos: Array<{
+        title: string
+        description: string
+        link: string
+        image?: string
+        listing_image?: string
+      }>
+    }
+  }
+).data.homepage_demos.slice(0, 3)
 
 const installCommand = "npx @electric-sql/start my-electric-app"
 
 const heroInnerRef = ref<HTMLElement>()
+const isMarkdownExport = useMarkdownExport()
 
 // Curated list of Sync-relevant blog posts that fill the panel before
 // the bottom CTA. Slugs are the trailing path segment of the blog post
@@ -53,13 +69,50 @@ const syncBlogPosts = [
   "tanstack-db-0.6-app-ready-with-persistence-and-includes",
   "local-first-with-your-existing-api",
 ]
+
+const pillars = [
+  {
+    title: "Super-fast reactivity",
+    body: "Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.",
+    href: "/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db",
+  },
+  {
+    title: "Resilient transport",
+    body: "Build apps that work reliably, even with patchy connectivity. Resilient transport that ensures data is never lost.",
+    href: "/blog/2026/03/24/durable-transport-ai-sdks",
+  },
+  {
+    title: "Real-time collaboration",
+    body: "Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.",
+    href: "/blog/2026/01/12/durable-sessions-for-collaborative-ai",
+  },
+  {
+    title: "Durable state",
+    body: "Build multi-step agentic workflows that survive crashes and restarts. Agents and workers resume from the same durable state.",
+    href: "/blog/2026/04/08/data-primitive-agent-loop",
+  },
+] as const
+
+const pillarsMarkdown = pillars
+  .map(
+    (pillar, index) => `### ${index + 1}. ${pillar.title}
+
+${pillar.body}
+
+[Read more](${pillar.href})`
+  )
+  .join("\n\n")
+
+const demosMarkdown = featuredDemos
+  .map((demo) => `- [${demo.title}](${demo.link}): ${demo.description}`)
+  .join("\n")
 </script>
 
 <template>
   <div class="sync-home">
     <!-- ───────────────────────── §1 — Hero ───────────────────────── -->
     <section class="sh-hero">
-      <SyncFanOutBg :exclude-el="heroInnerRef" :labels-on-hover="true" />
+      <SyncFanOutBg class="md-exclude" :exclude-el="heroInnerRef" :labels-on-hover="true" />
       <div ref="heroInnerRef" class="sh-hero-inner">
         <h1 class="sh-hero-name">
           Electric&nbsp;<span class="sh-hero-accent">Sync</span>
@@ -106,7 +159,10 @@ const syncBlogPosts = [
       title="Compose your sync&nbsp;stack"
       subtitle="Three composable primitives that work together &mdash; or independently &mdash; to keep state in sync from your database, through your network, into your apps and&nbsp;agents."
     >
-      <ComposeStackGrid :order="['postgres-sync', 'tanstack-db', 'pglite']" />
+      <ComposeStackGrid
+        v-if="!isMarkdownExport"
+        :order="['postgres-sync', 'tanstack-db', 'pglite']"
+      />
     </EaSection>
 
     <!-- ───────────── §3 — Postgres Sync (dark) ───────────── -->
@@ -114,7 +170,7 @@ const syncBlogPosts = [
       <div class="sh-primitive sh-primitive-two-col">
         <div class="sh-primitive-prose">
           <div class="sh-primitive-head">
-            <img src="/img/icons/electric.svg" alt="" class="sh-primitive-icon" />
+            <img src="/img/icons/electric.svg" alt="" class="sh-primitive-icon md-exclude" />
             <h2 class="sh-primitive-title">Postgres&nbsp;Sync</h2>
           </div>
           <p class="ea-prose">
@@ -144,7 +200,7 @@ const syncBlogPosts = [
             />
           </div>
         </div>
-        <div class="sh-primitive-visual">
+        <div class="sh-primitive-visual md-exclude">
           <MultiClientPulseDemo />
         </div>
       </div>
@@ -155,7 +211,7 @@ const syncBlogPosts = [
       <div class="sh-primitive sh-primitive-two-col sh-primitive-reversed">
         <div class="sh-primitive-prose">
           <div class="sh-primitive-head">
-            <img src="/img/icons/tanstack.svg" alt="" class="sh-primitive-icon" />
+            <img src="/img/icons/tanstack.svg" alt="" class="sh-primitive-icon md-exclude" />
             <h2 class="sh-primitive-title">TanStack&nbsp;DB</h2>
           </div>
           <p class="ea-prose">
@@ -234,7 +290,7 @@ const syncBlogPosts = [
       <div class="sh-primitive sh-primitive-two-col">
         <div class="sh-primitive-prose">
           <div class="sh-primitive-head">
-            <img src="/img/icons/pglite.product.svg" alt="" class="sh-primitive-icon" />
+            <img src="/img/icons/pglite.product.svg" alt="" class="sh-primitive-icon md-exclude" />
             <h2 class="sh-primitive-title">PGlite</h2>
           </div>
           <p class="ea-prose">
@@ -265,7 +321,7 @@ const syncBlogPosts = [
             />
           </div>
         </div>
-        <div class="sh-primitive-visual">
+        <div class="sh-primitive-visual md-exclude">
           <div class="sh-pglite-panel">
             <div class="sh-pglite-header mono">
               <span class="sh-pglite-dot" />
@@ -310,7 +366,7 @@ const syncBlogPosts = [
             </a>
           </div>
         </div>
-        <div class="sh-visual-col">
+        <div class="sh-visual-col md-exclude">
           <div class="sh-agent-loop-diagram-v" aria-hidden="true">
             <div class="vbus-col vbus-users">
               <span class="node node-client small">user</span>
@@ -342,7 +398,10 @@ const syncBlogPosts = [
       subtitle="Sync makes your apps super-fast, with end-to-end reactivity, resilience, and built-in multi-user&nbsp;collaboration."
       :dark="true"
     >
-      <div class="sh-pillars">
+      <MdExportExplicit>
+        <MarkdownContent>{{ pillarsMarkdown }}</MarkdownContent>
+      </MdExportExplicit>
+      <div class="sh-pillars md-exclude">
         <a
           v-for="(p, i) in [
             { id: 'reactivity', title: 'Super-fast reactivity', body: 'Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.', href: '/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db' },
@@ -368,7 +427,7 @@ const syncBlogPosts = [
       title="Your first sync, end to&nbsp;end"
     >
       <template #eyebrow>
-        Postgres&nbsp;Sync &nbsp;+&nbsp; TanStack&nbsp;DB
+        <span class="md-exclude">Postgres&nbsp;Sync &nbsp;+&nbsp; TanStack&nbsp;DB</span>
       </template>
       <template #subtitle>
         Compose <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a> with
@@ -479,7 +538,10 @@ const syncBlogPosts = [
       subtitle="Reference apps you can clone, run locally, and learn&nbsp;from."
       :dark="true"
     >
-      <div class="sh-demos">
+      <MdExportExplicit>
+        <MarkdownContent>{{ demosMarkdown }}</MarkdownContent>
+      </MdExportExplicit>
+      <div class="sh-demos md-exclude">
         <a
           v-for="demo in featuredDemos"
           :key="demo.link"
@@ -518,7 +580,7 @@ const syncBlogPosts = [
     <!-- ───────────── §7 — Bottom CTA ───────────── -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        Open source &middot; Apache&nbsp;2.0 &middot; ★&nbsp;9.5k
+        <span class="md-exclude">Open source &middot; Apache&nbsp;2.0 &middot; ★&nbsp;9.5k</span>
       </template>
       <template #title>
         Start syncing in&nbsp;minutes

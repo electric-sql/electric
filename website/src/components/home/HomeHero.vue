@@ -1,46 +1,69 @@
 <script setup lang="ts">
 import { VPButton } from 'vitepress/theme'
 
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 import HomeCompositionHero from './HomeCompositionHero.vue'
+
+const isMarkdownExport = useMarkdownExport()
+const hero = {
+  titleLeading: 'The agent platform',
+  titlePrefix: 'built on',
+  titleAccent: 'sync',
+  markdownTitle: 'Electric: The agent platform built on sync',
+  paragraphs: [
+    'Agents are long-lived entities in the data layer. The substrate for them is a sync engine.',
+    'Electric is the first agent platform built on sync.',
+  ],
+  actions: [
+    { text: 'Electric Cloud', href: '/cloud', theme: 'brand' },
+    { text: 'Quickstart', href: '/docs/agents/quickstart', theme: 'alt' },
+  ],
+}
+const heroMarkdown = `# ${hero.markdownTitle}
+
+${hero.paragraphs[0]}
+
+${hero.paragraphs[1]}
+
+[${hero.actions[0].text}](${hero.actions[0].href}) [${hero.actions[1].text}](${hero.actions[1].href})`
 </script>
 
 <template>
-  <section class="home-hero">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ heroMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <section v-else class="home-hero">
     <div class="home-hero-inner">
       <div class="home-hero-grid">
       <div class="home-hero-text">
         <h1 class="home-hero-name">
-          The agent&nbsp;platform<br />
-          built on&nbsp;<span class="home-hero-accent">sync</span>
+          {{ hero.titleLeading }}<br />
+          {{ hero.titlePrefix }}&nbsp;<span class="home-hero-accent">{{ hero.titleAccent }}</span>
         </h1>
         <p class="home-hero-sub">
           <span class="home-hero-sub-primary">
-            Agents are long-lived entities in the data&nbsp;layer.
-            The&nbsp;substrate for them is a sync&nbsp;engine.
+            {{ hero.paragraphs[0] }}
           </span>
           <br /><br />
           <span class="home-hero-sub-secondary">
-            Electric is the first agent platform built on&nbsp;sync.
+            {{ hero.paragraphs[1] }}
           </span>
         </p>
         <div class="home-hero-actions">
           <VPButton
+            v-for="action in hero.actions"
+            :key="action.href"
             tag="a"
             size="medium"
-            theme="brand"
-            text="Electric Cloud"
-            href="/cloud"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Quickstart"
-            href="/docs/agents/quickstart"
+            :theme="action.theme"
+            :text="action.text"
+            :href="action.href"
           />
         </div>
       </div>
-      <div class="home-hero-scene">
+      <div class="home-hero-scene md-exclude">
         <HomeCompositionHero />
       </div>
       </div>

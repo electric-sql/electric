@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import MarkdownContent from "./MarkdownContent.vue"
+import MdExportExplicit from "./MdExportExplicit.vue"
+import { useMarkdownExport } from "../lib/useMarkdownExport"
 
 /* InstallPill — single source of truth for the "$ npx … " install
    snippets that appear in landing-page hero rows and end-of-page CTA
@@ -42,9 +45,11 @@ const props = withDefaults(
 
 const tokens = computed(() => props.command.trim().split(/\s+/))
 const copyText = computed(() => props.clipboard || props.command)
+const markdownCommand = computed(() => `\`\`\`sh\n${props.command}\n\`\`\``)
 const accentIndex = computed(() =>
   props.accent ? tokens.value.indexOf(props.accent) : -1
 )
+const isMarkdownExport = useMarkdownExport()
 
 const copied = ref(false)
 let resetTimer: ReturnType<typeof setTimeout> | null = null
@@ -60,7 +65,12 @@ function copy() {
 </script>
 
 <template>
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdownCommand }}</MarkdownContent>
+  </MdExportExplicit>
+
   <button
+    v-else
     class="install-pill"
     :class="[`install-pill--${tone}`, { copied }]"
     type="button"

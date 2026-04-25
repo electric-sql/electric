@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import MarkdownContent from "../MarkdownContent.vue"
+import MdExportExplicit from "../MdExportExplicit.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
 import { ref, watch, onMounted, onBeforeUnmount } from "vue"
 import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
@@ -89,6 +92,19 @@ const cards: Card[] = [
   },
 ]
 
+const markdownCards = [
+  `GET https://api.streams.dev/v1/stream/chat-42?live=sse`,
+  ...cards.map(
+    (card) => `### ${card.lang}
+
+${card.tagline}
+
+\`\`\`
+${card.lines.map((line) => line.html.replace(/<[^>]+>/g, "")).join("\n")}
+\`\`\``
+  ),
+].join("\n\n")
+
 interface BannerEvent {
   text: string
   cursor: boolean
@@ -109,6 +125,7 @@ const STEADY_STATE: BannerEvent[] = [
 
 const rootRef = ref<HTMLElement>()
 const isActive = useDemoVisibility(rootRef)
+const isMarkdownExport = useMarkdownExport()
 
 const visibleEvents = ref<BannerEvent[]>([...STEADY_STATE])
 const pulsingCards = ref<Set<number>>(new Set())
@@ -190,7 +207,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootRef" class="pl">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdownCards }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else ref="rootRef" class="pl">
     <span class="sr-only">
       A single HTTP stream URL is consumed by five clients written in
       TypeScript, Python, Swift, Go and curl. Each receives the same

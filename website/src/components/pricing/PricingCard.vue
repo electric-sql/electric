@@ -1,4 +1,8 @@
 <script setup>
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+
 const { plan } = defineProps(['plan'])
 
 const priceColorVar = (() => {
@@ -33,10 +37,40 @@ const commitmentLabel = (() => {
 
 const hasPaidPrice = plan.type === 'tier' && plan.monthlyFee > 0
 const label = plan.shortName || plan.name
+const isMarkdownExport = useMarkdownExport()
+
+const markdown = [
+  `### ${label}`,
+  hasPaidPrice
+    ? `${formatPrice(plan)}${plan.priceQualifier || ''}`
+    : plan.type === 'enterprise'
+      ? formatPrice(plan)
+      : plan.name,
+  plan.who
+    ? `${plan.who}${hasCommitment ? ` — ${commitmentLabel}` : ''}`
+    : hasCommitment
+      ? commitmentLabel
+      : '',
+  plan.billingBehavior || '',
+  plan.effectiveWriteRate !== undefined
+    ? `- ${formatRate(plan.effectiveWriteRate)} per 1M writes${plan.discountPercent ? ` (${plan.discountPercent}% discount)` : ''}`
+    : '',
+  plan.effectiveRetentionRate !== undefined
+    ? `- ${formatRate(plan.effectiveRetentionRate)} per GB-month${plan.discountPercent ? ` (${plan.discountPercent}% discount)` : ''}`
+    : '',
+  plan.support || '',
+  `[${plan.ctaText}](${plan.ctaHref})`,
+]
+  .filter(Boolean)
+  .join('\n\n')
 </script>
 
 <template>
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdown }}</MarkdownContent>
+  </MdExportExplicit>
   <div
+    v-else
     :class="['pricing-card', { 'pricing-card-highlighted': plan.highlighted }]"
   >
     <div class="card-header">

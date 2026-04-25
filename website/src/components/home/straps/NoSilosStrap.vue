@@ -1,6 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
+import MarkdownContent from '../../MarkdownContent.vue'
+import MdExportExplicit from '../../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../../lib/useMarkdownExport'
+
 /* NoSilosStrap — full-bleed transition band that sits between the
    product panels and the supporting sections. Lifted to the same
    visual language as the landing-page CTA panels: --ea- tokens, mono
@@ -10,6 +14,22 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const stripRef = ref()
 const isRevealed = ref(false)
 let observer = null
+const isMarkdownExport = useMarkdownExport()
+const strap = {
+  eyebrow: 'Open protocol · Apache 2.0 · just HTTP',
+  title: 'No siloes. No black boxes.',
+  bodyPrefix: 'Just sync, solved, with',
+  bodyLink: { text: 'standard web tech', href: '/docs/api/http' },
+  actions: [
+    { text: 'Get started', href: '/docs/quickstart', theme: 'brand' },
+    { text: 'Read the Docs', href: '/docs/intro', theme: 'alt' },
+  ],
+}
+const markdown = `## ${strap.title}
+
+${strap.bodyPrefix} [${strap.bodyLink.text}](${strap.bodyLink.href}).
+
+[${strap.actions[0].text}](${strap.actions[0].href}) [${strap.actions[1].text}](${strap.actions[1].href})`
 
 onMounted(() => {
   observer = new IntersectionObserver(
@@ -30,36 +50,35 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdown }}</MarkdownContent>
+  </MdExportExplicit>
   <section
+    v-else
     ref="stripRef"
     :class="['ns-strap', { revealed: isRevealed }]"
   >
     <div class="ns-inner">
       <div class="ns-eyebrow mono">
         <span class="dot"></span>
-        Open protocol &middot; Apache&nbsp;2.0 &middot; just&nbsp;HTTP
+        {{ strap.eyebrow }}
       </div>
       <h2 class="ns-title">
-        No&nbsp;siloes. No&nbsp;black&nbsp;boxes.
+        {{ strap.title }}
       </h2>
       <p class="ns-tagline">
-        Just sync, solved, with
-        <a href="/docs/api/http">standard&nbsp;web&nbsp;tech</a>.
+        {{ strap.bodyPrefix }}
+        <a :href="strap.bodyLink.href">{{ strap.bodyLink.text }}</a>.
       </p>
       <div class="ns-actions">
         <VPButton
+          v-for="action in strap.actions"
+          :key="action.href"
           tag="a"
           size="medium"
-          theme="brand"
-          text="Get started"
-          href="/docs/quickstart"
-        />
-        <VPButton
-          tag="a"
-          size="medium"
-          theme="alt"
-          text="Read the Docs"
-          href="/docs/intro"
+          :theme="action.theme"
+          :text="action.text"
+          :href="action.href"
         />
       </div>
     </div>

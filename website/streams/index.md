@@ -7,6 +7,10 @@ description: >-
   streams over plain HTTP.
 sidebar: false
 pageClass: ds-homepage
+mdExport:
+  mode: parse-html
 ---
 
-<StreamsHomePage />
+<MdExportParseHtml>
+  <StreamsHomePage />
+</MdExportParseHtml>

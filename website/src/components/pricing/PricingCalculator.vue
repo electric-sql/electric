@@ -1,9 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
 import { data as pricing } from '../../../data/pricing.data.ts'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 
 const config = pricing.config
 const tiers = pricing.tiers
+const isMarkdownExport = useMarkdownExport()
 
 const PLAN_HIERARCHY = ['payg', 'pro', 'scale']
 
@@ -84,6 +88,7 @@ const currencyFmt = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 })
+const integerFmt = new Intl.NumberFormat('en-US')
 
 function safeVal(v) {
   const n = Number(v)
@@ -179,10 +184,34 @@ const planNote = computed(() => {
   const extra = currencyFmt.format(r.usageCost - r.tier.monthlyFee)
   return `The base plan cost of ${fee}, plus an additional ${extra} in usage fees`
 })
+
+const calculatorMarkdown = computed(() => {
+  const lines = [
+    `Default example inputs:`,
+    `- Writes per month: ${integerFmt.format(writesPerMonth.value)}`,
+    `- Data retention: ${integerFmt.format(retentionGB.value)} GB-months`,
+    '',
+    `Recommended plan: **${recommendation.value.tier.name}**`,
+    `- Estimated monthly cost: ${formattedTotal.value}${recommendation.value.totalCost > 0 ? ' / month' : ''}`,
+  ]
+
+  if (breakdownText.value) {
+    lines.push(`- Breakdown: ${breakdownText.value}`)
+  }
+
+  if (planNote.value) {
+    lines.push(`- Notes: ${planNote.value}`)
+  }
+
+  return lines.join('\n')
+})
 </script>
 
 <template>
-  <div class="calculator-container">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ calculatorMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="calculator-container">
     <div class="calculator-inputs">
       <div class="input-group">
         <label class="input-label">

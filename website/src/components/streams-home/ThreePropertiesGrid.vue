@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import MarkdownContent from "../MarkdownContent.vue"
+import MdExportExplicit from "../MdExportExplicit.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
+
 const cards = [
   {
     glyph: "{ url }",
@@ -30,10 +34,27 @@ const cards = [
     ],
   },
 ]
+
+const markdownCards = cards
+  .map(
+    (card) => `### ${card.title}
+
+${card.body}
+
+\`\`\`
+${card.code.join("\n")}
+\`\`\``
+  )
+  .join("\n\n")
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
-  <div class="tpg">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdownCards }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="tpg">
     <div v-for="card in cards" :key="card.title" class="tpg-card">
       <div class="tpg-glyph">{{ card.glyph }}</div>
       <h3 class="tpg-title">{{ card.title }}</h3>

@@ -5,6 +5,12 @@
    the colour palette matches the rest of the site instead of defaulting
    to whatever shiki produces. */
 
+import { computed } from 'vue'
+
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+
 const sseLines = [
   '<span class="tk-prop">data</span>: {<span class="tk-str">"type"</span>: <span class="tk-str">"text-delta"</span>, <span class="tk-str">"delta"</span>: <span class="tk-str">"Hi, "</span>}',
 ]
@@ -20,10 +26,85 @@ const tsxLines = [
   '  <span class="tk-kw">return</span> &lt;<span class="tk-fn">List</span> <span class="tk-prop">todos</span>={data} /&gt;',
   '}',
 ]
+
+const dataSources = [
+  {
+    title: 'Agent streams',
+    href: '/agents',
+    description: 'Durable, URL-addressable streams for long-lived agents.',
+  },
+  {
+    title: 'Real-time streams',
+    href: '/streams',
+    description: 'Append-only streams over HTTP.',
+  },
+  {
+    title: 'Database sync',
+    href: '/sync',
+    description: 'Sync from Postgres in real time.',
+  },
+]
+
+const stackLayers = [
+  {
+    title: 'Auth',
+    href: '/docs/sync/guides/auth',
+    description: 'With your API.',
+  },
+  {
+    title: 'Write',
+    href: '/docs/sync/guides/writes',
+    description: 'Through your backend.',
+  },
+  {
+    title: 'Middleware',
+    href: '/docs/sync/api/http',
+    description: "It's just HTTP and JSON.",
+  },
+]
+
+const stackMarkdown = computed(
+  () => `### Your data
+
+${dataSources
+  .map((source) => `- [${source.title}](${source.href}) - ${source.description}`)
+  .join('\n')}
+
+\`\`\`json
+data: {"type": "text-delta", "delta": "Hi, "}
+\`\`\`
+
+### Your stack
+
+${stackLayers
+  .map((layer) => `- [${layer.title}](${layer.href}) - ${layer.description}`)
+  .join('\n')}
+
+### Your app
+
+- [TanStack DB](/sync/tanstack-db) - Live queries and optimistic mutations on top of Electric.
+
+\`\`\`tsx
+const Todos = () => {
+  const { data } = useLiveQuery(query =>
+    query
+      .from({ todo: todoCollection })
+      .where(({ todo }) => todo.completed)
+  )
+
+  return <List todos={data} />
+}
+\`\`\``
+)
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
-  <div class="ww-stack">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ stackMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="ww-stack">
     <!-- ── Column 1 — Your data ─────────────────────────────────── -->
     <div class="ww-col">
       <div class="ww-tag mono">01 · your data</div>
@@ -78,7 +159,7 @@ const tsxLines = [
     <div class="ww-col">
       <div class="ww-tag mono">02 · your stack</div>
       <div class="ww-layers">
-        <a class="ww-layer no-visual" href="/docs/guides/auth">
+        <a class="ww-layer no-visual" href="/docs/sync/guides/auth">
           <div class="ww-layer-icon">
             <img src="/img/icons/auth.svg" />
           </div>
@@ -87,7 +168,7 @@ const tsxLines = [
             <p>With your API</p>
           </div>
         </a>
-        <a class="ww-layer no-visual" href="/docs/guides/writes">
+        <a class="ww-layer no-visual" href="/docs/sync/guides/writes">
           <div class="ww-layer-icon">
             <img src="/img/icons/writes.svg" />
           </div>
@@ -96,7 +177,7 @@ const tsxLines = [
             <p>Through your backend</p>
           </div>
         </a>
-        <a class="ww-layer no-visual" href="/docs/api/http">
+        <a class="ww-layer no-visual" href="/docs/sync/api/http">
           <div class="ww-layer-icon">
             <img src="/img/icons/deploy.png" />
           </div>

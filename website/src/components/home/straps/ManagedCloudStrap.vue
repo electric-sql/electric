@@ -1,6 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
+import MarkdownContent from '../../MarkdownContent.vue'
+import MdExportExplicit from '../../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../../lib/useMarkdownExport'
+
 /* ManagedCloudStrap — full-bleed band that highlights Electric Cloud
    as the turnkey way to run the stack. Mirrors the visual language of
    NoSilosStrap (eyebrow chip, large title, tagline, CTA row) so the
@@ -10,6 +14,23 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const stripRef = ref()
 const isRevealed = ref(false)
 let observer = null
+const isMarkdownExport = useMarkdownExport()
+const strap = {
+  eyebrow: 'Hosted · usage-based · turnkey',
+  title: 'Fully managed cloud',
+  bodyPrefix: 'Deploy on',
+  bodyLink: { text: 'Electric Cloud', href: '/cloud' },
+  bodySuffix: 'a globally distributed data delivery network with usage-based pricing.',
+  actions: [
+    { text: 'Electric Cloud', href: '/cloud', theme: 'brand' },
+    { text: 'See pricing', href: '/pricing', theme: 'alt' },
+  ],
+}
+const markdown = `## ${strap.title}
+
+${strap.bodyPrefix} [${strap.bodyLink.text}](${strap.bodyLink.href}) - ${strap.bodySuffix}
+
+[${strap.actions[0].text}](${strap.actions[0].href}) [${strap.actions[1].text}](${strap.actions[1].href})`
 
 onMounted(() => {
   observer = new IntersectionObserver(
@@ -30,39 +51,36 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdown }}</MarkdownContent>
+  </MdExportExplicit>
   <section
+    v-else
     ref="stripRef"
     :class="['mc-strap', { revealed: isRevealed }]"
   >
     <div class="mc-inner">
       <div class="mc-eyebrow mono">
         <span class="dot"></span>
-        Hosted &middot; usage-based &middot; turnkey
+        {{ strap.eyebrow }}
       </div>
       <h2 class="mc-title">
-        Fully managed&nbsp;cloud
+        {{ strap.title }}
       </h2>
       <p class="mc-tagline">
-        Deploy on
-        <a href="/cloud">Electric&nbsp;Cloud</a>
-        &mdash; a globally distributed
-        <span class="no-wrap">data delivery&nbsp;network</span>
-        with usage-based pricing.
+        {{ strap.bodyPrefix }}
+        <a :href="strap.bodyLink.href">{{ strap.bodyLink.text }}</a>
+        &mdash; {{ strap.bodySuffix }}
       </p>
       <div class="mc-actions">
         <VPButton
+          v-for="action in strap.actions"
+          :key="action.href"
           tag="a"
           size="medium"
-          theme="brand"
-          text="Electric Cloud"
-          href="/cloud"
-        />
-        <VPButton
-          tag="a"
-          size="medium"
-          theme="alt"
-          text="See pricing"
-          href="/pricing"
+          :theme="action.theme"
+          :text="action.text"
+          :href="action.href"
         />
       </div>
     </div>

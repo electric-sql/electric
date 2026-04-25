@@ -4,6 +4,8 @@ title: 'Electric'
 titleTemplate: ':title | The data platform for multi-agent'
 sidebar: false
 pageClass: home-page
+mdExport:
+  mode: parse-html
 # TODO(meta-image): the default meta image
 # (/img/meta/electric-sync-primitives.jpg, defined in
 # .vitepress/config.mts) still shows the legacy four-card grid and
@@ -50,4 +52,6 @@ const Todos = () => {
 
 </div>
 
-<HomePage />
+<MdExportParseHtml>
+  <HomePage />
+</MdExportParseHtml>

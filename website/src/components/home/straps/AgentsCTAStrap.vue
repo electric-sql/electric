@@ -1,6 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
+import MarkdownContent from '../../MarkdownContent.vue'
+import MdExportExplicit from '../../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../../lib/useMarkdownExport'
+
 /* AgentsCTAStrap — final full-bleed strap on the homepage. Drives
    readers towards the Electric Agents landing page and quickstart so
    the page closes with a single, focused next step. Visual language
@@ -11,6 +15,18 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const stripRef = ref()
 const isRevealed = ref(false)
 let observer = null
+const isMarkdownExport = useMarkdownExport()
+const strap = {
+  eyebrow: 'Build with Electric',
+  title: 'Bring your agents online',
+  actions: [
+    { text: 'Electric Agents', href: '/agents', theme: 'brand' },
+    { text: 'Quickstart', href: '/docs/agents/quickstart', theme: 'alt' },
+  ],
+}
+const markdown = `## ${strap.title}
+
+[${strap.actions[0].text}](${strap.actions[0].href}) [${strap.actions[1].text}](${strap.actions[1].href})`
 
 onMounted(() => {
   observer = new IntersectionObserver(
@@ -31,32 +47,31 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdown }}</MarkdownContent>
+  </MdExportExplicit>
   <section
+    v-else
     ref="stripRef"
     :class="['ac-strap', { revealed: isRevealed }]"
   >
     <div class="ac-inner">
       <div class="ac-eyebrow mono">
         <span class="dot"></span>
-        Build with&nbsp;Electric
+        {{ strap.eyebrow }}
       </div>
       <h2 class="ac-title">
-        Bring your agents&nbsp;online
+        {{ strap.title }}
       </h2>
       <div class="ac-actions">
         <VPButton
+          v-for="action in strap.actions"
+          :key="action.href"
           tag="a"
           size="medium"
-          theme="brand"
-          text="Electric Agents"
-          href="/agents"
-        />
-        <VPButton
-          tag="a"
-          size="medium"
-          theme="alt"
-          text="Quickstart"
-          href="/docs/agents/quickstart"
+          :theme="action.theme"
+          :text="action.text"
+          :href="action.href"
         />
       </div>
     </div>

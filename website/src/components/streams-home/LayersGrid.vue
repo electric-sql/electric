@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import MarkdownContent from "../MarkdownContent.vue"
+import MdExportExplicit from "../MdExportExplicit.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
+
 interface Layer {
   tag: string
   title: string
@@ -58,10 +62,29 @@ const layers: Layer[] = [
     linkLabel: "StreamDB →",
   },
 ]
+
+const markdownLayers = layers
+  .map(
+    (layer, index) => `### ${index + 1}. ${layer.title}
+
+${layer.body}
+
+\`\`\`
+${layer.code.join("\n")}
+\`\`\`
+
+[${layer.linkLabel}](${layer.href})`
+  )
+  .join("\n\n")
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
-  <div class="lg">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdownLayers }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="lg">
     <a
       v-for="layer in layers"
       :key="layer.title"

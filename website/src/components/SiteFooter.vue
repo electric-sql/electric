@@ -2,6 +2,7 @@
 /* Footer is intentionally empty of script — the appearance switcher
    was removed when the site was forced to dark-only via
    `appearance: 'force-dark'` in `.vitepress/config.mts`. */
+import MarkdownLink from './MarkdownLink.vue'
 </script>
 
 <template>
@@ -54,6 +55,9 @@
         <a href="https://github.com/electric-sql/electric/blob/main/LICENSE" target="_blank">Apache 2.0</a>
         License.
       </p>
+      <div class="footer-markdown-link">
+        <MarkdownLink variant="footer" />
+      </div>
     </div>
   </footer>
 </template>
@@ -178,5 +182,26 @@
 .copyright a:hover {
   color: var(--vp-c-text-1);
   text-decoration: underline;
+}
+
+.footer-markdown-link {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.footer-markdown-link :deep(.markdown-link-footer) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-markdown-link :deep(.markdown-link-footer:hover) {
+  color: var(--vp-c-text-1);
 }
 </style>

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import MarkdownContent from "../MarkdownContent.vue"
+import MdExportExplicit from "../MdExportExplicit.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
+
 interface Card {
   img?: string
   svg?: string
@@ -31,10 +35,28 @@ const cards: Card[] = [
     blog: "/blog/2026/03/24/durable-transport-ai-sdks",
   },
 ]
+
+const markdownCards = cards
+  .map((card) => {
+    const links = [`[Docs](${card.docs})`]
+    if (card.blog) links.push(`[Blog post](${card.blog})`)
+
+    return `### ${card.name}
+
+${card.body}
+
+${links.join(" · ")}`
+  })
+  .join("\n\n")
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
-  <div class="ig">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdownCards }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="ig">
     <a
       v-for="card in cards"
       :key="card.name"

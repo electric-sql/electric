@@ -20,6 +20,9 @@
 import { computed } from "vue"
 import { data as allPosts } from "../../data/posts.data.ts"
 import LandscapeBlogPostListing from "./LandscapeBlogPostListing.vue"
+import MarkdownContent from "./MarkdownContent.vue"
+import MdExportExplicit from "./MdExportExplicit.vue"
+import { useMarkdownExport } from "../lib/useMarkdownExport"
 
 const props = withDefaults(
   defineProps<{
@@ -56,10 +59,21 @@ const curated = computed(() => {
   }
   return []
 })
+
+const curatedMarkdown = computed(() =>
+  curated.value
+    .map((post: any) => `- [${post.title}](${post.path})`)
+    .join("\n")
+)
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
-  <div v-if="curated.length" class="curated-posts">
+  <MdExportExplicit v-if="isMarkdownExport && curated.length">
+    <MarkdownContent>{{ curatedMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-if="curated.length && !isMarkdownExport" class="curated-posts">
     <LandscapeBlogPostListing
       v-for="post in curated"
       :key="post.path"

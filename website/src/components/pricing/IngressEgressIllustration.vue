@@ -89,10 +89,10 @@
       </text>
 
       <svg
-        x="395"
-        y="32"
-        width="140"
-        height="108"
+        x="420"
+        y="51"
+        width="90"
+        height="70"
         viewBox="480 -10 300 232"
         overflow="visible"
       >
@@ -316,7 +316,11 @@
 .ingress-egress-illustration :deep(.iei-stroke-soft) {
   color: var(--vp-c-divider);
 }
-@media (max-width: 959px) {
+
+/* Hide on small phones — the labels get unreadable when the SVG is
+   squeezed below ~480px because the inner text is positioned on a fixed
+   960-unit grid. */
+@media (max-width: 479px) {
   .ingress-egress-illustration {
     display: none;
   }

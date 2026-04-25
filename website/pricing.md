@@ -1,18 +1,26 @@
 ---
-layout: home
-title: Pricing
+layout: page
+title: Cloud Pricing
+titleTemplate: false
 description: >-
   Electric Cloud has usage-based pricing with unlimited data delivery. Pay for writes and retention, not egress.
+sidebar: false
 hideReleaseBanner: true
+pageClass: pricing-page
+mdExport:
+  mode: parse-html
 ---
 
 <script setup>
-import Section from './src/components/home/Section.vue'
+import { VPButton } from 'vitepress/theme'
+import EaSection from './src/components/agents-home/Section.vue'
+import MidPageStrap from './src/components/MidPageStrap.vue'
 import PricingCard from './src/components/pricing/PricingCard.vue'
 import ComparisonTable from './src/components/pricing/ComparisonTable.vue'
 import PricingCalculator from './src/components/pricing/PricingCalculator.vue'
-import IngressEgressIllustration from './src/components/pricing/IngressEgressIllustration.vue'
+import PricingFanoutDiagram from './src/components/pricing/PricingFanoutDiagram.vue'
 import { data as pricing } from './data/pricing.data.ts'
+import { useMarkdownExport } from './src/lib/useMarkdownExport'
 
 import LogoStrip from '/static/img/blog/electric-beta-release/logo-strip.svg'
 import LogoStripSm from '/static/img/blog/electric-beta-release/logo-strip.sm.svg'
@@ -24,18 +32,43 @@ const services = pricing.services
 const enterprise = pricing.enterprise
 const comparisonPlans = pricing.comparisonPlans
 const config = pricing.config
+const isMarkdownExport = useMarkdownExport()
 </script>
 
-<Section :actions="[]">
-  <template #title>
-    Pay for writes and retention. Reads&nbsp;are&nbsp;free.
-  </template>
-  <template #tagline>
-    <a href="/cloud">Electric Cloud</a> charges for data
-    ingress and retention. Egress, fan-out, concurrent users, and data
-    delivery are unlimited at no additional&nbsp;cost.
-  </template>
-  <IngressEgressIllustration />
+<MdExportParseHtml>
+<section class="pr-hero">
+  <div class="pr-hero-inner">
+    <h1 class="pr-hero-name">
+      Cloud&nbsp;<span class="pr-hero-accent">Pricing</span>
+    </h1>
+    <p class="pr-hero-text">
+      Pay for writes and retention. Reads are&nbsp;free
+    </p>
+    <p class="pr-hero-tagline">
+      <a href="/cloud">Electric Cloud</a> charges for data ingress and
+      retention. Egress, fan-out, concurrent users, and data delivery are
+      unlimited at no additional&nbsp;cost.
+    </p>
+    <div class="pr-hero-row">
+      <VPButton
+        href="https://dashboard.electric-sql.cloud"
+        text="Sign up"
+        theme="brand"
+        size="medium"
+      />
+      <VPButton
+        href="/about/contact#sales"
+        text="Contact sales"
+        theme="alt"
+        size="medium"
+      />
+    </div>
+  </div>
+</section>
+
+<EaSection id="plans">
+  <PricingFanoutDiagram class="pricing-illustration" />
+
   <div class="pricing-grid">
     <PricingCard
       v-for="tier in tiers"
@@ -43,20 +76,21 @@ const config = pricing.config
       :plan="tier"
     />
   </div>
-</Section>
+</EaSection>
 
-<figure class="logo-strap">
-  <img :src="LogoStrip" class="hidden-md" />
-  <img :src="LogoStripXxs" class="block-md hidden-sm logo-strap-md" />
-  <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" />
-</figure>
+<EaSection id="customers" :dark="true">
+  <figure class="logo-strap md-exclude">
+    <img :src="LogoStrip" class="hidden-md" />
+    <img :src="LogoStripXxs" class="block-md hidden-sm logo-strap-md" />
+    <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" />
+  </figure>
+</EaSection>
 
-<Section :actions="[]">
-  <template #title>Need more support?</template>
-  <template #tagline>
-    Hands-on help and bespoke solutions
-    <span class="no-wrap-xs">for teams that need&nbsp;more</span>.
-  </template>
+<EaSection
+  id="support"
+  title="Need more&nbsp;support?"
+  subtitle="Hands-on help and bespoke solutions for teams that need&nbsp;more."
+>
   <div class="support-card">
     <div class="support-options">
       <div class="support-option">
@@ -75,102 +109,81 @@ const config = pricing.config
       <VPButton href="/about/contact#sales" text="Contact sales" theme="alt" />
     </div>
   </div>
-</Section>
+</EaSection>
 
-<div class="open-source-strap">
-  <div class="section-head">
-    <h1>Unlimited data delivery</h1>
-    <p>
-      We don't charge for egress, data delivery, fan-out, active
-      clients, connections, number of services — or monthly bills under
-      $5/month.
-    </p>
-  </div>
-  <div class="section-head" style="margin-top: 24px;">
-    <h2 style="font-size: 1.25rem; margin-bottom: 12px;">Powered by CDN caching</h2>
+<EaSection
+  id="unlimited-delivery"
+  :dark="true"
+  title="Unlimited data&nbsp;delivery"
+  subtitle="We don't charge for egress, data delivery, fan-out, active clients, connections, number of services — or monthly bills under&nbsp;$5/month."
+>
+  <div class="delivery-callout">
+    <h3>Powered by CDN caching</h3>
     <p>
       Electric delivers real-time data over HTTP, using CDN caching and
       request collapsing to handle millions of concurrent readers without
       proportional infrastructure cost. Your costs scale with writes,
-      not users.
+      not&nbsp;users.
     </p>
   </div>
-  <div class="strap-actions">
-    <div class="action">
-      <VPButton
-        href="https://dashboard.electric-sql.cloud"
-        text="Sign up"
-        theme="brand"
-      />
-      &nbsp;
-      <VPButton
-        href="/docs/api/http"
-        text="Learn more"
-        theme="alt"
-      />
-    </div>
-  </div>
-</div>
+  <template #actions>
+    <VPButton
+      href="https://dashboard.electric-sql.cloud"
+      text="Sign up"
+      theme="brand"
+      size="medium"
+    />
+    <VPButton
+      href="/docs/api/http"
+      text="Learn more"
+      theme="alt"
+      size="medium"
+    />
+  </template>
+</EaSection>
 
-<Section :actions="[]">
-  <template #override-title>
-    <h1 id="details">
-      Compare plans
-    </h1>
-  </template>
-  <template #tagline>
-    Usage-based pricing with <span class="no-wrap-xs">volume discounts <span class="no-wrap">on higher tiers</span></span>.
-  </template>
+<EaSection
+  id="details"
+  title="Compare plans"
+  subtitle="Usage-based pricing with volume discounts on higher&nbsp;tiers."
+>
   <ComparisonTable :comparisonPlans="comparisonPlans" :config="config" />
-</Section>
+</EaSection>
 
-<Section :actions="[]">
+<EaSection
+  id="calculator"
+  :dark="true"
+  title="Model your workload"
+  subtitle="Use our calculator to find the right plan for your&nbsp;workload."
+  v-if="!isMarkdownExport"
+>
+  <PricingCalculator />
+</EaSection>
+
+<MidPageStrap id="contact">
   <template #title>
-    Model your workload
+    Get in&nbsp;touch
   </template>
   <template #tagline>
-    Use our calculator to find the right plan<span class="hidden-sm">
-      for your&nbsp;workload</span>.
+    Let's chat through your requirements and see how we can&nbsp;help.
   </template>
-  <PricingCalculator />
-</Section>
+  <template #actions>
+    <VPButton
+      href="/about/contact#sales"
+      text="Contact sales"
+      theme="brand"
+      size="medium"
+    />
+    <VPButton
+      href="https://discord.electric-sql.com"
+      text="Ask on Discord"
+      theme="alt"
+      size="medium"
+    />
+  </template>
+</MidPageStrap>
 
-<div class="open-source-strap">
-  <div class="section-head">
-    <h1>Get in touch</h1>
-    <p>
-      Let's chat
-      <span class="hidden-sm">
-        through your requirements and
-      </span>
-      <span class="inline-sm">
-        to
-      </span>
-      <span class="no-wrap-sm">
-        see
-        <span class="no-wrap-xs">
-          how we can&nbsp;help</span></span>.
-    </p>
-  </div>
-  <div class="strap-actions">
-    <div class="action">
-      <VPButton
-        href="/about/contact#sales"
-        text="Contact sales"
-        theme="brand"
-      />
-      &nbsp;
-      <VPButton
-          href="https://discord.electric-sql.com"
-          text="Ask on Discord"
-          theme="alt"
-      />
-    </div>
-  </div>
-</div>
-
-<Section :actions="[]">
-  <template #title>Frequently asked questions</template>
+<EaSection id="faq" :dark="true" title="Frequently asked&nbsp;questions">
   <div class="faq-list">
     <details class="faq-item">
       <summary>What counts as a write?</summary>
@@ -225,7 +238,7 @@ const config = pricing.config
         period, provided your usage is within the target plan's limits.</p>
     </details>
   </div>
-</Section>
+</EaSection>
 
 <style>
   @supports (overflow: clip) {
@@ -239,8 +252,87 @@ const config = pricing.config
 </style>
 
 <style scoped>
+/* Pricing hero — mirrors the agents / streams / sync / cloud landing
+   page heroes so the four product landing pages and pricing feel like
+   a matched set: centered name with brand-coloured accent, then a
+   strapline, supporting tagline, and a row of CTAs. */
+
+.pr-hero {
+  position: relative;
+  padding: 72px 24px 56px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.pr-hero-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.pr-hero-name {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--vp-c-text-1);
+  margin: 0;
+  padding-bottom: 4px;
+  text-wrap: balance;
+}
+
+.pr-hero-accent {
+  color: var(--vp-c-brand-1);
+}
+
+.pr-hero-text {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  margin: 16px auto 0;
+  max-width: 720px;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.pr-hero-tagline {
+  font-family: var(--vp-font-family-base);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  margin: 18px auto 0;
+  max-width: 640px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.pr-hero-tagline a {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 35%, transparent);
+}
+
+.pr-hero-tagline a:hover {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+.pr-hero-row {
+  margin-top: 28px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pricing-illustration {
+  margin: 0 auto 56px;
+  max-width: 1040px;
+}
+
 .pricing-grid {
-  margin: 40px 0 40px;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 24px;
@@ -255,78 +347,79 @@ const config = pricing.config
 }
 
 @media (max-width: 529px) {
+  .pr-hero {
+    padding: 44px 20px 32px;
+  }
+
+  .pr-hero-name {
+    font-size: 30px;
+  }
+
+  .pr-hero-text {
+    font-size: 20px;
+  }
+
+  .pr-hero-tagline {
+    font-size: 15px;
+  }
+
+  .pr-hero-row {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .pricing-grid {
     grid-template-columns: 1fr;
     gap: 24px;
   }
 }
 
-.page-section {
-  padding: 10px 0;
-}
-
-.page-section:has(.comparison-table) {
-  padding-top: 50px;
-}
-
-.open-source-strap {
-  margin: 50px -400px 50px;
-  padding: 90px 400px 106px;
-  background: var(--vp-sidebar-bg-color);
-}
-
-.open-source-strap .section-head {
-  max-width: 725px;
-}
-
-.open-source-strap .section-head h1 {
-  margin-bottom: 16px;
-}
-
-.open-source-strap .section-head p {
-  margin: 10px 0 !important;
-  color: var(--vp-c-text-2);
-  font-weight: 500;
-}
-
-.strap-actions {
-  margin-top: 24px;
-  display: flex;
-  justify-content: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
 @media (max-width: 959px) {
-  .page-section {
-    padding: 5px 0;
+  .pr-hero {
+    padding: 56px 24px 40px;
   }
 
-  .page-section:has(.comparison-table) {
-    padding-top: 40px;
+  .pr-hero-name {
+    font-size: 38px;
   }
 
-  .open-source-strap {
-    margin: 50px -48px 60px;
-    padding: 80px 48px 70px;
-    text-align: center;
+  .pr-hero-text {
+    font-size: 22px;
   }
 
-  .open-source-strap .section-head {
-    text-align: center;
-    max-width: 635px;
-    margin-left: auto;
-    margin-right: auto;
+  .pr-hero-tagline {
+    font-size: 16px;
   }
+}
 
-  .strap-actions {
-    justify-content: center;
-  }
+/* "Powered by CDN caching" sub-callout inside the unlimited-delivery
+   section. Rendered as a tertiary block below the section header — same
+   prose tone as the section subtitle but bumped down a level visually. */
+.delivery-callout {
+  max-width: 720px;
+}
+
+.delivery-callout h3 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--vp-c-text-1);
+  margin: 0 0 10px;
+}
+
+.delivery-callout p {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  margin: 0;
 }
 
 .logo-strap {
-  margin-top: 40px;
-  margin-bottom: 40px;
+  margin: 0;
   width: 100%;
   display: flex;
   justify-content: center;
@@ -341,6 +434,13 @@ const config = pricing.config
 }
 .logo-strap-sm {
   max-width: 320px;
+}
+
+@media (max-width: 529px) {
+  .logo-strap {
+    margin-top: 24px;
+    margin-bottom: 56px;
+  }
 }
 
 .billing-dimensions {
@@ -388,7 +488,6 @@ const config = pricing.config
 }
 
 .support-card {
-  margin: 40px 0;
   background: var(--ec-surface-1);
   border: 1px solid var(--ec-border-1);
   border-radius: 12px;
@@ -445,7 +544,7 @@ const config = pricing.config
 }
 
 .faq-list {
-  margin: 40px 0;
+  margin: 0;
 }
 
 .faq-item {
@@ -511,3 +610,4 @@ const config = pricing.config
   margin-top: -10px !important;
 }
 </style>
+</MdExportParseHtml>

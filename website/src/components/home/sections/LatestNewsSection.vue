@@ -1,9 +1,22 @@
 <script setup>
+import { computed } from 'vue'
+
 import EaSection from '../../agents-home/Section.vue'
 import LandscapeBlogPostListing from '../../LandscapeBlogPostListing.vue'
+import MarkdownContent from '../../MarkdownContent.vue'
+import MdExportExplicit from '../../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../../lib/useMarkdownExport'
 
 import { data } from '../../../../data/posts.data.ts'
 const posts = data.filter((post) => post.homepage !== false).slice(0, 6)
+
+const postsMarkdown = computed(() =>
+  posts
+    .map((post) => `- [${post.title}](${post.path}) - ${post.excerpt}`)
+    .join('\n')
+)
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
@@ -15,7 +28,10 @@ const posts = data.filter((post) => post.homepage !== false).slice(0, 6)
       Subscribe to the
       <a href="/blog">Electric Blog</a>
     </template>
-    <div class="listing">
+    <MdExportExplicit v-if="isMarkdownExport">
+      <MarkdownContent>{{ postsMarkdown }}</MarkdownContent>
+    </MdExportExplicit>
+    <div v-else class="listing">
       <LandscapeBlogPostListing
         v-for="post in posts"
         :key="post.slug"

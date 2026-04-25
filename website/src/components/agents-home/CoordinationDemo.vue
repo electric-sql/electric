@@ -145,7 +145,7 @@ onUnmounted(() => {
       <div class="tile">
         <h4 class="tile-title">Spawn &amp; Send</h4>
         <p class="tile-desc"><code>spawn</code> creates a new entity. <code>send</code> delivers a message to any entity — waking it if it's sleeping. The entity replays from its stream, handles the message, then scales back to zero.</p>
-        <div class="diagram">
+        <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
             <line x1="66" y1="100" x2="225" y2="44" :class="['conn', { active: spawn.pr.active }]" />
             <line x1="66" y1="100" x2="225" y2="156" :class="['conn', { active: spawn.pw.active }]" />
@@ -172,7 +172,7 @@ onUnmounted(() => {
       <div class="tile">
         <h4 class="tile-title">Observe</h4>
         <p class="tile-desc">Watch another entity's stream in real time. When the observed entity appends an event, the observer wakes to process it — no polling, no open connections while&nbsp;idle.</p>
-        <div class="diagram">
+        <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
             <line x1="75" y1="100" x2="225" y2="100" :class="['conn', { active: observe.active }]" />
           </svg>
@@ -196,7 +196,7 @@ onUnmounted(() => {
       <div class="tile">
         <h4 class="tile-title">Shared State</h4>
         <p class="tile-desc">Multiple entities read and write to a shared state object backed by a stream. Changes propagate automatically — each writer wakes readers when state&nbsp;updates.</p>
-        <div class="diagram">
+        <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
             <line x1="150" y1="28" x2="150" y2="80" :class="['conn', { active: shared.l1.active }]" />
             <line x1="75" y1="166" x2="138" y2="108" :class="['conn', { active: shared.l2.active }]" />

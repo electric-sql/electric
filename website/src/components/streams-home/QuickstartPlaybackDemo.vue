@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import MarkdownContent from "../MarkdownContent.vue"
+import MdExportExplicit from "../MdExportExplicit.vue"
+import { useMarkdownExport } from "../../lib/useMarkdownExport"
 import {
   ref,
   computed,
@@ -25,6 +28,7 @@ type AnnotationAnchor = "cmd" | "out"
 
 interface Step {
   id: string
+  label: string
   command: string
   thinkMs: number
   output: OutputSegment[][]
@@ -35,6 +39,7 @@ interface Step {
 const script: Step[] = [
   {
     id: "s1",
+    label: "Create the stream",
     command: `curl -X PUT http://localhost:4437/v1/stream/hello \\\n     -H 'Content-Type: application/json'`,
     thinkMs: 420,
     output: [
@@ -49,6 +54,7 @@ const script: Step[] = [
   },
   {
     id: "s2",
+    label: "Append one JSON message",
     command: `curl -X POST http://localhost:4437/v1/stream/hello \\\n     -H 'Content-Type: application/json' \\\n     -d '{"hello":"world"}'`,
     thinkMs: 480,
     output: [
@@ -65,6 +71,7 @@ const script: Step[] = [
   },
   {
     id: "s3",
+    label: "Read from the start",
     command: `curl "http://localhost:4437/v1/stream/hello?offset=-1"`,
     thinkMs: 380,
     output: [
@@ -80,6 +87,7 @@ const script: Step[] = [
   },
   {
     id: "s4",
+    label: "Tail live with SSE",
     command: `curl -N "http://localhost:4437/v1/stream/hello?offset=-1&live=sse"`,
     thinkMs: 360,
     output: [
@@ -103,6 +111,16 @@ const script: Step[] = [
     annotationAnchor: "cmd",
   },
 ]
+
+const markdownQuickstart = computed(
+  () => `\`\`\`sh
+${script
+  .map((step) => `# ${step.label}\n${step.command.replace(/\n {5}/g, "\n  ")}`)
+  .join("\n\n")}
+\`\`\``
+)
+
+const isMarkdownExport = useMarkdownExport()
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pre-computed timeline — every visible state is a function of elapsedMs.
@@ -396,7 +414,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="rootRef" class="qs-root">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdownQuickstart }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else ref="rootRef" class="qs-root">
     <span class="sr-only">
       Animated terminal walkthrough: creates an Electric Stream, appends a
       message, reads it back from offset -1, then tails it live with

@@ -2,6 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { VPButton } from 'vitepress/theme'
 
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+import { toPlainText } from './markdown'
 // We deliberately reuse the canvas hero backgrounds from each
 // landing page so the homepage section graphics share line weight,
 // fade, comet tails and hover behaviour with their corresponding
@@ -66,6 +70,16 @@ const COPY: Record<Product, Copy> = {
 
 const copy = computed(() => COPY[props.product])
 const sceneFirst = computed(() => copy.value.sceneSide === 'left')
+const productMarkdown = computed(
+  () => `## ${copy.value.name}
+
+${toPlainText(copy.value.title)}
+
+${toPlainText(copy.value.sub)}
+
+[${copy.value.cta.text}](${copy.value.cta.href})`
+)
+const isMarkdownExport = useMarkdownExport()
 
 // Used by the underlying canvas (`HeroNetworkBg`/`StreamFlowBg`/
 // `SyncFanOutBg`) as the rectangle to avoid when laying out
@@ -155,7 +169,11 @@ const demoBindings = computed<Record<string, unknown>>(() => {
 </script>
 
 <template>
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ productMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
   <section
+    v-else
     class="home-product"
     :class="[
       `home-product--${props.product}`,
@@ -183,7 +201,7 @@ const demoBindings = computed<Record<string, unknown>>(() => {
         :exclude-el="textRef"
         :labels-on-hover="props.product === 'sync' || undefined"
         :paused="true"
-        class="home-product-bg"
+        class="home-product-bg md-exclude"
       />
       <div class="home-product-inner">
       <div class="home-product-grid">
@@ -203,7 +221,7 @@ const demoBindings = computed<Record<string, unknown>>(() => {
              composition, and three live canvases plus three live
              demos plus the hero would compete with the page copy
              for attention. The framed demo is the call-to-look. -->
-        <div class="home-product-scene">
+        <div class="home-product-scene md-exclude">
           <div class="home-product-scene-frame">
             <component
               :is="demo"
