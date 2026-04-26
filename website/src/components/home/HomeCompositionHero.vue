@@ -22,7 +22,7 @@
  * of each lower layer beyond the footprint of the layer above.
  */
 
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 
 import HeroNetworkBg from '../agents-home/HeroNetworkBg.vue'
 import StreamFlowBg from '../streams-home/StreamFlowBg.vue'
@@ -34,17 +34,149 @@ import SyncFanOutBg from '../sync-home/SyncFanOutBg.vue'
 // the static iso pose is still readable from the stylesheet.
 const root = ref<HTMLDivElement>()
 
-// Per-layer label refs are forwarded to each canvas Bg as `excludeEl`
-// so the underlying text-avoidance logic (already used to keep the
-// landing-page hero meshes from overlapping the headline copy) also
-// keeps each iso layer's "sync" / "streams" / "agents" sticker clear
-// of nodes, rails, and dots.
-const syncLabelRef = ref<HTMLSpanElement>()
-const streamsLabelRef = ref<HTMLSpanElement>()
-const agentsLabelRef = ref<HTMLSpanElement>()
+// Streams ref so we can call its imperative `spawnBranchAt(x, y)` to
+// fire an on-streams branch animation in response to a `dotLit` from
+// the agents or sync layer above/below — re-using the existing rail
+// branch visual so the bridge "lands" naturally on streams.
+const streamsRef = ref<{ spawnBranchAt: (x: number, y: number) => void } | null>(null)
 
 let raf = 0
 let prefersReducedMotion = false
+
+// ── Inter-layer bridges ────────────────────────────────────────────
+// When a dot lights up on the agents or sync layer, we connect it to
+// the streams layer with a brief, fading dotted line. The bridge
+// purely spans the Z gap (its source and target share canvas-local
+// (x, y), the difference is only their plane's translateZ), so the
+// implementation reduces to placing a thin div inside the .hch-stage
+// 3D context and rotating it 90° around Y so its width axis ends up
+// pointing along +Z (sync→streams) or -Z (agents→streams). CSS 3D
+// composition then handles z-ordering and projection automatically —
+// no overlay canvas, no homography math.
+//
+// The pool is fixed-size + reactive so we never grow/shrink the DOM:
+// each spawn picks an idle slot, drives a CSS keyframe via the
+// `is-active` class, and returns to the pool on `animationend`.
+//
+// The `spawnId` counter increments on every spawn and is folded into
+// the v-for `:key` below, so each spawn forces Vue to unmount the
+// old `<div>` and mount a fresh one. Without that, a tight race
+// causes a slow leak: when `animationend` sets `active = false` and
+// a new `dotLit` arrives in the same browser tick, `spawnBridge`
+// flips `active` straight back to `true` before Vue has flushed,
+// the diff sees no net change to `is-active`, the class is never
+// removed-and-re-added, CSS never restarts the animation, and the
+// slot is stuck `active` forever — over ~a minute the entire pool
+// drains. Bumping `spawnId` makes the diff strictly different and
+// guarantees a fresh element each spawn.
+interface BridgeSlot {
+  active: boolean
+  transform: string
+  spawnId: number
+}
+
+// Every `dotLit` produces a bridge if there's a free pool slot — no
+// Bernoulli gate, no inter-spawn timer. A consumer or node lighting
+// up *should* visibly connect to streams, otherwise the eye reads
+// the missing bridge as a glitch ("why does that one not have a
+// line?"). Concurrency is therefore capped only by the pool: each
+// active bridge lives 800 ms, so 16 slots gives a sustained ceiling
+// of 20 bridges/s, comfortably above the steady-state arrival rate
+// even when a sync fan-out burst (one row → several clients) lights
+// up multiple consumer dots within tens of ms of each other.
+const BRIDGE_POOL_SIZE = 16
+
+// Canvas-local → stage-local offsets. The bridges are parented in
+// .hch-stage and their `translate3d(stageX, stageY, …)` is in stage
+// coords, but every dotLit event arrives in the source canvas's own
+// pixel space. Two CSS quirks combine to shift the canvases off the
+// stage origin:
+//
+//   1. Each `.hch-band` has a `border: 1px` and the canvas wrapper
+//      inside is `position: absolute; inset: 0` — which positions
+//      against the band's *padding box*, not its border box, so the
+//      wrapper's (0, 0) actually sits 1px in from each band edge.
+//      This applies to all three layers (agents, streams, sync) and
+//      is the reason bridges previously rendered ~1px too far left
+//      on screen: at the iso tilt, a stage (-1, -1) shift projects
+//      to roughly (-1.4, -0.17) screen px, which reads as a small
+//      but visible left offset relative to the dot.
+//
+//   2. Only the agents wrapper is additionally pulled out by
+//      `.hch-band--agents :deep(.hero-network-wrap) { inset: -22px }`
+//      so the mesh can bleed past the layer's rounded border.
+//
+// So the canvas-local (0, 0) of each layer sits at stage:
+//   agents : (BAND_BORDER + AGENTS_INSET, …) = (-21, -21)
+//   sync   : (BAND_BORDER, BAND_BORDER)      = (  1,   1)
+//   streams: (BAND_BORDER, BAND_BORDER)      = (  1,   1)
+// We compose those into one offset per source for the bridge's
+// stage-coord transform, and unwind the streams offset when we hand
+// stage coords back to the streams canvas (which thinks in its own
+// canvas-local frame) so the on-streams branch dot lands exactly on
+// the bridge's terminal endpoint.
+const BAND_BORDER_PX = 1
+const AGENTS_CANVAS_INSET_PX = -22
+
+const bridgeSlots = reactive<BridgeSlot[]>(
+  Array.from({ length: BRIDGE_POOL_SIZE }, () => ({
+    active: false,
+    transform: '',
+    spawnId: 0,
+  })),
+)
+
+function spawnBridge(source: 'agents' | 'sync', x: number, y: number) {
+  if (prefersReducedMotion) return
+  const slot = bridgeSlots.find((s) => !s.active)
+  if (!slot) return
+  // Translate the canvas-local (x, y) into the .hch-stage frame the
+  // bridges live in. See the BAND_BORDER_PX / AGENTS_CANVAS_INSET_PX
+  // comment above for why the offsets aren't simply 0 (sync) and
+  // -22 (agents).
+  const offset =
+    BAND_BORDER_PX + (source === 'agents' ? AGENTS_CANVAS_INSET_PX : 0)
+  const stageX = x + offset
+  const stageY = y + offset
+  // Source plane Z + rotation direction so the rotated strip extends
+  // from the source plane *toward* streams. CSS rotateY(+90deg) sends
+  // a strip's +X width axis onto -Z, and rotateY(-90deg) onto +Z, so:
+  //   agents (Z=+160) → streams (Z=+40): need -Z → rotateY(+90)
+  //   sync   (Z=-80)  → streams (Z=+40): need +Z → rotateY(-90)
+  // The concrete Z values come from CSS custom properties on
+  // .hch-stage so the two responsive breakpoints (intermediate /
+  // mobile) override them without touching this code path.
+  const zVar =
+    source === 'agents' ? 'var(--hch-z-agents)' : 'var(--hch-z-sync)'
+  const rotY = source === 'agents' ? 90 : -90
+  slot.transform = `translate3d(${stageX.toFixed(2)}px, ${stageY.toFixed(2)}px, ${zVar}) rotateY(${rotY}deg)`
+  // Bumping `spawnId` flips the v-for `:key` so Vue mounts a fresh
+  // <div> on every spawn — see the comment on `BridgeSlot` for why
+  // a plain class toggle leaks slots over time.
+  slot.spawnId++
+  slot.active = true
+  // Fire the matching on-streams branch so the bridge visually "lands"
+  // on the streams layer with the same little ring + pulse the rest
+  // of the rail fan-outs use. The streams canvas thinks in its own
+  // canvas-local frame, which is shifted by BAND_BORDER_PX from the
+  // stage frame for the same reason agents/sync are — so unwind that
+  // offset here, otherwise the branch dot lands 1px down-right of
+  // the bridge endpoint and reads as a small "split tip".
+  streamsRef.value?.spawnBranchAt(
+    stageX - BAND_BORDER_PX,
+    stageY - BAND_BORDER_PX,
+  )
+}
+
+function onAgentsDotLit(x: number, y: number) {
+  spawnBridge('agents', x, y)
+}
+function onSyncDotLit(x: number, y: number) {
+  spawnBridge('sync', x, y)
+}
+function onBridgeAnimationEnd(slot: BridgeSlot) {
+  slot.active = false
+}
 
 function onScroll() {
   if (raf) return
@@ -99,26 +231,43 @@ onBeforeUnmount(() => {
         <SyncFanOutBg
           :labels-on-hover="true"
           :no-edge-fade="true"
-          :exclude-el="syncLabelRef"
           :spawn-rate="0.15"
           :die-rate="0.15"
+          :emit-dot-lit="true"
+          @dot-lit="onSyncDotLit"
         />
-        <span ref="syncLabelRef" class="hch-band-label">sync</span>
+        <span class="hch-band-label">sync</span>
       </div>
       <div class="hch-band hch-band--streams">
-        <StreamFlowBg :no-edge-fade="true" :exclude-el="streamsLabelRef" />
-        <span ref="streamsLabelRef" class="hch-band-label">streams</span>
+        <StreamFlowBg ref="streamsRef" :no-edge-fade="true" />
+        <span class="hch-band-label">streams</span>
       </div>
       <div class="hch-band hch-band--agents">
         <HeroNetworkBg
           :no-edge-fade="true"
-          :exclude-el="agentsLabelRef"
           :spawn-rate="0.4"
           :die-rate="0.4"
           :reposition-on-spawn="true"
+          :emit-dot-lit="true"
+          @dot-lit="onAgentsDotLit"
         />
-        <span ref="agentsLabelRef" class="hch-band-label">agents</span>
+        <span class="hch-band-label">agents</span>
       </div>
+      <!-- Bridge pool: thin dotted strips parented inside the 3D
+           stage so they inherit the iso transform. Each slot is
+           pre-rendered once and reused — `is-active` triggers the
+           CSS keyframe animation, `animationend` returns the slot
+           to the pool. The transform is set per-spawn to anchor at
+           the source dot's (x, y) on the source plane and rotate
+           90° around Y so the strip extends toward streams. -->
+      <div
+        v-for="(slot, i) in bridgeSlots"
+        :key="`bridge-${i}-${slot.spawnId}`"
+        class="hch-bridge"
+        :class="{ 'is-active': slot.active }"
+        :style="{ transform: slot.transform }"
+        @animationend="onBridgeAnimationEnd(slot)"
+      />
     </div>
   </div>
 </template>
@@ -170,6 +319,17 @@ onBeforeUnmount(() => {
   aspect-ratio: 1 / 1;
   height: auto;
   transform-style: preserve-3d;
+  /* Per-band Z offsets exposed as custom properties so the bridge
+     pool below can read the same values via `var(--hch-z-…)` in its
+     inline transforms — keeping the bridge endpoints exactly on the
+     source/target planes across responsive breakpoints (px on
+     desktop, vw on mobile). `--hch-bridge-len` is the |Z| span from
+     each side layer to streams, which is symmetric at every
+     breakpoint, so the bridge strip's width can be a single var. */
+  --hch-z-agents: 160px;
+  --hch-z-streams: 40px;
+  --hch-z-sync: -80px;
+  --hch-bridge-len: 120px;
   /* `--hch-shift-y` is updated on scroll for a subtle parallax
      drift (defaults to 0 so SSR / no-JS / reduced-motion users
      see the static iso pose). The translateY happens *before*
@@ -234,9 +394,9 @@ onBeforeUnmount(() => {
    the next section. The wider spread also makes the three layers
    feel like distinctly separate strata of a system rather than a
    tightly compressed sandwich. */
-.hch-band--agents   { transform: translateZ(160px); }
-.hch-band--streams  { transform: translateZ(40px); }
-.hch-band--sync     { transform: translateZ(-80px); }
+.hch-band--agents   { transform: translateZ(var(--hch-z-agents)); }
+.hch-band--streams  { transform: translateZ(var(--hch-z-streams)); }
+.hch-band--sync     { transform: translateZ(var(--hch-z-sync)); }
 
 /* Subtle layer-tint accent: a brand-coloured wash on each layer's
    border helps you parse the three planes as distinct strata
@@ -284,6 +444,74 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+/* ── Inter-layer bridge strips ────────────────────────────────────
+   A pool of identical thin dotted strips parented inside .hch-stage
+   so they live in the same 3D context as the layer bands. Each
+   strip is laid out flat at the stage origin (top-left, 1px tall)
+   and rotated/translated per-spawn into position. Because the
+   bridge always spans purely along Z (source and target share
+   canvas-local x, y), a single rotateY(±90°) is enough — no
+   homography or per-axis maths.
+
+   Layout:
+   - `width: var(--hch-bridge-len)` matches the |Z| span between the
+     side layer (agents or sync) and streams, so the strip's right
+     edge lands exactly on the streams plane after rotation.
+   - `transform-origin: 0 50% 0` pivots at the strip's left-middle:
+     the inline transform translates that pivot to (x, y, Z_source)
+     and then rotateY(±90°) swings the strip's width axis from +X
+     onto ±Z so it points at streams.
+   - `repeating-linear-gradient` paints a 1px-on / 3px-off dotted
+     pattern in the brand teal — same colour family as the streams
+     branch fan-outs so the bridge reads as part of that visual
+     vocabulary, not a separate effect. */
+.hch-bridge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--hch-bridge-len);
+  height: 1px;
+  pointer-events: none;
+  transform-origin: 0 50% 0;
+  background:
+    repeating-linear-gradient(
+      to right,
+      var(--vp-c-brand-1) 0 1px,
+      transparent 1px 4px
+    );
+  opacity: 0;
+  /* Keep the strip composited on its own layer so the per-spawn
+     transform updates don't trigger layout in the rest of the
+     stage. */
+  will-change: opacity, transform;
+}
+
+/* `is-active` runs the full lifecycle — fade in, hold, fade out —
+   in 800ms. The hold opacity (0.55) is intentionally a little
+   lower than the streams branch peak (~0.7) so the bridge reads
+   as the connecting "hint" and the on-streams branch / pulse
+   reads as the resolved event. `forwards` keeps the closing
+   keyframe's opacity:0 in place so the strip stays invisible
+   until the next spawn re-toggles `is-active`. */
+.hch-bridge.is-active {
+  animation: hch-bridge-life 800ms ease-in-out forwards;
+}
+
+@keyframes hch-bridge-life {
+  0%   { opacity: 0; }
+  18%  { opacity: 0.55; }
+  78%  { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hch-bridge,
+  .hch-bridge.is-active {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Tiny mono band label, bottom-left of each band. The bottom-
    left is the front-most corner of every plane in our iso
    projection (rotateX(58) rotateZ(-32) tilts the +Y/+X corner
@@ -327,10 +555,15 @@ onBeforeUnmount(() => {
       translateY(var(--hch-shift-y, 0px))
       rotateX(62deg)
       rotateZ(-30deg);
+    /* Tighter Z spread for the side-by-side hero column so the
+       stack reads as a compact model, not an oversized one. The
+       sync↔streams and agents↔streams gaps stay symmetric, so a
+       single bridge length still works. */
+    --hch-z-agents: 120px;
+    --hch-z-streams: 30px;
+    --hch-z-sync: -60px;
+    --hch-bridge-len: 90px;
   }
-  .hch-band--agents  { transform: translateZ(120px); }
-  .hch-band--streams { transform: translateZ(30px); }
-  .hch-band--sync    { transform: translateZ(-60px); }
 }
 
 /* Mobile (≤860): the homepage hero renders the iso scene larger than
@@ -373,16 +606,19 @@ onBeforeUnmount(() => {
       translateY(var(--hch-shift-y, 0px))
       rotateX(66deg)
       rotateZ(-30deg);
+    /* Z-spread expressed in vw so the separation scales with viewport
+       width. Sync sits well below the page (-12vw) so its protruding
+       bottom-front edge anchors the stack visually inside the cropped
+       strip; agents stays high (+6vw) so its front face is the
+       dominant top plane; streams is placed at the geometric midpoint
+       between the two ((-12 + 6) / 2 = -3vw) so the three bands read
+       as evenly stratified rather than top- or bottom-heavy. The
+       bridge length is the symmetric |Z| gap (9vw) so the dotted
+       strip terminates exactly on the streams plane on phones too. */
+    --hch-z-agents: 6vw;
+    --hch-z-streams: -3vw;
+    --hch-z-sync: -12vw;
+    --hch-bridge-len: 9vw;
   }
-  /* Z-spread expressed in vw so the separation scales with viewport
-     width. Sync sits well below the page (-12vw) so its protruding
-     bottom-front edge anchors the stack visually inside the cropped
-     strip; agents stays high (+6vw) so its front face is the
-     dominant top plane; streams is placed at the geometric midpoint
-     between the two ((-12 + 6) / 2 = -3vw) so the three bands read
-     as evenly stratified rather than top- or bottom-heavy. */
-  .hch-band--agents  { transform: translateZ(6vw); }
-  .hch-band--streams { transform: translateZ(-3vw); }
-  .hch-band--sync    { transform: translateZ(-12vw); }
 }
 </style>

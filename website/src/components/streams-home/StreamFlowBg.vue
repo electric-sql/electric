@@ -56,6 +56,16 @@ const tooltip = ref<HTMLDivElement>()
 let raf = 0
 let running = false
 
+// Imperative branch trigger — populated by `onMounted` once rails
+// exist. Exposed on the component instance via `defineExpose` so the
+// homepage iso-stack hero can fire a "consumer just landed here"
+// branch animation in response to a `dotLit` event from the agents
+// or sync layer above/below. The (x, y) is in canvas-local CSS
+// pixels; we snap to the closest rail and reuse the existing branch
+// drawing path so the visual matches the rest of the rail
+// fan-outs.
+let spawnBranchAtImpl: (x: number, y: number) => void = () => {}
+
 const STREAM_NAMES = [
   "chat",
   "agent",
@@ -170,6 +180,41 @@ onMounted(() => {
   let elapsed = 0
   let hoveredRail = -1
   let hoveredToken: { rail: number; idx: number } | null = null
+
+  // Wire up the imperative branch-spawn entry point. We re-use the
+  // existing `Branch` model (line growing from rail → consumerY,
+  // then a brief pulse + fade) so an externally-triggered branch
+  // looks identical to an ambient one. Snap to the rail with the
+  // smallest |rail.y - y| so a bridge landing between rails reads
+  // as "consumer joined the closest stream".
+  spawnBranchAtImpl = (x: number, y: number) => {
+    if (!running || rails.length === 0) return
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    let bestI = 0
+    let bestD = Infinity
+    for (let i = 0; i < rails.length; i++) {
+      const d = Math.abs(rails[i].y - y)
+      if (d < bestD) {
+        bestD = d
+        bestI = i
+      }
+    }
+    const rail = rails[bestI]
+    const dir = y >= rail.y ? 1 : -1
+    // Clamp so the consumer dot stays inside the canvas regardless
+    // of where the bridge landed.
+    const consumerY = Math.max(12, Math.min(h - 12, y))
+    const startX = Math.max(0, Math.min(w, x))
+    rail.branches.push({
+      startX,
+      consumerY,
+      life: 1700,
+      totalLife: 1700,
+      arrived: false,
+      pulse: 0,
+      dir,
+    })
+  }
 
   function getTextRects(element: Element): DOMRect[] {
     const rects: DOMRect[] = []
@@ -747,7 +792,14 @@ onMounted(() => {
     el.removeEventListener("mousemove", onMouseMove)
     el.removeEventListener("mouseleave", onMouseLeave)
     el.removeEventListener("click", onClick)
+    spawnBranchAtImpl = () => {}
   })
+})
+
+defineExpose({
+  spawnBranchAt(x: number, y: number) {
+    spawnBranchAtImpl(x, y)
+  },
 })
 </script>
 

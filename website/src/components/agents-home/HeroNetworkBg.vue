@@ -85,6 +85,14 @@ const props = withDefaults(
     // integer is used directly as the seed count, still capped at
     // `maxNodes`.
     initialNodes?: number
+    // When true, the canvas emits a `dotLit` event every time an
+    // existing node visibly lights up — random ambient wake, click
+    // wake, and message arrival. The event payload is the node's
+    // canvas-local `(x, y)` in CSS pixels. Off by default; only the
+    // homepage iso-stack hero turns this on so it can draw inter-layer
+    // bridge lines without paying the listener cost on the standalone
+    // agents landing hero.
+    emitDotLit?: boolean
   }>(),
   {
     density: 1,
@@ -100,8 +108,13 @@ const props = withDefaults(
     labelsOnHover: true,
     hideLabels: false,
     initialNodes: -1,
+    emitDotLit: false,
   },
 )
+
+const emit = defineEmits<{
+  dotLit: [x: number, y: number]
+}>()
 
 const canvas = ref<HTMLCanvasElement>()
 const tooltip = ref<HTMLDivElement>()
@@ -546,8 +559,21 @@ onMounted(() => {
     return (1.0 + Math.random() * 0.7) * Math.max(0.05, props.tokenSpeed)
   }
 
+  // Notify parents of a freshly-lit node so they can draw inter-layer
+  // bridge lines (homepage iso-stack hero only). Cheap when nobody's
+  // listening — guarded by the `emitDotLit` prop and by node aliveness
+  // so dying nodes don't trigger false bridges.
+  function notifyDotLit(idx: number) {
+    if (!props.emitDotLit) return
+    if (idx < 0 || idx >= nodes.length) return
+    const n = nodes[idx]
+    if (!n || !isAlive(n)) return
+    emit("dotLit", n.x, n.y)
+  }
+
   function wakeAndSend(idx: number) {
     nodes[idx].awake = 1
+    notifyDotLit(idx)
     const neighbors = getNeighbors(idx, edges).filter((n) => isAlive(nodes[n]))
     if (neighbors.length > 0) {
       const howMany = Math.min(neighbors.length, 1 + Math.floor(Math.random() * 3))
@@ -1114,6 +1140,7 @@ onMounted(() => {
         const arrivedAt = messages[i].to
         const arrivedFrom = messages[i].from
         nodes[arrivedAt].awake = Math.min(1, nodes[arrivedAt].awake + 0.85)
+        notifyDotLit(arrivedAt)
         messages.splice(i, 1)
 
         if (Math.random() < Math.max(0, Math.min(1, props.cascadeChance))) {
@@ -1240,6 +1267,7 @@ onMounted(() => {
         const startNode =
           aliveStarts[Math.floor(Math.random() * aliveStarts.length)]
         nodes[startNode].awake = Math.min(1, nodes[startNode].awake + 0.95)
+        notifyDotLit(startNode)
         const neighbors = getNeighbors(startNode, edges).filter(
           (n) => isAlive(nodes[n])
         )

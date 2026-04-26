@@ -65,6 +65,13 @@ const props = withDefaults(
     // drain the canvas down to a configurable floor
     // (`MIN_LIVE_SHAPES`) so the scene never empties out.
     dieRate?: number
+    // When true, the canvas emits a `dotLit` event every time a
+    // row visibly flashes (ambient `fireRow`, click-to-fire). The
+    // event payload is the row's canvas-local `(x, y)` in CSS
+    // pixels. Off by default; only the homepage iso-stack hero
+    // turns this on so it can draw inter-layer bridge lines without
+    // paying the listener cost on the standalone sync landing hero.
+    emitDotLit?: boolean
   }>(),
   {
     density: 1,
@@ -73,8 +80,13 @@ const props = withDefaults(
     overlapShapes: 2,
     spawnRate: 0,
     dieRate: 0,
+    emitDotLit: false,
   },
 )
+
+const emit = defineEmits<{
+  dotLit: [x: number, y: number]
+}>()
 
 // Birth/death tween durations for ambient shape spawn/die. Tuned
 // slightly slower than the agents-hero node tweens because shapes
@@ -1169,6 +1181,13 @@ onMounted(() => {
         // would otherwise reach a now-fading client and re-pulse
         // it, which reads as the network "ghost-replying" past
         // death.
+        //
+        // This is also where we emit `dotLit` for the homepage iso
+        // hero's inter-layer bridge: the lit dot in the sync layer
+        // is the *consumer* (client) circle that just received an
+        // update, not the source row in the table grid. So we hand
+        // out the client's centre coords at the moment its `pulse`
+        // ramps back up — same trigger as the visible flash.
         if (shapeAlive(owner)) {
           for (const cid of owner.clientIds) {
             const targetClient = clients[cid]
@@ -1178,6 +1197,9 @@ onMounted(() => {
               targetClient.y === t.toY
             ) {
               targetClient.pulse = 1
+              if (props.emitDotLit) {
+                emit("dotLit", targetClient.x, targetClient.y)
+              }
             }
           }
         }
