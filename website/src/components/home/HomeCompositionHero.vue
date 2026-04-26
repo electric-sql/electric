@@ -28,6 +28,20 @@ import HeroNetworkBg from '../agents-home/HeroNetworkBg.vue'
 import StreamFlowBg from '../streams-home/StreamFlowBg.vue'
 import SyncFanOutBg from '../sync-home/SyncFanOutBg.vue'
 
+// `labelOrientation` toggles whether the per-layer "agents" /
+// "streams" / "sync" stickers lie flat on their layer ('flat') or
+// stand up perpendicular to it ('standing'). Flat reads as a
+// printed label on the card surface; standing reads as a small
+// signpost rooted on the layer's leading edge. Both are valid
+// looks, so the brand-toys page exposes this as a control to
+// preview either pose without editing code.
+withDefaults(
+  defineProps<{
+    labelOrientation?: 'flat' | 'standing'
+  }>(),
+  { labelOrientation: 'standing' },
+)
+
 // Wrapper element so we can mutate two CSS custom properties on
 // scroll: a translateY parallax offset and an additive rotateX
 // "camera tilt". The actual transform composition lives in CSS so
@@ -236,11 +250,9 @@ onBeforeUnmount(() => {
           :emit-dot-lit="true"
           @dot-lit="onSyncDotLit"
         />
-        <span class="hch-band-label">sync</span>
       </div>
       <div class="hch-band hch-band--streams">
         <StreamFlowBg ref="streamsRef" :no-edge-fade="true" />
-        <span class="hch-band-label">streams</span>
       </div>
       <div class="hch-band hch-band--agents">
         <HeroNetworkBg
@@ -251,8 +263,32 @@ onBeforeUnmount(() => {
           :emit-dot-lit="true"
           @dot-lit="onAgentsDotLit"
         />
-        <span class="hch-band-label">agents</span>
       </div>
+      <!-- Layer labels: parented in .hch-stage (not inside the
+           bands) because each band's `overflow: hidden` would
+           otherwise force `transform-style: flat` on its subtree per
+           the CSS spec, collapsing any 3D-rotated child to its 2D
+           projection. Lifting them up one level keeps them in the
+           stage's preserve-3d context so a `--standing` rotation in
+           CSS actually stands them up perpendicular to their layer.
+           The per-layer modifier class supplies the matching
+           translateZ via a `--hch-z-label` custom property, so the
+           labels stay pinned to their band as the responsive
+           Z-spread shifts. The `--standing` modifier is bound to
+           the `labelOrientation` prop so brand-toys / parents can
+           flip between the two poses without editing CSS. -->
+      <span
+        class="hch-band-label hch-band-label--sync"
+        :class="{ 'hch-band-label--standing': labelOrientation === 'standing' }"
+      >sync</span>
+      <span
+        class="hch-band-label hch-band-label--streams"
+        :class="{ 'hch-band-label--standing': labelOrientation === 'standing' }"
+      >streams</span>
+      <span
+        class="hch-band-label hch-band-label--agents"
+        :class="{ 'hch-band-label--standing': labelOrientation === 'standing' }"
+      >agents</span>
       <!-- Bridge pool: thin dotted strips parented inside the 3D
            stage so they inherit the iso transform. Each slot is
            pre-rendered once and reused — `is-active` triggers the
@@ -512,17 +548,43 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Tiny mono band label, bottom-left of each band. The bottom-
-   left is the front-most corner of every plane in our iso
-   projection (rotateX(58) rotateZ(-32) tilts the +Y/+X corner
-   toward the viewer), so anchoring labels there puts them on the
-   protruding leading edge of each layer where they read most
-   prominently and never get occluded by a higher layer. The
-   label tilts with its plane in 3D, so it reads as a sticker on
-   the card rather than a screen-aligned overlay. */
+/* Tiny mono band label, anchored at the front-bottom corner of its
+   layer. CSS bottom-left projects to the bottom of the screen under
+   our iso transform (rotateX(58) rotateZ(-32) tilts the +X/+Y corner
+   toward the viewer), so a label there sits on the protruding
+   leading edge of each layer where it reads most prominently and
+   never gets occluded by a higher layer.
+
+   Two orientations are supported via the `labelOrientation` prop and
+   the `--standing` modifier class:
+
+   - flat (default): the label lies flat on the layer's XY plane,
+     reading like a printed sticker on the card surface.
+   - standing: `rotateX(-90deg)` pivoted at the label's bottom-left
+     tips the body from the layer's XY plane into its XZ plane, so
+     the text rises straight out of the layer along +Z (which the
+     iso transform maps to "up" on screen). The resulting surface
+     normal is +Y, which under the iso projection has a negative dot
+     product with the viewer's look direction — i.e. the readable
+     face ends up pointing at the camera, not away from it, so the
+     text is unmirrored.
+
+   Labels are parented in `.hch-stage` (not inside their band) so the
+   bands' `overflow: hidden` doesn't force them to flat compositing
+   per the CSS spec — that flattening would otherwise collapse the
+   `--standing` rotation to a 2D projection of zero height and make
+   the labels invisible. They each compose their own `translateZ()`
+   from `--hch-z-label` (set on the per-layer modifier class) so
+   they stay pinned to their band as the responsive Z spread
+   changes. */
 .hch-band-label {
   position: absolute;
-  bottom: 10px;
+  /* Flat labels read like a printed sticker, so they want a small
+     inset from the layer edge. Standing labels are perpendicular
+     signs hinged on the bottom edge, so they sit flush at `bottom:
+     0` (overridden below) — any inset there would float them above
+     the layer. */
+  bottom: 5px;
   left: 14px;
   z-index: 2;
   font-family: var(--vp-font-family-mono);
@@ -534,12 +596,25 @@ onBeforeUnmount(() => {
      in the brand colour at all times rather than only on hover. */
   color: var(--vp-c-brand-1);
   opacity: 0.95;
-  transition: opacity 0.2s ease;
   pointer-events: none;
   user-select: none;
+  /* Pivot at the label's bottom-left so the standing rotation hinges
+     on its baseline edge and the flat→standing toggle doesn't shift
+     the text's anchor point on screen. */
+  transform-origin: 0 100% 0;
+  transform: translateZ(var(--hch-z-label, 0));
+  /* Hide the back of the label — when standing, the front already
+     faces the viewer under our iso pose, so anything we'd render on
+     the back would just be a mirrored shadow if backface-visibility
+     were visible. */
+  backface-visibility: hidden;
 }
-.hch-band:hover .hch-band-label {
-  opacity: 1;
+.hch-band-label--agents  { --hch-z-label: var(--hch-z-agents); }
+.hch-band-label--streams { --hch-z-label: var(--hch-z-streams); }
+.hch-band-label--sync    { --hch-z-label: var(--hch-z-sync); }
+.hch-band-label--standing {
+  bottom: 0;
+  transform: translateZ(var(--hch-z-label, 0)) rotateX(-90deg);
 }
 
 /* Intermediate widths (still side-by-side with the text). The cell

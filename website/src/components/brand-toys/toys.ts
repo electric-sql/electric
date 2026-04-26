@@ -504,6 +504,15 @@ export const TOYS: readonly ToyDef[] = [
     description: `Three iso-stacked planes: sync / streams / agents layered.`,
     component: () =>
       import(`../home/HomeCompositionHero.vue`).then((m) => m.default),
+    controls: [
+      {
+        name: `labelOrientation`,
+        type: `select`,
+        default: `standing`,
+        options: [`flat`, `standing`],
+        description: `Lay the per-layer labels flat on each card, or stand them up perpendicular at the front edge.`,
+      },
+    ],
     fullBleed: true,
     background: `dark`,
     defaultSize: { w: 1600, h: 900 },
