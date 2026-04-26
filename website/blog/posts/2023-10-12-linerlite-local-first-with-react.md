@@ -43,7 +43,7 @@ Finally, you’ll find a brief breakdown of [how we built Linearlite](#how-we-bu
 
 ElectricSQL is an open source local-first software platform. Use it to build super fast, collaborative, offline-capable apps directly on Postgres by syncing to a local SQLite database.
 
-Electric comprises a [sync layer](https://legacy.electric-sql.com/docs/api/service) (built with Elixir) placed in front of your Postgres database, and a [type-safe client](/docs/api/clients/typescript) allowing you to bidirectionally sync data from your Postgres to local SQLite databases. This sync is [CRDT-based](https://legacy.electric-sql.com/docs/reference/consistency), resilient to conflicting edits from multiple nodes at the same time, and works after being offline for extended periods.
+Electric comprises a [sync layer](https://legacy.electric-sql.com/docs/api/service) (built with Elixir) placed in front of your Postgres database, and a [type-safe client](/docs/sync/api/clients/typescript) allowing you to bidirectionally sync data from your Postgres to local SQLite databases. This sync is [CRDT-based](https://legacy.electric-sql.com/docs/reference/consistency), resilient to conflicting edits from multiple nodes at the same time, and works after being offline for extended periods.
 
 In some ways Electric is similar to Hasura or PostgREST in that it can provide a plug-and-play API to your Postgres database. However, there are three key differences:
 
@@ -113,7 +113,7 @@ This is achieved with an order value in the database, which needs to then work i
 
 ## How we built Linearlite
 
-Linearlite started from our `npx create-electric-app@latest`. To find out more about this see our [Quickstart](/docs/quickstart).
+Linearlite started from our `npx create-electric-app@latest`. To find out more about this see our [Quickstart](/docs/sync/quickstart).
 
 All source code for Linearlite is in [/examples/linearlite](https://github.com/electric-sql/electric/tree/main/examples/linearlite)
 
@@ -176,7 +176,7 @@ npm run db:migrate
 Electric generates a type-safe client for your Electrified tables. There are two parts to this:
 
 1. The “Electric Satellite”. This is responsible for synchronising your local copy with that on the server. It is able to subscript a “shape” - this is a description of a subset of tables and rows (using a `where` clause) that you would like to copy to your user’s device. It then also monitors the local copy, synchronising any changes or additions.
-1. A [type-safe data access library](/docs/api/clients/typescript), or DAL. This is a TypeScript library that allows you to interact with, and perform queries on, your local copy of the database. It enforces runtime type-safety on all operations to ensure that the local database doesn’t reach a state that is not compatible with the server.
+1. A [type-safe data access library](/docs/sync/api/clients/typescript), or DAL. This is a TypeScript library that allows you to interact with, and perform queries on, your local copy of the database. It enforces runtime type-safety on all operations to ensure that the local database doesn’t reach a state that is not compatible with the server.
 
 To generate the client you run:
 
@@ -245,7 +245,7 @@ const App = () => {
 
 ```
 
-There are more details of how to [initialise an Electric client database in the documentation](/docs/api/clients/typescript#instantiation).
+There are more details of how to [initialise an Electric client database in the documentation](/docs/sync/api/clients/typescript#instantiation).
 
 ### Syncing data to the local database
 
@@ -265,7 +265,7 @@ await synced
 
 This instructs Electric to sync the entire issues table and any related comments to the local database. In future versions of Electric you will be able to configure partial replication using this api and `where` clauses.
 
-See the [documentation for more details on how to define partial replication](/docs/api/clients/typescript#sync).
+See the [documentation for more details on how to define partial replication](/docs/sync/api/clients/typescript#sync).
 
 ### Database queries
 

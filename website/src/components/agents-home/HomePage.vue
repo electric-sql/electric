@@ -19,9 +19,11 @@ import CuratedBlogPosts from "../CuratedBlogPosts.vue"
 // and pluck `data` off it. Same trick is used by other landing pages
 // that need raw access to the posts list (the `<CuratedBlogPosts>`
 // component does the same internally).
-import * as postsModule from "../../../data/posts.data.ts"
-const allPosts = (postsModule as unknown as { data: Array<{ tags?: unknown }> })
-  .data
+import { getVitepressData } from "../../lib/vitepressData"
+import type { PostListRow } from "../../types/data-loaders"
+import * as postsModule from "../../../data/posts.data"
+
+const allPosts = getVitepressData<PostListRow[]>(postsModule)
 
 const stackTab = ref<"server" | "entities">("server")
 const heroInnerRef = ref<HTMLElement>()
@@ -39,9 +41,7 @@ const hasAgentBlogPosts = computed(() =>
   allPosts.some(
     (p) =>
       Array.isArray(p.tags) &&
-      (p.tags as unknown[]).some(
-        (t) => String(t).toLowerCase() === "agents"
-      )
+      p.tags.some((t) => String(t).toLowerCase() === "agents")
   )
 )
 </script>
@@ -79,7 +79,7 @@ const hasAgentBlogPosts = computed(() =>
             size="medium"
             theme="alt"
             text="Docs"
-            href="/docs/agents"
+            href="/docs/agents/"
           />
         </div>
       </div>
@@ -98,7 +98,7 @@ const hasAgentBlogPosts = computed(() =>
           <p class="ea-prose">
             Electric Agents brings durable, composable, serverless agents
             to the infrastructure you already run. Built on
-            <a href="/streams">Electric&nbsp;Streams</a>,
+            <a href="/streams/">Electric&nbsp;Streams</a>,
             every agent sleeps when idle, wakes on demand and
             survives&nbsp;restarts.
           </p>

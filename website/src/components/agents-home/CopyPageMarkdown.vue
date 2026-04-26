@@ -38,7 +38,7 @@ async function copy() {
     setTimeout(() => { copied.value = false }, 2000)
   } catch {
     const content = document.querySelector('.vp-doc')
-    if (content) {
+    if (content instanceof HTMLElement) {
       await navigator.clipboard.writeText(content.innerText)
       copied.value = true
       setTimeout(() => { copied.value = false }, 2000)

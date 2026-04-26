@@ -88,7 +88,7 @@ If, instead, you stream tokens into a store and then subscribe to that store, yo
   />
 </figure>
 
-For example, here's our [Electric AI chat app](https://github.com/electric-sql/electric-ai-chat), streaming tokens via a store (in this case [a Postgres database](/docs/guides/deployment#_1-running-postgres)). It handles offline, patchy connectivity and page refreshes without a problem:
+For example, here's our [Electric AI chat app](https://github.com/electric-sql/electric-ai-chat), streaming tokens via a store (in this case [a Postgres database](/docs/sync/guides/deployment#_1-running-postgres)). It handles offline, patchy connectivity and page refreshes without a problem:
 
 <figure>
   <HTML5Video
@@ -99,9 +99,9 @@ For example, here's our [Electric AI chat app](https://github.com/electric-sql/e
 
 The key to this behaviour is _resumability_: the ability to resume streaming from a known position in the stream. To do this, the app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
 
-This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is _built in_ to sync engines for you. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending an `offset` parameter.
+This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is _built in_ to sync engines for you. For example, Electric's [sync protocol](/docs/sync/api/http) is based on the client sending an `offset` parameter.
 
-This is usually abstracted away at a [higher-level](/docs/api/clients/typescript), e.g.:
+This is usually abstracted away at a [higher-level](/docs/sync/api/clients/typescript), e.g.:
 
 ```tsx
 import { ShapeStream } from '@electric-sql/client'
@@ -148,7 +148,7 @@ When they do so, how do you keep the mobile app up-to-date with the session that
   />
 </figure>
 
-For example, with Electric, you can just write changes to Postgres and then Electric takes care of fanning-out data delivery to as many clients as you like (you can literally scale to [millions of clients](/docs/reference/benchmarks#cloud) straight out of the box).
+For example, with Electric, you can just write changes to Postgres and then Electric takes care of fanning-out data delivery to as many clients as you like (you can literally scale to [millions of clients](/docs/sync/reference/benchmarks#cloud) straight out of the box).
 
 So whichever device your user grabs or tab they return to, it can be up-to-date and exactly in the state they're expecting:
 
@@ -176,10 +176,10 @@ Now we have AI, collaboration-by-clicking-buttons is going to be replaced by by 
 
 That's what sync engines like Electric and [Figma's LiveGraph](https://www.figma.com/blog/livegraph-real-time-data-fetching-at-figma/) do. They handle resilient streaming and fan-out, with partial replication. So the right data syncs to the right users.
 
-For example, with Electric, you can define partial replication using [Shapes](/docs/guides/shapes):
+For example, with Electric, you can define partial replication using [Shapes](/docs/sync/guides/shapes):
 
 <div class="partial-replication-diagram">
-  <a href="/docs/guides/shapes" class="no-visual">
+  <a href="/docs/sync/guides/shapes" class="no-visual">
     <Card background="var(--vp-code-block-bg)">
       <PartialReplicationDiagramme />
     </Card>
@@ -400,7 +400,7 @@ Open your browser at [localhost:5173](http://localhost:5173)
 
 ### More info
 
-See the [Docs](/docs/intro) and [Demos](/demos), including the [Typescript Client](/docs/api/clients/typescript) and [React bindings](/docs/integrations/react).
+See the [Docs](/docs/sync/) and [Demos](/sync/demos/), including the [Typescript Client](/docs/sync/api/clients/typescript) and [React bindings](/docs/sync/integrations/react).
 
 If you have any questions, [Join the Discord](https://discord.electric-sql.com), where you can connect with the Electric team and other developers building on sync.
 

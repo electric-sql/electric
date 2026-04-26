@@ -9,13 +9,13 @@ const isMarkdownExport = useMarkdownExport()
 const section = {
   title: 'Scales to millions of users.',
   body: 'Electric streams over plain HTTP, so standard CDNs fan out high-throughput data delivery without ever touching your database.',
-  bodyLink: { text: 'standard CDNs', href: '/docs/api/http#caching' },
+  bodyLink: { text: 'standard CDNs', href: '/docs/sync/api/http#caching' },
   stats: [
     { value: '1M+', label: 'concurrent readers' },
     { value: '99%', label: 'CDN cache hit rate' },
     { value: '∞', label: 'DB load stays flat' },
   ],
-  link: { text: 'Read the benchmarks', href: '/docs/reference/benchmarks' },
+  link: { text: 'Read the benchmarks', href: '/docs/sync/reference/benchmarks' },
 }
 const markdown = `## ${section.title}
 

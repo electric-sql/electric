@@ -45,7 +45,7 @@ const isMarkdownExport = useMarkdownExport()
       Pay for writes and retention. Reads are&nbsp;free
     </p>
     <p class="pr-hero-tagline">
-      <a href="/cloud">Electric Cloud</a> charges for data ingress and
+      <a href="/cloud/">Electric Cloud</a> charges for data ingress and
       retention. Egress, fan-out, concurrent users, and data delivery are
       unlimited at no additional&nbsp;cost.
     </p>
@@ -134,7 +134,7 @@ const isMarkdownExport = useMarkdownExport()
       size="medium"
     />
     <VPButton
-      href="/docs/api/http"
+      href="/docs/sync/api/http"
       text="Learn more"
       theme="alt"
       size="medium"

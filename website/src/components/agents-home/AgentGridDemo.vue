@@ -9,7 +9,7 @@ const MOBILE_ROWS = 4
 const DOT_SIZE = 12
 const GAP = 16
 
-const containerRef = ref<HTMLElement | null>(null) as { value: HTMLElement | undefined }
+const containerRef = ref<HTMLElement | null>(null)
 const isActive = useDemoVisibility(containerRef)
 const isMobile = ref(false)
 
@@ -44,17 +44,6 @@ const prefixes = [
 
 function entityName(idx: number): string {
   return `${prefixes[idx % prefixes.length]}-${idx}`
-}
-
-function adjacents(idx: number): number[] {
-  const c = idx % cols.value
-  const r = Math.floor(idx / cols.value)
-  const result: number[] = []
-  if (c > 0) result.push(idx - 1)
-  if (c < cols.value - 1) result.push(idx + 1)
-  if (r > 0) result.push(idx - cols.value)
-  if (r < rows.value - 1) result.push(idx + cols.value)
-  return result
 }
 
 function activate(idx: number) {

@@ -11,7 +11,7 @@ There are many systems for syncing data and building local-first applications.
 
 > [!Tip] Add a project to this page
 > If you'd like to suggest a project to add to this page, please feel free to
-> <span class="no-wrap-sm">[submit a pull‑request](https://github.com/electric-sql/electric/edit/main/website/docs/reference/alternatives.md)</span>.
+> <span class="no-wrap-sm">[submit a pull‑request](https://github.com/electric-sql/electric/edit/main/website/docs/sync/reference/alternatives.md)</span>.
 
 ## Alternative projects
 
@@ -25,7 +25,7 @@ We list a selection of projects below, including for example:
 
 ### Real-time and sync
 
-[Electric](/sync) is a sync-engine. It syncs subsets of data from Postgres, in real-time, into local apps and services. Other real-time streaming systems and sync engines include:
+[Electric](/sync/) is a sync-engine. It syncs subsets of data from Postgres, in real-time, into local apps and services. Other real-time streaming systems and sync engines include:
 
 - [Ably](https://ably.com)
 - [Ampli-sync](https://ampliapps.com/sqlite-sync)

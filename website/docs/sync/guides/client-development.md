@@ -29,7 +29,7 @@ You can create a client for Electric by:
 
 ## Consume the HTTP API
 
-The [Electric sync service](/sync) syncs data over an [HTTP API](/docs/sync/api/http). The primary job of a client is to consume this API using HTTP requests.
+The [Electric sync service](/sync/) syncs data over an [HTTP API](/docs/sync/api/http). The primary job of a client is to consume this API using HTTP requests.
 
 :::tip Production Best Practice
 While this guide shows direct HTTP API consumption, **production applications should proxy Electric requests through your backend API** rather than connecting clients directly to Electric. This provides security, authorization, and a clean API interface. See the [authentication guide](/docs/sync/guides/auth) for implementation patterns.

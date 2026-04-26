@@ -8,7 +8,7 @@ outline: deep
 
 # Usage
 
-[Electric Cloud](https://dashboard.electric-sql.cloud) is the hosted, fully-managed platform for [Electric&nbsp;Streams](/streams) and [Electric&nbsp;Sync](/sync). Sign up, provision a service, and you get a globally distributed sync endpoint backed by our Data Delivery Network &mdash; without running any of the infrastructure yourself.
+[Electric Cloud](https://dashboard.electric-sql.cloud) is the hosted, fully-managed platform for [Electric&nbsp;Streams](/streams/) and [Electric&nbsp;Sync](/sync/). Sign up, provision a service, and you get a globally distributed sync endpoint backed by our Data Delivery Network &mdash; without running any of the infrastructure yourself.
 
 This page covers how to get up and running:
 
@@ -27,7 +27,7 @@ After signing in to the [dashboard](https://dashboard.electric-sql.cloud), creat
 
 ## Electric Sync: provision a source
 
-[Electric&nbsp;Sync](/sync) connects to your Postgres database, consumes changes over logical replication, and serves them as cacheable HTTP shapes.
+[Electric&nbsp;Sync](/sync/) connects to your Postgres database, consumes changes over logical replication, and serves them as cacheable HTTP shapes.
 
 1. Open the dashboard and click [New Source](https://dashboard.electric-sql.cloud/sources/new).
 2. Pick a region, project and environment, and paste your PostgreSQL connection string.
@@ -43,7 +43,7 @@ Your Postgres needs to be reachable from Electric Cloud and configured for logic
 
 ## Electric Streams: provision a service
 
-[Electric&nbsp;Streams](/streams) is a fully-managed implementation of the open [Durable&nbsp;Streams](https://durablestreams.com/) protocol &mdash; durable, append-only, replayable HTTP streams for events, agent loops and real-time data.
+[Electric&nbsp;Streams](/streams/) is a fully-managed implementation of the open [Durable&nbsp;Streams](https://durablestreams.com/) protocol &mdash; durable, append-only, replayable HTTP streams for events, agent loops and real-time data.
 
 To provision a Streams service, open the dashboard, pick a project and environment, and create a new **Streams** service. You'll receive a base URL and a service secret.
 

@@ -7,7 +7,7 @@ outline: [2, 3]
 
 # Upgrading
 
-How to upgrade the [Electric sync engine](/sync) with minimal disruption using rolling deployments. This guide covers two deployment scenarios: [shared storage](#shared-storage-recommended) (recommended) and [separate storage](#separate-storage-ephemeral) for ephemeral environments.
+How to upgrade the [Electric sync engine](/sync/) with minimal disruption using rolling deployments. This guide covers two deployment scenarios: [shared storage](#shared-storage-recommended) (recommended) and [separate storage](#separate-storage-ephemeral) for ephemeral environments.
 
 Before reading this guide, make sure you're familiar with the [Deployment guide](/docs/sync/guides/deployment) for general setup.
 

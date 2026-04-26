@@ -11,10 +11,10 @@ import EnvVarConfig from '../../../src/components/EnvVarConfig.vue'
 
 # Sync service configuration
 
-This page documents the config options for [self-hosting](/docs/sync/guides/deployment) the [Electric sync engine](/sync).
+This page documents the config options for [self-hosting](/docs/sync/guides/deployment) the [Electric sync engine](/sync/).
 
 > [!Warning] Advanced only
-> You don't need to worry about this if you're using [Electric Cloud](/cloud).
+> You don't need to worry about this if you're using [Electric Cloud](/cloud/).
 >
 > Also, the only required configuration options are `DATABASE_URL` and `ELECTRIC_SECRET`.
 

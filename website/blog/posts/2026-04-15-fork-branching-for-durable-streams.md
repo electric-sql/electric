@@ -12,12 +12,12 @@ post: true
 published: true
 ---
 
-[Durable Streams](/streams) is the [data primitive for the agent loop](/blog/2026/04/08/data-primitive-agent-loop). Today we're shipping fork — a single API call that branches a stream at any point. Rewind history, fan out agents in parallel, or probe an agent without polluting its context.
+[Durable Streams](/streams/) is the [data primitive for the agent loop](/blog/2026/04/08/data-primitive-agent-loop). Today we're shipping fork — a single API call that branches a stream at any point. Rewind history, fan out agents in parallel, or probe an agent without polluting its context.
 
 A fork creates a new stream from any point in an existing one. It shares everything before the fork point with its source and evolves independently after it. One API call, two headers.
 
 > [!Warning] Durable Streams AI chat demo with forkable sessions
-> Try the [live demo](https://fork-ai-chat.examples.electric-sql.com), read the [docs](/docs/intro), and [sign up for Electric Cloud](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams).
+> Try the [live demo](https://fork-ai-chat.examples.electric-sql.com), read the [docs](/docs/sync/), and [sign up for Electric Cloud](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams).
 
 <div class="embed-container top" style="padding-bottom: 84.4%">
   <YoutubeEmbed video-id="gmkqygh9ezo" />
@@ -31,7 +31,7 @@ A session log is linear but agent workflows aren't. An agent goes down a path th
 
 ## Fork: branching for streams
 
-A [Durable Stream](/streams) assigns an offset to each message as it's appended. When you fork a stream, you specify a source stream and a fork offset. The system creates a new stream that inherits all messages from the source up to that offset. After the fork point, the new stream lives independently — its own URL, its own appends, its own subscribers.
+A [Durable Stream](/streams/) assigns an offset to each message as it's appended. When you fork a stream, you specify a source stream and a fork offset. The system creates a new stream that inherits all messages from the source up to that offset. After the fork point, the new stream lives independently — its own URL, its own appends, its own subscribers.
 
 Forks don't copy data. They use copy-on-write (COW): the shared history between a fork and its source is genuinely shared at the storage level, and only new writes diverge. This means forking is instant regardless of stream length — a stream with ten thousand messages forks just as quickly as one with three.
 
@@ -114,15 +114,15 @@ Fork the session, run the side conversation in the fork, read the result. The ma
 
 ## Getting started
 
-Fork is available now on all Durable Streams services on [Electric Cloud](/cloud). Sign up, create a stream service, and start using it.
+Fork is available now on all Durable Streams services on [Electric Cloud](/cloud/). Sign up, create a stream service, and start using it.
 
-The [protocol spec](https://github.com/durable-streams/durable-streams) covers the full fork semantics — offset behavior across forks, concurrent readers, deletion propagation. The [API docs](/docs/intro) have the reference for all stream operations including fork.
+The [protocol spec](https://github.com/durable-streams/durable-streams) covers the full fork semantics — offset behavior across forks, concurrent readers, deletion propagation. The [API docs](/docs/sync/) have the reference for all stream operations including fork.
 
 ***
 
-- [Sign up for Electric Cloud](/cloud)
+- [Sign up for Electric Cloud](/cloud/)
 - [Try the fork demo](https://fork-ai-chat.examples.electric-sql.com)
-- [Read the docs](/docs/intro)
+- [Read the docs](/docs/sync/)
 - [Join the Discord](https://discord.electric-sql.com)
 
 <div class="actions cta-actions page-footer-actions left">
@@ -134,7 +134,7 @@ The [protocol spec](https://github.com/durable-streams/durable-streams) covers t
     />
     &nbsp;
     <VPButton
-        href="/docs/intro"
+        href="/docs/sync/"
         text="Docs"
         theme="alt"
     />

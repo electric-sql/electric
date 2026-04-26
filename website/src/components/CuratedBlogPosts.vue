@@ -18,11 +18,15 @@
    column on mobile, matching the homepage `LatestNewsSection`. */
 
 import { computed } from "vue"
-import { data as allPosts } from "../../data/posts.data.ts"
+import { getVitepressData } from "../lib/vitepressData"
+import type { PostListRow } from "../types/data-loaders"
+import * as postsModule from "../../data/posts.data"
 import LandscapeBlogPostListing from "./LandscapeBlogPostListing.vue"
 import MarkdownContent from "./MarkdownContent.vue"
 import MdExportExplicit from "./MdExportExplicit.vue"
 import { useMarkdownExport } from "../lib/useMarkdownExport"
+
+const allPosts = getVitepressData<PostListRow[]>(postsModule)
 
 const props = withDefaults(
   defineProps<{
@@ -33,13 +37,12 @@ const props = withDefaults(
   { limit: 4 }
 )
 
-const curated = computed(() => {
+const curated = computed((): PostListRow[] => {
   if (props.posts && props.posts.length) {
-    const ordered: any[] = []
+    const ordered: PostListRow[] = []
     for (const slug of props.posts) {
       const post = allPosts.find(
-        (p: any) =>
-          typeof p.path === "string" && p.path.endsWith(`/${slug}`)
+        (p) => typeof p.path === `string` && p.path.endsWith(`/${slug}`)
       )
       if (post) ordered.push(post)
     }
@@ -49,11 +52,9 @@ const curated = computed(() => {
     const wanted = new Set(props.tags.map((t) => t.toLowerCase()))
     return allPosts
       .filter(
-        (p: any) =>
+        (p) =>
           Array.isArray(p.tags) &&
-          p.tags.some((t: string) =>
-            wanted.has(String(t).toLowerCase())
-          )
+          p.tags.some((t) => wanted.has(String(t).toLowerCase()))
       )
       .slice(0, props.limit)
   }
@@ -62,7 +63,7 @@ const curated = computed(() => {
 
 const curatedMarkdown = computed(() =>
   curated.value
-    .map((post: any) => `- [${post.title}](${post.path})`)
+    .map((post) => `- [${String(post.title ?? post.path)}](${post.path})`)
     .join("\n")
 )
 

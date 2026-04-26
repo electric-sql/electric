@@ -1,26 +1,44 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parse } from 'yaml'
+import type {
+  GlobalPricingConfig,
+  PlanYamlRow,
+} from '../src/types/data-loaders'
+
+function parseGlobalPricingConfig(raw: string): GlobalPricingConfig {
+  return parse(raw) as GlobalPricingConfig
+}
+
+function parsePlanYaml(raw: string): PlanYamlRow {
+  return parse(raw) as PlanYamlRow
+}
 
 export default {
   watch: [`./plans/*.yaml`, `./pricing.yaml`],
 
-  load(files) {
+  load(files: string[]) {
     // Separate global config from plan files
     const configFile = files.find(
       (f) => f.endsWith(`pricing.yaml`) && !f.includes(`plans/`)
-    )
+    )!
     const planFiles = files.filter((f) => f !== configFile)
 
-    const config = parse(fs.readFileSync(configFile, `utf-8`))
+    const config = parseGlobalPricingConfig(
+      fs.readFileSync(configFile, `utf-8`)
+    )
 
     const plans = planFiles
       .map((file) => {
         const slug = path.basename(file, `.yaml`)
-        const data = parse(fs.readFileSync(file, `utf-8`))
+        const data = parsePlanYaml(fs.readFileSync(file, `utf-8`))
 
         // Derive effective rates for tier plans
-        if (data.type === `tier` && data.discountPercent !== undefined) {
+        if (
+          data.type === `tier` &&
+          typeof data.discountPercent === `number` &&
+          config.baseRates
+        ) {
           const discount = data.discountPercent / 100
           data.effectiveWriteRate = +(
             config.baseRates.writesPerMillion *

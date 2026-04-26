@@ -39,21 +39,13 @@ const PGliteReplDemo = defineClientComponent(() => {
   return import("./PGliteReplDemo.vue")
 })
 
-import * as demoModule from "../../../data/demos.data.ts"
+import { getVitepressData } from "../../lib/vitepressData"
+import type { DemosPayload, HomepageDemoCard } from "../../types/data-loaders"
+import * as demoModule from "../../../data/demos.data"
 
-const featuredDemos = (
-  demoModule as unknown as {
-    data: {
-      homepage_demos: Array<{
-        title: string
-        description: string
-        link: string
-        image?: string
-        listing_image?: string
-      }>
-    }
-  }
-).data.homepage_demos.slice(0, 3)
+const featuredDemos: HomepageDemoCard[] = getVitepressData<DemosPayload>(
+  demoModule
+).homepage_demos.slice(0, 3)
 
 const installCommand = "npx @electric-sql/start my-electric-app"
 
@@ -228,7 +220,7 @@ const demosMarkdown = featuredDemos
           <p class="ea-prose">
             Loads data from any source &mdash; including
             <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a> and
-            <a href="/streams">Electric&nbsp;Streams</a> &mdash; with optimistic
+            <a href="/streams/">Electric&nbsp;Streams</a> &mdash; with optimistic
             mutations that reconcile against your&nbsp;backend.
           </p>
           <div class="sh-primitive-actions">

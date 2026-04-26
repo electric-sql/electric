@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Electric Agents is **the durable runtime for long-lived agents**. It's a runtime and communication fabric for spawning and scaling collaborative agents on serverless compute, using your existing web and AI&nbsp;frameworks.
 
-Agent sessions and communication are backed by [Electric Streams](/streams). Each agent is an **entity** with its own stream of events.
+Agent sessions and communication are backed by [Electric Streams](/streams/). Each agent is an **entity** with its own stream of events.
 
 Entities listen for messages and events. When a message or event is received — like a child finishing or state changing — the entity is **woken** and its handler runs.
 

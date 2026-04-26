@@ -10,9 +10,9 @@
    viewport. The whole panel hides via `body.bt-recording` so you
    can capture a clean shot with a single keypress.  */
 
-import { computed, ref } from "vue"
+import { computed } from "vue"
 
-import type { ControlDef, ToyDef } from "./toys"
+import type { ToyDef } from "./toys"
 import { GROUP_LABELS } from "./toys"
 
 const props = defineProps<{
@@ -108,10 +108,6 @@ function toggleMulti(name: string, opt: string) {
 
 const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
 
-function renderControl(c: ControlDef) {
-  return c
-}
-const _ = renderControl
 </script>
 
 <template>

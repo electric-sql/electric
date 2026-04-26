@@ -19,10 +19,10 @@ const strap = {
   eyebrow: 'Open protocol · Apache 2.0 · just HTTP',
   title: 'No siloes. No black boxes.',
   bodyPrefix: 'Just sync, solved, with',
-  bodyLink: { text: 'standard web tech', href: '/docs/api/http' },
+  bodyLink: { text: 'standard web tech', href: '/docs/sync/api/http' },
   actions: [
-    { text: 'Get started', href: '/docs/quickstart', theme: 'brand' },
-    { text: 'Read the Docs', href: '/docs/intro', theme: 'alt' },
+    { text: 'Get started', href: '/docs/sync/quickstart', theme: 'brand' },
+    { text: 'Read the Docs', href: '/docs/sync/', theme: 'alt' },
   ],
 }
 const markdown = `## ${strap.title}

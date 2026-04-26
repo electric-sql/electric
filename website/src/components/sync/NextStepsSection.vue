@@ -3,16 +3,16 @@ import CTAStrap from '../home/CTAStrap.vue'
 
 const actions = [
   {
-    href: '/docs/quickstart',
+    href: '/docs/sync/quickstart',
     text: 'Quickstart',
     theme: 'brand',
   },
   {
-    href: '/docs/intro',
+    href: '/docs/sync/',
     text: 'Docs',
   },
   {
-    href: '/demos',
+    href: '/sync/demos/',
     text: 'Demos',
   },
 ]
@@ -23,11 +23,11 @@ const actions = [
     <template #title>Get started</template>
     <template #tagline>
       Start with the
-      <a href="/docs/quickstart">Quickstart</a>. Dive deeper with the
+      <a href="/docs/sync/quickstart">Quickstart</a>. Dive deeper with the
       <span class="no-wrap">
-        <a href="/docs/intro">Docs</a>
+        <a href="/docs/sync/">Docs</a>
         and
-        <a href="/demos">Demos</a>.
+        <a href="/sync/demos/">Demos</a>.
       </span>
     </template>
   </CTAStrap>

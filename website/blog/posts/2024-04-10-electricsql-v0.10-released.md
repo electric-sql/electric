@@ -24,13 +24,13 @@ It also adds data type support for byte arrays and blobs.
 
 [Shapes](https://legacy.electric-sql.com/docs/usage/data-access/shapes) are the key primitive in the Electric system for controlling what data syncs between the cloud and the local device.
 
-Shape subscriptions are created using the [`sync()` API](/docs/api/clients/typescript#sync), which targets a resource and association graph using where-clauses and an include-tree. However, prior to this release, the implementation of `sync()` was a placeholder that over-synced data and forced you to include all related tables.
+Shape subscriptions are created using the [`sync()` API](/docs/sync/api/clients/typescript#sync), which targets a resource and association graph using where-clauses and an include-tree. However, prior to this release, the implementation of `sync()` was a placeholder that over-synced data and forced you to include all related tables.
 
 Now, with v0.10, we've released shape filtering support that correctly filters rows by where-clause and include-tree. This allows you to use Shapes, as they were intended, to manage dynamic partial replication and optimise the data synced onto a local device.
 
 ### What's changed?
 
-The [`sync()` API](/docs/api/clients/typescript#sync) remains the same. For example:
+The [`sync()` API](/docs/sync/api/clients/typescript#sync) remains the same. For example:
 
 ```typescript
 const shape = await db.projects.sync({

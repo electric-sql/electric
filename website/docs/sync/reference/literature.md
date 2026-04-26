@@ -21,7 +21,7 @@ ElectricSQL builds on decades of research into distributed database technology. 
 
 > [!Tip] Edit this page
 > If you'd like to suggest a paper or an edit to make to this page, please
-> <span class="no-wrap-sm">[submit a pull‑request](https://github.com/electric-sql/electric/edit/main/website/docs/reference/alternatives.md)</span>.
+> <span class="no-wrap-sm">[submit a pull‑request](https://github.com/electric-sql/electric/edit/main/website/docs/sync/reference/alternatives.md)</span>.
 
 ## Research papers
 

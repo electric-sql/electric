@@ -16,6 +16,15 @@ import {
   type MeshWheel,
 } from "./meshOfStreams"
 
+/** rIC / cIC are not on `Window` in all TS `lib` builds. */
+type WindowWithIdle = Window & {
+  requestIdleCallback?: (
+    cb: IdleRequestCallback,
+    options?: IdleRequestOptions
+  ) => number
+  cancelIdleCallback?: (id: number) => void
+}
+
 const props = withDefaults(
   defineProps<{
     seed?: string
@@ -187,13 +196,13 @@ const sceneReady = ref(false)
 let scenePending: number | null = null
 function cancelPendingScene() {
   if (scenePending == null) return
-  if (
-    typeof window !== "undefined" &&
-    typeof (window as any).cancelIdleCallback === "function"
-  ) {
-    ;(window as any).cancelIdleCallback(scenePending)
-  } else {
-    clearTimeout(scenePending)
+  if (typeof window !== `undefined`) {
+    const w = window as WindowWithIdle
+    if (typeof w.cancelIdleCallback === `function`) {
+      w.cancelIdleCallback(scenePending)
+    } else {
+      clearTimeout(scenePending)
+    }
   }
   scenePending = null
 }
@@ -223,16 +232,15 @@ function scheduleSceneRebuild() {
     })
     sceneReady.value = true
   }
-  if (
-    typeof window !== "undefined" &&
-    typeof (window as any).requestIdleCallback === "function"
-  ) {
+  if (typeof window === `undefined`) return
+  const w = window as WindowWithIdle
+  if (typeof w.requestIdleCallback === `function`) {
     // 150ms deadline keeps the scene appearing snappily even on a
     // freshly-loaded page where the idle queue is empty, while still
     // yielding to higher-priority work (paint, layout, hydration).
-    scenePending = (window as any).requestIdleCallback(run, { timeout: 150 })
+    scenePending = w.requestIdleCallback(run, { timeout: 150 })
   } else {
-    scenePending = window.setTimeout(run, 0) as unknown as number
+    scenePending = window.setTimeout(run, 0)
   }
 }
 

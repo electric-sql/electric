@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { VPButton } from 'vitepress/theme-without-fonts'
-import { data as initialStarCounts } from '../../data/count.data.ts'
-import { getStarCount } from '../lib/star-count.ts'
+import { getVitepressData } from '../lib/vitepressData'
+import type { StarCountByRepo } from '../types/data-loaders'
+import * as count from '../../data/count.data'
+import { getStarCount } from '../lib/star-count'
 
 const props = defineProps<{
   repo: string
@@ -25,8 +27,9 @@ const updateButtonContent = (count: number) => {
   link.innerHTML = `<span class="vpi-social-github"></span><span class="github-text">${props.text || 'GitHub'}</span>&nbsp;<span class="count">${formatStarCount(count)}</span>`
 }
 
+const starCounts = getVitepressData<StarCountByRepo>(count)
 onMounted(async () => {
-  const initialCount = initialStarCounts[props.repo]
+  const initialCount = starCounts[props.repo]
 
   if (initialCount) {
     updateButtonContent(initialCount)

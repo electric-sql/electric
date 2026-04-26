@@ -192,7 +192,7 @@ ${example.code}
             Every prompt, tool call, and generation is appended at a known
             <strong>offset</strong> on a persistent, real-time stream.
             Replay from any offset, branch off, or fan out to humans,
-            agents, and <a href="/agents">Electric&nbsp;Agents</a> —
+            agents, and <a href="/agents/">Electric&nbsp;Agents</a> —
             over plain&nbsp;HTTP.
           </p>
         </div>

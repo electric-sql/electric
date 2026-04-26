@@ -28,7 +28,7 @@ Use it to build [fast,&nbsp;modern&nbsp;apps](/blog/2025/07/29/super-fast-apps-o
 
 Start with the [Quickstart](/docs/sync/quickstart) for the fastest way to get up-and-running.
 
-The easiest way to use Electric in production is the [Electric Cloud](/cloud). Alternatively, the [Deployment](/docs/sync/guides/deployment) guide covers how to self host.
+The easiest way to use Electric in production is the [Electric Cloud](/cloud/). Alternatively, the [Deployment](/docs/sync/guides/deployment) guide covers how to self host.
 
 - [Quickstart](/docs/sync/quickstart) — get a sync running end-to-end in a few minutes.
 - [Stacks](/docs/sync/stacks) — recommended stacks for building local-first apps with Electric.

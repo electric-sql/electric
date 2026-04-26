@@ -477,20 +477,20 @@ function createTurndownService() {
 
   service.addRule(`ignore-empty-buttons`, {
     filter: [`button`],
-    replacement: (_content, node) => {
+    replacement: (_content: string, node: Element) => {
       const text = node.textContent?.trim()
       return text ? `${text}\n\n` : ``
     },
   })
 
   service.addRule(`pre-with-file-header`, {
-    filter: (node) => {
+    filter: (node: Element) => {
       return (
         node.nodeName === `PRE` &&
         node.parentElement?.querySelector(`code`) !== null
       )
     },
-    replacement: (_content, node) => {
+    replacement: (_content: string, node: Element) => {
       const code = node.textContent?.replace(/\n+$/, ``) ?? ``
       if (!code.trim()) return ``
 
@@ -507,14 +507,14 @@ function createTurndownService() {
   })
 
   service.addRule(`drop-code-file-header`, {
-    filter: (node) =>
+    filter: (node: Element) =>
       node.nodeName === `DIV` && node.classList.contains(`code-file-header`),
     replacement: () => ``,
   })
 
   service.addRule(`faq-summary-heading`, {
     filter: [`summary`],
-    replacement: (content) => {
+    replacement: (content: string) => {
       const text = cleanMarkdown(content)
       return text ? `\n\n### ${text}\n\n` : ``
     },
@@ -522,15 +522,16 @@ function createTurndownService() {
 
   service.addRule(`details-container`, {
     filter: [`details`],
-    replacement: (content) => (content.trim() ? `\n\n${content.trim()}\n\n` : ``),
+    replacement: (content: string) =>
+      content.trim() ? `\n\n${content.trim()}\n\n` : ``,
   })
 
   service.addRule(`mono-lines`, {
-    filter: (node) =>
+    filter: (node: Element) =>
       (node.nodeName === `DIV` || node.nodeName === `SPAN`) &&
       node.classList.contains(`mono`) &&
       node.children.length === 0,
-    replacement: (_content, node) => {
+    replacement: (_content: string, node: Element) => {
       const text = node.textContent?.trim()
       return text ? `\`${text}\`` : ``
     },

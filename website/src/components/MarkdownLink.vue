@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useData } from 'vitepress'
+import { toMarkdownUrl } from '../lib/markdownUrl'
 
 const props = defineProps({
   variant: {
@@ -10,19 +11,6 @@ const props = defineProps({
 })
 
 const { page } = useData()
-
-function toMarkdownUrl(relativePath) {
-  const normalized = String(relativePath ?? '')
-    .replace(/^\//, '')
-    .replace(/\.html$/, '')
-    .replace(/\.md$/, '')
-
-  if (!normalized || normalized === 'index') {
-    return '/index.md'
-  }
-
-  return `/${normalized}.md`
-}
 
 const markdownUrl = computed(() => {
   return toMarkdownUrl(page.value.relativePath)

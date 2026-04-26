@@ -26,7 +26,7 @@ post: true
 
 Since [launching Durable Streams](/blog/2025/12/09/announcing-durable-streams) and our [Durable&nbsp;Sessions pattern](/blog/2026/01/12/durable-sessions-for-collaborative-ai) for collaborative AI, releasing adapters for the main AI SDKs has been our most requested feature.
 
-Today, we've released Durable Streams based transport and session adapters for [TanStack&nbsp;AI](https://durablestreams.com/tanstack-ai) and the [Vercel&nbsp;AI&nbsp;SDK](https://durablestreams.com/vercel-ai-sdk). With&nbsp;turnkey, scalable hosting on [Electric&nbsp;Cloud](/cloud).
+Today, we've released Durable Streams based transport and session adapters for [TanStack&nbsp;AI](https://durablestreams.com/tanstack-ai) and the [Vercel&nbsp;AI&nbsp;SDK](https://durablestreams.com/vercel-ai-sdk). With&nbsp;turnkey, scalable hosting on [Electric&nbsp;Cloud](/cloud/).
 
 Use them to add resilience, resumeability and multi-user, multi-agent collaboration to your apps. With&nbsp;minimal code changes and zero infra to manage.
 
@@ -37,7 +37,7 @@ Use them to add resilience, resumeability and multi-user, multi-agent collaborat
 
 Most AI apps break if there's [any kind of problem](/blog/2025/04/09/building-ai-apps-on-sync#resumability) with connectivity. Be it patchy network, or a navigation or re-render interrupting a long-running active generation.
 
-[Durable Streams](/streams) are the perfect solution for this. As persistent, addressable streams with a reliable delivery protocol, they provide **resilience** and **resumeability** for long-running active generations and agentic sesstions.
+[Durable Streams](/streams/) are the perfect solution for this. As persistent, addressable streams with a reliable delivery protocol, they provide **resilience** and **resumeability** for long-running active generations and agentic sesstions.
 
 Integrating Durable Streams via a [Durable Sessions](/blog/2026/01/12/durable-sessions-for-collaborative-ai) pattern extends this with natural support for multi-tab, multi-device, multi-user and multi-agent collaboration.
 

@@ -120,7 +120,7 @@ Get your [connection string from PlanetScale](https://planetscale.com/docs/postg
 
 ### Using Electric Cloud
 
-The simplest way to connect is via [Electric Cloud](/cloud). Use the **direct connection string** (port 5432) with `sslmode=require`. The database user must be the same one that ran your migrations (see [Table Ownership](#table-ownership)).
+The simplest way to connect is via [Electric Cloud](/cloud/). Use the **direct connection string** (port 5432) with `sslmode=require`. The database user must be the same one that ran your migrations (see [Table Ownership](#table-ownership)).
 
 ### Self-hosted
 

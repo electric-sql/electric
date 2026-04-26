@@ -21,6 +21,23 @@ import StageFrame from "./StageFrame.vue"
 import ControlPanel from "./ControlPanel.vue"
 import type { ToyDef, ControlDef } from "./toys"
 
+type StageBackground = NonNullable<ToyDef["background"]>
+
+function isStageBackground(s: string): s is StageBackground {
+  switch (s) {
+    case `dark`:
+    case `surface`:
+    case `elv`:
+    case `light`:
+    case `transparent`:
+    case `black`:
+    case `white`:
+      return true
+    default:
+      return false
+  }
+}
+
 const props = defineProps<{
   toy: ToyDef
 }>()
@@ -100,12 +117,10 @@ function serializeControl(c: ControlDef, v: unknown): string | null {
 function isDefault(c: ControlDef, v: unknown): boolean {
   if (c.default === undefined) return false
   if (c.type === "multiselect") {
-    return (
-      Array.isArray(v) &&
-      Array.isArray(c.default) &&
-      v.length === (c.default as unknown[]).length &&
-      v.every((x, i) => x === (c.default as unknown[])[i])
-    )
+    const d = c.default
+    if (!Array.isArray(v) || !Array.isArray(d)) return false
+    if (v.length !== d.length) return false
+    return v.every((x, i) => x === d[i])
   }
   return v === c.default
 }
@@ -120,7 +135,7 @@ const defaultPadding = 30
 const width = ref(defaultSize.w)
 const height = ref(defaultSize.h)
 const padding = ref(defaultPadding)
-const background = ref(props.toy.background ?? "dark")
+const background = ref<StageBackground>(props.toy.background ?? "dark")
 const showRuler = ref(false)
 const showBorder = ref(true)
 const collapsed = ref(false)
@@ -179,7 +194,9 @@ onMounted(() => {
   if (Number.isFinite(p) && p >= 0) padding.value = p
 
   const bg = q.get("bg")
-  if (bg) background.value = bg
+  if (bg && isStageBackground(bg)) {
+    background.value = bg
+  }
   if (q.get("ruler") === "1") showRuler.value = true
   if (q.get("border") === "0") showBorder.value = false
   if (q.get("panel") === "off") collapsed.value = true
@@ -349,6 +366,12 @@ function onReset() {
 function onRemount() {
   remount()
 }
+
+function onBackgroundFromPanel(v: string) {
+  if (isStageBackground(v)) {
+    background.value = v
+  }
+}
 </script>
 
 <template>
@@ -357,7 +380,7 @@ function onRemount() {
       v-model:width="width"
       v-model:height="height"
       :padding="padding"
-      :background="background as any"
+      :background="background"
       :show-ruler="showRuler"
       :show-border="showBorder"
       :full-bleed="toy.fullBleed"
@@ -388,7 +411,7 @@ function onRemount() {
       @update:width="(v) => (width = v)"
       @update:height="(v) => (height = v)"
       @update:padding="(v) => (padding = v)"
-      @update:background="(v) => (background = v)"
+      @update:background="onBackgroundFromPanel"
       @update:show-ruler="(v) => (showRuler = v)"
       @update:show-border="(v) => (showBorder = v)"
       @update:collapsed="(v) => (collapsed = v)"

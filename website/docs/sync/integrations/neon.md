@@ -14,7 +14,7 @@ image: /img/integrations/electric-neon.jpg
 
 ## Electric and Neon
 
-You can use Electric with Neon's [serverless Postgres hosting](https://neon.tech/docs/introduction/serverless).
+You can use Electric with Neon's [serverless Postgres hosting](https://neon.tech/docs/sync/duction/serverless).
 
 > [!Tip] Need context?
 > See the [Deployment guide](/docs/sync/guides/deployment) for more details.

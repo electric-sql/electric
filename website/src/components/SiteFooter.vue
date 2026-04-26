@@ -17,8 +17,8 @@ import MarkdownLink from './MarkdownLink.vue'
         <a href="/about/community">About</a>
         <a href="/about/contact">Contact</a>
         <a href="/about/legal/terms">Legal</a>
-        <a href="/docs/sync">Docs</a>
-        <a href="/sync/demos">Demos</a>
+        <a href="/docs/sync/">Docs</a>
+        <a href="/sync/demos/">Demos</a>
         <a href="/blog">Blog</a>
         <a href="https://dashboard.electric-sql.cloud/">Sign up</a>
       </nav>

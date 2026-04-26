@@ -109,7 +109,9 @@ function pickActive() {
   }
 }
 
-export function useDemoVisibility(elRef: Ref<HTMLElement | undefined>) {
+export function useDemoVisibility(
+  elRef: Ref<HTMLElement | null | undefined>
+) {
   const isActive = ref(false)
   let entry: DemoEntry | null = null
 

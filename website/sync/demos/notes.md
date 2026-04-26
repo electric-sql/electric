@@ -4,7 +4,7 @@ description: >-
   Collaborative note-taking app with sync powered by Electric and Yjs.
 deployed_url: https://notes.examples.electric-sql.com
 source_url: https://github.com/KyleAMathews/electric-notes
-image: /img/demos/notes-demo.png
+image: /img/sync/demos/notes-demo.png
 demo: true
 homepage: true
 order: 20

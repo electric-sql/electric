@@ -15,7 +15,15 @@ function clearTimers() {
 
 type Step = { d: number; fn: () => void }
 
-const spawn = reactive({
+type EntityStatus = "active" | "idle" | "sleeping" | "crashed" | "busy"
+
+const spawn = reactive<{
+  planner: EntityStatus
+  researcher: EntityStatus
+  writer: EntityStatus
+  pr: { active: boolean; label: string; reverse: boolean }
+  pw: { active: boolean; label: string; reverse: boolean }
+}>({
   planner: "sleeping",
   researcher: "sleeping",
   writer: "sleeping",
@@ -31,7 +39,13 @@ function resetSpawn() {
   spawn.pw = { active: false, label: "", reverse: false }
 }
 
-const observe = reactive({
+const observe = reactive<{
+  monitor: EntityStatus
+  worker: EntityStatus
+  active: boolean
+  label: string
+  dots: boolean
+}>({
   monitor: "sleeping",
   worker: "sleeping",
   active: false,
@@ -47,7 +61,15 @@ function resetObserve() {
   observe.dots = false
 }
 
-const shared = reactive({
+const shared = reactive<{
+  a1: EntityStatus
+  a2: EntityStatus
+  a3: EntityStatus
+  pulse: boolean
+  l1: { active: boolean; label: string }
+  l2: { active: boolean; label: string }
+  l3: { active: boolean; label: string }
+}>({
   a1: "sleeping",
   a2: "sleeping",
   a3: "sleeping",

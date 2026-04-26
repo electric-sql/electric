@@ -69,7 +69,7 @@ const cloudUrl = '/cloud'
       </a>
 
       <div class="dp-secondary-grid">
-        <a class="dp-card no-visual" href="/docs/quickstart">
+        <a class="dp-card no-visual" href="/docs/sync/quickstart">
           <div class="dp-card-head">
             <img src="/img/icons/coding.svg" class="dp-card-icon" />
             <h4>Local development</h4>
@@ -81,7 +81,7 @@ const cloudUrl = '/cloud'
           <div class="dp-card-foot mono">
             <span>Quickstart</span>
             <span class="dp-card-sep">·</span>
-            <a href="/docs/intro" class="dp-card-link" @click.stop>Docs →</a>
+            <a href="/docs/sync/" class="dp-card-link" @click.stop>Docs →</a>
           </div>
         </a>
 

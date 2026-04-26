@@ -1,3 +1,5 @@
+import type { StarCountByRepo } from '../types/data-loaders'
+
 const FALLBACK_DURABLE_STREAMS_COUNT = 1_000
 const FALLBACK_ELECTRIC_COUNT = 9_000
 const FALLBACK_PGLITE_COUNT = 14_000
@@ -31,7 +33,7 @@ export async function localStorageCache(
   return value
 }
 
-export async function getStarCount(repoPath, currentCount) {
+export async function getStarCount(repoPath: string, currentCount: number) {
   const ttl = 3_600 // 1 hour
 
   return localStorageCache(`starCount.${repoPath}`, ttl, async () => {
@@ -39,7 +41,7 @@ export async function getStarCount(repoPath, currentCount) {
   })
 }
 
-export async function fetchStarCount(repoPath, currentCount) {
+export async function fetchStarCount(repoPath: string, currentCount: number) {
   const url = `https://api.github.com/repos/${repoPath}`
   const response = await fetch(url)
 
@@ -52,23 +54,31 @@ export async function fetchStarCount(repoPath, currentCount) {
   return currentCount
 }
 
-export async function fetchStarCounts() {
-  const counts = {}
+const REPO_KEYS = [
+  `durable-streams/durable-streams`,
+  `electric-sql/electric`,
+  `electric-sql/pglite`,
+  `tanstack/db`,
+] as const
 
-  const results = await Promise.allSettled([
-    fetchStarCount(
-      `durable-streams/durable-streams`,
-      FALLBACK_DURABLE_STREAMS_COUNT
-    ),
-    fetchStarCount(`electric-sql/electric`, FALLBACK_ELECTRIC_COUNT),
-    fetchStarCount(`electric-sql/pglite`, FALLBACK_PGLITE_COUNT),
-    fetchStarCount(`tanstack/db`, FALLBACK_TANSTACK_DB_COUNT),
-  ])
+type RepoKey = (typeof REPO_KEYS)[number]
 
-  counts[`durable-streams/durable-streams`] = results[0].value
-  counts[`electric-sql/electric`] = results[1].value
-  counts[`electric-sql/pglite`] = results[2].value
-  counts[`tanstack/db`] = results[3].value
+const REPO_FALLBACKS: Record<RepoKey, number> = {
+  'durable-streams/durable-streams': FALLBACK_DURABLE_STREAMS_COUNT,
+  'electric-sql/electric': FALLBACK_ELECTRIC_COUNT,
+  'electric-sql/pglite': FALLBACK_PGLITE_COUNT,
+  'tanstack/db': FALLBACK_TANSTACK_DB_COUNT,
+}
 
-  return counts
+export async function fetchStarCounts(): Promise<StarCountByRepo> {
+  const results = await Promise.allSettled(
+    REPO_KEYS.map((k) => fetchStarCount(k, REPO_FALLBACKS[k]))
+  )
+  const out: StarCountByRepo = {}
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]!
+    const key: RepoKey = REPO_KEYS[i]!
+    out[key] = r.status === `fulfilled` ? r.value : REPO_FALLBACKS[key]
+  }
+  return out
 }

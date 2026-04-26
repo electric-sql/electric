@@ -8,7 +8,7 @@ outline: deep
 
 # CLI
 
-Command-line interface for [Electric Cloud](https://dashboard.electric-sql.cloud) &mdash; manage workspaces, projects, environments and services from the terminal. The CLI provides full control over your Cloud resources, from provisioning [Electric&nbsp;Sync](/sync) sources and [Electric&nbsp;Streams](/streams) services to managing per-PR environments in CI/CD pipelines. All commands support JSON output for scripting and&nbsp;automation.
+Command-line interface for [Electric Cloud](https://dashboard.electric-sql.cloud) &mdash; manage workspaces, projects, environments and services from the terminal. The CLI provides full control over your Cloud resources, from provisioning [Electric&nbsp;Sync](/sync/) sources and [Electric&nbsp;Streams](/streams/) services to managing per-PR environments in CI/CD pipelines. All commands support JSON output for scripting and&nbsp;automation.
 
 For an overview of what these resources are, see the [Usage guide](/cloud/usage).
 

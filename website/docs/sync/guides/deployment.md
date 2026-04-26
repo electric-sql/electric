@@ -17,13 +17,13 @@ import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.pn
 
 # Deployment
 
-How to deploy the [Electric sync engine](/sync), with links to integration docs for specific platforms like [Supabase](/docs/sync/integrations/supabase), [Neon](/docs/sync/integrations/neon), [Render](/docs/sync/integrations/render) and [AWS](/docs/sync/integrations/aws).
+How to deploy the [Electric sync engine](/sync/), with links to integration docs for specific platforms like [Supabase](/docs/sync/integrations/supabase), [Neon](/docs/sync/integrations/neon), [Render](/docs/sync/integrations/render) and [AWS](/docs/sync/integrations/aws).
 
 > [!TIP] Electric Cloud &ndash; the simplest way to use Electric
-> The simplest way to use Electric is via the [Electric Cloud](/cloud), which is a simple, scalable, <span class="no-wrap">low-cost</span>, managed Electric hosting service.
+> The simplest way to use Electric is via the [Electric Cloud](/cloud/), which is a simple, scalable, <span class="no-wrap">low-cost</span>, managed Electric hosting service.
 >
 >   <p class="action cloud-cta">
->     <a href="/cloud" class="VPButton small brand vspace">
+>     <a href="/cloud/" class="VPButton small brand vspace">
 >       <span class="vpi-electric-icon"></span> View Cloud</a>
 >   </p>
 
@@ -116,7 +116,7 @@ When running, Electric also keeps a pool of active database connections open. Th
 
 ## 2. Running Electric
 
-The [Electric sync engine](/sync) is an Elixir web service, packaged using Docker.
+The [Electric sync engine](/sync/) is an Elixir web service, packaged using Docker.
 
 You can deploy it anywhere you can run a container with a filesystem and exposed HTTP port. This includes cloud and application hosting platforms like:
 

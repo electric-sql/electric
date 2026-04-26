@@ -19,14 +19,14 @@ import WorksWithStack from '../WorksWithStack.vue'
         size="medium"
         theme="brand"
         text="Quickstart"
-        href="/docs/quickstart"
+        href="/docs/sync/quickstart"
       />
       <VPButton
         tag="a"
         size="medium"
         theme="alt"
         text="Read the Docs"
-        href="/docs/intro"
+        href="/docs/sync/"
       />
     </template>
   </EaSection>

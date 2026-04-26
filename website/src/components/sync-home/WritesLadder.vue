@@ -22,14 +22,14 @@ const tiles: Tile[] = [
     label: "Plain API",
     title: "Write through your API",
     body: "POST or PUT to your existing endpoints. The Postgres txid flows back through the read path.",
-    href: "/docs/guides/writes#through-the-db",
+    href: "/docs/sync/guides/writes#through-the-db",
   },
   {
     id: "shared",
     title: "Shared write path",
     label: "API + clients",
     body: "Many clients hit the same backend. Sync delivers the same change to every reader.",
-    href: "/docs/guides/writes#shared-write-path",
+    href: "/docs/sync/guides/writes#shared-write-path",
   },
   {
     id: "optimistic",

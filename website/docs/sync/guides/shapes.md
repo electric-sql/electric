@@ -182,7 +182,7 @@ The specified columns must always include the primary key column(s), and should 
 
 ## Subscribing to shapes
 
-Local clients establish shape subscriptions, typically using [client libraries](/docs/sync/api/clients/typescript). These sync data from the [Electric sync engine](/sync) into the client using the [HTTP API](/docs/sync/api/http).
+Local clients establish shape subscriptions, typically using [client libraries](/docs/sync/api/clients/typescript). These sync data from the [Electric sync engine](/sync/) into the client using the [HTTP API](/docs/sync/api/http).
 
 The sync service maintains shape subscriptions and streams any new data and data changes to the local client. In the client, shapes can be held as objects in memory, for example using a [`useShape`](/docs/sync/integrations/react) hook, or in a normalised store or database like [PGlite](/sync/pglite).
 

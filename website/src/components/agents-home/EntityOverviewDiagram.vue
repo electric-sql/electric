@@ -34,7 +34,7 @@
       <!-- Durable Stream -->
       <rect x="296" y="30" width="244" height="52" rx="5" class="inner-box" />
       <text x="418" y="46" text-anchor="middle" class="box-label">Durable Stream</text>
-      <rect v-for="(ev, i) in events" :key="'e'+i"
+      <rect v-for="(_, i) in events" :key="'e'+i"
             :x="304 + i * 46" y="54" width="38" height="20" rx="3"
             class="stream-event" />
       <text v-for="(ev, i) in events" :key="'el'+i"

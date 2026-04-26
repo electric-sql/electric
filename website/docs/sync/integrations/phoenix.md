@@ -14,7 +14,7 @@ image: /img/integrations/electric-phoenix.jpg
 
 ## Electric and Phoenix
 
-Electric is [developed in Elixir](/sync#how-does-it-work), has a first-class [Elixir client](/docs/sync/api/clients/elixir) and a deep Phoenix framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) library.
+Electric is [developed in Elixir](/sync/#how-does-it-work), has a first-class [Elixir client](/docs/sync/api/clients/elixir) and a deep Phoenix framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) library.
 
 <figure>
   <div style="aspect-ratio: 16/9" class="embed-container">
@@ -151,7 +151,7 @@ const MyComponent = () => {
 }
 ```
 
-See the Electric [demos](/sync/demos/) and [documentation](/docs/sync) for more client-side usage examples.
+See the Electric [demos](/sync/demos/) and [documentation](/docs/sync/) for more client-side usage examples.
 
 ## Installation and configuration
 

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitepress'
+import { defineConfig, type HeadConfig, type MarkdownOptions } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import llmstxt from 'vitepress-plugin-llms'
 import type { LanguageRegistration } from 'shiki'
@@ -460,23 +460,10 @@ export default defineConfig({
   ],
   ignoreDeadLinks: [
     /localhost/,
-    /^\/AGENTS(\.md)?$/,
-    /^\/cloud$/,
-    // Legacy /docs/* paths handled by Netlify redirects to /docs/sync/*
-    /^\/docs\/(intro|quickstart|stacks)(\/|$|#)/,
-    /^\/docs\/(guides|api|integrations|reference)\//,
-    // Bare paths to dirs with index.md (vitepress dead-link checker needs trailing slash)
-    /^\/sync$/,
-    /^\/streams$/,
-    /^\/agents$/,
-    /^\/docs\/sync$/,
-    /^\/docs\/agents$/,
-    /^\/docs\/streams$/,
-    // Legacy /demos/* paths handled by Netlify redirects to /sync/demos/*
-    /^\/demos(\/|$|#)/,
   ],
   markdown: {
     theme: 'github-dark',
+    // Shiki 3 and VitePress Shiki 1 `LanguageInput` types are incompatible; assert to VitePress `markdown.languages`.
     languages: [
       'css',
       'elixir',
@@ -488,8 +475,8 @@ export default defineConfig({
       'sql',
       'tsx',
       'typescript',
-      caddyfileLanguage
-    ],
+      caddyfileLanguage,
+    ] as NonNullable<MarkdownOptions['languages']>,
     config(md) {
       md.use(tabsMarkdownPlugin)
     },
@@ -502,6 +489,7 @@ export default defineConfig({
         'blog/$1/$2/$3/$4'
       )
     }
+    return id
   },
   sitemap: {
     hostname: 'https://electric-sql.com',
@@ -584,9 +572,9 @@ export default defineConfig({
     siteTitle: false,
     socialLinks: [],
   },
-  transformHead: ({ pageData, siteData }) => {
+  transformHead: ({ pageData, siteData }): HeadConfig[] => {
     const fm = pageData.frontmatter
-    const head = []
+    const head: HeadConfig[] = []
 
     const pageTitle = fm.title || siteData.title
     const titleTemplate = fm.titleTemplate || ':title | ElectricSQL'

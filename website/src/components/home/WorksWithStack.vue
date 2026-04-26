@@ -115,7 +115,7 @@ const isMarkdownExport = useMarkdownExport()
               src="/img/home/sync-targets/agent.svg"
               class="ww-card-icon"
             />
-            <a href="/agents" class="ww-card-label no-visual">Agent streams</a>
+            <a href="/agents/" class="ww-card-label no-visual">Agent streams</a>
           </div>
           <div class="ww-card-code">
             <div class="ww-code">
@@ -128,7 +128,7 @@ const isMarkdownExport = useMarkdownExport()
             </div>
           </div>
         </div>
-        <a href="/streams" class="ww-card ww-mini no-visual">
+        <a href="/streams/" class="ww-card ww-mini no-visual">
           <img
             src="/img/icons/durable-streams.svg"
             class="ww-card-icon"
@@ -140,7 +140,7 @@ const isMarkdownExport = useMarkdownExport()
             </div>
           </div>
         </a>
-        <a href="/sync" class="ww-card ww-mini no-visual">
+        <a href="/sync/" class="ww-card ww-mini no-visual">
           <img
             src="/img/icons/electric.svg"
             class="ww-card-icon"

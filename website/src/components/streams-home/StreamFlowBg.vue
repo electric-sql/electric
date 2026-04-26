@@ -146,22 +146,6 @@ function hitsExclusion(
   return false
 }
 
-function railVisible(
-  y: number,
-  zones: ExcludeRect[],
-  margin: number
-): { left: number; right: number } | null {
-  // Returns null if the entire rail row is occluded by an exclusion;
-  // otherwise returns the widest hit-window for hover.
-  for (const z of zones) {
-    if (y >= z.top - margin && y <= z.bottom + margin) {
-      // partial hit — caller still iterates pixel-by-pixel
-      return { left: z.left, right: z.right }
-    }
-  }
-  return null
-}
-
 onMounted(() => {
   const el = canvas.value
   const tt = tooltip.value

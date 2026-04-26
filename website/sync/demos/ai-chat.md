@@ -5,7 +5,7 @@ description: >-
 deployed_url: https://electric-ai-chat.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric-ai-chat
 blog_post_url: /blog/2025/04/09/building-ai-apps-on-sync
-image: /img/demos/ai-chat-demo.png
+image: /img/sync/demos/ai-chat-demo.png
 demo: true
 homepage: true
 order: 5

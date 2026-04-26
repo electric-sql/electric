@@ -92,7 +92,7 @@ const isMarkdownExport = useMarkdownExport()
           </div>
           <p>
             We host
-            <a href="/streams" @click.stop>Electric&nbsp;Streams</a>
+            <a href="/streams/" @click.stop>Electric&nbsp;Streams</a>
             &mdash; a fully-managed implementation of the open
             <a href="https://durablestreams.com/" @click.stop>Durable&nbsp;Streams</a>
             protocol &mdash; with
@@ -125,7 +125,7 @@ const isMarkdownExport = useMarkdownExport()
           </div>
           <p>
             We provision, run and operate the
-            <a href="/sync" @click.stop>Electric&nbsp;Sync</a>
+            <a href="/sync/" @click.stop>Electric&nbsp;Sync</a>
             engine for you. It connects to your Postgres, consumes changes
             over logical replication and provides a service endpoint for
             <a href="/docs/sync/guides/shapes" @click.stop>syncing shapes</a>

@@ -21,11 +21,11 @@ import NoStaleDataJPG from '/static/img/blog/no-stale-data.jpg?url'
 import GitHubButton from '../../src/components/GitHubButton.vue'
 </script>
 
-One of the exciting things about [local-first software](/sync) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
+One of the exciting things about [local-first software](/sync/) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
 
 But what if you don't want to eliminate your API? What if you want or need to keep it. How do you develop local-first software then?
 
-With [Electric](/sync), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
+With [Electric](/sync/), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
 
 I gave a talk on this subject at the second Local-first meetup in Berlin in December 2024:
 
@@ -52,9 +52,9 @@ For example, REST APIs are stateless. We know how to scale them. We know how to 
 
 ### Electric's approach
 
-At Electric, our mission is to make [sync](/sync) and [local-first](/sync) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
+At Electric, our mission is to make [sync](/sync/) and [local-first](/sync/) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
 
-This is why we work with [any data model](/docs/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/api/clients/typescript#shape) to a [local database](/sync/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
+This is why we work with [any data model](/docs/sync/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/sync/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/sync/api/clients/typescript#shape) to a [local database](/sync/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
 
 As a result, with Electric, you can develop local-first apps incrementally, using your existing API. So you can get the benefits of local-first, without having to re-engineer your stack or re-invent sliced bread, just to make toast in the morning.
 
@@ -84,9 +84,9 @@ To build local-first you have to have the data locally. If you're doing that wit
   </a>
 </figure>
 
-This is why you need [data sync](/sync). To keep the local data fresh when it changes.
+This is why you need [data sync](/sync/). To keep the local data fresh when it changes.
 
-Happily, this is exactly what Electric does. It [syncs data into local apps and services](/sync) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
+Happily, this is exactly what Electric does. It [syncs data into local apps and services](/sync/) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
 ```jsx
 import React, { useState, useEffect } from 'react'
@@ -135,15 +135,15 @@ You can go much further with Electric, all the way to [syncing into a local data
 
 #### Read-path
 
-Electric [only does the read-path sync](/docs/guides/writes#local-writes-with-electric). It syncs data out-of Postgres, into local apps.
+Electric [only does the read-path sync](/docs/sync/guides/writes#local-writes-with-electric). It syncs data out-of Postgres, into local apps.
 
 Electric does not do write-path sync. It does not provide (or prescribe) a solution for getting data back into Postgres from local apps and services. In fact, it's explicitly designed for you to [handle writes yourself](#writes).
 
 #### HTTP
 
-The other key thing about Electric sync is that [it's just JSON over HTTP](/docs/api/http).
+The other key thing about Electric sync is that [it's just JSON over HTTP](/docs/sync/api/http).
 
-Because it's JSON you can parse it and [work with it](/docs/guides/client-development) in any language and environment. Because it's HTTP you can proxy it. Which means you can use existing HTTP services and middleware to authorize access to it.
+Because it's JSON you can parse it and [work with it](/docs/sync/guides/client-development) in any language and environment. Because it's HTTP you can proxy it. Which means you can use existing HTTP services and middleware to authorize access to it.
 
 In fact, whatever you want to do to the replication stream &mdash; [encrypt](#encryption), [filter](#filtering), transform, split, remix, buffer, you name it &mdash; you can do through a proxy. Extensibility is built in at the protocol layer.
 
@@ -177,7 +177,7 @@ on todos for select
 using ( (select auth.uid()) = user_id );
 ```
 
-With Electric, you don't need to do this. Electric syncs [over HTTP](/docs/api/http). You make HTTP requests to a [Shape](/docs/guides/shapes) endpoint (see
+With Electric, you don't need to do this. Electric syncs [over HTTP](/docs/sync/api/http). You make HTTP requests to a [Shape](/docs/sync/guides/shapes) endpoint (see
 <a href="/openapi.html#/paths/~1v1~1shape/get" target="_blank">spec here</a>) at:
 
 ```http
@@ -197,21 +197,21 @@ Because this is an HTTP resource, you can authorize access to it just as you wou
 
 #### API proxy
 
-You can see this pattern implemented in the [Proxy auth example](/demos/proxy-auth).
+You can see this pattern implemented in the [Proxy auth example](/sync/demos/proxy-auth).
 
 This defines a proxy that takes an HTTP request, reads the user credentials from an `Authorization` header, uses them to authorize the request and if successful, proxies the request onto Electric:
 
 <<< @../../examples/proxy-auth/app/shape-proxy/route.ts{typescript}
 
-You can run this kind of proxy as part of your existing backend API. Here's [another example](/demos/gatekeeper-auth), this time using a [Plug](https://hexdocs.pm/phoenix/plug.html) to authorize requests to a [Phoenix](/docs/integrations/phoenix) application:
+You can run this kind of proxy as part of your existing backend API. Here's [another example](/sync/demos/gatekeeper-auth), this time using a [Plug](https://hexdocs.pm/phoenix/plug.html) to authorize requests to a [Phoenix](/docs/sync/integrations/phoenix) application:
 
 <<< @../../examples/gatekeeper-auth/api/lib/api_web/plugs/auth/verify_token.ex{elixir}
 
 #### Edge proxy
 
-If you're running Electric [behind a CDN](/docs/api/http#caching), you're likely to want to deploy your authorizing proxy in front of the CDN. Otherwise routing requests through your API adds latency and can become a bottleneck. You can achieve this by deploying your proxy as an edge function or worker in front of the CDN, for example using [Cloudflare Workers](/docs/integrations/cloudflare#auth-example) or [Supabase Edge Functions](/docs/integrations/supabase#sync-into-edge-function).
+If you're running Electric [behind a CDN](/docs/sync/api/http#caching), you're likely to want to deploy your authorizing proxy in front of the CDN. Otherwise routing requests through your API adds latency and can become a bottleneck. You can achieve this by deploying your proxy as an edge function or worker in front of the CDN, for example using [Cloudflare Workers](/docs/sync/integrations/cloudflare#auth-example) or [Supabase Edge Functions](/docs/sync/integrations/supabase#sync-into-edge-function).
 
-Here's a Supabase edge function using Deno that verifies that the [shape definition](/docs/guides/shapes#defining-shapes) in a JWT matches the shape definition in the request params:
+Here's a Supabase edge function using Deno that verifies that the [shape definition](/docs/sync/guides/shapes#defining-shapes) in a JWT matches the shape definition in the request params:
 
 <<< @../../examples/gatekeeper-auth/edge/index.ts{typescript}
 
@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
 
 #### Gatekeeper pattern
 
-Another pattern, illustrated in our [gatekeeper-auth example](/demos/gatekeeper-auth), is to:
+Another pattern, illustrated in our [gatekeeper-auth example](/sync/demos/gatekeeper-auth), is to:
 
 1. use an API endpoint to authorize shape access
 2. generate shape-scoped auth tokens
@@ -337,7 +337,7 @@ $ curl -sv --header "Authorization: Bearer <token>" \
 ...
 ```
 
-The [Typescript client](/docs/api/clients/typescript) supports auth headers and `401` / `403` error handling, so you can wrap this up using, e.g.:
+The [Typescript client](/docs/sync/api/clients/typescript) supports auth headers and `401` / `403` error handling, so you can wrap this up using, e.g.:
 
 <<< @../../examples/gatekeeper-auth/client/index.ts{ts}
 
@@ -355,9 +355,9 @@ Electric does [read-path](#read-path) sync. That's the bit between Postgres and 
   </a>
 </figure>
 
-Instead, Electric is designed for you to implement writes yourself. There's a comprehensive [Writes guide](/docs/guides/writes) and [Write patterns example](/demos/write-patterns) that walks through a range of approaches for this that integrate with your existing API.
+Instead, Electric is designed for you to implement writes yourself. There's a comprehensive [Writes guide](/docs/sync/guides/writes) and [Write patterns example](/sync/demos/write-patterns) that walks through a range of approaches for this that integrate with your existing API.
 
-You can also see a number of the examples that use an API for writes, including the [Linearlite](/demos/linearlite), [Phoenix LiveView](/demos/phoenix-liveview) and [Tanstack](/demos/tanstack) examples.
+You can also see a number of the examples that use an API for writes, including the [Linearlite](/sync/demos/linearlite), [Phoenix LiveView](/sync/demos/phoenix-liveview) and [Tanstack](/sync/demos/tanstack) examples.
 
 #### API server
 
@@ -371,7 +371,7 @@ To highlight a couple of the key patterns, let's look at the shared API server f
 
 #### Optimistic writes
 
-If you then look at the [optimistic state pattern](/docs/guides/writes#optimistic-state) (one of the approaches illustrated in the write-patterns example) you can see this being used, together with Electric sync, to support instant, local, offline-capable writes:
+If you then look at the [optimistic state pattern](/docs/sync/guides/writes#optimistic-state) (one of the approaches illustrated in the write-patterns example) you can see this being used, together with Electric sync, to support instant, local, offline-capable writes:
 
 <<< @../../examples/write-patterns/patterns/2-optimistic-state/index.tsx{tsx}
 
@@ -379,7 +379,7 @@ You can also see the [shared persistent optimistic state](https://github.com/ele
 
 #### Write-path sync
 
-Another pattern covered in the Writes guide is [through the database sync](/docs/guides/writes#through-the-db). This approach uses Electric to sync into an local, embedded database and then syncs changes made to the local database back to Postgres, via your API.
+Another pattern covered in the Writes guide is [through the database sync](/docs/sync/guides/writes#through-the-db). This approach uses Electric to sync into an local, embedded database and then syncs changes made to the local database back to Postgres, via your API.
 
 The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/sync/pglite) as the local embedded database. All the application code needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server.
 
@@ -404,7 +404,7 @@ Electric syncs ciphertext as well as it syncs plaintext. You can encrypt data on
 - _encrypt_ it before it leaves the client
 - _decrypt_ it when it comes into the client from the replication stream
 
-You can see an example of this in the [encryption example](/demos/encryption):
+You can see an example of this in the [encryption example](/sync/demos/encryption):
 
 <<< @../../examples/encryption/src/Example.tsx{tsx}
 
@@ -431,7 +431,7 @@ Either in your client or in your proxy. You could then put a denormalised `tenan
 
 ### Filtering
 
-The [HTTP API](/docs/api/http) streams a log of change operations. You can intercept this at any level -- in your API, in a middleware proxy or when handling or materialising the log from a ShapeStream instance in the client.
+The [HTTP API](/docs/sync/api/http) streams a log of change operations. You can intercept this at any level -- in your API, in a middleware proxy or when handling or materialising the log from a ShapeStream instance in the client.
 
 ## Using your existing tools
 
@@ -441,7 +441,7 @@ Because Electric syncs over HTTP, it integrates with standard debugging, visibil
 
 You can see Electric requests in your standard HTTP logs. You can catch errors and send them with request-specific context to systems like Sentry and AppSignal.
 
-You can debug on the command line [using `curl`](/docs/quickstart#http-api).
+You can debug on the command line [using `curl`](/docs/sync/quickstart#http-api).
 
 ### Browser console
 
@@ -457,14 +457,14 @@ You don't need to implement custom tooling to get visibility in what's happening
 
 ## Next steps
 
-This post has outlined how you can develop [local-first software](/sync) incrementally, using your existing API alongside [Electric](/sync) for read-path sync.
+This post has outlined how you can develop [local-first software](/sync/) incrementally, using your existing API alongside [Electric](/sync/) for read-path sync.
 
-To learn more and get started with Electric, see the [Quickstart](/docs/quickstart), [Documentation](/docs/intro) and source code on GitHub:
+To learn more and get started with Electric, see the [Quickstart](/docs/sync/quickstart), [Documentation](/docs/sync/) and source code on GitHub:
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
-        href="/docs/quickstart"
+        href="/docs/sync/quickstart"
         text="Quickstart"
         theme="electric"
     />

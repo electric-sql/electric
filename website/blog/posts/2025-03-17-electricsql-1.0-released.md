@@ -30,19 +30,19 @@ It's been a huge effort by the [whole team](/about/team). We've put our heart an
 
 Sync makes apps awesome. Electric solves sync.
 
-[Electric](/) is a Postgres sync engine. It handles the core concerns of [partial&nbsp;replication](/docs/guides/shapes), [fan&nbsp;out](/docs/api/http#caching), and [data&nbsp;delivery](/docs/reference/benchmarks#cloud).
+[Electric](/) is a Postgres sync engine. It handles the core concerns of [partial&nbsp;replication](/docs/sync/guides/shapes), [fan&nbsp;out](/docs/sync/api/http#caching), and [data&nbsp;delivery](/docs/sync/reference/benchmarks#cloud).
 
 So you can build awesome software without rolling your own sync.
 
 ## The path to 1.0
 
-In 2024 we [re-built Electric from scratch](/blog/2024/07/17/electric-next) to be simpler, faster, more reliable and more scalable. In December 2024, [we hit BETA](/blog/2024/12/10/electric-beta-release#the-path-to-beta) with production users, [proof of scalability](/docs/reference/benchmarks) and a raft of updated [docs](/docs/intro) and [demos](/demos).
+In 2024 we [re-built Electric from scratch](/blog/2024/07/17/electric-next) to be simpler, faster, more reliable and more scalable. In December 2024, [we hit BETA](/blog/2024/12/10/electric-beta-release#the-path-to-beta) with production users, [proof of scalability](/docs/sync/reference/benchmarks) and a raft of updated [docs](/docs/sync/) and [demos](/sync/demos/).
 
-Since then, we've launched a [managed cloud platform](/cloud), run / supported a wide range of production workloads from both open-source and cloud users, tested with [Antithesis](https://www.antithesis.com) and merged 200 bug-fix and reliability PRs.
+Since then, we've launched a [managed cloud platform](/cloud/), run / supported a wide range of production workloads from both open-source and cloud users, tested with [Antithesis](https://www.antithesis.com) and merged 200 bug-fix and reliability PRs.
 
 ## Stable APIs
 
-With the 1.0 release, the core [Electric sync service APIs](/docs/intro) are now stable.
+With the 1.0 release, the core [Electric sync service APIs](/docs/sync/) are now stable.
 
 Our policy is now no backwards-incompatible changes in patch or minor releases. You can now build on Electric without tracking the latest changes.
 
@@ -61,9 +61,9 @@ Electric is stable, reliable and scales. It's been stress-tested in production f
 
 > At [Otto](https://ottogrid.ai), we built a spreadsheet product where every cell operates as its own AI agent. ElectricSQL enables us to reliably stream agent updates to our spreadsheet in real-time and efficiently manage large spreadsheets at scale. It has dramatically simplified our architecture while delivering the performance we need for cell-level reactive updates.<br /> > _&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)_
 
-We process millions of requests and transactions each day. With hundreds of thousands of active [shapes](/docs/guides/shapes) and application users.
+We process millions of requests and transactions each day. With hundreds of thousands of active [shapes](/docs/sync/guides/shapes) and application users.
 
-The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud), showing flat, low latency and memory use scaling sync to 1 million concurrent clients on a single commodity Postgres:
+The chart below is from our [cloud benchmarks](/docs/sync/reference/benchmarks#cloud), showing flat, low latency and memory use scaling sync to 1 million concurrent clients on a single commodity Postgres:
 
 <figure>
   <ScalabilityChart />
@@ -86,7 +86,7 @@ As we build towards 2.0 and 3.0, Electric is only going to become more expressiv
 
 ## Next steps
 
-[Sign up for Cloud](/cloud), dive into the [Quickstart](/docs/quickstart), join the [Discord](https://discord.electric-sql.com) and star us on [GitHub](https://github.com/electric-sql/electric).
+[Sign up for Cloud](/cloud/), dive into the [Quickstart](/docs/sync/quickstart), join the [Discord](https://discord.electric-sql.com) and star us on [GitHub](https://github.com/electric-sql/electric).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
@@ -97,7 +97,7 @@ As we build towards 2.0 and 3.0, Electric is only going to become more expressiv
     />
     &nbsp;
     <VPButton
-        href="/docs/quickstart"
+        href="/docs/sync/quickstart"
         text="Quickstart"
         theme="alt"
     />

@@ -1,11 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parse } from 'yaml'
+import type { UseCaseListRow, YamlRecord } from '../src/types/data-loaders'
 
 export default {
   watch: [`../use-cases/*.md`],
 
-  load(files) {
+  load(files: string[]) {
     return files
       .map((file) => {
         const slug = path.basename(file, `.md`)
@@ -13,14 +14,19 @@ export default {
         const contents = fs.readFileSync(file, `utf-8`)
         const frontmatter = contents.split(`---\n`)[1]
 
-        const data = parse(frontmatter)
-        data.link = `/use-cases/${slug}`
+        const base = parse(frontmatter) as YamlRecord
+        const row: UseCaseListRow = {
+          ...base,
+          link: `/use-cases/${slug}`,
+        }
 
-        return data
+        return row
       })
       .filter((x) => x.homepage)
       .sort((a, b) => {
-        return parseInt(a.homepage_order) - parseInt(b.homepage_order)
+        const orderA = parseInt(a.homepage_order ?? `0`, 10)
+        const orderB = parseInt(b.homepage_order ?? `0`, 10)
+        return orderA - orderB
       })
   },
 }
