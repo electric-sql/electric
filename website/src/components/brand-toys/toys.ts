@@ -432,18 +432,6 @@ export const TOYS: readonly ToyDef[] = [
     source: `src/components/streams-home/StreamFlowBg.vue`,
   },
   {
-    id: `cloud-hex-bg`,
-    label: `Cloud — hex viewer background`,
-    group: `hero`,
-    description: `Hex-viewer rendering of the Tanner quote — Cloud hero art.`,
-    component: () =>
-      import(`../cloud-home/CloudHexBg.vue`).then((m) => m.default),
-    fullBleed: true,
-    background: `dark`,
-    defaultSize: { w: 1280, h: 720 },
-    source: `src/components/cloud-home/CloudHexBg.vue`,
-  },
-  {
     id: `home-iso-bg`,
     label: `Home — isometric stack background`,
     group: `hero`,
@@ -621,19 +609,6 @@ export const TOYS: readonly ToyDef[] = [
     source: `src/components/sync-home/ComposeStackGrid.vue`,
     animated: false,
   },
-  {
-    id: `cloud-strip`,
-    label: `Sync — cloud strip`,
-    group: `sync`,
-    description: `Horizontal cloud-hosting logo strip.`,
-    component: () =>
-      import(`../sync-home/CloudStrip.vue`).then((m) => m.default),
-    defaultSize: { w: 1280, h: 200 },
-    background: `dark`,
-    source: `src/components/sync-home/CloudStrip.vue`,
-    animated: false,
-  },
-
   // ─────────────────────────── AGENTS DEMOS ───────────────────────────
   {
     id: `agent-grid`,
@@ -932,17 +907,6 @@ export const TOYS: readonly ToyDef[] = [
     source: `src/components/streams-home/AgentLoopFillDemo.vue`,
   },
   {
-    id: `cdn-fan-out`,
-    label: `Streams — CDN fan-out`,
-    group: `streams`,
-    description: `One stream fans out across a CDN's edges.`,
-    component: () =>
-      import(`../streams-home/CdnFanOutDemo.vue`).then((m) => m.default),
-    defaultSize: { w: 1280, h: 720 },
-    background: `dark`,
-    source: `src/components/streams-home/CdnFanOutDemo.vue`,
-  },
-  {
     id: `collab-session`,
     label: `Streams — collab session`,
     group: `streams`,
@@ -972,28 +936,6 @@ export const TOYS: readonly ToyDef[] = [
     defaultSize: { w: 1280, h: 720 },
     background: `dark`,
     source: `src/components/streams-home/ConnectionDropDemo.vue`,
-  },
-  {
-    id: `layer-dropdown`,
-    label: `Streams — layer dropdown`,
-    group: `streams`,
-    description: `Four-layer protocol dropdown explainer.`,
-    component: () =>
-      import(`../streams-home/LayerDropdownDemo.vue`).then((m) => m.default),
-    defaultSize: { w: 1280, h: 720 },
-    background: `dark`,
-    source: `src/components/streams-home/LayerDropdownDemo.vue`,
-  },
-  {
-    id: `layered-stack`,
-    label: `Streams — layered stack`,
-    group: `streams`,
-    description: `Layered-stack animation — bytes → JSON → events → DB.`,
-    component: () =>
-      import(`../streams-home/LayeredStackDemo.vue`).then((m) => m.default),
-    defaultSize: { w: 1280, h: 720 },
-    background: `dark`,
-    source: `src/components/streams-home/LayeredStackDemo.vue`,
   },
   {
     id: `layers-grid`,
@@ -1118,18 +1060,6 @@ export const TOYS: readonly ToyDef[] = [
     defaultSize: { w: 1280, h: 720 },
     background: `dark`,
     source: `src/components/ScalabilityChart.vue`,
-    animated: false,
-  },
-  {
-    id: `snapshot-sync-diagram`,
-    label: `Misc — snapshot sync diagram`,
-    group: `misc`,
-    description: `Static snapshot-sync diagram.`,
-    component: () =>
-      import(`../SnapshotSyncDiagram.vue`).then((m) => m.default),
-    defaultSize: { w: 1280, h: 720 },
-    background: `dark`,
-    source: `src/components/SnapshotSyncDiagram.vue`,
     animated: false,
   },
   {
