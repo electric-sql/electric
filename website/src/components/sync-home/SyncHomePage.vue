@@ -112,7 +112,13 @@ const demosMarkdown = featuredDemos
   <div class="sync-home">
     <!-- ───────────────────────── §1 — Hero ───────────────────────── -->
     <section class="sh-hero">
-      <SyncFanOutBg class="md-exclude" :exclude-el="heroInnerRef" :labels-on-hover="true" />
+      <SyncFanOutBg
+        class="md-exclude"
+        :exclude-el="heroInnerRef"
+        :labels-on-hover="true"
+        :spawn-rate="0.15"
+        :die-rate="0.15"
+      />
       <div ref="heroInnerRef" class="sh-hero-inner">
         <h1 class="sh-hero-name">
           Electric&nbsp;<span class="sh-hero-accent">Sync</span>

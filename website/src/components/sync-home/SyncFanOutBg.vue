@@ -48,14 +48,49 @@ const props = withDefaults(
     // with up to 2 extras for a bit more activity; raise for a
     // busier table, drop to 0 for a clean 4-shape layout.
     overlapShapes?: number
+    // Random ambient shape-spawn rate, in shapes per second. 0
+    // (the default) disables ambient spawning, matching the
+    // historical "build once at mount" behaviour. Useful values
+    // are small — shapes are big visual elements, so a rate of
+    // 0.1 (one event every ~10 s) already reads as "alive" without
+    // dominating the page. Honours `MAX_SHAPES` as an upper bound
+    // and respects exclusion zones / quadrant placement just like
+    // the initial layout pass.
+    spawnRate?: number
+    // Random ambient shape-die rate, in shapes per second. 0 (the
+    // default) disables. Picks a random alive shape and tweens it
+    // out over `SHAPE_DEATH_DURATION` before unbinding it from
+    // its rows + client. Combined with `spawnRate` at the same
+    // value the population stays roughly steady; alone it'll
+    // drain the canvas down to a configurable floor
+    // (`MIN_LIVE_SHAPES`) so the scene never empties out.
+    dieRate?: number
   }>(),
   {
     density: 1,
     activity: 1,
     tokenSpeed: 1,
     overlapShapes: 2,
+    spawnRate: 0,
+    dieRate: 0,
   },
 )
+
+// Birth/death tween durations for ambient shape spawn/die. Tuned
+// slightly slower than the agents-hero node tweens because shapes
+// are big rounded-rect regions with attached labels + connector
+// lines — a 350 ms scale-in feels rushed for a region; 500/600 ms
+// reads as a deliberate "shape created" / "shape dropped" event.
+const SHAPE_BIRTH_DURATION = 500
+const SHAPE_DEATH_DURATION = 600
+
+// Floors / ceilings for ambient shape spawn/die. The scene is
+// designed around ~6 shapes (4 base + up to 2 overlap); we let
+// the ambient rates drift around that, but keep a minimum floor
+// so a streak of dies never empties the canvas, and a ceiling so
+// runaway spawn rates don't pile shapes on top of each other.
+const MIN_LIVE_SHAPES = 3
+const MAX_SHAPES = 8
 
 const canvas = ref<HTMLCanvasElement>()
 const tooltip = ref<HTMLDivElement>()
@@ -89,6 +124,24 @@ interface Shape {
   bbox: { left: number; top: number; right: number; bottom: number }
   clientIds: number[]
   labelSide: "above" | "below"
+  // Birth / death tween clocks (ms). `birthT` accumulates from 0
+  // on add and is capped at `SHAPE_BIRTH_DURATION`; the shape
+  // renders alpha-faded by `birthT/SHAPE_BIRTH_DURATION` until
+  // then. `dyingT` is 0 while alive — once non-zero the shape is
+  // fading out (alpha drops, attached tokens fade alongside) and
+  // once it crosses `SHAPE_DEATH_DURATION` we run cleanup
+  // (strip the shape's id from row.shapeIds / client.shapeIds,
+  // re-pick the client's display name) and mark `dead` so the
+  // slot is skipped by all draw / hit / spawn paths. The slot
+  // itself stays in the `shapes` array forever so existing index
+  // references in `row.shapeIds`, `client.shapeIds`, and
+  // `token.shapeId` stay valid without a remap pass on every
+  // death. Initial buildShapes-pass shapes start at
+  // `birthT === SHAPE_BIRTH_DURATION` so the canvas paints them
+  // at full strength immediately on first frame.
+  birthT: number
+  dyingT: number
+  dead: boolean
 }
 
 interface Client {
@@ -177,10 +230,40 @@ onMounted(() => {
   let tokens: Token[] = []
   let exclusions: ExcludeRect[] = []
   let nextSpawn = 600 + Math.random() * 800
+  // Fractional accumulators for ambient shape spawn / death,
+  // analogous to the node spawn/die pattern in the agents hero.
+  // `rate * dt/1000` accumulates each frame and we trigger one
+  // event per integer crossed, so sub-1/s rates work cleanly
+  // (e.g. spawnRate 0.1 fires roughly every 10 s) while burst
+  // rates (multiple events per frame) are still bounded by the
+  // per-frame attempt cap inside the spawn / die loops.
+  let spawnAcc = 0
+  let dieAcc = 0
   let last = 0
   let hoveredShape = -1
   let hoveredClient = -1
   let hoveredRow = -1
+
+  // Per-shape lifecycle factor — 0..1, 1 at rest. Birth ramps from
+  // 0..1 over `SHAPE_BIRTH_DURATION`; death fades 1..0 over
+  // `SHAPE_DEATH_DURATION`. Dead shapes return 0.
+  function shapeLife(s: Shape): number {
+    if (s.dead) return 0
+    const born = Math.min(1, s.birthT / SHAPE_BIRTH_DURATION)
+    const dying =
+      s.dyingT > 0
+        ? Math.max(0, 1 - s.dyingT / SHAPE_DEATH_DURATION)
+        : 1
+    return born * dying
+  }
+
+  // "Live" = not dead and not yet fading out. Used to gate ambient
+  // spawn targets, hover/click hit-tests, and the random-update
+  // picker so a fading shape doesn't briefly flash back up before
+  // its death tween wins (which reads as a glitch).
+  function shapeAlive(s: Shape): boolean {
+    return !s.dead && s.dyingT === 0
+  }
 
   function getTextRects(element: Element): DOMRect[] {
     const rects: DOMRect[] = []
@@ -443,6 +526,11 @@ onMounted(() => {
         bbox: placed.bbox,
         clientIds: [clientId],
         labelSide,
+        // Initial layout — start fully born so the canvas paints
+        // the mesh at full strength on first frame, not fading in.
+        birthT: SHAPE_BIRTH_DURATION,
+        dyingT: 0,
+        dead: false,
       }
       shapes.push(shape)
       clients[clientId].shapeIds.push(id)
@@ -644,6 +732,13 @@ onMounted(() => {
   }
 
   function drawShape(shape: Shape, dark: boolean) {
+    if (shape.dead) return
+    // Birth/death tween — alpha-multiplier on every drawn element
+    // for this shape (fill, dashed border, connector lines, label).
+    // Geometry stays at its real size so the bbox doesn't pulse;
+    // the fade alone is enough to read "appearing" / "leaving".
+    const life = shapeLife(shape)
+    if (life <= 0.001) return
     const cx = (shape.bbox.left + shape.bbox.right) / 2
     const cy = (shape.bbox.top + shape.bbox.bottom) / 2
     // Shapes are the anchor of the metaphor — keep them fully visible
@@ -658,14 +753,14 @@ onMounted(() => {
     roundRect(c!, shape.bbox, 12)
     c!.fillStyle = teal(
       dark,
-      hovered ? 0.09 : dim ? 0.015 : 0.035,
+      (hovered ? 0.09 : dim ? 0.015 : 0.035) * life,
     )
     c!.fill()
     c!.lineWidth = hovered ? 1.2 : 1
     c!.setLineDash([3, 4])
     c!.strokeStyle = teal(
       dark,
-      hovered ? 0.7 : dim ? 0.12 : 0.36,
+      (hovered ? 0.7 : dim ? 0.12 : 0.36) * life,
     )
     c!.stroke()
     c!.restore()
@@ -678,7 +773,7 @@ onMounted(() => {
         0.45,
         radialFade((cx + client.x) / 2, (cy + client.y) / 2),
       )
-      const a = (hovered ? 0.5 : dim ? 0.08 : 0.22) * fadeMid
+      const a = (hovered ? 0.5 : dim ? 0.08 : 0.22) * fadeMid * life
       if (a < 0.03) continue
       // Anchor on the bbox edge nearest the client.
       const ax = Math.max(shape.bbox.left, Math.min(shape.bbox.right, client.x))
@@ -708,12 +803,12 @@ onMounted(() => {
       c!.textBaseline = "alphabetic"
       c!.fillStyle = teal(
         dark,
-        hovered ? 0.95 : dim ? 0.28 : 0.6,
+        (hovered ? 0.95 : dim ? 0.28 : 0.6) * life,
       )
       c!.fillText(`shape:${shape.name}`, cx, labelY)
       if (hovered) {
         c!.font = `11px var(--vp-font-family-mono)`
-        c!.fillStyle = muted(dark, 0.55)
+        c!.fillStyle = muted(dark, 0.55 * life)
         c!.fillText(
           shape.clause,
           cx,
@@ -772,7 +867,7 @@ onMounted(() => {
     c!.restore()
   }
 
-  function drawToken(t: Token, dark: boolean) {
+  function drawToken(t: Token, dark: boolean, lifeMul = 1) {
     const x = t.fromX + (t.toX - t.fromX) * t.progress
     const y = t.fromY + (t.toY - t.fromY) * t.progress
     const fade = radialFade(x, y)
@@ -782,7 +877,7 @@ onMounted(() => {
         : t.progress > 0.88
           ? (1 - t.progress) / 0.12
           : 1
-    const a = lifeAlpha * fade
+    const a = lifeAlpha * fade * lifeMul
     if (a < 0.04) return
 
     // Comet tail
@@ -827,10 +922,162 @@ onMounted(() => {
     for (const cl of clients) drawClient(cl, dark)
   }
 
+  // ── Ambient shape spawn / die ─────────────────────────────────
+  // Mirrors the node-spawn / node-die pattern in the agents hero
+  // (`HeroNetworkBg`), with shape-shaped semantics:
+  //   - spawn picks a random quadrant and tries to place a fresh
+  //     shape there with `allowOverlap=true`, so growth doesn't
+  //     stall once the four base quadrants are occupied;
+  //   - die picks a random alive shape, marks `dyingT` non-zero
+  //     and lets the death tween run to completion before any row
+  //     / client cleanup actually happens (so the bbox + connector
+  //     visibly fade out before the rows re-style).
+  // Shape ids stay stable forever — we never splice the `shapes`
+  // array — so `row.shapeIds`, `client.shapeIds`, and
+  // `token.shapeId` all continue to resolve to the same Shape
+  // record (which may now be `dead: true`). Cleanup-after-death
+  // strips the stale id from the row + client lists; new spawns
+  // then claim a fresh slot at `shapes.length` and the cycle
+  // continues.
+
+  function attemptSpawnShape(): boolean {
+    if (shapes.filter((s) => !s.dead).length >= MAX_SHAPES) return false
+    // Reuse the buildShapes quadrant grid so spawned shapes land
+    // in the same regions that the initial layout favours. Random
+    // order so the spawn point isn't predictable.
+    const margin = 18
+    const midX = w / 2
+    const midY = h / 2
+    const quadrants: ExcludeRect[] = [
+      { left: margin, top: margin, right: midX - margin / 2, bottom: midY - margin / 2 },
+      { left: midX + margin / 2, top: margin, right: w - margin, bottom: midY - margin / 2 },
+      { left: margin, top: midY + margin / 2, right: midX - margin / 2, bottom: h - margin },
+      { left: midX + margin / 2, top: midY + margin / 2, right: w - margin, bottom: h - margin },
+    ]
+    const order = quadrants
+      .map((q) => ({ q, k: Math.random() }))
+      .sort((a, b) => a.k - b.k)
+      .map((entry) => entry.q)
+
+    // Pick a name not currently in active use so each visible
+    // shape has a distinct label, even after several rounds of
+    // spawn/die. Falling back to the full library if every name
+    // is taken is purely defensive — `MAX_SHAPES` (8) is below
+    // the library size (7 today), but the fallback keeps us safe
+    // if the library shrinks in the future.
+    const usedNames = new Set(
+      shapes.filter((s) => !s.dead).map((s) => s.name),
+    )
+    const available = SHAPE_LIBRARY.filter((d) => !usedNames.has(d.name))
+    const pool = available.length > 0 ? available : SHAPE_LIBRARY
+    const def = pool[Math.floor(Math.random() * pool.length)]
+
+    for (const q of order) {
+      const placed = tryPlaceShapeInRegion(q, 3, 4, 60, true)
+      if (!placed) continue
+      const clientId = nearestClientTo(placed.bbox)
+      const cl = clients[clientId]
+      if (!cl) continue
+      const cx = (placed.bbox.left + placed.bbox.right) / 2
+      const cy = (placed.bbox.top + placed.bbox.bottom) / 2
+      // Same "shape too close to its client" guard as the initial
+      // pass — keeps the connector readable rather than collapsing
+      // a label on top of the client glyph.
+      if (Math.hypot(cx - cl.x, cy - cl.y) < 70) continue
+      const labelSide: "above" | "below" =
+        placed.bbox.top - 18 > 4 &&
+        !hitsExclusion(cx, placed.bbox.top - 14, exclusions, 6)
+          ? "above"
+          : "below"
+      const newId = shapes.length
+      const shape: Shape = {
+        id: newId,
+        name: def.name,
+        clause: def.clause,
+        rowIndices: placed.rowIndices,
+        bbox: placed.bbox,
+        clientIds: [clientId],
+        labelSide,
+        // Ambient spawns start at 0 birth so the new region fades
+        // in over `SHAPE_BIRTH_DURATION` rather than popping into
+        // existence at full strength.
+        birthT: 0,
+        dyingT: 0,
+        dead: false,
+      }
+      shapes.push(shape)
+      cl.shapeIds.push(newId)
+      // Take the new shape's name on this client. If the client
+      // was previously named after another shape, that name is
+      // overwritten; the original shape's tooltip still lists it
+      // among the client's subscriptions, so the linkage is not
+      // lost. When the older shape dies we re-pick the client
+      // name from whatever's left (see `cleanupDeadShape`).
+      cl.name = `/${def.name}`
+      for (const ri of placed.rowIndices) {
+        if (!rows[ri].shapeIds.includes(newId)) rows[ri].shapeIds.push(newId)
+      }
+      return true
+    }
+    return false
+  }
+
+  function attemptKillShape(): boolean {
+    const alive = shapes.filter(shapeAlive)
+    // Soft floor so a streak of dies doesn't drain the canvas to
+    // empty. Combined with matching spawn/die rates the steady
+    // state floats well above `MIN_LIVE_SHAPES`; the floor is
+    // really just a safety net for unlucky streaks.
+    if (alive.length <= MIN_LIVE_SHAPES) return false
+    const victim = alive[Math.floor(Math.random() * alive.length)]
+    victim.dyingT = 0.001
+    return true
+  }
+
+  function cleanupDeadShape(shape: Shape) {
+    // Strip the dead shape's id from every row that listed it as
+    // a member. We don't touch the row's other treatment — rows
+    // belonging to additional surviving shapes stay sized + tinted
+    // as "in shape"; rows whose only shape was this one snap back
+    // to plain dots, which is invisible at this point because the
+    // shape's bbox has already faded to alpha 0.
+    for (const rowIdx of shape.rowIndices) {
+      const row = rows[rowIdx]
+      if (!row) continue
+      const i = row.shapeIds.indexOf(shape.id)
+      if (i >= 0) row.shapeIds.splice(i, 1)
+    }
+    // Same pattern for clients: drop the dead id, then either
+    // hide the client (no surviving shapes) or re-anchor its
+    // display name on whatever's still alive. We never delete
+    // the client record itself — anchors are fixed-position
+    // corner slots and we want them available for future spawns.
+    for (const cid of shape.clientIds) {
+      const cl = clients[cid]
+      if (!cl) continue
+      const i = cl.shapeIds.indexOf(shape.id)
+      if (i >= 0) cl.shapeIds.splice(i, 1)
+      const survivors = cl.shapeIds
+        .map((sid) => shapes[sid])
+        .filter((s) => s && !s.dead)
+      if (survivors.length === 0) {
+        cl.name = ""
+      } else {
+        cl.name = `/${survivors[survivors.length - 1].name}`
+      }
+    }
+    shape.rowIndices = []
+    shape.clientIds = []
+    shape.dead = true
+  }
+
   // ── Spawning ───────────────────────────────────────────────────
   function spawnRandomUpdate() {
-    if (shapes.length === 0) return
-    const shape = shapes[Math.floor(Math.random() * shapes.length)]
+    // Pull from the alive set only — a fading shape shouldn't seed
+    // a new flash + token round-trip while it's busy dying.
+    const alive = shapes.filter(shapeAlive)
+    if (alive.length === 0) return
+    const shape = alive[Math.floor(Math.random() * alive.length)]
     if (shape.rowIndices.length === 0) return
     const rowIdx =
       shape.rowIndices[Math.floor(Math.random() * shape.rowIndices.length)]
@@ -850,7 +1097,12 @@ onMounted(() => {
     const speedMul = Math.max(0.05, props.tokenSpeed)
     for (const sid of shapeIds) {
       const shape = shapes[sid]
-      if (!shape) continue
+      // Only fire for live shapes — skipping dying / dead ones
+      // means stale `row.shapeIds` references (cleaned up at the
+      // end of the death tween) don't seed orphan tokens, and
+      // ambient picks for a freshly-marked dying shape don't
+      // briefly resurrect it.
+      if (!shape || !shapeAlive(shape)) continue
       for (const cid of shape.clientIds) {
         const client = clients[cid]
         if (!client) continue
@@ -894,16 +1146,31 @@ onMounted(() => {
     // Advance + draw tokens. When paused, each token holds its
     // seeded progress so the fan-outs read as a frozen mid-flight
     // snapshot.
+    //
+    // Tokens belonging to a dying shape fade alongside the shape
+    // (`lifeMul = shapeLife(...)`); once their owner is fully
+    // dead we drop the token outright rather than render it
+    // arriving at the now-stripped client. This keeps tokens
+    // visually anchored to their shape's lifecycle without any
+    // discontinuity at death.
     for (let i = tokens.length - 1; i >= 0; i--) {
       const t = tokens[i]
+      const owner = shapes[t.shapeId]
+      if (!owner || owner.dead) {
+        tokens.splice(i, 1)
+        continue
+      }
       if (!props.paused) {
         t.progress += t.speed * (dt / 1000)
       }
       if (!props.paused && t.progress >= 1) {
-        // Arrived — pulse the client.
-        const shape = shapes[t.shapeId]
-        if (shape) {
-          for (const cid of shape.clientIds) {
+        // Arrived — pulse the client only if the shape is still
+        // alive. A token in flight at the moment its shape died
+        // would otherwise reach a now-fading client and re-pulse
+        // it, which reads as the network "ghost-replying" past
+        // death.
+        if (shapeAlive(owner)) {
+          for (const cid of owner.clientIds) {
             const targetClient = clients[cid]
             if (
               targetClient &&
@@ -917,7 +1184,7 @@ onMounted(() => {
         tokens.splice(i, 1)
         continue
       }
-      drawToken(t, dark)
+      drawToken(t, dark, shapeLife(owner))
     }
 
     for (const cl of clients) drawClient(cl, dark)
@@ -937,6 +1204,65 @@ onMounted(() => {
       if (!props.paused && nextSpawn <= 0) {
         spawnRandomUpdate()
         nextSpawn = 220 + Math.random() * 500
+      }
+    }
+
+    // ── Ambient shape spawn / die ───────────────────────────
+    // Driven by `spawnRate` / `dieRate` (shapes per second), both
+    // gated by `paused`. Each accumulator is fractional so sub-1/s
+    // rates work cleanly. Per-frame attempt cap (4) means a huge
+    // rate bump can't lock the main thread on a single tick.
+    if (!props.paused) {
+      const spawnRate = Math.max(0, props.spawnRate)
+      const dieRate = Math.max(0, props.dieRate)
+      if (spawnRate > 0) {
+        spawnAcc += spawnRate * (dt / 1000)
+        let attempts = 0
+        while (spawnAcc >= 1 && attempts < 4) {
+          spawnAcc -= 1
+          attempts++
+          if (!attemptSpawnShape()) {
+            // Couldn't place this round — don't bank up infinite
+            // tries while the canvas is full / hostile.
+            break
+          }
+        }
+        if (spawnAcc > 1) spawnAcc = 1
+      } else {
+        spawnAcc = 0
+      }
+      if (dieRate > 0) {
+        dieAcc += dieRate * (dt / 1000)
+        let attempts = 0
+        while (dieAcc >= 1 && attempts < 4) {
+          dieAcc -= 1
+          attempts++
+          if (!attemptKillShape()) break
+        }
+        if (dieAcc > 1) dieAcc = 1
+      } else {
+        dieAcc = 0
+      }
+    }
+
+    // ── Shape lifecycle clocks ──────────────────────────────
+    // Always advance birth/death clocks (even when paused) so a
+    // pause doesn't strand half-faded shapes on screen — death
+    // animations always finish promptly. When a shape's `dyingT`
+    // crosses `SHAPE_DEATH_DURATION` we run cleanup, which strips
+    // its id from rows + clients (re-picking each affected
+    // client's display name from its surviving subscriptions).
+    for (let i = 0; i < shapes.length; i++) {
+      const s = shapes[i]
+      if (s.dead) continue
+      if (s.birthT < SHAPE_BIRTH_DURATION) {
+        s.birthT = Math.min(SHAPE_BIRTH_DURATION, s.birthT + dt)
+      }
+      if (s.dyingT > 0) {
+        s.dyingT += dt
+        if (s.dyingT >= SHAPE_DEATH_DURATION) {
+          cleanupDeadShape(s)
+        }
       }
     }
 
@@ -967,6 +1293,11 @@ onMounted(() => {
 
   function findShapeAt(mx: number, my: number): number {
     for (let i = 0; i < shapes.length; i++) {
+      // Skip dead + currently-dying shapes — clicking a fading
+      // bbox to fire a new round-trip would resurrect it visually
+      // (the fired token would re-pulse the client) which reads
+      // as a glitch.
+      if (!shapeAlive(shapes[i])) continue
       const b = shapes[i].bbox
       if (mx >= b.left && mx <= b.right && my >= b.top && my <= b.bottom) return i
     }
@@ -1007,6 +1338,7 @@ onMounted(() => {
       hoveredRow = -1
       hoveredShape = -1
       const subs = client.shapeIds
+        .filter((sid) => shapes[sid] && shapeAlive(shapes[sid]))
         .map((sid) => `shape:${shapes[sid].name}`)
         .join(", ")
       setTooltip(
@@ -1024,6 +1356,7 @@ onMounted(() => {
       hoveredShape = -1
       hoveredClient = -1
       const inShapes = row.shapeIds
+        .filter((sid) => shapes[sid] && shapeAlive(shapes[sid]))
         .map((sid) => `shape:${shapes[sid].name}`)
         .join(", ")
       setTooltip(
@@ -1063,10 +1396,12 @@ onMounted(() => {
 
     const cIdx = findClientAt(mx, my)
     if (cIdx >= 0) {
-      // Fire a row from each subscribed shape.
+      // Fire a row from each subscribed shape — but only the alive
+      // ones, so clicking a client whose subscription is mid-death
+      // doesn't re-flash the dying shape's rows.
       for (const sid of clients[cIdx].shapeIds) {
         const shape = shapes[sid]
-        if (!shape || shape.rowIndices.length === 0) continue
+        if (!shape || !shapeAlive(shape) || shape.rowIndices.length === 0) continue
         const ri =
           shape.rowIndices[Math.floor(Math.random() * shape.rowIndices.length)]
         fireRow(ri, sid)

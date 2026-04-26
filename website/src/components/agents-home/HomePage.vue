@@ -50,7 +50,13 @@ const hasAgentBlogPosts = computed(() =>
   <div class="ea-home">
     <!-- Section 1: Hero -->
     <section class="ea-hero">
-      <HeroNetworkBg class="md-exclude" :exclude-el="heroInnerRef" />
+      <HeroNetworkBg
+        class="md-exclude"
+        :exclude-el="heroInnerRef"
+        :spawn-rate="0.4"
+        :die-rate="0.4"
+        :reposition-on-spawn="true"
+      />
       <div ref="heroInnerRef" class="ea-hero-inner">
         <h1 class="ea-hero-name">Electric&nbsp;<span class="ea-hero-accent">Agents</span></h1>
         <p class="ea-hero-text">

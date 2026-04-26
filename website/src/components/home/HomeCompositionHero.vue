@@ -100,6 +100,8 @@ onBeforeUnmount(() => {
           :labels-on-hover="true"
           :no-edge-fade="true"
           :exclude-el="syncLabelRef"
+          :spawn-rate="0.15"
+          :die-rate="0.15"
         />
         <span ref="syncLabelRef" class="hch-band-label">sync</span>
       </div>
@@ -108,7 +110,13 @@ onBeforeUnmount(() => {
         <span ref="streamsLabelRef" class="hch-band-label">streams</span>
       </div>
       <div class="hch-band hch-band--agents">
-        <HeroNetworkBg :no-edge-fade="true" :exclude-el="agentsLabelRef" />
+        <HeroNetworkBg
+          :no-edge-fade="true"
+          :exclude-el="agentsLabelRef"
+          :spawn-rate="0.4"
+          :die-rate="0.4"
+          :reposition-on-spawn="true"
+        />
         <span ref="agentsLabelRef" class="hch-band-label">agents</span>
       </div>
     </div>
