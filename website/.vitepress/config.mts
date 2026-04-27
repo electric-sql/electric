@@ -636,6 +636,9 @@ export default defineConfig({
       '/agents/demos': agentsDemosSidebar,
       '/streams/demos': streamsDemosSidebar,
       '/docs/sync': syncDocsSidebar,
+      // Agents examples are surfaced from the demos section, so keep
+      // their pages on the same compact demos/examples sidebar.
+      '/docs/agents/examples': agentsDemosSidebar,
       '/docs/agents': agentsDocsSidebar,
       '/docs/streams': streamsDocsSidebar,
       '/about': resourcesSidebar,
