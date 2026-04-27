@@ -176,6 +176,14 @@ If you were waiting for shapes to handle more realistic access-control logic wit
 
 See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full reference.
 
+## Where this lands
+
+Subqueries are now available to everyone in Electric 1.6.
+
+If you want them enabled on your Cloud project today, get in touch.
+
+The remaining rollout flags are temporary. We expect to lift them over the next few weeks.
+
 ***
 
 [Docs](/docs/guides/shapes#where-clause) · [Cloud](/cloud) · [Discord](https://discord.electric-sql.com)
