@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "coverage": "pnpm exec vitest run --coverage --passWithNoTests",
     "cf:deploy": "pnpm build && wrangler deploy",
     "cf:dev": "pnpm build && wrangler dev"
   },
@@ -28,6 +30,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "5.8.3",
     "vite": "^6.0.7",
+    "vitest": "^4.1.0",
     "wrangler": "^3.99.0"
   }
 }

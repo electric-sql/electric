@@ -80,8 +80,19 @@ function makeFakeCtx(opts: {
           },
         },
         inbox: { toArray: inbox },
+        // recordRun() reads `runs.toArray` to seed its counter; an
+        // empty array is fine for tests that don't otherwise care.
+        runs: { toArray: [] as Array<{ key: string }> },
       },
     },
+    // The handler calls ctx.recordRun() around each CLI invocation;
+    // give the mock a no-op handle so it doesn't blow up before the
+    // CLI runner is exercised.
+    recordRun: () => ({
+      key: `run-0`,
+      end: () => {},
+      attachResponse: () => {},
+    }),
   }
 
   return { ctx, state, calls }
@@ -219,7 +230,9 @@ describe(`registerCodingSession`, () => {
 
     // Runner was invoked with the prompt
     expect(runner.run).toHaveBeenCalledTimes(1)
-    const call = runner.run.mock.calls[0]![0] as {
+    const call = (
+      runner.run.mock.calls as unknown as Array<Array<unknown>>
+    )[0]![0] as {
       agent: string
       prompt: string
       sessionId?: string
@@ -284,7 +297,9 @@ describe(`registerCodingSession`, () => {
     ).rejects.toThrow() // resolveSession fails for a synthetic id — same as the other test
 
     expect(runner.run).toHaveBeenCalledTimes(1)
-    const call = runner.run.mock.calls[0]![0] as { prompt: string }
+    const call = (
+      runner.run.mock.calls as unknown as Array<Array<unknown>>
+    )[0]![0] as { prompt: string }
     expect(call.prompt).toBe(`hello`)
   })
 })
