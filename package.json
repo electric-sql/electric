@@ -8,7 +8,7 @@
   "packageManager": "pnpm@10.12.1",
   "private": true,
   "scripts": {
-    "ci:publish": "pnpm '/^ci:publish:.+/' && pnpm exec changeset tag",
+    "ci:publish": "pnpm exec changeset tag && pnpm '/^ci:publish:.+/'",
     "ci:publish:hex-electric": "pnpm run --dir packages/sync-service publish:hex",
     "ci:publish:hex-electric-client": "pnpm run --dir packages/elixir-client publish:hex",
     "ci:publish:npm": "pnpm publish -r --filter './packages/**' --no-git-checks --access public",
