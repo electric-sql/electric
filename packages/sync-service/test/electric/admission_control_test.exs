@@ -232,8 +232,8 @@ defmodule Electric.AdmissionControlTest do
 
       assert measurements.count == 1
       assert measurements.current == 1
+      assert measurements.limit == 10
       assert metadata.kind == :initial
-      assert metadata.limit == 10
 
       :telemetry.detach(handler_id)
     end
@@ -278,10 +278,10 @@ defmodule Electric.AdmissionControlTest do
                       %{stack_id: ^stack_id} = metadata}
 
       assert measurements.count == 1
+      assert measurements.limit == 2
       assert metadata.kind == :initial
       assert metadata.reason == :overloaded
       assert metadata.current == 3
-      assert metadata.limit == 2
 
       :telemetry.detach(handler_id)
     end

@@ -114,7 +114,9 @@ defmodule ElectricTelemetry.StackTelemetry do
       last_value("electric.connection.consumers_ready.total"),
       last_value("electric.connection.consumers_ready.failed_to_recover"),
       last_value("electric.admission_control.acquire.current", tags: [:kind]),
+      last_value("electric.admission_control.acquire.limit", tags: [:kind]),
       sum("electric.admission_control.reject.count", tags: [:kind]),
+      last_value("electric.admission_control.reject.limit", tags: [:kind]),
       distribution("electric.shape_log_collector.transaction.affected_shape_count")
       | additional_metrics(telemetry_opts)
     ]
