@@ -16,9 +16,14 @@ post: true
 published: true
 ---
 
-:::info Subqueries are now available for everyone
-Upgrade to Electric 1.6 or available in the [cloud](https://dashboard.electric-sql.cloud/). Existing cloud users should get in touch to get subqueries enabled on their instance.
-:::
+<script setup>
+import InlineBanner from '../../src/components/InlineBanner.vue'
+</script>
+
+<InlineBanner title="Subqueries are now available for everyone in Electric 1.6.">
+  <a href="https://dashboard.electric-sql.cloud/">Try them in Cloud</a>
+  <a href="mailto:support@electric-sql.com">Existing Cloud users: get in touch</a>
+</InlineBanner>
 
 Sync is what makes apps feel instant. The data is already there when a screen renders. Another user changes something and your UI stays current. You can refresh, reconnect, switch devices, and keep going.
 
