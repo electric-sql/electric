@@ -420,7 +420,13 @@ const streamsDemosSidebar = [
   {
     text: 'Demo apps',
     collapsed: false,
-    items: [{ text: 'Territory Wars', link: '/streams/demos/territory-wars' }],
+    items: [
+      {
+        text: 'Collaborative AI Editor',
+        link: '/streams/demos/collaborative-ai-editor',
+      },
+      { text: 'Territory Wars', link: '/streams/demos/territory-wars' },
+    ],
   },
   {
     text: 'Technical examples',
