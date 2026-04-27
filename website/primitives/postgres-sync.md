@@ -13,6 +13,7 @@ import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.pn
 
 import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 import GitHubButton from '../src/components/GitHubButton.vue'
+import InlineBanner from '../src/components/InlineBanner.vue'
 </script>
 
 <img src="/img/icons/electric.svg" class="product-icon" />
@@ -25,9 +26,10 @@ Read-path sync engine for Postgres that handles partial replication,
   <span class="no-wrap">
     fan-out</span></span>.
 
-:::info
-Subqueries are now available for everyone [Subqueries](/blog/2026/04/22/subqueries) as part of Electric 1.6 and in the [cloud](https://dashboard.electric-sql.cloud/)
-:::
+<InlineBanner title="Subqueries are now available for everyone in Electric 1.6.">
+  <a href="/blog/2026/04/22/subqueries">Read the announcement</a>
+  <a href="https://dashboard.electric-sql.cloud/">Try them in Cloud</a>
+</InlineBanner>
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
