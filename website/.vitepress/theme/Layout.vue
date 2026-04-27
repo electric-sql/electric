@@ -1,7 +1,6 @@
 <script setup>
 import { watch, onMounted, computed, ref } from 'vue'
 import { useData, useRouter } from 'vitepress'
-import { posthog } from 'posthog-js'
 import { useSidebar, useLocalNav } from 'vitepress/theme'
 
 import DefaultTheme from 'vitepress/theme-without-fonts'
@@ -19,14 +18,23 @@ import MegaNavMobile from './components/MegaNavMobile.vue'
 
 import ReleaseBanner from '../../src/components/home/ReleaseBanner.vue'
 
+const POSTHOG_ENABLED_HOSTNAMES = new Set([
+  `electric-sql.com`,
+  `www.electric-sql.com`,
+  `electric.ax`,
+  `www.electric.ax`,
+])
+
 // Posthog analytics
 const router = useRouter()
 onMounted(() => {
   // Only run PostHog tracking in production
-  if (window.location.hostname === 'electric-sql.com') {
+  if (POSTHOG_ENABLED_HOSTNAMES.has(window.location.hostname)) {
+    const posthogPromise = import('posthog-js')
     watch(
       () => router.route.data.relativePath,
-      (path) => {
+      async () => {
+        const { posthog } = await posthogPromise
         posthog.init('phc_o4xENyuuSCdNPG2CWtfdqzYYXs6v8SbmVDzm3CP0Qwn', {
           api_host: `https://admin.electric-sql.cloud/api/ph`,
           ui_host: 'https://us.i.posthog.com',

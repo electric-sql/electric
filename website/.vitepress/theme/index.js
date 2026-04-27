@@ -1,5 +1,6 @@
 import DefaultTheme, { VPButton } from 'vitepress/theme-without-fonts'
 import { enhanceAppWithTabs } from 'vitepress-plugin-tabs/client'
+import { defineAsyncComponent } from 'vue'
 
 import Layout from './Layout.vue'
 
@@ -17,53 +18,79 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 import MegaNav from './components/MegaNav.vue'
 import MegaNavMobile from './components/MegaNavMobile.vue'
 import MegaNavPanel from './components/MegaNavPanel.vue'
+import AgentsSection from '../../src/components/agents-home/Section.vue'
+
+const asyncComponent = (loader) => defineAsyncComponent(loader)
+
+// Route-specific marketing pages and demos are registered globally so
+// Markdown can reference them, but loading them synchronously puts every
+// page's visuals in the base theme chunk.
+const CloudHomePage = asyncComponent(() =>
+  import(`../../src/components/cloud-home/CloudHomePage.vue`)
+)
+const HomePage = asyncComponent(() =>
+  import(`../../src/components/home/HomePage.vue`)
+)
+const SyncHomePage = asyncComponent(() =>
+  import(`../../src/components/sync-home/SyncHomePage.vue`)
+)
+const StreamsHomePage = asyncComponent(() =>
+  import(`../../src/components/streams-home/StreamsHomePage.vue`)
+)
+const BrandToysPage = asyncComponent(() =>
+  import(`../../src/components/brand-toys/BrandToysPage.vue`)
+)
 
 // OG image cards. Rendered by routes under `/og/*` and captured by
 // `scripts/generate-og-images.mjs` to produce the social-card JPGs in
 // `public/img/meta/`. Not linked from any nav and excluded from the
 // sitemap / llms.txt — they only exist as a screenshot surface.
-import OgAgents from '../../src/components/og/OgAgents.vue'
-import OgCloud from '../../src/components/og/OgCloud.vue'
-import OgHomepage from '../../src/components/og/OgHomepage.vue'
-import OgStreams from '../../src/components/og/OgStreams.vue'
-import OgSync from '../../src/components/og/OgSync.vue'
+const OgAgents = asyncComponent(() => import(`../../src/components/og/OgAgents.vue`))
+const OgCloud = asyncComponent(() => import(`../../src/components/og/OgCloud.vue`))
+const OgHomepage = asyncComponent(() => import(`../../src/components/og/OgHomepage.vue`))
+const OgStreams = asyncComponent(() => import(`../../src/components/og/OgStreams.vue`))
+const OgSync = asyncComponent(() => import(`../../src/components/og/OgSync.vue`))
 
-// Site root homepage.
-import HomePage from '../../src/components/home/HomePage.vue'
-
-// Electric Cloud overview.
-import CloudHomePage from '../../src/components/cloud-home/CloudHomePage.vue'
-
-// Electric Sync homepage. /sync is the composable sync stack overview;
-// the Postgres Sync primitive deep-dive (/sync/postgres-sync) is now a
-// docs-style markdown page that imports the educational demo
-// components from `src/components/sync-home/*` directly, so it doesn't
-// need a top-level page component.
-import SyncHomePage from '../../src/components/sync-home/SyncHomePage.vue'
-
-// Durable Streams homepage.
-import StreamsHomePage from '../../src/components/streams-home/StreamsHomePage.vue'
-
-// Internal `/brand-toys` recording-stage page (not linked from any
-// nav). Uses `?id=<slug>` to switch between a searchable index and
-// a single-toy viewer.
-import BrandToysPage from '../../src/components/brand-toys/BrandToysPage.vue'
-
-// Electric Agents homepage (ported from darix-docs).
-import AgentGridDemo from '../../src/components/agents-home/AgentGridDemo.vue'
-import AgentsHomePage from '../../src/components/agents-home/HomePage.vue'
-import AgentsSection from '../../src/components/agents-home/Section.vue'
-import ContextCompositionDemo from '../../src/components/agents-home/ContextCompositionDemo.vue'
-import CoordinationDemo from '../../src/components/agents-home/CoordinationDemo.vue'
-import CopyPageMarkdown from '../../src/components/agents-home/CopyPageMarkdown.vue'
-import CrashRecoveryDemo from '../../src/components/agents-home/CrashRecoveryDemo.vue'
-import EntityNode from '../../src/components/agents-home/EntityNode.vue'
-import EntityOverviewDiagram from '../../src/components/agents-home/EntityOverviewDiagram.vue'
-import EntityStreamDemo from '../../src/components/agents-home/EntityStreamDemo.vue'
-import HeroNetworkBg from '../../src/components/agents-home/HeroNetworkBg.vue'
-import MessageLine from '../../src/components/agents-home/MessageLine.vue'
-import StreamViewer from '../../src/components/agents-home/StreamViewer.vue'
-import SystemMonitorDemo from '../../src/components/agents-home/SystemMonitorDemo.vue'
+// Electric Agents homepage components.
+const AgentGridDemo = asyncComponent(() =>
+  import(`../../src/components/agents-home/AgentGridDemo.vue`)
+)
+const AgentsHomePage = asyncComponent(() =>
+  import(`../../src/components/agents-home/HomePage.vue`)
+)
+const ContextCompositionDemo = asyncComponent(() =>
+  import(`../../src/components/agents-home/ContextCompositionDemo.vue`)
+)
+const CoordinationDemo = asyncComponent(() =>
+  import(`../../src/components/agents-home/CoordinationDemo.vue`)
+)
+const CopyPageMarkdown = asyncComponent(() =>
+  import(`../../src/components/agents-home/CopyPageMarkdown.vue`)
+)
+const CrashRecoveryDemo = asyncComponent(() =>
+  import(`../../src/components/agents-home/CrashRecoveryDemo.vue`)
+)
+const EntityNode = asyncComponent(() =>
+  import(`../../src/components/agents-home/EntityNode.vue`)
+)
+const EntityOverviewDiagram = asyncComponent(() =>
+  import(`../../src/components/agents-home/EntityOverviewDiagram.vue`)
+)
+const EntityStreamDemo = asyncComponent(() =>
+  import(`../../src/components/agents-home/EntityStreamDemo.vue`)
+)
+const HeroNetworkBg = asyncComponent(() =>
+  import(`../../src/components/agents-home/HeroNetworkBg.vue`)
+)
+const MessageLine = asyncComponent(() =>
+  import(`../../src/components/agents-home/MessageLine.vue`)
+)
+const StreamViewer = asyncComponent(() =>
+  import(`../../src/components/agents-home/StreamViewer.vue`)
+)
+const SystemMonitorDemo = asyncComponent(() =>
+  import(`../../src/components/agents-home/SystemMonitorDemo.vue`)
+)
 
 import './custom.css'
 
