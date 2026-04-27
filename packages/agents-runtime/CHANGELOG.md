@@ -1,5 +1,11 @@
 # @electric-ax/agents-runtime
 
+## 0.0.4
+
+### Patch Changes
+
+- 9024ec2: fix: allow for `onPayload` to support non-standard model APIs
+
 ## 0.0.3
 
 ### Patch Changes
