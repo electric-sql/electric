@@ -18,7 +18,7 @@ Creates a runtime with a Node HTTP adapter:
 import {
   createEntityRegistry,
   createRuntimeHandler,
-} from "@durable-streams/darix-runtime"
+} from "@electric-ax/agents-runtime"
 
 const registry = createEntityRegistry()
 // ... register entity types ...
@@ -34,15 +34,38 @@ const runtime = createRuntimeHandler({
 
 ```ts
 interface RuntimeRouterConfig {
-  baseUrl: string // Durable streams server URL
+  baseUrl: string // Electric Agents server URL
   serveEndpoint?: string // Webhook callback URL
   webhookPath?: string // Path to match (default: derived from serveEndpoint)
+  handlerUrl?: string // Deprecated alias for serveEndpoint
   registry?: EntityRegistry
+  subscriptionPathForType?: (typeName: string) => string
   idleTimeout?: number // ms before closing idle wake (default: 20000)
   heartbeatInterval?: number // ms between heartbeats (default: 30000)
-  createDarixTools?: (
-    context: DarixToolsContext
-  ) => AgentTool[] | Promise<AgentTool[]> // factory for extra agent tools
+  createElectricTools?: (context: {
+    entityUrl: string
+    entityType: string
+    args: Readonly<Record<string, unknown>>
+    db: EntityStreamDBWithActions
+    events: Array<ChangeEvent>
+    upsertCronSchedule(opts: {
+      id: string
+      expression: string
+      timezone?: string
+      payload?: unknown
+      debounceMs?: number
+      timeoutMs?: number
+    }): Promise<{ txid: string }>
+    upsertFutureSendSchedule(opts: {
+      id: string
+      payload: unknown
+      targetUrl?: string
+      fireAt: string
+      from?: string
+      messageType?: string
+    }): Promise<{ txid: string }>
+    deleteSchedule(opts: { id: string }): Promise<{ txid: string }>
+  }) => AgentTool[] | Promise<AgentTool[]> // factory for extra agent tools
   onWakeError?: (error: Error) => boolean | void // return true to mark handled
   registrationConcurrency?: number // max concurrent type registrations (default: 8)
 }
@@ -82,7 +105,7 @@ await runtime.registerTypes()
 
 This makes two requests per entity type:
 
-1. `POST /_darix/entity-types` — registers the type definition and schemas.
+1. `POST /_electric/entity-types` — registers the type definition and schemas.
 2. `PUT /{type}/**?subscription={type}-handler` — creates a webhook subscription for the type.
 
 ## RuntimeHandler
@@ -119,7 +142,7 @@ interface RuntimeHandler {
 Fetch-native alternative with no Node HTTP dependency:
 
 ```ts
-import { createRuntimeRouter } from "@durable-streams/darix-runtime"
+import { createRuntimeRouter } from "@electric-ax/agents-runtime"
 
 const router = createRuntimeRouter(config)
 const response = await router.handleRequest(request)
@@ -131,6 +154,6 @@ Use this when integrating with non-Node frameworks or edge runtimes.
 
 | Variable            | Default                 | Purpose                  |
 | ------------------- | ----------------------- | ------------------------ |
-| `DARIX_URL`         | `http://localhost:4437` | Electric Agents runtime server URL |
+| `ELECTRIC_AGENTS_URL`         | `http://localhost:4437` | Electric Agents runtime server URL |
 | `PORT`              | `3000`                  | Your app's HTTP port     |
 | `ANTHROPIC_API_KEY` | —                       | Claude API key           |

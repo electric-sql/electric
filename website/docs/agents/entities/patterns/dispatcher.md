@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Pattern: classify incoming messages and route to the appropriate agent type.
 
-**Source:** [`examples/durable-agents-playground/src/coordination/dispatcher.ts`](https://github.com/electric-sql/durable-streams/blob/main/examples/durable-agents-playground/src/coordination/dispatcher.ts)
+**Source:** [`packages/agents-runtime/skills/designing-entities/references/patterns/dispatcher.md`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/dispatcher.md)
 
 ## Registration
 
@@ -25,7 +25,7 @@ export function registerDispatcher(registry: EntityRegistry) {
       ctx.useAgent({
         systemPrompt: DISPATCHER_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, dispatchTool],
+        tools: [...ctx.electricTools, dispatchTool],
       })
       await ctx.agent.run()
     },

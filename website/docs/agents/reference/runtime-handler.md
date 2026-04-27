@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Factory functions that create the runtime request router and Node HTTP adapter. The router handles webhook wake delivery from the Electric Agents runtime server and registers entity types on startup.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ## RuntimeRouter
 
@@ -94,9 +94,30 @@ interface RuntimeRouterConfig {
   subscriptionPathForType?: (typeName: string) => string
   idleTimeout?: number
   heartbeatInterval?: number
-  createDarixTools?: (
-    context: DarixToolsContext
-  ) => AgentTool[] | Promise<AgentTool[]>
+  createElectricTools?: (context: {
+    entityUrl: string
+    entityType: string
+    args: Readonly<Record<string, unknown>>
+    db: EntityStreamDBWithActions
+    events: Array<ChangeEvent>
+    upsertCronSchedule(opts: {
+      id: string
+      expression: string
+      timezone?: string
+      payload?: unknown
+      debounceMs?: number
+      timeoutMs?: number
+    }): Promise<{ txid: string }>
+    upsertFutureSendSchedule(opts: {
+      id: string
+      payload: unknown
+      targetUrl?: string
+      fireAt: string
+      from?: string
+      messageType?: string
+    }): Promise<{ txid: string }>
+    deleteSchedule(opts: { id: string }): Promise<{ txid: string }>
+  }) => AgentTool[] | Promise<AgentTool[]>
   onWakeError?: (error: Error) => boolean | void
   registrationConcurrency?: number
 }
@@ -106,12 +127,12 @@ interface RuntimeRouterConfig {
 | ------------------------- | ------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `baseUrl`                 | `string`                                                      | -                                            | Base URL of the Electric Agents runtime server (e.g. `"http://localhost:4437"`). Required.                                          |
 | `serveEndpoint`           | `string`                                                      | -                                            | Full webhook callback URL exposed by your app. Used for type registration.                                        |
-| `webhookPath`             | `string`                                                      | pathname from `serveEndpoint`, or `"/darix"` | Path matched by `handleRequest()`.                                                                                |
+| `webhookPath`             | `string`                                                      | pathname from `serveEndpoint`, or `"/electric-agents"` | Path matched by `handleRequest()`.                                                                                |
 | `handlerUrl`              | `string`                                                      | -                                            | Deprecated alias for `serveEndpoint`.                                                                             |
 | `registry`                | `EntityRegistry`                                              | default registry                             | Entity registry for this handler. Falls back to the module-level default registry.                                |
 | `subscriptionPathForType` | `(typeName: string) => string`                                | -                                            | Override the webhook subscription path used per entity type registration.                                         |
 | `idleTimeout`             | `number`                                                      | `20000`                                      | Idle timeout in milliseconds before closing a wake.                                                               |
 | `heartbeatInterval`       | `number`                                                      | `30000`                                      | Heartbeat interval in milliseconds.                                                                               |
-| `createDarixTools`        | `(context: DarixToolsContext) => AgentTool[] \| Promise<...>` | -                                            | Optional tool factory invoked for each wake context before handler execution. Provides extra tools to the agent.  |
+| `createElectricTools`     | `(context) => AgentTool[] \| Promise<...>`                    | -                                            | Optional tool factory invoked for each wake context before handler execution. Provides extra tools to the agent.  |
 | `onWakeError`             | `(error: Error) => boolean \| void`                           | -                                            | Observer for background wake failures. Return `true` to mark the error as handled so it is not rethrown on drain. |
 | `registrationConcurrency` | `number`                                                      | `8`                                          | Max number of concurrent entity-type registrations.                                                               |

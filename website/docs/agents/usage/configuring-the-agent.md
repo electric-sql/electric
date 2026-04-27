@@ -26,7 +26,7 @@ interface AgentConfig {
 | --------------- | -------- | ----------------------------------------------------------------------- |
 | `systemPrompt`  | Yes      | The system prompt passed to the LLM.                                    |
 | `model`         | Yes      | Model identifier string, passed through to the provider.                |
-| `tools`         | Yes      | Array of tools available to the agent. Always include `ctx.darixTools`. |
+| `tools`         | Yes      | Array of tools available to the agent. Always include `ctx.electricTools`. |
 | `streamFn`      | No       | Custom streaming function. Defaults to the built-in Claude adapter.     |
 | `testResponses` | No       | Mock responses for testing without calling the LLM.                     |
 
@@ -37,7 +37,7 @@ async handler(ctx) {
   ctx.useAgent({
     systemPrompt: 'You are a helpful assistant.',
     model: 'claude-sonnet-4-5-20250929',
-    tools: [...ctx.darixTools],
+    tools: [...ctx.electricTools],
   })
   await ctx.agent.run()
 }
@@ -47,15 +47,15 @@ async handler(ctx) {
 
 To control what content fills the agent's context window (token budgets, cache tiers, external sources), use `ctx.useContext()` alongside `useAgent`. See [Context composition](./context-composition).
 
-## ctx.darixTools
+## ctx.electricTools
 
-`ctx.darixTools` is an array of runtime-provided tools that the agent needs to function correctly (e.g. sending messages, reporting results). Always spread these into the `tools` array:
+`ctx.electricTools` is an array of runtime-provided tools that the agent needs to function correctly (e.g. sending messages, reporting results). Always spread these into the `tools` array:
 
 ```ts
-tools: [...ctx.darixTools, myCustomTool, anotherTool]
+tools: [...ctx.electricTools, myCustomTool, anotherTool]
 ```
 
-Omitting `ctx.darixTools` will break runtime coordination.
+Omitting `ctx.electricTools` will break runtime coordination.
 
 ## ctx.agent.run()
 
@@ -113,7 +113,7 @@ For testing handlers without making LLM calls, pass `testResponses`. Two forms a
 ctx.useAgent({
   systemPrompt: "...",
   model: "claude-sonnet-4-5-20250929",
-  tools: [...ctx.darixTools],
+  tools: [...ctx.electricTools],
   testResponses: ["Hello! How can I help?", "Sure, I can do that."],
 })
 ```

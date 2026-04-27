@@ -1,27 +1,25 @@
 ---
-title: Playground
+title: Pattern references
 titleTemplate: "... - Electric Agents"
 description: >-
-  Example app with 14 agent types spanning standalone, coordination, blackboard, and reactive patterns.
+  Electric Agents pattern references for standalone, coordination, blackboard, and reactive designs.
 outline: [2, 3]
 ---
 
-# Playground
+# Pattern references
 
-The `durable-agents-playground` is an example application demonstrating Electric Agents patterns. Located at `examples/durable-agents-playground/` in the repository.
+The former playground examples are now represented by Electric Agents pattern references in the monorepo under `packages/agents-runtime/skills/designing-entities/references/patterns/`.
 
 ## What it includes
 
-14 agent types organized into four categories.
+The patterns are organized into four categories.
 
 ### Standalone
 
-- `assistant` --- general-purpose agent with calculator, database, memory, dice, and inventory tools
+- `single-agent` --- one entity handles the full task itself
 
 ### Coordination
 
-- `worker` --- generic configurable child agent (prompt and shared state via spawn args)
-- `deep-researcher` --- spawns specialist sub-agents for deep research
 - `manager-worker` --- multi-perspective analysis (optimist/pessimist/pragmatist)
 - `dispatcher` --- routes tasks to the appropriate agent type
 - `pipeline` --- sequential worker stages
@@ -29,49 +27,20 @@ The `durable-agents-playground` is an example application demonstrating Electric
 
 ### Blackboard (shared state)
 
-- `debate` --- pro/con workers with shared argument state
-- `peer-review` --- multiple reviewers evaluating an artifact
-- `wiki` --- 7 category specialists building a knowledge base
-- `trading-floor` --- traders with shared market state
+- `blackboard` --- multiple workers coordinate through shared state
 
 ### Reactive
 
-- `summarizer` --- observes entity streams, produces summaries
-- `monitor` --- watches multiple entities, reports status changes
-- `guardian` --- quality control observer
+- `reactive-observers` --- observes entity streams and reacts to changes
 
-## Running it
+## Source references
 
-```bash
-cd examples/durable-agents-playground
-pnpm install
-cp ../../.env.template .env  # Set ANTHROPIC_API_KEY
-pnpm dev
-```
-
-Requires a running Electric Agents runtime server at `http://localhost:4437` (default).
-
-## Project structure
-
-```
-src/
-├── server.ts                 # Entry point, registry, HTTP server
-├── guards.ts                 # State transition validation
-├── standalone/assistant.ts   # Standalone assistant
-├── workers/worker.ts         # Generic worker
-├── coordination/             # Coordination patterns
-├── blackboard/               # Shared state patterns
-├── reactive/                 # Observer patterns
-└── tools/                    # Tool definitions
-    ├── registry.ts           # Tool factory registry
-    ├── calculator.ts
-    ├── memory-store.ts
-    ├── sqlite.ts
-    ├── inventory.ts
-    ├── dice-roll.ts
-    ├── web-search.ts
-    ├── fetch-url.ts
-    └── observe.ts
-```
+- [`single-agent`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/single-agent.md)
+- [`manager-worker`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/manager-worker.md)
+- [`dispatcher`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/dispatcher.md)
+- [`pipeline`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/pipeline.md)
+- [`map-reduce`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/map-reduce.md)
+- [`blackboard`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/blackboard.md)
+- [`reactive-observers`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/reactive-observers.md)
 
 See [Agents & Patterns](../usage/spawning-and-coordinating.md) for detailed documentation of each pattern.

@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Describes why an entity handler was invoked. Passed as the second argument to the handler function.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 type WakeEvent = {
@@ -44,7 +44,7 @@ Handlers see exactly two values for `wake.type`. Everything that isn't a direct 
 
 ### `"message_received"`
 
-An external message landed in the entity's inbox — from `ctx.send()`, the CLI's `darix send`, or any direct `/send` HTTP call.
+An external message landed in the entity's inbox — from `ctx.send()`, the CLI's `electric agents send`, or any direct `/send` HTTP call.
 
 | Field          | Shape                                                                             |
 | -------------- | --------------------------------------------------------------------------------- |

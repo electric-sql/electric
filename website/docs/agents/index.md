@@ -44,7 +44,7 @@ registry.define("support", {
       ctx.useAgent({
         systemPrompt: "You are a support agent.",
         model: "claude-sonnet-4-5-20250929",
-        tools: [...ctx.darixTools, searchKbTool],
+        tools: [...ctx.electricTools, searchKbTool],
       })
       await ctx.agent.run()
     }
@@ -103,7 +103,7 @@ The core pattern is [`ctx.useAgent()`](/docs/agents/reference/agent-config) foll
 ctx.useAgent({
   systemPrompt: "You are a helpful assistant.",
   model: "claude-sonnet-4-5-20250929",
-  tools: [...ctx.darixTools, myCustomTool],
+  tools: [...ctx.electricTools, myCustomTool],
 })
 
 await ctx.agent.run()

@@ -12,7 +12,7 @@ Proxy handle for a shared state collection, accessed via a `SharedStateHandle` r
 
 > **Note:** `StateCollectionProxy` applies to **shared state handles** only. Entity state uses `ctx.db.actions.<coll>_insert/update/delete` for writes and `ctx.db.collections.<coll>?.get/toArray` for reads. See [EntityDefinition](./entity-definition) for details.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 interface StateCollectionProxy<T extends object = Record<string, unknown>> {

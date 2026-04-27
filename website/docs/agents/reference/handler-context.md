@@ -10,7 +10,7 @@ outline: [2, 3]
 
 The handler context is passed as the first argument to every entity handler. It provides access to state, coordination primitives, and agent configuration.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 interface HandlerContext<TState extends StateProxy = StateProxy> {
@@ -23,7 +23,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
   state: TState
   events: Array<ChangeEvent>
   actions: Record<string, (...args: unknown[]) => unknown>
-  darixTools: AgentTool[]
+  electricTools: AgentTool[]
   useAgent(config: AgentConfig): AgentHandle
   useContext(config: UseContextConfig): void
   timelineMessages(opts?: TimelineProjectionOpts): Array<TimestampedMessage>
@@ -70,7 +70,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 }
 ```
 
-> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, and `db()` from `@durable-streams/darix-runtime` to construct `ObservationSource` values for `observe()`.
+> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, and `db()` from `@electric-ax/agents-runtime` to construct `ObservationSource` values for `observe()`.
 
 ## Properties
 
@@ -85,7 +85,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `state`      | `TState`                                          | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](./state-collection-proxy). |
 | `events`     | `Array<ChangeEvent>`                              | Change events that triggered this wake.                                                                       |
 | `actions`    | `Record<string, (...args: unknown[]) => unknown>` | Auto-generated CRUD actions for custom state collections.                                                     |
-| `darixTools` | `AgentTool[]`                                     | Built-in tools (e.g. `send_message`) to spread into agent config.                                             |
+| `electricTools` | `AgentTool[]`                                     | Built-in tools (e.g. `send_message`) to spread into agent config.                                             |
 
 ## Methods
 

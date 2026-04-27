@@ -16,7 +16,7 @@ Test agent handlers without calling the LLM by providing canned responses:
 ctx.useAgent({
   systemPrompt: "...",
   model: "claude-sonnet-4-5-20250929",
-  tools: [...ctx.darixTools],
+  tools: [...ctx.electricTools],
   testResponses: ["Hello! How can I help?"],
 })
 await ctx.agent.run()
@@ -46,7 +46,7 @@ The runtime wraps your `TestResponseFn` with `bridge.onRunStart()` / `bridge.onR
 ## Unit testing entity registration
 
 ```ts
-import { createEntityRegistry } from "@durable-streams/darix-runtime"
+import { createEntityRegistry } from "@electric-ax/agents-runtime"
 
 const registry = createEntityRegistry()
 registerAssistant(registry)
@@ -73,4 +73,4 @@ test("creates runtime with types", () => {
 
 ## Integration testing
 
-Integration testing with the full Electric Agents server is possible using the `@durable-streams/server-conformance-tests` package, which provides test server utilities for running against a live server instance.
+Integration testing with the full Electric Agents server is possible using the `@electric-ax/agents-server-conformance-tests` package, which provides test server utilities for running against a live server instance.

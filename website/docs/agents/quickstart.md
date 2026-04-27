@@ -16,25 +16,25 @@ The Electric Agents runtime has three key components:
 
 1. **Runtime server** — the durable streams server that persists entity state.
 2. **CLI** — a command-line tool for spawning entities, sending messages, and streaming events.
-3. **GUI** — an Electron app for observing and interacting with entities.
+3. **Web UI** — a dashboard for observing and interacting with entities.
 
 The first step is to get these running, with a built-in agent you can use right away.
 
-You can then define and engineer agents (and agent topologies and coordination patterns, ...) in **your own web app** that uses the `@durable-streams/darix-runtime` shim to register with the runtime.
+You can then define and engineer agents (and agent topologies and coordination patterns, ...) in **your own web app** that uses `@electric-ax/agents-runtime` to register with the runtime.
 
 ## Prerequisites
 
 - Node.js 22+
-- [pnpm](https://pnpm.io/installation)
+- [pnpm](https://pnpm.io/installation) (if you're working from a local checkout)
 - [Docker](https://docs.docker.com/get-docker/) (the dev server runs Postgres and Electric in containers)
 
 ## Clone the repo
 
-Electric Agents packages are not yet published to npm. For now, clone the repo and use it as a local workspace:
+If you're developing against the monorepo packages, clone Electric:
 
 ```sh
-git clone git@github.com:electric-sql/durable-streams.git
-cd durable-streams
+git clone git@github.com:electric-sql/electric.git
+cd electric
 pnpm install
 ```
 
@@ -49,9 +49,9 @@ E.g.:
 
 ```sh
 cat <<'EOF' > .env
-  ANTHROPIC_API_KEY="sk-ant-..."
-  BRAVE_SEARCH_API_KEY="BS..."
- EOF
+ANTHROPIC_API_KEY="sk-ant-..."
+BRAVE_SEARCH_API_KEY="BS..."
+EOF
 ```
 
 ## Try the built-in Horton assistant
@@ -61,32 +61,28 @@ The runtime server ships with a built-in agent type, `horton` — a friendly cap
 ### 1. Start the runtime server
 
 ```sh
-pnpm start:darix
+npx electric-ax agents quickstart --anthropic-api-key "$ANTHROPIC_API_KEY"
 ```
 
-This starts Postgres and Electric containers via Docker, then launches the Electric Agents runtime server with `horton` (and an internal `worker` type it can spawn) registered. The server defaults to `http://localhost:4437` but picks a random port if 4437 is in use — the URL is printed on startup.
+This starts Postgres and Electric containers via Docker, launches the Electric Agents runtime server, starts the built-in agents runtime with `horton` and `worker` registered, and prints the UI URL. The server defaults to `http://localhost:4437`.
 
 ### 2. Interact via CLI
 
 In a separate terminal, spawn a Horton entity, send it a message, and observe the output:
 
 ```sh
-pnpm darix spawn /horton/my-horton
-pnpm darix send /horton/my-horton 'Hello!'
-pnpm darix observe /horton/my-horton
+npx electric-ax agents spawn /horton/my-horton
+npx electric-ax agents send /horton/my-horton 'Hello!'
+npx electric-ax agents observe /horton/my-horton
 ```
 
 - `spawn` creates a new entity instance at the given path.
 - `send` delivers a message to the entity's inbox, waking its handler.
 - `observe` streams the entity's events to your terminal in real-time.
 
-### 3. Start the GUI (optional)
+### 3. Open the web UI
 
-You can also start the Electron app to observe and interact with entities visually:
-
-```sh
-pnpm start:darix-app
-```
+The quickstart command prints the UI URL. Open it to observe and interact with entities visually.
 
 ## Create your own entity types
 
@@ -94,17 +90,20 @@ Once you've seen the built-in agents in action, you can define your own entity t
 
 ### Set up your app
 
-Your app is a separate project that uses `@durable-streams/darix-runtime` to define entities and handle webhooks. To use the local (unpublished) packages, add the durable-streams packages to your app's pnpm workspace.
+Your app is a separate project that uses `@electric-ax/agents-runtime` to define entities and handle webhooks.
 
-For example, if your app is at `~/my-app` and you cloned durable-streams to `~/durable-streams`, add the following to your app's `pnpm-workspace.yaml`:
+Install the runtime package:
+
+```sh
+pnpm add @electric-ax/agents-runtime
+```
+
+If you're using the packages directly from a local Electric checkout, add the package paths to your app's `pnpm-workspace.yaml` instead. For example, if your app is at `~/my-app` and you cloned Electric to `~/electric`, add:
 
 ```yaml
 packages:
   - "packages/*"
-  - "../durable-streams/packages/ts-darix-runtime"
-  - "../durable-streams/packages/client"
-  - "../durable-streams/packages/state"
-  - "../durable-streams/packages/server"
+  - "../electric/packages/agents-runtime"
 ```
 
 Then run `pnpm install` in your app to link the workspace packages.
@@ -118,9 +117,9 @@ import http from "node:http"
 import {
   createEntityRegistry,
   createRuntimeHandler,
-} from "@durable-streams/darix-runtime"
+} from "@electric-ax/agents-runtime"
 
-const DARIX_URL = process.env.DARIX_URL ?? "http://localhost:4437"
+const ELECTRIC_AGENTS_URL = process.env.ELECTRIC_AGENTS_URL ?? "http://localhost:4437"
 const PORT = Number(process.env.PORT ?? 3000)
 const SERVE_URL = process.env.SERVE_URL ?? `http://localhost:${PORT}`
 
@@ -132,14 +131,14 @@ registry.define("assistant", {
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
       model: "claude-sonnet-4-5-20250929",
-      tools: [...ctx.darixTools],
+      tools: [...ctx.electricTools],
     })
     await ctx.agent.run()
   },
 })
 
 const runtime = createRuntimeHandler({
-  baseUrl: DARIX_URL,
+  baseUrl: ELECTRIC_AGENTS_URL,
   serveEndpoint: `${SERVE_URL}/webhook`,
   registry,
 })
@@ -176,12 +175,12 @@ npx tsx server.ts
 
 ### Interact with your entity
 
-From the durable-streams repo:
+From your app:
 
 ```sh
-pnpm darix spawn /assistant/my-assistant
-pnpm darix send /assistant/my-assistant 'Hello!'
-pnpm darix observe /assistant/my-assistant
+npx electric-ax agents spawn /assistant/my-assistant
+npx electric-ax agents send /assistant/my-assistant 'Hello!'
+npx electric-ax agents observe /assistant/my-assistant
 ```
 
 ## Next steps

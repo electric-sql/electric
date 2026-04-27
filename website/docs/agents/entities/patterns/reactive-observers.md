@@ -10,17 +10,17 @@ outline: [2, 3]
 
 Pattern: entities that watch other entities and react to changes.
 
-**Source:** [`examples/durable-agents-playground/src/reactive/`](https://github.com/electric-sql/durable-streams/blob/main/examples/durable-agents-playground/src/reactive/)
+**Source:** [`packages/agents-runtime/skills/designing-entities/references/patterns/reactive-observers.md`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/reactive-observers.md)
 
 ## Core mechanism
 
-An entity calls `ctx.observe(entity(entityUrl), { wake: { on: 'change', collections: [...] } })` to start watching another entity. The `entity()` helper (imported from `@durable-streams/darix-runtime`) wraps a raw URL into the correct observe target. When the observed entity has new activity in the specified collections, the observer is woken.
+An entity calls `ctx.observe(entity(entityUrl), { wake: { on: 'change', collections: [...] } })` to start watching another entity. The `entity()` helper (imported from `@electric-ax/agents-runtime`) wraps a raw URL into the correct observe target. When the observed entity has new activity in the specified collections, the observer is woken.
 
 ## Monitor example
 
 The monitor watches multiple entities and reports status changes.
 
-**Source:** [`examples/durable-agents-playground/src/reactive/monitor.ts`](https://github.com/electric-sql/durable-streams/blob/main/examples/durable-agents-playground/src/reactive/monitor.ts)
+**Source:** [`packages/agents-runtime/skills/designing-entities/references/patterns/reactive-observers.md`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/reactive-observers.md)
 
 ```ts
 export function registerMonitor(registry: EntityRegistry) {
@@ -51,7 +51,7 @@ export function registerMonitor(registry: EntityRegistry) {
       ctx.useAgent({
         systemPrompt: MONITOR_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, observeTool],
+        tools: [...ctx.electricTools, observeTool],
       })
       await ctx.agent.run()
     },
@@ -66,7 +66,7 @@ The monitor wraps the base observe tool to also transition its own state to `obs
 The `observe_entity` tool lets the LLM decide what to watch:
 
 ```ts
-import { entity } from "@durable-streams/darix-runtime"
+import { entity } from "@electric-ax/agents-runtime"
 
 export function createObserveTool(ctx: HandlerContext): AgentTool {
   return {

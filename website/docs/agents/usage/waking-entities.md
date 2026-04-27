@@ -57,7 +57,7 @@ See the full catalog of `Wake` values in [WakeEvent](../reference/wake-event#wak
 `ctx.observe()` subscribes to another entity's stream without spawning it. Pair it with a `wake` option to re-invoke this handler when the observed stream changes:
 
 ```ts
-import { entity } from "@durable-streams/darix-runtime"
+import { entity } from "@electric-ax/agents-runtime"
 
 await ctx.observe(entity(someEntityUrl), {
   wake: { on: "change", collections: ["status"], debounceMs: 250 },
@@ -78,7 +78,7 @@ await ctx.observe(db("board-1", schema), {
 
 ### 5. A schedule
 
-Cron schedules and future-send schedules both wake their target entity when they fire. Schedules are created via `ctx.darixTools` (the built-in `upsert_cron_schedule` / `upsert_future_send_schedule` tools) and live on the entity's manifest — so they survive restarts and can be updated or cancelled idempotently.
+Cron schedules and future-send schedules both wake their target entity when they fire. Schedules are created via `ctx.electricTools` (the built-in `upsert_cron_schedule` / `upsert_future_send_schedule` tools) and live on the entity's manifest — so they survive restarts and can be updated or cancelled idempotently.
 
 ## Reading a WakeEvent
 

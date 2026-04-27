@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Interface for tools the LLM can call during the agent loop. Re-exported from `@mariozechner/pi-agent-core`.
 
-**Source:** `@durable-streams/darix-runtime` (re-export)
+**Source:** `@electric-ax/agents-runtime` (re-export)
 
 ```ts
 interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> {

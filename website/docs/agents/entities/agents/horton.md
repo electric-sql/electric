@@ -10,21 +10,21 @@ outline: [2, 3]
 
 The built-in assistant registered by the Electric Agents dev server. Horton can chat conversationally, search the web, read and edit files, run shell commands, and dispatch subagents (workers) for isolated subtasks.
 
-**Source:** [`packages/ts-darix-server/src/darix-agents/agents/horton.ts`](https://github.com/electric-sql/durable-streams/blob/main/packages/ts-darix-server/src/darix-agents/agents/horton.ts)
+**Source:** [`packages/agents/src/agents/horton.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/agents/horton.ts)
 
 ## Try it
 
-With the dev server running (`pnpm start:darix`):
+With the dev server running (`npx electric-ax agents quickstart`):
 
 ```sh
-pnpm darix spawn /horton/my-horton
-pnpm darix send /horton/my-horton 'What's in this directory?'
-pnpm darix observe /horton/my-horton
+npx electric-ax agents spawn /horton/my-horton
+npx electric-ax agents send /horton/my-horton 'What's in this directory?'
+npx electric-ax agents observe /horton/my-horton
 ```
 
 ## Tools
 
-Horton is configured with `ctx.darixTools` plus the seven Horton tools:
+Horton is configured with `ctx.electricTools` plus the seven Horton tools:
 
 | Tool           | Purpose                                                  |
 | -------------- | -------------------------------------------------------- |
@@ -49,7 +49,7 @@ On the first wake, Horton calls `generateTitle()` (Haiku) to summarise the user'
 | Type name         | `horton`                                          |
 | Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)     |
 | Title model       | `claude-haiku-4-5-20251001`                       |
-| Tools             | `ctx.darixTools` + Horton tool set (7 tools)      |
+| Tools             | `ctx.electricTools` + Horton tool set (7 tools)      |
 | Working directory | Passed at bootstrap (defaults to `process.cwd()`) |
 | Title generation  | Yes, on first wake                                |
 
@@ -62,7 +62,7 @@ import {
   HORTON_MODEL,
   buildHortonSystemPrompt,
   createHortonTools,
-} from "@durable-streams/ts-darix-server"
+} from "@electric-ax/agents"
 
 registry.define("my-assistant", {
   description: "Horton with an extra custom tool",
@@ -72,7 +72,7 @@ registry.define("my-assistant", {
       systemPrompt: buildHortonSystemPrompt(process.cwd()),
       model: HORTON_MODEL,
       tools: [
-        ...ctx.darixTools,
+        ...ctx.electricTools,
         ...createHortonTools(process.cwd(), ctx, readSet),
         myCustomTool,
       ],

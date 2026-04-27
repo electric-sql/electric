@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Configuration for the LLM agent loop. Passed to `ctx.useAgent()`.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 interface AgentConfig {
@@ -28,7 +28,7 @@ interface AgentConfig {
 | --------------- | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
 | `systemPrompt`  | `string`                     | Yes      | System prompt sent to the LLM on each step.                                                         |
 | `model`         | `string`                     | Yes      | Model identifier (e.g. `"claude-sonnet-4-5-20250929"`).                                             |
-| `tools`         | `AgentTool[]`                | Yes      | Tools available to the LLM. Always include `ctx.darixTools` first. See [`AgentTool`](./agent-tool). |
+| `tools`         | `AgentTool[]`                | Yes      | Tools available to the LLM. Always include `ctx.electricTools` first. See [`AgentTool`](./agent-tool). |
 | `streamFn`      | `StreamFn`                   | No       | Custom streaming function. Overrides the default LLM provider.                                      |
 | `testResponses` | `string[] \| TestResponseFn` | No       | Mock LLM responses for testing. When set, no real LLM calls are made.                               |
 

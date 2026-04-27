@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Pattern: a parent agent spawns multiple specialist children, waits for all to complete, and synthesizes results.
 
-**Source:** [`examples/durable-agents-playground/src/coordination/manager-worker.ts`](https://github.com/electric-sql/durable-streams/blob/main/examples/durable-agents-playground/src/coordination/manager-worker.ts)
+**Source:** [`packages/agents-runtime/skills/designing-entities/references/patterns/manager-worker.md`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/manager-worker.md)
 
 ## Registration
 
@@ -28,7 +28,7 @@ export function registerManagerWorker(registry: EntityRegistry) {
       ctx.useAgent({
         systemPrompt: MANAGER_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, analyzeTool],
+        tools: [...ctx.electricTools, analyzeTool],
       })
       await ctx.agent.run()
     },

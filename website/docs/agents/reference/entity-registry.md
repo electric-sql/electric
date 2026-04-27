@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Manages entity type registrations. Create an isolated registry with `createEntityRegistry()`, or use the module-level convenience functions for a shared default registry.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 class EntityRegistry {

@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Pattern: multiple agents coordinate through a shared data structure. A parent creates shared state, spawns workers that connect to it, and workers read/write shared collections via auto-generated CRUD tools.
 
-**Source:** [`examples/durable-agents-playground/src/blackboard/`](https://github.com/electric-sql/durable-streams/blob/main/examples/durable-agents-playground/src/blackboard/)
+**Source:** [`packages/agents-runtime/skills/designing-entities/references/patterns/blackboard.md`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/blackboard.md)
 
 ## Debate example
 
@@ -36,7 +36,7 @@ const debateSchema = {
 ### Registration
 
 ```ts
-import { db } from "@durable-streams/darix-runtime"
+import { db } from "@electric-ax/agents-runtime"
 
 export function registerDebate(registry: EntityRegistry) {
   registry.define(`debate`, {
@@ -59,7 +59,7 @@ export function registerDebate(registry: EntityRegistry) {
       ctx.useAgent({
         systemPrompt: DEBATE_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, startTool, checkTool, endTool],
+        tools: [...ctx.electricTools, startTool, checkTool, endTool],
       })
       await ctx.agent.run()
     },

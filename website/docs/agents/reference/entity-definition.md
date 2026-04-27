@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Defines an entity type's schema, state, and handler. Passed to `registry.define()` or `defineEntity()`.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 interface EntityDefinition {

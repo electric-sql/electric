@@ -63,7 +63,7 @@ registerCoordinator(registry, WEB_PORT)
 registerTileAgent(registry)
 
 const runtime = createRuntimeHandler({
-  baseUrl: DARIX_URL,
+  baseUrl: ELECTRIC_AGENTS_URL,
   serveEndpoint: `${SERVE_URL}/webhook`,
   registry,
 })
@@ -99,8 +99,8 @@ Requires a running Electric Agents runtime server at `http://localhost:4437`.
 Then in another terminal:
 
 ```bash
-darix spawn /coordinator/my-drawing
-darix send /coordinator/my-drawing 'Draw a sunset over mountains'
+npx electric-ax agents spawn /coordinator/my-drawing
+npx electric-ax agents send /coordinator/my-drawing 'Draw a sunset over mountains'
 ```
 
 View the canvas live at `http://localhost:3000/my-drawing` --- it auto-refreshes as tiles draw.

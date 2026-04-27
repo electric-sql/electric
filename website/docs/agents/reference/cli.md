@@ -2,72 +2,72 @@
 title: CLI
 titleTemplate: "... - Electric Agents"
 description: >-
-  Command reference for the darix CLI: spawn, send, observe, inspect, list, and manage entities.
+  Command reference for the Electric Agents CLI: spawn, send, observe, inspect, list, and manage entities.
 outline: [2, 3]
 ---
 
 # CLI reference
 
-The `darix` CLI manages entity types and entities. Install from `@durable-streams/darix-cli`.
+The Electric Agents CLI manages entity types and entities. Install it from `electric-ax`, then use the `electric agents` command. You can also run one-off commands with `npx electric-ax agents ...`.
 
 ```bash
-npm install -g @durable-streams/darix-cli
+npm install -g electric-ax
 ```
 
 ## Environment variables
 
 | Variable         | Default                 | Purpose                      |
 | ---------------- | ----------------------- | ---------------------------- |
-| `DARIX_URL`      | `http://localhost:4437` | Server URL                   |
-| `DARIX_IDENTITY` | `user@hostname`         | Sender identity for messages |
+| `ELECTRIC_AGENTS_URL`      | `http://localhost:4437` | Server URL                   |
+| `ELECTRIC_AGENTS_IDENTITY` | `user@hostname`         | Sender identity for messages |
 
 ## Commands
 
-### `darix types`
+### <span class="cli-command"><code>types</code></span> {#types}
 
 List registered entity types.
 
 ```bash
-darix types
+electric agents types
 ```
 
-### `darix types inspect <name>`
+### <span class="cli-command"><code>types inspect &lt;name&gt;</code></span> {#types-inspect-name}
 
 Show entity type details. Outputs JSON.
 
 ```bash
-darix types inspect chat
+electric agents types inspect chat
 ```
 
-### `darix types delete <name>`
+### <span class="cli-command"><code>types delete &lt;name&gt;</code></span> {#types-delete-name}
 
 Delete an entity type registration.
 
 ```bash
-darix types delete chat
+electric agents types delete chat
 ```
 
-### `darix spawn <url-path> [--args <json>]`
+### <span class="cli-command"><code>spawn &lt;url-path&gt; [--args &lt;json&gt;]</code></span> {#spawn-url-path-args-json}
 
 Spawn an entity. URL path format: `/<type>/<id>`.
 
 ```bash
-darix spawn /chat/my-convo
-darix spawn /chat/my-convo --args '{"topic": "AI safety"}'
+electric agents spawn /chat/my-convo
+electric agents spawn /chat/my-convo --args '{"topic": "AI safety"}'
 ```
 
 | Option          | Description                    |
 | --------------- | ------------------------------ |
 | `--args <json>` | Spawn arguments as JSON object |
 
-### `darix send <url> <message...> [--type <msg-type>] [--json]`
+### <span class="cli-command"><code>send &lt;url&gt; &lt;message...&gt; [--type &lt;msg-type&gt;] [--json]</code></span> {#send-url-message-type-json}
 
 Send a message to an entity. By default, wraps the message string as `{ text: "..." }`. Use `--json` to send raw JSON.
 
 ```bash
-darix send /chat/my-convo 'Hello!'
-darix send /chat/my-convo '{"custom": "payload"}' --json
-darix send /chat/my-convo 'alert' --type warning
+electric agents send /chat/my-convo 'Hello!'
+electric agents send /chat/my-convo '{"custom": "payload"}' --json
+electric agents send /chat/my-convo 'alert' --type warning
 ```
 
 | Option              | Description                                                      |
@@ -75,35 +75,35 @@ darix send /chat/my-convo 'alert' --type warning
 | `--type <msg-type>` | Set the message type field                                       |
 | `--json`            | Parse message argument as JSON instead of wrapping as `{ text }` |
 
-### `darix observe <url> [--from <offset>]`
+### <span class="cli-command"><code>observe &lt;url&gt; [--from &lt;offset&gt;]</code></span> {#observe-url-from-offset}
 
 Stream entity events in real-time. Requires an interactive terminal.
 
 ```bash
-darix observe /chat/my-convo
-darix observe /chat/my-convo --from 0
+electric agents observe /chat/my-convo
+electric agents observe /chat/my-convo --from 0
 ```
 
 | Option            | Description                      |
 | ----------------- | -------------------------------- |
 | `--from <offset>` | Start streaming from this offset |
 
-### `darix inspect <url>`
+### <span class="cli-command"><code>inspect &lt;url&gt;</code></span> {#inspect-url}
 
 Show entity details. Outputs JSON.
 
 ```bash
-darix inspect /chat/my-convo
+electric agents inspect /chat/my-convo
 ```
 
-### `darix ps [--type <type>] [--status <status>] [--parent <url>]`
+### <span class="cli-command"><code>ps [--type &lt;type&gt;] [--status &lt;status&gt;] [--parent &lt;url&gt;]</code></span> {#ps-type-status-parent}
 
 List entities with optional filters.
 
 ```bash
-darix ps
-darix ps --type chat --status running
-darix ps --parent /manager/my-manager
+electric agents ps
+electric agents ps --type chat --status running
+electric agents ps --parent /manager/my-manager
 ```
 
 | Option              | Description                 |
@@ -114,31 +114,37 @@ darix ps --parent /manager/my-manager
 
 Output shows `URL`, `STATUS`, `CREATED`, and `LAST ACTIVE` columns with human-readable relative timestamps. Results are sorted by most recently active first.
 
-### `darix kill <url>`
+### <span class="cli-command"><code>kill &lt;url&gt;</code></span> {#kill-url}
 
 Delete an entity.
 
 ```bash
-darix kill /chat/my-convo
+electric agents kill /chat/my-convo
 ```
 
-### `darix completion [action]`
+### <span class="cli-command"><code>completion [action]</code></span> {#completion-action}
 
 Set up shell completions. Without arguments, prints setup instructions.
 
 ```bash
-darix completion            # Show setup instructions
-darix completion install    # Auto-install into your shell init file
+electric agents completion            # Show setup instructions
+electric agents completion install    # Auto-install into your shell init file
 ```
 
 **Manual setup** (add to your shell init file):
 
 ```bash
 # Bash (~/.bashrc) or Zsh (~/.zshrc)
-eval "$(darix --completion)"
+eval "$(electric --completion)"
 
 # Fish (~/.config/fish/config.fish)
-darix --completion-fish | source
+electric --completion-fish | source
 ```
 
 Completions provide tab-completion for commands, flags, entity types, and entity URLs.
+
+<style scoped>
+.cli-command code::before {
+  content: "electric agents ";
+}
+</style>

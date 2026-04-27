@@ -165,7 +165,7 @@ This example from the built-in Horton assistant shows all three source types wor
 
 ```ts
 async handler(ctx, wake) {
-  const tools = [...ctx.darixTools, ...customTools]
+  const tools = [...ctx.electricTools, ...customTools]
 
   ctx.useContext({
     sourceBudget: 18_000,

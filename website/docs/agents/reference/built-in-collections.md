@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Every entity automatically has these 17 collections, populated by the runtime as the agent operates. Custom state collections defined in `EntityDefinition.state` are merged with these at creation time.
 
-**Source:** `@durable-streams/darix-runtime` -- `entity-schema.ts`
+**Source:** `@electric-ax/agents-runtime` -- `entity-schema.ts`
 
 ## Collection summary
 

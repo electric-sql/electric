@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Pattern: split input into chunks, process all in parallel, collect results.
 
-**Source:** [`examples/durable-agents-playground/src/coordination/map-reduce.ts`](https://github.com/electric-sql/durable-streams/blob/main/examples/durable-agents-playground/src/coordination/map-reduce.ts)
+**Source:** [`packages/agents-runtime/skills/designing-entities/references/patterns/map-reduce.md`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/map-reduce.md)
 
 ## Registration
 
@@ -26,7 +26,7 @@ export function registerMapReduce(registry: EntityRegistry) {
       ctx.useAgent({
         systemPrompt: MAP_REDUCE_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, createMapChunksTool(ctx)],
+        tools: [...ctx.electricTools, createMapChunksTool(ctx)],
       })
       await ctx.agent.run()
     },

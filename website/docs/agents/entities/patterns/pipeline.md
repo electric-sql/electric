@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Pattern: sequential stages where each stage's output feeds into the next.
 
-**Source:** [`examples/durable-agents-playground/src/coordination/pipeline.ts`](https://github.com/electric-sql/durable-streams/blob/main/examples/durable-agents-playground/src/coordination/pipeline.ts)
+**Source:** [`packages/agents-runtime/skills/designing-entities/references/patterns/pipeline.md`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/pipeline.md)
 
 ## Registration
 
@@ -26,7 +26,7 @@ export function registerPipeline(registry: EntityRegistry) {
       ctx.useAgent({
         systemPrompt: PIPELINE_SYSTEM_PROMPT,
         model: `claude-sonnet-4-5-20250929`,
-        tools: [...ctx.darixTools, createRunStageTool(ctx)],
+        tools: [...ctx.electricTools, createRunStageTool(ctx)],
       })
       await ctx.agent.run()
     },

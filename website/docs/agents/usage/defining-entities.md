@@ -15,7 +15,7 @@ An entity type is registered with an `EntityRegistry`. The registry maps type na
 `createEntityRegistry()` returns an `EntityRegistry`. Register types with `registry.define(name, definition)`.
 
 ```ts
-import { createEntityRegistry } from "@durable-streams/darix-runtime"
+import { createEntityRegistry } from "@electric-ax/agents-runtime"
 
 const registry = createEntityRegistry()
 
@@ -25,7 +25,7 @@ registry.define("assistant", {
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
       model: "claude-sonnet-4-5-20250929",
-      tools: [...ctx.darixTools],
+      tools: [...ctx.electricTools],
     })
     await ctx.agent.run()
   },
@@ -118,7 +118,7 @@ For projects with multiple entity types, keep a separate registry file and impor
 
 ```ts
 // entities/registry.ts
-import { createEntityRegistry } from "@durable-streams/darix-runtime"
+import { createEntityRegistry } from "@electric-ax/agents-runtime"
 import { registerAssistant } from "./assistant"
 import { registerWorker } from "./worker"
 
@@ -129,7 +129,7 @@ registerWorker(registry)
 
 ```ts
 // entities/assistant.ts
-import type { EntityRegistry } from "@durable-streams/darix-runtime"
+import type { EntityRegistry } from "@electric-ax/agents-runtime"
 
 export function registerAssistant(registry: EntityRegistry) {
   registry.define("assistant", {
@@ -138,7 +138,7 @@ export function registerAssistant(registry: EntityRegistry) {
       ctx.useAgent({
         systemPrompt: "You are a helpful assistant.",
         model: "claude-sonnet-4-5-20250929",
-        tools: [...ctx.darixTools],
+        tools: [...ctx.electricTools],
       })
       await ctx.agent.run()
     },

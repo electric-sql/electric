@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Handle for a shared state stream, returned by `ctx.mkdb()` and `await ctx.observe(db(...))`. Provides typed collection proxies keyed by the collection names declared in the schema map.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 type SharedStateHandle<
@@ -54,7 +54,7 @@ interface SharedStateCollectionSchema {
 ## Example
 
 ```ts
-import { db } from "@durable-streams/darix-runtime"
+import { db } from "@electric-ax/agents-runtime"
 
 const schema = {
   findings: {

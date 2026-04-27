@@ -44,7 +44,7 @@ The context API passed into the handler:
 | `ctx.timelineMessages()`            | Project the entity timeline into LLM messages                         |
 | `ctx.insertContext(id, entry)`      | Insert a durable context entry                                        |
 | `ctx.agent.run()`                   | Execute the agent loop                                                |
-| `ctx.darixTools`                    | Runtime-provided tools to spread into agent config                    |
+| `ctx.electricTools`                    | Runtime-provided tools to spread into agent config                    |
 | `ctx.spawn(type, id, args, opts)`   | Create child entity                                                   |
 | `ctx.observe(source, opts)`         | Subscribe to a source via `entity()`, `cron()`, `entities()`, `db()`  |
 | `ctx.send(url, payload, opts)`      | Send message to an entity                                             |
@@ -62,7 +62,7 @@ See [Writing handlers](/docs/agents/usage/writing-handlers) and [HandlerContext 
 ctx.useAgent({
   systemPrompt: string,
   model: string,           // e.g. 'claude-sonnet-4-5-20250929'
-  tools: AgentTool[],      // [...ctx.darixTools, ...custom]
+  tools: AgentTool[],      // [...ctx.electricTools, ...custom]
   streamFn?: StreamFn,     // optional streaming callback
   testResponses?: string[] // for testing without LLM
 })
@@ -199,20 +199,20 @@ Every entity automatically has 17 `ctx.db.collections`:
 
 See [Built-in collections](/docs/agents/reference/built-in-collections).
 
-## 9. CLI (`darix`)
+## 9. CLI (`electric agents`)
 
-Interact with the system using the `darix` CLI:
+Interact with the system using the Electric Agents CLI:
 
-| Command                               | Purpose                      |
-| ------------------------------------- | ---------------------------- |
-| `darix types`                         | List registered entity types |
-| `darix types inspect <name>`          | Show type schema             |
-| `darix spawn /type/id --args '{...}'` | Create entity                |
-| `darix send /type/id 'message'`       | Send message                 |
-| `darix observe /type/id`              | Stream entity events         |
-| `darix inspect /type/id`              | Show entity state            |
-| `darix ps [--type --status --parent]` | List entities                |
-| `darix kill /type/id`                 | Stop entity                  |
+| Command                                      | Purpose                      |
+| -------------------------------------------- | ---------------------------- |
+| `electric agents types`                       | List registered entity types |
+| `electric agents types inspect <name>`        | Show type schema             |
+| `electric agents spawn /type/id --args '{...}'` | Create entity                |
+| `electric agents send /type/id 'message'`     | Send message                 |
+| `electric agents observe /type/id`            | Stream entity events         |
+| `electric agents inspect /type/id`            | Show entity state            |
+| `electric agents ps [--type --status --parent]` | List entities                |
+| `electric agents kill /type/id`               | Stop entity                  |
 
 See [CLI reference](/docs/agents/reference/cli).
 
@@ -223,7 +223,7 @@ const registry = createEntityRegistry()
 registerMyEntity(registry)
 
 const runtime = createRuntimeHandler({
-  baseUrl: DARIX_URL, // runtime server
+  baseUrl: ELECTRIC_AGENTS_URL, // Electric Agents server
   serveEndpoint: `${URL}/webhook`, // callback URL
   registry,
 })

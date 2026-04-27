@@ -57,7 +57,7 @@ Pure functions with no side effects beyond what they compute. Define directly as
 
 ```ts
 import { Type } from "@sinclair/typebox"
-import type { AgentTool } from "@durable-streams/darix-runtime"
+import type { AgentTool } from "@electric-ax/agents-runtime"
 
 const calculatorTool: AgentTool = {
   name: "calculator",
@@ -83,7 +83,7 @@ Use a factory function that receives the `HandlerContext`. The state persists ac
 
 ```ts
 import { Type } from "@sinclair/typebox"
-import type { AgentTool, HandlerContext } from "@durable-streams/darix-runtime"
+import type { AgentTool, HandlerContext } from "@electric-ax/agents-runtime"
 
 function createMemoryStoreTool(ctx: HandlerContext): AgentTool {
   return {
@@ -163,7 +163,7 @@ Use a factory that receives the `HandlerContext`. These tools can spawn entities
 
 ```ts
 import { Type } from "@sinclair/typebox"
-import type { AgentTool, HandlerContext } from "@durable-streams/darix-runtime"
+import type { AgentTool, HandlerContext } from "@electric-ax/agents-runtime"
 
 function createDispatchTool(ctx: HandlerContext): AgentTool {
   return {
@@ -204,7 +204,7 @@ function createDispatchTool(ctx: HandlerContext): AgentTool {
 
 ## Wiring tools together
 
-Tools are constructed in the handler and passed to `useAgent` alongside `ctx.darixTools`:
+Tools are constructed in the handler and passed to `useAgent` alongside `ctx.electricTools`:
 
 ```ts
 registry.define("assistant", {
@@ -219,11 +219,11 @@ registry.define("assistant", {
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant with persistent memory.",
       model: "claude-sonnet-4-5-20250929",
-      tools: [...ctx.darixTools, memoryTool, dispatchTool, calculatorTool],
+      tools: [...ctx.electricTools, memoryTool, dispatchTool, calculatorTool],
     })
     await ctx.agent.run()
   },
 })
 ```
 
-Always spread `ctx.darixTools` first. Your custom tools follow.
+Always spread `ctx.electricTools` first. Your custom tools follow.

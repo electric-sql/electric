@@ -29,7 +29,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
   state: TState
   events: Array<ChangeEvent>
   actions: Record<string, (...args: unknown[]) => unknown>
-  darixTools: AgentTool[]
+  electricTools: AgentTool[]
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
@@ -81,7 +81,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `state`            | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](../reference/state-collection-proxy).                                |
 | `events`           | Change events that triggered this wake.                                                                                                                 |
 | `actions`          | Named action functions from the entity definition's `actions` factory.                                                                                  |
-| `darixTools`       | Built-in tools for spawning, observing, sending, and managing entities. Pass to `useAgent`.                                                             |
+| `electricTools`       | Built-in tools for spawning, observing, sending, and managing entities. Pass to `useAgent`.                                                             |
 | `useAgent`         | Configures the LLM agent. Returns an `AgentHandle`. See [Configuring the agent](./configuring-the-agent).                                               |
 | `useContext`       | Declares context sources with token budgets and cache tiers. See [Context composition](./context-composition).                                          |
 | `timelineMessages` | Projects the entity timeline into LLM messages. See [Context composition](./context-composition#timelinemessages).                                      |
@@ -145,7 +145,7 @@ registry.define("assistant", {
     ctx.useAgent({
       systemPrompt: "You are a helpful assistant.",
       model: "claude-sonnet-4-5-20250929",
-      tools: [...ctx.darixTools],
+      tools: [...ctx.electricTools],
     })
     await ctx.agent.run()
   },
@@ -215,7 +215,7 @@ async handler(ctx) {
   ctx.useAgent({
     systemPrompt,
     model: 'claude-sonnet-4-5-20250929',
-    tools: [...ctx.darixTools],
+    tools: [...ctx.electricTools],
   })
   await ctx.agent.run()
 }
@@ -223,7 +223,7 @@ async handler(ctx) {
 
 ## Adding custom tools
 
-Combine `ctx.darixTools` with custom tools:
+Combine `ctx.electricTools` with custom tools:
 
 ```ts
 async handler(ctx) {
@@ -247,7 +247,7 @@ async handler(ctx) {
   ctx.useAgent({
     systemPrompt: 'You are an assistant with lookup capabilities.',
     model: 'claude-sonnet-4-5-20250929',
-    tools: [...ctx.darixTools, myTool],
+    tools: [...ctx.electricTools, myTool],
   })
   await ctx.agent.run()
 }

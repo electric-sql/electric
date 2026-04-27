@@ -10,7 +10,7 @@ outline: [2, 3]
 
 A generic, sandboxed subagent type. Workers are spawned by other agents (typically [Horton](./horton)) via the `spawn_worker` tool — the spawner provides a system prompt and picks the subset of tools the worker should have access to.
 
-**Source:** [`packages/ts-darix-server/src/darix-agents/agents/worker.ts`](https://github.com/electric-sql/durable-streams/blob/main/packages/ts-darix-server/src/darix-agents/agents/worker.ts)
+**Source:** [`packages/agents/src/agents/worker.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/agents/worker.ts)
 
 ## Spawn args
 
@@ -72,7 +72,7 @@ The spawn uses `wake: { on: 'runFinished', includeResponse: true }`, so the spaw
 4. Runs the agent until the LLM stops.
 
 ::: warning Least-privilege sandbox
-Workers deliberately do **not** receive `ctx.darixTools`. The spawner already picked the worker's tool subset; granting entity-runtime primitives (cron, schedule, send-to-arbitrary-entity) would let a worker escape that scope. If a worker needs those primitives, it must spawn its own subagent or report back to the spawner. This invariant is asserted by `worker-least-privilege.test.ts`.
+Workers deliberately do **not** receive `ctx.electricTools`. The spawner already picked the worker's tool subset; granting entity-runtime primitives (cron, schedule, send-to-arbitrary-entity) would let a worker escape that scope. If a worker needs those primitives, it must spawn its own subagent or report back to the spawner. This invariant is asserted by `worker-least-privilege.test.ts`.
 :::
 
 ## Reporting footer
@@ -90,6 +90,6 @@ When you finish, respond with a concise report covering what was done and any ke
 | ----------------- | --------------------------------------------------------------------- |
 | Type name         | `worker`                                                              |
 | Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)                         |
-| Tools             | Subset of 7 primitives chosen at spawn time. **No `ctx.darixTools`.** |
+| Tools             | Subset of 7 primitives chosen at spawn time. **No `ctx.electricTools`.** |
 | Working directory | Provided to `registerWorker` at bootstrap                             |
 | Description       | `Internal — generic worker spawned by other agents`                   |

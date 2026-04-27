@@ -10,7 +10,7 @@ outline: [2, 3]
 
 Handle returned by `ctx.spawn()` and `ctx.observe()`. Provides access to a child or observed entity's stream and status.
 
-**Source:** `@durable-streams/darix-runtime`
+**Source:** `@electric-ax/agents-runtime`
 
 ```ts
 interface EntityHandle {
