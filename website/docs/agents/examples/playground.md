@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # Pattern references
 
-The former playground examples are now represented by Electric Agents pattern references in the monorepo under `packages/agents-runtime/skills/designing-entities/references/patterns/`.
+Electric Agents pattern references live in the monorepo under `packages/agents-runtime/skills/designing-entities/references/patterns/`.
 
 ## What it includes
 

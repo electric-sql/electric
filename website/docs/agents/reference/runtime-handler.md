@@ -34,7 +34,7 @@ interface RuntimeRouter {
 | `handleWebhookRequest(request)`     | `Promise<Response>`         | Handle a webhook request directly, without route matching.                                              |
 | `dispatchWebhookWake(notification)` | `void`                      | Dispatch an already-parsed webhook notification. Runs the wake handler in the background.               |
 | `drainWakes()`                      | `Promise<void>`             | Wait for all in-flight wake handlers to settle. Throws if any wake errored.                             |
-| `waitForSettled()`                  | `Promise<void>`             | Alias for `drainWakes()`. Intended for callers that care about runtime quiescence.                      |
+| `waitForSettled()`                  | `Promise<void>`             | Wait for all in-flight wake handlers to settle.                                                         |
 | `abortWakes()`                      | `void`                      | Abort in-flight wakes so host shutdown can complete quickly.                                            |
 | `debugState()`                      | `RuntimeDebugState`         | Return a runtime-local snapshot for tests and shutdown diagnostics.                                     |
 | `typeNames`                         | `string[]`                  | Names of all registered entity types (read-only).                                                       |
@@ -42,7 +42,7 @@ interface RuntimeRouter {
 
 ## RuntimeHandler
 
-Extends `RuntimeRouter` with a Node HTTP compatibility adapter.
+Extends `RuntimeRouter` with a Node HTTP adapter.
 
 ```ts
 interface RuntimeHandler extends RuntimeRouter {
@@ -80,7 +80,7 @@ function createRuntimeRouter(config: RuntimeRouterConfig): RuntimeRouter
 function createRuntimeHandler(config: RuntimeHandlerConfig): RuntimeHandler
 ```
 
-`RuntimeHandlerConfig` is an alias for `RuntimeRouterConfig`.
+Both factory functions accept the same runtime router configuration.
 
 ## RuntimeRouterConfig
 
@@ -89,7 +89,6 @@ interface RuntimeRouterConfig {
   baseUrl: string
   serveEndpoint?: string
   webhookPath?: string
-  handlerUrl?: string
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
   idleTimeout?: number
@@ -128,7 +127,6 @@ interface RuntimeRouterConfig {
 | `baseUrl`                 | `string`                                                      | -                                            | Base URL of the Electric Agents runtime server (e.g. `"http://localhost:4437"`). Required.                                          |
 | `serveEndpoint`           | `string`                                                      | -                                            | Full webhook callback URL exposed by your app. Used for type registration.                                        |
 | `webhookPath`             | `string`                                                      | pathname from `serveEndpoint`, or `"/electric-agents"` | Path matched by `handleRequest()`.                                                                                |
-| `handlerUrl`              | `string`                                                      | -                                            | Deprecated alias for `serveEndpoint`.                                                                             |
 | `registry`                | `EntityRegistry`                                              | default registry                             | Entity registry for this handler. Falls back to the module-level default registry.                                |
 | `subscriptionPathForType` | `(typeName: string) => string`                                | -                                            | Override the webhook subscription path used per entity type registration.                                         |
 | `idleTimeout`             | `number`                                                      | `20000`                                      | Idle timeout in milliseconds before closing a wake.                                                               |

@@ -66,7 +66,6 @@ The same source helpers used by `ctx.observe()` can be used with `AgentsClient`.
 | `entities({ tags })` | Observe the entity membership stream matching tags. |
 | `db(id, schema)`    | Observe a shared-state stream.                       |
 | `cron(expression)`  | Build a cron source for wake subscriptions.          |
-| `tagged(query)`     | Deprecated wrapper around `entities()`.              |
 
 ```ts
 import { db } from "@electric-ax/agents-runtime"

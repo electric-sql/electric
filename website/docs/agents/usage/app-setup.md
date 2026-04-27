@@ -37,7 +37,6 @@ interface RuntimeRouterConfig {
   baseUrl: string // Electric Agents server URL
   serveEndpoint?: string // Webhook callback URL
   webhookPath?: string // Path to match (default: derived from serveEndpoint)
-  handlerUrl?: string // Deprecated alias for serveEndpoint
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
   idleTimeout?: number // ms before closing idle wake (default: 20000)
@@ -139,7 +138,7 @@ interface RuntimeDebugState {
 | `handleWebhookRequest` | Processes a webhook POST directly, without path matching                           |
 | `dispatchWebhookWake`  | Dispatches a pre-parsed notification (fire-and-forget)                             |
 | `drainWakes`           | Waits for all in-flight wake handlers to settle; throws on errors                  |
-| `waitForSettled`       | Alias for `drainWakes()` — waits for all in-flight wakes; throws on errors         |
+| `waitForSettled`       | Waits for all in-flight wakes; throws on errors                                    |
 | `abortWakes`           | Cancels all in-flight wake handlers immediately                                    |
 | `debugState`           | Returns a snapshot of internal runtime state for diagnostics                       |
 | `registerTypes`        | Registers entity types and webhook subscriptions with the Electric Agents runtime server     |

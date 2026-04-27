@@ -70,7 +70,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 }
 ```
 
-> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, and `db()` from `@electric-ax/agents-runtime` to construct `ObservationSource` values for `observe()`. The deprecated `tagged()` helper remains as a wrapper around `entities()` for older code.
+> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, and `db()` from `@electric-ax/agents-runtime` to construct `ObservationSource` values for `observe()`.
 
 ## Properties
 

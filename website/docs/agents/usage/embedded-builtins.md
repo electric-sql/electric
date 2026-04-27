@@ -103,8 +103,6 @@ interface AgentHandlerResult {
 }
 ```
 
-`createAgentHandler()` is a backwards-compatible convenience wrapper around `createBuiltinAgentHandler()`.
-
 ## Extra Electric Tools
 
 Both `BuiltinAgentsServer` and `createBuiltinAgentHandler()` accept `createElectricTools`. The factory receives the same context shape as `RuntimeRouterConfig.createElectricTools` and can add host-specific tools to Horton.
@@ -159,15 +157,10 @@ Environment variables:
 | Variable                         | Description                                           |
 | -------------------------------- | ----------------------------------------------------- |
 | `ELECTRIC_AGENTS_SERVER_URL`     | Required coordinator server URL.                      |
-| `ELECTRIC_AGENTS_BASE_URL`       | Alias for `ELECTRIC_AGENTS_SERVER_URL`.               |
 | `ELECTRIC_AGENTS_BUILTIN_BASE_URL` | Public webhook base URL for the built-in server.   |
-| `BUILTIN_AGENTS_BASE_URL`        | Alias for `ELECTRIC_AGENTS_BUILTIN_BASE_URL`.         |
 | `ELECTRIC_AGENTS_BUILTIN_HOST`   | Bind host.                                            |
-| `HOST`                           | Alias for `ELECTRIC_AGENTS_BUILTIN_HOST`.             |
 | `ELECTRIC_AGENTS_BUILTIN_PORT`   | Built-in server port. Defaults to `4448`.             |
-| `PORT`                           | Alias for `ELECTRIC_AGENTS_BUILTIN_PORT`.             |
 | `ELECTRIC_AGENTS_WORKING_DIRECTORY` | Working directory for file tools.                  |
-| `WORKING_DIRECTORY`              | Alias for `ELECTRIC_AGENTS_WORKING_DIRECTORY`.        |
 
 ## Built-in Agent APIs
 
