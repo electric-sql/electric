@@ -106,6 +106,7 @@ jobs:
     with:
       git_ref: ${{ needs.derive_build_vars.outputs.git_ref }}
       image_repo: electricax/agents-server
+      artifact_prefix: agents-server
       context: .
       file: packages/agents-server/Dockerfile
       tags: ${{ needs.derive_build_vars.outputs.image_tags }}

@@ -43,6 +43,11 @@ on:
         required: false
         default: '{"include":[{"platform":"linux/amd64","platform_id":"amd64","runner":"blacksmith-4vcpu-ubuntu-2404"},{"platform":"linux/arm64/v8","platform_id":"arm64","runner":"blacksmith-4vcpu-ubuntu-2404-arm"}]}'
         type: string
+      artifact_prefix:
+        description: 'Prefix used to isolate digest artifacts when multiple image publish workflows run together'
+        required: false
+        default: 'image'
+        type: string
 
 jobs:
   build_and_push_image:
@@ -82,7 +87,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.platform_id }}
+          name: ${{ inputs.artifact_prefix }}-digests-${{ matrix.platform_id }}
           path: /tmp/digests/*
 
   publish_tagged_image:
@@ -99,7 +104,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: digests-*
+          pattern: ${{ inputs.artifact_prefix }}-digests-*
           merge-multiple: true
           path: /tmp/digests
 
