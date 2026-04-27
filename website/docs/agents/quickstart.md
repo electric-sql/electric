@@ -2,115 +2,96 @@
 title: Quickstart
 titleTemplate: "... - Electric Agents"
 description: >-
-  Get Electric Agents up and running in a few seconds and then define custom agents running in your own web app or serverless functions.
+  Run the Electric Agents runtime and the built-in Horton assistant with a single CLI command, then connect from the web UI or define your own entities.
 outline: [2, 3]
 ---
 
 # Quickstart
 
-Get Electric Agents up and running in a few seconds and then define custom agents that run in your own web app (or serverless functions).
-
-## Runtime components
-
-The Electric Agents runtime has three key components:
-
-1. **Runtime server** — the durable streams server that persists entity state.
-2. **CLI** — a command-line tool for spawning entities, sending messages, and streaming events.
-3. **Web UI** — a dashboard for observing and interacting with entities.
-
-The first step is to get these running, with a built-in agent you can use right away.
-
-You can then define and engineer agents (and agent topologies and coordination patterns, ...) in **your own web app** that uses `@electric-ax/agents-runtime` to register with the runtime.
-
-## Prerequisites
-
-- Node.js 18+
-- [pnpm](https://pnpm.io/installation) (if you're working from a local checkout)
-- [Docker](https://docs.docker.com/get-docker/) (the dev server runs Postgres and Electric in containers)
-
-## Clone the repo
-
-If you're developing against the monorepo packages, clone Electric:
+One command starts the Electric Agents runtime, the web UI, and a local [Horton](./entities/agents/horton) assistant you can chat with right away. From there, define your own [entities](./usage/defining-entities) in your own app.
 
 ```sh
-git clone git@github.com:electric-sql/electric.git
-cd electric
-pnpm install
+npx electric-ax agents quickstart
 ```
 
-## Setup environment variables
+## What you'll need
 
-Create a `.env` file with:
+- **Node.js 18+**.
+- **[Docker](https://docs.docker.com/get-docker/)**. The runtime server, Postgres, and Electric run as containers.
+- **An [Anthropic API key](https://console.anthropic.com/settings/keys)**. Used by the built-in Horton agent.
+- *(Optional)* A **[Brave Search API key](https://brave.com/search/api/)** if you want Horton to be able to search the web.
 
-- `ANTHROPIC_API_KEY` (mandatory)
-- `BRAVE_SEARCH_API_KEY` (optional, if you're using agents that search)
+## Set your API key
 
-E.g.:
+Either export it in your shell:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Or persist it in a `.env` file in the directory you run the CLI from (this creates or overwrites `.env` in the current directory):
 
 ```sh
 cat <<'EOF' > .env
-ANTHROPIC_API_KEY="sk-ant-..."
-BRAVE_SEARCH_API_KEY="BS..."
+ANTHROPIC_API_KEY=sk-ant-...
+# BRAVE_SEARCH_API_KEY=BS...
 EOF
 ```
 
-## Try the built-in Horton assistant
+The CLI also accepts `--anthropic-api-key <key>` if you'd rather pass it inline.
 
-The runtime server ships with a built-in agent type, `horton` — a friendly capable assistant that can chat, research the web, read and edit code, run shell commands, and dispatch subagents. It's the easiest way to try Electric Agents before writing any code.
-
-### 1. Start the runtime server
+## Start the runtime
 
 ```sh
-npx electric-ax agents quickstart --anthropic-api-key "$ANTHROPIC_API_KEY"
+npx electric-ax agents quickstart
 ```
 
-This starts Postgres and Electric containers via Docker, launches the Electric Agents runtime server, starts the built-in agents runtime with `horton` and `worker` registered, and prints the UI URL. The server defaults to `http://localhost:4437`.
+This:
 
-### 2. Interact via CLI
+1. Starts Postgres, Electric, and the Electric Agents runtime server in Docker (the runtime serves both the API and the web UI on `http://localhost:4437`).
+2. Starts a built-in **Horton** runtime in the foreground that registers the `horton` and `worker` entity types.
+3. Prints onboarding commands you can copy into a second terminal.
 
-In a separate terminal, spawn a Horton entity, send it a message, and observe the output:
+Leave this terminal running. Press `Ctrl-C` to stop the built-in Horton runtime — the runtime server containers keep running in the background until you call [`electric agents stop`](#stop-the-dev-environment).
+
+## Chat with Horton
+
+### From the web UI
+
+Open [http://localhost:4437](http://localhost:4437). Spawn a `horton` entity from the dashboard and send it a message — its timeline updates live as the agent thinks, calls tools, and responds.
+
+### From the CLI
+
+In a separate terminal:
 
 ```sh
-npx electric-ax agents spawn /horton/my-horton
-npx electric-ax agents send /horton/my-horton 'Hello!'
-npx electric-ax agents observe /horton/my-horton
+npx electric-ax agents spawn /horton/onboarding
+npx electric-ax agents send /horton/onboarding 'Walk me through Electric Agents'
+npx electric-ax agents observe /horton/onboarding
 ```
 
 - `spawn` creates a new entity instance at the given path.
 - `send` delivers a message to the entity's inbox, waking its handler.
-- `observe` streams the entity's events to your terminal in real-time.
+- `observe` streams the entity's events to your terminal in real time, with reasoning, tool calls, and text deltas rendered inline.
 
-### 3. Open the web UI
+See the [CLI reference](./reference/cli) for the full command surface.
 
-The quickstart command prints the UI URL. Open it to observe and interact with entities visually.
+## Define your own entity types
 
-## Create your own entity types
+Once you're chatting with Horton, the next step is to define your own entity types in your own app. Your app is just a process that registers entity types with the runtime server and receives webhook callbacks when they wake.
 
-Once you've seen the built-in agents in action, you can define your own entity types in your own app.
-
-### Set up your app
-
-Your app is a separate project that uses `@electric-ax/agents-runtime` to define entities and handle webhooks.
-
-Install the runtime package:
+### 1. Install the runtime SDK
 
 ```sh
-pnpm add @electric-ax/agents-runtime
+mkdir my-agents-app && cd my-agents-app
+npm init -y
+npm install @electric-ax/agents-runtime
+npm install --save-dev tsx
 ```
 
-If you're using the packages directly from a local Electric checkout, add the package paths to your app's `pnpm-workspace.yaml` instead. For example, if your app is at `~/my-app` and you cloned Electric to `~/electric`, add:
+### 2. Create a server
 
-```yaml
-packages:
-  - "packages/*"
-  - "../electric/packages/agents-runtime"
-```
-
-Then run `pnpm install` in your app to link the workspace packages.
-
-### Create your app server
-
-Create `server.ts` in your app:
+Create `server.ts`:
 
 ```ts
 import http from "node:http"
@@ -119,7 +100,8 @@ import {
   createRuntimeHandler,
 } from "@electric-ax/agents-runtime"
 
-const ELECTRIC_AGENTS_URL = process.env.ELECTRIC_AGENTS_URL ?? "http://localhost:4437"
+const ELECTRIC_AGENTS_URL =
+  process.env.ELECTRIC_AGENTS_URL ?? "http://localhost:4437"
 const PORT = Number(process.env.PORT ?? 3000)
 const SERVE_URL = process.env.SERVE_URL ?? `http://localhost:${PORT}`
 
@@ -161,21 +143,25 @@ server.listen(PORT, async () => {
 This does four things:
 
 1. **Defines an entity type** called `assistant` with a handler that configures and runs an LLM agent.
-2. **Creates a runtime handler** that connects to the Electric Agents runtime server.
-3. **Starts an HTTP server** that receives webhook callbacks from the runtime.
+2. **Creates a runtime handler** that connects to the runtime server.
+3. **Starts an HTTP server** to receive webhook callbacks from the runtime.
 4. **Registers entity types** with the runtime server on startup.
 
-### Run your app
+See [App setup](./usage/app-setup) for the full `createRuntimeHandler` configuration.
 
-Make sure the runtime server is already running, then:
+### 3. Run your app
+
+With the runtime server already running (from `electric agents quickstart` or `electric agents start`), start your app:
 
 ```sh
 npx tsx server.ts
 ```
 
-### Interact with your entity
+Your handler calls `ctx.useAgent()` in this process, so make sure `ANTHROPIC_API_KEY` is exported in this shell (or copy your `.env` into `my-agents-app`).
 
-From your app:
+### 4. Interact with your entity
+
+Spawn an instance, send it a message, and observe the timeline:
 
 ```sh
 npx electric-ax agents spawn /assistant/my-assistant
@@ -183,8 +169,33 @@ npx electric-ax agents send /assistant/my-assistant 'Hello!'
 npx electric-ax agents observe /assistant/my-assistant
 ```
 
+Or open the web UI at `http://localhost:4437` and pick `/assistant/my-assistant` from the entity list.
+
+## Stop the dev environment
+
+`Ctrl-C` in the quickstart terminal stops the built-in Horton runtime. The runtime server containers keep running. To stop them:
+
+```sh
+npx electric-ax agents stop                  # stop containers, keep data
+npx electric-ax agents stop --remove-volumes # stop containers and wipe data
+```
+
+## Run pieces independently
+
+`quickstart` runs `start` then `start-builtin` for you. Run them yourself if you want the runtime server up across multiple sessions, or to run your own agent process instead of the built-ins:
+
+```sh
+npx electric-ax agents start          # runtime server + UI (background, Docker)
+npx electric-ax agents start-builtin  # built-in Horton + worker (foreground)
+```
+
+See the [CLI reference](./reference/cli#start) for the full set of commands.
+
 ## Next steps
 
-- [Overview](./) — understand the mental model.
+- [Overview](./) — the mental model behind entities, handlers, and wakes.
+- [Usage overview](./usage/overview) — the full developer surface on one page.
 - [Defining entities](./usage/defining-entities) — entity types, schemas, and configuration.
-- [Writing handlers](./usage/writing-handlers) — handler lifecycle and context API.
+- [Writing handlers](./usage/writing-handlers) — handler lifecycle and the `ctx` API.
+- [Configuring the agent](./usage/configuring-the-agent) — `useAgent`, models, tools, and streaming.
+- [Built-in agents](./entities/agents/horton) — Horton and Worker, the agents that ship with the runtime.
