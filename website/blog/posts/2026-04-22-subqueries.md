@@ -16,6 +16,10 @@ post: true
 published: true
 ---
 
+:::info Subqueries are now available for everyone
+Upgrade to Electric 1.6 or available in the [cloud](https://dashboard.electric-sql.cloud/). Existing cloud users should get in touch to get subqueries enabled on their instance.
+:::
+
 Sync is what makes apps feel instant. The data is already there when a screen renders. Another user changes something and your UI stays current. You can refresh, reconnect, switch devices, and keep going.
 
 That is the broad pitch. We have written more about how [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and why it is the right foundation for [collaborative, real-time apps](/blog/2025/04/09/building-ai-apps-on-sync).
