@@ -16,10 +16,6 @@ post: true
 published: true
 ---
 
-<script setup>
-import InlineBanner from '../../src/components/InlineBanner.vue'
-</script>
-
 Sync is what makes apps feel instant. The data is already there when a screen renders. Another user changes something and your UI stays current. You can refresh, reconnect, switch devices, and keep going.
 
 That is the broad pitch. We have written more about how [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and why it is the right foundation for [collaborative, real-time apps](/blog/2025/04/09/building-ai-apps-on-sync).
@@ -32,9 +28,9 @@ In simple demos, a column filter is enough. In real systems, the rule usually li
 
 This is where subqueries matter.
 
-<InlineBanner title="Subqueries are now available for everyone in Electric 1.6.">
-  <a href="https://dashboard.electric-sql.cloud/">Try them in Cloud</a>
-</InlineBanner>
+:::info Available now
+Subqueries are now available for everyone in Electric 1.6. [Try subqueries in Cloud](https://dashboard.electric-sql.cloud/).
+:::
 
 ## Query-driven sync
 
