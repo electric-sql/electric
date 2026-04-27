@@ -38,6 +38,11 @@ jobs:
             # Monorepo — find skills/ under packages
             for dir in packages/*/skills; do
               if [ -d "$dir" ]; then
+                # Skip internal skills (not intent skills)
+                if [ "$dir" = "packages/agents/skills" ]; then
+                  echo "Skipping $dir (internal skills)..."
+                  continue
+                fi
                 echo "Validating $dir..."
                 intent validate "$dir"
               fi

@@ -1,21 +1,32 @@
 defmodule Electric.Shapes.Querying do
+  alias Electric.Replication.Eval.Parser.Func
+  alias Electric.Replication.Eval.SqlGenerator
   alias Electric.ShapeCache.LogChunker
-  alias Electric.Utils
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Shape
-  alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Shapes.SubqueryTags
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Utils
 
-  @value_prefix SubqueryMoves.value_prefix()
-  @null_sentinel SubqueryMoves.null_sentinel()
+  @value_prefix SubqueryTags.value_prefix()
+  @null_sentinel SubqueryTags.null_sentinel()
 
-  def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
+  def query_move_in(conn, stack_id, shape_handle, shape, {where, params}, opts \\ []) do
     table = Utils.relation_to_sql(shape.root_table)
 
-    {json_like_select, _} =
-      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
+    metadata =
+      metadata_sql(
+        shape,
+        stack_id,
+        shape_handle,
+        opts |> Keyword.put(:start_param_idx, length(params) + 1)
+      )
+
+    {json_like_select, metadata_params} =
+      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle, metadata)
 
     key_select = key_select(shape)
-    tag_select = make_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
+    tag_select = Enum.join(metadata.tags_sqls, ", ")
 
     query =
       Postgrex.prepare!(
@@ -24,7 +35,7 @@ defmodule Electric.Shapes.Querying do
         ~s|SELECT #{key_select}, ARRAY[#{tag_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
       )
 
-    Postgrex.stream(conn, query, params)
+    Postgrex.stream(conn, query, params ++ metadata_params)
     |> Stream.flat_map(& &1.rows)
   end
 
@@ -51,7 +62,10 @@ defmodule Electric.Shapes.Querying do
     limit = if limit = subset.limit, do: " LIMIT #{limit}", else: ""
     offset = if offset = subset.offset, do: " OFFSET #{offset}", else: ""
 
-    {json_like_select, params} = json_like_select(shape, headers, stack_id, shape_handle)
+    metadata = metadata_sql(shape, stack_id, shape_handle)
+
+    {json_like_select, params} =
+      json_like_select(shape, headers, stack_id, shape_handle, metadata)
 
     query =
       Postgrex.prepare!(
@@ -120,7 +134,8 @@ defmodule Electric.Shapes.Querying do
       where =
         if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
 
-      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle)
+      metadata = metadata_sql(shape, stack_id, shape_handle)
+      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle, metadata)
 
       query =
         Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
@@ -177,13 +192,13 @@ defmodule Electric.Shapes.Querying do
            selected_columns: columns
          } = shape,
          additional_headers,
-         stack_id,
-         shape_handle
+         _stack_id,
+         _shape_handle,
+         metadata
        ) do
-    tags = make_tags(shape, stack_id, shape_handle)
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table, additional_headers, tags)
+    headers_part = build_headers_part(root_table, additional_headers, metadata)
 
     # We're building a JSON string that looks like this:
     #
@@ -200,13 +215,13 @@ defmodule Electric.Shapes.Querying do
     query =
       ~s['{' || #{key_part} || ',' || #{value_part} || ',' || #{headers_part} || '}']
 
-    {query, []}
+    {query, metadata.params}
   end
 
-  defp build_headers_part(rel, headers, tags) when is_list(headers),
-    do: build_headers_part(rel, Map.new(headers), tags)
+  defp build_headers_part(rel, headers, metadata) when is_list(headers),
+    do: build_headers_part(rel, Map.new(headers), metadata)
 
-  defp build_headers_part({relation, table}, additional_headers, tags) do
+  defp build_headers_part({relation, table}, additional_headers, metadata) do
     headers = %{operation: "insert", relation: [relation, table]}
 
     headers =
@@ -216,11 +231,11 @@ defmodule Electric.Shapes.Querying do
       |> Utils.escape_quotes(?')
 
     headers =
-      if tags != [] do
+      if metadata.tags_sqls != [] do
         "{" <> json = headers
 
-        tags = Enum.join(tags, ~s[ || '","' || ])
-        ~s/{"tags":["' || #{tags} || '"],/ <> json
+        ~s/{"active_conditions":#{active_conditions_json_expr(metadata)},"tags":#{tags_json_expr(metadata.tags_sqls)},/ <>
+          json
       else
         headers
       end
@@ -286,8 +301,298 @@ defmodule Electric.Shapes.Querying do
   defp pg_escape_string_for_json(str), do: ~s[to_json(#{str})::text]
   defp pg_coalesce_json_string(str), do: ~s[coalesce(#{str} , 'null')]
 
+  defp metadata_sql(shape, stack_id, shape_handle, opts \\ []) do
+    case dnf_plan_for_metadata(shape, opts) do
+      %DnfPlan{} = plan ->
+        tags_sqls = tags_sql(plan, stack_id, shape_handle)
+
+        {active_conditions_sqls, params} =
+          case Keyword.get(opts, :views) do
+            nil ->
+              {active_conditions_sql(plan), []}
+
+            views ->
+              {sqls, params, _next_idx} =
+                active_conditions_sql_for_views(
+                  plan,
+                  views,
+                  shape.where.used_refs,
+                  Keyword.get(opts, :start_param_idx, 1)
+                )
+
+              {sqls, params}
+          end
+
+        %{tags_sqls: tags_sqls, active_conditions_sqls: active_conditions_sqls, params: params}
+
+      nil ->
+        %{
+          tags_sqls: make_tags(shape, stack_id, shape_handle),
+          active_conditions_sqls: nil,
+          params: []
+        }
+    end
+  end
+
+  defp dnf_plan_for_metadata(shape, opts) do
+    case Keyword.get(opts, :dnf_plan) do
+      %DnfPlan{} = plan ->
+        plan
+
+      nil ->
+        if shape.shape_dependencies == [] do
+          nil
+        else
+          {:ok, %DnfPlan{} = plan} = DnfPlan.compile(shape)
+          plan
+        end
+    end
+  end
+
+  def move_in_where_clause(plan, dep_index, views_before_move, views_after_move, used_refs) do
+    impacted = Map.get(plan.dependency_disjuncts, dep_index, [])
+    all_idxs = Enum.to_list(0..(length(plan.disjuncts) - 1))
+    unaffected = all_idxs -- impacted
+
+    {candidate_sql, candidate_params, next_param} =
+      build_disjuncts_sql(
+        plan,
+        impacted,
+        views_after_move,
+        used_refs,
+        1
+      )
+
+    {impacted_before_sql, impacted_before_params, next_param} =
+      build_disjuncts_sql(
+        plan,
+        impacted,
+        views_before_move,
+        used_refs,
+        next_param
+      )
+
+    {unaffected_sql, unaffected_params, _} =
+      build_disjuncts_sql(
+        plan,
+        unaffected,
+        views_before_move,
+        used_refs,
+        next_param
+      )
+
+    where =
+      case join_sql(" OR ", [impacted_before_sql, unaffected_sql]) do
+        nil -> candidate_sql
+        excl -> "(#{candidate_sql}) AND NOT (#{excl})"
+      end
+
+    {where, candidate_params ++ impacted_before_params ++ unaffected_params}
+  end
+
+  def active_conditions_sql(plan) do
+    Enum.map(0..(plan.position_count - 1), fn pos ->
+      info = plan.positions[pos]
+      base_sql = info.sql
+
+      if info.negated do
+        "(NOT COALESCE((#{base_sql})::boolean, false))::boolean"
+      else
+        "COALESCE((#{base_sql})::boolean, false)"
+      end
+    end)
+  end
+
+  def active_conditions_sql_for_views(plan, views, used_refs, start_param_idx \\ 1) do
+    {sqls, params, next_param_idx} =
+      Enum.reduce(0..(plan.position_count - 1), {[], [], start_param_idx}, fn pos,
+                                                                              {sqls, params,
+                                                                               param_idx} ->
+        info = Map.fetch!(plan.positions, pos)
+
+        {base_sql, sql_params, next_param_idx} =
+          position_to_sql(info, views, used_refs, param_idx)
+
+        sql =
+          if info.negated do
+            "(NOT COALESCE((#{base_sql})::boolean, false))::boolean"
+          else
+            "COALESCE((#{base_sql})::boolean, false)"
+          end
+
+        {[sql | sqls], params ++ sql_params, next_param_idx}
+      end)
+
+    {Enum.reverse(sqls), params, next_param_idx}
+  end
+
+  def tags_sql(plan, stack_id, shape_handle) do
+    Enum.map(plan.disjuncts, fn conj ->
+      positions_in_disjunct = MapSet.new(conj, &elem(&1, 0))
+
+      slot_sqls =
+        Enum.map(0..(plan.position_count - 1), fn pos ->
+          if MapSet.member?(positions_in_disjunct, pos) do
+            tag_slot_sql(plan.positions[pos], stack_id, shape_handle)
+          else
+            "''"
+          end
+        end)
+
+      Enum.join(slot_sqls, " || '/' || ")
+    end)
+  end
+
+  defp build_disjuncts_sql(
+         _plan,
+         [],
+         _views,
+         _used_refs,
+         pidx
+       ) do
+    {nil, [], pidx}
+  end
+
+  defp build_disjuncts_sql(
+         plan,
+         disjunct_idxs,
+         views,
+         used_refs,
+         pidx
+       ) do
+    {sqls, params, next_pidx} =
+      Enum.reduce(disjunct_idxs, {[], [], pidx}, fn didx, {sqls, params, pi} ->
+        conj = Enum.at(plan.disjuncts, didx)
+
+        {conj_sql, conj_params, next_pi} =
+          build_conjunction_sql(plan, conj, views, used_refs, pi)
+
+        {[conj_sql | sqls], params ++ conj_params, next_pi}
+      end)
+
+    sql = join_sql(" OR ", Enum.reverse(sqls))
+
+    {sql, params, next_pidx}
+  end
+
+  defp build_conjunction_sql(plan, conj, views, used_refs, pidx) do
+    {parts, params, next_pi} =
+      Enum.reduce(conj, {[], [], pidx}, fn {pos, polarity}, {parts, params, pi} ->
+        info = plan.positions[pos]
+
+        {sql, ps, next_pi} = position_to_sql(info, views, used_refs, pi)
+
+        sql = if polarity == :negated, do: "NOT (#{sql})", else: sql
+
+        {[sql | parts], params ++ ps, next_pi}
+      end)
+
+    sql = parts |> Enum.reverse() |> Enum.join(" AND ")
+    {sql, params, next_pi}
+  end
+
+  defp position_to_sql(%{is_subquery: false} = info, _, _, pidx) do
+    {info.sql, [], pidx}
+  end
+
+  defp position_to_sql(
+         %{is_subquery: true} = info,
+         views,
+         used_refs,
+         pidx
+       ) do
+    lhs_sql = lhs_sql_from_ast(info.ast)
+    ref_type = Map.get(used_refs, info.subquery_ref)
+    values = Map.get(views, info.subquery_ref, MapSet.new()) |> MapSet.to_list()
+
+    case ref_type do
+      {:array, {:row, col_types}} ->
+        casts = Enum.map(col_types, &Electric.Replication.Eval.type_to_pg_cast/1)
+
+        params =
+          case values do
+            [] ->
+              Enum.map(casts, fn _ -> [] end)
+
+            _ ->
+              values
+              |> Utils.unzip_any()
+              |> Tuple.to_list()
+              |> Enum.zip(col_types)
+              |> Enum.map(fn {col_vals, col_type} ->
+                Enum.map(col_vals, &value_to_postgrex(&1, col_type))
+              end)
+          end
+
+        sql =
+          casts
+          |> Enum.with_index(pidx)
+          |> Enum.map_join(", ", fn {col, index} -> "$#{index}::#{col}[]" end)
+          |> then(&"#{lhs_sql} IN (SELECT * FROM unnest(#{&1}))")
+
+        {sql, params, pidx + length(casts)}
+
+      {:array, element_type} ->
+        type_cast = Electric.Replication.Eval.type_to_pg_cast(element_type)
+        sql = "#{lhs_sql} = ANY ($#{pidx}::#{type_cast}[])"
+        {sql, [Enum.map(values, &value_to_postgrex(&1, element_type))], pidx + 1}
+    end
+  end
+
+  defp value_to_postgrex(value, type) do
+    Electric.Replication.Eval.value_to_postgrex(value, type)
+  end
+
+  defp lhs_sql_from_ast(%Func{name: "sublink_membership_check", args: [testexpr, _]}) do
+    SqlGenerator.to_sql(testexpr)
+  end
+
+  defp tag_slot_sql(%{is_subquery: true, tag_columns: [col]}, stack_id, shape_handle) do
+    col_sql = pg_cast_column_to_text(col)
+    namespaced = pg_namespace_value_sql(col_sql)
+    ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
+  end
+
+  defp tag_slot_sql(
+         %{is_subquery: true, tag_columns: {:hash_together, cols}},
+         stack_id,
+         shape_handle
+       ) do
+    column_parts =
+      Enum.map(cols, fn col_name ->
+        col = pg_cast_column_to_text(col_name)
+        ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
+      end)
+
+    ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
+  end
+
+  defp tag_slot_sql(%{is_subquery: false}, _stack_id, _shape_handle) do
+    "'1'"
+  end
+
+  defp join_sql(separator, sqls) do
+    case Enum.reject(sqls, &is_nil/1) do
+      [] -> nil
+      [single] -> single
+      multiple -> Enum.map_join(multiple, separator, &"(#{&1})")
+    end
+  end
+
+  defp active_conditions_json_expr(%{active_conditions_sqls: nil, tags_sqls: tags_sqls}) do
+    List.duplicate(true, length(tags_sqls)) |> Jason.encode!()
+  end
+
+  defp active_conditions_json_expr(%{active_conditions_sqls: sqls}) do
+    "' || to_json(ARRAY[" <> Enum.join(sqls, ", ") <> "]::boolean[])::text || '"
+  end
+
+  defp tags_json_expr(tags_sqls) do
+    "' || to_json(ARRAY[" <> Enum.join(tags_sqls, ", ") <> "]::text[])::text || '"
+  end
+
   # Generates SQL to namespace a value for tag hashing.
-  # This MUST produce identical output to SubqueryMoves.namespace_value/1 for
+  # This MUST produce identical output to SubqueryTags.namespace_value/1 for
   # the same input values, or Elixir-side and SQL-side tag computation will diverge.
   defp pg_namespace_value_sql(col_sql) do
     ~s[CASE WHEN #{col_sql} IS NULL THEN '#{@null_sentinel}' ELSE '#{@value_prefix}' || #{col_sql} END]

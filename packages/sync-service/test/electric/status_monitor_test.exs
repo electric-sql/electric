@@ -505,4 +505,72 @@ defmodule Electric.StatusMonitorTest do
       assert {:error, _} = StatusMonitor.wait_until(stack_id, :active, timeout: 1)
     end
   end
+
+  describe "wait_until_async/2" do
+    test "replies immediately when already active", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      set_status_to_active(%{stack_id: stack_id})
+
+      ref = StatusMonitor.wait_until_async(stack_id, :active)
+      assert_receive {{StatusMonitor, ^ref}, {:ok, :active}}, 100
+    end
+
+    test "replies immediately with :read_only when shape metadata is ready", %{
+      stack_id: stack_id
+    } do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      ref = StatusMonitor.wait_until_async(stack_id, :read_only)
+      assert_receive {{StatusMonitor, ^ref}, {:ok, :read_only}}, 100
+    end
+
+    test "notifies when status transitions to active", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      ref = StatusMonitor.wait_until_async(stack_id, :active)
+      refute_receive {{StatusMonitor, ^ref}, _}, 50
+
+      set_status_to_active(%{stack_id: stack_id})
+      assert_receive {{StatusMonitor, ^ref}, {:ok, :active}}, 100
+    end
+
+    test "does not notify :active waiter for :read_only transition", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      ref = StatusMonitor.wait_until_async(stack_id, :active)
+
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      refute_receive {{StatusMonitor, ^ref}, _}, 50
+    end
+
+    test "notifies :read_only waiter when shape metadata becomes ready", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      ref = StatusMonitor.wait_until_async(stack_id, :read_only)
+      refute_receive {{StatusMonitor, ^ref}, _}, 50
+
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
+      assert_receive {{StatusMonitor, ^ref}, {:ok, :read_only}}, 100
+    end
+
+    test "supports multiple concurrent waiters at different levels", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      ref_ro = StatusMonitor.wait_until_async(stack_id, :read_only)
+      ref_active = StatusMonitor.wait_until_async(stack_id, :active)
+
+      # Transition to read_only — only the read_only waiter should be notified
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
+      assert_receive {{StatusMonitor, ^ref_ro}, {:ok, :read_only}}, 100
+      refute_receive {{StatusMonitor, ^ref_active}, _}, 50
+
+      # Transition to active — the active waiter should be notified
+      set_status_to_active(%{stack_id: stack_id})
+      assert_receive {{StatusMonitor, ^ref_active}, {:ok, :active}}, 100
+    end
+  end
 end

@@ -422,6 +422,10 @@ const streamsDemosSidebar = [
     collapsed: false,
     items: [
       {
+        text: 'Durable Doom',
+        link: '/streams/demos/durable-doom',
+      },
+      {
         text: 'Collaborative AI Editor',
         link: '/streams/demos/collaborative-ai-editor',
       },

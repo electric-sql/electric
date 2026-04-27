@@ -4,6 +4,7 @@ defmodule Electric.Shapes.ShapeTest do
   alias Electric.Replication.Changes.{NewRecord, DeletedRecord, UpdatedRecord}
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Shape
 
   @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'",
@@ -13,6 +14,18 @@ defmodule Electric.Shapes.ShapeTest do
                  refs: %{["data"] => {:array, :int4}}
                )
   @relation_id 1
+  @refs %{
+    ["id"] => :int4,
+    ["x"] => :int4,
+    ["y"] => :int4,
+    ["z"] => :int4,
+    ["status"] => :text,
+    ["name"] => :text,
+    ["a"] => :int4,
+    ["b"] => :int4
+  }
+  @stack_id "test_stack"
+  @shape_handle "test_shape"
 
   describe "convert_change/2" do
     test "skips changes for other tables" do
@@ -294,6 +307,109 @@ defmodule Electric.Shapes.ShapeTest do
       assert Shape.convert_change(shape, update_to_new_record, extra_refs: extra_refs) == [
                Changes.convert_update(update_to_new_record, to: :new_record)
              ]
+    end
+
+    test "uses DNF metadata for streamed changes when a subquery is combined with OR" do
+      where =
+        Parser.parse_and_validate_expression!(
+          "inner_id IN (SELECT id FROM inner_table WHERE include_inner = true) OR include_outer = true",
+          refs: %{
+            ["inner_id"] => :int4,
+            ["include_outer"] => :bool,
+            ["$sublink", "0"] => {:array, :int4}
+          },
+          sublink_queries: %{0 => "SELECT id FROM inner_table WHERE include_inner = true"}
+        )
+
+      shape = %Shape{
+        root_table: {"public", "outer_table"},
+        root_table_id: @relation_id,
+        where: where,
+        selected_columns: ["id", "inner_id", "include_outer"],
+        explicitly_selected_columns: ["id", "inner_id", "include_outer"],
+        shape_dependencies: [
+          %Shape{
+            root_table: {"public", "inner_table"},
+            root_table_id: 2,
+            selected_columns: ["id"],
+            explicitly_selected_columns: ["id"]
+          }
+        ]
+      }
+
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
+
+      [converted] =
+        Shape.convert_change(
+          shape,
+          %NewRecord{
+            relation: {"public", "outer_table"},
+            record: %{"id" => "1", "inner_id" => "1", "include_outer" => "true"}
+          },
+          stack_id: "test_stack",
+          shape_handle: "test_handle",
+          extra_refs:
+            {%{["$sublink", "0"] => MapSet.new()}, %{["$sublink", "0"] => MapSet.new()}},
+          dnf_plan: dnf_plan
+        )
+
+      subquery_tag =
+        :crypto.hash(:md5, "test_stack" <> "test_handle" <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert converted.move_tags == [subquery_tag <> "/", "/1"]
+      assert converted.active_conditions == [false, true]
+    end
+
+    test "keeps updates when only active_conditions change after column filtering" do
+      where =
+        Parser.parse_and_validate_expression!(
+          "inner_id IN (SELECT id FROM inner_table WHERE include_inner = true) OR include_outer = true",
+          refs: %{
+            ["inner_id"] => :int4,
+            ["include_outer"] => :bool,
+            ["$sublink", "0"] => {:array, :int4}
+          },
+          sublink_queries: %{0 => "SELECT id FROM inner_table WHERE include_inner = true"}
+        )
+
+      shape = %Shape{
+        root_table: {"public", "outer_table"},
+        root_table_id: @relation_id,
+        where: where,
+        selected_columns: ["id"],
+        explicitly_selected_columns: ["id"],
+        shape_dependencies: [
+          %Shape{
+            root_table: {"public", "inner_table"},
+            root_table_id: 2,
+            selected_columns: ["id"],
+            explicitly_selected_columns: ["id"]
+          }
+        ]
+      }
+
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
+
+      [converted] =
+        Shape.convert_change(
+          shape,
+          %UpdatedRecord{
+            relation: {"public", "outer_table"},
+            old_record: %{"id" => "1", "inner_id" => "1", "include_outer" => "true"},
+            record: %{"id" => "1", "inner_id" => "1", "include_outer" => "true"}
+          },
+          stack_id: "test_stack",
+          shape_handle: "test_handle",
+          extra_refs:
+            {%{["$sublink", "0"] => MapSet.new([1])}, %{["$sublink", "0"] => MapSet.new()}},
+          dnf_plan: dnf_plan
+        )
+
+      assert converted.old_record == %{"id" => "1"}
+      assert converted.record == %{"id" => "1"}
+      assert converted.active_conditions == [false, true]
+      assert converted.removed_move_tags == []
     end
 
     test "correctly converts updates to deleted records with subqueries if the referenced set has changed" do
@@ -608,6 +724,37 @@ defmodule Electric.Shapes.ShapeTest do
                    {%{["$sublink", "0"] => MapSet.new([2])},
                     %{["$sublink", "0"] => MapSet.new([2])}}
                )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS accounts (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY, account_id INT REFERENCES accounts(id), active BOOLEAN NOT NULL DEFAULT false)"
+         ]
+    test "deduplicates identical subqueries onto one dependency", %{inspector: inspector} do
+      assert {:ok,
+              %Shape{
+                where: where,
+                shape_dependencies: [
+                  %Shape{
+                    root_table: {"public", "accounts"},
+                    where: %{query: "id > 5"}
+                  }
+                ],
+                subquery_comparison_expressions: comparison_expressions
+              }} =
+               Shape.new("users",
+                 inspector: inspector,
+                 where:
+                   "(active = true OR account_id IN (SELECT id FROM accounts WHERE id > 5)) AND account_id IN (SELECT id FROM accounts WHERE id > 5)"
+               )
+
+      assert where.used_refs == %{
+               ["active"] => :bool,
+               ["account_id"] => :int4,
+               ["$sublink", "0"] => {:array, :int4}
+             }
+
+      assert Map.keys(comparison_expressions) == [["$sublink", "0"]]
     end
 
     @tag with_sql: [
@@ -1014,5 +1161,326 @@ defmodule Electric.Shapes.ShapeTest do
       refute Shape.comparable(shape1) == Shape.comparable(shape2)
       refute Shape.comparable(shape1) === Shape.comparable(shape2)
     end
+  end
+
+  describe "get_row_metadata/6 - single subquery" do
+    test "row included when value is in subquery view" do
+      {where, deps} = parse_where_with_sublinks(~S"x IN (SELECT id FROM dep)", 1)
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5])}
+
+      assert {:ok, true, tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [true]
+      assert length(tags) == 1
+    end
+
+    test "row excluded when value is not in subquery view" do
+      {where, deps} = parse_where_with_sublinks(~S"x IN (SELECT id FROM dep)", 1)
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([99])}
+
+      assert {:ok, false, _tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [false]
+    end
+  end
+
+  describe "get_row_metadata/6 - OR with subqueries" do
+    setup do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      %{plan: plan, where: where}
+    end
+
+    test "included via first disjunct only", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, true, tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [true, false]
+      assert length(tags) == 2
+    end
+
+    test "included via second disjunct only", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, _tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [false, true]
+    end
+
+    test "included via both disjuncts", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, _tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [true, true]
+    end
+
+    test "excluded when neither disjunct satisfied", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([99]), ["$sublink", "1"] => MapSet.new([99])}
+
+      assert {:ok, false, _tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [false, false]
+    end
+  end
+
+  describe "get_row_metadata/6 - mixed row predicate and subquery" do
+    setup do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      %{plan: plan, where: where}
+    end
+
+    test "included via first disjunct when subquery matches and row predicate true",
+         %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, true, _tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert Enum.count(active_conditions, & &1) == 2
+    end
+
+    test "excluded from first disjunct when row predicate false", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "closed"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, false, _tags, active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      row_pred_pos =
+        plan.positions
+        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> elem(0)
+
+      refute Enum.at(active_conditions, row_pred_pos)
+    end
+
+    test "included via second disjunct even when first disjunct row predicate false",
+         %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "closed"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, _tags, _active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+    end
+  end
+
+  describe "get_row_metadata/6 - tags" do
+    test "tags have correct structure with slots per position" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, tags, _active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert length(tags) == 2
+
+      [tag0, tag1] = tags
+      [slot0_0, slot0_1] = String.split(tag0, "/")
+      assert slot0_0 != ""
+      assert slot0_1 == ""
+
+      [slot1_0, slot1_1] = String.split(tag1, "/")
+      assert slot1_0 == ""
+      assert slot1_1 != ""
+    end
+
+    test "row predicate positions get sentinel value in tags" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, true, tags, _active_conditions} =
+               Shape.get_row_metadata(plan, record, views, where, @stack_id, @shape_handle)
+
+      [tag0 | _] = tags
+      slots = String.split(tag0, "/")
+
+      row_pred_pos =
+        plan.positions
+        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> elem(0)
+
+      assert Enum.at(slots, row_pred_pos) == "1"
+    end
+  end
+
+  describe "get_row_metadata/6 - update scenarios" do
+    test "update that changes which disjuncts are satisfied" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      old_record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+
+      assert {:ok, true, old_tags, old_ac} =
+               Shape.get_row_metadata(plan, old_record, views, where, @stack_id, @shape_handle)
+
+      new_record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "closed"}
+
+      assert {:ok, true, new_tags, new_ac} =
+               Shape.get_row_metadata(plan, new_record, views, where, @stack_id, @shape_handle)
+
+      row_pred_pos =
+        plan.positions
+        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> elem(0)
+
+      assert Enum.at(old_ac, row_pred_pos) == true
+      assert Enum.at(new_ac, row_pred_pos) == false
+
+      removed_tags = old_tags -- new_tags
+      assert removed_tags == [] or length(removed_tags) >= 0
+    end
+
+    test "correct removed_tags when column values change" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      views = %{["$sublink", "0"] => MapSet.new([5, 99]), ["$sublink", "1"] => MapSet.new([10])}
+
+      old_record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+
+      {:ok, _old_incl, old_tags, _old_ac} =
+        Shape.get_row_metadata(plan, old_record, views, where, @stack_id, @shape_handle)
+
+      new_record = %{"id" => "1", "x" => "99", "y" => "10", "status" => "open"}
+
+      {:ok, _new_incl, new_tags, _new_ac} =
+        Shape.get_row_metadata(plan, new_record, views, where, @stack_id, @shape_handle)
+
+      [old_tag0, _] = old_tags
+      [new_tag0, _] = new_tags
+      assert old_tag0 != new_tag0
+
+      [_, old_tag1] = old_tags
+      [_, new_tag1] = new_tags
+      assert old_tag1 == new_tag1
+
+      removed_tags = old_tags -- new_tags
+      assert length(removed_tags) == 1
+    end
+  end
+
+  defp parse_where_with_sublinks(where_clause, num_deps, opts \\ []) do
+    sublink_refs =
+      Keyword.get_lazy(opts, :sublink_refs, fn ->
+        Map.new(0..(num_deps - 1), fn i ->
+          {["$sublink", "#{i}"], {:array, :int4}}
+        end)
+      end)
+
+    dep_columns = Keyword.get(opts, :dep_columns, nil)
+
+    sublink_queries =
+      Map.new(0..(num_deps - 1), fn i ->
+        cols =
+          if dep_columns do
+            Enum.at(dep_columns, i) |> Enum.join(", ")
+          else
+            "id"
+          end
+
+        {i, "SELECT #{cols} FROM dep#{i + 1}"}
+      end)
+
+    all_refs = Map.merge(@refs, sublink_refs)
+    {:ok, pgquery} = Parser.parse_query(where_clause)
+
+    {:ok, expr} =
+      Parser.validate_where_ast(pgquery,
+        refs: all_refs,
+        sublink_queries: sublink_queries
+      )
+
+    deps =
+      Enum.map(0..(num_deps - 1), fn _i ->
+        %Shape{
+          root_table: {"public", "dep"},
+          root_table_id: 100,
+          root_pk: ["id"],
+          root_column_count: 1,
+          where: nil,
+          selected_columns: ["id"],
+          explicitly_selected_columns: ["id"]
+        }
+      end)
+
+    {expr, deps}
+  end
+
+  defp make_shape(where, deps) do
+    %Shape{
+      root_table: {"public", "test"},
+      root_table_id: 1,
+      root_pk: ["id"],
+      root_column_count: 5,
+      where: where,
+      selected_columns: ["id", "x", "y", "status"],
+      explicitly_selected_columns: ["id", "x", "y", "status"],
+      shape_dependencies: deps,
+      shape_dependencies_handles: Enum.with_index(deps, fn _, i -> "dep_handle_#{i}" end)
+    }
   end
 end

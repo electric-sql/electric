@@ -1,0 +1,111 @@
+name: Publish agents-server image to Docker Hub
+
+# If you decide to modify the list of triggers for this action, don't forget to also update the
+# conditional logic in the derive_build_vars job below.
+on:
+  push:
+    branches: ['main']
+    paths:
+      - 'packages/agents-server/**'
+      - 'packages/agents-server-ui/**'
+      - 'packages/agents-runtime/**'
+  # Allows the workflow to be called by the Changesets workflow
+  workflow_call:
+    inputs:
+      git_ref:
+        description: 'Git ref to build from (branch name, tag, or commit SHA)'
+        required: true
+        type: string
+      docker_tag:
+        description: 'Optional Docker Hub tag override (derived from git_ref if omitted)'
+        required: false
+        type: string
+  # Allows the workflow to be triggered manually from the UI
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: 'Git ref to build from (branch name, tag, or commit SHA)'
+        required: true
+        type: string
+      docker_tag:
+        description: 'Optional Docker Hub tag override (derived from git_ref if omitted)'
+        required: false
+        type: string
+
+env:
+  DOCKERHUB_REPO: electricax/agents-server
+
+jobs:
+  derive_build_vars:
+    name: Derive build variables from the source code
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      git_ref: ${{ steps.git_ref.outputs.git_ref }}
+      image_tags: ${{ steps.vars.outputs.image_tags }}
+
+    steps:
+      - name: Determine the ref to check out
+        id: git_ref
+        env:
+          INPUT_GIT_REF: ${{ inputs.git_ref }}
+          INPUT_DOCKER_TAG: ${{ inputs.docker_tag }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -n "$INPUT_DOCKER_TAG" ]; then
+            ref="$INPUT_GIT_REF"
+            build_mode=custom
+          elif [ -n "$INPUT_GIT_REF" ]; then
+            ref="refs/tags/$INPUT_GIT_REF"
+            build_mode=release
+          else
+            ref="$COMMIT_SHA"
+            build_mode=canary
+          fi
+
+          echo "git_ref=$ref" >> $GITHUB_OUTPUT
+          echo "build_mode=$build_mode" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.git_ref.outputs.git_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Determine final image tags
+        id: vars
+        env:
+          BUILD_MODE: ${{ steps.git_ref.outputs.build_mode }}
+          INPUT_DOCKER_TAG: ${{ inputs.docker_tag }}
+        run: |
+          AGENT_SERVER_VERSION=$(
+            git describe --abbrev=7 --tags --always --first-parent --match '@electric-ax/agents-server@*' | sed -En 's|^@electric-ax/agents-server@||p'
+          )
+
+          if [ -n "$INPUT_DOCKER_TAG" ]; then
+            IMAGE_TAGS="${DOCKERHUB_REPO}:${INPUT_DOCKER_TAG}"
+          elif [ "$BUILD_MODE" = "release" ]; then
+            IMAGE_TAGS=$(
+              printf '%s\n%s\n' \
+                "${DOCKERHUB_REPO}:latest" \
+                "${DOCKERHUB_REPO}:${AGENT_SERVER_VERSION}"
+            )
+          else
+            IMAGE_TAGS="${DOCKERHUB_REPO}:canary"
+          fi
+
+          {
+            echo "image_tags<<EOF"
+            echo "$IMAGE_TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build_and_publish_image:
+    needs: [derive_build_vars]
+    uses: ./.github/workflows/docker_multiarch_image.yml
+    secrets: inherit
+    with:
+      git_ref: ${{ needs.derive_build_vars.outputs.git_ref }}
+      image_repo: electricax/agents-server
+      context: .
+      file: packages/agents-server/Dockerfile
+      tags: ${{ needs.derive_build_vars.outputs.image_tags }}

@@ -1315,6 +1315,34 @@ defmodule Electric.ShapeCacheTest do
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
     end
 
+    test "restarted subquery shape reseeds the subquery index after restart", ctx do
+      alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      # Before restart: shape should have positions in the SubqueryIndex
+      index_before = SubqueryIndex.for_stack(ctx.stack_id)
+      assert index_before != nil
+      assert SubqueryIndex.has_positions?(index_before, shape_handle)
+
+      restart_shape_cache(ctx)
+
+      # After restart: the SubqueryIndex is recreated by the ShapeLogCollector.
+      # The consumer re-initializes and reseeds the index.
+      # Wait for the consumer to finish restoring.
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      index_after = SubqueryIndex.for_stack(ctx.stack_id)
+      assert index_after != nil
+
+      assert wait_until(200, fn ->
+               SubqueryIndex.has_positions?(index_after, shape_handle)
+             end)
+    end
+
     test "restores shapes with subqueries and their materializers when backup missing", ctx do
       {shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
@@ -1359,6 +1387,22 @@ defmodule Electric.ShapeCacheTest do
               "shape_task_supervisor"
             ] do
         :ok = stop_supervised(name)
+      end
+    end
+
+    defp wait_until(timeout_ms, fun, started_at \\ System.monotonic_time(:millisecond))
+
+    defp wait_until(timeout_ms, fun, started_at) do
+      cond do
+        fun.() ->
+          true
+
+        System.monotonic_time(:millisecond) - started_at >= timeout_ms ->
+          false
+
+        true ->
+          Process.sleep(10)
+          wait_until(timeout_ms, fun, started_at)
       end
     end
   end

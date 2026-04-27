@@ -3,7 +3,6 @@ title: Next.js
 description: >-
   Example of an Electric app using Next.js.
 deployed_url: https://nextjs.examples.electric-sql.com/
-source_url: https://github.com/electric-sql/electric/tree/main/examples/nextjs
 image: /img/demos/items-screenshot.png
 example: true
 ---
@@ -16,10 +15,14 @@ example: true
 
 ## Next.js example app
 
-This is an example using Electric with [Next.js](/docs/sync/integrations/next).
+This page refers to the historical Electric demo built with
+[Next.js](/docs/sync/integrations/next).
 
-The entrypoint for the Electric-specific code is in [`./app/page.tsx`](https://github.com/electric-sql/electric/blob/main/examples/nextjs/app/page.tsx):
+The `examples/nextjs` source tree was removed from the repository on April 23,
+2026 after it fell behind the supported Next.js and React stack, so there is
+no maintained in-repo source snapshot to embed here on `main`.
 
-<<< @../../examples/nextjs/app/page.tsx{tsx}
+For current guidance, see the [Next.js integration guide](/docs/sync/integrations/next),
+[auth guide](/docs/sync/guides/auth), and [write patterns guide](/docs/sync/guides/writes).
 
 <DemoCTAs :demo="$frontmatter" />

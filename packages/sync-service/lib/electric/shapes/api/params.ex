@@ -3,6 +3,7 @@ defmodule Electric.Shapes.Api.Params do
 
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Api
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Shape
 
   import Ecto.Changeset
@@ -162,6 +163,10 @@ defmodule Electric.Shapes.Api.Params do
   end
 
   @type t() :: %__MODULE__{}
+
+  def compaction_enabled?(%__MODULE__{} = params) do
+    Map.fetch!(params, @tmp_compaction_flag)
+  end
 
   def validate(%Electric.Shapes.Api{} = api, params) do
     params
@@ -330,7 +335,13 @@ defmodule Electric.Shapes.Api.Params do
            log_mode: fetch_field!(changeset, :log)
          ) do
       {:ok, shape} ->
-        put_change(changeset, :shape_definition, shape)
+        case DnfPlan.compile(shape) do
+          {:error, reason} ->
+            add_error(changeset, :where, reason)
+
+          _ok ->
+            put_change(changeset, :shape_definition, shape)
+        end
 
       {:error, :connection_not_available} ->
         add_error(

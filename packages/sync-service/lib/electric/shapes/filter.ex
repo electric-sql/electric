@@ -18,15 +18,11 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
-  alias Electric.Replication.Eval
-  alias Electric.Replication.Eval.Parser.Func
-  alias Electric.Replication.Eval.Parser.Ref
-  alias Electric.Replication.Eval.Walker
-  alias Electric.Shapes.Consumer.Materializer
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Filter
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Shapes.Shape
-  alias Electric.Shapes.WhereClause
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -37,15 +33,7 @@ defmodule Electric.Shapes.Filter do
     :where_cond_table,
     :eq_index_table,
     :incl_index_table,
-    :refs_fun,
-    :stack_id,
-    # {relation, field_name} -> [{dep_handle, field_type}]
-    :sublink_field_table,
-    # dep_handle -> MapSet(outer_shape_ids)
-    :sublink_dep_table,
-    # MapSet of shape_ids registered in the inverted index — enables O(1) membership
-    # check in the hot path without loading the shape or touching dep ETS tables.
-    :sublink_shapes_set
+    :subquery_index
   ]
 
   @type t :: %Filter{}
@@ -59,11 +47,7 @@ defmodule Electric.Shapes.Filter do
       where_cond_table: :ets.new(:filter_where, [:set, :private]),
       eq_index_table: :ets.new(:filter_eq, [:set, :private]),
       incl_index_table: :ets.new(:filter_incl, [:set, :private]),
-      refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end),
-      stack_id: Keyword.get(opts, :stack_id),
-      sublink_field_table: :ets.new(:filter_sublink_field, [:set, :private]),
-      sublink_dep_table: :ets.new(:filter_sublink_dep, [:set, :private]),
-      sublink_shapes_set: MapSet.new()
+      subquery_index: SubqueryIndex.new(Keyword.take(opts, [:stack_id]))
     }
   end
 
@@ -80,15 +64,10 @@ defmodule Electric.Shapes.Filter do
   @doc """
   Returns `true` when ShapeLogCollector can route the shape through any of its
   indexes instead of relying exclusively on `other_shapes` scans.
-
-  This includes both the primary equality/inclusion indexes and the sublink
-  inverted index used for dependency-driven subquery routing.
   """
   @spec indexed_shape?(Shape.t()) :: boolean()
   def indexed_shape?(%Shape{} = shape) do
-    WhereCondition.indexed_where?(shape.where) or
-      (Shape.dependency_handles_known?(shape) and
-         map_size(extract_sublink_fields(shape.where)) > 0)
+    WhereCondition.indexed_where?(shape.where)
   end
 
   @doc """
@@ -106,16 +85,21 @@ defmodule Electric.Shapes.Filter do
     where_cond_id = get_or_create_table_condition(filter, shape.root_table)
 
     WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
+    maybe_register_subquery_shape(filter, shape_id, shape)
 
-    # Only register in the inverted index when the WHERE is non-optimisable
-    # (landed in other_shapes). Indexed dep shapes use the equality/inclusion path.
-    if shape.shape_dependencies_handles != [] and
-         in_other_shapes?(filter, where_cond_id, shape_id) do
-      register_sublink_shape(filter, shape_id, shape)
-    else
-      filter
-    end
+    filter
   end
+
+  defp maybe_register_subquery_shape(
+         %Filter{subquery_index: index},
+         shape_id,
+         %Shape{shape_dependencies: [_ | _]} = shape
+       ) do
+    {:ok, plan} = DnfPlan.compile(shape)
+    SubqueryIndex.register_shape(index, shape_id, plan)
+  end
+
+  defp maybe_register_subquery_shape(_filter, _shape_id, _shape), do: :ok
 
   defp get_or_create_table_condition(filter, table_name) do
     case :ets.lookup(filter.tables_table, table_name) do
@@ -145,17 +129,21 @@ defmodule Electric.Shapes.Filter do
       :ok -> :ok
     end
 
-    filter =
-      if registered_in_inverted_index?(filter, shape_id) do
-        unregister_sublink_shape(filter, shape_id, shape)
-      else
-        filter
-      end
-
+    maybe_unregister_subquery_shape(filter, shape_id, shape)
     :ets.delete(filter.shapes_table, shape_id)
 
     filter
   end
+
+  defp maybe_unregister_subquery_shape(
+         %Filter{subquery_index: index},
+         shape_id,
+         %Shape{shape_dependencies: [_ | _]}
+       ) do
+    SubqueryIndex.unregister_shape(index, shape_id)
+  end
+
+  defp maybe_unregister_subquery_shape(_filter, _shape_id, _shape), do: :ok
 
   @doc """
   Returns the shape IDs for all shapes that have been added to the filter
@@ -218,91 +206,16 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shapes_affected_by_record(filter, table_name, record) do
-    where_cond_results =
+    candidates_from_where_condition =
       case :ets.lookup(filter.tables_table, table_name) do
-        [] -> MapSet.new()
-        [{_, where_cond_id}] -> WhereCondition.affected_shapes(filter, where_cond_id, record)
+        [] ->
+          MapSet.new()
+
+        [{_, where_cond_id}] ->
+          WhereCondition.affected_shapes(filter, where_cond_id, record)
       end
 
-    MapSet.union(where_cond_results, sublink_affected_shapes(filter, table_name, record))
-  end
-
-  # Inverted-index lookup for dep shapes that live in other_shapes.
-  # Returns affected outer shapes in O(fields × dep_handles_per_field) instead
-  # of the O(N×D) loop that WhereCondition.other_shapes_affected would do.
-  defp sublink_affected_shapes(%Filter{stack_id: nil}, _table_name, _record), do: MapSet.new()
-
-  defp sublink_affected_shapes(filter, table_name, record) do
-    link_values_table = Materializer.link_values_table_name(filter.stack_id)
-
-    candidates =
-      Enum.reduce(record, MapSet.new(), fn {field_name, string_value}, acc ->
-        case :ets.lookup(filter.sublink_field_table, {table_name, field_name}) do
-          [] ->
-            acc
-
-          [{_, dep_infos}] ->
-            Enum.reduce(dep_infos, acc, fn {dep_handle, field_type}, inner_acc ->
-              if record_matches_dep?(
-                   link_values_table,
-                   dep_handle,
-                   field_type,
-                   string_value
-                 ) do
-                union_shapes_for_dep(filter, dep_handle, inner_acc)
-              else
-                inner_acc
-              end
-            end)
-        end
-      end)
-
-    OpenTelemetry.add_span_attributes("filter.sublink_candidates_count": MapSet.size(candidates))
-
-    # Re-evaluate full WHERE for candidates to handle any non-sublink conditions
-    OpenTelemetry.timed_fun("filter.sublink_reeval.duration_µs", fn ->
-      for shape_id <- candidates,
-          shape = get_shape(filter, shape_id),
-          not is_nil(shape),
-          WhereClause.includes_record?(shape.where, record, filter.refs_fun.(shape)),
-          into: MapSet.new() do
-        shape_id
-      end
-    end)
-  rescue
-    # The named ETS table may not exist during a ConsumerRegistry restart window.
-    # Return empty rather than propagating to the broad "return all shapes" fallback.
-    ArgumentError -> MapSet.new()
-  end
-
-  # Returns true if the record's field value is present in the dep handle's
-  # cached link values, or if no cached values exist yet (optimistic inclusion).
-  defp record_matches_dep?(link_values_table, dep_handle, _field_type, nil = _string_value) do
-    # Null field values never match link values, but we still include
-    # candidates when no cache exists (materializer not started).
-    :ets.lookup(link_values_table, dep_handle) == []
-  end
-
-  defp record_matches_dep?(link_values_table, dep_handle, field_type, string_value) do
-    case :ets.lookup(link_values_table, dep_handle) do
-      [] ->
-        # No cached values yet (materializer not started) -- include as candidate
-        # so the re-eval via refs_fun handles it correctly.
-        true
-
-      [{_, linked_values}] ->
-        case Eval.Env.parse_const(Eval.Env.new(), string_value, field_type) do
-          {:ok, parsed_value} -> MapSet.member?(linked_values, parsed_value)
-          _ -> false
-        end
-    end
-  end
-
-  defp union_shapes_for_dep(filter, dep_handle, acc) do
-    case :ets.lookup(filter.sublink_dep_table, dep_handle) do
-      [{_, shape_ids}] -> MapSet.union(acc, shape_ids)
-      [] -> acc
-    end
+    candidates_from_where_condition
   end
 
   defp all_shape_ids(%Filter{} = filter) do
@@ -316,10 +229,13 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shape_ids_for_table(%Filter{} = filter, table_name) do
-    case :ets.lookup(filter.tables_table, table_name) do
-      [] -> MapSet.new()
-      [{_, where_cond_id}] -> WhereCondition.all_shape_ids(filter, where_cond_id)
-    end
+    from_where_condition =
+      case :ets.lookup(filter.tables_table, table_name) do
+        [] -> MapSet.new()
+        [{_, where_cond_id}] -> WhereCondition.all_shape_ids(filter, where_cond_id)
+      end
+
+    from_where_condition
   end
 
   @doc """
@@ -333,132 +249,7 @@ defmodule Electric.Shapes.Filter do
   end
 
   @doc """
-  Returns true if a dep shape is registered in the sublink inverted index.
-
-  Only dep shapes in top-level other_shapes (non-optimisable WHERE) are registered.
-  Dep shapes that go through an equality index end up in nested other_shapes and
-  must be evaluated normally by `other_shapes_affected`.
+  Get the subquery index. Used by consumers to seed/update membership.
   """
-  @spec registered_in_inverted_index?(t(), shape_id()) :: boolean()
-  def registered_in_inverted_index?(%Filter{sublink_shapes_set: set}, shape_id),
-    do: MapSet.member?(set, shape_id)
-
-  defp in_other_shapes?(filter, where_cond_id, shape_id) do
-    case :ets.lookup(filter.where_cond_table, where_cond_id) do
-      [{_, {_index_keys, other_shapes}}] -> Map.has_key?(other_shapes, shape_id)
-      [] -> false
-    end
-  end
-
-  # Walks the WHERE expression tree and returns a map of
-  # %{sublink_index => {field_name, field_type}} for each
-  # sublink_membership_check node with a simple field reference on the left.
-  # Returns an empty map for nil or complex (RowExpr) left-hand sides.
-  defp extract_sublink_fields(nil), do: %{}
-
-  defp extract_sublink_fields(%{eval: eval}) do
-    Walker.reduce!(
-      eval,
-      fn
-        %Func{
-          name: "sublink_membership_check",
-          args: [
-            %Ref{path: [field_name], type: field_type},
-            %Ref{path: ["$sublink", n_str]}
-          ]
-        },
-        acc,
-        _ ->
-          {:ok, Map.put(acc, String.to_integer(n_str), {field_name, field_type})}
-
-        _, acc, _ ->
-          {:ok, acc}
-      end,
-      %{}
-    )
-  end
-
-  defp register_sublink_shape(filter, shape_id, shape) do
-    sublink_fields = extract_sublink_fields(shape.where)
-
-    for {sublink_index, {field_name, field_type}} <- sublink_fields do
-      dep_handle = Enum.at(shape.shape_dependencies_handles, sublink_index)
-
-      field_key = {shape.root_table, field_name}
-
-      existing_entries =
-        case :ets.lookup(filter.sublink_field_table, field_key) do
-          [{_, entries}] -> entries
-          [] -> []
-        end
-
-      unless Enum.any?(existing_entries, fn {h, _} -> h == dep_handle end) do
-        :ets.insert(
-          filter.sublink_field_table,
-          {field_key, [{dep_handle, field_type} | existing_entries]}
-        )
-      end
-
-      existing_shapes =
-        case :ets.lookup(filter.sublink_dep_table, dep_handle) do
-          [{_, shapes}] -> shapes
-          [] -> MapSet.new()
-        end
-
-      :ets.insert(filter.sublink_dep_table, {dep_handle, MapSet.put(existing_shapes, shape_id)})
-    end
-
-    # RowExpr subqueries (e.g. `(a, b) IN (SELECT ...)`) produce no indexable fields;
-    # those shapes stay in other_shapes and must not be marked as indexed.
-    if map_size(sublink_fields) > 0 do
-      %{filter | sublink_shapes_set: MapSet.put(filter.sublink_shapes_set, shape_id)}
-    else
-      filter
-    end
-  end
-
-  defp unregister_sublink_shape(filter, shape_id, shape) do
-    sublink_fields = extract_sublink_fields(shape.where)
-
-    for {sublink_index, {field_name, _field_type}} <- sublink_fields do
-      dep_handle = Enum.at(shape.shape_dependencies_handles, sublink_index)
-
-      dep_now_empty? =
-        case :ets.lookup(filter.sublink_dep_table, dep_handle) do
-          [{_, shapes}] ->
-            new_shapes = MapSet.delete(shapes, shape_id)
-
-            if MapSet.size(new_shapes) == 0 do
-              :ets.delete(filter.sublink_dep_table, dep_handle)
-              true
-            else
-              :ets.insert(filter.sublink_dep_table, {dep_handle, new_shapes})
-              false
-            end
-
-          [] ->
-            true
-        end
-
-      if dep_now_empty? do
-        field_key = {shape.root_table, field_name}
-
-        case :ets.lookup(filter.sublink_field_table, field_key) do
-          [{_, entries}] ->
-            new_entries = Enum.reject(entries, fn {h, _} -> h == dep_handle end)
-
-            if new_entries == [] do
-              :ets.delete(filter.sublink_field_table, field_key)
-            else
-              :ets.insert(filter.sublink_field_table, {field_key, new_entries})
-            end
-
-          [] ->
-            :ok
-        end
-      end
-    end
-
-    %{filter | sublink_shapes_set: MapSet.delete(filter.sublink_shapes_set, shape_id)}
-  end
+  def subquery_index(%Filter{subquery_index: index}), do: index
 end

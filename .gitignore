@@ -32,3 +32,5 @@ response.tmp
 !website/.claude/commands
 !website/.claude/skills
 _artifacts
+**/logs/*
+**/.env

@@ -1,10 +1,7 @@
 defmodule Electric.Shapes.Consumer.State do
   @moduledoc false
-  alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Eval.Parser
-  alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
   alias Electric.Postgres.SnapshotQuery
   alias Electric.Replication.LogOffset
@@ -25,15 +22,13 @@ defmodule Electric.Shapes.Consumer.State do
     :storage,
     :writer,
     initial_snapshot_state: InitialSnapshot.new(nil),
-    move_handling_state: MoveIns.new(),
+    event_handler: nil,
     transaction_builder: TransactionBuilder.new(),
     buffer: [],
     txn_offset_mapping: [],
     materializer_subscribed?: false,
     terminating?: false,
     buffering?: false,
-    or_with_subquery?: false,
-    not_with_subquery?: false,
     # Based on the write unit value, consumer will either buffer txn fragments in memory until
     # it sees a commit (write_unit=txn) or it will write each received txn fragment to storage
     # immediately (write_unit=txn_fragment).
@@ -50,31 +45,7 @@ defmodule Electric.Shapes.Consumer.State do
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
-  @type move_in_name() :: String.t()
-
   @type uninitialized_t() :: term()
-  # @type uninitialized_t() :: %__MODULE__{
-  #         stack_id: Electric.stack_id(),
-  #         shape_handle: Shape.handle(),
-  #         shape: Shape.t(),
-  #         awaiting_snapshot_start: list(GenServer.from()),
-  #         buffer: list(Transaction.t()),
-  #         monitors: list({pid(), reference()}),
-  #         txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
-  #         snapshot_started?: boolean(),
-  #         materializer_subscribed?: boolean(),
-  #         terminating?: boolean(),
-  #         buffering?: boolean(),
-  #         initial_snapshot_filtering?: boolean(),
-  #         waiting_move_ins: %{move_in_name() => pg_snapshot()},
-  #         filtering_move_ins: list(Shape.handle()),
-  #         move_in_buffering_snapshot: nil | pg_snapshot(),
-  #         hibernate_after: non_neg_integer(),
-  #         latest_offset: nil,
-  #         initial_pg_snapshot: nil,
-  #         storage: nil,
-  #         writer: nil
-  #       }
 
   @typedoc """
   State of the consumer process.
@@ -89,53 +60,14 @@ defmodule Electric.Shapes.Consumer.State do
   last relevant one to last one generally in the transaction and use that
   to map back the flushed offset to the transaction boundary.
 
-  ## Move-in handling
-
-  There are 3 fields in the state relating to the move-in handling:
-  `waiting_move_ins`, `filtering_move_ins`, and `move_in_buffering_snapshot`.
-
-  Once a move-in is necessary, we immeidately query the DB for the snapshot,
-  and store it in `waiting_move_ins` until we know the affected key set for this
-  move-in (possible only when entire query resolves). If a transaction is not a
-  part of any of these "waiting" move-in snapshots, we cannot apply it yet
-  and so we start buffering. In order to avoid walking the `waiting_move_ins`
-  map every time, we instead construct a "buffering snapshot" which is a union
-  of all the "waiting" move-in snapshots. This is stored in `move_in_buffering_snapshot`
-  and is updated when anything is added to or removed from `waiting_move_ins`.
-
-  Once we have the affected key set, we can move the move-in to `filtering_move_ins`.
-  Filtering logic is described elsewhere.
-
   ## Buffering
 
   Consumer will be buffering transactions in 2 cases: when we're waiting for initial
-  snapshot information, or when we can't reason about the change in context of a move-in.
+  snapshot information, or when an active subquery move-in is being spliced into the log.
 
   Buffer is stored in reverse order.
   """
   @type t() :: term()
-  # @type t() :: %__MODULE__{
-  #         stack_id: Electric.stack_id(),
-  #         shape_handle: Shape.handle(),
-  #         shape: Shape.t(),
-  #         awaiting_snapshot_start: list(GenServer.from()),
-  #         buffer: list(Transaction.t()),
-  #         monitors: list({pid(), reference()}),
-  #         txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
-  #         snapshot_started?: boolean(),
-  #         materializer_subscribed?: boolean(),
-  #         terminating?: boolean(),
-  #         buffering?: boolean(),
-  #         initial_snapshot_filtering?: boolean(),
-  #         waiting_move_ins: %{move_in_name() => pg_snapshot()},
-  #         filtering_move_ins: list(Shape.handle()),
-  #         move_in_buffering_snapshot: nil | pg_snapshot(),
-  #         hibernate_after: non_neg_integer(),
-  #         latest_offset: LogOffset.t(),
-  #         initial_pg_snapshot: nil | pg_snapshot(),
-  #         storage: Storage.shape_storage(),
-  #         writer: Storage.writer_state()
-  #       }
 
   defguard is_snapshot_started(state)
            when is_struct(state.initial_snapshot_state, InitialSnapshot) and
@@ -175,8 +107,6 @@ defmodule Electric.Shapes.Consumer.State do
     %{
       state
       | shape: shape,
-        or_with_subquery?: has_or_with_subquery?(shape),
-        not_with_subquery?: has_not_with_subquery?(shape),
         # Enable direct fragment-to-storage streaming for shapes without subquery dependencies
         # and if the current shape itself isn't an inner shape of a shape with subqueries.
         write_unit:
@@ -187,62 +117,6 @@ defmodule Electric.Shapes.Consumer.State do
             @write_unit_txn_fragment
           end
     }
-  end
-
-  defp has_or_with_subquery?(%Shape{shape_dependencies: []}), do: false
-  defp has_or_with_subquery?(%Shape{where: nil}), do: false
-
-  defp has_or_with_subquery?(%Shape{where: where}) do
-    Walker.reduce!(
-      where.eval,
-      fn
-        %Parser.Func{name: "or"} = or_node, acc, _ctx ->
-          if subtree_has_sublink?(or_node) do
-            {:ok, true}
-          else
-            {:ok, acc}
-          end
-
-        _node, acc, _ctx ->
-          {:ok, acc}
-      end,
-      false
-    )
-  end
-
-  defp subtree_has_sublink?(tree) do
-    Walker.reduce!(
-      tree,
-      fn
-        %Parser.Ref{path: ["$sublink", _]}, _acc, _ctx ->
-          {:ok, true}
-
-        _node, acc, _ctx ->
-          {:ok, acc}
-      end,
-      false
-    )
-  end
-
-  defp has_not_with_subquery?(%Shape{shape_dependencies: []}), do: false
-  defp has_not_with_subquery?(%Shape{where: nil}), do: false
-
-  defp has_not_with_subquery?(%Shape{where: where}) do
-    Walker.reduce!(
-      where.eval,
-      fn
-        %Parser.Func{name: "not"} = not_node, acc, _ctx ->
-          if subtree_has_sublink?(not_node) do
-            {:ok, true}
-          else
-            {:ok, acc}
-          end
-
-        _node, acc, _ctx ->
-          {:ok, acc}
-      end,
-      false
-    )
   end
 
   @doc """
@@ -361,32 +235,6 @@ defmodule Electric.Shapes.Consumer.State do
     do: xmin
 
   def initial_snapshot_xmin(%__MODULE__{}), do: nil
-
-  @doc """
-  Track a change in the touch tracker.
-  """
-  @spec track_change(t(), pos_integer(), Electric.Replication.Changes.change()) :: t()
-  def track_change(%__MODULE__{move_handling_state: move_handling_state} = state, xid, change) do
-    %{state | move_handling_state: MoveIns.track_touch(move_handling_state, xid, change)}
-  end
-
-  @doc """
-  Garbage collect touches that are visible in all pending snapshots.
-  """
-  @spec gc_touch_tracker(t()) :: t()
-  def gc_touch_tracker(%__MODULE__{move_handling_state: move_handling_state} = state) do
-    %{
-      state
-      | move_handling_state: MoveIns.gc_touch_tracker(move_handling_state)
-    }
-  end
-
-  def remove_completed_move_ins(
-        %__MODULE__{move_handling_state: move_handling_state} = state,
-        xid
-      ) do
-    %{state | move_handling_state: MoveIns.remove_completed(move_handling_state, xid)}
-  end
 
   def telemetry_attrs(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle, shape: shape}) do
     [

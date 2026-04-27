@@ -1,3 +1,33 @@
 
 # sst
 .sst
+
+# dependencies
+node_modules
+**/node_modules
+
+# build output
+dist
+**/dist
+
+# test/build artifacts
+coverage
+**/coverage
+logs
+**/logs
+
+# vcs and editor state
+.git
+.jj
+
+# repo areas not needed for the agent-server image build
+examples
+website
+integration-tests
+
+# large generated Elixir artifacts
+packages/sync-service/tmp
+packages/sync-service/_build
+packages/sync-service/deps
+packages/sync-service/cover
+packages/sync-service/.elixir_ls

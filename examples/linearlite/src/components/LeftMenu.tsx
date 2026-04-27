@@ -4,7 +4,7 @@ import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.sv
 import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
 import { MenuContext } from '../App'
 import classnames from 'classnames'
-import { memo, RefObject, useRef, useState, useContext } from 'react'
+import { memo, useRef, useState, useContext } from 'react'
 import { BsPencilSquare as AddIcon } from 'react-icons/bs'
 import { BsSearch as SearchIcon } from 'react-icons/bs'
 import { BsFillGrid3X3GapFill as BoardIcon } from 'react-icons/bs'
@@ -20,7 +20,7 @@ import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
 
 function LeftMenu() {
-  const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
+  const ref = useRef<HTMLDivElement>(null)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)

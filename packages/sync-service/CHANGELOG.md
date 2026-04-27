@@ -1,5 +1,19 @@
 # @core/sync-service
 
+## 1.5.2
+
+### Patch Changes
+
+- 388ec63: Classify admission control requests by actual shape existence instead of offset value. Prevents shape creation storms after restarts/redeploys from bypassing initial request limits, and avoids penalising reconnecting clients to shared shapes.
+- 902970b: Fix race condition where HTTP readers crash with ArgumentError on deleted ETS buffer table during stack restarts
+- 0fd30fc: Fix admission control permit leak in error handlers. `register_before_send` callbacks are not available in `Plug.ErrorHandler` because it uses the original conn, so permits must be released explicitly.
+- b6a82be: Fix crash when LsnTracker ETS table is empty during long-poll timeout. Return nil instead of crashing, fall back to shape offset, and align request read-only flag with runtime status. Also fix stale flushed_wal (always 0) when populating LsnTracker during replication slot creation.
+- 365dd17: Fix replication connection drops caused by PostgreSQL's wal_sender_timeout during backpressure. The replication client now sends periodic keepalive messages while event processing is paused, preventing the connection from being killed during slow downstream processing.
+- e9db22c: Include stack_id in otel opts for stack metrics. It had been omitted by mistake before.
+- 59a96b8: Add sync-service telemetry for indexed vs unindexed shape counts, backed by maintained in-memory counters so periodic metrics stay O(1) even on very large stacks.
+- 0afe007: Add optional PhoenixLiveDashboard with configurable port to listen on.
+- f842bc0: Handle transient errors when creating shapes gracefully rather than crashing entire stack
+
 ## 1.5.1
 
 ### Patch Changes

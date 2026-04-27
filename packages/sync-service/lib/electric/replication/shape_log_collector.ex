@@ -26,7 +26,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.LogOffset
-  alias Electric.Shapes.Consumer.Materializer
+
   alias Electric.Shapes.DependencyLayers
   alias Electric.Shapes.EventRouter
   alias Electric.Shapes.Partitions
@@ -98,6 +98,31 @@ defmodule Electric.Replication.ShapeLogCollector do
   def handle_event(event, stack_id) do
     trace_context = OpenTelemetry.get_current_context()
     GenServer.call(name(stack_id), {:handle_event, event, trace_context}, :infinity)
+  end
+
+  @doc """
+  Non-blocking variant of `handle_event/2`.
+
+  Sends a `$gen_call` to the collector and returns a monitor reference.
+  The caller receives `{monitor_ref, response}` when the event is processed,
+  or `{:DOWN, monitor_ref, :process, pid, reason}` if the collector crashes.
+
+  Uses the same `$gen_call` protocol as `GenServer.call` internally — the
+  existing `handle_call` handles the request unchanged.
+  """
+  def handle_event_async(event, stack_id) do
+    trace_context = OpenTelemetry.get_current_context()
+    server = name(stack_id)
+
+    case GenServer.whereis(server) do
+      nil ->
+        exit({:noproc, {__MODULE__, :handle_event_async, [event, stack_id]}})
+
+      pid ->
+        monitor_ref = Process.monitor(pid)
+        send(pid, {:"$gen_call", {self(), monitor_ref}, {:handle_event, event, trace_context}})
+        monitor_ref
+    end
   end
 
   @doc """
@@ -219,7 +244,6 @@ defmodule Electric.Replication.ShapeLogCollector do
         pids_by_shape_handle: %{},
         event_router:
           opts
-          |> Map.put(:refs_fun, &Materializer.get_all_as_refs(&1, stack_id))
           |> Keyword.new()
           |> EventRouter.new(),
         flush_tracker:

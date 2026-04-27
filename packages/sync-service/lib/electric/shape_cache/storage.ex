@@ -88,9 +88,12 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Write a move in snapshot to the storage. Should write it alongside the main log,
   with stiching being done via a separate call `append_move_in_snapshot_to_log!`.
+
+  The stream items are `[key, tags, json]`, where `tags` is the row tag list
+  and `json` is the encoded log item body.
   """
   @callback write_move_in_snapshot!(
-              Enumerable.t({key :: String.t(), value :: Querying.json_iodata()}),
+              Enumerable.t(row()),
               name :: String.t(),
               shape_opts()
             ) :: :ok

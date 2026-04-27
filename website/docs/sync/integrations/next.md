@@ -20,13 +20,21 @@ Next.js is based on React. Electric [works with React](./react). You can integra
 
 #### Next.js example
 
-See the [Nextjs example](/sync/demos/nextjs) on GitHub. This demonstrates using Electric for read-path sync and a Next.js API for handling writes:
+We do not currently ship a maintained `examples/nextjs` app in this repository.
+The previous example was removed from `main` on April 23, 2026 after it fell
+behind the supported Next.js and React stack.
 
-<<< @../../examples/nextjs/app/page.tsx
+When integrating Electric with Next.js, the key pieces are:
 
-It also demonstrates using a [shape-proxy endpoint](https://github.com/electric-sql/electric/blob/main/examples/nextjs/app/shape-proxy/route.ts) for proxying access to the Electric sync service. This allows you to implement [auth](/docs/sync/guides/auth) and routing in-front-of Electric (and other concerns like transforming or decrypting the stream) using your Next.js backend:
+- Use the normal Electric React client patterns inside client components.
+- Proxy Electric through a Next.js route handler or other server-side endpoint
+  so secrets stay on the server.
+- Handle writes through your own API and keep Electric on the read path.
 
-<<< @../../examples/nextjs/app/shape-proxy/route.ts
+The [Next.js demo page](/sync/demos/nextjs) remains as a historical deployment
+reference. For current implementation guidance, see the
+[auth guide](/docs/sync/guides/auth), [shapes guide](/docs/sync/guides/shapes), and
+[write patterns guide](/docs/sync/guides/writes).
 
 #### ElectroDrizzle
 
