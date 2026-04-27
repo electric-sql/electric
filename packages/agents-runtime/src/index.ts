@@ -19,6 +19,7 @@ export type {
   SharedStateSchemaMap,
   SharedStateHandle,
   AgentConfig,
+  AgentModel,
   EntityDefinition,
   EntityTypeEntry,
   SharedStateHandleInfo,

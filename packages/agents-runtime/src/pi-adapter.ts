@@ -19,6 +19,7 @@ import type {
   AgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
+import type { KnownProvider, Model } from '@mariozechner/pi-ai'
 import type { LLMMessage } from './types'
 
 // ============================================================================
@@ -27,7 +28,8 @@ import type { LLMMessage } from './types'
 
 export interface PiAdapterOptions {
   systemPrompt: string
-  model: string
+  model: string | Model<any>
+  provider?: KnownProvider
   tools: Array<AgentTool>
   streamFn?: StreamFn
 }
@@ -48,6 +50,26 @@ interface PiAgentHandle {
 }
 
 type PiAgentAdapterFactory = (config: PiAgentAdapterConfig) => PiAgentHandle
+
+export function resolvePiModel(opts: {
+  model: string | Model<any>
+  provider?: KnownProvider
+}): Model<any> {
+  if (typeof opts.model !== `string`) {
+    return opts.model
+  }
+
+  const provider = opts.provider ?? `anthropic`
+  const model = getModel(provider, opts.model as Parameters<typeof getModel>[1])
+
+  if (!model) {
+    throw new Error(
+      `[agent-runtime] Unknown model "${opts.model}" for provider "${provider}"`
+    )
+  }
+
+  return model
+}
 
 // ============================================================================
 // Context Translation
@@ -129,17 +151,17 @@ export function createPiAgentAdapter(
     let stepStartTime = 0
     let textStarted = false
 
-    const model = getModel(
-      `anthropic`,
-      opts.model as Parameters<typeof getModel>[1]
-    )
+    const model = resolvePiModel({
+      model: opts.model,
+      ...(opts.provider && { provider: opts.provider }),
+    })
 
     const agent = new Agent({
       initialState: {
         systemPrompt: opts.systemPrompt,
         tools: opts.tools as Array<never>,
         messages: history as Array<never>,
-        ...(model && { model }),
+        model,
       },
       ...(opts.streamFn && { streamFn: opts.streamFn }),
     })
@@ -178,8 +200,8 @@ export function createPiAgentAdapter(
                 stepStartTime = Date.now()
                 textStarted = false
                 bridge.onStepStart({
-                  modelProvider: `anthropic`,
-                  modelId: opts.model,
+                  modelProvider: model.provider,
+                  modelId: model.id,
                 })
                 break
               }
