@@ -47,20 +47,22 @@ onMounted(() => {
 // 2.4.1 "Bypass Blocks"). The skip-to-content link VitePress already
 // provides targets the same #VPContent element, so the skip link and
 // the landmark stay consistent.
-watch(
-  () => router.route.data.relativePath,
-  () => {
-    requestAnimationFrame(() => {
-      const contentEl =
-        document.querySelector('.VPContent') ||
-        document.querySelector('.VPHome')
-      if (contentEl && !contentEl.hasAttribute('role')) {
-        contentEl.setAttribute('role', 'main')
-      }
-    })
-  },
-  { immediate: true }
-)
+onMounted(() => {
+  watch(
+    () => router.route.data.relativePath,
+    () => {
+      requestAnimationFrame(() => {
+        const contentEl =
+          document.querySelector('.VPContent') ||
+          document.querySelector('.VPHome')
+        if (contentEl && !contentEl.hasAttribute('role')) {
+          contentEl.setAttribute('role', 'main')
+        }
+      })
+    },
+    { immediate: true }
+  )
+})
 
 const { Layout } = DefaultTheme
 
