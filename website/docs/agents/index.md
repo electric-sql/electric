@@ -2,7 +2,7 @@
 title: Electric Agents
 titleTemplate: "... - Electric Agents"
 description: >-
-  The durable runtime for long-lived agents. Core concepts behind Electric Agents — entities, handlers, wakes, state, agent loops, tools, and coordination.
+  The durable runtime for long-lived agents — entities, handlers, wakes, agent loops, and coordination, built on Electric Streams, TanStack DB, and pi.
 outline: [2, 3]
 ---
 
@@ -14,17 +14,33 @@ import EntityOverviewDiagram from '../../src/components/agents-home/EntityOvervi
 
 Electric Agents is **the durable runtime for long-lived agents**. It's a runtime and communication fabric for spawning and scaling collaborative agents on serverless compute, using your existing web and AI&nbsp;frameworks.
 
-Agent sessions and communication are backed by [Electric Streams](/streams/). Each agent is an **entity** with its own stream of events.
+Each agent is an **entity** — an addressable, schema-typed unit of state at `/{type}/{id}`. An entity's session and state live on a durable [Electric&nbsp;Stream](/streams/) of events.
 
-Entities listen for messages and events. When a message or event is received — like a child finishing or state changing — the entity is **woken** and its handler runs.
+Entities **wake** when something happens — a message arrives, a child finishes, state changes, or a scheduled time elapses. When woken, the entity's handler runs. It can configure an LLM agent loop, update state, spawn children, and coordinate with other entities.
 
-All agent activity (runs, tool calls, text output) is persisted to the entity's durable stream. This means agents can scale to zero and survive restarts whilst maintaining full session history. Sessions can be observed and interacted with by any number of other users and entities, both asynchronously and in real time.
+Every step — runs, tool calls, text deltas, state changes — is appended to the entity's stream as it happens. Agents scale to zero and survive restarts. Any session can be replayed or [forked](/blog/2026/04/15/fork-branching-for-durable-streams) from any point, and observed in real time by any number of users and entities, both inside the system and from external apps.
 
 <EntityOverviewDiagram />
 
+Start with the [Quickstart](/docs/agents/quickstart) to run the built-in `horton` agent and connect your own app in a few minutes. The [Usage overview](/docs/agents/usage/overview) summarises the full developer surface in a single page.
+
+## How it works
+
+The runtime SDK is a layer over three foundations:
+
+- **[Electric&nbsp;Streams](/streams/)** — durable, ordered event log per entity.
+- **[TanStack&nbsp;DB](https://tanstack.com/db)** — typed local reads and writes via collections.
+- **Mario Zechner's [pi](https://github.com/badlogic/pi-mono) toolkit** — `pi-ai` (unified multi-provider LLM API) and `pi-agent-core` (agent runtime) for the LLM agent loop.
+
+**One stream per entity.** The runtime projects that stream into a typed local DB of collections — an `EntityStreamDB`. Inside a handler, that DB is `ctx.db`: writes go through `ctx.db.actions` (which append events to the stream), reads come from `ctx.db.collections`. The runtime ships [built-in collections](#built-in-collections) for runs, tool calls, text deltas, errors, inbox, and more, and you add your own typed [state](#state) collections per entity type.
+
+**Inside a handler.** When a handler calls `ctx.useAgent()`, the runtime configures the agent on its behalf and routes every step — model call, text delta, tool invocation, error — through the same projection, so the agent loop becomes durable events on the entity's stream.
+
+**Outside the handler.** Any app or other entity can call [`createAgentsClient().observe(entity('/type/id'))`](/docs/agents/usage/clients-and-react) to load an entity's stream into a local DB and react to changes in real time, with the same schemas and types as the handler.
+
 ## Entities
 
-The unit of durable state. Defined with [`registry.define()`](/docs/agents/reference/entity-registry). Each entity has a type and an ID, addressed by URL as `/{type}/{id}`. An entity's stream is the single source of truth for everything that has happened to it. See [Defining entities](/docs/agents/usage/defining-entities).
+Use entities to model anything long-lived and addressable — an agent session, a chat thread, a research job, a coordinator, a worker. You register a **type** with [`registry.define()`](/docs/agents/reference/entity-registry) and spawn **instances** at `/{type}/{id}`. Each instance has its own state, handler, and event stream. See [Defining entities](/docs/agents/usage/defining-entities).
 
 ```ts
 const registry = createEntityRegistry()
@@ -58,7 +74,7 @@ registry.define("support", {
 
 ## Wakes
 
-Events that trigger a handler invocation. Wake sources include: incoming messages, child entity completion, state changes, and timeouts. The [`WakeEvent`](/docs/agents/reference/wake-event) tells the handler why it was woken. See [Waking entities](/docs/agents/usage/waking-entities).
+Events that trigger a handler invocation. Wake sources include incoming messages, child completion, state changes, and timers (scheduled sends, cron, timeouts). The [`WakeEvent`](/docs/agents/reference/wake-event) tells the handler why it was woken. See [Waking entities](/docs/agents/usage/waking-entities).
 
 ```ts
 async handler(ctx, wake) {
@@ -75,7 +91,7 @@ async handler(ctx, wake) {
 
 ## State
 
-Custom persistent collections on the entity. Writes go through `ctx.db.actions` and reads through `ctx.db.collections`, backed by [TanStack DB](https://tanstack.com/db). State is local to the entity and survives restarts. You define typed collections as part of the [entity definition](/docs/agents/reference/entity-definition). See [Managing state](/docs/agents/usage/managing-state).
+Custom persistent collections on the entity. Defined as part of the [entity definition](/docs/agents/reference/entity-definition) and accessed through `ctx.db` alongside the [built-in collections](#built-in-collections). State is local to the entity, typed, and survives restarts. Use it for things that belong to the entity but aren't part of the agent's event stream — an order's items, a research job's findings, a chat session's TODOs. See [Managing state](/docs/agents/usage/managing-state).
 
 ```ts
 registry.define("tracker", {
@@ -117,7 +133,7 @@ await ctx.agent.run()
 
 ## Tools
 
-Functions the LLM can call during the agent loop. Each tool has a name, description, parameters (defined with TypeBox or any Standard Schema validator), and an execute function. Tools run in the handler's context and have access to the entity's state and coordination primitives. See [Defining tools](/docs/agents/usage/defining-tools) and the [`AgentTool` reference](/docs/agents/reference/agent-tool).
+Functions the LLM can call during the agent loop. Each tool has a name, description, parameters (defined with [TypeBox](https://github.com/sinclairzx81/typebox) or any [Standard Schema](https://standardschema.dev) validator), and an execute function. Tools run in the handler's context and have access to the entity's state and coordination primitives. See [Defining tools](/docs/agents/usage/defining-tools) and the [`AgentTool` reference](/docs/agents/reference/agent-tool).
 
 ```ts
 const searchKbTool: AgentTool = {
@@ -149,10 +165,10 @@ async handler(ctx) {
     "worker",
     "task-1",
     {
-      systemPrompt: "Analyse this data",
+      systemPrompt: "Analyse the report",
       tools: ["read"],
     },
-    { initialMessage: data, wake: "runFinished" }
+    { initialMessage: "Find the top three issues", wake: "runFinished" }
   )
 
   // send a message to another entity
@@ -167,7 +183,7 @@ async handler(ctx) {
 
 ## Built-in collections
 
-Every entity automatically has collections for runs, steps, texts, tool calls, errors, inbox, and more. These are populated by the runtime as the agent operates. You can query them from the handler or observe them externally. See the [Built-in collections reference](/docs/agents/reference/built-in-collections).
+Every entity automatically has collections for runs, steps, texts, tool calls, errors, inbox, and more. These are populated by the runtime as the agent operates and give you live observability into every step of the agent loop — useful for chat UIs, debugging tools, dashboards, and analytics. Query them from the handler or observe them externally. See the [Built-in collections reference](/docs/agents/reference/built-in-collections).
 
 ```ts
 // from inside a handler
@@ -179,3 +195,14 @@ const client = createAgentsClient({ baseUrl: "http://localhost:4437" })
 const db = await client.observe(entity("/support/ticket-42"))
 console.log(db.collections.texts.toArray)
 ```
+
+## Next steps
+
+- [Quickstart](/docs/agents/quickstart) — run the built-in `horton` agent and connect your own app.
+- [Usage overview](/docs/agents/usage/overview) — the full developer surface on one page.
+- [Defining entities](/docs/agents/usage/defining-entities) — entity types, schemas, and configuration.
+- [Writing handlers](/docs/agents/usage/writing-handlers) — handler lifecycle and the `ctx` API.
+- [Configuring the agent](/docs/agents/usage/configuring-the-agent) — `useAgent`, models, tools, and streaming.
+- [Spawning & coordinating](/docs/agents/usage/spawning-and-coordinating) — multi-entity topologies and shared state.
+- [Built-in agents](/docs/agents/entities/agents/horton) — Horton and Worker, the agents that ship with the runtime.
+- [Examples](/docs/agents/examples/playground) — pattern walkthroughs and demo apps.
