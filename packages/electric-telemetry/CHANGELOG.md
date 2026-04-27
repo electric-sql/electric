@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.2.2
+
+### Patch Changes
+
+- c48f0bc: Export `electric.admission_control.acquire.limit` and `electric.admission_control.reject.limit` metrics so dashboards can plot fill percentage (`acquire.current / acquire.limit`) and over-limit pressure by `kind`.
+
 ## 0.2.1
 
 ### Patch Changes

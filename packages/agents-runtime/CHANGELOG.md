@@ -1,5 +1,12 @@
 # @electric-ax/agents-runtime
 
+## 0.0.3
+
+### Patch Changes
+
+- 5ef535b: feat: allow arbitrary models instead of hardcoding anthropic
+- 6d8be8b: fix: ensure api keys are correctly passed through
+
 ## 0.0.2
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @electric-ax/agents-server
 
+## 0.2.1
+
+### Patch Changes
+
+- 50bbf06: fix: ensure public url of the server is used everywhere
+- 842182d: fix: ensure CORS is set to \*
+- 4e60832: fix: improve docker image size
+- Updated dependencies [5ef535b]
+- Updated dependencies [6d8be8b]
+  - @electric-ax/agents-runtime@0.0.3
+
 ## 0.2.0
 
 ### Minor Changes
