@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
-import { watch } from 'node:fs'
+import { watch, promises as fsp } from 'node:fs'
+import { homedir } from 'node:os'
+import path from 'node:path'
 import { z } from 'zod'
 import {
   deserializeCursor,
@@ -94,6 +96,83 @@ async function discoverNewestSession(
   // discoverSessions returns most-recent-first for each agent, so
   // the first match is what the CLI just wrote.
   return candidates[0]!.sessionId
+}
+
+/**
+ * Compute the candidate directories where Claude Code stores per-cwd
+ * session JSONL files. Claude resolves the cwd to its realpath when
+ * choosing the directory name (so /tmp/foo on macOS lands under
+ * `-private-tmp-foo`), but the entity may have been spawned with the
+ * non-realpath form. Return both candidates so the caller can union
+ * their contents.
+ */
+async function getClaudeProjectDirs(cwd: string): Promise<Array<string>> {
+  const home = homedir()
+  const make = (c: string): string =>
+    path.join(home, `.claude`, `projects`, c.replace(/\//g, `-`))
+  const dirs = [make(cwd)]
+  try {
+    const real = await fsp.realpath(cwd)
+    if (real !== cwd) dirs.push(make(real))
+  } catch {
+    // cwd may not exist on disk yet — skip realpath
+  }
+  return dirs
+}
+
+async function listClaudeJsonlIdsByCwd(cwd: string): Promise<Set<string>> {
+  const ids = new Set<string>()
+  for (const dir of await getClaudeProjectDirs(cwd)) {
+    try {
+      const files = await fsp.readdir(dir)
+      for (const f of files) {
+        if (f.endsWith(`.jsonl`)) ids.add(f.slice(0, -`.jsonl`.length))
+      }
+    } catch {
+      // dir may not exist (no prior runs in this cwd)
+    }
+  }
+  return ids
+}
+
+/**
+ * Deterministic-path discovery for a freshly created session. After the
+ * Claude CLI runs in `-p` mode it writes the new JSONL straight into
+ * `~/.claude/projects/<sanitize(cwd)>/<id>.jsonl` *without* leaving a
+ * `~/.claude/sessions/<pid>.json` lock file (those are interactive-only),
+ * so `discoverSessions` can miss it. Compute the expected dir directly
+ * and diff its contents against a pre-run snapshot. Returns the newest
+ * fresh sessionId or null. Codex falls back to discoverNewestSession.
+ */
+async function findNewSessionAfterRun(
+  agent: CodingAgentType,
+  cwd: string,
+  preDirectIds: ReadonlySet<string>,
+  preDiscoveredIds: ReadonlySet<string>
+): Promise<string | null> {
+  if (agent === `claude`) {
+    const dirs = await getClaudeProjectDirs(cwd)
+    let best: { id: string; mtime: number } | null = null
+    for (const dir of dirs) {
+      try {
+        const files = await fsp.readdir(dir)
+        for (const f of files) {
+          if (!f.endsWith(`.jsonl`)) continue
+          const id = f.slice(0, -`.jsonl`.length)
+          if (preDirectIds.has(id)) continue
+          const st = await fsp.stat(path.join(dir, f)).catch(() => null)
+          if (!st) continue
+          if (!best || st.mtimeMs > best.mtime) {
+            best = { id, mtime: st.mtimeMs }
+          }
+        }
+      } catch {
+        // dir may not exist
+      }
+    }
+    if (best) return best.id
+  }
+  return discoverNewestSession(agent, cwd, preDiscoveredIds)
 }
 
 const sessionMetaRowSchema = z.object({
@@ -524,8 +603,17 @@ export function registerCodingSession(
             // its own jsonl (writing an empty one ourselves breaks
             // `claude -r <id>` — claude can't resume an empty file).
             // After it exits, diff the on-disk sessions to find the
-            // new id, then load and mirror in one shot.
-            const preIds = new Set(
+            // new id, then load and mirror in one shot. Snapshot both
+            // the deterministic per-cwd directory (works for Claude
+            // `-p` runs that don't drop a metadata lock file) and
+            // discoverSessions (covers Codex + interactive Claude
+            // sessions) before the run so either path can spot the
+            // freshly written session.
+            const preDirectIds =
+              runningMeta.agent === `claude`
+                ? await listClaudeJsonlIdsByCwd(runningMeta.cwd)
+                : new Set<string>()
+            const preDiscoveredIds = new Set(
               (await discoverSessions(runningMeta.agent)).map(
                 (s) => s.sessionId
               )
@@ -540,10 +628,11 @@ export function registerCodingSession(
                 `[coding-session] ${runningMeta.agent} CLI exited ${cliResult.exitCode}. stderr=${cliResult.stderr.slice(0, 800) || `<empty>`} stdout=${cliResult.stdout.slice(0, 800) || `<empty>`}`
               )
             }
-            const foundId = await discoverNewestSession(
+            const foundId = await findNewSessionAfterRun(
               runningMeta.agent,
               runningMeta.cwd,
-              preIds
+              preDirectIds,
+              preDiscoveredIds
             )
             if (!foundId) {
               throw new Error(
