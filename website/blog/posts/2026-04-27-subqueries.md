@@ -34,7 +34,6 @@ This is where subqueries matter.
 
 <InlineBanner title="Subqueries are now available for everyone in Electric 1.6.">
   <a href="https://dashboard.electric-sql.cloud/">Try them in Cloud</a>
-  <a href="mailto:support@electric-sql.com">Get in touch to enable</a>
 </InlineBanner>
 
 ## Query-driven sync
