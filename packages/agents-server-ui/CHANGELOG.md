@@ -1,5 +1,12 @@
 # @electric-ax/agents-server-ui
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [9024ec2]
+  - @electric-ax/agents-runtime@0.0.4
+
 ## 0.1.2
 
 ### Patch Changes

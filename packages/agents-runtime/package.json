@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-runtime",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Electric agent runtime — behavioral stack for agent entities over durable streams",
   "repository": {
     "type": "git",
