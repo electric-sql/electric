@@ -2,7 +2,7 @@
 title: Territory Wars
 description: >-
   Multiplayer territory capture game built with Yjs CRDTs on Durable Streams.
-deployed_url: /sync/demos/territory-wars/index.html
+deployed_url: /demos/territory-wars/index.html
 source_url: https://github.com/balegas/territory-wars
 image: https://img.youtube.com/vi/r3i25BGom0s/maxresdefault.jpg
 demo: true

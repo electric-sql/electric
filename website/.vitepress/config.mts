@@ -295,8 +295,19 @@ const agentsDocsSidebar = [
       },
     ],
   },
+]
+
+// Compact sidebar for the Agents demos section. The product title,
+// Overview / Quickstart / Demos links are rendered above this by
+// `DocsSidebarHero.vue`.
+const agentsDemosSidebar = [
   {
-    text: 'Examples',
+    text: 'Demo apps',
+    collapsed: false,
+    items: [{ text: 'Coming soon', link: '/agents/demos' }],
+  },
+  {
+    text: 'Technical examples',
     collapsed: false,
     items: [
       { text: 'Playground', link: '/docs/agents/examples/playground' },
@@ -305,8 +316,44 @@ const agentsDocsSidebar = [
   },
 ]
 
-// Shared sidebar for the Streams docs section AND the streams demos
-// page at /streams/demos — same rationale as `agentsDocsSidebar`.
+// Compact sidebar for the Sync demos section. The product title,
+// Overview / Quickstart / Stacks / Demos links are rendered above
+// this by `DocsSidebarHero.vue`; this sidebar only lists the demo
+// section content.
+const syncDemosSidebar = [
+  {
+    text: 'Demo apps',
+    collapsed: false,
+    items: [
+      { text: 'Burn', link: '/sync/demos/burn' },
+      { text: 'AI Chat', link: '/sync/demos/ai-chat' },
+      { text: 'Linearlite', link: '/sync/demos/linearlite' },
+      { text: 'Notes', link: '/sync/demos/notes' },
+      { text: 'Pixel art', link: '/sync/demos/pixel-art' },
+    ],
+  },
+  {
+    text: 'Technical examples',
+    collapsed: false,
+    items: [
+      { text: 'Bash', link: '/sync/demos/bash' },
+      { text: 'Encryption', link: '/sync/demos/encryption' },
+      { text: 'Gatekeeper auth', link: '/sync/demos/gatekeeper-auth' },
+      { text: 'Next.js', link: '/sync/demos/nextjs' },
+      { text: 'Phoenix LiveView', link: '/sync/demos/phoenix-liveview' },
+      { text: 'Proxy auth', link: '/sync/demos/proxy-auth' },
+      { text: 'React', link: '/sync/demos/react' },
+      { text: 'Redis', link: '/sync/demos/redis' },
+      { text: 'Remix', link: '/sync/demos/remix' },
+      { text: 'Tanstack', link: '/sync/demos/tanstack' },
+      { text: 'Todo app', link: '/sync/demos/todo-app' },
+      { text: 'Write patterns', link: '/sync/demos/write-patterns' },
+      { text: 'Yjs', link: '/sync/demos/yjs' },
+    ],
+  },
+]
+
+// Shared sidebar for the Streams docs section.
 const streamsDocsSidebar = [
   {
     text: 'Usage',
@@ -361,6 +408,27 @@ const streamsDocsSidebar = [
       {
         text: 'durablestreams.com',
         link: 'https://durablestreams.com',
+      },
+    ],
+  },
+]
+
+// Compact sidebar for the Streams demos section. The product title,
+// Overview / Quickstart / Demos links are rendered above this by
+// `DocsSidebarHero.vue`.
+const streamsDemosSidebar = [
+  {
+    text: 'Demo apps',
+    collapsed: false,
+    items: [{ text: 'Territory Wars', link: '/streams/demos/territory-wars' }],
+  },
+  {
+    text: 'Technical examples',
+    collapsed: false,
+    items: [
+      {
+        text: 'Yjs demo',
+        link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/yjs-demo',
       },
     ],
   },
@@ -540,13 +608,11 @@ export default defineConfig({
       '/sync/postgres-sync': syncDocsSidebar,
       '/sync/tanstack-db': syncDocsSidebar,
       '/sync/pglite': syncDocsSidebar,
-      // Demo pages live at marketing URLs (/sync/demos/*) but
-      // conceptually belong to the docs — they render with the docs
-      // sidebar so users can navigate sideways into Guides / API /
-      // Integrations. Same insertion-order rule as the primitives
-      // above: this MUST come before `/sync/` so it wins the prefix
-      // match.
-      '/sync/demos': syncDocsSidebar,
+      // Demo pages live at marketing URLs (/sync/demos/*) and get a
+      // compact section sidebar under the Sync product hero. Same
+      // insertion-order rule as the primitives above: this MUST come
+      // before `/sync/` so it wins the prefix match.
+      '/sync/demos': syncDemosSidebar,
       // Marketing-style /sync/* fallback. The /sync landing page
       // itself sets `sidebar: false`, so this only catches anything
       // under /sync/* that doesn't have a more specific sidebar key
@@ -565,10 +631,10 @@ export default defineConfig({
           ],
         },
       ],
-      // Agents and Streams demo pages — same pattern as /sync/demos:
-      // marketing URL but rendered with the docs sidebar.
-      '/agents/demos': agentsDocsSidebar,
-      '/streams/demos': streamsDocsSidebar,
+      // Demo-section sidebars keep the product hero links at the top,
+      // then focus the sidebar on demos and examples.
+      '/agents/demos': agentsDemosSidebar,
+      '/streams/demos': streamsDemosSidebar,
       '/docs/sync': syncDocsSidebar,
       '/docs/agents': agentsDocsSidebar,
       '/docs/streams': streamsDocsSidebar,

@@ -1,5 +1,5 @@
 ---
-title: Demos
+title: Sync demos
 description: >-
   Demos and example applications build with Electric Sync.
 image: /img/demos/demos-header.jpg
@@ -11,9 +11,7 @@ import { data } from '../../data/demos.data.ts'
 const { demos, examples } = data
 </script>
 
-<img src="/img/demos/demos.svg" class="product-icon" />
-
-# Demos
+# Sync demos
 
 Demos and example applications built with Electric Sync.
 
