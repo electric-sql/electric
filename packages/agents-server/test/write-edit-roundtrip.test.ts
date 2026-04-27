@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createEditTool } from '../src/electric-agents/tools/edit'
-import { createWriteTool } from '../src/electric-agents/tools/write'
+import { createEditTool } from '../../agents/src/tools/edit'
+import { createWriteTool } from '../../agents/src/tools/write'
 
 describe(`write→edit roundtrip in same wake`, () => {
   let cwd: string

@@ -1583,9 +1583,6 @@ importers:
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
         version: 0.70.2(ws@8.20.0)(zod@4.3.6)
-      '@mozilla/readability':
-        specifier: ^0.6.0
-        version: 0.6.0
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -1604,9 +1601,6 @@ importers:
       fastq:
         specifier: ^1.20.1
         version: 1.20.1
-      jsdom:
-        specifier: ^28.1.0
-        version: 28.1.0(@noble/hashes@2.0.1)
       lmdb:
         specifier: ^3.5.1
         version: 3.5.4
@@ -1619,12 +1613,6 @@ importers:
       postgres:
         specifier: ^3.4.0
         version: 3.4.7
-      turndown:
-        specifier: ^7.2.2
-        version: 7.2.4
-      turndown-plugin-gfm:
-        specifier: ^1.0.2
-        version: 1.0.2
       undici:
         specifier: ^7.24.7
         version: 7.25.0
@@ -1638,15 +1626,9 @@ importers:
       '@electric-ax/agents-server-ui':
         specifier: workspace:*
         version: link:../agents-server-ui
-      '@types/jsdom':
-        specifier: ^27.0.0
-        version: 27.0.0
       '@types/node':
         specifier: ^22.19.15
         version: 22.19.17
-      '@types/turndown':
-        specifier: ^5.0.6
-        version: 5.0.6
       '@vitest/coverage-v8':
         specifier: ^4.1.0
         version: 4.1.5(vitest@4.1.5)
