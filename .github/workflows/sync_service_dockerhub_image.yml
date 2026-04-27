@@ -165,7 +165,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.platform_id }}
+          name: electric-digests-${{ matrix.platform_id }}
           path: /tmp/digests/*
 
   publish_tagged_image:
@@ -181,7 +181,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: digests-*
+          pattern: electric-digests-*
           merge-multiple: true
           path: /tmp/digests
 
