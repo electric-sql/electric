@@ -20,7 +20,7 @@ const isMarkdownExport = useMarkdownExport()
 <template>
   <MdExportExplicit v-if="isMarkdownExport">
     <MarkdownContent>
-Watch on YouTube: {{ youtubeUrl }}
+Watch on YouTube: [{{ title }}]({{ youtubeUrl }})
     </MarkdownContent>
   </MdExportExplicit>
 

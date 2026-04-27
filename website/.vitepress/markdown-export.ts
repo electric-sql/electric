@@ -131,7 +131,7 @@
  * - `MarkdownContent` is the primitive for emitting raw markdown strings from a
  *   component when `isMarkdownExport` is true.
  * - Example: `YoutubeEmbed.vue` renders an iframe for normal HTML builds but
- *   emits `Watch on YouTube: ...` during markdown export.
+ *   emits `Watch on YouTube: [title](https://www.youtube.com/watch?v=...)` during export.
  *
  * Ignore behavior
  *
