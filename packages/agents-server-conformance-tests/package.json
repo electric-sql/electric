@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@electric-ax/agents-server": "workspace:*",
-    "@mariozechner/pi-agent-core": "^0.57.1",
+    "@mariozechner/pi-agent-core": "^0.70.2",
     "tsdown": "^0.9.0",
     "typescript": "^5.0.0"
   },

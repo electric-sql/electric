@@ -58,8 +58,8 @@
   "dependencies": {
     "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.0",
     "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
-    "@mariozechner/pi-agent-core": "^0.57.1",
-    "@mariozechner/pi-ai": "^0.57.1",
+    "@mariozechner/pi-agent-core": "^0.70.2",
+    "@mariozechner/pi-ai": "^0.70.2",
     "@standard-schema/spec": "^1.1.0",
     "@tanstack/db": "^0.6.4",
     "cron-parser": "^5.5.0",

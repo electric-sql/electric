@@ -21,7 +21,11 @@ import type {
   AgentTool as PiAgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
-import type { KnownProvider, Model } from '@mariozechner/pi-ai'
+import type {
+  KnownProvider,
+  Model,
+  SimpleStreamOptions,
+} from '@mariozechner/pi-ai'
 import type {
   EntityStreamDB as RuntimeEntityStreamDB,
   EntityStreamDBWithActions as RuntimeEntityStreamDBWithActions,
@@ -584,6 +588,7 @@ export interface AgentConfig {
   getApiKey?: (
     provider: string
   ) => Promise<string | undefined> | string | undefined
+  onPayload?: SimpleStreamOptions[`onPayload`]
   testResponses?: TestResponses
 }
 
