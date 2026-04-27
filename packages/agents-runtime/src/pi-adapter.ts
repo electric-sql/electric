@@ -32,6 +32,9 @@ export interface PiAdapterOptions {
   provider?: KnownProvider
   tools: Array<AgentTool>
   streamFn?: StreamFn
+  getApiKey?: (
+    provider: string
+  ) => Promise<string | undefined> | string | undefined
 }
 
 interface PiAgentAdapterConfig {
@@ -164,6 +167,7 @@ export function createPiAgentAdapter(
         model,
       },
       ...(opts.streamFn && { streamFn: opts.streamFn }),
+      ...(opts.getApiKey && { getApiKey: opts.getApiKey }),
     })
 
     function processAgentEvents(

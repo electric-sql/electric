@@ -581,6 +581,9 @@ export interface AgentConfig {
   provider?: KnownProvider
   tools: Array<AgentTool>
   streamFn?: StreamFn
+  getApiKey?: (
+    provider: string
+  ) => Promise<string | undefined> | string | undefined
   testResponses?: TestResponses
 }
 

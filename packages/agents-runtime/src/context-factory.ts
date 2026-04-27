@@ -314,6 +314,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           ...(activeAgentConfig.streamFn && {
             streamFn: activeAgentConfig.streamFn,
           }),
+          ...(activeAgentConfig.getApiKey && {
+            getApiKey: activeAgentConfig.getApiKey,
+          }),
         })
         const handle = adapterFactory({
           entityUrl: config.entityUrl,
