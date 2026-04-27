@@ -119,7 +119,7 @@ onMounted(async () => {
         </template>
       </div>
       <div class="cg-body">
-        <h3 class="cg-title">{{ repo.name }}</h3>
+        <h2 class="cg-title">{{ repo.name }}</h2>
         <p class="cg-desc">{{ repo.desc }}</p>
       </div>
       <span class="cg-cta-pill">

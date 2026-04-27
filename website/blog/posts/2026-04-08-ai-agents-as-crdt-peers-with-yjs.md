@@ -33,7 +33,7 @@ This post walks through how I built a [Collaborative AI Editor](https://collabor
 > Try the [live demo](https://collaborative-ai-editor.examples.electric-sql.com) and browse the [source code](https://github.com/electric-sql/collaborative-ai-editor).
 
 <div class="embed-container top" style="padding-bottom: 56.25%">
-  <YoutubeEmbed video-id="qdEIE5XY0wo" />
+  <YoutubeEmbed video-id="qdEIE5XY0wo" title="AI agents as CRDT peers: building a collaborative AI editor with Yjs" />
 </div>
 
 ## The integration problem

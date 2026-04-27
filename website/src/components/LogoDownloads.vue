@@ -17,7 +17,7 @@
         <img src="/img/brand/logo.svg" alt="Electric logo on dark" />
       </div>
       <div class="ld-meta">
-        <h4 class="ld-title">Dark backgrounds</h4>
+        <h3 class="ld-title">Dark backgrounds</h3>
         <p class="ld-filename mono">logo.svg</p>
         <span class="ld-cta mono">Download →</span>
       </div>
@@ -35,7 +35,7 @@
         />
       </div>
       <div class="ld-meta">
-        <h4 class="ld-title">Light backgrounds</h4>
+        <h3 class="ld-title">Light backgrounds</h3>
         <p class="ld-filename mono">logo.inverse.svg</p>
         <span class="ld-cta mono">Download →</span>
       </div>

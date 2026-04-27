@@ -42,7 +42,7 @@ Most AI apps break if there's [any kind of problem](/blog/2025/04/09/building-ai
 Integrating Durable Streams via a [Durable Sessions](/blog/2026/01/12/durable-sessions-for-collaborative-ai) pattern extends this with natural support for multi-tab, multi-device, multi-user and multi-agent collaboration.
 
 <div class="embed-container top" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="81KXwxld7dw" />
+  <YoutubeEmbed video-id="81KXwxld7dw" title="TanStack AI - Durable Sessions demo" />
 </div>
 
 These aspects of resilience, resumability and collaboration are key to adoption of AI apps and agentic systems. The AI SDKs are aware of the challenges and provide extension points to plug in custom transports as a solution.

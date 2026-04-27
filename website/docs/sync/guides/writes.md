@@ -267,7 +267,7 @@ One consideration is the indirection between making a write and handling a rollb
 
 <div style="max-width: 512px; margin: 24px 0">
   <div class="embed-container">
-    <YoutubeEmbed video-id="WEFuEY3fHd0" />
+    <YoutubeEmbed video-id="WEFuEY3fHd0" title="Adam Wiggins: Local-First at Scale (Local-First Meetup Berlin #1)" />
   </div>
 </div>
 

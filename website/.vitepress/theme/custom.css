@@ -1363,6 +1363,16 @@ pre {
   overflow-x: scroll;
 }
 
+/* Accessibility: bump Shiki's github-dark comment color (#6A737D) to a
+   higher-contrast gray. The default ~4.06:1 fails WCAG AA (4.5:1 min);
+   #8b949e gives ~5.39:1 against the dark code-block background. The
+   `i` flag makes the attribute selector case-insensitive so this still
+   matches if Shiki ever changes its inline-style casing. !important is
+   required to override Shiki's inline `style="color:..."`. */
+.shiki span[style*="#6A737D" i] {
+  color: #8b949e !important;
+}
+
 ul.benefits {
   color: var(--vp-c-text-1) !important;
 

@@ -80,9 +80,9 @@ const isMarkdownExport = useMarkdownExport()
 
 <EaSection id="customers" :dark="true">
   <figure class="logo-strap md-exclude">
-    <img :src="LogoStrip" class="hidden-md" />
-    <img :src="LogoStripXxs" class="block-md hidden-sm logo-strap-md" />
-    <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" />
+    <img :src="LogoStrip" class="hidden-md" alt="Used by Google, Supabase, Trigger.dev, otto, and Doorboost" />
+    <img :src="LogoStripXxs" class="block-md hidden-sm logo-strap-md" alt="Used by Google, Supabase, Trigger.dev, otto, and Doorboost" />
+    <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" alt="Used by Google, Supabase, Trigger.dev, otto, and Doorboost" />
   </figure>
 </EaSection>
 

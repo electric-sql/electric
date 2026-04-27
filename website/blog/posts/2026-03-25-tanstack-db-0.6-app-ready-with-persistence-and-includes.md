@@ -60,7 +60,7 @@ This gives you a complete app data model you can adopt incrementally.
 The React Native shopping list demo shows this stack end to end: an Electric collection syncing in real time, with state persisted locally through SQLite for offline support.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="EBXOjQds8hU" />
+  <YoutubeEmbed video-id="EBXOjQds8hU" title="TanStack DB 0.6 Now Includes Persistence, Offline Support, and Hierarchical Data" />
 </div>
 
 Source code: [react-native/shopping-list example on GitHub](https://github.com/TanStack/db/tree/main/examples/react-native/shopping-list).

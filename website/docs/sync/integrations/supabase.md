@@ -123,6 +123,6 @@ Electric and Supabase are also collaborating to develop [PGlite](/sync/pglite), 
 
 <div style="max-width: 512px; margin: 24px 0">
   <div class="embed-container">
-    <YoutubeEmbed video-id="ooWaPVvljlU" />
+    <YoutubeEmbed video-id="ooWaPVvljlU" title="I gave AI full control over my database (postgres.new)" />
   </div>
 </div>

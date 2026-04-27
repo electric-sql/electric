@@ -512,7 +512,7 @@ export default defineConfig({
       pattern:
         'https://github.com/electric-sql/electric/edit/main/website/:path',
     },
-    logo: { light: '/img/brand/logo.inverse.svg', dark: '/img/brand/logo.svg' },
+    logo: { light: '/img/brand/logo.inverse.svg', dark: '/img/brand/logo.svg', alt: 'Electric' },
     nav: [],
     search: {
       provider: 'local',

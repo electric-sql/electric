@@ -72,7 +72,7 @@ It shows how to build an agentic system on real-time sync, where:
 
 <figure>
   <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="4QpErQ9nVEc" />
+    <YoutubeEmbed video-id="4QpErQ9nVEc" title="Burn intro" />
   </div>
 </figure>
 

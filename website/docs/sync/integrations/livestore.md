@@ -20,6 +20,6 @@ See Johannes' Local-first Conf 2025 talk for more details:
 
 <div style="max-width: 512px; margin: 12px 0">
   <div class="embed-container">
-    <YoutubeEmbed video-id="nyPl84BopKc" />
+    <YoutubeEmbed video-id="nyPl84BopKc" title="Johannes Schickling - Sync different: Event sourcing in local-first apps" />
   </div>
 </div>

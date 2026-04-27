@@ -75,7 +75,7 @@ function copy() {
     :class="[`install-pill--${tone}`, { copied }]"
     type="button"
     @click="copy"
-    :aria-label="copied ? 'Copied' : 'Copy install command'"
+    :aria-label="copied ? 'Copied' : `Copy ${command} to clipboard`"
   >
     <span class="install-pill-text">
       <span class="install-pill-prompt">$</span>

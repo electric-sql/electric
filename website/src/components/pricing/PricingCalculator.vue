@@ -231,6 +231,7 @@ const calculatorMarkdown = computed(() => {
           min="0"
           :max="SLIDER_MAX"
           step="1"
+          aria-label="Writes per month"
         />
       </div>
       <div class="input-group">
@@ -251,6 +252,7 @@ const calculatorMarkdown = computed(() => {
           min="0"
           :max="SLIDER_MAX"
           step="1"
+          aria-label="Data retention (GB-months)"
         />
       </div>
       <div class="toggles-section">

@@ -143,7 +143,7 @@ onUnmounted(() => {
     <div class="tiles">
       <!-- Spawn & Send -->
       <div class="tile">
-        <h4 class="tile-title">Spawn &amp; Send</h4>
+        <h3 class="tile-title">Spawn &amp; Send</h3>
         <p class="tile-desc"><code>spawn</code> creates a new entity. <code>send</code> delivers a message to any entity — waking it if it's sleeping. The entity replays from its stream, handles the message, then scales back to zero.</p>
         <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
@@ -170,7 +170,7 @@ onUnmounted(() => {
 
       <!-- Observe -->
       <div class="tile">
-        <h4 class="tile-title">Observe</h4>
+        <h3 class="tile-title">Observe</h3>
         <p class="tile-desc">Watch another entity's stream in real time. When the observed entity appends an event, the observer wakes to process it — no polling, no open connections while&nbsp;idle.</p>
         <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
@@ -194,7 +194,7 @@ onUnmounted(() => {
 
       <!-- Shared State -->
       <div class="tile">
-        <h4 class="tile-title">Shared State</h4>
+        <h3 class="tile-title">Shared State</h3>
         <p class="tile-desc">Multiple entities read and write to a shared state object backed by a stream. Changes propagate automatically — each writer wakes readers when state&nbsp;updates.</p>
         <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">

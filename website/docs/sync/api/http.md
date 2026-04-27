@@ -332,7 +332,7 @@ Most caching proxies and CDNs support a feature called [request collapsing](http
 
 <div style="width: 100%; max-width: 512px">
   <div class="embed-container">
-    <YoutubeEmbed video-id="9G9ipVQCZ9w" />
+    <YoutubeEmbed video-id="9G9ipVQCZ9w" title="2 Minute Tech Tuesdays - Request coalescing" />
   </div>
 </div>
 

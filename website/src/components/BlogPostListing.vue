@@ -119,7 +119,7 @@ const { post } = defineProps(['post'])
           {{ post.title }}
         </h3>
         <p class="post-author">
-          <img :src="authors[post.authors[0]].image" />
+          <img :src="authors[post.authors[0]].image" alt="" />
           <span>
             {{ authors[post.authors[0]].name }}
           </span>

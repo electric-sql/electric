@@ -89,7 +89,7 @@ The [Checkout example with Supabase](https://legacy.electric-sql.com/docs/exampl
 You can see it running at [checkout-demo.electric-sql.com](http://checkout-demo.electric-sql.com/) and in the demo screencast below:
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="WhRBvJ4cUWk" />
+  <YoutubeEmbed video-id="WhRBvJ4cUWk" title="ElectricSQL Checkout Demo using Supabase Postgres, Auth and Edge Functions" />
 </div>
 
 ### trpc-crdt

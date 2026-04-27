@@ -49,7 +49,7 @@ This post introduces the [Durable Session pattern](#durable-session-pattern) and
 > See the TanStack AI - Durable Sessions [demo video](https://youtu.be/81KXwxld7dw) and [source code](https://github.com/electric-sql/transport).
 
 <div class="embed-container top" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="81KXwxld7dw" />
+  <YoutubeEmbed video-id="81KXwxld7dw" title="TanStack AI - Durable Sessions demo" />
 </div>
 
 ## Getting things done with agents
@@ -622,7 +622,7 @@ With minimal changes to your component code and zero changes to your real AI eng
 > See the full code example and working demo app of a [TanStack AI - Durable Sessions reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-sessions).
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="81KXwxld7dw" />
+  <YoutubeEmbed video-id="81KXwxld7dw" title="TanStack AI - Durable Sessions demo" />
 </div>
 
 ## The key pattern for collaborative AI

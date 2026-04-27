@@ -43,6 +43,28 @@ onMounted(() => {
   }
 })
 
+// Accessibility: VitePress's default Layout doesn't wrap the content
+// area in a <main> landmark and doesn't expose a slot that lets us add
+// one. Patch role="main" onto the content wrapper on every route change
+// so screen reader users get a proper main landmark to jump to (WCAG
+// 2.4.1 "Bypass Blocks"). The skip-to-content link VitePress already
+// provides targets the same #VPContent element, so the skip link and
+// the landmark stay consistent.
+watch(
+  () => router.route.data.relativePath,
+  () => {
+    requestAnimationFrame(() => {
+      const contentEl =
+        document.querySelector('.VPContent') ||
+        document.querySelector('.VPHome')
+      if (contentEl && !contentEl.hasAttribute('role')) {
+        contentEl.setAttribute('role', 'main')
+      }
+    })
+  },
+  { immediate: true }
+)
+
 const { Layout } = DefaultTheme
 
 const { frontmatter, page } = useData()

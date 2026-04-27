@@ -4,9 +4,13 @@ import MdExportExplicit from './MdExportExplicit.vue'
 
 import { useMarkdownExport } from '../lib/useMarkdownExport'
 
-const props = defineProps<{
-  videoId: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    videoId: string
+    title?: string
+  }>(),
+  { title: 'YouTube video player' }
+)
 
 const src = `https://www.youtube-nocookie.com/embed/${props.videoId}?rel=0`
 const youtubeUrl = `https://www.youtube.com/watch?v=${props.videoId}`
@@ -23,6 +27,7 @@ Watch on YouTube: {{ youtubeUrl }}
   <iframe
     v-else
     :src="src"
+    :title="title"
     allow="encrypted-media; fullscreen; picture-in-picture"
     class="youtube-embed"
     sandbox="allow-presentation allow-same-origin allow-scripts"
