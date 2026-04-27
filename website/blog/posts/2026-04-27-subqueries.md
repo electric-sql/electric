@@ -176,11 +176,9 @@ See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full refer
 
 ## Where this lands
 
-Subqueries are now available to everyone in Electric 1.6.
+That is the real point of this release. Sync only works cleanly in production if it can follow the access rules and parent-child relationships that already exist in the schema. Subqueries are what make shapes fit that reality, and with 1.6 they now stay on the incremental path even when the logic uses more complex expressions. We now consider them ready for general use, and they are available to everyone in Electric 1.6.
 
-If you want them enabled on your Cloud project today, get in touch.
-
-The remaining rollout flags are temporary. We expect to lift them over the next few weeks.
+If you want to use them on Cloud today, get in touch and we can enable them on your project. The remaining rollout flags are temporary, and we expect to lift them over the next few weeks.
 
 ***
 
