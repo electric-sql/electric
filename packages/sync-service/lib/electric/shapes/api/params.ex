@@ -164,6 +164,10 @@ defmodule Electric.Shapes.Api.Params do
 
   @type t() :: %__MODULE__{}
 
+  def compaction_enabled?(%__MODULE__{} = params) do
+    Map.fetch!(params, @tmp_compaction_flag)
+  end
+
   def validate(%Electric.Shapes.Api{} = api, params) do
     params
     |> cast_params()

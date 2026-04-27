@@ -42,8 +42,8 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
   plug :parse_body
   plug :validate_request
+  plug :reject_subquery_shape_compaction_request
   plug :resolve_existing_shape
-  plug :reject_unsupported_shape_creation
   plug :check_admission
   plug :load_shape
   plug :serve_shape_response
@@ -254,6 +254,29 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  # Compaction is not compatible with shapes that contain subqueries, so reject
+  # the request before any existence lookup or shape creation attempt.
+  defp reject_subquery_shape_compaction_request(
+         %Conn{assigns: %{request: request}} = conn,
+         _
+       ) do
+    if subquery_shape_compaction_requested?(request) do
+      conn
+      |> Api.Response.send(
+        Api.Response.invalid_request(request,
+          errors: %{experimental_compaction: [@subquery_compaction_error]}
+        )
+      )
+      |> halt()
+    else
+      conn
+    end
+  end
+
+  defp subquery_shape_compaction_requested?(%{params: params}) do
+    Api.Params.compaction_enabled?(params) and params.shape_definition.shape_dependencies != []
+  end
+
   # Check if the shape already exists so admission control can classify
   # accurately (:initial for new shapes, :existing for known shapes).
   #
@@ -274,34 +297,8 @@ defmodule Electric.Plug.ServeShapePlug do
     # tables haven't been created yet — ETS operations (lookup, insert, whereis) raise
     # ArgumentError on a missing table, which can happen when a request arrives before the
     # shape subsystem finishes initializing.
-    ArgumentError -> put_private(conn, :shape_exists?, nil)
+    ArgumentError -> put_private(conn, :shape_exists?, false)
   end
-
-  defp reject_unsupported_shape_creation(
-         %Conn{assigns: %{request: request}} = conn,
-         _
-       ) do
-    if conn.private[:shape_exists?] != false or
-         not unsupported_shape_creation?(request.params.shape_definition) do
-      conn
-    else
-      conn
-      |> Api.Response.send(
-        Api.Response.invalid_request(request,
-          errors: %{experimental_compaction: [@subquery_compaction_error]}
-        )
-      )
-      |> halt()
-    end
-  end
-
-  defp unsupported_shape_creation?(%Electric.Shapes.Shape{
-         storage: %{compaction: :enabled},
-         shape_dependencies: [_ | _]
-       }),
-       do: true
-
-  defp unsupported_shape_creation?(_shape), do: false
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
