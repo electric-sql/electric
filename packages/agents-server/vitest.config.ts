@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     fileParallelism: false,
     maxWorkers: 1,
+    globalSetup: [`./test/global-setup.ts`],
     coverage: {
       provider: `v8`,
       reporter: [`text`, `json`, `html`, `lcov`],

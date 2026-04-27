@@ -51,6 +51,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { DurableStreamTestServer } from '@durable-streams/server'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type {
+  AgentModel,
   EntityRegistry,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
@@ -124,6 +125,19 @@ interface MockAgentBootstrap {
   registry: EntityRegistry
 }
 
+const MOCK_CHAT_MODEL: AgentModel = {
+  id: `mock-chat`,
+  name: `Mock Chat`,
+  api: `anthropic-messages`,
+  provider: `anthropic`,
+  baseUrl: `http://mock`,
+  reasoning: false,
+  input: [`text`],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 200_000,
+  maxTokens: 4_096,
+}
+
 function createMockAgentBootstrap(options: {
   agentServerUrl: string
   workingDirectory?: string
@@ -136,7 +150,7 @@ function createMockAgentBootstrap(options: {
     handler: async (ctx) => {
       ctx.useAgent({
         systemPrompt: `You are a concise test assistant.`,
-        model: `mock-chat`,
+        model: MOCK_CHAT_MODEL,
         tools: [],
         streamFn: options.streamFn,
       })
