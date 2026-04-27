@@ -198,6 +198,13 @@ export class ElectricAgentsServer {
     return this._url
   }
 
+  private get publicUrl(): string {
+    if (!this._url) {
+      throw new Error(`Server not started`)
+    }
+    return this.options.baseUrl?.replace(/\/+$/, ``) ?? this._url
+  }
+
   async start(): Promise<string> {
     if (this.server) {
       throw new Error(`Server already started`)
@@ -404,7 +411,7 @@ export class ElectricAgentsServer {
 
           if (this.options.mockStreamFn) {
             this.mockAgentBootstrap = createMockAgentBootstrap({
-              agentServerUrl: this._url,
+              agentServerUrl: this.publicUrl,
               workingDirectory: this.options.workingDirectory,
               streamFn: this.options.mockStreamFn,
             })
@@ -1398,6 +1405,7 @@ export class ElectricAgentsServer {
     res: ServerResponse
   ): Promise<boolean> {
     if (!this._url) return false
+    const publicUrl = this.publicUrl
 
     const subscriptionId = url.searchParams.get(`subscription`)
     if (!subscriptionId) return false
@@ -1415,7 +1423,7 @@ export class ElectricAgentsServer {
           if (typeof payload.webhook === `string`) {
             targetWebhookUrl =
               rewriteLoopbackWebhookUrl(payload.webhook) ?? null
-            payload.webhook = `${this._url}/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
+            payload.webhook = `${publicUrl}/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
             requestBody = new TextEncoder().encode(JSON.stringify(payload))
           }
         } catch {
@@ -1527,9 +1535,10 @@ export class ElectricAgentsServer {
             : null
       const callbackUrl =
         typeof payload.callback === `string` ? payload.callback : null
+      const publicUrl = this.publicUrl
       const isInternalAgentHandlerTarget =
-        this._url != null &&
-        targetWebhookUrl.startsWith(`${this._url}/_electric/agent-handler`)
+        targetWebhookUrl.startsWith(`${this._url}/_electric/agent-handler`) ||
+        targetWebhookUrl.startsWith(`${publicUrl}/_electric/agent-handler`)
 
       if (primaryStream) {
         rootSpan?.setAttribute(ATTR.STREAM_PATH, primaryStream)
@@ -1606,8 +1615,8 @@ export class ElectricAgentsServer {
           runningEntityUrl = entity.url
         }
 
-        if (this._url && consumerId && callbackUrl) {
-          enriched.callback = `${this._url}/_electric/callback-forward/${encodeURIComponent(consumerId)}`
+        if (consumerId && callbackUrl) {
+          enriched.callback = `${publicUrl}/_electric/callback-forward/${encodeURIComponent(consumerId)}`
         }
         if (isInternalAgentHandlerTarget && entity) {
           enriched.writeToken = entity.write_token

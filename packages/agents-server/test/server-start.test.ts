@@ -372,4 +372,25 @@ describe(`ElectricAgentsServer.start`, () => {
     )
     expect(mockAgentRegisterTypesMock).toHaveBeenCalledOnce()
   })
+
+  it(`uses configured baseUrl for public mock agent registration URLs`, async () => {
+    const streamFn = vi.fn()
+
+    server = new ElectricAgentsServer({
+      baseUrl: `https://agents.example.com/`,
+      durableStreamsUrl: `http://durable.test`,
+      mockStreamFn: streamFn as any,
+      port: 0,
+      postgresUrl: TEST_POSTGRES_URL,
+    })
+
+    await expect(server.start()).resolves.toMatch(/^http:\/\//)
+    expect(createRuntimeHandlerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: `https://agents.example.com`,
+        serveEndpoint: `https://agents.example.com/_electric/mock-agent-handler`,
+        subscriptionPathForType: expect.any(Function),
+      })
+    )
+  })
 })
