@@ -5,7 +5,7 @@ description: >-
 outline: [2, 3]
 ---
 
-<img src="/img/icons/tanstack.svg" width="64px" />
+<img src="/img/icons/tanstack.svg" width="64px" alt="" />
 <br />
 
 # TanStack AI
@@ -40,7 +40,7 @@ Then, because any client connecting to the same session subscribes and writes to
 We call this the [Durable Session pattern](https://electric-sql.com/blog/2026/01/12/durable-sessions-for-collaborative-ai) for building resilient, collaborative AI apps.
 
 <div class="embed-container top" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="81KXwxld7dw" />
+  <YoutubeEmbed video-id="81KXwxld7dw" title="TanStack AI - Durable Sessions demo" />
 </div>
 
 ### Initial message history

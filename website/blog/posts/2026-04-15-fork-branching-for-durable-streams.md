@@ -20,7 +20,7 @@ A fork creates a new stream from any point in an existing one. It shares everyth
 > Try the [live demo](https://fork-ai-chat.examples.electric-sql.com), read the [docs](/docs/sync/), and [sign up for Electric Cloud](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams).
 
 <div class="embed-container top" style="padding-bottom: 84.4%">
-  <YoutubeEmbed video-id="gmkqygh9ezo" />
+  <YoutubeEmbed video-id="gmkqygh9ezo" title="Durable Streams AI Chat Forking" />
 </div>
 
 ## Streams are sessions

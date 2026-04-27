@@ -63,7 +63,7 @@ But when you dig into it, these all collapse to processes and database state. In
 
 <figure>
   <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="4QpErQ9nVEc" />
+    <YoutubeEmbed video-id="4QpErQ9nVEc" title="Burn intro" />
   </div>
 </figure>
 
@@ -111,7 +111,7 @@ It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create an
 
 <figure>
   <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="2DhGHnk3Ebc" />
+    <YoutubeEmbed video-id="2DhGHnk3Ebc" title="Burn usage" />
   </div>
 </figure>
 
@@ -185,7 +185,7 @@ Phoenix also has a sync library, [Phoenix.Sync](https://hexdocs.pm/phoenix_sync)
 
 <figure>
   <div style="aspect-ratio: 16/9" class="embed-container">
-    <YoutubeEmbed video-id="rlzL5wnWa9o" />
+    <YoutubeEmbed video-id="rlzL5wnWa9o" title="Introducing Phoenix.Sync - James Arthur at ElixirConf 2025" />
   </div>
 </figure>
 
@@ -360,7 +360,7 @@ Live queries are reactive and built on a [super-fast, query engine](/blog/2025/0
 
 <figure>
   <div class="embed-container" style="padding-bottom: 62.5%">
-    <YoutubeEmbed video-id="_5__QSphP24" />
+    <YoutubeEmbed video-id="_5__QSphP24" title="Burn multi-user" />
   </div>
 </figure>
 
@@ -374,7 +374,7 @@ The memory collects facts in the database. The facts sync into the front-end, wh
 
 <figure>
   <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="qEs8ITbb1ZA" />
+    <YoutubeEmbed video-id="qEs8ITbb1ZA" title="Burn computer" />
   </div>
 </figure>
 
@@ -437,7 +437,7 @@ This retrieval and rendering process _is_ the context engineering behind the sys
 
 <figure>
   <div class="embed-container" style="padding-bottom: 56.25%">
-    <YoutubeEmbed video-id="sUpFc9qO0jA" />
+    <YoutubeEmbed video-id="sUpFc9qO0jA" title="Burn closing thoughts" />
   </div>
 </figure>
 

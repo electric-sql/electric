@@ -30,7 +30,7 @@ With [Electric](/sync/), you can develop local-first apps incrementally, [using 
 I gave a talk on this subject at the second Local-first meetup in Berlin in December 2024:
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="gSGEFYuLuho" />
+  <YoutubeEmbed video-id="gSGEFYuLuho" title="James Arthur: Local-first with your existing API (Local-First Berlin #2)" />
 </div>
 
 ## The Toaster Project

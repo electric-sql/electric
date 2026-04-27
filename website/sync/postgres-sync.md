@@ -38,7 +38,7 @@ import WritesLadder from '../src/components/sync-home/WritesLadder.vue'
 }
 </style>
 
-<img src="/img/icons/electric.svg" class="product-icon" />
+<img src="/img/icons/electric.svg" class="product-icon" alt="" />
 
 # Postgres&nbsp;Sync
 

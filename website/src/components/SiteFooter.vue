@@ -129,8 +129,11 @@ import MarkdownLink from './MarkdownLink.vue'
   transition: color 0.2s;
 }
 .footer-nav a:hover,
-.footer-social a:hover {
+.footer-nav a:focus-visible,
+.footer-social a:hover,
+.footer-social a:focus-visible {
   color: var(--vp-c-text-1);
+  text-decoration: underline;
 }
 
 /* Social icons */
@@ -177,9 +180,10 @@ import MarkdownLink from './MarkdownLink.vue'
 }
 .copyright a {
   color: var(--vp-c-text-2);
-  text-decoration: none;
+  text-decoration: underline;
 }
-.copyright a:hover {
+.copyright a:hover,
+.copyright a:focus-visible {
   color: var(--vp-c-text-1);
   text-decoration: underline;
 }

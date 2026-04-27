@@ -55,7 +55,7 @@ const cards = [
         <span class="cc-dot" />
         {{ c.eyebrow }}
       </div>
-      <h3 class="cc-title">{{ c.title }}</h3>
+      <h2 class="cc-title">{{ c.title }}</h2>
       <p class="cc-body">{{ c.body }}</p>
       <span class="cc-link mono">{{ c.link }}</span>
     </a>

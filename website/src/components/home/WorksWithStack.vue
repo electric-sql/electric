@@ -114,6 +114,7 @@ const isMarkdownExport = useMarkdownExport()
             <img
               src="/img/home/sync-targets/agent.svg"
               class="ww-card-icon"
+              alt=""
             />
             <a href="/agents/" class="ww-card-label no-visual">Agent streams</a>
           </div>
@@ -132,6 +133,7 @@ const isMarkdownExport = useMarkdownExport()
           <img
             src="/img/icons/durable-streams.svg"
             class="ww-card-icon"
+            alt=""
           />
           <div class="ww-mini-text">
             <div class="ww-mini-title">Real-time streams</div>
@@ -144,6 +146,7 @@ const isMarkdownExport = useMarkdownExport()
           <img
             src="/img/icons/electric.svg"
             class="ww-card-icon"
+            alt=""
           />
           <div class="ww-mini-text">
             <div class="ww-mini-title">Database sync</div>
@@ -161,28 +164,28 @@ const isMarkdownExport = useMarkdownExport()
       <div class="ww-layers">
         <a class="ww-layer no-visual" href="/docs/sync/guides/auth">
           <div class="ww-layer-icon">
-            <img src="/img/icons/auth.svg" />
+            <img src="/img/icons/auth.svg" alt="" />
           </div>
           <div class="ww-layer-body">
-            <h4>Auth</h4>
+            <h3>Auth</h3>
             <p>With your API</p>
           </div>
         </a>
         <a class="ww-layer no-visual" href="/docs/sync/guides/writes">
           <div class="ww-layer-icon">
-            <img src="/img/icons/writes.svg" />
+            <img src="/img/icons/writes.svg" alt="" />
           </div>
           <div class="ww-layer-body">
-            <h4>Write</h4>
+            <h3>Write</h3>
             <p>Through your backend</p>
           </div>
         </a>
         <a class="ww-layer no-visual" href="/docs/sync/api/http">
           <div class="ww-layer-icon">
-            <img src="/img/icons/deploy.png" />
+            <img src="/img/icons/deploy.png" alt="" />
           </div>
           <div class="ww-layer-body">
-            <h4>Middleware</h4>
+            <h3>Middleware</h3>
             <p>It's just HTTP &amp; JSON</p>
           </div>
         </a>
@@ -194,7 +197,7 @@ const isMarkdownExport = useMarkdownExport()
       <div class="ww-tag mono">03 · your app</div>
       <div class="ww-card ww-card-full">
         <div class="ww-card-head">
-          <img src="/img/icons/tanstack.svg" class="ww-card-icon" />
+          <img src="/img/icons/tanstack.svg" class="ww-card-icon" alt="" />
           <a
             href="/sync/tanstack-db"
             class="ww-card-label no-visual"
@@ -411,7 +414,7 @@ const isMarkdownExport = useMarkdownExport()
   margin: 0 14px 0 4px;
 }
 
-.ww-layer-body h4 {
+.ww-layer-body h3 {
   font-size: 15px;
   font-weight: 600;
   margin: 0;

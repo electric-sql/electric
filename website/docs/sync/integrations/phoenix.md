@@ -18,7 +18,7 @@ Electric is [developed in Elixir](/sync/#how-does-it-work), has a first-class [E
 
 <figure>
   <div style="aspect-ratio: 16/9" class="embed-container">
-    <YoutubeEmbed video-id="rlzL5wnWa9o" />
+    <YoutubeEmbed video-id="rlzL5wnWa9o" title="Introducing Phoenix.Sync - James Arthur at ElixirConf 2025" />
   </div>
 </figure>
 

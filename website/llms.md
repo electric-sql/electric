@@ -7,6 +7,7 @@ outline: [2, 3]
 
 <img src="/img/icons/llms.svg" class="product-icon"
     style="width: 72px"
+    alt=""
 />
 
 # AGENTS.md

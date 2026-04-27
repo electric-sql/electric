@@ -82,7 +82,7 @@ Developed by an open collective, stewarded by [Tanner Linsley](https://github.co
 Tanner has long wanted to add local-first sync to TanStack: <em>&ldquo;I think ideally every developer would love to be able to interact with their APIs as if they were local-first. I have no doubt that that is what everybody wants.&rdquo;</em>.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="hy9pNJMFfyM" />
+  <YoutubeEmbed video-id="hy9pNJMFfyM" title="#25 – Tanner Linsley: TanStack DB" />
 </div>
 
 When Electric co-founder [Kyle Mathews](/about/team#kyle) approached Tanner to work on this, they immediately aligned on DX and a vision for incrementally adoptable local-first app development. There was still once piece missing though: a reactive query engine fast enough to make the vision a reality.

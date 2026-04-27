@@ -40,7 +40,7 @@ For the full details, see the [Yjs Durable Streams Protocol](https://github.com/
 Try [Territory Wars](/sync/demos/territory-wars) — a multiplayer territory capture game running `y-durable-streams` live on Electric&nbsp;Cloud. The game board is a Yjs Y.Map where each cell is a last-writer-wins register. Players move to claim cells and enclose territory. Player presence is tracked via awareness streams. Game state is managed via [StreamDB](/blog/2026/03/26/stream-db).
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="r3i25BGom0s" />
+  <YoutubeEmbed video-id="r3i25BGom0s" title="y-durable-streams. A Yjs provider built on top of Durable Streams." />
 </div>
 
 ## Get started

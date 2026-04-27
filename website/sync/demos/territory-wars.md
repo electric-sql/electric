@@ -25,6 +25,6 @@ Built with [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/
 
 <figure>
   <div class="embed-container">
-    <YoutubeEmbed video-id="r3i25BGom0s" />
+    <YoutubeEmbed video-id="r3i25BGom0s" title="y-durable-streams. A Yjs provider built on top of Durable Streams." />
   </div>
 </figure>
