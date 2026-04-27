@@ -10,6 +10,10 @@ mdExport:
   mode: parse-html
 ---
 
+<script setup>
+import SyncHomePage from '../src/components/sync-home/SyncHomePage.vue'
+</script>
+
 <MdExportParseHtml>
   <SyncHomePage />
 </MdExportParseHtml>

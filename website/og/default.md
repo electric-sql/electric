@@ -15,4 +15,8 @@ lastUpdated: false
 editLink: false
 ---
 
+<script setup>
+import OgHomepage from '../src/components/og/OgHomepage.vue'
+</script>
+
 <OgHomepage />

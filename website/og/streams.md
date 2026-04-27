@@ -15,4 +15,8 @@ lastUpdated: false
 editLink: false
 ---
 
+<script setup>
+import OgStreams from '../src/components/og/OgStreams.vue'
+</script>
+
 <OgStreams />

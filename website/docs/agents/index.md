@@ -6,6 +6,10 @@ description: >-
 outline: [2, 3]
 ---
 
+<script setup>
+import EntityOverviewDiagram from '../../src/components/agents-home/EntityOverviewDiagram.vue'
+</script>
+
 # Electric Agents
 
 Electric Agents is **the durable runtime for long-lived agents**. It's a runtime and communication fabric for spawning and scaling collaborative agents on serverless compute, using your existing web and AI&nbsp;frameworks.

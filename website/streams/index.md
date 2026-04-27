@@ -12,6 +12,10 @@ mdExport:
   mode: parse-html
 ---
 
+<script setup>
+import StreamsHomePage from '../src/components/streams-home/StreamsHomePage.vue'
+</script>
+
 <MdExportParseHtml>
   <StreamsHomePage />
 </MdExportParseHtml>

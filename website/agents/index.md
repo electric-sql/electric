@@ -10,6 +10,10 @@ mdExport:
   mode: parse-html
 ---
 
+<script setup>
+import AgentsHomePage from '../src/components/agents-home/HomePage.vue'
+</script>
+
 <MdExportParseHtml>
   <AgentsHomePage />
 </MdExportParseHtml>

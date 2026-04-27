@@ -15,4 +15,8 @@ lastUpdated: false
 editLink: false
 ---
 
+<script setup>
+import OgAgents from '../src/components/og/OgAgents.vue'
+</script>
+
 <OgAgents />

@@ -15,4 +15,8 @@ lastUpdated: false
 editLink: false
 ---
 
+<script setup>
+import OgSync from '../src/components/og/OgSync.vue'
+</script>
+
 <OgSync />

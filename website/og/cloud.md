@@ -15,4 +15,8 @@ lastUpdated: false
 editLink: false
 ---
 
+<script setup>
+import OgCloud from '../src/components/og/OgCloud.vue'
+</script>
+
 <OgCloud />

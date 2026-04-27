@@ -12,6 +12,10 @@ mdExport:
   mode: parse-html
 ---
 
+<script setup>
+import CloudHomePage from '../src/components/cloud-home/CloudHomePage.vue'
+</script>
+
 <MdExportParseHtml>
   <CloudHomePage />
 </MdExportParseHtml>

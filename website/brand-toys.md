@@ -8,4 +8,8 @@ pageClass: brand-toys-page
 hideReleaseBanner: true
 ---
 
+<script setup>
+import BrandToysPage from './src/components/brand-toys/BrandToysPage.vue'
+</script>
+
 <BrandToysPage />

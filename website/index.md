@@ -22,6 +22,10 @@ mdExport:
 # /public/img/meta/.
 ---
 
+<script setup>
+import HomePage from './src/components/home/HomePage.vue'
+</script>
+
 <div data-template="true" class="hidden" id="works-with-sql-template">
 
 ```sql
