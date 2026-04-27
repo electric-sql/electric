@@ -1,6 +1,7 @@
 import { queryOnce } from '@durable-streams/state'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
+import { entityStateSchema } from './entity-schema'
 import { createOutboundBridge, loadOutboundIdSeed } from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
@@ -33,6 +34,7 @@ import type {
   LLMMessage,
   ObservationHandle,
   ObservationSource,
+  RunHandle,
   SharedStateHandle,
   SharedStateSchemaMap,
   StateProxy,
@@ -207,6 +209,25 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   let useContextConfig: UseContextConfig | null = null
   let useContextHash = ``
   let useContextRegistrations = 0
+  // Lazy-loaded run-id counter used by ctx.recordRun(). Initialized
+  // from the runs already present in the entity's StreamDB so keys
+  // remain monotonic across handler invocations.
+  let recordRunCounter: number | null = null
+  const nextRunKey = (): string => {
+    if (recordRunCounter == null) {
+      let max = 0
+      const rows = config.db.collections.runs.toArray as Array<{ key: string }>
+      for (const row of rows) {
+        const m = row.key.match(/^run-(\d+)/)
+        if (!m) continue
+        max = Math.max(max, parseInt(m[1]!, 10) + 1)
+      }
+      recordRunCounter = max
+    }
+    const key = `run-${recordRunCounter}`
+    recordRunCounter += 1
+    return key
+  }
 
   const contextApi = createContextEntriesApi({
     db: config.db,
@@ -617,6 +638,45 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         type: opts?.type,
         afterMs: opts?.afterMs,
       })
+    },
+    recordRun(): RunHandle {
+      const key = nextRunKey()
+      let deltaCounter = 0
+      config.writeEvent(
+        entityStateSchema.runs.insert({
+          key,
+          value: { status: `started` } as never,
+        }) as ChangeEvent
+      )
+      return {
+        key,
+        end({ status, finishReason }): void {
+          config.writeEvent(
+            entityStateSchema.runs.update({
+              key,
+              value: {
+                status,
+                finish_reason:
+                  finishReason ?? (status === `failed` ? `error` : `stop`),
+              } as never,
+            }) as ChangeEvent
+          )
+        },
+        attachResponse(text: string): void {
+          if (typeof text !== `string` || text.length === 0) return
+          config.writeEvent(
+            entityStateSchema.textDeltas.insert({
+              key: `${key}:delta-${deltaCounter}`,
+              value: {
+                text_id: key,
+                run_id: key,
+                delta: text,
+              } as never,
+            }) as ChangeEvent
+          )
+          deltaCounter += 1
+        },
+      }
     },
     sleep(): void {
       sleepRequested = true

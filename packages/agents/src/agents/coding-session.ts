@@ -585,6 +585,22 @@ export function registerCodingSession(
           },
         })
 
+        // Record the CLI invocation as a `runs` collection event so
+        // observers waking on `runFinished` are notified when the turn
+        // ends. Without this the parent (e.g. Horton via spawn_coder)
+        // would never be woken because the coder bypasses useAgent.
+        const recordedRun = ctx.recordRun()
+        // Snapshot the existing event keys so we can identify which
+        // events are appended during this CLI run and surface their
+        // assistant text as the run's response payload.
+        const eventKeysBefore = new Set(
+          (
+            ctx.db.collections.events.toArray as unknown as Array<{
+              key: string
+            }>
+          ).map((e) => e.key)
+        )
+
         try {
           const mirrorCtx: LiveMirrorCtx = {
             events: {
@@ -712,8 +728,26 @@ export function registerCodingSession(
             cursor: nextCursorJson,
             lastProcessedInboxKey: inboxMsg.key,
           }
+          // Pipe assistant_message text from this run into text_delta
+          // events linked to recordedRun so the runFinished wake's
+          // `includeResponse` payload carries the coder's reply.
+          for (const row of ctx.db.collections.events
+            .toArray as unknown as Array<{
+            key: string
+            type: string
+            payload: { text?: unknown }
+          }>) {
+            if (eventKeysBefore.has(row.key)) continue
+            if (row.type !== `assistant_message`) continue
+            const text = row.payload?.text
+            if (typeof text === `string` && text.length > 0) {
+              recordedRun.attachResponse(text)
+            }
+          }
+          recordedRun.end({ status: `completed` })
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
+          recordedRun.end({ status: `failed`, finishReason: `error` })
           ctx.db.actions.sessionMeta_update({
             key: `current`,
             updater: (d: SessionMetaRow) => {

@@ -697,6 +697,32 @@ export interface AgentHandle {
   run: (input?: string) => Promise<AgentRunResult>
 }
 
+/**
+ * Handle returned by `ctx.recordRun()`. Lets a non-LLM entity bracket
+ * an external operation (CLI subprocess, HTTP call, etc.) with the
+ * same `runs`-collection events that `useAgent` writes internally, so
+ * parents observing the entity with `wake: "runFinished"` are woken
+ * when the operation completes.
+ */
+export interface RunHandle {
+  /** Generated run key (e.g. `run-3`). Same value appears in the entity's `runs` collection. */
+  readonly key: string
+  /**
+   * Finalize the run by writing the corresponding `runs` collection
+   * update. Calling this satisfies the `runFinished` wake matcher,
+   * causing observers to be woken.
+   */
+  end(opts: { status: `completed` | `failed`; finishReason?: string }): void
+  /**
+   * Attach a response text to this run as a `text_delta` event linked
+   * via `run_id`. Observers waking on `runFinished` with
+   * `includeResponse: true` receive the concatenation of all deltas
+   * attached this way as the run's `response`. Multiple calls append
+   * additional deltas in order.
+   */
+  attachResponse(text: string): void
+}
+
 export interface HandlerContext<TState extends StateProxy = StateProxy> {
   firstWake: boolean
   tags: Readonly<EntityTags>
@@ -765,6 +791,14 @@ export interface HandlerContext<TState extends StateProxy = StateProxy> {
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
   ) => void
+  /**
+   * Record a non-LLM run on the entity's built-in `runs` collection.
+   * Use this to bracket an external operation (CLI subprocess, HTTP
+   * call, etc.) so observers waking on `runFinished` are notified when
+   * it completes. LLM-driven entities don't need to call this — the
+   * `useAgent` flow records runs internally via the outbound bridge.
+   */
+  recordRun: () => RunHandle
   sleep: () => void
   setTag: (key: string, value: string) => Promise<void>
   removeTag: (key: string) => Promise<void>
