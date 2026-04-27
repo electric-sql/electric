@@ -16,10 +16,14 @@ npm install -g electric-ax
 
 ## Environment variables
 
-| Variable         | Default                 | Purpose                      |
-| ---------------- | ----------------------- | ---------------------------- |
-| `ELECTRIC_AGENTS_URL`      | `http://localhost:4437` | Server URL                   |
-| `ELECTRIC_AGENTS_IDENTITY` | `user@hostname`         | Sender identity for messages |
+| Variable                         | Default                 | Purpose                                      |
+| -------------------------------- | ----------------------- | -------------------------------------------- |
+| `ELECTRIC_AGENTS_URL`            | `http://localhost:4437` | Server URL for entity commands and built-ins |
+| `ELECTRIC_AGENTS_IDENTITY`       | `user@hostname`         | Sender identity for messages                 |
+| `ELECTRIC_AGENTS_PORT`           | `4437`                  | Port used by `start` / `quickstart`          |
+| `ELECTRIC_AGENTS_BUILTIN_PORT`   | `4448`                  | Webhook port for `start-builtin`             |
+| `ELECTRIC_AGENTS_COMPOSE_PROJECT` | `electric-agents`       | Docker Compose project name                  |
+| `ANTHROPIC_API_KEY`              | -                       | Required for `start-builtin` and `quickstart` |
 
 ## Commands
 
@@ -121,6 +125,51 @@ Delete an entity.
 ```bash
 electric agents kill /chat/my-convo
 ```
+
+### <span class="cli-command"><code>start</code></span> {#start}
+
+Start the local Electric Agents coordinator server, Postgres, Electric, and UI using Docker Compose.
+
+```bash
+electric agents start
+```
+
+### <span class="cli-command"><code>start-builtin [--anthropic-api-key &lt;key&gt;]</code></span> {#start-builtin}
+
+Start the built-in Horton runtime and register built-in agent types with the coordinator server.
+
+```bash
+electric agents start-builtin --anthropic-api-key sk-ant-...
+```
+
+| Option                         | Description                                    |
+| ------------------------------ | ---------------------------------------------- |
+| `--anthropic-api-key <key>`    | Anthropic API key for the built-in Horton server |
+
+### <span class="cli-command"><code>quickstart [--anthropic-api-key &lt;key&gt;]</code></span> {#quickstart}
+
+Start the coordinator server, print onboarding commands, and run the built-in agents runtime.
+
+```bash
+electric agents quickstart --anthropic-api-key sk-ant-...
+```
+
+| Option                         | Description                                    |
+| ------------------------------ | ---------------------------------------------- |
+| `--anthropic-api-key <key>`    | Anthropic API key for the built-in Horton server |
+
+### <span class="cli-command"><code>stop [--remove-volumes]</code></span> {#stop}
+
+Stop the local Electric Agents dev environment.
+
+```bash
+electric agents stop
+electric agents stop --remove-volumes
+```
+
+| Option             | Description                    |
+| ------------------ | ------------------------------ |
+| `--remove-volumes` | Remove Docker volumes as well. |
 
 ### <span class="cli-command"><code>completion [action]</code></span> {#completion-action}
 

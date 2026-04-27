@@ -90,7 +90,9 @@ registry.define("tracker", {
     const item = ctx.db.collections.items.get("item-1")
 
     // write
-    ctx.db.actions.items_insert({ key: "item-2", name: "New", done: false })
+    ctx.db.actions.items_insert({
+      row: { key: "item-2", name: "New", done: false },
+    })
   },
 })
 ```
@@ -116,14 +118,17 @@ Functions the LLM can call during the agent loop. Each tool has a name, descript
 ```ts
 const searchKbTool: AgentTool = {
   name: "search_kb",
+  label: "Search knowledge base",
   description: "Search the knowledge base",
-  parameters: z.object({
-    query: z.string({ description: "Search query" }),
+  parameters: Type.Object({
+    query: Type.String({ description: "Search query" }),
   }),
   execute: async (_toolCallId, params) => {
-    const results = await searchKnowledgeBase(params.query)
+    const { query } = params as { query: string }
+    const results = await searchKnowledgeBase(query)
     return {
       content: [{ type: "text", text: JSON.stringify(results) }],
+      details: {},
     }
   },
 }
@@ -136,9 +141,15 @@ Entities interact through structured primitives. An entity can `spawn` children,
 ```ts
 async handler(ctx) {
   // spawn a child entity — wake parent when it finishes
-  const child = await ctx.spawn("worker", "task-1", {
-    systemPrompt: "Analyse this data",
-  }, { initialMessage: data, wake: "runFinished" })
+  const child = await ctx.spawn(
+    "worker",
+    "task-1",
+    {
+      systemPrompt: "Analyse this data",
+      tools: ["read"],
+    },
+    { initialMessage: data, wake: "runFinished" }
+  )
 
   // send a message to another entity
   ctx.send("/notify/alerts", { level: "info", text: "Task started" })
@@ -159,9 +170,8 @@ Every entity automatically has collections for runs, steps, texts, tool calls, e
 const allRuns = ctx.db.collections.runs.toArray
 const lastError = ctx.db.collections.errors.toArray.at(-1)
 
-// from outside — observe an entity's stream in real-time
-const stream = client.stream("/support/ticket-42")
-for await (const event of stream) {
-  console.log(event.type, event.value)
-}
+// from outside — load an entity's stream into a local DB
+const client = createAgentsClient({ baseUrl: "http://localhost:4437" })
+const db = await client.observe(entity("/support/ticket-42"))
+console.log(db.collections.texts.toArray)
 ```

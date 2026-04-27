@@ -22,7 +22,7 @@ ctx.useAgent({
 await ctx.agent.run()
 ```
 
-Responses are consumed in order. Each string becomes the agent's text output for that turn.
+For array responses, the runtime picks a response based on the number of prior runs for the entity, which makes repeated wakes deterministic without calling an LLM. The selected string becomes the agent's text output for that run.
 
 ## TestResponseFn
 
@@ -37,7 +37,7 @@ testResponses: async (message, bridge) => {
 }
 ```
 
-The `bridge` parameter gives control over text-level events, letting you simulate tool calls, reasoning steps, and multi-turn interactions. Returning a string emits it as a text block automatically.
+The `bridge` parameter gives control over text-level events, letting you simulate tool calls, reasoning steps, and multi-turn interactions. Returning a string emits it as a text block automatically; returning `undefined` emits no automatic text response.
 
 ::: info Runtime-managed lifecycle
 The runtime wraps your `TestResponseFn` with `bridge.onRunStart()` / `bridge.onRunEnd()` and step start/end calls automatically. Do not call these yourself — only use text-level bridge methods (e.g. `onTextStart`, `onTextDelta`, `onTextEnd`) or tool-level methods inside the function.

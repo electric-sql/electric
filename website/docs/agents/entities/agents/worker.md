@@ -17,14 +17,18 @@ A generic, sandboxed subagent type. Workers are spawned by other agents (typical
 ```ts
 interface WorkerArgs {
   systemPrompt: string
-  tools: Array<WorkerToolName>
+  tools?: Array<WorkerToolName>
+  sharedDb?: { id: string; schema: SharedStateSchemaMap }
+  sharedDbToolMode?: "full" | "write-only"
 }
 ```
 
-| Field          | Required | Description                                                                                   |
-| -------------- | -------- | --------------------------------------------------------------------------------------------- |
-| `systemPrompt` | Yes      | The worker's system prompt. Brief it like a colleague: file paths, line numbers, deliverable. |
-| `tools`        | Yes      | Non-empty subset of valid tool names (see below). Unknown names throw at parse time.          |
+| Field              | Required | Description                                                                                   |
+| ------------------ | -------- | --------------------------------------------------------------------------------------------- |
+| `systemPrompt`     | Yes      | The worker's system prompt. Brief it like a colleague: file paths, line numbers, deliverable. |
+| `tools`            | No       | Subset of valid tool names (see below). Unknown names throw at parse time.                    |
+| `sharedDb`         | No       | Shared state stream id and schema to connect to.                                              |
+| `sharedDbToolMode` | No       | Shared state tool mode: `"full"` (default) or `"write-only"`.                                 |
 
 `registerWorker(registry, { workingDirectory, streamFn? })` is called by the dev server during bootstrap; you don't usually call it yourself.
 
@@ -42,6 +46,8 @@ type WorkerToolName =
 ```
 
 These are the same primitives Horton uses. Pick the smallest subset the worker needs — tools are the worker's permission set.
+
+The worker must receive at least one tool or a `sharedDb` config. If `sharedDb` is provided, the worker gets generated shared-state tools in addition to any selected primitives.
 
 ## Spawning a worker
 
@@ -66,13 +72,14 @@ The spawn uses `wake: { on: 'runFinished', includeResponse: true }`, so the spaw
 
 ## What the handler does
 
-1. Parses `ctx.args` into `WorkerArgs`. Throws if `systemPrompt` is empty or `tools` contains an unknown name.
+1. Parses `ctx.args` into `WorkerArgs`. Throws if `systemPrompt` is empty, if `tools` contains an unknown name, or if neither `tools` nor `sharedDb` is provided.
 2. Builds the requested tool instances against the worker's `workingDirectory` (and a fresh per-wake `readSet` for the read-first-then-edit guard).
-3. Configures the agent with `HORTON_MODEL` (`claude-sonnet-4-5-20250929`), the provided system prompt (with a brief reporting-back footer appended), and the assembled tool list.
-4. Runs the agent until the LLM stops.
+3. If `sharedDb` is present, connects with `ctx.observe(db(id, schema))` and exposes generated `read_*`, `write_*`, `update_*`, and `delete_*` tools (`write_*` only in `"write-only"` mode).
+4. Configures the agent with `HORTON_MODEL` (`claude-sonnet-4-5-20250929`), the provided system prompt (with a brief reporting-back footer appended), and the assembled tool list.
+5. Runs the agent until the LLM stops.
 
 ::: warning Least-privilege sandbox
-Workers deliberately do **not** receive `ctx.electricTools`. The spawner already picked the worker's tool subset; granting entity-runtime primitives (cron, schedule, send-to-arbitrary-entity) would let a worker escape that scope. If a worker needs those primitives, it must spawn its own subagent or report back to the spawner. This invariant is asserted by `worker-least-privilege.test.ts`.
+Workers deliberately do **not** receive `ctx.electricTools`. The spawner already picked the worker's tool subset; granting entity-runtime primitives (cron, schedule, send-to-arbitrary-entity) would let a worker escape that scope. If a worker needs those primitives, it must spawn its own subagent or report back to the spawner.
 :::
 
 ## Reporting footer
@@ -90,6 +97,6 @@ When you finish, respond with a concise report covering what was done and any ke
 | ----------------- | --------------------------------------------------------------------- |
 | Type name         | `worker`                                                              |
 | Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)                         |
-| Tools             | Subset of 7 primitives chosen at spawn time. **No `ctx.electricTools`.** |
+| Tools             | Subset of 7 primitives plus optional shared-state tools. **No `ctx.electricTools`.** |
 | Working directory | Provided to `registerWorker` at bootstrap                             |
-| Description       | `Internal — generic worker spawned by other agents`                   |
+| Description       | `Internal — generic worker spawned by other agents. Configure via spawn args (systemPrompt + tools + optional sharedDb).` |

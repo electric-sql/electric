@@ -116,10 +116,15 @@ After spawning children in `firstWake`, use `observe` on subsequent wakes to get
 ```ts
 async handler(ctx) {
   if (ctx.firstWake) {
-    await ctx.spawn("worker", "analyst", { systemPrompt: "..." }, {
-      initialMessage: "Initial task.",
-      wake: "runFinished",
-    })
+    await ctx.spawn(
+      "worker",
+      "analyst",
+      { systemPrompt: "...", tools: ["read"] },
+      {
+        initialMessage: "Initial task.",
+        wake: "runFinished",
+      }
+    )
   }
 
   const analyst = await ctx.observe(entity("/worker/analyst"))
@@ -134,7 +139,7 @@ async handler(ctx) {
 
 ## Workers and authenticated APIs
 
-Workers are least-privilege sandboxes — they receive a `systemPrompt`, `tools`, and `initialMessage`, nothing else. Never interpolate secrets (`process.env.API_KEY`, auth tokens) into a worker's prompt or message — they are persisted in the entity's durable stream.
+Workers are least-privilege sandboxes. The built-in `worker` receives a `systemPrompt`, a selected `tools` subset, an optional `sharedDb` config, and the `initialMessage` delivered at spawn time. Never interpolate secrets (`process.env.API_KEY`, auth tokens) into a worker's prompt or message — they are persisted in the entity's durable stream.
 
 **Manager-side prefetch** is the recommended pattern: the manager does the authenticated fetch and passes the raw data to the worker.
 
@@ -149,7 +154,7 @@ const data = await response.json()
 await ctx.spawn(
   "worker",
   id,
-  { systemPrompt: "Summarise this data." },
+  { systemPrompt: "Summarise this data.", tools: ["read"] },
   {
     initialMessage: JSON.stringify(data),
     wake: "runFinished",

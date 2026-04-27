@@ -70,7 +70,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 }
 ```
 
-> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, and `db()` from `@electric-ax/agents-runtime` to construct `ObservationSource` values for `observe()`.
+> **Tip:** Use the helper functions `entity()`, `cron()`, `entities()`, and `db()` from `@electric-ax/agents-runtime` to construct `ObservationSource` values for `observe()`. The deprecated `tagged()` helper remains as a wrapper around `entities()` for older code.
 
 ## Properties
 
@@ -84,8 +84,8 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `db`         | `EntityStreamDBWithActions`                       | The entity's TanStack DB instance with registered actions.                                                    |
 | `state`      | `TState`                                          | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](./state-collection-proxy). |
 | `events`     | `Array<ChangeEvent>`                              | Change events that triggered this wake.                                                                       |
-| `actions`    | `Record<string, (...args: unknown[]) => unknown>` | Auto-generated CRUD actions for custom state collections.                                                     |
-| `electricTools` | `AgentTool[]`                                     | Built-in tools (e.g. `send_message`) to spread into agent config.                                             |
+| `actions`    | `Record<string, (...args: unknown[]) => unknown>` | Custom non-CRUD actions from the entity definition's `actions` factory. Auto-generated CRUD actions live on `ctx.db.actions` and `ctx.state`. |
+| `electricTools` | `AgentTool[]`                                     | Host-provided runtime-level tools to spread into agent config when needed. May be empty.                     |
 
 ## Methods
 

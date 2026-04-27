@@ -73,7 +73,7 @@ function createRunStageTool(ctx: HandlerContext): AgentTool {
       const child = await ctx.spawn(
         `worker`,
         id,
-        { systemPrompt: instruction },
+        { systemPrompt: instruction, tools: [`read`] },
         { initialMessage: input, wake: `runFinished` }
       )
       ctx.db.actions.children_insert({

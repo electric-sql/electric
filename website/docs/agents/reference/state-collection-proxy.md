@@ -8,9 +8,9 @@ outline: [2, 3]
 
 # StateCollectionProxy
 
-Proxy handle for a shared state collection, accessed via a `SharedStateHandle` returned by `ctx.mkdb()` or `await ctx.observe(db(...))`. Mutations are routed through auto-generated CRUD actions. Reads delegate to the underlying TanStack DB collection.
+Proxy handle for a state collection. Entity-local state exposes these proxies on `ctx.state.<collection>`, and shared state exposes them on a `SharedStateHandle` returned by `ctx.mkdb()` or `await ctx.observe(db(...))`. Mutations are routed through auto-generated CRUD actions. Reads delegate to the underlying TanStack DB collection.
 
-> **Note:** `StateCollectionProxy` applies to **shared state handles** only. Entity state uses `ctx.db.actions.<coll>_insert/update/delete` for writes and `ctx.db.collections.<coll>?.get/toArray` for reads. See [EntityDefinition](./entity-definition) for details.
+> **Note:** Entity state can also be accessed through the lower-level `ctx.db.actions.<coll>_insert/update/delete` and `ctx.db.collections.<coll>?.get/toArray` APIs. `ctx.state` is the proxy convenience layer over those APIs.
 
 **Source:** `@electric-ax/agents-runtime`
 
@@ -36,6 +36,6 @@ interface StateCollectionProxy<T extends object = Record<string, unknown>> {
 
 ## Notes
 
-- Mutating methods (`insert`, `update`, `delete`) return a Transaction. These are fire-and-forget -- the write is persisted to the entity's durable stream asynchronously.
+- Mutating methods (`insert`, `update`, `delete`) return a Transaction. These are fire-and-forget -- the write is persisted to the backing durable stream asynchronously.
 - The `update` method uses Immer-style drafts. Mutate the draft directly rather than returning a new object.
-- `toArray` is a property, not a method call. Access it without parentheses: `shared.items.toArray`.
+- `toArray` is a property, not a method call. Access it without parentheses: `ctx.state.items.toArray` or `shared.items.toArray`.

@@ -24,7 +24,7 @@ const researchSchema = {
 }
 ```
 
-Each entry requires `schema`, `type`, and `primaryKey`. The `type` is the event type string written to the backing durable stream.
+Each entry requires `type` and `primaryKey`. `schema` is optional but recommended for validation. The `type` is the event type string written to the backing durable stream.
 
 ## Creating shared state
 

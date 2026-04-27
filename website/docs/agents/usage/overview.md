@@ -61,7 +61,8 @@ See [Writing handlers](/docs/agents/usage/writing-handlers) and [HandlerContext 
 ```ts
 ctx.useAgent({
   systemPrompt: string,
-  model: string,           // e.g. 'claude-sonnet-4-5-20250929'
+  model: string | Model<any>, // e.g. 'claude-sonnet-4-5-20250929'
+  provider?: KnownProvider,   // defaults to 'anthropic' for string models
   tools: AgentTool[],      // [...ctx.electricTools, ...custom]
   streamFn?: StreamFn,     // optional streaming callback
   testResponses?: string[] // for testing without LLM
@@ -78,12 +79,17 @@ See [Configuring the agent](/docs/agents/usage/configuring-the-agent) and [Agent
 ```ts
 const myTool: AgentTool = {
   name: "calculator",
-  description: "...",
+  label: "Calculator",
+  description: "Evaluate a mathematical expression.",
   parameters: Type.Object({ expression: Type.String() }), // TypeBox
-  execute: async (toolCallId, params) => ({
-    content: [{ type: "text", text: result }],
-    details: {},
-  }),
+  execute: async (_toolCallId, params) => {
+    const { expression } = params as { expression: string }
+    const result = evaluate(expression)
+    return {
+      content: [{ type: "text", text: String(result) }],
+      details: {},
+    }
+  },
 }
 ```
 
@@ -93,8 +99,16 @@ const myTool: AgentTool = {
 function createMemoryTool(ctx: HandlerContext): AgentTool {
   return {
     name: "memory_store",
+    label: "Memory Store",
+    description: "Persist a key-value memory row.",
+    parameters: Type.Object({
+      key: Type.String(),
+      value: Type.String(),
+    }),
     execute: async (_, params) => {
+      const { key, value } = params as { key: string; value: string }
       ctx.db.actions.memory_insert({ row: { key, value } }) // writes to entity state
+      return { content: [{ type: "text", text: "Stored." }], details: {} }
     },
   }
 }
@@ -105,10 +119,28 @@ function createMemoryTool(ctx: HandlerContext): AgentTool {
 ```ts
 function createDispatchTool(ctx: HandlerContext): AgentTool {
   return {
+    name: "dispatch",
+    label: "Dispatch",
+    description: "Spawn a worker and return its text output.",
+    parameters: Type.Object({
+      id: Type.String(),
+      systemPrompt: Type.String(),
+      task: Type.String(),
+    }),
     execute: async (_, params) => {
-      const child = await ctx.spawn("worker", id, args, { wake: "runFinished" })
-      const text = await child.text()
-      return { content: [{ type: "text", text }] }
+      const { id, systemPrompt, task } = params as {
+        id: string
+        systemPrompt: string
+        task: string
+      }
+      const child = await ctx.spawn(
+        "worker",
+        id,
+        { systemPrompt, tools: ["read"] },
+        { initialMessage: task, wake: "runFinished" }
+      )
+      const text = (await child.text()).join("\n\n")
+      return { content: [{ type: "text", text }], details: {} }
     },
   }
 }
@@ -194,8 +226,8 @@ Every entity automatically has 17 `ctx.db.collections`:
 | `manifests`        | Wiring declarations       | discriminated union: child/source/shared-state/effect/context/schedule |
 | `replayWatermarks` | Replay offset tracking    | `source_id, offset`                                                    |
 | `tags`             | Entity tags/labels        | `key, value`                                                           |
-| `contextInserted`  | Context additions         | `context_id, content`                                                  |
-| `contextRemoved`   | Context removals          | `context_id`                                                           |
+| `contextInserted`  | Context additions         | `id, name, attrs, content, timestamp`                                  |
+| `contextRemoved`   | Context removals          | `id, name, timestamp`                                                  |
 
 See [Built-in collections](/docs/agents/reference/built-in-collections).
 
@@ -212,7 +244,11 @@ Interact with the system using the Electric Agents CLI:
 | `electric agents observe /type/id`            | Stream entity events         |
 | `electric agents inspect /type/id`            | Show entity state            |
 | `electric agents ps [--type --status --parent]` | List entities                |
-| `electric agents kill /type/id`               | Stop entity                  |
+| `electric agents kill /type/id`               | Delete entity                |
+| `electric agents start`                       | Start local dev environment  |
+| `electric agents start-builtin`               | Start built-in Horton runtime |
+| `electric agents quickstart`                  | Start local server and built-ins |
+| `electric agents stop`                        | Stop local dev environment   |
 
 See [CLI reference](/docs/agents/reference/cli).
 

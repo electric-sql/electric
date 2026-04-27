@@ -52,7 +52,7 @@ for (let i = 0; i < chunks.length; i++) {
   const child = await ctx.spawn(
     `worker`,
     id,
-    { systemPrompt: task },
+    { systemPrompt: task, tools: [`read`] },
     {
       initialMessage: chunks[i],
       wake: `runFinished`,

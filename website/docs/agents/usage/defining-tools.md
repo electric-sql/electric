@@ -204,7 +204,7 @@ function createDispatchTool(ctx: HandlerContext): AgentTool {
 
 ## Wiring tools together
 
-Tools are constructed in the handler and passed to `useAgent` alongside `ctx.electricTools`:
+Tools are constructed in the handler and passed to `useAgent`. Include `ctx.electricTools` when your runtime host provides runtime-level tools that the LLM should be able to call:
 
 ```ts
 registry.define("assistant", {
@@ -226,4 +226,4 @@ registry.define("assistant", {
 })
 ```
 
-Always spread `ctx.electricTools` first. Your custom tools follow.
+When you include `ctx.electricTools`, spread them before your custom tools so host-provided primitives keep their expected order.

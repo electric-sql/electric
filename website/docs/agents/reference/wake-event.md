@@ -30,7 +30,7 @@ type WakeEvent = {
 | Field        | Type      | Description                                                              |
 | ------------ | --------- | ------------------------------------------------------------------------ |
 | `source`     | `string`  | URL or identifier of the stream that triggered the wake.                 |
-| `type`       | `string`  | Wake type — one of `"message_received"` or `"wake"`. See catalog.        |
+| `type`       | `string`  | Wake type. Usually `"message_received"` or `"wake"`; fallback webhook events can use `triggerEvent` or `"message"`. See catalog. |
 | `fromOffset` | `number`  | Start offset of new events in the source stream.                         |
 | `toOffset`   | `number`  | End offset (exclusive) of new events.                                    |
 | `eventCount` | `number`  | Number of new events in this wake.                                       |
@@ -40,7 +40,7 @@ type WakeEvent = {
 
 ## Wake-type catalog
 
-Handlers see exactly two values for `wake.type`. Everything that isn't a direct inbox message is flattened into `"wake"`, with the specifics carried on `wake.payload`.
+Handlers usually see two values for `wake.type`. Direct inbox messages arrive as `"message_received"`. Most non-message triggers are flattened into `"wake"`, with the specifics carried on `wake.payload`. Low-level webhook fallbacks can surface `triggerEvent` directly, or `"message"` when no trigger event is provided.
 
 ### `"message_received"`
 
@@ -105,6 +105,7 @@ type Wake =
   | {
       on: "change"
       collections?: string[]
+      ops?: ("insert" | "update" | "delete")[]
       debounceMs?: number
       timeoutMs?: number
     }
@@ -126,5 +127,6 @@ Wake the parent when changes occur in the observed stream.
 | ------------- | ---------- | ------------------------------------------------------------- |
 | `on`          | `'change'` | Required discriminant.                                        |
 | `collections` | `string[]` | Optional filter. Only wake on changes to these collections.   |
+| `ops`         | `string[]` | Optional operation filter: `"insert"`, `"update"`, and/or `"delete"`. |
 | `debounceMs`  | `number`   | Debounce interval in milliseconds. Batches rapid changes.     |
 | `timeoutMs`   | `number`   | Maximum time to wait before waking, even if no changes occur. |

@@ -62,7 +62,7 @@ for (const perspective of PERSPECTIVES) {
     const child = await ctx.spawn(
       `worker`,
       childId,
-      { systemPrompt: perspective.systemPrompt },
+      { systemPrompt: perspective.systemPrompt, tools: [`read`] },
       { initialMessage: question, wake: `runFinished` }
     )
     children.insert({

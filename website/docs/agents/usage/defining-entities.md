@@ -53,8 +53,8 @@ interface EntityDefinition {
 | Field            | Purpose                                                                               |
 | ---------------- | ------------------------------------------------------------------------------------- |
 | `description`    | Human-readable description. Shown in the Electric Agents UI and CLI.                            |
-| `state`          | Custom persistent collections accessed via `ctx.db.actions` and `ctx.db.collections`. |
-| `actions`        | Factory that returns named action functions. Receives collection handles.             |
+| `state`          | Custom persistent collections accessed via `ctx.state`, `ctx.db.actions`, and `ctx.db.collections`. |
+| `actions`        | Factory that returns custom non-CRUD action functions exposed on `ctx.actions`.       |
 | `creationSchema` | JSON Schema for arguments passed when the entity is spawned.                          |
 | `inboxSchemas`   | JSON Schemas for typed inbox message categories.                                      |
 | `outputSchemas`  | JSON Schemas for typed output message categories.                                     |
@@ -78,7 +78,7 @@ interface CollectionDefinition {
 | `type`       | `"state:{name}"` | Event type string used in the durable stream.                           |
 | `primaryKey` | `"key"`          | The field used as the primary key for the collection.                   |
 
-Declared collections become available via `ctx.db.actions` (for writes) and `ctx.db.collections` (for reads):
+Declared collections become available via `ctx.state` proxies and the lower-level `ctx.db.actions` / `ctx.db.collections` APIs:
 
 ```ts
 import { z } from "zod"
@@ -100,16 +100,24 @@ registry.define("coordinator", {
     if (ctx.firstWake) {
       ctx.db.actions.status_insert({ row: { key: "current", value: "idle" } })
     }
+    // Convenience proxy:
+    ctx.state.children.insert({
+      key: "child-1",
+      url: "/worker/child-1",
+      kind: "worker",
+    })
+
+    // Lower-level APIs:
     // Writes: ctx.db.actions.children_insert(), .children_update(), .children_delete()
     // Reads: ctx.db.collections.children?.get(key), .children?.toArray
   },
 })
 ```
 
-For entity state, writes use `ctx.db.actions.<name>_insert/update/delete` and reads use `ctx.db.collections.<name>?.get(key)` and `ctx.db.collections.<name>?.toArray`.
+For entity state, `ctx.state.<name>.insert/update/delete/get/toArray` is the convenience API. Lower-level writes use `ctx.db.actions.<name>_insert/update/delete`, and reads use `ctx.db.collections.<name>?.get(key)` and `ctx.db.collections.<name>?.toArray`.
 
 ::: info
-The `StateCollectionProxy` interface (with `.insert()`, `.update()`, `.delete()`, `.get()`, `.toArray`) applies to **shared state handles** only, not entity state collections. See [Shared state](./shared-state) for details.
+`StateCollectionProxy` is used for both entity-local `ctx.state` and shared state handles. See [StateCollectionProxy](../reference/state-collection-proxy) for details.
 :::
 
 ## Registry pattern

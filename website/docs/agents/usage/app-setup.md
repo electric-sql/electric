@@ -119,9 +119,16 @@ interface RuntimeHandler {
   drainWakes(): Promise<void>
   waitForSettled(): Promise<void>
   abortWakes(): void
-  debugState(): Record<string, unknown>
+  debugState(): RuntimeDebugState
   readonly typeNames: string[]
   registerTypes(): Promise<void>
+}
+
+interface RuntimeDebugState {
+  pendingWakeCount: number
+  pendingWakeLabels: string[]
+  wakeErrorCount: number
+  typeNames: string[]
 }
 ```
 

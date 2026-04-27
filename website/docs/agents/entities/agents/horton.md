@@ -24,7 +24,7 @@ npx electric-ax agents observe /horton/my-horton
 
 ## Tools
 
-Horton is configured with `ctx.electricTools` plus the seven Horton tools:
+Horton is configured with `ctx.electricTools` plus the base Horton tool set:
 
 | Tool           | Purpose                                                  |
 | -------------- | -------------------------------------------------------- |
@@ -38,9 +38,11 @@ Horton is configured with `ctx.electricTools` plus the seven Horton tools:
 
 `brave_search` requires `BRAVE_SEARCH_API_KEY` in the environment; without it the tool errors at call time.
 
+When docs support or skills are available, Horton also adds the docs search tool and skill tools during bootstrap.
+
 ## Title generation
 
-On the first wake, Horton calls `generateTitle()` (Haiku) to summarise the user's first message into a 3-5 word session title and stores it via `ctx.setTag('title', title)`. Failures are logged and ignored — the entity continues without a title.
+After the first agent run completes, Horton calls `generateTitle()` (Haiku) to summarise the user's first message into a 3-5 word session title and stores it via `ctx.setTag('title', title)`. Failures are logged and ignored — the entity continues without a title.
 
 ## Details
 
@@ -49,9 +51,9 @@ On the first wake, Horton calls `generateTitle()` (Haiku) to summarise the user'
 | Type name         | `horton`                                          |
 | Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)     |
 | Title model       | `claude-haiku-4-5-20251001`                       |
-| Tools             | `ctx.electricTools` + Horton tool set (7 tools)      |
+| Tools             | `ctx.electricTools` + base Horton tool set, plus docs/skill tools when configured |
 | Working directory | Passed at bootstrap (defaults to `process.cwd()`) |
-| Title generation  | Yes, on first wake                                |
+| Title generation  | Yes, after the first run if no title tag exists   |
 
 ## Extending Horton
 

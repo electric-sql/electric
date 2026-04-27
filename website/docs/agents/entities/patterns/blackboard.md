@@ -89,7 +89,7 @@ const proWorker = await ctx.spawn(
 5. The `check_debate` tool reads the shared state to see current arguments:
 
 ```ts
-const args = state.shared.arguments.toArray
+const args = shared.arguments.toArray
 ```
 
 6. The `end_debate` tool reads all arguments and transitions to `done`.
@@ -100,12 +100,12 @@ const args = state.shared.arguments.toArray
 type DebateStatus = "idle" | "debating" | "ruling" | "done"
 ```
 
-## Other blackboard examples
+## Other blackboard variants
 
-The playground includes several other blackboard implementations:
+The same structure applies to other blackboard workflows:
 
-- **Wiki** (`blackboard/wiki.ts`) -- 7 specialist workers collaboratively build a knowledge base. Each writes articles to a shared `articles` collection.
-- **Peer Review** (`blackboard/peer-review.ts`) -- workers submit reviews with scores and feedback to a shared `reviews` collection. A coordinator summarizes the reviews.
-- **Trading Floor** (`blackboard/trading-floor.ts`) -- trader agents submit buy/sell orders to a shared `orders` collection. Transitions through morning/afternoon sessions.
+- **Wiki** -- specialist workers collaboratively build a knowledge base. Each writes articles to a shared `articles` collection.
+- **Peer review** -- workers submit reviews with scores and feedback to a shared `reviews` collection. A coordinator summarizes the reviews.
+- **Trading floor** -- trader agents submit buy/sell orders to a shared `orders` collection and transition through market sessions.
 
 All follow the same structure: parent creates shared state, spawns workers with `sharedDb` in their args, workers use generated CRUD tools to coordinate.

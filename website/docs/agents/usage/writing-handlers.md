@@ -80,8 +80,8 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `db`               | The entity's stream database. Use `db.actions` for writes and `db.collections` for reads.                                                               |
 | `state`            | Proxy object keyed by collection name. Each property is a [`StateCollectionProxy`](../reference/state-collection-proxy).                                |
 | `events`           | Change events that triggered this wake.                                                                                                                 |
-| `actions`          | Named action functions from the entity definition's `actions` factory.                                                                                  |
-| `electricTools`       | Built-in tools for spawning, observing, sending, and managing entities. Pass to `useAgent`.                                                             |
+| `actions`          | Custom non-CRUD action functions from the entity definition's `actions` factory.                                                                        |
+| `electricTools`       | Host-provided runtime-level tools to pass to `useAgent` when needed. May be empty.                                                                      |
 | `useAgent`         | Configures the LLM agent. Returns an `AgentHandle`. See [Configuring the agent](./configuring-the-agent).                                               |
 | `useContext`       | Declares context sources with token budgets and cache tiers. See [Context composition](./context-composition).                                          |
 | `timelineMessages` | Projects the entity timeline into LLM messages. See [Context composition](./context-composition#timelinemessages).                                      |
@@ -118,7 +118,7 @@ type WakeEvent = {
 | Field        | Description                                                    |
 | ------------ | -------------------------------------------------------------- |
 | `source`     | The stream or entity that caused the wake.                     |
-| `type`       | The wake type (e.g. `"message"`, `"runFinished"`, `"change"`). |
+| `type`       | The wake type: `"message_received"` for inbox messages or `"wake"` for child completion, observed changes, cron, and timeouts. |
 | `fromOffset` | Start offset of the events that triggered this wake.           |
 | `toOffset`   | End offset of the events that triggered this wake.             |
 | `eventCount` | Number of new events since last wake.                          |
@@ -159,7 +159,8 @@ Passed to `ctx.useAgent()`:
 ```ts
 interface AgentConfig {
   systemPrompt: string
-  model: string
+  model: string | Model<any>
+  provider?: KnownProvider
   tools: AgentTool[]
   streamFn?: StreamFn
   testResponses?: string[] | TestResponseFn
@@ -207,6 +208,7 @@ Arguments passed at spawn time are available as `ctx.args`. This is how you para
 // Spawning side
 const child = await ctx.spawn('worker', 'analysis-1', {
   systemPrompt: 'You are an analyst.',
+  tools: ['read'],
 })
 
 // Worker handler

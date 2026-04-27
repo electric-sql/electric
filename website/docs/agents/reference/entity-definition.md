@@ -32,7 +32,7 @@ interface EntityDefinition {
 | ---------------- | ---------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | `description`    | `string`                                             | No       | Human-readable description of the entity type. Used in type registration.                                          |
 | `state`          | `Record<string, CollectionDefinition>`               | No       | Custom state collections exposed via `ctx.db.actions` (writes) and `ctx.db.collections` (reads).                   |
-| `actions`        | `(collections) => Record<string, (...args) => void>` | No       | Factory for custom CRUD actions. Receives TanStack DB collections, returns named action functions.                 |
+| `actions`        | `(collections) => Record<string, (...args) => void>` | No       | Factory for custom non-CRUD actions. Receives TanStack DB collections, returns named action functions exposed on `ctx.actions`. |
 | `creationSchema` | `StandardJSONSchemaV1`                               | No       | JSON Schema for spawn arguments validation.                                                                        |
 | `inboxSchemas`   | `Record<string, StandardJSONSchemaV1>`               | No       | JSON Schemas for inbound message types, keyed by message type.                                                     |
 | `outputSchemas`  | `Record<string, StandardJSONSchemaV1>`               | No       | JSON Schemas for output event types. Defaults are provided by the runtime.                                         |

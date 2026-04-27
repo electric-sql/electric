@@ -15,7 +15,8 @@ Configuration for the LLM agent loop. Passed to `ctx.useAgent()`.
 ```ts
 interface AgentConfig {
   systemPrompt: string
-  model: string
+  model: string | Model<any>
+  provider?: KnownProvider
   tools: AgentTool[]
   streamFn?: StreamFn
   testResponses?: string[] | TestResponseFn
@@ -27,9 +28,10 @@ interface AgentConfig {
 | Field           | Type                         | Required | Description                                                                                         |
 | --------------- | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
 | `systemPrompt`  | `string`                     | Yes      | System prompt sent to the LLM on each step.                                                         |
-| `model`         | `string`                     | Yes      | Model identifier (e.g. `"claude-sonnet-4-5-20250929"`).                                             |
-| `tools`         | `AgentTool[]`                | Yes      | Tools available to the LLM. Always include `ctx.electricTools` first. See [`AgentTool`](./agent-tool). |
-| `streamFn`      | `StreamFn`                   | No       | Custom streaming function. Overrides the default LLM provider.                                      |
+| `model`         | `string \| Model<any>`       | Yes      | Model identifier (e.g. `"claude-sonnet-4-5-20250929"`) or a resolved model object.                  |
+| `provider`      | `KnownProvider`              | No       | Provider to use when `model` is a string. Defaults to `"anthropic"`.                                |
+| `tools`         | `AgentTool[]`                | Yes      | Tools available to the LLM. Spread `ctx.electricTools` when your runtime host provides runtime-level tools. See [`AgentTool`](./agent-tool). |
+| `streamFn`      | `StreamFn`                   | No       | Optional streaming callback passed to the underlying agent.                                         |
 | `testResponses` | `string[] \| TestResponseFn` | No       | Mock LLM responses for testing. When set, no real LLM calls are made.                               |
 
 ## TestResponseFn
@@ -41,7 +43,7 @@ type TestResponseFn = (
 ) => Promise<string | undefined>
 ```
 
-A function that receives the current conversation and returns a mock response string, or `undefined` to end the agent loop.
+A function that receives the current trigger message and an outbound bridge, then returns a mock response string. Returning `undefined` emits no automatic text response.
 
 ## AgentHandle
 
@@ -67,16 +69,14 @@ interface AgentHandle {
 
 ```ts
 interface AgentRunResult {
-  result?: unknown
   writes: ChangeEvent[]
   toolCalls: Array<{ name: string; args: unknown; result: unknown }>
   usage: { tokens: number; duration: number }
 }
 ```
 
-| Field       | Type                                   | Description                                              |
-| ----------- | -------------------------------------- | -------------------------------------------------------- |
-| `result`    | `unknown`                              | Final result value, if any.                              |
-| `writes`    | `ChangeEvent[]`                        | All events written to the entity stream during this run. |
-| `toolCalls` | `Array<{ name, args, result }>`        | Record of all tool calls made during this run.           |
-| `usage`     | `{ tokens: number; duration: number }` | Token count and wall-clock duration in milliseconds.     |
+| Field       | Type                                   | Description                                                                 |
+| ----------- | -------------------------------------- | --------------------------------------------------------------------------- |
+| `writes`    | `ChangeEvent[]`                        | Currently returned as an empty array placeholder.                           |
+| `toolCalls` | `Array<{ name, args, result }>`        | Currently returned as an empty array placeholder.                           |
+| `usage`     | `{ tokens: number; duration: number }` | Currently returned as `{ tokens: 0, duration: 0 }` until usage aggregation is wired in. |

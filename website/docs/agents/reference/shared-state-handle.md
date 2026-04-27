@@ -39,17 +39,17 @@ type SharedStateSchemaMap = Record<string, SharedStateCollectionSchema>
 
 ```ts
 interface SharedStateCollectionSchema {
-  schema: unknown
+  schema?: StandardSchemaV1
   type: string
   primaryKey: string
 }
 ```
 
-| Field        | Type      | Description                                                      |
-| ------------ | --------- | ---------------------------------------------------------------- |
-| `schema`     | `unknown` | Zod or Standard Schema validator for the row type.               |
-| `type`       | `string`  | Event type string used in the durable stream (e.g. `"finding"`). |
-| `primaryKey` | `string`  | Primary key field name on the row (must be a string field).      |
+| Field        | Type               | Required | Description                                                      |
+| ------------ | ------------------ | -------- | ---------------------------------------------------------------- |
+| `schema`     | `StandardSchemaV1` | No       | Zod or Standard Schema validator for the row type.               |
+| `type`       | `string`           | Yes      | Event type string used in the durable stream (e.g. `"finding"`). |
+| `primaryKey` | `string`           | Yes      | Primary key field name on the row (must be a string field).      |
 
 ## Example
 

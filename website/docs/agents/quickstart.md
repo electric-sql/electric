@@ -24,7 +24,7 @@ You can then define and engineer agents (and agent topologies and coordination p
 
 ## Prerequisites
 
-- Node.js 22+
+- Node.js 18+
 - [pnpm](https://pnpm.io/installation) (if you're working from a local checkout)
 - [Docker](https://docs.docker.com/get-docker/) (the dev server runs Postgres and Electric in containers)
 

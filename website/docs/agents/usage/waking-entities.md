@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # Waking entities
 
-Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, a cron firing, a scheduled send delivering. Between wakes the entity is idle — no process, no memory, no running handler.
+Entities in Electric Agents are driven by **wakes**. A wake is a single handler invocation triggered by something outside the handler: a new message, a child finishing, a change in an observed stream, or a schedule. Between wakes the entity is idle — no process, no memory, no running handler.
 
 Everything you do to make an entity respond to something — `ctx.spawn(..., { wake })`, `ctx.observe(..., { wake })`, `ctx.send()`, `upsertCronSchedule()` — is ultimately a way to produce a wake.
 
@@ -44,10 +44,15 @@ The receiving handler sees `wake.type === "message_received"` and finds the payl
 Pass `wake` when spawning a child to control when the parent wakes:
 
 ```ts
-const child = await ctx.spawn("worker", "analysis-1", args, {
-  initialMessage: "begin",
-  wake: { on: "runFinished", includeResponse: true },
-})
+const child = await ctx.spawn(
+  "worker",
+  "analysis-1",
+  { systemPrompt: "Analyse this input.", tools: ["read"] },
+  {
+    initialMessage: "begin",
+    wake: { on: "runFinished", includeResponse: true },
+  }
+)
 ```
 
 See the full catalog of `Wake` values in [WakeEvent](../reference/wake-event#wake).
@@ -78,7 +83,7 @@ await ctx.observe(db("board-1", schema), {
 
 ### 5. A schedule
 
-Cron schedules and future-send schedules both wake their target entity when they fire. Schedules are created via `ctx.electricTools` (the built-in `upsert_cron_schedule` / `upsert_future_send_schedule` tools) and live on the entity's manifest — so they survive restarts and can be updated or cancelled idempotently.
+Runtime hosts can expose schedule-management tools through `ctx.electricTools`. The current schedule tool set is `list_schedules`, `upsert_cron_schedule`, `upsert_future_send`, and `delete_schedule`. Schedule entries live on the entity's manifest, so they survive restarts and can be updated or cancelled idempotently.
 
 ## Reading a WakeEvent
 
@@ -108,7 +113,7 @@ async handler(ctx, wake) {
 Two wake types reach handlers directly:
 
 - `"message_received"` — an external message was delivered to this entity's inbox.
-- `"wake"` — a synthesised wake for anything else (child finished, collection change, cron, scheduled send, timeout). The specifics are on `wake.payload`.
+- `"wake"` — a synthesised wake for anything else (child finished, collection change, cron, timeout). The specifics are on `wake.payload`. A future-send schedule delivers a message, so it arrives as `"message_received"`.
 
 For the full payload shape (`changes[]`, `finished_child`, `other_children`, `timeout`), see the [wake-type catalog](../reference/wake-event#wake-type-catalog) in the reference.
 

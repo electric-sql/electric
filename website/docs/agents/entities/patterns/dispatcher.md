@@ -41,7 +41,7 @@ The dispatcher entity defines no `state` collections. It is stateless -- it reli
 
 The dispatcher exposes a `dispatch` tool. When the LLM classifies an incoming message, it calls the tool with:
 
-- `type` -- the entity type to spawn (e.g. `"assistant"`, `"worker"`)
+- `type` -- the entity type to spawn (e.g. `"horton"`, `"worker"`, or an app-defined type)
 - `systemPrompt` -- a focused prompt crafted for the task
 - `task` -- the original message to forward
 
@@ -56,7 +56,7 @@ The tool then:
 await ctx.spawn(
   type,
   id,
-  { systemPrompt },
+  type === `worker` ? { systemPrompt, tools: [`read`] } : { systemPrompt },
   {
     initialMessage: task,
     wake: `runFinished`,
@@ -73,3 +73,5 @@ return {
   details: { id, type },
 }
 ```
+
+When dispatching to the built-in `worker`, include its required tool subset in the spawn args.

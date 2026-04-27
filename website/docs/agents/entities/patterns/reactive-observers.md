@@ -72,7 +72,7 @@ export function createObserveTool(ctx: HandlerContext): AgentTool {
   return {
     name: `observe_entity`,
     label: `Observe Entity`,
-    description: `Start observing another entity by its URL. The current entity will receive observation_update messages when the observed entity has new activity.`,
+    description: `Start observing another entity by its URL. The current entity will wake with a change payload when the observed entity has new activity.`,
     parameters: Type.Object({
       entity_url: Type.String({
         description: `The URL of the entity to observe`,
@@ -96,7 +96,7 @@ export function createObserveTool(ctx: HandlerContext): AgentTool {
           content: [
             {
               type: `text`,
-              text: `Now observing entity: ${entity_url}. You will receive observation_update messages when new activity is detected.`,
+              text: `Now observing entity: ${entity_url}. You will be woken when new activity is detected.`,
             },
           ],
           details: {},
@@ -117,9 +117,9 @@ export function createObserveTool(ctx: HandlerContext): AgentTool {
 }
 ```
 
-## Other reactive examples
+## Other reactive variants
 
-- **Summarizer** (`reactive/summarizer.ts`) -- observes an entity's `texts` and `textDeltas` collections and produces progressive summaries of its output.
-- **Guardian** (`reactive/guardian.ts`) -- observes an entity's `texts` and `toolCalls` collections and evaluates output quality, checking for hallucination signals, safety issues, and formatting problems.
+- **Summarizer** -- observes an entity's `texts` and `textDeltas` collections and produces progressive summaries of its output.
+- **Guardian** -- observes an entity's `texts` and `toolCalls` collections and evaluates output quality, checking for hallucination signals, safety issues, and formatting problems.
 
 All three follow the same structure: register an entity, wrap `createObserveTool` with a state transition, configure the agent with the observe tool, and run.
