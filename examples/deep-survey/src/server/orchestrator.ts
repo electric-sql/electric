@@ -12,6 +12,7 @@ import { swarmSharedSchema, type WikiEntry, type Xref } from './schema.js'
 import { explorerSpawnArgs } from './explorer.js'
 import { SURVEY_WORKER_ENTITY_TYPE } from './survey-worker.js'
 import { createSharedWikiTools, createWebSearchTool } from './shared-tools.js'
+import { orchestratorModelConfig } from './model-config.js'
 
 type SwarmSharedState = SharedStateHandle<typeof swarmSharedSchema>
 
@@ -324,7 +325,7 @@ export function registerOrchestrator(registry: EntityRegistry) {
 
       ctx.useAgent({
         systemPrompt: ORCHESTRATOR_SYSTEM_PROMPT,
-        model: `claude-sonnet-4-5-20250929`,
+        ...orchestratorModelConfig(),
         tools: [
           ...ctx.electricTools,
           createWebSearchTool(),
