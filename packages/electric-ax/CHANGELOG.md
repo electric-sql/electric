@@ -1,5 +1,11 @@
 # electric-ax
 
+## 0.1.9
+
+### Patch Changes
+
+- 1d6e728: fix: ensure docker-compose has a correct reference
+
 ## 0.1.8
 
 ### Patch Changes
