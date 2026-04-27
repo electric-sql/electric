@@ -1,7 +1,9 @@
 defmodule Electric.LsnTrackerTest do
   use ExUnit.Case, async: true
 
-  import Support.ComponentSetup, only: [with_registry: 1, with_stack_id_from_test: 1]
+  import Support.ComponentSetup,
+    only: [with_lsn_tracker: 1, with_registry: 1, with_stack_id_from_test: 1]
+
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
 
@@ -79,12 +81,20 @@ defmodule Electric.LsnTrackerTest do
   end
 
   describe "broadcast_last_seen_lsn/2" do
-    setup [:with_registry]
+    setup [:with_registry, :with_lsn_tracker]
 
     test "delivers messages to processes registered for global_lsn_updates", ctx do
       LsnTracker.subscribe_to_global_lsn_updates(ctx.stack_id)
 
       :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 42)
+
+      assert_receive {:global_last_seen_lsn, 42}
+    end
+
+    test "replays the most recent broadcast to newly registered processes", ctx do
+      :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 42)
+
+      assert {:ok, _} = LsnTracker.subscribe_to_global_lsn_updates(ctx.stack_id)
 
       assert_receive {:global_last_seen_lsn, 42}
     end

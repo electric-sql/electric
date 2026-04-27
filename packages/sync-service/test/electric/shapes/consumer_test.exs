@@ -2,6 +2,7 @@ defmodule Electric.Shapes.ConsumerTest do
   use ExUnit.Case, async: true
   use Repatch.ExUnit, assert_expectations: true
 
+  alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes
@@ -1992,15 +1993,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
       # Mock query_move_in_async to simulate a query without hitting the database
       Repatch.patch(
-        Electric.Shapes.PartialModes,
+        Electric.Shapes.Consumer.Effects,
         :query_move_in_async,
         [mode: :shared],
-        fn _task_sup, _shape_handle, _shape, _where_clause, opts ->
-          consumer_pid = opts[:consumer_pid]
-          name = opts[:move_in_name]
-          results_fn = opts[:results_fn]
-
-          send(parent, {:query_requested, name, consumer_pid, results_fn})
+        fn _task_sup, _consumer_state, _buffering_state, consumer_pid ->
+          send(parent, {:query_requested, consumer_pid})
 
           :ok
         end
@@ -2030,10 +2027,10 @@ defmodule Electric.Shapes.ConsumerTest do
         ctx.stack_id
       )
 
-      assert_receive {:query_requested, name, ^consumer_pid, results_fn}
+      assert_receive {:query_requested, ^consumer_pid}
 
       # Snapshot here is intentionally before the update to make sure the update is considered shadowing
-      send(consumer_pid, {:pg_snapshot_known, name, {90, 95, []}})
+      send(consumer_pid, {:pg_snapshot_known, {90, 95, []}})
 
       # Now send an UPDATE (xid = 100) before move-in query completes
       # This should be converted to INSERT
@@ -2053,32 +2050,37 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
-      # Should get new_changes notification for the UPDATE-as-INSERT
-      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
 
-      # Now write data for the move-in query
-      results_fn.(
+      send_stored_move_in_complete(
+        consumer_pid,
+        shape_storage,
         [
           [
-            "\"public\".\"test_table\"/\"1\"",
-            ["tag_does_not_matter"],
-            Jason.encode!(%{"value" => %{"id" => "1", "value" => "old"}})
+            ~s'"public"."test_table"/"1"',
+            [],
+            Jason.encode!(%{
+              "key" => ~s'"public"."test_table"/"1"',
+              "value" => %{"id" => "1", "value" => "old"},
+              "headers" => %{
+                "operation" => "insert",
+                "relation" => ["public", "test_table"]
+              }
+            })
           ]
         ],
-        {90, 95, []}
+        Lsn.from_integer(100)
       )
-
-      send(consumer_pid, {:query_move_in_complete, name, ["test_key"], {90, 95, []}})
 
       assert_receive {^ref, :new_changes, _offset}, @receive_timeout
 
       # Check storage for operations
-      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
-
       assert [
+               %{"headers" => %{"event" => "move-in"}},
                %{
                  "headers" => %{"operation" => "insert"},
-                 "value" => %{"id" => "1", "value" => "updated"}
+                 "key" => ~s'"public"."test_table"/"1"',
+                 "value" => %{"id" => "1", "value" => "old"}
                },
                %{
                  "headers" => %{
@@ -2087,8 +2089,320 @@ defmodule Electric.Shapes.ConsumerTest do
                    "xmax" => "95",
                    "xip_list" => []
                  }
+               },
+               %{
+                 "headers" => %{"operation" => "update", "txids" => [100]},
+                 "key" => ~s'"public"."test_table"/"1"'
                }
              ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+    end
+
+    test "consumer splices a pending move-in on global_last_seen_lsn broadcast", ctx do
+      parent = self()
+
+      Repatch.patch(
+        Electric.Shapes.Consumer.Effects,
+        :query_move_in_async,
+        [mode: :shared],
+        fn _task_sup, _consumer_state, _buffering_state, consumer_pid ->
+          send(parent, {:query_requested, consumer_pid})
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      ShapeLogCollector.handle_event(
+        complete_txn_fragment(100, Lsn.from_integer(50), [
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(Lsn.from_integer(50), 0)
+          }
+        ]),
+        ctx.stack_id
+      )
+
+      assert_receive {:query_requested, ^consumer_pid}
+
+      send(consumer_pid, {:pg_snapshot_known, {100, 300, []}})
+
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      send_stored_move_in_complete(
+        consumer_pid,
+        shape_storage,
+        [
+          [
+            ~s'"public"."test_table"/"1"',
+            [],
+            Jason.encode!(%{
+              "key" => ~s'"public"."test_table"/"1"',
+              "value" => %{"id" => "1", "value" => "old"},
+              "headers" => %{
+                "operation" => "insert",
+                "relation" => ["public", "test_table"]
+              }
+            })
+          ]
+        ],
+        Lsn.from_integer(100)
+      )
+
+      refute_receive {^ref, :new_changes, _}, 100
+
+      assert :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 100)
+      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      assert [
+               %{"headers" => %{"event" => "move-in"}},
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => ~s'"public"."test_table"/"1"',
+                 "value" => %{"id" => "1", "value" => "old"}
+               },
+               %{
+                 "headers" => %{
+                   "control" => "snapshot-end",
+                   "xmin" => "100",
+                   "xmax" => "300",
+                   "xip_list" => []
+                 }
+               }
+             ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+    end
+
+    test "consumer replays the latest broadcast when subscribing for a move-in", ctx do
+      parent = self()
+
+      Repatch.patch(
+        Electric.Shapes.Consumer.Effects,
+        :query_move_in_async,
+        [mode: :shared],
+        fn _task_sup, _consumer_state, _buffering_state, consumer_pid ->
+          send(parent, {:query_requested, consumer_pid})
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      [dep_handle] = shape.shape_dependencies_handles
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      assert :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 100)
+
+      send(
+        consumer_pid,
+        {:materializer_changes, dep_handle,
+         %{
+           move_in: [{1, "1"}],
+           move_out: []
+         }}
+      )
+
+      assert_receive {:query_requested, ^consumer_pid}
+
+      send(consumer_pid, {:pg_snapshot_known, {100, 300, []}})
+
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      send_stored_move_in_complete(
+        consumer_pid,
+        shape_storage,
+        [
+          [
+            ~s'"public"."test_table"/"1"',
+            [],
+            Jason.encode!(%{
+              "key" => ~s'"public"."test_table"/"1"',
+              "value" => %{"id" => "1", "value" => "old"},
+              "headers" => %{
+                "operation" => "insert",
+                "relation" => ["public", "test_table"]
+              }
+            })
+          ]
+        ],
+        Lsn.from_integer(100)
+      )
+
+      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      assert [
+               %{"headers" => %{"event" => "move-in"}},
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => ~s'"public"."test_table"/"1"',
+                 "value" => %{"id" => "1", "value" => "old"}
+               },
+               %{
+                 "headers" => %{
+                   "control" => "snapshot-end",
+                   "xmin" => "100",
+                   "xmax" => "300",
+                   "xip_list" => []
+                 }
+               }
+             ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+    end
+
+    test "consumer startup seeds the stack-scoped subquery index", ctx do
+      alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      # The consumer should have seeded the SubqueryIndex during initialization
+      index = SubqueryIndex.for_stack(ctx.stack_id)
+      assert index != nil
+
+      # The shape should be registered with positions (by Filter.add_shape)
+      assert SubqueryIndex.has_positions?(index, shape_handle)
+
+      # The shape should be marked ready (no longer in fallback) once
+      # the consumer has seeded the index. After await_snapshot_start returns
+      # the consumer has completed initialization including subquery seeding.
+      {:ok, _shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+
+      # The consumer seeds the index via SubqueryIndex.for_stack, but the
+      # index is also modified by the Filter (which runs in the
+      # ShapeLogCollector process). Check that the shape has positions
+      # and that membership entries are correct (empty views for a fresh shape).
+      positions = SubqueryIndex.positions_for_shape(index, shape_handle)
+      assert length(positions) > 0
+
+      # Verify the index is accessible and has retained node registrations.
+      assert positions == SubqueryIndex.positions_for_shape(index, shape_handle)
+    end
+
+    test "consumer steady dependency move_in adds value to the subquery index", ctx do
+      alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+
+      parent = self()
+
+      Repatch.patch(
+        Electric.Shapes.Consumer.Effects,
+        :query_move_in_async,
+        [mode: :shared],
+        fn _task_sup, _consumer_state, _buffering_state, consumer_pid ->
+          send(parent, {:query_requested, consumer_pid})
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      index = SubqueryIndex.for_stack(ctx.stack_id)
+      {:ok, _shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+
+      # Before any dependency changes, the index has empty membership
+      refute SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+
+      # Send a new record for the dependency table to trigger a move_in
+      ShapeLogCollector.handle_event(
+        complete_txn_fragment(100, Lsn.from_integer(50), [
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(Lsn.from_integer(50), 0)
+          }
+        ]),
+        ctx.stack_id
+      )
+
+      # Wait for the consumer to process the event and request a move_in query
+      assert_receive {:query_requested, consumer_pid}
+
+      # During buffering, the value should have been added to the index
+      # (union for positive dependency: before ∪ after)
+      assert SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+
+      # Complete the move_in query to transition back to steady state
+      send(consumer_pid, {:pg_snapshot_known, {100, 300, []}})
+
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      send_stored_move_in_complete(
+        consumer_pid,
+        shape_storage,
+        [
+          [
+            ~s'"public"."test_table"/"1"',
+            [],
+            Jason.encode!(%{
+              "key" => ~s'"public"."test_table"/"1"',
+              "value" => %{"id" => "1", "value" => "val"},
+              "headers" => %{
+                "operation" => "insert",
+                "relation" => ["public", "test_table"]
+              }
+            })
+          ]
+        ],
+        Lsn.from_integer(100)
+      )
+
+      # Allow the consumer to process the completion
+      assert :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 100)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      # After move_in completes, value should still be in the index (now steady state)
+      assert SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+    end
+
+    test "consumer cleanup removes shape rows from the subquery index", ctx do
+      alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      index = SubqueryIndex.for_stack(ctx.stack_id)
+      assert SubqueryIndex.has_positions?(index, shape_handle)
+
+      # Monitor the consumer so we know when cleanup finishes
+      consumer_name = Shapes.Consumer.name(ctx.stack_id, shape_handle)
+      consumer_pid = GenServer.whereis(consumer_name)
+      ref = Process.monitor(consumer_pid)
+
+      expect_shape_status(remove_shape: fn _, ^shape_handle -> :ok end)
+      ShapeCache.clean_shape(shape_handle, ctx.stack_id)
+
+      # Wait for consumer to shut down, flushing any other messages first
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _reason}, 5000
+
+      # The ShapeLogCollector removes the shape from the filter asynchronously.
+      # Wait briefly for it to process.
+      Process.sleep(100)
+
+      # After cleanup, the shape's rows should be removed from the index
+      refute SubqueryIndex.has_positions?(index, shape_handle)
     end
   end
 
@@ -2127,5 +2441,17 @@ defmodule Electric.Shapes.ConsumerTest do
 
   defp get_log_items_from_storage(offset, shape_storage) do
     Storage.get_log_stream(offset, shape_storage) |> Enum.map(&Jason.decode!/1)
+  end
+
+  defp send_stored_move_in_complete(consumer_pid, shape_storage, rows, lsn) do
+    snapshot_name = Electric.Utils.uuid4()
+    row_bytes = Enum.reduce(rows, 0, fn [_, _, json], acc -> acc + IO.iodata_length(json) end)
+
+    Storage.write_move_in_snapshot!(rows, snapshot_name, shape_storage)
+
+    send(
+      consumer_pid,
+      {:query_move_in_complete, snapshot_name, length(rows), row_bytes, lsn}
+    )
   end
 end

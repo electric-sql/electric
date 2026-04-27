@@ -66,4 +66,20 @@ defmodule Electric.Replication.Eval do
   def type_to_pg_cast({:row, _}, _), do: raise("Unsupported type: row")
   def type_to_pg_cast({:internal, _}, _), do: raise("Unsupported type: internal")
   def type_to_pg_cast(type, _) when is_atom(type), do: to_string(type)
+
+  @doc """
+  Convert a value from the eval representation to the format Postgrex expects
+  for binary protocol encoding.
+
+  Most types (integers, floats, booleans, dates, times, etc.) use native Elixir
+  types that Postgrex handles directly. UUID is a notable exception: the eval
+  system stores UUIDs as human-readable strings, but Postgrex expects 16-byte
+  raw binaries.
+  """
+  def value_to_postgrex(value, :uuid) when is_binary(value) do
+    {:ok, bin} = Ecto.UUID.dump(value)
+    bin
+  end
+
+  def value_to_postgrex(value, _type), do: value
 end

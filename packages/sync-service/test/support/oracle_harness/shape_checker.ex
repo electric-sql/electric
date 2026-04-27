@@ -29,8 +29,6 @@ defmodule Support.OracleHarness.ShapeChecker do
   alias Electric.Client.ShapeDefinition
   alias Electric.Client.ShapeState
 
-  @default_timeout_ms 10_000
-
   defstruct [
     :name,
     :table,
@@ -90,7 +88,7 @@ defmodule Support.OracleHarness.ShapeChecker do
     Enum.each(shape.pk, &validate_identifier!(&1, "pk column"))
 
     shape_def = ShapeDefinition.new!(shape.table, where: shape.where)
-    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
+    timeout_ms = Keyword.fetch!(opts, :timeout_ms)
 
     state = %__MODULE__{
       name: shape.name,

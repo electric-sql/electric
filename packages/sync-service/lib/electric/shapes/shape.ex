@@ -2,11 +2,14 @@ defmodule Electric.Shapes.Shape do
   @moduledoc """
   Struct describing the requested shape
   """
-  alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Replication.Eval.Expr
+  alias Electric.Replication.Eval.Runner
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
+  alias Electric.Replication.Eval.Walker
   alias Electric.Replication.Changes
+  alias Electric.Shapes.DnfPlan
+  alias Electric.Shapes.SubqueryTags
   alias Electric.Shapes.WhereClause
   alias Electric.Utils
   alias Electric.Shapes.Shape.Validators
@@ -265,7 +268,7 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp fill_tag_structure(shape) do
-    {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+    {tag_structure, comparison_expressions} = SubqueryTags.move_in_tag_structure(shape)
 
     %{
       shape
@@ -280,16 +283,20 @@ defmodule Electric.Shapes.Shape do
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
          :ok <- check_feature_flag(subqueries, opts),
-         {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
+         {:ok, shape_dependencies, sublink_dependency_indexes} <-
+           build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
-         all_refs = Map.merge(refs, dependency_refs),
+         all_refs =
+           Map.merge(refs, expand_dependency_refs(dependency_refs, sublink_dependency_indexes)),
          :ok <- Validators.validate_parameters(opts[:params]),
          {:ok, where} <-
            Parser.validate_where_ast(where,
              params: opts[:params],
              refs: all_refs,
-             sublink_queries: extract_sublink_queries(shape_dependencies)
+             sublink_queries:
+               expand_sublink_queries(shape_dependencies, sublink_dependency_indexes)
            ),
+         {:ok, where} <- canonicalize_where_sublink_refs(where, sublink_dependency_indexes),
          {:ok, where} <- Validators.validate_where_return_type(where) do
       {:ok, where, shape_dependencies}
     else
@@ -317,13 +324,42 @@ defmodule Electric.Shapes.Shape do
   defp build_shape_dependencies(subqueries, opts) do
     shared_opts = Map.drop(opts, [:where, :columns, :relation])
 
-    Utils.map_while_ok(subqueries, fn subquery ->
-      shared_opts
-      |> Map.put(:select, subquery)
-      |> Map.put(:autofill_pk_select?, true)
-      |> Map.put(:log_mode, :full)
-      |> new()
+    subqueries
+    |> Enum.with_index()
+    |> Utils.reduce_while_ok({[], %{}, %{}}, fn {subquery, occurrence_idx},
+                                                {shape_dependencies, dependency_index_by_shape,
+                                                 occurrence_to_dependency} ->
+      with {:ok, shape_dependency} <-
+             shared_opts
+             |> Map.put(:select, subquery)
+             |> Map.put(:autofill_pk_select?, true)
+             |> Map.put(:log_mode, :full)
+             |> new() do
+        comparable_shape = comparable(shape_dependency)
+
+        case dependency_index_by_shape do
+          %{^comparable_shape => dependency_idx} ->
+            {:ok,
+             {shape_dependencies, dependency_index_by_shape,
+              Map.put(occurrence_to_dependency, occurrence_idx, dependency_idx)}}
+
+          %{} ->
+            dependency_idx = length(shape_dependencies)
+
+            {:ok,
+             {shape_dependencies ++ [shape_dependency],
+              Map.put(dependency_index_by_shape, comparable_shape, dependency_idx),
+              Map.put(occurrence_to_dependency, occurrence_idx, dependency_idx)}}
+        end
+      end
     end)
+    |> case do
+      {:ok, {shape_dependencies, _dependency_index_by_shape, occurrence_to_dependency}} ->
+        {:ok, shape_dependencies, occurrence_to_dependency}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp build_dependency_refs(shape_dependencies, inspector) do
@@ -349,6 +385,46 @@ defmodule Electric.Shapes.Shape do
         {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
       end
     end)
+  end
+
+  defp expand_dependency_refs(dependency_refs, sublink_dependency_indexes) do
+    Map.new(sublink_dependency_indexes, fn {occurrence_idx, dependency_idx} ->
+      {["$sublink", "#{occurrence_idx}"],
+       Map.fetch!(dependency_refs, ["$sublink", "#{dependency_idx}"])}
+    end)
+  end
+
+  defp expand_sublink_queries(shape_dependencies, sublink_dependency_indexes) do
+    canonical_queries = extract_sublink_queries(shape_dependencies)
+
+    Map.new(sublink_dependency_indexes, fn {occurrence_idx, dependency_idx} ->
+      {occurrence_idx, Map.fetch!(canonical_queries, dependency_idx)}
+    end)
+  end
+
+  defp canonicalize_where_sublink_refs(%Expr{} = where, sublink_dependency_indexes) do
+    with {:ok, eval} <-
+           Walker.fold(
+             where.eval,
+             fn
+               %Parser.Ref{path: ["$sublink", idx]} = ref, _children, occurrence_to_dependency ->
+                 dependency_idx =
+                   occurrence_to_dependency
+                   |> Map.fetch!(String.to_integer(idx))
+                   |> Integer.to_string()
+
+                 {:ok, %{ref | path: ["$sublink", dependency_idx]}}
+
+               node, children, _occurrence_to_dependency when map_size(children) == 0 ->
+                 {:ok, node}
+
+               node, children, _occurrence_to_dependency ->
+                 {:ok, Map.merge(node, children)}
+             end,
+             sublink_dependency_indexes
+           ) do
+      {:ok, %{where | eval: eval, used_refs: Parser.find_refs(eval)}}
+    end
   end
 
   defp extract_sublink_queries(shapes) do
@@ -545,17 +621,20 @@ defmodule Electric.Shapes.Shape do
   Updates, on the other hand, may be converted to an "new record" or a "deleted record"
   if the previous/new version of the updated row isn't in the shape.
   """
-  def convert_change(shape, change, opts \\ [])
+  def convert_change(shape, change, opts \\ []) do
+    opts = Map.new(opts)
+    do_convert_change(shape, change, opts)
+  end
 
-  def convert_change(%__MODULE__{root_table: table}, %{relation: relation}, _)
-      when table != relation,
-      do: []
+  defp do_convert_change(%__MODULE__{root_table: table}, %{relation: relation}, _)
+       when table != relation,
+       do: []
 
-  def convert_change(
-        %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
-        change,
-        opts
-      ) do
+  defp do_convert_change(
+         %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
+         change,
+         opts
+       ) do
     # If the change actually doesn't change any columns, we can skip it - this is possible on Postgres but we don't care for those.
     if is_struct(change, Changes.UpdatedRecord) and MapSet.size(change.changed_columns) == 0 do
       []
@@ -564,62 +643,129 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _), do: [change]
+  defp do_convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _),
+    do: [change]
 
-  def convert_change(
-        %__MODULE__{where: where, selected_columns: selected_columns} = shape,
-        change,
-        opts
-      )
-      when is_struct(change, Changes.NewRecord)
-      when is_struct(change, Changes.DeletedRecord) do
-    record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
+  defp do_convert_change(
+         %__MODULE__{selected_columns: selected_columns} = shape,
+         %Changes.NewRecord{record: record} = change,
+         opts
+       ) do
+    {_old_refs, new_refs} = opts[:extra_refs] || {%{}, %{}}
 
-    # This is a pre-image and post-image of the value sets for subqueries.
-    # In case of a new record, we use the post-image, because we'll need to see the record,
-    # but in case of a deleted record, we use the pre-image, because we've never seen an insert
-    extra_refs = opts[:extra_refs] || {%{}, %{}}
+    case project_row_metadata(shape, record, new_refs, opts) do
+      {:ok, true, metadata} ->
+        [change |> put_row_metadata(metadata) |> filter_change_columns(selected_columns)]
 
-    used_extra_refs =
-      if is_struct(change, Changes.NewRecord), do: elem(extra_refs, 1), else: elem(extra_refs, 0)
-
-    if WhereClause.includes_record?(where, record, used_extra_refs) do
-      change
-      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
-      |> filter_change_columns(selected_columns)
-      |> List.wrap()
-    else
-      []
+      {:ok, false, _metadata} ->
+        []
     end
   end
 
-  def convert_change(
-        %__MODULE__{where: where, selected_columns: selected_columns} = shape,
-        %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
-        opts
-      ) do
-    {extra_refs_old, extra_refs_new} = opts[:extra_refs] || {%{}, %{}}
-    old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs_old)
-    new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs_new)
+  defp do_convert_change(
+         %__MODULE__{selected_columns: selected_columns} = shape,
+         %Changes.DeletedRecord{old_record: record} = change,
+         opts
+       ) do
+    {old_refs, _new_refs} = opts[:extra_refs] || {%{}, %{}}
+
+    case project_row_metadata(shape, record, old_refs, opts) do
+      {:ok, true, metadata} ->
+        [change |> put_row_metadata(metadata) |> filter_change_columns(selected_columns)]
+
+      {:ok, false, _metadata} ->
+        []
+    end
+  end
+
+  defp do_convert_change(
+         %__MODULE__{selected_columns: selected_columns} = shape,
+         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
+         opts
+       ) do
+    {old_refs, new_refs} = opts[:extra_refs] || {%{}, %{}}
+
+    {:ok, old_included?, old_metadata} = project_row_metadata(shape, old_record, old_refs, opts)
+    {:ok, new_included?, new_metadata} = project_row_metadata(shape, record, new_refs, opts)
 
     converted_changes =
-      case {old_record_in_shape, new_record_in_shape} do
-        {true, true} -> [change]
-        {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
-        {false, true} -> [Changes.convert_update(change, to: :new_record)]
-        {false, false} -> []
+      case {old_included?, new_included?} do
+        {true, true} ->
+          [
+            put_updated_metadata(change, new_metadata,
+              removed_move_tags: old_metadata.move_tags -- new_metadata.move_tags
+            )
+          ]
+
+        {true, false} ->
+          [
+            Changes.convert_update(change, to: :deleted_record)
+            |> put_row_metadata(old_metadata)
+          ]
+
+        {false, true} ->
+          [
+            Changes.convert_update(change, to: :new_record)
+            |> put_row_metadata(new_metadata)
+          ]
+
+        {false, false} ->
+          []
       end
 
     converted_changes
-    |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&should_keep_change?/1)
+  end
+
+  defp project_row_metadata(
+         %__MODULE__{where: where},
+         record,
+         refs,
+         %{dnf_plan: %DnfPlan{} = dnf_plan, stack_id: stack_id, shape_handle: shape_handle}
+       ) do
+    case get_row_metadata(dnf_plan, record, refs, where, stack_id, shape_handle) do
+      {:ok, included?, move_tags, active_conditions} ->
+        {:ok, included?, %{move_tags: move_tags, active_conditions: active_conditions}}
+    end
+  end
+
+  defp project_row_metadata(
+         %__MODULE__{where: where, tag_structure: tag_structure},
+         record,
+         refs,
+         opts
+       ) do
+    {:ok,
+     WhereClause.includes_record?(where, record, WhereClause.subquery_member_from_refs(refs)),
+     %{
+       move_tags:
+         make_tags_from_pattern(tag_structure, record, opts[:stack_id], opts[:shape_handle]),
+       active_conditions: make_active_conditions(tag_structure)
+     }}
   end
 
   defp filter_change_columns(change, nil), do: change
 
   defp filter_change_columns(change, selected_columns) do
     Changes.filter_columns(change, selected_columns)
+  end
+
+  defp put_row_metadata(change, %{move_tags: move_tags, active_conditions: active_conditions}) do
+    %{change | move_tags: move_tags, active_conditions: active_conditions}
+  end
+
+  defp put_updated_metadata(
+         change,
+         %{move_tags: move_tags, active_conditions: active_conditions},
+         opts
+       ) do
+    %{
+      change
+      | move_tags: move_tags,
+        removed_move_tags: Keyword.get(opts, :removed_move_tags, []),
+        active_conditions: active_conditions
+    }
   end
 
   def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
@@ -637,7 +783,8 @@ defmodule Electric.Shapes.Shape do
         shape_handle
       ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
-    %{change | move_tags: move_tags}
+    active_conditions = make_active_conditions(tag_structure)
+    %{change | move_tags: move_tags, active_conditions: active_conditions}
   end
 
   def fill_move_tags(
@@ -652,7 +799,14 @@ defmodule Electric.Shapes.Shape do
       make_tags_from_pattern(tag_structure, old_record, stack_id, shape_handle) --
         move_tags
 
-    %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
+    active_conditions = make_active_conditions(tag_structure)
+
+    %{
+      change
+      | move_tags: move_tags,
+        removed_move_tags: old_move_tags,
+        active_conditions: active_conditions
+    }
   end
 
   def fill_move_tags(
@@ -663,22 +817,101 @@ defmodule Electric.Shapes.Shape do
         stack_id,
         shape_handle
       ) do
-    %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
+    active_conditions = make_active_conditions(tag_structure)
+
+    %{
+      change
+      | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle),
+        active_conditions: active_conditions
+    }
   end
+
+  def get_row_metadata(dnf_plan, record, views, where_expr, stack_id, shape_handle) do
+    with {:ok, ref_values} <- Runner.record_to_ref_values(where_expr.used_refs, record) do
+      refs = Map.merge(ref_values, views)
+      active_conditions = compute_active_conditions(dnf_plan, refs)
+      tags = compute_tags(dnf_plan, record, stack_id, shape_handle)
+      included? = compute_inclusion(dnf_plan, active_conditions)
+      {:ok, included?, tags, active_conditions}
+    end
+  end
+
+  defp compute_active_conditions(dnf_plan, refs) do
+    Enum.map(0..(dnf_plan.position_count - 1), fn pos ->
+      info = dnf_plan.positions[pos]
+      pos_expr = Expr.wrap_parser_part(info.ast)
+
+      base_result =
+        case Runner.execute(pos_expr, refs) do
+          {:ok, value} when value not in [nil, false] -> true
+          _ -> false
+        end
+
+      if info.negated, do: not base_result, else: base_result
+    end)
+  end
+
+  defp compute_tags(dnf_plan, record, stack_id, shape_handle) do
+    Enum.map(dnf_plan.disjuncts, fn conj ->
+      positions_in_disjunct = MapSet.new(conj, &elem(&1, 0))
+
+      Enum.map(0..(dnf_plan.position_count - 1), fn pos ->
+        if MapSet.member?(positions_in_disjunct, pos) do
+          compute_tag_slot(dnf_plan.positions[pos], record, stack_id, shape_handle)
+        else
+          ""
+        end
+      end)
+      |> Enum.join("/")
+    end)
+  end
+
+  defp compute_tag_slot(%{is_subquery: true, tag_columns: [col]}, record, stack_id, shape_handle) do
+    SubqueryTags.make_value_hash(stack_id, shape_handle, Map.get(record, col))
+  end
+
+  defp compute_tag_slot(
+         %{is_subquery: true, tag_columns: {:hash_together, cols}},
+         record,
+         stack_id,
+         shape_handle
+       ) do
+    parts =
+      Enum.map(cols, fn col ->
+        col <> ":" <> SubqueryTags.namespace_value(Map.get(record, col))
+      end)
+
+    SubqueryTags.make_value_hash_raw(stack_id, shape_handle, Enum.join(parts))
+  end
+
+  defp compute_tag_slot(%{is_subquery: false}, _record, _stack_id, _shape_handle) do
+    "1"
+  end
+
+  defp compute_inclusion(dnf_plan, active_conditions) do
+    Enum.any?(dnf_plan.disjuncts, fn conj ->
+      Enum.all?(conj, fn {pos, _polarity} ->
+        Enum.at(active_conditions, pos)
+      end)
+    end)
+  end
+
+  defp make_active_conditions([]), do: []
+  defp make_active_conditions(tag_structure), do: List.duplicate(true, length(tag_structure))
 
   defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
     Enum.map(patterns, fn pattern ->
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
-          SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
+          SubqueryTags.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
 
         {:hash_together, columns} ->
           column_parts =
             Enum.map(columns, fn col ->
-              col <> ":" <> SubqueryMoves.namespace_value(Map.get(record, col))
+              col <> ":" <> SubqueryTags.namespace_value(Map.get(record, col))
             end)
 
-          SubqueryMoves.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
+          SubqueryTags.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
       end)
       |> Enum.join("/")
     end)
@@ -686,6 +919,13 @@ defmodule Electric.Shapes.Shape do
 
   defp should_keep_change?(%Changes.UpdatedRecord{removed_move_tags: removed_move_tags})
        when removed_move_tags != [], do: true
+
+  defp should_keep_change?(%Changes.UpdatedRecord{
+         old_record: record,
+         record: record,
+         active_conditions: [_ | _]
+       }),
+       do: true
 
   defp should_keep_change?(%Changes.UpdatedRecord{old_record: record, record: record}),
     do: false

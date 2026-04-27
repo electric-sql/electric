@@ -105,24 +105,24 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
   defp equality_gen do
     one_of([
       # level_3_id = 'l3-X'
-      level_3_id_gen() |> map(&{"level_3_id = '#{&1}'", false}),
+      level_3_id_gen() |> map(&{"level_3_id = '#{&1}'", true}),
       # id = 'l4-X'
-      level_4_id_gen() |> map(&{"id = '#{&1}'", false}),
+      level_4_id_gen() |> map(&{"id = '#{&1}'", true}),
       # value = 'vX'
-      value_literal_gen() |> map(&{"value = '#{&1}'", false})
+      value_literal_gen() |> map(&{"value = '#{&1}'", true})
     ])
   end
 
   # col > 'val', col <> 'val', etc.
   defp comparison_gen do
     bind({member_of(["<", ">", "<=", ">=", "<>"]), value_literal_gen()}, fn {op, val} ->
-      constant({"value #{op} '#{val}'", false})
+      constant({"value #{op} '#{val}'", true})
     end)
   end
 
   # col LIKE 'pattern' / col NOT LIKE 'pattern'
   defp like_gen do
-    bind({member_of([{"LIKE", false}, {"NOT LIKE", false}]), like_pattern_gen()}, fn
+    bind({member_of([{"LIKE", true}, {"NOT LIKE", true}]), like_pattern_gen()}, fn
       {{op, optimized}, pattern} ->
         constant({"value #{op} '#{pattern}'", optimized})
     end)
@@ -131,7 +131,7 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
   # col BETWEEN 'a' AND 'b' / col NOT BETWEEN 'a' AND 'b'
   defp between_gen do
     bind(
-      {member_of([{"BETWEEN", false}, {"NOT BETWEEN", false}]), value_literal_gen(),
+      {member_of([{"BETWEEN", true}, {"NOT BETWEEN", true}]), value_literal_gen(),
        value_literal_gen()},
       fn {{op, optimized}, v1, v2} ->
         # Ensure v1 <= v2 for valid BETWEEN
@@ -147,12 +147,12 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       # level_3_id IN ('l3-1', 'l3-2', ...)
       bind(list_of(level_3_id_gen(), min_length: 2, max_length: 4), fn ids ->
         values = ids |> Enum.uniq() |> Enum.map(&"'#{&1}'") |> Enum.join(", ")
-        constant({"level_3_id IN (#{values})", false})
+        constant({"level_3_id IN (#{values})", true})
       end),
       # id IN ('l4-1', 'l4-2', ...)
       bind(list_of(level_4_id_gen(), min_length: 2, max_length: 4), fn ids ->
         values = ids |> Enum.uniq() |> Enum.map(&"'#{&1}'") |> Enum.join(", ")
-        constant({"id IN (#{values})", false})
+        constant({"id IN (#{values})", true})
       end)
     ])
   end
@@ -176,12 +176,12 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       # Filter by active flag
       bool_gen()
       |> map(fn active ->
-        {"level_3_id IN (SELECT id FROM level_3 WHERE active = #{active})", false}
+        {"level_3_id IN (SELECT id FROM level_3 WHERE active = #{active})", true}
       end),
       # Filter by level_2_id
       level_2_id_gen()
       |> map(fn l2_id ->
-        {"level_3_id IN (SELECT id FROM level_3 WHERE level_2_id = '#{l2_id}')", false}
+        {"level_3_id IN (SELECT id FROM level_3 WHERE level_2_id = '#{l2_id}')", true}
       end)
     ])
   end
@@ -193,14 +193,14 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       bind({bool_gen(), bool_gen()}, fn {active_l3, active_l2} ->
         constant(
           {"level_3_id IN (SELECT id FROM level_3 WHERE active = #{active_l3} AND level_2_id IN (SELECT id FROM level_2 WHERE active = #{active_l2}))",
-           false}
+           true}
         )
       end),
       # Through specific level_1_id
       level_1_id_gen()
       |> map(fn l1_id ->
         {"level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id = '#{l1_id}'))",
-         false}
+         true}
       end)
     ])
   end
@@ -210,7 +210,7 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
     bool_gen()
     |> map(fn active_l1 ->
       {"level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id IN (SELECT id FROM level_1 WHERE active = #{active_l1})))",
-       false}
+       true}
     end)
   end
 
@@ -220,19 +220,19 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       case level do
         1 ->
           constant(
-            {"level_3_id IN (SELECT level_3_id FROM level_3_tags WHERE tag = '#{tag}')", false}
+            {"level_3_id IN (SELECT level_3_id FROM level_3_tags WHERE tag = '#{tag}')", true}
           )
 
         2 ->
           constant(
             {"level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT level_2_id FROM level_2_tags WHERE tag = '#{tag}'))",
-             false}
+             true}
           )
 
         3 ->
           constant(
             {"level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id IN (SELECT level_1_id FROM level_1_tags WHERE tag = '#{tag}')))",
-             false}
+             true}
           )
       end
     end)
@@ -247,12 +247,12 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       # NOT IN with active flag
       bool_gen()
       |> map(fn active ->
-        {"level_3_id NOT IN (SELECT id FROM level_3 WHERE active = #{active})", false}
+        {"level_3_id NOT IN (SELECT id FROM level_3 WHERE active = #{active})", true}
       end),
       # NOT IN with level_2_id
       level_2_id_gen()
       |> map(fn l2_id ->
-        {"level_3_id NOT IN (SELECT id FROM level_3 WHERE level_2_id = '#{l2_id}')", false}
+        {"level_3_id NOT IN (SELECT id FROM level_3 WHERE level_2_id = '#{l2_id}')", true}
       end)
     ])
   end
@@ -266,13 +266,8 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
 
   defp and_composition(depth) do
     bind({base_expr_gen(depth - 1), base_expr_gen(depth - 1)}, fn
-      {{left, left_opt}, {right, right_opt}} ->
-        has_left_subquery = contains_subquery?(left)
-        has_right_subquery = contains_subquery?(right)
-
-        # AND with multiple subqueries at same level is NOT optimized
-        optimized = left_opt and right_opt and not (has_left_subquery and has_right_subquery)
-        constant({"(#{left}) AND (#{right})", optimized})
+      {{left, _left_opt}, {right, _right_opt}} ->
+        constant({"(#{left}) AND (#{right})", true})
     end)
   end
 
@@ -281,13 +276,8 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
 
   defp or_composition(depth) do
     bind({base_expr_gen(depth - 1), base_expr_gen(depth - 1)}, fn
-      {{left, left_opt}, {right, right_opt}} ->
-        # OR with subqueries is typically not optimized
-        optimized =
-          left_opt and right_opt and not contains_subquery?(left) and
-            not contains_subquery?(right)
-
-        constant({"(#{left}) OR (#{right})", optimized})
+      {{left, _left_opt}, {right, _right_opt}} ->
+        constant({"(#{left}) OR (#{right})", true})
     end)
   end
 
@@ -303,22 +293,23 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       # a OR b OR c (multiple ORs)
       {1, multi_or_composition(depth)},
       # Subquery OR simple condition
-      {2, subquery_or_simple(depth)}
+      {2, subquery_or_simple(depth)},
+      # (expr OR expr) AND (expr OR expr)
+      {2, or_branches_and_composition()}
     ])
   end
 
   defp and_or_composition(depth) do
     bind({or_composition(depth - 1), base_expr_gen(depth - 1)}, fn
-      {{or_expr, or_opt}, {simple, simple_opt}} ->
-        optimized = or_opt and simple_opt
-        constant({"(#{or_expr}) AND (#{simple})", optimized})
+      {{or_expr, _or_opt}, {simple, _simple_opt}} ->
+        constant({"(#{or_expr}) AND (#{simple})", true})
     end)
   end
 
   defp not_composition(_depth) do
     one_of([
       # NOT (simple condition)
-      atomic_with_meta() |> map(fn {expr, _} -> {"NOT (#{expr})", false} end),
+      atomic_with_meta() |> map(fn {expr, _} -> {"NOT (#{expr})", true} end),
       # NOT IN subquery
       not_in_subquery_gen()
     ])
@@ -328,16 +319,32 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
     bind(list_of(base_expr_gen(depth - 1), min_length: 2, max_length: 3), fn exprs ->
       clauses = Enum.map(exprs, fn {expr, _} -> "(#{expr})" end)
       combined = Enum.join(clauses, " OR ")
-      # Multi-OR is generally not optimized
-      constant({combined, false})
+      constant({combined, true})
     end)
+  end
+
+  # (expr OR expr) AND (expr OR expr) — each expr is a subquery or atomic
+  defp or_branches_and_composition do
+    bind(
+      {subquery_or_atomic(), subquery_or_atomic(), subquery_or_atomic(), subquery_or_atomic()},
+      fn {{s1, _}, {s2, _}, {s3, _}, {s4, _}} ->
+        constant({"(#{s1} OR #{s2}) AND (#{s3} OR #{s4})", true})
+      end
+    )
+  end
+
+  defp subquery_or_atomic do
+    frequency([
+      {2, subquery_1_level_gen()},
+      {1, tag_subquery_gen()},
+      {2, atomic_with_meta()}
+    ])
   end
 
   defp subquery_or_simple(_depth) do
     bind({subquery_1_level_gen(), atomic_with_meta()}, fn
       {{subq, _}, {simple, _}} ->
-        # OR with subquery is not optimized
-        constant({"(#{subq}) OR (#{simple})", false})
+        constant({"(#{subq}) OR (#{simple})", true})
     end)
   end
 
@@ -357,7 +364,4 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       {1, or_composition(depth - 1)}
     ])
   end
-
-  # Helper to detect if expression contains a subquery
-  defp contains_subquery?(expr), do: String.contains?(expr, "SELECT")
 end
