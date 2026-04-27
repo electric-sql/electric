@@ -21,7 +21,7 @@ The `examples/remix` source tree was removed from the repository on April 23,
 2026 after it fell behind the maintained example set, so there is no
 in-repo source snapshot to embed here on `main`.
 
-For current guidance, see the [React integration guide](/docs/integrations/react),
-[auth guide](/docs/guides/auth), and [write patterns guide](/docs/guides/writes).
+For current guidance, see the [React integration guide](/docs/sync/integrations/react),
+[auth guide](/docs/sync/guides/auth), and [write patterns guide](/docs/sync/guides/writes).
 
 <DemoCTAs :demo="$frontmatter" />

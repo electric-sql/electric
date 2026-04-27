@@ -26,7 +26,7 @@ This gives Doom properties that come for free from the stream primitive:
 - **Time-travel** — read up to any offset and replay to that point, with WASM memory snapshots for instant backward seek
 - **Fork-to-continue** — [fork](/blog/2026/04/15/fork-branching-for-durable-streams) the stream at any tic and take over someone else's playthrough mid-action
 
-No servers, no game backends, no sandboxes. Just a static page, a WASM engine, and Durable&nbsp;Streams on [Electric&nbsp;Cloud](/cloud).
+No servers, no game backends, no sandboxes. Just a static page, a WASM engine, and Durable&nbsp;Streams on [Electric&nbsp;Cloud](/cloud/).
 
 <figure>
   <div class="embed-container" style="padding-bottom: 56.25%">

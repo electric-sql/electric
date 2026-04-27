@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-Can Doom run on [Durable&nbsp;Streams](/primitives/durable-streams)? Absolutely! The result turned out to be surprisingly interesting and a showcase of the patterns for building multi-agent systems.
+Can Doom run on [Durable&nbsp;Streams](/streams/)? Absolutely! The result turned out to be surprisingly interesting and a showcase of the patterns for building multi-agent systems.
 
 Durable Doom is a fun little experiment where we hook into the game's loop to log every state change into a Durable Stream. Live streaming, time traveling, and the ability to resume playing from any point. What enables a globally-distributed, replayable game loop is the same primitive that power multi-agents.
 
@@ -131,7 +131,7 @@ Durable&nbsp;Doom started as a weekend project inspired by the meme *Will it run
 
 This probably is not the technology that is going to be adopted by AAA studios for building modern games with complex physics and nondeterministic logic, but everyone else is building agents — agents need durable state.
 
-Try Durable&nbsp;Streams services on [Electric&nbsp;Cloud](/cloud). Sign up, create a stream service, and start having fun.
+Try Durable&nbsp;Streams services on [Electric&nbsp;Cloud](/cloud/). Sign up, create a stream service, and start having fun.
 
 ***
 
