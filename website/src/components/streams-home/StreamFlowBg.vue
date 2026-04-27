@@ -41,6 +41,12 @@ const props = withDefaults(
     // Multiplier on branch (consumer fan-out) frequency. 1 keeps
     // the live 3–8 s interval per rail; raise for more branching.
     branchActivity?: number
+    // Additional axis-aligned no-draw rects in coords relative to
+    // the canvas's parent element (the hero <section>). Merged with
+    // the rects measured from `excludeEl`. See SyncFanOutBg for the
+    // motivation — used by the OG capture to reserve the Electric
+    // wordmark's bbox in the frame's top-left corner.
+    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
   }>(),
   {
     density: 1,
@@ -48,6 +54,7 @@ const props = withDefaults(
     activity: 1,
     tokenSpeed: 1,
     branchActivity: 1,
+    extraExcludeRects: () => [],
   },
 )
 
@@ -224,18 +231,26 @@ onMounted(() => {
 
   function measureExclusions(): ExcludeRect[] {
     const zones: ExcludeRect[] = []
-    const excEl = props.excludeEl
-    if (!excEl || !el!.parentElement) return zones
+    if (!el!.parentElement) return zones
     const origin = el!.parentElement!.getBoundingClientRect()
-    const rects = getTextRects(excEl)
-    for (const r of rects) {
-      if (r.width === 0 && r.height === 0) continue
-      zones.push({
-        left: r.left - origin.left,
-        top: r.top - origin.top,
-        right: r.right - origin.left,
-        bottom: r.bottom - origin.top,
-      })
+    const excEl = props.excludeEl
+    if (excEl) {
+      const rects = getTextRects(excEl)
+      for (const r of rects) {
+        if (r.width === 0 && r.height === 0) continue
+        zones.push({
+          left: r.left - origin.left,
+          top: r.top - origin.top,
+          right: r.right - origin.left,
+          bottom: r.bottom - origin.top,
+        })
+      }
+    }
+    // Caller-supplied rects already live in the parent-relative
+    // frame, so we append them as-is. Used by the OG capture to
+    // reserve the Electric wordmark's bbox.
+    for (const r of props.extraExcludeRects) {
+      zones.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
     }
     return zones
   }

@@ -6,6 +6,22 @@ import MdExportExplicit from '../MdExportExplicit.vue'
 import { useMarkdownExport } from '../../lib/useMarkdownExport'
 import HomeCompositionHero from './HomeCompositionHero.vue'
 
+withDefaults(
+  defineProps<{
+    /* paused freezes ambient activity on the iso-stack composition
+       (sync / streams / agents canvases). Used by the OG capture so
+       the screenshotted frame is a stable, deterministic still. */
+    paused?: boolean
+    /* hideActions removes the row of CTA buttons (Electric Cloud,
+       Quickstart) below the headline copy. Set on the OG capture so
+       the social graphic shows just the headline + supporting copy +
+       iso composition, not interactive CTAs that have no meaning on
+       a static image. */
+    hideActions?: boolean
+  }>(),
+  { paused: false, hideActions: false }
+)
+
 const isMarkdownExport = useMarkdownExport()
 const hero = {
   titleLeading: 'The agent platform',
@@ -51,7 +67,7 @@ ${hero.paragraphs[1]}
             {{ hero.paragraphs[1] }}
           </span>
         </p>
-        <div class="home-hero-actions">
+        <div v-if="!hideActions" class="home-hero-actions">
           <VPButton
             v-for="action in hero.actions"
             :key="action.href"
@@ -64,7 +80,7 @@ ${hero.paragraphs[1]}
         </div>
       </div>
       <div class="home-hero-scene md-exclude">
-        <HomeCompositionHero />
+        <HomeCompositionHero :paused="paused" />
       </div>
       </div>
     </div>

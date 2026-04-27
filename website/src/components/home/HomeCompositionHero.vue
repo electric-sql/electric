@@ -38,8 +38,16 @@ import SyncFanOutBg from '../sync-home/SyncFanOutBg.vue'
 withDefaults(
   defineProps<{
     labelOrientation?: 'flat' | 'standing'
+    /* paused freezes ambient activity on every layer (sync /
+       streams / agents) and disables the inter-layer "bridge"
+       cascades fired in response to `dotLit` events. Existing
+       in-flight tokens still settle and hover/click interactions
+       still work — this only stops new ambient spawns. Used by
+       the OG capture so the iso-stack frame is a deterministic
+       still rather than catching the canvases mid-animation. */
+    paused?: boolean
   }>(),
-  { labelOrientation: 'standing' },
+  { labelOrientation: 'standing', paused: false },
 )
 
 // Wrapper element so we can mutate two CSS custom properties on
@@ -248,11 +256,12 @@ onBeforeUnmount(() => {
           :spawn-rate="0.15"
           :die-rate="0.15"
           :emit-dot-lit="true"
+          :paused="paused"
           @dot-lit="onSyncDotLit"
         />
       </div>
       <div class="hch-band hch-band--streams">
-        <StreamFlowBg ref="streamsRef" :no-edge-fade="true" />
+        <StreamFlowBg ref="streamsRef" :no-edge-fade="true" :paused="paused" />
       </div>
       <div class="hch-band hch-band--agents">
         <HeroNetworkBg
@@ -261,6 +270,7 @@ onBeforeUnmount(() => {
           :die-rate="0.4"
           :reposition-on-spawn="true"
           :emit-dot-lit="true"
+          :paused="paused"
           @dot-lit="onAgentsDotLit"
         />
       </div>

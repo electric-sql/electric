@@ -303,6 +303,70 @@
   overflow-x: clip;
 }
 
+/* ── OG image cards ────────────────────────────────────────────────────
+   Pages under `/og/*` exist purely as a screenshot surface for the
+   social-card generation pipeline (see
+   `scripts/generate-og-images.mjs`). They render a single 1200x630
+   card and need to be stripped of every piece of normal page chrome —
+   navbar, footer, release banner, content padding — so the card sits
+   flush in the top-left of the viewport and can be captured by
+   clipping the viewport directly.
+
+   The frontmatter on each `og/*.md` already disables most of this
+   (`navbar: false`, `sidebar: false`, etc.), but VitePress still
+   reserves space for the navbar via CSS variables and renders the
+   release banner / site footer from our custom Layout. The rules
+   below take care of the rest. */
+.og-page {
+  /* Make the html/body fit the card exactly so the screenshot pipeline
+     can clip the viewport without any cropping math. */
+  background: #0c0e14 !important;
+  --vp-nav-height: 0px;
+  --vp-layout-top-height: 0px;
+}
+
+.og-page .VPNav,
+.og-page .VPLocalNav,
+.og-page .VPSidebar,
+.og-page .VPNavScreen,
+.og-page .VPHomeFeatures,
+.og-page .release-banner,
+.og-page .markdown-link-local-nav-container,
+.og-page .markdown-link-footer-container,
+.og-page .custom-local-nav-dropdown {
+  display: none !important;
+}
+
+.og-page .VPContent {
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+}
+
+.og-page .VPPage {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Hide the bottom site footer on OG pages even though our Layout only
+   renders it when there's no sidebar — `/og/*` has no sidebar so it
+   would render by default. */
+.og-page footer,
+.og-page .site-footer {
+  display: none !important;
+}
+
+/* Lock the page itself to the social-card box. The OgFrame component
+   sizes itself to 1200x630, but we also clamp the surrounding wrapper
+   so any stray Layout chrome can never push the card off-screen. */
+html:has(.og-page),
+body:has(.og-page) {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #0c0e14 !important;
+  overflow: hidden;
+}
+
 .vpi-electric-icon {
   --icon: url(/img/brand/icon.svg);
   margin-left: -4px !important;

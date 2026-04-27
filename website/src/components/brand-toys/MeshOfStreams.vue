@@ -70,6 +70,14 @@ const props = withDefaults(
     // mesh so it can sit behind copy as a background (the cloud hero
     // uses ~0.55). Doesn't affect geometry, just visual weight.
     intensity?: number
+    // Additional axis-aligned no-place / no-draw rects in coords
+    // relative to the mesh's host element. Merged with the rects
+    // measured from `excludeEl` so callers can reserve space for
+    // chrome that lives outside the inner copy block — e.g. the OG
+    // capture wraps this hero inside a frame that overlays the
+    // Electric wordmark in the top-left, and feeds the wordmark's
+    // bbox in here so no canvas geometry paints under it.
+    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
   }>(),
   {
     seed: "mesh-of-streams",
@@ -98,6 +106,7 @@ const props = withDefaults(
     excludeMargin: 18,
     excludeFeather: 14,
     intensity: 1,
+    extraExcludeRects: () => [],
   }
 )
 
@@ -157,22 +166,29 @@ function getTextRects(element: Element): DOMRect[] {
 function measureExclusions() {
   const host = root.value
   const target = props.excludeEl
-  if (!host || !target) {
-    if (exclusions.value.length > 0) exclusions.value = []
-    return
-  }
-  const origin = host.getBoundingClientRect()
-  const rects = getTextRects(target)
   const next: ExcludeRect[] = []
-  for (const r of rects) {
-    if (r.width <= 0 || r.height <= 0) continue
+  if (host && target) {
+    const origin = host.getBoundingClientRect()
+    const rects = getTextRects(target)
+    for (const r of rects) {
+      if (r.width <= 0 || r.height <= 0) continue
+      next.push({
+        left: r.left - origin.left,
+        top: r.top - origin.top,
+        right: r.right - origin.left,
+        bottom: r.bottom - origin.top,
+      })
+    }
+  }
+  for (const r of props.extraExcludeRects) {
     next.push({
-      left: r.left - origin.left,
-      top: r.top - origin.top,
-      right: r.right - origin.left,
-      bottom: r.bottom - origin.top,
+      left: r.left,
+      top: r.top,
+      right: r.right,
+      bottom: r.bottom,
     })
   }
+  if (next.length === 0 && exclusions.value.length === 0) return
   exclusions.value = next
 }
 

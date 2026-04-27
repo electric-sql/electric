@@ -93,6 +93,12 @@ const props = withDefaults(
     // bridge lines without paying the listener cost on the standalone
     // agents landing hero.
     emitDotLit?: boolean
+    // Additional axis-aligned no-draw rects in coords relative to
+    // the canvas's parent element (the hero <section>). Merged with
+    // the rects measured from `excludeEl`. Used by the OG capture to
+    // reserve the Electric wordmark's bbox in the frame's top-left
+    // corner so the mesh never paints under the brand mark.
+    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
   }>(),
   {
     density: 1,
@@ -109,6 +115,7 @@ const props = withDefaults(
     hideLabels: false,
     initialNodes: -1,
     emitDotLit: false,
+    extraExcludeRects: () => [],
   },
 )
 
@@ -425,19 +432,26 @@ onMounted(() => {
 
   function measureExclusions(): ExcludeRect[] {
     const zones: ExcludeRect[] = []
-    const excEl = props.excludeEl
-    if (!excEl || !el!.parentElement) return zones
+    if (!el!.parentElement) return zones
     const origin = el!.parentElement!.getBoundingClientRect()
-
-    const rects = getTextRects(excEl)
-    for (const r of rects) {
-      if (r.width === 0 && r.height === 0) continue
-      zones.push({
-        left: r.left - origin.left,
-        top: r.top - origin.top,
-        right: r.right - origin.left,
-        bottom: r.bottom - origin.top,
-      })
+    const excEl = props.excludeEl
+    if (excEl) {
+      const rects = getTextRects(excEl)
+      for (const r of rects) {
+        if (r.width === 0 && r.height === 0) continue
+        zones.push({
+          left: r.left - origin.left,
+          top: r.top - origin.top,
+          right: r.right - origin.left,
+          bottom: r.bottom - origin.top,
+        })
+      }
+    }
+    // Caller-supplied rects already live in the parent-relative
+    // frame, so we append them as-is. Used by the OG capture to
+    // reserve the Electric wordmark's bbox.
+    for (const r of props.extraExcludeRects) {
+      zones.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
     }
     return zones
   }

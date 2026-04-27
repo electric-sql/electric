@@ -39,8 +39,15 @@ const props = withDefaults(
     clipboard?: string
     tone?: Tone
     accent?: string
+    /* hideCopy hides the trailing copy-to-clipboard affordance and
+       disables the click-to-copy behaviour entirely. Used by the
+       social-image hero captures (`/og/*` routes) where the pill is
+       being rendered as a static graphic, not an interactive control,
+       so a copy button would be both visually noisy and meaningless
+       on a screenshot. */
+    hideCopy?: boolean
   }>(),
-  { clipboard: "", tone: "raised", accent: "" }
+  { clipboard: "", tone: "raised", accent: "", hideCopy: false }
 )
 
 const tokens = computed(() => props.command.trim().split(/\s+/))
@@ -68,6 +75,31 @@ function copy() {
   <MdExportExplicit v-if="isMarkdownExport">
     <MarkdownContent>{{ markdownCommand }}</MarkdownContent>
   </MdExportExplicit>
+
+  <div
+    v-else-if="hideCopy"
+    class="install-pill install-pill--static"
+    :class="[`install-pill--${tone}`]"
+    role="presentation"
+  >
+    <span class="install-pill-text">
+      <span class="install-pill-prompt">$</span>
+      <template v-for="(tok, i) in tokens" :key="i">
+        <span v-if="i > 0">&nbsp;</span>
+        <span
+          :class="[
+            'install-pill-tok',
+            accentIndex >= 0
+              ? i === accentIndex
+                ? 'install-pill-tok--accent'
+                : 'install-pill-tok--muted'
+              : `install-pill-tok-${i}`,
+          ]"
+          >{{ tok }}</span
+        >
+      </template>
+    </span>
+  </div>
 
   <button
     v-else
@@ -158,6 +190,18 @@ function copy() {
 }
 .install-pill--sunken {
   background: var(--ea-bg);
+}
+
+/* Static (non-interactive) variant used when `hideCopy` is set. The
+   pill renders as a `<div>` instead of a `<button>` so it's read by
+   AT as decorative chrome rather than a control, and we drop the
+   pointer + hover affordance so it can't be confused with an
+   interactive element. */
+.install-pill--static {
+  cursor: default;
+}
+.install-pill--static:hover {
+  border-color: var(--ea-divider);
 }
 
 .install-pill-text {

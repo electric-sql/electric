@@ -23,7 +23,7 @@ import { VPButton } from "vitepress/theme"
 import { defineClientComponent } from "vitepress"
 
 import EaSection from "../agents-home/Section.vue"
-import SyncFanOutBg from "./SyncFanOutBg.vue"
+import SyncHero, { installCommand } from "./SyncHero.vue"
 import ComposeStackGrid from "./ComposeStackGrid.vue"
 import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
 import InstallPill from "../InstallPill.vue"
@@ -55,9 +55,6 @@ const featuredDemos: HomepageDemoCard[] = getVitepressData<DemosPayload>(
   demoModule
 ).homepage_demos.slice(0, 3)
 
-const installCommand = "npx @electric-sql/start my-electric-app"
-
-const heroInnerRef = ref<HTMLElement>()
 const isMarkdownExport = useMarkdownExport()
 
 // Curated list of Sync-relevant blog posts that fill the panel before
@@ -111,53 +108,7 @@ const demosMarkdown = featuredDemos
 <template>
   <div class="sync-home">
     <!-- ───────────────────────── §1 — Hero ───────────────────────── -->
-    <section class="sh-hero">
-      <SyncFanOutBg
-        class="md-exclude"
-        :exclude-el="heroInnerRef"
-        :labels-on-hover="true"
-        :spawn-rate="0.15"
-        :die-rate="0.15"
-      />
-      <div ref="heroInnerRef" class="sh-hero-inner">
-        <h1 class="sh-hero-name">
-          Electric&nbsp;<span class="sh-hero-accent">Sync</span>
-        </h1>
-        <p class="sh-hero-text">
-          Composable sync primitives for multi-agent&nbsp;systems
-        </p>
-
-        <div class="sh-hero-install-row">
-          <!-- Single-accent highlighting to match the agents and
-               streams hero pills: every other token (`npx`, the
-               `my-electric-app` placeholder name) renders muted and
-               only `@electric-sql/start` — the actual Electric
-               package — picks up the brand colour. -->
-          <InstallPill
-            :command="installCommand"
-            tone="raised"
-            accent="@electric-sql/start"
-          />
-        </div>
-
-        <div class="sh-hero-row">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Quickstart"
-            href="/docs/sync/quickstart"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Docs"
-            href="/docs/sync"
-          />
-        </div>
-      </div>
-    </section>
+    <SyncHero />
 
     <!-- ───────────── §2 — Compose your sync stack ───────────── -->
     <EaSection
@@ -636,69 +587,10 @@ const demosMarkdown = featuredDemos
   max-width: 100vw;
 }
 
-/* ── Hero ───────────────────────────────────────────────────────── */
-
-.sh-hero {
-  position: relative;
-  padding: 80px 24px 72px;
-  text-align: center;
-  overflow: hidden;
-}
-
-.sh-hero-inner {
-  position: relative;
-  z-index: 1;
-  max-width: 880px;
-  margin: 0 auto;
-  pointer-events: none;
-}
-.sh-hero-inner > * {
-  pointer-events: auto;
-}
-
-.sh-hero-name {
-  font-size: 56px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--ea-text-1);
-  margin: 0;
-  padding-bottom: 4px;
-  text-wrap: balance;
-}
-
-.sh-hero-accent {
-  color: var(--vp-c-brand-1);
-}
-
-.sh-hero-text {
-  font-size: 28px;
-  font-weight: 500;
-  color: var(--ea-text-1);
-  margin: 16px auto 32px;
-  max-width: 720px;
-  line-height: 1.35;
-  text-wrap: balance;
-}
-
-/* Two-row CTA stack mirroring the Agents hero: the copyable install
-   pill always sits on its own line above the Quickstart / Docs
-   buttons so it reads as a distinct, scannable affordance rather
-   than a peer of the buttons. */
-.sh-hero-install-row {
-  margin-top: 24px;
-  display: flex;
-  justify-content: center;
-}
-
-.sh-hero-row {
-  margin-top: 14px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
+/* Hero markup, styles and the bg canvas all live in `SyncHero.vue`,
+   which is rendered as `<SyncHero />` at the top of the template.
+   Re-exporting the canonical install command from there keeps the
+   hero pill and the bottom-CTA pill below in sync. */
 
 /* ── Primitive sections ─────────────────────────────────────────── */
 
@@ -1284,12 +1176,8 @@ const demosMarkdown = featuredDemos
 }
 
 @media (max-width: 768px) {
-  .sh-hero {
-    padding: 56px 24px 48px;
-  }
-  .sh-hero-name { font-size: 36px; }
-  .sh-hero-text { font-size: 22px; }
-
+  /* Hero responsive overrides live in `SyncHero.vue` alongside the
+     hero CSS. */
   .sh-primitive-icon {
     width: 36px;
     height: 36px;
@@ -1308,20 +1196,8 @@ const demosMarkdown = featuredDemos
 }
 
 @media (max-width: 480px) {
-  .sh-hero {
-    padding: 44px 20px 36px;
-  }
-  .sh-hero-name { font-size: 28px; }
-  .sh-hero-text { font-size: 19px; }
-
-  .sh-hero-row {
-    flex-direction: column;
-    align-items: stretch;
-    max-width: 280px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
+  /* Hero responsive overrides live in `SyncHero.vue` alongside the
+     hero CSS. */
   .sh-primitive-head {
     gap: 12px;
     margin-bottom: 16px;

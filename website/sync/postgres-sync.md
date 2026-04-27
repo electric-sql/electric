@@ -2,7 +2,6 @@
 title: Postgres Sync
 description: >-
   Read-path sync engine for Postgres that handles partial replication, data delivery and fan-out.
-image: /img/meta/electric-sync.jpg
 outline: deep
 ---
 

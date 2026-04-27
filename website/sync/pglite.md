@@ -2,7 +2,6 @@
 title: PGlite
 description: >-
   Embeddable Postgres with reactivity and sync. For a full database inside your client or runtime.
-image: /img/meta/pglite.jpg
 outline: deep
 ---
 

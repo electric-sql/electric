@@ -16,7 +16,8 @@
     "build:markdown-export": "MARKDOWN_EXPORT=1 vitepress build .",
     "dev": "vitepress dev .",
     "dev:netlify": "netlify dev",
-    "preview": "vitepress preview ."
+    "preview": "vitepress preview .",
+    "build-og-images": "node ./scripts/generate-og-images.mjs"
   },
   "engineManager": "^pnpm@9.15.0",
   "devDependencies": {
@@ -28,7 +29,9 @@
     "cheerio": "^1.2.0",
     "jsdom": "^29.0.2",
     "nodemon": "^3.1.4",
+    "playwright": "^1.52.0",
     "pnpm": "^9.15.0",
+    "sharp": "^0.34.5",
     "shiki": "^3.21.0",
     "turndown": "^7.2.4",
     "turndown-plugin-gfm": "^1.0.2",

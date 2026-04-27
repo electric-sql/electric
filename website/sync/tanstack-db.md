@@ -2,7 +2,6 @@
 title: TanStack DB
 description: >-
   Reactive client store for building super-fast apps. With sub-millisecond reactivity and instant local writes.
-image: /img/meta/tanstack-db.jpg
 outline: deep
 ---
 

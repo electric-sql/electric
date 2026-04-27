@@ -18,6 +18,16 @@ import MegaNav from './components/MegaNav.vue'
 import MegaNavMobile from './components/MegaNavMobile.vue'
 import MegaNavPanel from './components/MegaNavPanel.vue'
 
+// OG image cards. Rendered by routes under `/og/*` and captured by
+// `scripts/generate-og-images.mjs` to produce the social-card JPGs in
+// `public/img/meta/`. Not linked from any nav and excluded from the
+// sitemap / llms.txt — they only exist as a screenshot surface.
+import OgAgents from '../../src/components/og/OgAgents.vue'
+import OgCloud from '../../src/components/og/OgCloud.vue'
+import OgHomepage from '../../src/components/og/OgHomepage.vue'
+import OgStreams from '../../src/components/og/OgStreams.vue'
+import OgSync from '../../src/components/og/OgSync.vue'
+
 // Site root homepage.
 import HomePage from '../../src/components/home/HomePage.vue'
 
@@ -94,6 +104,12 @@ export default {
     app.component(`StreamsHomePage`, StreamsHomePage)
     app.component(`SystemMonitorDemo`, SystemMonitorDemo)
     app.component(`BrandToysPage`, BrandToysPage)
+    // OG image cards.
+    app.component(`OgAgents`, OgAgents)
+    app.component(`OgCloud`, OgCloud)
+    app.component(`OgHomepage`, OgHomepage)
+    app.component(`OgStreams`, OgStreams)
+    app.component(`OgSync`, OgSync)
     enhanceAppWithTabs(app)
   },
   extends: DefaultTheme,

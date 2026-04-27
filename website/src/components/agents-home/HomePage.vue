@@ -7,7 +7,7 @@ import CrashRecoveryDemo from "./CrashRecoveryDemo.vue"
 import CoordinationDemo from "./CoordinationDemo.vue"
 import AgentGridDemo from "./AgentGridDemo.vue"
 import ContextCompositionDemo from "./ContextCompositionDemo.vue"
-import HeroNetworkBg from "./HeroNetworkBg.vue"
+import AgentsHero, { installCommand } from "./AgentsHero.vue"
 import SystemMonitorDemo from "./SystemMonitorDemo.vue"
 import InstallPill from "../InstallPill.vue"
 import MidPageStrap from "../MidPageStrap.vue"
@@ -26,9 +26,6 @@ import * as postsModule from "../../../data/posts.data"
 const allPosts = getVitepressData<PostListRow[]>(postsModule)
 
 const stackTab = ref<"server" | "entities">("server")
-const heroInnerRef = ref<HTMLElement>()
-
-const installCommand = "npx electric-ax agents quickstart"
 
 /* "From the blog" panel — sits just before the bottom CTA. Source list
    is the global `posts.data.ts` filtered by the `agents` tag, so any
@@ -49,41 +46,7 @@ const hasAgentBlogPosts = computed(() =>
 <template>
   <div class="ea-home">
     <!-- Section 1: Hero -->
-    <section class="ea-hero">
-      <HeroNetworkBg
-        class="md-exclude"
-        :exclude-el="heroInnerRef"
-        :spawn-rate="0.4"
-        :die-rate="0.4"
-        :reposition-on-spawn="true"
-      />
-      <div ref="heroInnerRef" class="ea-hero-inner">
-        <h1 class="ea-hero-name">Electric&nbsp;<span class="ea-hero-accent">Agents</span></h1>
-        <p class="ea-hero-text">
-          The durable runtime for long-lived&nbsp;agents
-        </p>
-        <div class="ea-hero-install-row">
-          <InstallPill :command="installCommand" tone="raised" accent="agents" />
-        </div>
-
-        <div class="ea-hero-row">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Quickstart"
-            href="/docs/agents/quickstart"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Docs"
-            href="/docs/agents/"
-          />
-        </div>
-      </div>
-    </section>
+    <AgentsHero />
 
     <!-- Section 1b: Agents need to come online -->
     <Section id="come-online">
@@ -694,135 +657,10 @@ const hasAgentBlogPosts = computed(() =>
   max-width: 100vw;
 }
 
-/* ── Hero ──────────────────────────────────────────────────────────── */
-
-.ea-hero {
-  position: relative;
-  /* Tightened from 100/80 to compensate for the second CTA row
-     (install pill + action-button row) so the hero stays roughly the
-     same overall height as before the split. */
-  padding: 72px 24px 56px;
-  text-align: center;
-  overflow: hidden;
-}
-
-.ea-hero-inner {
-  position: relative;
-  z-index: 1;
-  max-width: 860px;
-  margin: 0 auto;
-  pointer-events: none;
-}
-.ea-hero-inner * {
-  pointer-events: auto;
-}
-
-.ea-hero-name {
-  font-size: 56px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-  -webkit-text-fill-color: currentColor;
-  color: var(--ea-text-1);
-  margin: 0;
-  padding-bottom: 4px;
-  text-wrap: balance;
-}
-
-.ea-hero-accent {
-  color: var(--vp-c-brand-1);
-  -webkit-text-fill-color: currentColor;
-}
-
-.ea-hero-text {
-  font-size: 28px;
-  font-weight: 500;
-  color: var(--ea-text-1);
-  margin: 16px auto 30px;
-  max-width: 720px;
-  line-height: 1.35;
-  text-wrap: balance;
-}
-
-/* Two-row CTA stack: the install pill always sits on its own line
-   above the action buttons so the copyable command reads as a
-   distinct affordance rather than a peer of the buttons. */
-.ea-hero-install-row {
-  margin-top: 24px;
-  display: flex;
-  justify-content: center;
-}
-
-.ea-hero-row {
-  margin-top: 14px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-/* Hero install pill is rendered by the shared `<InstallPill>` component
-   in `src/components/InstallPill.vue` — pill chrome, type sizes,
-   syntax-highlighting palette and clipboard behaviour all live there. */
-
-.ea-hero-credibility {
-  font-family: var(--vp-font-family-base);
-  font-size: 14px;
-  color: var(--ea-text-2);
-  margin-top: 28px;
-}
-
-.ea-hero-credibility a {
-  color: var(--vp-c-brand-1);
-  text-decoration: none;
-}
-.ea-hero-credibility a:hover {
-  text-decoration: underline;
-}
-
-/* Mobile: tighten hero padding and scale headline / tagline so the
-   hero matches the streams / sync responsive rhythm. Without these the
-   56px name overflows narrow viewports and the 100px top padding
-   crowds the navbar on phones. */
-@media (max-width: 768px) {
-  .ea-hero {
-    /* Bumped horizontal padding from 20 → 24 for more breathing room
-       from the viewport edge on tablets / large phones. */
-    padding: 56px 24px 40px;
-  }
-  .ea-hero-name {
-    font-size: 36px;
-  }
-  .ea-hero-text {
-    font-size: 22px;
-  }
-}
-
-@media (max-width: 480px) {
-  .ea-hero {
-    /* Bumped horizontal padding from 16 → 20 for breathing room. */
-    padding: 44px 20px 32px;
-  }
-  .ea-hero-name {
-    font-size: 28px;
-  }
-  .ea-hero-text {
-    font-size: 19px;
-  }
-  /* Stack the action buttons full-width on the smallest screens so
-     they don't wrap awkwardly underneath the install pill. */
-  .ea-hero-row {
-    flex-direction: column;
-    align-items: stretch;
-    max-width: 280px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
+/* Hero markup, styles and the bg canvas all live in `AgentsHero.vue`,
+   which is rendered as `<AgentsHero />` at the top of the template.
+   Re-exporting the canonical install command from there keeps the
+   hero pill and the bottom-CTA pill below in sync. */
 
 .ea-problem-prose .ea-section-title {
   font-size: 28px;
@@ -2003,9 +1841,9 @@ const hasAgentBlogPosts = computed(() =>
 /* ── Responsive ────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
-  /* NOTE: hero padding / type sizes for this breakpoint live in the
-     earlier `.ea-hero` media query block alongside the hero CSS so
-     all hero rules are kept together. Do not duplicate them here. */
+  /* NOTE: hero padding / type sizes for this breakpoint live in
+     `AgentsHero.vue` (the extracted hero component) alongside the
+     hero CSS so all hero rules are kept together. */
   .ea-problem {
     flex-direction: column;
     gap: 32px;
@@ -2143,12 +1981,9 @@ const hasAgentBlogPosts = computed(() =>
 }
 
 @media (max-width: 480px) {
-  /* NOTE: hero padding / type sizes for this breakpoint live in the
-     earlier `.ea-hero` media query block alongside the hero CSS so
-     all hero rules are kept together. Do not duplicate them here. */
-  .ea-hero-credibility {
-    font-size: 12px;
-  }
+  /* NOTE: hero padding / type sizes for this breakpoint live in
+     `AgentsHero.vue` (the extracted hero component) alongside the
+     hero CSS so all hero rules are kept together. */
   /* All per-section section-title overrides drop to 20px in lockstep
      with the shared `.ea-section-title` rule in Section.vue. Keep this
      selector list in sync with the 768px rule above. */

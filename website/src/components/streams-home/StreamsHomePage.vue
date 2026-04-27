@@ -4,7 +4,7 @@ import { VPButton } from "vitepress/theme"
 
 import EaSection from "../agents-home/Section.vue"
 
-import StreamFlowBg from "./StreamFlowBg.vue"
+import StreamsHero, { installCommand } from "./StreamsHero.vue"
 import AgentLoopFillDemo from "./AgentLoopFillDemo.vue"
 import ConnectionDropDemo from "./ConnectionDropDemo.vue"
 import QuickstartPlaybackDemo from "./QuickstartPlaybackDemo.vue"
@@ -32,10 +32,6 @@ const streamsBlogPosts = [
   "ai-agents-as-crdt-peers-with-yjs",
   "stream-db",
 ]
-
-const heroInnerRef = ref<HTMLElement>()
-
-const installCommand = "npm i @durable-streams/client"
 
 const isMarkdownExport = useMarkdownExport()
 
@@ -139,47 +135,7 @@ ${example.code}
 <template>
   <div class="ds-home">
     <!-- ───────────────── §1 — Hero ───────────────── -->
-    <section class="ds-hero">
-      <StreamFlowBg class="md-exclude" :exclude-el="heroInnerRef" />
-      <div ref="heroInnerRef" class="ds-hero-inner">
-        <h1 class="ds-hero-name">
-          Electric&nbsp;<span class="ds-hero-accent">Streams</span>
-        </h1>
-        <p class="ds-hero-text">
-          The data primitive for the agent&nbsp;loop
-        </p>
-
-        <div class="ds-hero-install-row">
-          <!-- Accent the package name only: every other token (`npm`,
-               `i`) renders muted and just `@durable-streams/client`
-               picks up the brand colour. Reads lighter than the
-               default positional 4-colour palette and points the eye
-               at the actual product name in the command. -->
-          <InstallPill
-            :command="installCommand"
-            tone="raised"
-            accent="@durable-streams/client"
-          />
-        </div>
-
-        <div class="ds-hero-row">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Quickstart"
-            href="/docs/streams/quickstart"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Docs"
-            href="/docs/streams"
-          />
-        </div>
-      </div>
-    </section>
+    <StreamsHero />
 
     <!-- ───────────────── §1.5 — The agent loop, on streams ───────────────── -->
     <EaSection id="agent-loop-primitive">
@@ -717,81 +673,10 @@ ${example.code}
   max-width: 100vw;
 }
 
-/* ── §1 Hero ──────────────────────────────────────────────────────── */
-
-.ds-hero {
-  position: relative;
-  /* Bottom padding bumped from 56 → 96 to give the hero (and the
-     animated stream-flow background that paints behind it) more room
-     to breathe before the first section takes over. Top stays at 72
-     so the headline still anchors high on the viewport. */
-  padding: 72px 24px 96px;
-  text-align: center;
-  overflow: hidden;
-}
-
-.ds-hero-inner {
-  position: relative;
-  z-index: 1;
-  max-width: 860px;
-  margin: 0 auto;
-  pointer-events: none;
-}
-.ds-hero-inner * {
-  pointer-events: auto;
-}
-
-.ds-hero-name {
-  font-size: 56px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-  -webkit-text-fill-color: currentColor;
-  color: var(--ea-text-1);
-  margin: 0;
-  padding-bottom: 4px;
-  text-wrap: balance;
-}
-
-.ds-hero-accent {
-  color: var(--vp-c-brand-1);
-  -webkit-text-fill-color: currentColor;
-}
-
-.ds-hero-text {
-  font-size: 28px;
-  font-weight: 500;
-  color: var(--ea-text-1);
-  margin: 16px auto 30px;
-  max-width: 720px;
-  line-height: 1.35;
-  text-wrap: balance;
-}
-
-/* Two-row CTA stack: the install pill always sits on its own line
-   above the action buttons so the copyable command reads as a
-   distinct affordance rather than a peer of the buttons. */
-.ds-hero-install-row {
-  margin-top: 24px;
-  display: flex;
-  justify-content: center;
-}
-
-.ds-hero-row {
-  margin-top: 14px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-/* Hero install pill is rendered by the shared `<InstallPill>` component
-   in `src/components/InstallPill.vue` — pill chrome, type sizes,
-   syntax-highlighting palette and clipboard behaviour all live there. */
+/* Hero markup, styles and the bg canvas all live in `StreamsHero.vue`,
+   which is rendered as `<StreamsHero />` at the top of the template.
+   Re-exporting the canonical install command from there keeps the
+   hero pill and the bottom-CTA pill below in sync. */
 
 /* ── §2 Pain intro ─────────────────────────────────────────────── */
 
@@ -1328,19 +1213,8 @@ ${example.code}
 }
 
 @media (max-width: 768px) {
-  .ds-hero {
-    /* Bumped horizontal padding from 20 → 24 for more breathing room
-       from the viewport edge on tablets / large phones. Bottom
-       padding scales with the desktop bump (40 → 64) so the hero
-       still has air below the CTAs at this breakpoint. */
-    padding: 56px 24px 64px;
-  }
-  .ds-hero-name {
-    font-size: 36px;
-  }
-  .ds-hero-text {
-    font-size: 22px;
-  }
+  /* Hero responsive overrides live in `StreamsHero.vue` alongside
+     the hero CSS. */
   .ds-split-text .ea-section-title {
     font-size: 22px;
   }
@@ -1371,17 +1245,8 @@ ${example.code}
 }
 
 @media (max-width: 480px) {
-  .ds-hero {
-    /* Bumped horizontal padding from 16 → 20 for breathing room.
-       Bottom padding scales with the desktop bump (32 → 52). */
-    padding: 44px 20px 52px;
-  }
-  .ds-hero-name {
-    font-size: 28px;
-  }
-  .ds-hero-text {
-    font-size: 19px;
-  }
+  /* Hero responsive overrides live in `StreamsHero.vue` alongside
+     the hero CSS. */
   /* Drop the section title override in lockstep with the shared
      `.ea-section-title` rule in Section.vue (20px at 480px) so the
      `.ds-split-text` heading matches every other section title on
@@ -1396,15 +1261,6 @@ ${example.code}
   }
   /* `.ds-pain-intro` font-size at 480px is handled by the shared
      `.ea-prose` mobile cascade in custom.css. */
-  /* Stack the action buttons full-width on the smallest screens so
-     they don't wrap awkwardly underneath the install pill. */
-  .ds-hero-row {
-    flex-direction: column;
-    align-items: stretch;
-    max-width: 280px;
-    margin-left: auto;
-    margin-right: auto;
-  }
   .ds-stack-code .code-block,
   .ds-first-stream .code-block {
     font-size: 11px;

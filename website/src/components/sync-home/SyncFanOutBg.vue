@@ -72,6 +72,14 @@ const props = withDefaults(
     // turns this on so it can draw inter-layer bridge lines without
     // paying the listener cost on the standalone sync landing hero.
     emitDotLit?: boolean
+    // Additional axis-aligned no-draw rects in coords relative to
+    // the canvas's parent element (the hero <section>). Merged with
+    // the rects measured from `excludeEl` so callers can reserve
+    // space for chrome that lives outside the inner copy block —
+    // e.g. the OG capture wraps this hero inside a frame that
+    // overlays the Electric wordmark in the top-left, and feeds the
+    // wordmark's bbox in here so no canvas geometry paints under it.
+    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
   }>(),
   {
     density: 1,
@@ -81,6 +89,7 @@ const props = withDefaults(
     spawnRate: 0,
     dieRate: 0,
     emitDotLit: false,
+    extraExcludeRects: () => [],
   },
 )
 
@@ -299,18 +308,27 @@ onMounted(() => {
 
   function measureExclusions(): ExcludeRect[] {
     const zones: ExcludeRect[] = []
-    const excEl = props.excludeEl
-    if (!excEl || !el!.parentElement) return zones
+    if (!el!.parentElement) return zones
     const origin = el!.parentElement!.getBoundingClientRect()
-    const rects = getTextRects(excEl)
-    for (const r of rects) {
-      if (r.width === 0 && r.height === 0) continue
-      zones.push({
-        left: r.left - origin.left,
-        top: r.top - origin.top,
-        right: r.right - origin.left,
-        bottom: r.bottom - origin.top,
-      })
+    const excEl = props.excludeEl
+    if (excEl) {
+      const rects = getTextRects(excEl)
+      for (const r of rects) {
+        if (r.width === 0 && r.height === 0) continue
+        zones.push({
+          left: r.left - origin.left,
+          top: r.top - origin.top,
+          right: r.right - origin.left,
+          bottom: r.bottom - origin.top,
+        })
+      }
+    }
+    // `extraExcludeRects` is supplied directly in parent-relative
+    // coords (same frame `measureExclusions` produces above), so we
+    // append them as-is. Used by the OG capture to reserve the
+    // wordmark's bbox in the frame's top-left corner.
+    for (const r of props.extraExcludeRects) {
+      zones.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })
     }
     return zones
   }
