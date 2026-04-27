@@ -13,16 +13,16 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import http from 'node:http'
-import { registerAssistant } from './assistant.js'
-import { registerResearcher } from './researcher.js'
+import { registerOptimist } from './optimist.js'
+import { registerCritic } from './critic.js'
 
 const AGENTS_URL = process.env.AGENTS_URL ?? `http://localhost:4437`
 const PORT = Number(process.env.PORT ?? 4700)
 const SERVE_URL = process.env.SERVE_URL ?? `http://localhost:${PORT}`
 
 const registry = createEntityRegistry()
-registerAssistant(registry)
-registerResearcher(registry)
+registerOptimist(registry)
+registerCritic(registry)
 
 const runtime = createRuntimeHandler({
   baseUrl: AGENTS_URL,
@@ -151,8 +151,8 @@ const server = http.createServer(async (req, res) => {
       const room: Room = { id, name, agents: [], createdAt: Date.now() }
       rooms.set(id, room)
 
-      await spawnAgent(room, `assistant`)
-      await spawnAgent(room, `researcher`)
+      await spawnAgent(room, `optimist`)
+      await spawnAgent(room, `critic`)
 
       writeJson(res, 200, {
         id: room.id,

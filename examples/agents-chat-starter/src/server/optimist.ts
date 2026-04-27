@@ -4,26 +4,23 @@ import { chatroomSchema } from './schema.js'
 import {
   createSendMessageTool,
   createBroadcastFn,
-  createWebSearchTool,
   getConversationHistory,
   DEFAULT_MODEL,
   type ChatroomState,
 } from './shared-tools.js'
 import type { EntityRegistry } from '@electric-ax/agents-runtime'
 
-const researcherArgsSchema = z.object({
-  chatroomId: z.string().min(1),
-})
+const argsSchema = z.object({ chatroomId: z.string().min(1) })
 
-const SYSTEM_PROMPT = `You are a Research Agent in a shared chatroom with web search. Respond to questions needing current facts, news, or data — use web_search first, then send_message. If the question is general conversation or brainstorming, stay silent. Ignore messages from other agents unless directly addressed.`
+const SYSTEM_PROMPT = `You are an Optimist in a shared chatroom. When the user asks a question, provide an enthusiastic, positive analysis focusing on opportunities and benefits. Use send_message to post your response. If other agents have already covered the optimistic angle, add new points or stay silent.`
 
-export function registerResearcher(registry: EntityRegistry): void {
-  registry.define(`researcher`, {
-    description: `Research agent with web search capability`,
-    creationSchema: researcherArgsSchema,
+export function registerOptimist(registry: EntityRegistry): void {
+  registry.define(`optimist`, {
+    description: `Optimist analyst — focuses on opportunities and benefits`,
+    creationSchema: argsSchema,
 
     async handler(ctx) {
-      const args = researcherArgsSchema.parse(ctx.args)
+      const args = argsSchema.parse(ctx.args)
 
       if (ctx.firstWake) {
         ctx.mkdb(args.chatroomId, chatroomSchema)
@@ -54,7 +51,6 @@ export function registerResearcher(registry: EntityRegistry): void {
             ctx.entityUrl,
             createBroadcastFn(args.chatroomId, ctx.entityUrl)
           ),
-          createWebSearchTool(),
         ],
       })
       await ctx.agent.run()

@@ -10,19 +10,17 @@ import {
 } from './shared-tools.js'
 import type { EntityRegistry } from '@electric-ax/agents-runtime'
 
-const assistantArgsSchema = z.object({
-  chatroomId: z.string().min(1),
-})
+const argsSchema = z.object({ chatroomId: z.string().min(1) })
 
-const SYSTEM_PROMPT = `You are a General Assistant in a shared chatroom. Respond to conversational questions, brainstorming, and explanations. If a question needs web research, stay silent — a Researcher agent will handle it. If unsure, respond. Use send_message to post replies. Ignore messages from other agents unless directly addressed.`
+const SYSTEM_PROMPT = `You are a Critic in a shared chatroom. When the user asks a question, provide a sharp analysis focusing on risks, downsides, and challenges. Use send_message to post your response. If other agents have already covered the critical angle, add new points or stay silent.`
 
-export function registerAssistant(registry: EntityRegistry): void {
-  registry.define(`assistant`, {
-    description: `General-purpose helpful chat agent`,
-    creationSchema: assistantArgsSchema,
+export function registerCritic(registry: EntityRegistry): void {
+  registry.define(`critic`, {
+    description: `Critical analyst — focuses on risks and challenges`,
+    creationSchema: argsSchema,
 
     async handler(ctx) {
-      const args = assistantArgsSchema.parse(ctx.args)
+      const args = argsSchema.parse(ctx.args)
 
       if (ctx.firstWake) {
         ctx.mkdb(args.chatroomId, chatroomSchema)
@@ -33,8 +31,6 @@ export function registerAssistant(registry: EntityRegistry): void {
         db(args.chatroomId, chatroomSchema)
       )) as unknown as ChatroomState
 
-      // Inject conversation history as volatile context so the agent
-      // always sees the full chat, even if it just joined the room.
       ctx.useContext({
         sourceBudget: 50_000,
         sources: {
