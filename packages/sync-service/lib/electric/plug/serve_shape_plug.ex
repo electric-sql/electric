@@ -35,12 +35,14 @@ defmodule Electric.Plug.ServeShapePlug do
   require Logger
 
   @admission_permit_key {__MODULE__, :admission_permit}
+  @subquery_compaction_error "can't be enabled for shapes with subqueries"
 
   # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with
   # query params and an OTEL span.
   plug :put_resp_content_type, "application/json"
   plug :parse_body
   plug :validate_request
+  plug :reject_subquery_shape_compaction_request
   plug :resolve_existing_shape
   plug :check_admission
   plug :load_shape
@@ -249,6 +251,21 @@ defmodule Electric.Plug.ServeShapePlug do
       |> Map.put("subset", Map.merge(existing_subset, subset_params))
     else
       Map.merge(query_params, body_params)
+    end
+  end
+
+  defp reject_subquery_shape_compaction_request(%{assigns: %{request: request}} = conn, _) do
+    if Api.Params.compaction_enabled?(request.params) and
+         request.params.shape_definition.shape_dependencies != [] do
+      conn
+      |> Api.Response.send(
+        Api.Response.invalid_request(request,
+          errors: %{experimental_compaction: [@subquery_compaction_error]}
+        )
+      )
+      |> halt()
+    else
+      conn
     end
   end
 
