@@ -9,27 +9,25 @@ concurrency:
   group: examples-pr-${{ github.event.number }}
 
 jobs:
+  example-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-example-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create example matrix
+        id: create-example-matrix
+        run: node scripts/ci/example-matrix.mjs teardown
+
   teardown-pr-stack:
     name: Teardown Examples PR stack
+    needs: example-matrix
     environment: Pull request
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        example:
-          [
-            'yjs',
-            'linearlite-read-only',
-            'write-patterns',
-            'nextjs',
-            'todo-app',
-            'proxy-auth',
-            'phoenix-liveview',
-            'tanstack',
-            'remix',
-            'react',
-            'burn',
-          ]
+      matrix: ${{ fromJson(needs.example-matrix.outputs.matrix) }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -55,7 +53,12 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          if [ -f "${{ matrix.example.path }}/package.json" ]; then
+            pnpm --filter "$(jq -r .name "${{ matrix.example.path }}/package.json")..." --filter @electric-examples/shared install --frozen-lockfile
+          else
+            pnpm install --frozen-lockfile
+          fi
 
       - name: Cache SST state
         uses: actions/cache@v4
@@ -65,8 +68,8 @@ jobs:
           restore-keys: |
             sst-cache-${{ runner.os }}
 
-      - name: Remove ${{ matrix.example }} example
-        working-directory: ./examples/${{ matrix.example }}
+      - name: Remove ${{ matrix.example.name }} example
+        working-directory: ./${{ matrix.example.path }}
         run: |
           export PR_NUMBER=${{ github.event.number }}
           echo "Removing stage pr-$PR_NUMBER"

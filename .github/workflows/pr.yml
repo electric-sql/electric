@@ -35,7 +35,7 @@ jobs:
           node-version-file: '.tool-versions'
           cache: 'pnpm'
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --filter @electric-sql/client... --filter @electric-sql/react... --filter @electric-sql/y-electric... install --frozen-lockfile
       - name: Build Packages
         run: pnpm --filter @electric-sql/client --filter @electric-sql/react --filter @electric-sql/y-electric run build
       - name: Publish Previews
