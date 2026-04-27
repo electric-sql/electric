@@ -136,7 +136,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexNodeTest do
                  filter,
                  condition_id,
                  "shape1",
-                 subquery_optimisation()
+                 subquery_optimisation(),
+                 []
                )
 
       refute SubqueryIndex.has_positions?(reverse_index, "shape1")
@@ -149,7 +150,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexNodeTest do
                  filter,
                  condition_id,
                  "shape2",
-                 subquery_optimisation(field: @other_field)
+                 subquery_optimisation(field: @other_field),
+                 []
                )
     end
   end
@@ -162,7 +164,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexNodeTest do
         filter,
         condition_id,
         shape_id,
-        subquery_optimisation(opts)
+        subquery_optimisation(opts),
+        []
       )
   end
 

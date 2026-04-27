@@ -105,20 +105,33 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Register a shape on a concrete subquery filter node.
   """
-  @spec add_shape(Filter.t(), reference(), term(), map()) :: :ok
-  def add_shape(%Filter{subquery_index: table} = filter, condition_id, shape_id, optimisation) do
+  @spec add_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :ok
+  def add_shape(
+        %Filter{subquery_index: table} = filter,
+        condition_id,
+        shape_id,
+        optimisation,
+        branch_key
+      ) do
     node_id = {condition_id, optimisation.field}
     next_condition_id = make_ref()
 
     WhereCondition.init(filter, next_condition_id)
-    WhereCondition.add_shape(filter, next_condition_id, shape_id, optimisation.and_where)
+
+    WhereCondition.add_shape(
+      filter,
+      next_condition_id,
+      shape_id,
+      optimisation.and_where,
+      branch_key
+    )
 
     ensure_node_meta(table, node_id, optimisation.testexpr)
 
     :ets.insert(
       table,
       {{:node_shape, node_id},
-       {shape_id, optimisation.dep_index, optimisation.polarity, next_condition_id}}
+       {shape_id, optimisation.dep_index, optimisation.polarity, next_condition_id, branch_key}}
     )
 
     if optimisation.polarity == :negated do
@@ -128,13 +141,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     :ets.insert(
       table,
       {{:shape_node, shape_id},
-       {node_id, optimisation.dep_index, optimisation.polarity, next_condition_id}}
+       {node_id, optimisation.dep_index, optimisation.polarity, next_condition_id, branch_key}}
     )
 
     :ets.insert(
       table,
       {{:shape_dep_node, shape_id, optimisation.dep_index},
-       {node_id, optimisation.polarity, next_condition_id}}
+       {node_id, optimisation.polarity, next_condition_id, branch_key}}
     )
 
     :ets.insert(table, {{:node_fallback, node_id}, {shape_id, next_condition_id}})
@@ -144,21 +157,33 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Remove a shape from a concrete subquery filter node.
   """
-  @spec remove_shape(Filter.t(), reference(), term(), map()) :: :deleted | :ok
-  def remove_shape(%Filter{subquery_index: table} = filter, condition_id, shape_id, optimisation) do
+  @spec remove_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :deleted | :ok
+  def remove_shape(
+        %Filter{subquery_index: table} = filter,
+        condition_id,
+        shape_id,
+        optimisation,
+        branch_key
+      ) do
     node_id = {condition_id, optimisation.field}
 
-    case node_shape_entry_for_shape(table, shape_id, node_id) do
+    case node_shape_entry_for_shape(table, shape_id, node_id, branch_key) do
       nil ->
         :deleted
 
       {dep_index, polarity, next_condition_id} ->
         _ =
-          WhereCondition.remove_shape(filter, next_condition_id, shape_id, optimisation.and_where)
+          WhereCondition.remove_shape(
+            filter,
+            next_condition_id,
+            shape_id,
+            optimisation.and_where,
+            branch_key
+          )
 
         :ets.match_delete(
           table,
-          {{:node_shape, node_id}, {shape_id, dep_index, polarity, next_condition_id}}
+          {{:node_shape, node_id}, {shape_id, dep_index, polarity, next_condition_id, branch_key}}
         )
 
         if polarity == :negated do
@@ -170,12 +195,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
         :ets.match_delete(
           table,
-          {{:shape_node, shape_id}, {node_id, dep_index, polarity, next_condition_id}}
+          {{:shape_node, shape_id}, {node_id, dep_index, polarity, next_condition_id, branch_key}}
         )
 
         :ets.match_delete(
           table,
-          {{:shape_dep_node, shape_id, dep_index}, {node_id, polarity, next_condition_id}}
+          {{:shape_dep_node, shape_id, dep_index},
+           {node_id, polarity, next_condition_id, branch_key}}
         )
 
         :ets.match_delete(table, {{:node_fallback, node_id}, {shape_id, next_condition_id}})
@@ -209,7 +235,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def mark_ready(table, shape_handle) do
     :ets.delete(table, {:fallback, shape_handle})
 
-    for {node_id, _dep_index, _polarity, _next_condition_id} <-
+    for {node_id, _dep_index, _polarity, _next_condition_id, _branch_key} <-
           nodes_for_shape(table, shape_handle) do
       :ets.match_delete(table, {{:node_fallback, node_id}, {shape_handle, :_}})
     end
@@ -222,7 +248,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec add_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
   def add_value(table, shape_handle, subquery_ref, dep_index, value) do
-    for {node_id, polarity, next_condition_id} <-
+    for {node_id, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, shape_handle, dep_index) do
       case polarity do
         :positive ->
@@ -248,7 +274,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec remove_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
   def remove_value(table, shape_handle, subquery_ref, dep_index, value) do
-    for {node_id, polarity, next_condition_id} <-
+    for {node_id, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, shape_handle, dep_index) do
       case polarity do
         :positive ->
@@ -366,7 +392,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def positions_for_shape(table, shape_handle) do
     table
     |> nodes_for_shape(shape_handle)
-    |> Enum.map(fn {node_id, _dep_index, _polarity, _next_condition_id} -> node_id end)
+    |> Enum.map(fn {node_id, _dep_index, _polarity, _next_condition_id, _branch_key} ->
+      node_id
+    end)
   end
 
   defp ensure_node_meta(table, node_id, testexpr) do
@@ -407,11 +435,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     |> Enum.map(&elem(&1, 1))
   end
 
-  defp node_shape_entry_for_shape(table, shape_id, node_id) do
+  defp node_shape_entry_for_shape(table, shape_id, node_id, branch_key) do
     table
     |> nodes_for_shape(shape_id)
     |> Enum.find_value(fn
-      {^node_id, dep_index, polarity, next_condition_id} ->
+      {^node_id, dep_index, polarity, next_condition_id, ^branch_key} ->
         {dep_index, polarity, next_condition_id}
 
       _ ->
@@ -427,7 +455,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     table
     |> :ets.lookup({:node_shape, node_id})
     |> Enum.reduce(MapSet.new(), fn
-      {{:node_shape, ^node_id}, {shape_id, _dep_index, _polarity, next_condition_id}}, acc ->
+      {{:node_shape, ^node_id}, {shape_id, _dep_index, _polarity, next_condition_id, _branch_key}},
+      acc ->
         MapSet.put(acc, {shape_id, next_condition_id})
 
       _, acc ->

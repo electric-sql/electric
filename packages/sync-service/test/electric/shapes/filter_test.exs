@@ -29,6 +29,18 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.indexed_shape?(shape)
     end
 
+    test "returns true for OR shapes when both branches are indexed" do
+      shape = Shape.new!("t1", where: "id = 7 OR id = 8", inspector: @inspector)
+
+      assert Filter.indexed_shape?(shape)
+    end
+
+    test "returns false for OR shapes when one branch is not indexed" do
+      shape = Shape.new!("t1", where: "id = 7 OR number > 5", inspector: @inspector)
+
+      refute Filter.indexed_shape?(shape)
+    end
+
     test "returns false for shapes without an indexable where clause" do
       shape = Shape.new!("t1", inspector: @inspector)
 
@@ -460,6 +472,40 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "1", "number" => "3"}, false},
           {%{"id" => "3", "number" => "6"}, false}
         ]
+      },
+      %{
+        where: "id = 1 OR id = 2",
+        records: [
+          {%{"id" => "1"}, true},
+          {%{"id" => "2"}, true},
+          {%{"id" => "3"}, false}
+        ]
+      },
+      %{
+        where: "id = 1 AND (number = 2 OR number = 3)",
+        records: [
+          {%{"id" => "1", "number" => "2"}, true},
+          {%{"id" => "1", "number" => "3"}, true},
+          {%{"id" => "1", "number" => "4"}, false},
+          {%{"id" => "2", "number" => "2"}, false}
+        ]
+      },
+      %{
+        where: "(id = 1 OR id = 2) AND number = 3",
+        records: [
+          {%{"id" => "1", "number" => "3"}, true},
+          {%{"id" => "2", "number" => "3"}, true},
+          {%{"id" => "1", "number" => "4"}, false},
+          {%{"id" => "3", "number" => "3"}, false}
+        ]
+      },
+      %{
+        where: "(id = 1 AND number > 2) OR (id = 1 AND number < 1)",
+        records: [
+          {%{"id" => "1", "number" => "3"}, true},
+          {%{"id" => "1", "number" => "0"}, true},
+          {%{"id" => "1", "number" => "2"}, false}
+        ]
       }
     ]
 
@@ -498,9 +544,27 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "1 = ANY(an_array)", inspector: @inspector),
       Shape.new!("table", where: "2 = ANY(an_array)", inspector: @inspector),
       Shape.new!("table", where: "id = 1 AND 1 = ANY(an_array)", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 OR id = 2", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 OR number > 5", inspector: @inspector),
+      Shape.new!("table",
+        where: "(id = 1 AND number > 2) OR (id = 1 AND number < 1)",
+        inspector: @inspector
+      ),
+      Shape.new!("table", where: "id = 1 AND (number = 2 OR number = 3)", inspector: @inspector),
+      Shape.new!("table", where: "(id = 1 OR id = 2) AND number = 3", inspector: @inspector),
       Shape.new!("table", where: "id IN (1, 2, 3)", inspector: @inspector),
       Shape.new!("table", where: "id IN (4, 5)", inspector: @inspector),
       Shape.new!("table", where: "id IN (1, 2) AND number > 5", inspector: @inspector),
+      Shape.new!("table",
+        where: "id IN (SELECT id FROM another_table) OR id = 1",
+        inspector: @inspector,
+        feature_flags: ["allow_subqueries"]
+      ),
+      Shape.new!("table",
+        where: "id IN (SELECT id FROM another_table) OR number > 5",
+        inspector: @inspector,
+        feature_flags: ["allow_subqueries"]
+      ),
       Shape.new!("table",
         where: "id IN (SELECT id FROM another_table)",
         inspector: @inspector,
@@ -765,7 +829,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "where clause in the form `const = ANY(array_field)` is optimised" do
       # Same shape count as @> but higher budget per shape because the ANY
-      # AST is deeper to pattern-match through optimise_where
+      # AST is deeper to pattern-match through the planner
       shape_count = @shape_count * 5
       max_reductions = @max_reductions * 10
 
@@ -790,15 +854,16 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
-    test "where clause in the form `field IN (const1, const2, ...)` is optimised" do
+    test "where clause in the form `field = const1 OR field = const2` is optimised" do
+      max_reductions = @max_reductions * 2
       filter = Filter.new()
 
       Enum.each(1..@shape_count, fn i ->
         shape =
-          Shape.new!("t1", where: "id IN (#{i}, #{i + @shape_count})", inspector: @inspector)
+          Shape.new!("t1", where: "id = #{i} OR id = #{i + @shape_count}", inspector: @inspector)
 
         add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
-        assert add_reductions < @max_reductions
+        assert add_reductions < max_reductions
       end)
 
       change = change("t1", %{"id" => "7"})
@@ -806,11 +871,11 @@ defmodule Electric.Shapes.FilterTest do
 
       affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
-      assert affected_reductions < @max_reductions
+      assert affected_reductions < max_reductions
 
       Enum.each(1..@shape_count, fn i ->
         remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
-        assert remove_reductions < @max_reductions
+        assert remove_reductions < max_reductions
       end)
     end
 
@@ -1007,13 +1072,11 @@ defmodule Electric.Shapes.FilterTest do
            "CREATE TABLE IF NOT EXISTS or_parent (id INT PRIMARY KEY)",
            "CREATE TABLE IF NOT EXISTS or_child (id INT PRIMARY KEY, par_id INT REFERENCES or_parent(id), value TEXT NOT NULL)"
          ]
-    test "non-optimisable OR+subquery shape is affected by root table changes", %{
+    test "optimisable OR+subquery shape is affected by root table changes", %{
       inspector: inspector
     } do
-      # Shape with OR combining a subquery and a simple condition.
-      # OR is not optimisable, so the shape lands in other_shapes AND
-      # gets registered in the sublink inverted index. Root table changes
-      # must still be routed to this shape once seeded.
+      # Both OR branches are indexable, so the shape is registered twice in the
+      # filter tree: once for the subquery branch and once for the simple branch.
       {:ok, shape} =
         Shape.new("or_child",
           inspector: inspector,
@@ -1065,6 +1128,53 @@ defmodule Electric.Shapes.FilterTest do
       }
 
       assert Filter.affected_shapes(filter, update_into_shape) == MapSet.new(["shape1"])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS or_parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS or_child (id INT PRIMARY KEY, par_id INT REFERENCES or_parent(id), value TEXT NOT NULL)"
+         ]
+    test "mixed OR+subquery shape falls back to other_shapes verification", %{
+      inspector: inspector
+    } do
+      {:ok, shape} =
+        Shape.new("or_child",
+          inspector: inspector,
+          where: "par_id IN (SELECT id FROM or_parent) OR value LIKE 'target%'"
+        )
+
+      filter = Filter.new()
+      filter = Filter.add_shape(filter, "shape1", shape)
+
+      index = Filter.subquery_index(filter)
+      subquery_ref = ["$sublink", "0"]
+
+      for value <- [1, 2, 3] do
+        SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, value)
+      end
+
+      SubqueryIndex.mark_ready(index, "shape1")
+
+      insert_matching_value = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "99", "par_id" => "99", "value" => "target-me"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching_value) == MapSet.new(["shape1"])
+
+      insert_matching_subquery = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "10", "par_id" => "2", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching_subquery) == MapSet.new(["shape1"])
+
+      insert_no_match = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "50", "par_id" => "99", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new([])
     end
 
     @tag with_sql: [

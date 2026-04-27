@@ -69,21 +69,21 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       register_node_shape(filter, table, condition_id, "s3")
 
       assert [
-               {{:node_shape, {^condition_id, @field}}, {"s1", 0, :positive, _}},
-               {{:node_shape, {^condition_id, @field}}, {"s2", 0, :positive, _}},
-               {{:node_shape, {^condition_id, @field}}, {"s3", 0, :positive, _}}
+               {{:node_shape, {^condition_id, @field}}, {"s1", 0, :positive, _, []}},
+               {{:node_shape, {^condition_id, @field}}, {"s2", 0, :positive, _, []}},
+               {{:node_shape, {^condition_id, @field}}, {"s3", 0, :positive, _, []}}
              ] = Enum.sort(:ets.lookup(table, {:node_shape, {condition_id, @field}}))
 
       assert :ok =
-               SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation())
+               SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation(), [])
 
       assert MapSet.new(["s2", "s3"]) == SubqueryIndex.all_shape_ids(filter, condition_id, @field)
 
       assert :ok =
-               SubqueryIndex.remove_shape(filter, condition_id, "s2", subquery_optimisation())
+               SubqueryIndex.remove_shape(filter, condition_id, "s2", subquery_optimisation(), [])
 
       assert :deleted =
-               SubqueryIndex.remove_shape(filter, condition_id, "s3", subquery_optimisation())
+               SubqueryIndex.remove_shape(filter, condition_id, "s3", subquery_optimisation(), [])
 
       assert [] == :ets.lookup(table, {:node_shape, {condition_id, @field}})
       assert [] == :ets.lookup(table, {:node_meta, {condition_id, @field}})
@@ -150,7 +150,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       SubqueryIndex.add_value(table, "s1", @subquery_ref, 0, 5)
 
       assert :deleted =
-               SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation())
+               SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation(), [])
 
       refute SubqueryIndex.has_positions?(table, "s1")
 
@@ -173,7 +173,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
   defp register_node_shape(filter, table, condition_id, shape_id, opts \\ []) do
     SubqueryIndex.register_shape(table, shape_id, make_plan(opts))
-    :ok = SubqueryIndex.add_shape(filter, condition_id, shape_id, subquery_optimisation(opts))
+    :ok = SubqueryIndex.add_shape(filter, condition_id, shape_id, subquery_optimisation(opts), [])
   end
 
   defp subquery_optimisation(opts \\ []) do
