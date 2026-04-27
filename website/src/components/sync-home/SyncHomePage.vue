@@ -33,11 +33,19 @@ import MarkdownContent from "../MarkdownContent.vue"
 import MdExportExplicit from "../MdExportExplicit.vue"
 import { useMarkdownExport } from "../../lib/useMarkdownExport"
 
-// PGlite REPL is browser-only (WASM + DOM access at script-setup
-// time), so lazy-load it on the client and render inside <ClientOnly>.
-const PGliteReplDemo = defineClientComponent(() => {
-  return import("./PGliteReplDemo.vue")
-})
+// PGlite REPL is browser-only (WASM + DOM in the child module), so we use
+// defineClientComponent: the import only runs in onMounted, so the WASM stack
+// never runs during SSR. One browser boot fetches several assets
+// (initdb.wasm, pglite.wasm, pglite.data); that is expected — not the same
+// file loaded repeatedly unless the devtools "Disable cache" is on.
+const pgliteReplLoading = ref(true)
+const PGliteReplDemo = defineClientComponent(
+  () => import("./PGliteReplDemo.vue"),
+  undefined,
+  () => {
+    pgliteReplLoading.value = false
+  }
+)
 
 import { getVitepressData } from "../../lib/vitepressData"
 import type { DemosPayload, HomepageDemoCard } from "../../types/data-loaders"
@@ -327,12 +335,13 @@ const demosMarkdown = featuredDemos
               <span class="sh-pglite-meta">WASM Postgres · in this page</span>
             </div>
             <div class="sh-pglite-body">
-              <ClientOnly>
-                <PGliteReplDemo />
-                <template #fallback>
-                  <div class="sh-pglite-loading mono">Booting PGlite&hellip;</div>
-                </template>
-              </ClientOnly>
+              <div
+                v-if="pgliteReplLoading"
+                class="sh-pglite-loading mono"
+              >
+                Booting PGlite&hellip;
+              </div>
+              <PGliteReplDemo />
             </div>
           </div>
         </div>

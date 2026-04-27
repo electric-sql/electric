@@ -19,9 +19,6 @@ import MegaNavMobile from './components/MegaNavMobile.vue'
 
 import ReleaseBanner from '../../src/components/home/ReleaseBanner.vue'
 
-import HomeFeaturesAfter from '../../src/partials/home-features-after.md'
-import HomeFeaturesBefore from '../../src/partials/home-features-before.md'
-
 // Posthog analytics
 const router = useRouter()
 onMounted(() => {

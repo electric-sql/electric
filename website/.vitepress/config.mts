@@ -369,6 +369,12 @@ const streamsDocsSidebar = [
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
+    resolve: {
+      // A single ESM copy of PGlite: otherwise the sync landing bundle can
+      // end up with duplicate graph edges (e.g. REPL + search/local chunks)
+      // and fetch initdb + wasm + .data more than once per page load.
+      dedupe: ['@electric-sql/pglite', '@electric-sql/pglite-repl'],
+    },
     define: {
       // Expose Netlify environment variables to the client
       'import.meta.env.DEPLOY_PRIME_URL': JSON.stringify(

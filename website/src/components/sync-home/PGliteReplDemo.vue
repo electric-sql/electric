@@ -8,9 +8,9 @@
 // REPL is fully in view.
 //
 // This component is browser-only (PGlite is WASM + the REPL touches
-// the DOM at script-setup time). Use `defineClientComponent` +
-// `<ClientOnly>` from the call-site so VitePress doesn't try to SSR
-// it.
+// the DOM at script-setup time). The call-site must load it with
+// VitePress `defineClientComponent` so the module is not executed
+// during SSR.
 
 import { ref, watch, onBeforeUnmount } from 'vue'
 import '@electric-sql/pglite-repl/webcomponent'
