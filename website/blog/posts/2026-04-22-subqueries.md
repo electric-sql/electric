@@ -8,7 +8,7 @@ excerpt: >-
   Sync only works in real apps if it can follow relationships.
   Subqueries let Electric express relational filters for each user in SQL,
   and Electric 1.6 keeps complex expressions incremental too.
-authors: [rob]
+authors: [rob, icehaunter]
 image: /img/blog/subqueries/header.jpg
 tags: [shapes, postgres-sync, release]
 outline: [2, 3]
