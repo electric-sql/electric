@@ -269,3 +269,16 @@ await runtime.registerTypes() // register all types with runtime server
 ```
 
 See [App setup](/docs/agents/usage/app-setup) and [RuntimeHandler reference](/docs/agents/reference/runtime-handler).
+
+## 11. App clients and embedded built-ins
+
+Use the client and embedding APIs when you need to work with agents outside an entity handler:
+
+| API                               | Use case                                      |
+| --------------------------------- | --------------------------------------------- |
+| `createAgentsClient()`            | Observe entity, membership, or shared-state streams from app code |
+| `useChat()`                       | Render an observed `EntityStreamDB` in React  |
+| `createRuntimeServerClient()`     | Spawn, message, delete, tag, and schedule entities from services |
+| `BuiltinAgentsServer`             | Host Horton and worker in your own process    |
+
+See [Clients & React](/docs/agents/usage/clients-and-react), [Programmatic runtime client](/docs/agents/usage/programmatic-runtime-client), and [Embedded built-ins](/docs/agents/usage/embedded-builtins).

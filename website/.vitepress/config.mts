@@ -199,7 +199,19 @@ const agentsDocsSidebar = [
         link: '/docs/agents/usage/waking-entities',
       },
       { text: 'Shared state', link: '/docs/agents/usage/shared-state' },
+      {
+        text: 'Clients & React',
+        link: '/docs/agents/usage/clients-and-react',
+      },
+      {
+        text: 'Programmatic runtime client',
+        link: '/docs/agents/usage/programmatic-runtime-client',
+      },
       { text: 'App setup', link: '/docs/agents/usage/app-setup' },
+      {
+        text: 'Embedded built-ins',
+        link: '/docs/agents/usage/embedded-builtins',
+      },
       { text: 'Testing', link: '/docs/agents/usage/testing' },
     ],
   },

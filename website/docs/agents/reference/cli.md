@@ -192,6 +192,45 @@ electric --completion-fish | source
 
 Completions provide tab-completion for commands, flags, entity types, and entity URLs.
 
+## Programmatic CLI
+
+The `electric-ax` package also exports the Commander program and handler factory used by the binary. Use these APIs for tests, custom wrappers, or embedding the command tree in another tool.
+
+```ts
+import {
+  createElectricCliHandlers,
+  createElectricProgram,
+  getElectricCliEnv,
+  run,
+} from "electric-ax"
+
+const env = getElectricCliEnv({
+  ELECTRIC_AGENTS_URL: "http://localhost:4437",
+  ELECTRIC_AGENTS_IDENTITY: "docs@example.com",
+})
+
+const handlers = createElectricCliHandlers(env, "electric agents")
+const program = createElectricProgram({
+  env,
+  handlers,
+  commandName: "electric",
+  commandPrefix: "electric agents",
+})
+
+await program.parseAsync(["node", "electric", "agents", "types"])
+```
+
+| Export                            | Purpose                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `DEFAULT_ELECTRIC_AGENTS_URL`     | Default server URL (`"http://localhost:4437"`).                          |
+| `getElectricCliEnv(env?)`         | Reads `ELECTRIC_AGENTS_URL` and `ELECTRIC_AGENTS_IDENTITY`.              |
+| `createElectricCliHandlers()`     | Creates the default command handlers.                                    |
+| `createElectricProgram()`         | Creates the Commander program.                                           |
+| `resolveCommandPrefix(argv, env?)` | Resolves help text examples for direct or package-manager invocation.    |
+| `run(argv?)`                      | Runs the CLI entrypoint.                                                 |
+
+The installed binaries are `electric` and `electric-ax`. The package also includes `electric-dev` for development workflows.
+
 <style scoped>
 .cli-command code::before {
   content: "electric agents ";
