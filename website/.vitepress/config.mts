@@ -436,6 +436,18 @@ const streamsDemosSidebar = [
         text: 'Yjs demo',
         link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/yjs-demo',
       },
+      {
+        text: 'StreamDB',
+        link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/stream-db',
+      },
+      {
+        text: 'Chat AI SDK',
+        link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/chat-aisdk',
+      },
+      {
+        text: 'Chat TanStack',
+        link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/chat-tanstack',
+      },
     ],
   },
 ]

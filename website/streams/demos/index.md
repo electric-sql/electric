@@ -16,6 +16,24 @@ const technicalExamples = [
       'Collaborative editor example using y-durable-streams as a Yjs provider.',
     link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/yjs-demo',
   },
+  {
+    title: 'StreamDB',
+    description:
+      'Example showing how to use StreamDB to model messages, presence and agents on top of a Durable Stream.',
+    link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/stream-db',
+  },
+  {
+    title: 'Chat AI SDK',
+    description:
+      'Chat example using Durable Streams as the transport for the Vercel AI SDK.',
+    link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/chat-aisdk',
+  },
+  {
+    title: 'Chat TanStack',
+    description:
+      'Chat example using Durable Streams with the TanStack AI transport.',
+    link: 'https://github.com/durable-streams/durable-streams/tree/main/examples/chat-tanstack',
+  },
 ]
 </script>
 
