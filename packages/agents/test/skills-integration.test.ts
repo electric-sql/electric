@@ -23,16 +23,16 @@ describe(`skills end-to-end`, () => {
     await fs.mkdir(appDir, { recursive: true })
 
     await fs.writeFile(
-      path.join(baseDir, `tutorial.md`),
+      path.join(baseDir, `quickstart.md`),
       `---
 description: Learn to build entities
-whenToUse: User asks about tutorials
-keywords: [tutorial, learning]
+whenToUse: User asks about quickstarts
+keywords: [quickstart, learning]
 ---
 
 # Tutorial
 
-This is the tutorial content. It teaches you how to build entities.`,
+This is the quickstart content. It teaches you how to build entities.`,
       `utf-8`
     )
 
@@ -61,7 +61,7 @@ App-specific content here.`,
 
     // 2. Check catalog rendering
     const catalog = registry.renderCatalog()
-    expect(catalog).toContain(`tutorial`)
+    expect(catalog).toContain(`quickstart`)
     expect(catalog).toContain(`my-guide`)
 
     // 3. Create skill tools with mock context
@@ -83,18 +83,18 @@ App-specific content here.`,
     const removeTool = tools.find((t) => t.name === `remove_skill`)!
 
     // 4. Load a skill
-    const loadResult = await useTool.execute(`tc1`, { name: `tutorial` })
+    const loadResult = await useTool.execute(`tc1`, { name: `quickstart` })
     expect(loadResult.details).toMatchObject({ loaded: true })
-    expect(contextStore.has(`skill:tutorial`)).toBe(true)
-    expect(contextStore.get(`skill:tutorial`)!.content).toContain(`Tutorial`)
+    expect(contextStore.has(`skill:quickstart`)).toBe(true)
+    expect(contextStore.get(`skill:quickstart`)!.content).toContain(`Tutorial`)
 
     // 5. Try loading again — should be no-op
-    const dupResult = await useTool.execute(`tc2`, { name: `tutorial` })
+    const dupResult = await useTool.execute(`tc2`, { name: `quickstart` })
     expect(dupResult.details).toMatchObject({ alreadyLoaded: true })
 
     // 6. Unload
-    const removeResult = await removeTool.execute(`tc3`, { name: `tutorial` })
+    const removeResult = await removeTool.execute(`tc3`, { name: `quickstart` })
     expect(removeResult.details).toMatchObject({ removed: true })
-    expect(mockCtx.removeContext).toHaveBeenCalledWith(`skill:tutorial`)
+    expect(mockCtx.removeContext).toHaveBeenCalledWith(`skill:quickstart`)
   })
 })

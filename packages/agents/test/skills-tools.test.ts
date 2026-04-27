@@ -34,33 +34,36 @@ function createMockCtx() {
   }
 }
 
-const TUTORIAL_META: SkillMeta = {
-  name: `tutorial`,
-  description: `A tutorial`,
+const QUICKSTART_META: SkillMeta = {
+  name: `quickstart`,
+  description: `A quickstart`,
   whenToUse: `When learning`,
-  keywords: [`tutorial`],
+  keywords: [`quickstart`],
   max: 10_000,
   charCount: 500,
   contentHash: `abc123`,
-  source: `/skills/tutorial.md`,
+  source: `/skills/quickstart.md`,
 }
 
 describe(`skill tools`, () => {
   it(`use_skill loads skill content into context`, async () => {
     const registry = createMockRegistry({
-      tutorial: { meta: TUTORIAL_META, content: `# Tutorial\nContent here` },
+      quickstart: {
+        meta: QUICKSTART_META,
+        content: `# Tutorial\nContent here`,
+      },
     })
     const ctx = createMockCtx()
     const tools = createSkillTools(registry, ctx as any)
     const useTool = tools.find((t) => t.name === `use_skill`)!
 
-    const result = await useTool.execute(`tc1`, { name: `tutorial` })
+    const result = await useTool.execute(`tc1`, { name: `quickstart` })
 
     expect(ctx.insertContext).toHaveBeenCalledWith(
-      `skill:tutorial`,
+      `skill:quickstart`,
       expect.objectContaining({
         name: `skill_instructions`,
-        attrs: { skill: `tutorial`, type: `directive` },
+        attrs: { skill: `quickstart`, type: `directive` },
       })
     )
     const insertedContent = ctx.insertContext.mock.calls[0]![1].content
@@ -93,14 +96,14 @@ describe(`skill tools`, () => {
 
   it(`use_skill is a no-op when skill is already loaded`, async () => {
     const registry = createMockRegistry({
-      tutorial: { meta: TUTORIAL_META, content: `# Tutorial` },
+      quickstart: { meta: QUICKSTART_META, content: `# Tutorial` },
     })
     const ctx = createMockCtx()
-    ctx.getContext.mockReturnValue({ id: `skill:tutorial` })
+    ctx.getContext.mockReturnValue({ id: `skill:quickstart` })
     const tools = createSkillTools(registry, ctx as any)
     const useTool = tools.find((t) => t.name === `use_skill`)!
 
-    const result = await useTool.execute(`tc1`, { name: `tutorial` })
+    const result = await useTool.execute(`tc1`, { name: `quickstart` })
 
     expect(ctx.insertContext).not.toHaveBeenCalled()
     expect(result.content[0]).toMatchObject({
@@ -111,15 +114,15 @@ describe(`skill tools`, () => {
 
   it(`use_skill truncates and warns when content exceeds max`, async () => {
     const bigContent = `x`.repeat(15_000)
-    const meta = { ...TUTORIAL_META, max: 10_000, charCount: 15_000 }
+    const meta = { ...QUICKSTART_META, max: 10_000, charCount: 15_000 }
     const registry = createMockRegistry({
-      tutorial: { meta, content: bigContent },
+      quickstart: { meta, content: bigContent },
     })
     const ctx = createMockCtx()
     const tools = createSkillTools(registry, ctx as any)
     const useTool = tools.find((t) => t.name === `use_skill`)!
 
-    const result = await useTool.execute(`tc1`, { name: `tutorial` })
+    const result = await useTool.execute(`tc1`, { name: `quickstart` })
 
     const insertedContent = ctx.insertContext.mock.calls[0]![1].content
     // Content is truncated to max (10,000) — no wrapper prefix in insertContext
@@ -134,15 +137,15 @@ describe(`skill tools`, () => {
 
   it(`remove_skill removes skill from context`, async () => {
     const registry = createMockRegistry({
-      tutorial: { meta: TUTORIAL_META, content: `# Tutorial` },
+      quickstart: { meta: QUICKSTART_META, content: `# Tutorial` },
     })
     const ctx = createMockCtx()
     const tools = createSkillTools(registry, ctx as any)
     const removeTool = tools.find((t) => t.name === `remove_skill`)!
 
-    const result = await removeTool.execute(`tc1`, { name: `tutorial` })
+    const result = await removeTool.execute(`tc1`, { name: `quickstart` })
 
-    expect(ctx.removeContext).toHaveBeenCalledWith(`skill:tutorial`)
+    expect(ctx.removeContext).toHaveBeenCalledWith(`skill:quickstart`)
     expect(result.content[0]).toMatchObject({
       type: `text`,
       text: expect.stringContaining(`removed`),
@@ -151,12 +154,12 @@ describe(`skill tools`, () => {
 
   it(`use_skill substitutes named arguments`, async () => {
     const meta = {
-      ...TUTORIAL_META,
+      ...QUICKSTART_META,
       arguments: [`project_path`],
       argumentHint: `[project path]`,
     }
     const registry = createMockRegistry({
-      tutorial: {
+      quickstart: {
         meta,
         content: `Create project at $project_path`,
       },
@@ -166,7 +169,7 @@ describe(`skill tools`, () => {
     const useTool = tools.find((t) => t.name === `use_skill`)!
 
     await useTool.execute(`tc1`, {
-      name: `tutorial`,
+      name: `quickstart`,
       args: `/home/user/my-app`,
     })
 
@@ -177,8 +180,8 @@ describe(`skill tools`, () => {
 
   it(`use_skill substitutes indexed arguments`, async () => {
     const registry = createMockRegistry({
-      tutorial: {
-        meta: TUTORIAL_META,
+      quickstart: {
+        meta: QUICKSTART_META,
         content: `First: $0, Second: $1`,
       },
     })
@@ -186,7 +189,7 @@ describe(`skill tools`, () => {
     const tools = createSkillTools(registry, ctx as any)
     const useTool = tools.find((t) => t.name === `use_skill`)!
 
-    await useTool.execute(`tc1`, { name: `tutorial`, args: `alpha beta` })
+    await useTool.execute(`tc1`, { name: `quickstart`, args: `alpha beta` })
 
     const insertedContent = ctx.insertContext.mock.calls[0]![1].content
     expect(insertedContent).toContain(`First: alpha, Second: beta`)
@@ -194,8 +197,8 @@ describe(`skill tools`, () => {
 
   it(`use_skill substitutes $ARGUMENTS`, async () => {
     const registry = createMockRegistry({
-      tutorial: {
-        meta: TUTORIAL_META,
+      quickstart: {
+        meta: QUICKSTART_META,
         content: `Run with: $ARGUMENTS`,
       },
     })
@@ -203,7 +206,7 @@ describe(`skill tools`, () => {
     const tools = createSkillTools(registry, ctx as any)
     const useTool = tools.find((t) => t.name === `use_skill`)!
 
-    await useTool.execute(`tc1`, { name: `tutorial`, args: `foo bar baz` })
+    await useTool.execute(`tc1`, { name: `quickstart`, args: `foo bar baz` })
 
     const insertedContent = ctx.insertContext.mock.calls[0]![1].content
     expect(insertedContent).toContain(`Run with: foo bar baz`)
@@ -211,8 +214,8 @@ describe(`skill tools`, () => {
 
   it(`use_skill appends args when no placeholders found`, async () => {
     const registry = createMockRegistry({
-      tutorial: {
-        meta: TUTORIAL_META,
+      quickstart: {
+        meta: QUICKSTART_META,
         content: `No placeholders here`,
       },
     })
@@ -220,7 +223,7 @@ describe(`skill tools`, () => {
     const tools = createSkillTools(registry, ctx as any)
     const useTool = tools.find((t) => t.name === `use_skill`)!
 
-    await useTool.execute(`tc1`, { name: `tutorial`, args: `some-value` })
+    await useTool.execute(`tc1`, { name: `quickstart`, args: `some-value` })
 
     const insertedContent = ctx.insertContext.mock.calls[0]![1].content
     expect(insertedContent).toContain(`No placeholders here`)

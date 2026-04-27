@@ -37,3 +37,4 @@ export {
 } from './tools/spawn-worker.js'
 export type { WorkerToolName } from './tools/spawn-worker.js'
 export { createHortonDocsSupport } from './docs/knowledge-base.js'
+export { braveSearchTool } from '@electric-ax/agents-runtime/tools'
