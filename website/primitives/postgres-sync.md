@@ -25,6 +25,10 @@ Read-path sync engine for Postgres that handles partial replication,
   <span class="no-wrap">
     fan-out</span></span>.
 
+:::info
+Subqueries are now available for everyone [Subqueries](/blog/2026/04/22/subqueries) as part of Electric 1.6 and in the [cloud](https://dashboard.electric-sql.cloud/)
+:::
+
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
