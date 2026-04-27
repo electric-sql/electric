@@ -172,8 +172,6 @@ Subqueries remain behind the same feature flags as before:
 ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
-If you were waiting for shapes to handle more realistic access-control logic without giving up the fast path, this is the point to try it.
-
 See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full reference.
 
 ## Where this lands
