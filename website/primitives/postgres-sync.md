@@ -40,7 +40,7 @@ Read-path sync engine for Postgres that handles partial replication,
 </div>
 
 <InlineBanner title="Subqueries are now available for everyone in Electric 1.6.">
-  <a href="/blog/2026/04/22/subqueries">Read the announcement</a>
+  <a href="/blog/2026/04/27/subqueries">Read the announcement</a>
   <a href="https://dashboard.electric-sql.cloud/">Try them in Cloud</a>
 </InlineBanner>
 
