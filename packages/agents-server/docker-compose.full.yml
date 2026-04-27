@@ -50,7 +50,7 @@ services:
         condition: service_started
     environment:
       ELECTRIC_AGENTS_LOG_LEVEL: ${ELECTRIC_AGENTS_LOG_LEVEL:-debug}
-      ELECTRIC_AGENTS_BASE_URL: http://electric-agents:4437
+      ELECTRIC_AGENTS_BASE_URL: ${ELECTRIC_AGENTS_BASE_URL:-http://localhost:${ELECTRIC_AGENTS_PORT:-4437}}
       DATABASE_URL: postgres://${ELECTRIC_AGENTS_POSTGRES_USER:-electric_agents}:${ELECTRIC_AGENTS_POSTGRES_PASSWORD:-electric_agents}@postgres:5432/${ELECTRIC_AGENTS_POSTGRES_DB:-electric_agents}
       ELECTRIC_AGENTS_HOST: 0.0.0.0
       ELECTRIC_AGENTS_PORT: 4437
