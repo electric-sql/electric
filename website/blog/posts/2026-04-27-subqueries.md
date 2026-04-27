@@ -28,8 +28,8 @@ In simple demos, a column filter is enough. In real systems, the rule usually li
 
 This is where subqueries matter.
 
-:::info Available now
-Subqueries are now available for everyone in Electric 1.6. [Try subqueries in Cloud](https://dashboard.electric-sql.cloud/).
+:::info Subqueries are now available for everyone in Electric 1.6
+[Try subqueries in Cloud](https://dashboard.electric-sql.cloud/).
 :::
 
 ## Query-driven sync
