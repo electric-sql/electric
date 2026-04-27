@@ -1,5 +1,5 @@
 ---
-title: Subqueries — making sync work in practice
+title: "Subqueries\u2014making sync work in practice"
 description: >-
   Subqueries let Electric shapes express relational filtering in SQL.
   Electric 1.6 keeps complex AND/OR/NOT expressions incremental too, so
@@ -22,7 +22,7 @@ import InlineBanner from '../../src/components/InlineBanner.vue'
 
 <InlineBanner title="Subqueries are now available for everyone in Electric 1.6.">
   <a href="https://dashboard.electric-sql.cloud/">Try them in Cloud</a>
-  <a href="mailto:support@electric-sql.com">Existing Cloud users: get in touch</a>
+  <a href="mailto:support@electric-sql.com">Get in touch to enable</a>
 </InlineBanner>
 
 Sync is what makes apps feel instant. The data is already there when a screen renders. Another user changes something and your UI stays current. You can refresh, reconnect, switch devices, and keep going.
