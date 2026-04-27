@@ -35,6 +35,7 @@ defmodule Electric.Plug.ServeShapePlug do
   require Logger
 
   @admission_permit_key {__MODULE__, :admission_permit}
+  @subquery_compaction_error "can't be enabled for shapes with subqueries"
 
   # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with
   # query params and an OTEL span.
@@ -42,6 +43,7 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :parse_body
   plug :validate_request
   plug :resolve_existing_shape
+  plug :reject_unsupported_shape_creation
   plug :check_admission
   plug :load_shape
   plug :serve_shape_response
@@ -272,8 +274,34 @@ defmodule Electric.Plug.ServeShapePlug do
     # tables haven't been created yet — ETS operations (lookup, insert, whereis) raise
     # ArgumentError on a missing table, which can happen when a request arrives before the
     # shape subsystem finishes initializing.
-    ArgumentError -> put_private(conn, :shape_exists?, false)
+    ArgumentError -> put_private(conn, :shape_exists?, nil)
   end
+
+  defp reject_unsupported_shape_creation(
+         %Conn{assigns: %{request: request}} = conn,
+         _
+       ) do
+    if conn.private[:shape_exists?] != false or
+         not unsupported_shape_creation?(request.params.shape_definition) do
+      conn
+    else
+      conn
+      |> Api.Response.send(
+        Api.Response.invalid_request(request,
+          errors: %{experimental_compaction: [@subquery_compaction_error]}
+        )
+      )
+      |> halt()
+    end
+  end
+
+  defp unsupported_shape_creation?(%Electric.Shapes.Shape{
+         storage: %{compaction: :enabled},
+         shape_dependencies: [_ | _]
+       }),
+       do: true
+
+  defp unsupported_shape_creation?(_shape), do: false
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])

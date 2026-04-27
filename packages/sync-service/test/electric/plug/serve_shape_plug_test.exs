@@ -29,6 +29,18 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  %{name: "value", type: "text", pk_position: nil, type_id: {28, 1}}
                ]
              )
+  @subquery_inspector Support.StubInspector.new(%{
+                        {"public", "parent"} => [
+                          %{name: "id", type: "int8", pk_position: 0, type_id: {20, 1}},
+                          %{name: "value", type: "int8", pk_position: nil, type_id: {20, 1}}
+                        ],
+                        {"public", "child"} => [
+                          %{name: "id", type: "int8", pk_position: 0, type_id: {20, 1}},
+                          %{name: "parent_id", type: "int8", pk_position: nil, type_id: {20, 1}},
+                          %{name: "value", type: "int8", pk_position: nil, type_id: {20, 1}}
+                        ]
+                      })
+  @subquery_where "parent_id in (SELECT id FROM parent WHERE value = 1)"
 
   @test_shape %Shape{
     root_table: {"public", "users"},
@@ -67,7 +79,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
   defp build_plug_opts(ctx) do
     Api.plug_opts(
       stack_id: ctx.stack_id,
-      inspector: @inspector,
+      inspector: Access.get(ctx, :inspector, @inspector),
+      feature_flags: Access.get(ctx, :feature_flags, []),
       stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
       long_poll_timeout: long_poll_timeout(ctx),
       sse_timeout: sse_timeout(ctx),
@@ -231,6 +244,90 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  "live" => ["can't be true when offset == -1"]
                }
              }
+    end
+
+    test "returns 400 when creating a subquery shape with compaction enabled", ctx do
+      ctx =
+        ctx
+        |> Map.put(:inspector, @subquery_inspector)
+        |> Map.put(:feature_flags, ["allow_subqueries"])
+
+      expect_shape_cache(
+        fetch_handle_by_shape: fn %Shape{
+                                    root_table: {"public", "child"},
+                                    shape_dependencies: [_ | _],
+                                    storage: %{compaction: :enabled}
+                                  },
+                                  _stack_id ->
+          :error
+        end
+      )
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{
+            "table" => "public.child",
+            "where" => @subquery_where,
+            "experimental_compaction" => "true"
+          },
+          "?offset=now"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" => "Invalid request",
+               "errors" => %{
+                 "experimental_compaction" => ["can't be enabled for shapes with subqueries"]
+               }
+             }
+    end
+
+    test "allows an existing subquery shape when compaction is enabled", ctx do
+      ctx =
+        ctx
+        |> Map.put(:inspector, @subquery_inspector)
+        |> Map.put(:feature_flags, ["allow_subqueries"])
+
+      expect_shape_cache(
+        fetch_handle_by_shape: fn %Shape{
+                                    root_table: {"public", "child"},
+                                    shape_dependencies: [_ | _],
+                                    storage: %{compaction: :enabled}
+                                  },
+                                  _stack_id ->
+          {:ok, @test_shape_handle}
+        end,
+        get_or_create_shape_handle: fn %Shape{
+                                         root_table: {"public", "child"},
+                                         shape_dependencies: [_ | _],
+                                         storage: %{compaction: :enabled}
+                                       },
+                                       _stack_id,
+                                       _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{
+            "table" => "public.child",
+            "where" => @subquery_where,
+            "experimental_compaction" => "true"
+          },
+          "?offset=now"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "electric-has-data") == ["false"]
+      assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
     test "returns snapshot when offset is -1", ctx do
