@@ -104,14 +104,6 @@ See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full refer
 Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pro, Scale, and Enterprise plans](/pricing).
 :::
 
-## Why this matters
-
-The interesting part of sync is not a nicer `fetch()`. It is what you get once the right data is already local: live UIs, collaboration, resilient apps, instant navigation, fewer loading states.
-
-But none of that survives contact with production unless sync can follow your actual data model. The moment you have shared documents, org membership, private projects, child records, or exclusions, a simple column filter stops being enough.
-
-Subqueries are what make shapes fit real applications. They let you describe who can see a row, which child rows come along with a parent, how multiple access paths compose, and how exclusions or overrides work.
-
 ## What changed in Electric 1.6
 
 Subqueries are not new. We have supported them for a while, behind feature flags, and they have already been battle tested by customers in production.
@@ -169,9 +161,15 @@ ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 
 See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full reference.
 
-## Where this lands
+## Summary
 
-That is the real point of this release. Sync only works cleanly in production if it can follow the access rules and parent-child relationships that already exist in the schema. Subqueries are what make shapes fit that reality, and with 1.6 they now stay on the incremental path even when the logic uses more complex expressions. We now consider them ready for general use, and they are available to everyone in Electric 1.6.
+The interesting part of sync is not a nicer `fetch()`. It is what you get once the right data is already local: live UIs, collaboration, resilient apps, instant navigation, fewer loading states.
+
+But none of that survives contact with production unless sync can follow your actual data model. The moment you have shared documents, org membership, private projects, child records, or exclusions, a simple column filter stops being enough.
+
+Subqueries are what make shapes fit real applications. They let you describe who can see a row, which child rows come along with a parent, how multiple access paths compose, and how exclusions or overrides work.
+
+We now consider them ready for general use, and they are available to everyone in Electric 1.6.
 
 If you want to use them on Cloud today, get in touch and we can enable them on your project. The remaining rollout flags are temporary, and we expect to lift them over the next few weeks.
 
