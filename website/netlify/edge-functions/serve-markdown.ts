@@ -1,6 +1,6 @@
 import type { Context } from '@netlify/edge-functions'
 
-import { isSocialMediaBot } from '../../src/lib/social-bot-detection'
+import { isSocialMediaBot } from '../../src/lib/social-bot-detection.ts'
 
 // Path prefixes that should serve markdown to agents
 const PATH_PREFIXES = [
