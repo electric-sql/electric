@@ -1,0 +1,21 @@
+{
+  "tutorial": {
+    "name": "tutorial",
+    "description": "Interactive tutorial — build a perspectives analyzer entity with the manager-worker pattern",
+    "whenToUse": "User asks about building entities, wants a tutorial, is new to Electric Agents, or wants to learn multi-agent patterns",
+    "keywords": [
+      "tutorial",
+      "getting started",
+      "learn",
+      "multi-agent",
+      "manager-worker",
+      "perspectives",
+      "entity"
+    ],
+    "userInvocable": true,
+    "max": 25000,
+    "charCount": 10898,
+    "contentHash": "c8b677bd543e69d53874c1766b3e73674315204ebcf1369673292e0a1cbc3290",
+    "source": "/Users/vbalegas/.npm/_npx/58eaf4d868a11380/node_modules/@electric-ax/agents/skills/tutorial.md"
+  }
+}
