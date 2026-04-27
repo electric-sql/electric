@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { createPiAgentAdapter, toAgentHistory } from '../src/pi-adapter'
+import {
+  createPiAgentAdapter,
+  resolvePiModel,
+  toAgentHistory,
+} from '../src/pi-adapter'
 import type { OutboundIdSeed } from '../src/outbound-bridge'
 import type { LLMMessage } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AssistantMessage,
+  Model,
   ToolResultMessage,
   UserMessage,
 } from '@mariozechner/pi-ai'
@@ -87,6 +92,55 @@ describe(`createPiAgentAdapter`, () => {
     const handle = factory(config)
     handle.dispose()
     expect(handle.isRunning()).toBe(false)
+  })
+})
+
+describe(`resolvePiModel`, () => {
+  it(`defaults string model ids to the Anthropic provider`, () => {
+    const model = resolvePiModel({
+      model: `claude-sonnet-4-5-20250929`,
+    })
+
+    expect(model.provider).toBe(`anthropic`)
+    expect(model.id).toBe(`claude-sonnet-4-5-20250929`)
+  })
+
+  it(`resolves string model ids against an explicit provider`, () => {
+    const model = resolvePiModel({
+      provider: `openai`,
+      model: `gpt-4o-mini`,
+    })
+
+    expect(model.provider).toBe(`openai`)
+    expect(model.id).toBe(`gpt-4o-mini`)
+  })
+
+  it(`accepts custom Model objects directly`, () => {
+    const customModel: Model<`openai-completions`> = {
+      id: `deepseek-v4-flash`,
+      name: `DeepSeek V4 Flash`,
+      api: `openai-completions`,
+      provider: `deepseek`,
+      baseUrl: `https://api.deepseek.com`,
+      reasoning: false,
+      input: [`text`],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128000,
+      maxTokens: 8192,
+    }
+
+    expect(resolvePiModel({ model: customModel })).toBe(customModel)
+  })
+
+  it(`throws a clear error for unknown provider model ids`, () => {
+    expect(() =>
+      resolvePiModel({
+        provider: `openai`,
+        model: `definitely-not-a-real-model`,
+      })
+    ).toThrow(
+      `[agent-runtime] Unknown model "definitely-not-a-real-model" for provider "openai"`
+    )
   })
 })
 

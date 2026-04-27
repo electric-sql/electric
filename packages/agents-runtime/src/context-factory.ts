@@ -16,6 +16,7 @@ import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
   AgentHandle,
+  AgentModel,
   AgentRunResult,
   AgentTool,
   EntityHandle,
@@ -33,6 +34,16 @@ import type {
   WakeEvent,
   WakeSession,
 } from './types'
+
+function agentModelId(model: AgentModel): string {
+  return typeof model === `string` ? model : model.id
+}
+
+function agentModelProvider(config: AgentConfig): string {
+  return typeof config.model === `string`
+    ? (config.provider ?? `anthropic`)
+    : config.model.provider
+}
 
 export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   entityUrl: string
@@ -296,6 +307,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
+          ...(activeAgentConfig.provider && {
+            provider: activeAgentConfig.provider,
+          }),
           tools: [...activeAgentConfig.tools, ...extraTools] as Array<never>,
           ...(activeAgentConfig.streamFn && {
             streamFn: activeAgentConfig.streamFn,
@@ -318,7 +332,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const logPrefix = `[${config.entityUrl}]`
         runtimeLog.info(
           logPrefix,
-          `agent.run starting model=${activeAgentConfig.model} ` +
+          `agent.run starting provider=${agentModelProvider(activeAgentConfig)} ` +
+            `model=${agentModelId(activeAgentConfig.model)} ` +
             `messages=${messages.length} latestRole=${latestMessageRole ?? `none`} ` +
             `wakeType=${config.wakeEvent.type} wakeOffset=${config.wakeOffset} ` +
             `triggerMessageLen=${messageText.length} ` +
@@ -373,7 +388,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           bridge.onRunStart()
           bridge.onStepStart({
             modelProvider: `test`,
-            modelId: activeAgentConfig.model,
+            modelId: agentModelId(activeAgentConfig.model),
           })
 
           if (Array.isArray(responses)) {

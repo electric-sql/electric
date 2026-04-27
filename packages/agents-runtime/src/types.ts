@@ -21,6 +21,7 @@ import type {
   AgentTool as PiAgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
+import type { KnownProvider, Model } from '@mariozechner/pi-ai'
 import type {
   EntityStreamDB as RuntimeEntityStreamDB,
   EntityStreamDBWithActions as RuntimeEntityStreamDBWithActions,
@@ -572,10 +573,12 @@ export type AgentRunResult = {
 }
 
 export type AgentTool = PiAgentTool
+export type AgentModel = string | Model<any>
 
 export interface AgentConfig {
   systemPrompt: string
-  model: string
+  model: AgentModel
+  provider?: KnownProvider
   tools: Array<AgentTool>
   streamFn?: StreamFn
   testResponses?: TestResponses
