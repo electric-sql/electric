@@ -132,12 +132,6 @@ const layoutClass = computed(() => {
       <!-- Wide screens: Above "On this page" -->
       <MarkdownLink v-if="showMarkdownLink" variant="aside" />
     </template>
-    <template #doc-footer-before>
-      <!-- Footer: Right-aligned next to "Edit this page" -->
-      <div v-if="showMarkdownLink" class="markdown-link-footer-container">
-        <MarkdownLink variant="footer" />
-      </div>
-    </template>
     <template #layout-bottom>
       <SiteFooter v-if="!hasSidebar" />
     </template>
