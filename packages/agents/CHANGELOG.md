@@ -1,5 +1,11 @@
 # @electric-ax/agents
 
+## 0.1.5
+
+### Patch Changes
+
+- 4801e76: fix: ensure builtin skills are packaged
+
 ## 0.1.4
 
 ### Patch Changes
