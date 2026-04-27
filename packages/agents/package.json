@@ -63,7 +63,8 @@
     "vitest": "^4.1.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "sideEffects": false,
   "license": "Apache-2.0"
