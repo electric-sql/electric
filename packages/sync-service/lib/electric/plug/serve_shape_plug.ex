@@ -254,12 +254,7 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  # Compaction is not compatible with shapes that contain subqueries, so reject
-  # the request before any existence lookup or shape creation attempt.
-  defp reject_subquery_shape_compaction_request(
-         %Conn{assigns: %{request: request}} = conn,
-         _
-       ) do
+  defp reject_subquery_shape_compaction_request(%{assigns: %{request: request}} = conn, _) do
     if subquery_shape_compaction_requested?(request) do
       conn
       |> Api.Response.send(
