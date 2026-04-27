@@ -69,6 +69,7 @@ defmodule Electric.Shapes.Api do
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
   @offset_out_of_bounds %{offset: ["out of bounds for this shape"]}
+
   # Need to implement Access behaviour because we use that to extract config
   # when using shapes api
   @behaviour Access
