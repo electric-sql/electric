@@ -307,16 +307,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
-          ...(activeAgentConfig.provider && {
-            provider: activeAgentConfig.provider,
-          }),
+
+          provider: activeAgentConfig.provider,
+
           tools: [...activeAgentConfig.tools, ...extraTools] as Array<never>,
-          ...(activeAgentConfig.streamFn && {
-            streamFn: activeAgentConfig.streamFn,
-          }),
-          ...(activeAgentConfig.getApiKey && {
-            getApiKey: activeAgentConfig.getApiKey,
-          }),
+
+          streamFn: activeAgentConfig.streamFn,
+
+          getApiKey: activeAgentConfig.getApiKey,
+
+          onPayload: activeAgentConfig.onPayload,
         })
         const handle = adapterFactory({
           entityUrl: config.entityUrl,
