@@ -7,10 +7,10 @@ import {
   createWebSearchTool,
   type SwarmSharedState,
 } from './shared-tools.js'
+import { surveyWorkerModelConfig } from './model-config.js'
 import type { EntityRegistry } from '@electric-ax/agents-runtime'
 
 export const SURVEY_WORKER_ENTITY_TYPE = `survey_worker`
-const SURVEY_WORKER_MODEL = `claude-sonnet-4-5-20250929`
 
 const surveyWorkerArgsSchema = z.object({
   systemPrompt: z.string().min(1),
@@ -30,7 +30,7 @@ export function registerSurveyWorker(registry: EntityRegistry): void {
 
       ctx.useAgent({
         systemPrompt: args.systemPrompt,
-        model: SURVEY_WORKER_MODEL,
+        ...surveyWorkerModelConfig(),
         tools: [
           createWebSearchTool(),
           createFetchUrlTool(),

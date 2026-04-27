@@ -88,7 +88,8 @@ pnpm install && pnpm --filter @electric-ax/agents-runtime build
 Create a `.env` file in this directory:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/
+ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/ (optional if MOONSHOT_API_KEY is set)
+MOONSHOT_API_KEY=sk-...            # https://platform.moonshot.ai/ (optional if ANTHROPIC_API_KEY is set)
 BRAVE_SEARCH_API_KEY=...           # https://brave.com/search/api/ (optional)
 ```
 
@@ -137,7 +138,7 @@ node packages/electric-ax/bin/electric-dev.mjs agent stop
 | Layer             | Technology                                                    |
 | ----------------- | ------------------------------------------------------------- |
 | Agent runtime     | [@electric-ax/agents-runtime](../../packages/agents-runtime/) |
-| LLM               | Claude (Anthropic API)                                        |
+| LLM               | Claude (Anthropic API) and/or Kimi (Moonshot API)             |
 | Web search        | Brave Search API                                              |
 | Frontend          | React 19, Vite 7, TypeScript                                  |
 | Real-time state   | TanStack DB, Durable Streams                                  |
@@ -147,13 +148,14 @@ node packages/electric-ax/bin/electric-dev.mjs agent stop
 
 ## Environment Variables
 
-| Variable               | Default                  | Description                                |
-| ---------------------- | ------------------------ | ------------------------------------------ |
-| `ANTHROPIC_API_KEY`    | —                        | Anthropic API key (required)               |
-| `BRAVE_SEARCH_API_KEY` | —                        | Brave Search API key for web research      |
-| `DARIX_URL`            | `http://localhost:4437`  | Electric Agents server URL                 |
-| `PORT`                 | `4700`                   | Backend server port                        |
-| `SERVE_URL`            | `http://localhost:$PORT` | Webhook callback URL for the agents server |
+| Variable               | Default                  | Description                                                                                                  |
+| ---------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`    | —                        | Anthropic API key. Uses Sonnet for coordinator and workers when Moonshot is absent                           |
+| `MOONSHOT_API_KEY`     | —                        | Moonshot API key. Uses `kimi-k2.6`; when both keys are set, workers use Kimi and the coordinator uses Sonnet |
+| `BRAVE_SEARCH_API_KEY` | —                        | Brave Search API key for web research                                                                        |
+| `DARIX_URL`            | `http://localhost:4437`  | Electric Agents server URL                                                                                   |
+| `PORT`                 | `4700`                   | Backend server port                                                                                          |
+| `SERVE_URL`            | `http://localhost:$PORT` | Webhook callback URL for the agents server                                                                   |
 
 ## Project Structure
 
