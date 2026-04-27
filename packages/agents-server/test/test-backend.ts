@@ -158,10 +158,8 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
   }
 
   const composeProject = getElectricAgentsComposeProject()
-  const pgHostPort = process.env.PG_HOST_PORT ?? `5432`
-  const electricHostPort = process.env.ELECTRIC_HOST_PORT ?? `3060`
   throw new Error(
-    `ElectricAgents test backend schema is stale: expected current tags/manifest/outbox schema and no legacy entities.metadata column. Reset the matching backend with "ELECTRIC_AGENTS_COMPOSE_PROJECT=${composeProject} PG_HOST_PORT=${pgHostPort} ELECTRIC_HOST_PORT=${electricHostPort} pnpm clean:electric-agents" and rerun the relevant Vitest project.`
+    `ElectricAgents test backend schema is stale: expected current tags/manifest/outbox schema and no legacy entities.metadata column. Reset the matching backend with "docker compose -p ${composeProject} -f ${ELECTRIC_AGENTS_COMPOSE_FILE} down -v" and rerun the relevant Vitest project.`
   )
 }
 export async function ensureElectricAgentsTestBackend(): Promise<void> {
