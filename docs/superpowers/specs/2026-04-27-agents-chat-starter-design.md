@@ -20,10 +20,11 @@ Frontend (React + Vite)          Backend (Node.js)           Infrastructure
 
 ### Data flow
 
-1. User clicks "Add Researcher" -> frontend `PUT` to agents-server -> spawns researcher entity -> entity observes shared chatroom DB
-2. User types message -> frontend writes to shared state `messages` collection
-3. Each agent entity wakes on new messages -> reads conversation -> decides if relevant -> writes response to shared state
-4. Frontend subscribes to shared state via TanStack DB -> renders all messages in order
+1. Backend creates a shared state DB (durable stream) when a room is created
+2. User clicks "Add Researcher" -> backend spawns researcher entity -> entity observes shared chatroom DB with `wake: { on: 'change', collections: ['messages'] }`
+3. User types message -> frontend `POST /api/room/:id/message` -> backend appends user message to the shared state stream
+4. All agents observing the stream wake up -> read conversation -> decide if relevant -> write response to the same shared state stream
+5. Frontend subscribes to shared state via `createAgentsClient` + `observe(db(...))` -> TanStack DB `createEffect` -> renders all messages in order
 
 ## Shared State Schema
 
@@ -101,12 +102,13 @@ Minimal Node.js HTTP server (following deep-survey pattern):
 
 ### Endpoints
 
-| Method | Path                  | Purpose                                                                      |
-| ------ | --------------------- | ---------------------------------------------------------------------------- |
-| `GET`  | `/api/config`         | Returns `{ darixUrl }` for frontend                                          |
-| `POST` | `/api/room`           | Create chatroom — spawns a shared state DB, returns `{ roomId }`             |
-| `POST` | `/api/room/:id/agent` | Spawn an agent into the room — body: `{ type: "researcher" \| "assistant" }` |
-| `POST` | `/webhook`            | agents-runtime webhook handler                                               |
+| Method | Path                    | Purpose                                                             |
+| ------ | ----------------------- | ------------------------------------------------------------------- |
+| `GET`  | `/api/config`           | Returns `{ darixUrl }` for frontend                                 |
+| `POST` | `/api/room`             | Create chatroom — creates shared state stream, returns `{ roomId }` |
+| `POST` | `/api/room/:id/message` | Write user message to the chatroom shared state stream              |
+| `POST` | `/api/room/:id/agent`   | Spawn an agent into the room — body: `{ type: string }`             |
+| `POST` | `/webhook`              | agents-runtime webhook handler                                      |
 
 ### Startup
 
@@ -129,20 +131,15 @@ server.listen(PORT, async () => {
 
 ### Chatroom creation
 
-The `/api/room` endpoint doesn't spawn an entity — it just returns a room ID. The shared state DB is created by the first agent that joins (using `ctx.mkdb()`). Subsequent agents observe the existing DB.
+The `/api/room` endpoint creates the shared state durable stream via the agents-server API (`ensureSharedStateStream`) and returns the room ID. The backend server stores the stream path and write token so it can append user messages later.
 
-To handle the race of "who creates the shared DB first", the first agent to join calls `ctx.mkdb()`, and subsequent agents call `ctx.observe(db(...))`. Each entity checks if the DB exists before creating:
+When agents are spawned into the room, they receive the `chatroomId` as a creation arg and observe the existing shared state:
 
 ```typescript
-// First agent to join creates the DB; others observe
-if (ctx.firstWake) {
-  try {
-    ctx.mkdb(chatroomId, chatroomSchema)
-  } catch {
-    // Already exists — another agent created it first
-  }
-}
-const chatroom = await ctx.observe(db(chatroomId, chatroomSchema))
+// Agent handler — observe the chatroom shared state with wake-on-change
+const chatroom = await ctx.observe(db(chatroomId, chatroomSchema), {
+  wake: { on: 'change', collections: ['messages'] },
+})
 ```
 
 ### Dynamic entity type discovery
@@ -171,7 +168,7 @@ src/ui/
 
 ### `useChatroom` hook
 
-Subscribes to the chatroom shared state DB and returns messages in order:
+Read-only subscription to the chatroom shared state DB. Returns messages sorted by timestamp and active agents in the room:
 
 ```typescript
 function useChatroom(darixUrl: string, roomId: string) {
@@ -180,10 +177,17 @@ function useChatroom(darixUrl: string, roomId: string) {
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
-    // 1. createAgentsClient({ baseUrl: darixUrl })
-    // 2. observe(entities({ tags: { room_id: roomId } })) -> track agents
-    // 3. observe(db(roomId, chatroomSchema)) -> track messages
-    // 4. createEffect on messages collection -> sort by timestamp -> setMessages
+    const client = createAgentsClient({ baseUrl: darixUrl })
+
+    // Track agents in the room by tag
+    const entitiesDb = await client.observe(
+      entities({ tags: { room_id: roomId } })
+    )
+    // createEffect on members collection -> setAgents
+
+    // Subscribe to chatroom shared state
+    const chatroomDb = await client.observe(db(roomId, chatroomSchema))
+    // createEffect on messages collection -> sort by timestamp -> setMessages
   }, [darixUrl, roomId])
 
   return { messages, agents, connected }
@@ -210,17 +214,20 @@ function useEntityTypes(darixUrl: string) {
 
 ### User message sending
 
-User messages go directly into the shared state DB. The frontend writes to the shared state via an API endpoint on the backend server (since the frontend doesn't have a write token for the shared state stream). The backend provides a `POST /api/room/:id/message` endpoint:
+The frontend sends user messages via `POST /api/room/:id/message` to the backend server. The backend appends the message directly to the chatroom's shared state durable stream. This triggers wake-on-change for all observing agents.
 
 ```typescript
-// Backend: POST /api/room/:id/message
-// Writes the user message to the chatroom shared state
-// The room's shared state stream write token is stored server-side
+// Frontend
+const sendMessage = async (text: string) => {
+  await fetch(`/api/room/${roomId}/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+}
 ```
 
-Alternatively, user messages can be sent to all agents via `POST /{type}/{id}/send` and the agents write both the user message and their response to shared state. This is simpler — the user message is the `initialMessage` or sent via the entity `/send` endpoint, and each agent writes it plus their response to the shared chat.
-
-**Chosen approach**: Send user messages to all agents in the room via their `/send` endpoint. Each agent receives the message, reads the shared state for context, and writes their response to shared state. The first agent to process also writes the user message to the shared state (using an idempotent insert keyed by a message ID from the frontend).
+The message appears in the UI when the stream subscription delivers it (near-instant, no optimistic mutations). This keeps the frontend simple — it's a pure subscriber to the shared state with a thin write API.
 
 ## UI Design
 
