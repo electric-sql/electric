@@ -4,8 +4,8 @@ description: >-
   Local-first project management app built with Electric and PGlite.
 deployed_url: https://linearlite.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/linearlite
-listing_image: /img/sync/demos/linearlite-demo.png
-image: /img/sync/demos/linearlite-screenshot.png
+listing_image: /img/demos/linearlite-demo.png
+image: /img/demos/linearlite-screenshot.png
 demo: true
 homepage: true
 order: 10

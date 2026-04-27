@@ -5,7 +5,7 @@ description: >-
 deployed_url: https://burn.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/burn
 blog_post_url: /blog/2025/08/12/bringing-agents-back-down-to-earth
-image: /img/sync/demos/burn.jpg
+image: /img/demos/burn.jpg
 demo: true
 homepage: true
 order: 3
