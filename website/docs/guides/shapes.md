@@ -189,10 +189,6 @@ Electric 1.6 keeps these moves incremental even for compound expressions that us
 Subqueries are currently enabled using `ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries`. The flags are unchanged; they gate rollout rather than a separate syntax or API. See the [configuration docs](/docs/api/config#allow_subqueries) for details.
 :::
 
-:::warning Client compatibility
-The incremental behavior for compound subquery expressions in Electric 1.6 requires updated clients. TanStack DB clients need `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`. Upgrade clients before rolling out the server update.
-:::
-
 When constructing a where clause with user input as a filter, it's recommended to use a positional placeholder (`$1`) to avoid
 SQL injection-like situations. For example, if filtering a table on a user id, it's better to use `where=user = $1` with
 `params[1]=provided_id`. If not using positional placeholders and constructing where clauses yourself, take care to SQL-escape user input.

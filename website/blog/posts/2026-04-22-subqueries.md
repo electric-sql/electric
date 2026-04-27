@@ -172,15 +172,6 @@ Subqueries remain behind the same feature flags as before:
 ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
-:::warning
-Incremental sync for complex subquery expressions in Electric 1.6 requires a client protocol update. Make sure all your clients are on:
-
-- `@tanstack/db >= 0.6.2`
-- `@tanstack/electric-db-collection >= 0.3.0`
-
-before upgrading the server. Those versions have been available since April 3, 2026.
-:::
-
 If you were waiting for shapes to handle more realistic access-control logic without giving up the fast path, this is the point to try it.
 
 See the [WHERE clause docs](/docs/guides/shapes#where-clause) for the full reference.
