@@ -1,5 +1,12 @@
 # electric-ax
 
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [4801e76]
+  - @electric-ax/agents@0.1.5
+
 ## 0.1.9
 
 ### Patch Changes

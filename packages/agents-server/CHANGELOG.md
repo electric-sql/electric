@@ -1,5 +1,11 @@
 # @electric-ax/agents-server
 
+## 0.2.3
+
+### Patch Changes
+
+- e311cf1: feat: ui improvements
+
 ## 0.2.2
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "electric-ax",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "CLI for Electric Agents",
   "author": "ElectricSQL team and contributors",
   "license": "Apache-2.0",
