@@ -255,7 +255,8 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp reject_subquery_shape_compaction_request(%{assigns: %{request: request}} = conn, _) do
-    if subquery_shape_compaction_requested?(request) do
+    if Api.Params.compaction_enabled?(request.params) and
+         request.params.shape_definition.shape_dependencies != [] do
       conn
       |> Api.Response.send(
         Api.Response.invalid_request(request,
@@ -266,10 +267,6 @@ defmodule Electric.Plug.ServeShapePlug do
     else
       conn
     end
-  end
-
-  defp subquery_shape_compaction_requested?(%{params: params}) do
-    Api.Params.compaction_enabled?(params) and params.shape_definition.shape_dependencies != []
   end
 
   # Check if the shape already exists so admission control can classify
