@@ -4,6 +4,7 @@ import { chatroomSchema } from './schema.js'
 import {
   createSendMessageTool,
   createBroadcastFn,
+  getConversationHistory,
   DEFAULT_MODEL,
   type ChatroomState,
 } from './shared-tools.js'
@@ -31,6 +32,18 @@ export function registerAssistant(registry: EntityRegistry): void {
       const chatroom = (await ctx.observe(
         db(args.chatroomId, chatroomSchema)
       )) as unknown as ChatroomState
+
+      // Inject conversation history as volatile context so the agent
+      // always sees the full chat, even if it just joined the room.
+      ctx.useContext({
+        sourceBudget: 50_000,
+        sources: {
+          conversation: {
+            cache: `volatile`,
+            content: async () => getConversationHistory(chatroom),
+          },
+        },
+      })
 
       ctx.useAgent({
         systemPrompt: SYSTEM_PROMPT,

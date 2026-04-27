@@ -28,6 +28,20 @@ export function createBroadcastFn(
   }
 }
 
+/** Read all messages from the shared state and format as conversation context */
+export function getConversationHistory(chatroom: ChatroomState): string {
+  const messages = (chatroom.messages as any).toArray as Array<{
+    senderName: string
+    text: string
+  }>
+  if (messages.length === 0) return ``
+  return (
+    `\nConversation so far:\n` +
+    messages.map((m) => `[${m.senderName}]: ${m.text}`).join(`\n`) +
+    `\n`
+  )
+}
+
 function textResult(text: string, details: Record<string, unknown> = {}) {
   return {
     content: [{ type: `text` as const, text }],

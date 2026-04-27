@@ -5,6 +5,7 @@ import {
   createSendMessageTool,
   createBroadcastFn,
   createWebSearchTool,
+  getConversationHistory,
   DEFAULT_MODEL,
   type ChatroomState,
 } from './shared-tools.js'
@@ -32,6 +33,16 @@ export function registerResearcher(registry: EntityRegistry): void {
       const chatroom = (await ctx.observe(
         db(args.chatroomId, chatroomSchema)
       )) as unknown as ChatroomState
+
+      ctx.useContext({
+        sourceBudget: 50_000,
+        sources: {
+          conversation: {
+            cache: `volatile`,
+            content: async () => getConversationHistory(chatroom),
+          },
+        },
+      })
 
       ctx.useAgent({
         systemPrompt: SYSTEM_PROMPT,
