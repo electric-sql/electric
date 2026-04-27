@@ -65,6 +65,12 @@ function shortenSlug(slug: string): string {
 const GUIDE_COLUMN_WIDTH = 16
 const GUIDE_LINE_LEFT = 7
 const GUIDE_LINE_COLOR = `var(--gray-a6)`
+// Each EntityListItem row uses py="2" (Radix space-2 = 8px) of vertical
+// padding. The TreeGuide flex item only stretches to the row's content
+// box (excluding padding), which leaves visible gaps in the vertical
+// line between adjacent rows. Extending the line `top` and `height` by
+// the row's padding bridges those gaps.
+const GUIDE_ROW_PADDING_Y = 8
 
 function TreeGuide({
   hasMoreAtDepth,
@@ -93,8 +99,10 @@ function TreeGuide({
                 style={{
                   position: `absolute`,
                   left: GUIDE_LINE_LEFT,
-                  top: 0,
-                  height: verticalStopsAtMid ? `50%` : `100%`,
+                  top: -GUIDE_ROW_PADDING_Y,
+                  height: verticalStopsAtMid
+                    ? `calc(50% + ${GUIDE_ROW_PADDING_Y}px)`
+                    : `calc(100% + ${GUIDE_ROW_PADDING_Y * 2}px)`,
                   borderLeft: `1px solid ${GUIDE_LINE_COLOR}`,
                 }}
               />
