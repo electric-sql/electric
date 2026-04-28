@@ -16,7 +16,7 @@ import {
   createWriteTool,
   braveSearchTool,
   fetchUrlTool,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/tools'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { SkillsRegistry } from '../skills/types'
 

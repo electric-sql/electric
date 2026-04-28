@@ -41,6 +41,16 @@
         "default": "./dist/react.cjs"
       }
     },
+    "./tools": {
+      "import": {
+        "types": "./dist/tools.d.ts",
+        "default": "./dist/tools.js"
+      },
+      "require": {
+        "types": "./dist/tools.d.cts",
+        "default": "./dist/tools.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "peerDependencies": {

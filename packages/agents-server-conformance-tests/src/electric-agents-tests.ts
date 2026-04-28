@@ -1943,7 +1943,7 @@ export function runElectricAgentsConformanceTests(
     }
 
     test(`bash tool captures stdout and stderr`, async () => {
-      const { createBashTool } = await import(`../../agents-runtime/src/index`)
+      const { createBashTool } = await import(`../../agents-runtime/src/tools`)
       const tool = createBashTool(`/tmp`)
       const result = await tool.execute(`test-tc`, {
         command: `echo "hello" && echo "error" >&2`,
@@ -1954,7 +1954,7 @@ export function runElectricAgentsConformanceTests(
     })
 
     test(`bash tool enforces timeout`, async () => {
-      const { createBashTool } = await import(`../../agents-runtime/src/index`)
+      const { createBashTool } = await import(`../../agents-runtime/src/tools`)
       const tool = createBashTool(`/tmp`)
       const result = await tool.execute(`test-tc`, { command: `sleep 60` })
       expect(result.details.timedOut).toBe(true)
@@ -1962,7 +1962,7 @@ export function runElectricAgentsConformanceTests(
 
     test(`read_file rejects paths outside working directory`, async () => {
       const { createReadFileTool } = await import(
-        `../../agents-runtime/src/index`
+        `../../agents-runtime/src/tools`
       )
       const tool = createReadFileTool(`/tmp/test-workdir`)
       const result = await tool.execute(`test-tc`, { path: `../../etc/passwd` })
@@ -1971,7 +1971,7 @@ export function runElectricAgentsConformanceTests(
 
     test(`read_file rejects binary files`, async () => {
       const { createReadFileTool } = await import(
-        `../../agents-runtime/src/index`
+        `../../agents-runtime/src/tools`
       )
       const fs = await import(`node:fs/promises`)
       const path = await import(`node:path`)
@@ -1991,7 +1991,7 @@ export function runElectricAgentsConformanceTests(
 
     test(`read_file rejects oversized files`, async () => {
       const { createReadFileTool } = await import(
-        `../../agents-runtime/src/index`
+        `../../agents-runtime/src/tools`
       )
       const fs = await import(`node:fs/promises`)
       const path = await import(`node:path`)
@@ -2010,13 +2010,13 @@ export function runElectricAgentsConformanceTests(
     })
 
     test(`web_search tool has correct interface`, async () => {
-      const { braveSearchTool } = await import(`../../agents-runtime/src/index`)
+      const { braveSearchTool } = await import(`../../agents-runtime/src/tools`)
       expect(braveSearchTool.name).toBe(`web_search`)
       expect(typeof braveSearchTool.execute).toBe(`function`)
     })
 
     test(`fetch_url tool has correct interface`, async () => {
-      const { fetchUrlTool } = await import(`../../agents-runtime/src/index`)
+      const { fetchUrlTool } = await import(`../../agents-runtime/src/tools`)
       expect(fetchUrlTool.name).toBe(`fetch_url`)
       expect(typeof fetchUrlTool.execute).toBe(`function`)
     })
