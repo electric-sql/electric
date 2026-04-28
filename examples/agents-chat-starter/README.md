@@ -7,15 +7,11 @@ Two agents — an **Optimist** and a **Critic** — join every room. Ask a quest
 ## Quick Start
 
 ```bash
-# 1. Start the agents infrastructure
-npx electric-ax agent quickstart
-
-# 2. Clone and install
-npx gitpick electric-sql/electric/tree/main/examples/agents-chat-starter my-chat-app
+# 1. Initialize the project
+npx electric-ax agents init my-chat-app
 cd my-chat-app
-pnpm install
 
-# 3. Configure
+# 2. Configure
 cp .env.example .env
 # Set ANTHROPIC_API_KEY in .env
 
