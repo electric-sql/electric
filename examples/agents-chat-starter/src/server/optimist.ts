@@ -4,7 +4,6 @@ import { chatroomSchema } from './schema.js'
 import {
   createSendMessageTool,
   createWebSearchTool,
-  createBroadcastFn,
   getConversationHistory,
   DEFAULT_MODEL,
   type ChatroomState,
@@ -49,8 +48,7 @@ export function registerOptimist(registry: EntityRegistry): void {
           createSendMessageTool(
             chatroom.messages,
             ctx.entityUrl,
-            ctx.entityUrl,
-            createBroadcastFn(args.chatroomId, ctx.entityUrl)
+            ctx.entityUrl
           ),
           createWebSearchTool(),
         ],

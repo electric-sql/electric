@@ -217,42 +217,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // Broadcast agent message to other agents (called by send_message tool)
-    if (action === `broadcast` && req.method === `POST`) {
-      try {
-        const body = (await readJson(req)) as {
-          text?: string
-          from?: string
-          excludeEntity?: string
-        }
-        const room = rooms.get(roomId!)
-        if (!room || !body.text) {
-          writeJson(res, 400, { error: `Invalid request` })
-          return
-        }
-
-        // Send to all agents except the sender
-        const targets = room.agents.filter(
-          (a) => a.entityUrl !== body.excludeEntity
-        )
-        await Promise.all(
-          targets.map((a) =>
-            sendToEntity(
-              a.entityUrl,
-              `[${body.from}]: ${body.text}`,
-              body.from ?? `agent`
-            )
-          )
-        )
-        writeJson(res, 200, { ok: true })
-      } catch (err) {
-        writeJson(res, 500, {
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
-      return
-    }
-
     // Spawn agent
     if (action === `agent` && req.method === `POST`) {
       try {

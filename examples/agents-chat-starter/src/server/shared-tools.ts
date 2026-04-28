@@ -6,26 +6,6 @@ export type ChatroomState = SharedStateHandle<typeof chatroomSchema>
 
 export const DEFAULT_MODEL = `claude-sonnet-4-5-20250929`
 
-/** Create a function that broadcasts an agent message to other agents in the room */
-export function createBroadcastFn(
-  chatroomId: string,
-  entityUrl: string
-): (text: string, senderName: string) => Promise<void> {
-  return async (text, senderName) => {
-    const serverUrl =
-      process.env.SERVE_URL ?? `http://localhost:${process.env.PORT ?? 4700}`
-    await fetch(`${serverUrl}/api/rooms/${chatroomId}/broadcast`, {
-      method: `POST`,
-      headers: { 'Content-Type': `application/json` },
-      body: JSON.stringify({
-        text,
-        from: senderName,
-        excludeEntity: entityUrl,
-      }),
-    }).catch(() => {})
-  }
-}
-
 /** Read all messages from the shared state and format as conversation context */
 export function getConversationHistory(chatroom: ChatroomState): string {
   const messages = (chatroom.messages as any).toArray as Array<{
@@ -113,8 +93,7 @@ export function createWebSearchTool(): AgentTool {
 export function createSendMessageTool(
   messages: MessageCollection,
   entityUrl: string,
-  displayName: string,
-  broadcastFn?: (text: string, senderName: string) => Promise<void>
+  displayName: string
 ): AgentTool {
   return {
     name: `send_message`,
@@ -135,10 +114,6 @@ export function createSendMessageTool(
         timestamp: Date.now(),
       })
       await awaitPersisted(transaction)
-
-      if (broadcastFn) {
-        await broadcastFn(text, displayName).catch(() => {})
-      }
 
       return {
         content: [{ type: `text` as const, text: `Message sent.` }],
