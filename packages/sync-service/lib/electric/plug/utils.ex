@@ -83,6 +83,7 @@ defmodule Electric.Plug.Utils do
   end
 
   alias OpenTelemetry.SemConv, as: SC
+  @max_telemetry_string_bytes 64 * 1024
 
   @doc false
   def redact_query_string(nil), do: nil
@@ -105,6 +106,11 @@ defmodule Electric.Plug.Utils do
           {"http.query_param.#{k}", redact_query_param_value(k, v)}
         end)
       end
+
+    body_params_map =
+      assigns
+      |> Map.get(:body_params, %{})
+      |> telemetry_body_params()
 
     %{
       "error.type" => assigns[:error_str],
@@ -134,8 +140,64 @@ defmodule Electric.Plug.Utils do
     |> Map.filter(fn {_k, v} -> not is_nil(v) end)
     |> Map.merge(Map.get(conn.private, :telemetry_span_attrs, %{}))
     |> Map.merge(query_params_map)
+    |> Map.merge(body_params_map)
     |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
+  end
+
+  defp telemetry_body_params(body_params) when body_params == %{}, do: %{}
+
+  defp telemetry_body_params(body_params) when is_map(body_params),
+    do: flatten_telemetry_params(body_params)
+
+  defp telemetry_body_params(_), do: %{}
+
+  defp flatten_telemetry_params(params, prefix \\ "http.body_param") do
+    Enum.reduce(params, %{}, fn {key, value}, attrs ->
+      Map.merge(attrs, flatten_telemetry_param(value, "#{prefix}.#{key}"))
+    end)
+  end
+
+  defp flatten_telemetry_param(%{} = params, prefix), do: flatten_telemetry_params(params, prefix)
+
+  defp flatten_telemetry_param(params, prefix) when is_list(params) do
+    params
+    |> Enum.with_index()
+    |> Enum.reduce(%{}, fn {value, index}, attrs ->
+      Map.merge(attrs, flatten_telemetry_param(value, "#{prefix}.#{index}"))
+    end)
+  end
+
+  defp flatten_telemetry_param(nil, _prefix), do: %{}
+
+  defp flatten_telemetry_param(value, prefix)
+       when is_binary(value) or is_boolean(value) or is_number(value) do
+    %{prefix => maybe_truncate_telemetry_string(value)}
+  end
+
+  defp flatten_telemetry_param(value, prefix) do
+    %{prefix => value |> inspect() |> maybe_truncate_telemetry_string()}
+  end
+
+  defp maybe_truncate_telemetry_string(value) when not is_binary(value), do: value
+
+  defp maybe_truncate_telemetry_string(value)
+       when byte_size(value) <= @max_telemetry_string_bytes, do: value
+
+  defp maybe_truncate_telemetry_string(value) do
+    value
+    |> binary_part(0, @max_telemetry_string_bytes)
+    |> trim_invalid_utf8()
+  end
+
+  defp trim_invalid_utf8(value) when value == "", do: value
+
+  defp trim_invalid_utf8(value) do
+    if String.valid?(value) do
+      value
+    else
+      trim_invalid_utf8(binary_part(value, 0, byte_size(value) - 1))
+    end
   end
 
   defp user_agent(%Plug.Conn{} = conn) do

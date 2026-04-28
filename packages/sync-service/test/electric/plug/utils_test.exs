@@ -47,6 +47,87 @@ defmodule Electric.Plug.UtilsTest do
       assert attrs["http.query_param.offset"] == "-1"
       assert attrs["http.query_param.flag"] == ""
     end
+
+    test "includes documented top-level subset body params alongside query params" do
+      conn =
+        Plug.Test.conn(:post, "/v1/shape?foo=bar")
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.assign(:body_params, %{
+          "where" => "value ILIKE $1",
+          "limit" => 1,
+          "offset" => 0,
+          "tags" => ["a", 2, nil],
+          "table" => "items",
+          "skip_me" => nil
+        })
+
+      attrs = Utils.common_open_telemetry_attrs(conn)
+
+      assert attrs["http.query_param.foo"] == "bar"
+      assert attrs["http.body_param.subset.where"] == "value ILIKE $1"
+      assert attrs["http.body_param.subset.limit"] == 1
+      assert attrs["http.body_param.subset.offset"] == 0
+      refute Map.has_key?(attrs, "http.body_param.table")
+      refute Map.has_key?(attrs, "http.body_param.subset.params")
+      refute Map.has_key?(attrs, "http.body_param.subset.tags")
+      refute Map.has_key?(attrs, "http.body_param.skip_me")
+    end
+
+    test "treats top-level subset body params as subset telemetry attrs" do
+      conn =
+        Plug.Test.conn(:post, "/v1/shape")
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.assign(:body_params, %{
+          "where" => "value ILIKE $1",
+          "limit" => 1,
+          "offset" => 0
+        })
+
+      attrs = Utils.common_open_telemetry_attrs(conn)
+
+      assert attrs["http.body_param.subset.where"] == "value ILIKE $1"
+      assert attrs["http.body_param.subset.limit"] == 1
+      assert attrs["http.body_param.subset.offset"] == 0
+      refute Map.has_key?(attrs, "http.body_param.where")
+    end
+
+    test "truncates large body param strings to 2000 bytes and keeps valid UTF-8" do
+      long_value = String.duplicate("😀", 20_000)
+
+      conn =
+        Plug.Test.conn(:post, "/v1/shape")
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.assign(:body_params, %{
+          "where" => long_value
+        })
+
+      attrs = Utils.common_open_telemetry_attrs(conn)
+      truncated = attrs["http.body_param.subset.where"]
+
+      assert String.valid?(truncated)
+      assert byte_size(truncated) <= 2000
+      assert byte_size(truncated) < byte_size(long_value)
+      assert String.starts_with?(long_value, truncated)
+    end
+
+    test "ignores non-subset top-level POST body params" do
+      conn =
+        Plug.Test.conn(:post, "/v1/shape")
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.assign(:body_params, %{
+          "table" => "items",
+          "params" => %{"tenant" => "acme"}
+        })
+
+      attrs = Utils.common_open_telemetry_attrs(conn)
+
+      refute Map.has_key?(attrs, "http.body_param.table")
+      refute Map.has_key?(attrs, "http.body_param.subset.params")
+
+      refute Enum.any?(Map.keys(attrs), fn key ->
+               is_binary(key) and String.starts_with?(key, "http.body_param.")
+             end)
+    end
   end
 
   describe "get_next_interval_timestamp/2" do
