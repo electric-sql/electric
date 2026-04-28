@@ -1,5 +1,15 @@
 # @electric-ax/agents-server
 
+## 0.2.4
+
+### Patch Changes
+
+- 89debcf: Pull in the latest `@electric-ax/agents-server-ui` bundle (3-tab coder spawn dialog, queued-prompt timeline rows, full nativeSessionId in the session header) and minor comment cleanup in the proxied-CORS path.
+- 491ba04: Move tool implementations (bash, read, write, edit, fetch_url, web_search, schedules) from agents-server to agents package, removing duplicate code. Tools are now exported from `@electric-ax/agents`.
+- Updated dependencies [4987694]
+- Updated dependencies [89debcf]
+  - @electric-ax/agents-runtime@0.1.0
+
 ## 0.2.3
 
 ### Patch Changes

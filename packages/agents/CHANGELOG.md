@@ -1,5 +1,20 @@
 # @electric-ax/agents
 
+## 0.2.0
+
+### Minor Changes
+
+- 491ba04: Move tool implementations (bash, read, write, edit, fetch_url, web_search, schedules) from agents-server to agents package, removing duplicate code. Tools are now exported from `@electric-ax/agents`.
+- 4fc022b: Redesign Horton onboarding: rename tutorial to quickstart skill (extended with routes + frontend phases), add init skill for project scaffolding, add onboarding routing to system prompt, configurable docs URL via HORTON_DOCS_URL, upgrade to claude-sonnet-4-6, fix web search fallback tool definition, and remove duplicate braveSearchTool from agents-server (now exported from agents)
+- 4987694: Move tool implementations (bash, read, write, edit, fetch_url, web_search, schedules) from `@electric-ax/agents` to `@electric-ax/agents-runtime` so they are available without importing the built-in agents package. **Breaking:** tool exports removed from `@electric-ax/agents` — import from `@electric-ax/agents-runtime` instead.
+
+### Patch Changes
+
+- 89debcf: Add the `coder` entity (a Claude Code / Codex CLI session wrapped as a long-lived entity) and give Horton matching `spawn_coder` / `prompt_coder` tools so the chatbot can dispatch coding work and keep prompting the same coder across many turns. The coder records its own `runs` events around each CLI invocation and pipes the assistant reply through `attachResponse`, so observers waking with `runFinished` get the response in the wake payload. Includes `--skip-git-repo-check` for `codex exec`, deterministic per-cwd Claude session discovery (so non-interactive `claude -p` runs are found reliably), and adopts the first prompt's text as the entity's display title.
+- Updated dependencies [4987694]
+- Updated dependencies [89debcf]
+  - @electric-ax/agents-runtime@0.1.0
+
 ## 0.1.5
 
 ### Patch Changes
