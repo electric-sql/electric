@@ -1,6 +1,7 @@
 name: Changesets
 
 on:
+  workflow_dispatch: {}
   push:
     branches:
       - main
@@ -88,6 +89,67 @@ jobs:
     secrets: inherit
     with:
       git_ref: ${{ needs.changesets.outputs.agent_server_release_tag }}
+
+  publish-canary:
+    name: Publish canary to npm
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if agents packages changed
+        id: check
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^packages/(agents|agents-runtime|electric-ax)/'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.changed == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.changed == 'true'
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: steps.check.outputs.changed == 'true'
+
+      - name: Set canary versions
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          for pkg in packages/agents packages/agents-runtime packages/electric-ax; do
+            current=$(jq -r '.version' "$pkg/package.json")
+            canary_version="${current}-canary.${SHORT_SHA}"
+            jq --arg v "$canary_version" '.version = $v' "$pkg/package.json" > tmp.json && mv tmp.json "$pkg/package.json"
+            echo "Set $pkg to $canary_version"
+          done
+
+      - name: Set canary image tag defaults
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          sed -i "s/= \`latest\`/= \`canary\`/g" packages/electric-ax/src/version.ts
+
+      - name: Build agent packages
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          pnpm run --filter '@electric-ax/agents-runtime' build
+          pnpm run --filter '@electric-ax/agents' build
+          pnpm run --filter 'electric-ax' build
+
+      - name: Publish canary packages
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          pnpm publish --filter '@electric-ax/agents-runtime' --tag canary --no-git-checks --access public
+          pnpm publish --filter '@electric-ax/agents' --tag canary --no-git-checks --access public
+          pnpm publish --filter 'electric-ax' --tag canary --no-git-checks --access public
 
   update-cloud:
     name: Update Electric version used by Cloud
