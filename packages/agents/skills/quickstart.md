@@ -418,16 +418,18 @@ export function registerChatAgent(registry: EntityRegistry) {
     async handler(ctx) {
       const args = chatAgentArgs.parse(ctx.args)
 
-      // First wake: create the shared state, then return
+      // First wake: create the shared state
       if (ctx.firstWake) {
         ctx.mkdb(args.chatroomId, chatroomSchema)
-        return
       }
 
-      // Subsequent wakes: observe shared state and respond
-      const chatroom = (await ctx.observe(
-        db(args.chatroomId, chatroomSchema)
-      )) as unknown as ChatroomState
+      // Observe shared state — wake when messages change
+      const chatroom = (await ctx.observe(db(args.chatroomId, chatroomSchema), {
+        wake: { on: 'change', collections: ['shared:message'] },
+      })) as unknown as ChatroomState
+
+      // On first wake, just register the wake — don't call the LLM
+      if (ctx.firstWake) return
 
       ctx.useAgent({
         systemPrompt:
@@ -462,8 +464,9 @@ pnpm electric-agents spawn /chat-agent/agent-1 '{"chatroomId":"room-1"}' \
 **Key concepts:**
 
 - `ctx.mkdb(id, schema)` — creates a shared state stream (only on first wake)
-- `ctx.observe(db(id, schema))` — connects to an existing shared state
-- Multiple entities can observe the same shared state by using the same `id`
+- `ctx.observe(db(id, schema), { wake })` — connects to shared state and wakes on changes
+- `wake: { on: 'change', collections: ['shared:message'] }` — wake when specific event types appear
+- The observe + wake must run on first wake (before early return) so the wake registers
 - Custom tools (`send_message`, `web_search`) — agents interact with the world through tools you define
 
 ## Step 7: Context assembly — agents that remember

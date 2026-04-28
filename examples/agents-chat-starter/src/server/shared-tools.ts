@@ -1,13 +1,68 @@
+import { db } from '@electric-ax/agents-runtime'
 import { Type } from '@sinclair/typebox'
-import type { AgentTool, SharedStateHandle } from '@electric-ax/agents-runtime'
+import { z } from 'zod'
+import type {
+  AgentTool,
+  EntityRegistry,
+  SharedStateHandle,
+} from '@electric-ax/agents-runtime'
 import { chatroomSchema } from './schema.js'
 
 export type ChatroomState = SharedStateHandle<typeof chatroomSchema>
 
 export const DEFAULT_MODEL = `claude-sonnet-4-5-20250929`
 
+const chatAgentArgs = z.object({ chatroomId: z.string().min(1) })
+
+/** Register a chat agent that observes a shared chatroom and responds to messages */
+export function registerChatAgent(
+  registry: EntityRegistry,
+  name: string,
+  description: string,
+  systemPrompt: string
+): void {
+  registry.define(name, {
+    description,
+    creationSchema: chatAgentArgs,
+
+    async handler(ctx) {
+      const args = chatAgentArgs.parse(ctx.args)
+
+      if (ctx.firstWake) {
+        ctx.mkdb(args.chatroomId, chatroomSchema)
+      }
+
+      const chatroom = (await ctx.observe(db(args.chatroomId, chatroomSchema), {
+        wake: { on: `change`, collections: [`shared:message`] },
+      })) as unknown as ChatroomState
+
+      if (ctx.firstWake) return
+
+      ctx.useContext({
+        sourceBudget: 50_000,
+        sources: {
+          conversation: {
+            cache: `volatile`,
+            content: async () => getConversationHistory(chatroom),
+          },
+        },
+      })
+
+      ctx.useAgent({
+        systemPrompt,
+        model: DEFAULT_MODEL,
+        tools: [
+          createSendMessageTool(chatroom.messages, ctx.entityUrl, name),
+          createWebSearchTool(),
+        ],
+      })
+      await ctx.agent.run()
+    },
+  })
+}
+
 /** Read all messages from the shared state and format as conversation context */
-export function getConversationHistory(chatroom: ChatroomState): string {
+function getConversationHistory(chatroom: ChatroomState): string {
   const messages = (chatroom.messages as any).toArray as Array<{
     senderName: string
     text: string
@@ -32,7 +87,7 @@ async function awaitPersisted(transaction: unknown): Promise<void> {
 
 const BRAVE_API_URL = `https://api.search.brave.com/res/v1/web/search`
 
-export function createWebSearchTool(): AgentTool {
+function createWebSearchTool(): AgentTool {
   return {
     name: `web_search`,
     label: `Web Search`,
@@ -90,7 +145,7 @@ export function createWebSearchTool(): AgentTool {
   }
 }
 
-export function createSendMessageTool(
+function createSendMessageTool(
   messages: MessageCollection,
   entityUrl: string,
   displayName: string

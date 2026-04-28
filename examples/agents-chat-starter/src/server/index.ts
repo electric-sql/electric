@@ -13,16 +13,27 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import http from 'node:http'
-import { registerOptimist } from './optimist.js'
-import { registerCritic } from './critic.js'
+import { registerChatAgent } from './shared-tools.js'
 
 const AGENTS_URL = process.env.AGENTS_URL ?? `http://localhost:4437`
 const PORT = Number(process.env.PORT ?? 4700)
 const SERVE_URL = process.env.SERVE_URL ?? `http://localhost:${PORT}`
 
 const registry = createEntityRegistry()
-registerOptimist(registry)
-registerCritic(registry)
+
+registerChatAgent(
+  registry,
+  `optimist`,
+  `Optimist analyst — focuses on opportunities and benefits`,
+  `You are an Optimist in a shared chatroom. You wake whenever the conversation changes. Read the conversation history in your context. If the latest message is from a user, respond with an enthusiastic, positive analysis focusing on opportunities and benefits. Use web_search to find supporting evidence when helpful. If the latest message is from another agent, do NOT respond — just end your turn silently.`
+)
+
+registerChatAgent(
+  registry,
+  `critic`,
+  `Critical analyst — focuses on risks and challenges`,
+  `You are a Critic in a shared chatroom. You wake whenever the conversation changes. Read the conversation history in your context. If the latest message is from a user, respond with a sharp analysis focusing on risks, downsides, and challenges. Use web_search to find supporting evidence when helpful. If the latest message is from another agent, do NOT respond — just end your turn silently.`
+)
 
 const runtime = createRuntimeHandler({
   baseUrl: AGENTS_URL,
