@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Type } from '@sinclair/typebox'
-import type {
-  AgentTool,
-  EntityStreamDBWithActions,
-} from '@electric-ax/agents-runtime'
+import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
 
 type ScheduleManifest = {
   key: string

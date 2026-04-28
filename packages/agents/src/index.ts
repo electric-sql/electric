@@ -36,4 +36,11 @@ export {
   createSpawnWorkerTool,
 } from './tools/spawn-worker.js'
 export type { WorkerToolName } from './tools/spawn-worker.js'
+export { createBashTool } from './tools/bash.js'
+export { createReadFileTool } from './tools/read-file.js'
+export { createWriteTool } from './tools/write.js'
+export { createEditTool } from './tools/edit.js'
+export { braveSearchTool } from './tools/brave-search.js'
+export { fetchUrlTool } from './tools/fetch-url.js'
+export { createScheduleTools } from './tools/schedules.js'
 export { createHortonDocsSupport } from './docs/knowledge-base.js'

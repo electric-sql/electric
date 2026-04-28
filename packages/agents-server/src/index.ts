@@ -40,8 +40,3 @@ export type {
   CreateAdapter,
 } from './electric-agents/adapter-types.js'
 export { DEFAULT_OUTPUT_SCHEMAS } from './electric-agents/default-entity-schemas.js'
-export { createBashTool } from './electric-agents/tools/bash.js'
-export { createReadFileTool } from './electric-agents/tools/read-file.js'
-export { braveSearchTool } from './electric-agents/tools/brave-search.js'
-export { fetchUrlTool } from './electric-agents/tools/fetch-url.js'
-export { createScheduleTools } from './electric-agents/tools/schedules.js'
