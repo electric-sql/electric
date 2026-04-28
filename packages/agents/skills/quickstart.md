@@ -70,11 +70,13 @@ Entities can declare persistent state collections that survive across wakes, all
 
 **Ask the user where they want the project.** Suggest a sensible default (e.g., `./perspectives-app` relative to the working directory) but let them choose. Do not create files or directories until the user confirms the location.
 
+**Ensure the user has an `ANTHROPIC_API_KEY` set.** The app's `.env` file (in the project root) must contain `ANTHROPIC_API_KEY=sk-ant-...`. If there is no `.env` file yet, ask the user to create one or provide their key so you can write it. Without this key, agents cannot call the LLM and will fail at runtime.
+
 Once the directory is confirmed, read `server.ts` in that directory:
 
 - **Has `registerPerspectives`**: resume from where they left off (read `entities/perspectives.ts` to determine the step)
 - **Has `server.ts` but no perspectives**: go to Step 1
-- **No `server.ts`**: scaffold the project — spawn a worker (`tools: ["bash"]`, systemPrompt: `"Set up an Electric Agents app project."`, initialMessage: `"mkdir -p TARGET/lib TARGET/entities && cp SKILL_DIR/scaffold/* TARGET/ && cp SKILL_DIR/scaffold/lib/* TARGET/lib/ && cp SKILL_DIR/scaffold/.env TARGET/ && cd TARGET && pnpm install && pnpm dev &"` — replace SKILL_DIR and TARGET). Then proceed to Step 1 while the worker runs. Wait for the worker to finish before writing files.
+- **No `server.ts`**: scaffold the project — spawn a worker (`tools: ["bash"]`, systemPrompt: `"Set up an Electric Agents app project."`, initialMessage: `"mkdir -p TARGET/lib TARGET/entities && cp SKILL_DIR/scaffold/* TARGET/ && cp SKILL_DIR/scaffold/lib/* TARGET/lib/ && cd TARGET && pnpm install && pnpm dev &"` — replace SKILL_DIR and TARGET). Then proceed to Step 1 while the worker runs. Wait for the worker to finish before writing files.
 
 ## Steps
 
