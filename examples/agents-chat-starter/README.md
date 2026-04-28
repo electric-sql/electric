@@ -1,6 +1,6 @@
 # Electric Agents Chat Starter
 
-A multi-agent chatroom where AI agents with different perspectives discuss topics together.
+[Electric Agents](https://electric-sql.com/docs/agents/) is a framework for building durable, collaborative AI agents. Agents run as long-lived entities with persistent state on durable streams — they scale to zero, survive restarts, and coordinate through shared state and wake events. This starter builds a multi-agent chatroom on top of it.
 
 Two agents — an **Optimist** and a **Critic** — join every room. Ask a question and watch them debate from opposing viewpoints.
 
@@ -11,51 +11,30 @@ Two agents — an **Optimist** and a **Critic** — join every room. Ask a quest
 npx electric-ax agents init my-chat-app
 cd my-chat-app
 
-# 2. Start the agents infrastructure
-npx electric-ax agent quickstart
+# 2. Start the agents infrastructure (Postgres, Electric, Durable Streams)
+npx electric-ax agents quickstart
 
-# 3. Configure (in a new terminal)
+# 3. In a new terminal, set your Anthropic API key
 cp .env.example .env
-# Set ANTHROPIC_API_KEY in .env
+# Edit .env and add your key: ANTHROPIC_API_KEY=sk-ant-...
+# Get one at https://console.anthropic.com/settings/keys
 
 # 4. Run
+pnpm install
 pnpm dev
 # Open http://localhost:5175
 ```
 
 ## How It Works
 
-### Architecture
+Each agent is an **entity** — an addressable unit of state at `/{type}/{id}` backed by a durable event stream. The runtime wakes entities in response to events (new messages, state changes, timers) and provides a handler context (`ctx`) for configuring the agent's LLM, tools, and coordination.
 
-```
-Frontend (React + Vite)         Backend (Node.js)          Infrastructure
-┌────────────────────┐    ┌──────────────────────┐    ┌────────────────┐
-│ TanStack DB        │    │ agents-runtime        │    │ agents-server  │
-│ - useLiveQuery     │◄──►│ - optimist entity     │◄──►│ (Postgres +    │
-│ - shared state sub │    │ - critic entity       │    │  Electric +    │
-│                    │    │ - HTTP endpoints      │    │  Durable       │
-│ Radix UI           │    └──────────────────────┘    │  Streams)      │
-│ - Slack-style chat │                                └────────────────┘
-└────────────────────┘
-```
+In this starter:
 
-### Data Flow
-
-1. **User sends message** → backend writes to shared state stream
-2. **Agents wake** via `ctx.observe(db(...), { wake: { on: 'change' } })`
-3. **Agents read history** via `ctx.useContext()` with conversation context
-4. **Agents respond** via `send_message` tool → writes to same shared state
-5. **Frontend updates** reactively via `useLiveQuery` on the shared state collection
-
-### Key Concepts
-
-| Concept          | API                                                       | Purpose                                                |
-| ---------------- | --------------------------------------------------------- | ------------------------------------------------------ |
-| Shared state     | `ctx.mkdb()`, `ctx.observe(db(...))`                      | Cross-entity coordination — agents share a message log |
-| Wake-on-change   | `wake: { on: 'change', collections: ['shared:message'] }` | Agents wake when new messages appear                   |
-| Context assembly | `ctx.useContext({ sourceBudget, sources })`               | Inject conversation history into agent context         |
-| Live queries     | `useLiveQuery(q => q.from(...).orderBy(...).select(...))` | Reactive frontend — no polling                         |
-| Entity spawning  | `PUT /{type}/{id}` with `initialMessage`                  | Create agent instances at runtime                      |
+1. **User sends message** — backend writes to a shared state stream
+2. **Agents wake** — `ctx.observe(db(...), { wake: { on: 'change' } })` triggers the handler when new messages arrive
+3. **Agents respond** — the LLM runs with conversation context and uses the `send_message` tool to post back to shared state
+4. **Frontend updates** — `useLiveQuery` on the shared state collection updates the UI reactively
 
 ## Project Structure
 
@@ -103,4 +82,4 @@ The agent automatically:
 - **Runtime**: `@electric-ax/agents-runtime` — entity lifecycle, shared state, context assembly
 - **Frontend**: React 19 + Vite + Radix UI Themes + TanStack DB
 - **Backend**: Node.js HTTP server
-- **Infrastructure**: Postgres + Electric + Durable Streams (via `electric-ax agent quickstart`)
+- **Infrastructure**: Postgres + Electric + Durable Streams (via `electric-ax agents quickstart`)
