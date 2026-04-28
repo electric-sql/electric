@@ -1,19 +1,20 @@
 ---
-description: Interactive tutorial — build a perspectives analyzer entity with the manager-worker pattern
-whenToUse: User asks about building entities, wants a tutorial, is new to Electric Agents, or wants to learn multi-agent patterns
+description: Guided quickstart — build a full Electric Agents app from entity to frontend
+whenToUse: User is new to Electric Agents, wants to learn how agents work, asks for a quickstart or getting started guide
 keywords:
-  - tutorial
+  - quickstart
   - getting started
   - learn
   - multi-agent
   - manager-worker
-  - perspectives
   - entity
+  - app
+  - frontend
 user-invocable: true
-max: 25000
+max: 35000
 ---
 
-# Tutorial: Build a Perspectives Analyzer
+# Quickstart: Build a Perspectives Analyzer
 
 Build a `perspectives` entity that analyzes questions from an optimist and a critic using the manager-worker pattern. Use the exact code below — do not invent different code.
 
@@ -67,7 +68,9 @@ Entities can declare persistent state collections that survive across wakes, all
 
 ## Before starting
 
-Read `server.ts` in the working directory:
+**Ask the user where they want the project.** Suggest a sensible default (e.g., `./perspectives-app` relative to the working directory) but let them choose. Do not create files or directories until the user confirms the location.
+
+Once the directory is confirmed, read `server.ts` in that directory:
 
 - **Has `registerPerspectives`**: resume from where they left off (read `entities/perspectives.ts` to determine the step)
 - **Has `server.ts` but no perspectives**: go to Step 1
@@ -85,7 +88,13 @@ Read `server.ts` in the working directory:
 
 **Step 5 — Wire up.** Read `server.ts`, show the import change, ask to write, update it.
 
-**Step 6 — Recap.**
+**Step 6 — After confirmation:** explain how entities integrate with HTTP. Show Step 6 code (adds routes to expose perspectives as an API). Ask to write.
+
+**Step 7 — After confirmation:** write the route handler file. Update `server.ts` to mount routes. Give curl commands to test the full request lifecycle. Ask to continue.
+
+**Step 8 — After confirmation:** explain how the frontend connects. Show Step 8 code (React UI). Create the UI files. Give commands to run it.
+
+**Step 9 — Recap.**
 
 ## Rules
 
@@ -272,6 +281,190 @@ export function registerPerspectives(registry: EntityRegistry) {
 
 Test: `pnpm electric-agents spawn /perspectives/test-3 && pnpm electric-agents send /perspectives/test-3 "Is remote work better than office work?" && pnpm electric-agents observe /perspectives/test-3`
 
+## Step 6: HTTP routes
+
+`routes.ts`:
+
+```typescript
+import type { RuntimeServerClient } from '@electric-ax/agents-runtime'
+
+export function createRoutes(client: RuntimeServerClient) {
+  return {
+    async handleAnalyze(req: Request): Promise<Response> {
+      const { question } = (await req.json()) as { question: string }
+      const id = `perspectives-${Date.now()}`
+
+      await client.spawnEntity({
+        entityType: 'perspectives',
+        entityId: id,
+        initialMessage: question,
+      })
+
+      return Response.json({ entityId: id, status: 'analyzing' })
+    },
+
+    async handleStatus(entityId: string): Promise<Response> {
+      const info = await client.getEntityInfo({
+        entityType: 'perspectives',
+        entityId,
+      })
+      return Response.json(info)
+    },
+  }
+}
+```
+
+`server.ts` additions:
+
+```typescript
+import { createRoutes } from './routes'
+import { createRuntimeServerClient } from '@electric-ax/agents-runtime'
+
+const client = createRuntimeServerClient({ baseUrl: ELECTRIC_AGENTS_URL })
+const routes = createRoutes(client)
+
+// Add inside the http.createServer callback, before the 404:
+if (req.url === '/api/analyze' && req.method === 'POST') {
+  const body = await new Promise<string>((resolve) => {
+    let data = ''
+    req.on('data', (chunk) => (data += chunk))
+    req.on('end', () => resolve(data))
+  })
+  const request = new Request('http://localhost', {
+    method: 'POST',
+    body,
+    headers: { 'content-type': 'application/json' },
+  })
+  const response = await routes.handleAnalyze(request)
+  res.writeHead(response.status, { 'content-type': 'application/json' })
+  res.end(await response.text())
+  return
+}
+
+const statusMatch = req.url?.match(/^\/api\/status\/(.+)$/)
+if (statusMatch && req.method === 'GET') {
+  const response = await routes.handleStatus(statusMatch[1]!)
+  res.writeHead(response.status, { 'content-type': 'application/json' })
+  res.end(await response.text())
+  return
+}
+```
+
+Test: `curl -X POST http://localhost:3000/api/analyze -H 'Content-Type: application/json' -d '{"question": "Is remote work better than office work?"}'`
+
+Then: `curl http://localhost:3000/api/status/<entityId>`
+
+## Step 8: Frontend
+
+`ui/index.html`:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Perspectives Analyzer</title>
+    <script type="module" src="./main.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+```
+
+`ui/main.tsx`:
+
+```tsx
+import React, { useState } from 'react'
+import { createRoot } from 'react-dom/client'
+
+function App() {
+  const [question, setQuestion] = useState('')
+  const [entityId, setEntityId] = useState<string | null>(null)
+  const [status, setStatus] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function analyze() {
+    setLoading(true)
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question }),
+    })
+    const data = await res.json()
+    setEntityId(data.entityId)
+    setLoading(false)
+    pollStatus(data.entityId)
+  }
+
+  async function pollStatus(id: string) {
+    const interval = setInterval(async () => {
+      const res = await fetch(`/api/status/${id}`)
+      const data = await res.json()
+      setStatus(data)
+      if (data.status === 'completed' || data.status === 'failed') {
+        clearInterval(interval)
+      }
+    }, 2000)
+  }
+
+  return (
+    <div
+      style={{ maxWidth: 600, margin: '2rem auto', fontFamily: 'system-ui' }}
+    >
+      <h1>Perspectives Analyzer</h1>
+      <div>
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="Ask a question..."
+          style={{ width: '100%', padding: '0.5rem', fontSize: '1rem' }}
+        />
+        <button onClick={analyze} disabled={loading || !question}>
+          {loading ? 'Analyzing...' : 'Analyze'}
+        </button>
+      </div>
+      {status && (
+        <div style={{ marginTop: '1rem' }}>
+          <h2>Status: {status.status}</h2>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>
+            {JSON.stringify(status, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
+createRoot(document.getElementById('root')!).render(<App />)
+```
+
+Add to `server.ts` — serve static files from `ui/`:
+
+```typescript
+import fs from 'node:fs'
+
+// Add inside http.createServer callback, before the 404:
+if (req.method === 'GET' && req.url?.startsWith('/ui')) {
+  const filePath = path.join(here, req.url)
+  if (fs.existsSync(filePath)) {
+    const ext = path.extname(filePath)
+    const types: Record<string, string> = {
+      '.html': 'text/html',
+      '.js': 'application/javascript',
+      '.tsx': 'application/javascript',
+      '.css': 'text/css',
+    }
+    res.writeHead(200, { 'content-type': types[ext] ?? 'text/plain' })
+    res.end(fs.readFileSync(filePath, 'utf-8'))
+    return
+  }
+}
+```
+
+Test: Open `http://localhost:3000/ui/index.html` in a browser.
+
 ## What you learned
 
 - `registry.define()` — entity types with description, state, handler
@@ -280,3 +473,6 @@ Test: `pnpm electric-agents spawn /perspectives/test-3 && pnpm electric-agents s
 - Wake events — parents wake when children finish
 - State collections — track data across wakes
 - The worker pattern — one generic type, many roles
+- HTTP routes — expose entities as API endpoints
+- `createRuntimeServerClient()` — spawn and query entities programmatically
+- Frontend integration — build a UI that talks to your agent API

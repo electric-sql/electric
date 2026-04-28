@@ -22,7 +22,7 @@ import type { SkillsRegistry } from '../skills/types'
 
 const TITLE_MODEL = `claude-haiku-4-5-20251001`
 
-export const HORTON_MODEL = `claude-sonnet-4-5-20250929`
+export const HORTON_MODEL = `claude-sonnet-4-6`
 
 let anthropic: Anthropic | null = null
 function getClient(): Anthropic {
@@ -147,7 +147,7 @@ export async function generateTitle(
 
 export function buildHortonSystemPrompt(
   workingDirectory: string,
-  opts: { hasDocsSupport?: boolean; hasSkills?: boolean } = {}
+  opts: { hasDocsSupport?: boolean; hasSkills?: boolean; docsUrl?: string } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
     ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
@@ -161,7 +161,7 @@ export function buildHortonSystemPrompt(
   const skillsGuidance = opts.hasSkills
     ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
 
-Some skills are user-invocable — the user can trigger them with a slash command like \`/tutorial\`. When you see a message starting with \`/\` followed by a skill name, load that skill immediately with use_skill. Pass any text after the skill name as args.
+Some skills are user-invocable — the user can trigger them with a slash command like \`/quickstart\`. When you see a message starting with \`/\` followed by a skill name, load that skill immediately with use_skill. Pass any text after the skill name as args.
 
 ## IMPORTANT: How to use a loaded skill
 
@@ -173,6 +173,30 @@ When you load a skill, it becomes your primary directive for that interaction. F
 4. **Unload when done.** Use remove_skill to free context space when the skill's workflow is complete.
 
 Do NOT load a skill and then ignore its instructions. The skill is there because it contains a tested, specific workflow. Your job is to execute it faithfully.`
+    : ``
+  const onboardingGuidance = `\n# Onboarding
+When a user is new or asks how to get started with Electric Agents, assess their situation:
+
+- **Want to learn how agents work?** → Load the quickstart skill.
+  This is a guided build that takes them from zero to a running app
+  with entities, multi-agent coordination, routes, and a frontend.
+
+- **Want to start building an app?** → Load the init skill.
+  This scaffolds a project and orients them in the codebase.
+  If they already know Electric Agents, skip the concepts.
+  If they don't, offer the quickstart first.
+
+- **Have a specific question?** → Answer it directly.
+  Use your docs tools or fetch_url for Electric Agents questions.
+  Use your other tools for general coding help.
+
+Don't force onboarding. If someone just wants to chat or code, let them.`
+  const docsUrlGuidance = opts.docsUrl
+    ? `\n# Electric Agents documentation
+- ${opts.hasDocsSupport ? `If search_durable_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
+- The Electric Agents docs site is at ${opts.docsUrl}
+- The docs site covers: Usage (entity definition, handlers, tools, state, spawning, coordination, waking, shared state, client integration, app setup), Reference (handler context, entity definitions, configurations, tools, state proxies, wake events, registries), Entities (Horton, Worker), and Patterns (Manager-Worker, Pipeline, Map-Reduce, Dispatcher, Blackboard, Reactive Observers).
+- For general coding questions unrelated to Electric Agents, use brave_search or your own knowledge.`
     : ``
   return `You are Horton, a friendly and capable assistant. You can chat, research the web, read and edit code, run shell commands, and dispatch subagents (workers) for isolated subtasks. Be warm and engaging in conversation; be precise and concrete when working with code.
 
@@ -190,7 +214,7 @@ ${docsTools}${skillsTools}
 - Prefer edit over write when modifying existing files.
 - You must read a file before you can edit it.
 - Use absolute paths or paths relative to the current working directory.
-${docsGuidance}${skillsGuidance}
+${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
 # Risky actions
 Pause and confirm with the user before:
@@ -260,6 +284,7 @@ function createAssistantHandler(options: {
   docsSupport: HortonDocsSupport | null
   docsSearchTool?: AgentTool
   skillsRegistry: SkillsRegistry | null
+  docsUrl?: string
 }) {
   const {
     workingDirectory,
@@ -267,6 +292,7 @@ function createAssistantHandler(options: {
     docsSupport,
     docsSearchTool,
     skillsRegistry,
+    docsUrl,
   } = options
   const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
 
@@ -338,6 +364,7 @@ function createAssistantHandler(options: {
       systemPrompt: buildHortonSystemPrompt(workingDirectory, {
         hasDocsSupport: Boolean(docsSupport),
         hasSkills,
+        docsUrl,
       }),
       model: HORTON_MODEL,
       tools,
@@ -377,9 +404,20 @@ export function registerHorton(
     workingDirectory: string
     streamFn?: StreamFn
     skillsRegistry?: SkillsRegistry | null
+    docsUrl?: string
   }
 ): Array<string> {
   const { workingDirectory, streamFn, skillsRegistry = null } = options
+  const docsUrl = options.docsUrl ?? process.env.HORTON_DOCS_URL
+
+  if (process.env.BRAVE_SEARCH_API_KEY) {
+    serverLog.info(`[horton] Web search: using Brave Search API`)
+  } else {
+    serverLog.warn(
+      `[horton] BRAVE_SEARCH_API_KEY not set — web search will fall back to Anthropic built-in search (uses your ANTHROPIC_API_KEY)`
+    )
+  }
+
   const docsSupport = createHortonDocsSupport(workingDirectory)
   const docsSearchTool = docsSupport?.createSearchTool()
 
@@ -395,6 +433,7 @@ export function registerHorton(
     docsSupport,
     docsSearchTool,
     skillsRegistry,
+    docsUrl,
   })
 
   registry.define(`horton`, {
