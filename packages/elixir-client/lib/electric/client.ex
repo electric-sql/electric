@@ -149,6 +149,8 @@ defmodule Electric.Client do
 
   defmodule Error do
     defexception [:message, :resp]
+
+    @type t() :: %__MODULE__{}
   end
 
   defstruct [
