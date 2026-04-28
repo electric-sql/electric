@@ -1,9 +1,9 @@
 ---
 title: "Introducing Electric Agents — the agent platfom built\u00A0on\u00A0sync"
 description: >-
-  Introducing Electric Agents, the agent platform built on sync. Use it to bring your agents online, wire them into your business systems and enable multi-user, multi-agent collaboration.
+  Introducing Electric Agents, the agent platform built on sync. Use it to build scalable, collaborative multi-agent systems that integrate into your online systems.
 excerpt: >-
-  Introducing Electric Agents, the agent platform built on sync. Use it to bring your agents online, wire them into your business systems and enable multi-user, multi-agent collaboration.
+  Introducing Electric Agents, the agent platform built on sync. Use it to build scalable, collaborative multi-agent systems that integrate into your online systems.
 authors: [kyle]
 image: /img/blog/introducing-electric-agents/header3.jpg
 tags: [electric-agents, durable-streams, agents, sync, collaboration]
@@ -15,16 +15,16 @@ published: true
 ---
 
 <script setup>
+  import AgentLoopFillDemo from "../../src/components/streams-home/AgentLoopFillDemo.vue"
+  import HomeCompositionHero from "../../src/components/home/HomeCompositionHero.vue"
   import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 </script>
 
-Today's agents live on your laptop or behind a chat window. That's wrong. They need to live online, storing the session log in a primitive like a [Durable Stream](/streams/).
-
-When you deploy lots of agents, you end up with a tangled mesh of these session logs. The substrate to tame that complexity is a sync engine.
+Agents are long-lived, logical entities that live in the data layer. Collaborative, multi-agent systems are a distributed data problem. The substrate for that is a sync engine.
 
 Today we're introducing [Electric Agents](/agents/): the first agent platform built on sync.
 
-Use it to bring your agents online, wire them into your business systems and enable rich multi-user, multi-agent collaboration.
+Use it to build scalable, multi-agent systems, enable rich multi-user, multi-agent collaboration and integrate agents into your online systems.
 
 > [!Warning] ✨&nbsp; Get started with Electric Agents
 > See the [Overview](/agents/), [Docs](/docs/agents/) and [Quickstart](/docs/agents/quickstart) guide.
@@ -33,7 +33,7 @@ Use it to bring your agents online, wire them into your business systems and ena
   <YoutubeEmbed video-id="x84uGuLWJNA" title="Electric - Agents on sync" />
 </div>
 
-## Bring your agents online
+## Guarding the log
 
 Why can't I pick up my Claude Code session on my phone?
 
@@ -42,6 +42,8 @@ You start an agent. It runs for ten minutes. You close your laptop to go to a me
 These feel like missing features, but they're all symptoms of the same thing. The agent's state isn't *live* and *online*. It's dumped into a hidden file on your computer somewhere. Or if the agent is online, like in a Durable Object, access is guarded by the interface it's exposed behind.
 
 The agent session, the session log, is not accessible. You can't share it, you can't observe it or subscribe to it. You can't fork it. It's not *addressable*. These aren't seperate problems. They're all the same problem. Agents are treated as compute and access to the session log is prohibited or guarded by predefined interfaces.
+
+### Inverting the paradigm
 
 What if instead of hiding or guarding access to the log, you turn the agent inside out and just expose the log, on the outside? In a [data primitive like a Durable Stream](/blog/2026/04/08/data-primitive-agent-loop).
 
@@ -56,6 +58,12 @@ Suddenly, all your agents become:
 - **forkable** &mdash; for concurrency and exploration
 
 It's a totally different paradigm.
+
+<figure style="border: 0.5px solid #75FBFD">
+  <a href="/img/blog/introducing-electric-agents/one-primitive.jpg" class="no-visual">
+    <img src="/img/blog/introducing-electric-agents/one-primitive.jpg" />
+  </a>
+</figure>
 
 ## Moving to multi-agent
 
@@ -99,11 +107,15 @@ Agents are in the same black-box moment. Current agent frameworks are complicate
 
 Kleppmann's insight: the database is a log with projections on top. Agents need the same architecture with one extension — the log has to be live. Not just durable and ordered, but multi-reader, multi-writer, reactive, and real-time. A [Durable Stream](/streams/).
 
-### The agent is the log
+<figure>
+  <AgentLoopFillDemo />
+</figure>
+
+### The agent is the durable stream
 
 With [Electric Agents](/agents/) we propose a new way of seeing agents:
 
-> **The agent is the log.**
+> **The agent is the durable stream.**
 >
 > Everything else is a projection or a subscriber.
 
@@ -137,6 +149,27 @@ The full picture is three layers:
 3. reactive queries ([TanStack DB](/sync/tanstack-db)) for UIs and agent context
 
 Each layer is a view of the one below it. The code stays small because the concept stays singular.
+
+<style>
+  .layers-illustration-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 5.6 / 4;
+    margin-bottom: -10px;
+  }
+
+  @media (max-width: 860px) {
+    .layers-illustration-wrapper {
+      aspect-ratio: 7 / 4;
+    }
+  }
+</style>
+
+<figure>
+  <div class="layers-illustration-wrapper">
+    <HomeCompositionHero />
+  </div>
+</figure>
 
 ## Examples
 
@@ -184,11 +217,9 @@ The agent goes off the rails at step 7. Fork the stream at step 6. The fork inhe
 
 The shape of the argument above isn't controversial inside the companies building agent infrastructure. In the last few weeks alone:
 
-**Anthropic**, [introducing Managed Agents](https://www.anthropic.com/engineering/managed-agents), described the session as "the append-only log of everything that happened" — and built the runtime around the claim that the harness shouldn't hold state: *"Because the session log sits outside the harness, nothing in the harness needs to survive a crash. When one fails, a new one can be rebooted with `wake(sessionId)`, use `getSession(id)` to get back the event log, and resume from the last event."*
-
-**Cloudflare**, [introducing Project Think](https://blog.cloudflare.com/project-think/), described three waves of agents: chatbots (stateless, reactive), coding agents (stateful, tool-using), and agents as infrastructure — *"Durable, distributed, structurally safe, and serverless. These are agents that run on the Internet, survive failures, cost nothing when idle."* They correctly identified that agents are not request-handlers and require their own execution environment.
-
-**LangChain**, via Harrison Chase, [landed on the lock-in](https://www.langchain.com/blog/your-harness-your-memory): *"As soon as there is any state associated, its much harder to switch. Because this memory matters. And if you switch, you lose access to it."* State ownership determines everything downstream. Harness portability is memory portability.
+- **Anthropic**, [introducing Managed Agents](https://www.anthropic.com/engineering/managed-agents), described the session as "the append-only log of everything that happened" — and built the runtime around the claim that the harness shouldn't hold state: *"Because the session log sits outside the harness, nothing in the harness needs to survive a crash. When one fails, a new one can be rebooted with `wake(sessionId)`, use `getSession(id)` to get back the event log, and resume from the last event."*
+- **Cloudflare**, [introducing Project Think](https://blog.cloudflare.com/project-think/), described three waves of agents: chatbots (stateless, reactive), coding agents (stateful, tool-using), and agents as infrastructure — *"Durable, distributed, structurally safe, and serverless. These are agents that run on the Internet, survive failures, cost nothing when idle."* They correctly identified that agents are not request-handlers and require their own execution environment.
+- **LangChain**, via Harrison Chase, [landed on the lock-in](https://www.langchain.com/blog/your-harness-your-memory): *"As soon as there is any state associated, its much harder to switch. Because this memory matters. And if you switch, you lose access to it."* State ownership determines everything downstream. Harness portability is memory portability.
 
 Each of them independently arrived at a piece of the same architectural picture. Append-only log as the source of truth. Session that outlives the process. State that outlives the model. One-to-one addressability. They agree on almost everything except what the substrate underneath should be.
 
@@ -214,6 +245,6 @@ And follow the instructions! If you need support or have any questions, join our
 
 ***
 
-Agents live in the log. When you deploy lots of agents, you end up with a mesh of logs. The substrate to tame that complexity is a sync engine.
+Agents are long-lived, logical entities that live in the data layer. Collaborative, multi-agent systems are a distributed data problem. The substrate for that is a sync engine.
 
-[Electric Agents](/agents/) is the first agent platform built on sync. Use it to bring your agents online, wire them into your business and enable real, dynamic, multi-user, multi-agent collaboration.
+[Electric Agents](/agents/) is the first agent platform built on sync. Use it to build scalable, multi-agent systems, enable rich multi-user, multi-agent collaboration and integrate agents into your online systems.
