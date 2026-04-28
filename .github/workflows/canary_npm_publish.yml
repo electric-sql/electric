@@ -1,6 +1,7 @@
 name: Publish canary npm packages
 
 on:
+  workflow_dispatch: {}
   push:
     branches: ['main']
     paths:
@@ -56,9 +57,9 @@ jobs:
           pnpm run --filter '@electric-ax/agents' build
           pnpm run --filter 'electric-ax' build
 
-      # Publish with canary tag (uses OIDC provenance for auth, matching the release workflow)
+      # Publish with canary tag (uses OIDC trusted publishing for auth, matching the release workflow)
       - name: Publish canary packages
         run: |
-          pnpm publish --filter '@electric-ax/agents-runtime' --tag canary --no-git-checks --access public --provenance
-          pnpm publish --filter '@electric-ax/agents' --tag canary --no-git-checks --access public --provenance
-          pnpm publish --filter 'electric-ax' --tag canary --no-git-checks --access public --provenance
+          pnpm publish --filter '@electric-ax/agents-runtime' --tag canary --no-git-checks --access public
+          pnpm publish --filter '@electric-ax/agents' --tag canary --no-git-checks --access public
+          pnpm publish --filter 'electric-ax' --tag canary --no-git-checks --access public
