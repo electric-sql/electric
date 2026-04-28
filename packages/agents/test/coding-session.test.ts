@@ -69,6 +69,12 @@ function makeFakeCtx(opts: {
     firstWake: opts.firstWake,
     args: opts.args,
     entityUrl: opts.entityUrl ?? `/coding-session/test-1`,
+    // The handler reads `ctx.tags.title` and calls `ctx.setTag(...)`
+    // when adopting the first prompt as the entity's display title.
+    // Provide an empty tags map and a no-op setTag so neither call
+    // throws before the CLI runner is exercised.
+    tags: {} as Record<string, string>,
+    setTag: () => Promise.resolve(),
     db: {
       actions: makeActions(),
       collections: {

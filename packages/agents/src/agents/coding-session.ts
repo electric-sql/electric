@@ -586,6 +586,16 @@ export function registerCodingSession(
         }
         const prompt = parsed.data.text
 
+        // Adopt the first prompt as the entity's display title (truncated)
+        // so the sidebar surfaces something meaningful for coders that
+        // would otherwise fall back to a random slug. Only set it if no
+        // title is already present — preserves explicit titles supplied
+        // by spawners (e.g. a future deep-survey-style use of `tags.title`).
+        const existingTitle = ctx.tags.title
+        if (typeof existingTitle !== `string` || existingTitle.length === 0) {
+          void ctx.setTag(`title`, prompt.slice(0, 80))
+        }
+
         ctx.db.actions.sessionMeta_update({
           key: `current`,
           updater: (d: SessionMetaRow) => {
