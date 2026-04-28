@@ -37,7 +37,7 @@ export function RoomsSidebar({
 
   return (
     <Flex direction="column" className="panel panel-rooms">
-      <Box px="3" py="3">
+      <Box px="3" py="3" className="panel-header">
         <Heading size="3">Agents Chat</Heading>
       </Box>
 

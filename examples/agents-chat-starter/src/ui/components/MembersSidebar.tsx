@@ -1,4 +1,4 @@
-import { Box, Flex, Text, Heading } from '@radix-ui/themes'
+import { Box, Flex, Text } from '@radix-ui/themes'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { AgentsCollection } from '../hooks/useChatroom.js'
 import type { EntityType } from '../hooks/useEntityTypes.js'
@@ -14,6 +14,11 @@ export function MembersSidebar({
   onSpawn: (type: string) => void
   connected: boolean
 }) {
+  const CHAT_AGENT_TYPES = [`optimist`, `critic`]
+  const chatAgentTypes = entityTypes.filter((et) =>
+    CHAT_AGENT_TYPES.includes(et.name)
+  )
+
   const { data: agents = [] } = useLiveQuery(
     agentsCollection
       ? (q) => q.from({ a: agentsCollection }).select(({ a }) => a)
@@ -23,14 +28,10 @@ export function MembersSidebar({
 
   return (
     <Flex direction="column" className="panel panel-members">
-      <Box px="3" py="3">
-        <Heading size="3">Members</Heading>
-      </Box>
-
       <Box flexGrow="1" px="2" className="panel-scroll">
-        <Box px="1" pb="1">
+        <Box px="1" pb="1" pt="2">
           <Text size="1" color="gray" weight="medium">
-            In this room
+            Members
           </Text>
         </Box>
         {!connected && agents.length === 0 && (
@@ -73,43 +74,38 @@ export function MembersSidebar({
             <Box style={{ minWidth: 0 }}>
               <Box>
                 <Text size="2" weight="medium" truncate>
-                  {agent.url}
+                  {(agent.url as string).split(`/`).pop()}
                 </Text>
               </Box>
             </Box>
           </Flex>
         ))}
-      </Box>
 
-      {entityTypes.length > 0 && (
-        <Box px="2" className="panel-footer">
-          <Box px="1" pb="1" pt="2">
-            <Text size="1" color="gray" weight="medium">
-              Add agent
-            </Text>
-          </Box>
-          {entityTypes.map((et) => (
-            <Flex
-              key={et.name}
-              align="center"
-              gap="2"
-              px="2"
-              py="1"
-              className={connected ? `list-row` : ``}
-              onClick={() => connected && onSpawn(et.name)}
-              style={{ opacity: connected ? 1 : 0.4 }}
-            >
-              <Text size="1" color="gray" style={{ flexShrink: 0 }}>
-                +
-              </Text>
-              <Text size="2" style={{ textTransform: `capitalize` }}>
-                {et.name}
-              </Text>
-            </Flex>
-          ))}
-          <Box pb="2" />
+        <Box px="1" pb="1" pt="3">
+          <Text size="1" color="gray" weight="medium">
+            Add agent
+          </Text>
         </Box>
-      )}
+        {chatAgentTypes.map((et) => (
+          <Flex
+            key={et.name}
+            align="center"
+            gap="2"
+            px="2"
+            py="1"
+            className={connected ? `list-row` : ``}
+            onClick={() => connected && onSpawn(et.name)}
+            style={{ opacity: connected ? 1 : 0.4 }}
+          >
+            <Text size="1" color="gray" style={{ flexShrink: 0 }}>
+              +
+            </Text>
+            <Text size="2" style={{ textTransform: `capitalize` }}>
+              {et.name}
+            </Text>
+          </Flex>
+        ))}
+      </Box>
     </Flex>
   )
 }

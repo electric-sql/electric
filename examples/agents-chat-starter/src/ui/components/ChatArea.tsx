@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Box, Flex, Text, Button, Heading, TextField } from '@radix-ui/themes'
+import { Box, Flex, Text, Button, TextField } from '@radix-ui/themes'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { Message } from '../../server/schema.js'
 import type {
@@ -60,25 +60,8 @@ export function ChatArea({
     onSend(text)
   }
 
-  if (!roomName) {
-    return (
-      <Flex direction="column" flexGrow="1" align="center" justify="center">
-        <Text size="3" color="gray">
-          Select or create a room to start chatting
-        </Text>
-      </Flex>
-    )
-  }
-
   return (
     <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
-      <Box px="3" py="3" className="chat-header">
-        <Heading size="3">
-          <Text color="gray"># </Text>
-          {roomName}
-        </Heading>
-      </Box>
-
       {error && (
         <Box px="3" py="2" className="chat-error">
           <Text size="1" color="red">
@@ -88,7 +71,14 @@ export function ChatArea({
       )}
 
       <Box flexGrow="1" className="chat-messages">
-        {messages.length === 0 && (
+        {!roomName && (
+          <Flex align="center" justify="center" style={{ height: `100%` }}>
+            <Text size="2" color="gray">
+              Select or create a room to start chatting
+            </Text>
+          </Flex>
+        )}
+        {roomName && messages.length === 0 && (
           <Flex align="center" justify="center" style={{ height: `100%` }}>
             <Text size="2" color="gray">
               {connected
@@ -114,8 +104,9 @@ export function ChatArea({
         <Box flexGrow="1">
           <TextField.Root
             size="2"
-            placeholder={`Message #${roomName}`}
+            placeholder={roomName ? `Message #${roomName}` : `Select a room...`}
             value={input}
+            disabled={!roomName}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === `Enter` && !e.shiftKey) {
@@ -125,7 +116,7 @@ export function ChatArea({
             }}
           />
         </Box>
-        <Button onClick={handleSend} disabled={!input.trim()}>
+        <Button onClick={handleSend} disabled={!roomName || !input.trim()}>
           Send
         </Button>
       </Flex>

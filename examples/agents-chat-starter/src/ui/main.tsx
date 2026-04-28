@@ -1,6 +1,6 @@
 import { StrictMode, useState, useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Theme, Flex, Text } from '@radix-ui/themes'
+import { Theme, Flex, Text, Box, Heading } from '@radix-ui/themes'
 import '@radix-ui/themes/styles.css'
 import { useChatroom } from './hooks/useChatroom.js'
 import { useEntityTypes } from './hooks/useEntityTypes.js'
@@ -136,20 +136,36 @@ function App() {
         onCreateRoom={createRoom}
         creating={creating}
       />
-      <ChatArea
-        messagesCollection={messagesCollection}
-        agentsCollection={agentsCollection}
-        connected={connected}
-        error={error}
-        onSend={sendMessage}
-        roomName={activeRoom?.name ?? null}
-      />
-      <MembersSidebar
-        agentsCollection={agentsCollection}
-        entityTypes={entityTypes}
-        onSpawn={spawnAgent}
-        connected={connected}
-      />
+      <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
+        <Box px="3" py="3" className="chat-header">
+          {activeRoom ? (
+            <Heading size="3">
+              <Text color="gray"># </Text>
+              {activeRoom.name}
+            </Heading>
+          ) : (
+            <Heading size="3" color="gray">
+              Chat
+            </Heading>
+          )}
+        </Box>
+        <Flex flexGrow="1" style={{ minHeight: 0 }}>
+          <ChatArea
+            messagesCollection={messagesCollection}
+            agentsCollection={agentsCollection}
+            connected={connected}
+            error={error}
+            onSend={sendMessage}
+            roomName={activeRoom?.name ?? null}
+          />
+          <MembersSidebar
+            agentsCollection={agentsCollection}
+            entityTypes={entityTypes}
+            onSpawn={spawnAgent}
+            connected={connected}
+          />
+        </Flex>
+      </Flex>
     </Flex>
   )
 }
