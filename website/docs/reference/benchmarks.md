@@ -124,7 +124,7 @@ Each shape in this benchmark is independent, ensuring that a write operation aff
 The two graphs differ based on the type of where clause used for the shapes:
 
 - **Top Graph:** The where clause is in the form `field = constant`, where each shape is assigned a unique constant. These types of where clause, along with
-  [other patterns](/docs/guides/shapes#optimised-where-clauses),
+  [other patterns](/docs/guides/shapes#optimized-where-clauses),
   are optimised for high performance regardless of the number of shapes — analogous to having an index on the field. As shown in the graph, the latency remains consistently
   flat at 6ms as the number of shapes increases. This 6ms latency includes 3ms for PostgreSQL to process the write operation and 3ms for Electric to propagate it.
   We are actively working to optimise additional where clause types in the future.
@@ -182,6 +182,7 @@ In this benchmark there are a varying number of shapes with just one client subs
 
 Latency and peak memory use rises linearly. Average memory use is flat.
 
+<a id="_7-write-throughput-with-optimized-where-clauses"></a>
 #### 7. Write throughput with optimised where clauses
 
 <figure>
@@ -202,10 +203,10 @@ is using an optimised where clause, specifically `field = constant`.
 > so that we can evaluate millions of where clauses at once, providing the where clauses follow various patterns, which we call optimised where clauses.
 > `field = constant` is one of the patterns we optimise, we can evaluate millions of these where clauses at once by indexing the shapes based on the constant
 > value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
-> `field = const AND another_condition` is another pattern we optimise. We aim to optimise a large subset of Postgres where clauses in the future.
+> `field = const AND another_condition` is another pattern we optimise, and some indexable `OR` combinations are now optimised too. This benchmark still measures the specific `field = constant` case shown above.
 > Optimised where clauses mean that we can process writes in a quarter of a millisecond, regardless of how many shapes there are.
 >
-> For more information on optimised where clauses, see the [shape API](/docs/guides/shapes#optimised-where-clauses).
+> For more information on optimised where clauses, see the [shape API](/docs/guides/shapes#optimized-where-clauses).
 
 The top graph shows throughput for Postgres 14, the bottom graph for Postgres 15.
 
