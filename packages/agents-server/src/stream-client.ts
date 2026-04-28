@@ -93,7 +93,7 @@ export class StreamClient {
 
       await handle.append(data)
       const head = await handle.head()
-      return { offset: head.offset ?? `` }
+      return { offset: (head.exists && head.offset) || `` }
     })
   }
 
