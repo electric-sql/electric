@@ -38,14 +38,26 @@ export function registerChatAgent(
 
       if (ctx.firstWake) return
 
-      // Only respond to user messages — skip if latest message is from an agent
+      // Only respond if there's a user message we haven't replied to yet
       const allMessages = (chatroom.messages as any).toArray as Array<{
         role: string
+        sender: string
+        timestamp: number
       }>
-      if (allMessages.length > 0) {
-        const latest = allMessages[allMessages.length - 1]!
-        if (latest.role !== `user`) return
+      const sorted = [...allMessages].sort((a, b) => a.timestamp - b.timestamp)
+      let lastUserIdx = -1
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        if (sorted[i]!.role === `user`) {
+          lastUserIdx = i
+          break
+        }
       }
+      if (lastUserIdx === -1) return // no user messages
+      // Check if this agent already responded after the last user message
+      const alreadyReplied = sorted
+        .slice(lastUserIdx + 1)
+        .some((m) => m.sender === ctx.entityUrl)
+      if (alreadyReplied) return
 
       ctx.useContext({
         sourceBudget: 50_000,
