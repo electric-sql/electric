@@ -20,6 +20,30 @@ published: true
   import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 </script>
 
+<style scoped>
+  .embed-container {
+    border: 1px solid var(--vp-c-divider);
+  }
+  .embed-container > iframe {
+    top: -1px;
+    left: -1px;
+    width: calc(100% + 2px);
+    height: calc(100% + 2px);
+  }
+  .layers-illustration-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 5.6 / 4;
+    margin-bottom: -10px;
+  }
+
+  @media (max-width: 860px) {
+    .layers-illustration-wrapper {
+      aspect-ratio: 7 / 4;
+    }
+  }
+</style>
+
 Agents are long-lived, logical entities that live in the data layer. Collaborative, multi-agent systems are a distributed data problem. The substrate for that is a sync engine.
 
 Today we're introducing [Electric Agents](/agents/): the first agent platform built on sync.
@@ -149,21 +173,6 @@ The full picture is three layers:
 3. reactive queries ([TanStack DB](/sync/tanstack-db)) for UIs and agent context
 
 Each layer is a view of the one below it. The code stays small because the concept stays singular.
-
-<style>
-  .layers-illustration-wrapper {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 5.6 / 4;
-    margin-bottom: -10px;
-  }
-
-  @media (max-width: 860px) {
-    .layers-illustration-wrapper {
-      aspect-ratio: 7 / 4;
-    }
-  }
-</style>
 
 <figure>
   <div class="layers-illustration-wrapper">
