@@ -14,7 +14,9 @@ homepageOrder: 10
 published: true
 ---
 
-<!-- TLDR: Short, tight, echoes the website lead. Category claim up front. -->
+<script setup>
+  import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
+</script>
 
 Today's agents live on your laptop or behind a chat window. That's wrong. They need to live online, storing the session log in a primitive like a [Durable Stream](/streams/).
 
@@ -26,6 +28,10 @@ Use it to bring your agents online, wire them into your business systems and ena
 
 > [!Warning] ✨&nbsp; Get started with Electric Agents
 > See the [Overview](/agents/), [Docs](/docs/agents/) and [Quickstart](/docs/agents/quickstart) guide.
+
+<div class="embed-container">
+  <YoutubeEmbed video-id="x84uGuLWJNA" title="Electric - Agents on sync" />
+</div>
 
 ## Bring your agents online
 
