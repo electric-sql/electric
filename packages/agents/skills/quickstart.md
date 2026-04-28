@@ -70,11 +70,13 @@ Entities can declare persistent state collections that survive across wakes, all
 
 **Ask the user where they want the project.** Suggest a sensible default (e.g., `./perspectives-app` relative to the working directory) but let them choose. Do not create files or directories until the user confirms the location.
 
+**Ensure the user has an `ANTHROPIC_API_KEY` set.** The app's `.env` file (in the project root) must contain `ANTHROPIC_API_KEY=sk-ant-...`. If there is no `.env` file yet, ask the user to create one or provide their key so you can write it. Without this key, agents cannot call the LLM and will fail at runtime.
+
 Once the directory is confirmed, read `server.ts` in that directory:
 
 - **Has `registerPerspectives`**: resume from where they left off (read `entities/perspectives.ts` to determine the step)
 - **Has `server.ts` but no perspectives**: go to Step 1
-- **No `server.ts`**: scaffold the project — spawn a worker (`tools: ["bash"]`, systemPrompt: `"Set up an Electric Agents app project."`, initialMessage: `"mkdir -p TARGET/lib TARGET/entities && cp SKILL_DIR/scaffold/* TARGET/ && cp SKILL_DIR/scaffold/lib/* TARGET/lib/ && cp SKILL_DIR/scaffold/.env TARGET/ && cd TARGET && pnpm install && pnpm dev &"` — replace SKILL_DIR and TARGET). Then proceed to Step 1 while the worker runs. Wait for the worker to finish before writing files.
+- **No `server.ts`**: scaffold the project — spawn a worker (`tools: ["bash"]`, systemPrompt: `"Set up an Electric Agents app project."`, initialMessage: `"mkdir -p TARGET/lib TARGET/entities && cp SKILL_DIR/scaffold/* TARGET/ && cp SKILL_DIR/scaffold/lib/* TARGET/lib/ && cd TARGET && pnpm install && pnpm dev &"` — replace SKILL_DIR and TARGET). Then proceed to Step 1 while the worker runs. Wait for the worker to finish before writing files.
 
 ## Steps
 
@@ -88,11 +90,11 @@ Once the directory is confirmed, read `server.ts` in that directory:
 
 **Step 5 — Wire up.** Read `server.ts`, show the import change, ask to write, update it.
 
-**Step 6 — After confirmation:** explain how entities integrate with HTTP. Show Step 6 code (adds routes to expose perspectives as an API). Ask to write.
+**Step 6 — After confirmation:** explain shared state as cross-entity coordination. Show Step 6 code (chatroom schema + chat-agent entity with `ctx.mkdb` and `ctx.observe`). Write files, give CLI commands to test. Ask to continue.
 
-**Step 7 — After confirmation:** write the route handler file. Update `server.ts` to mount routes. Give curl commands to test the full request lifecycle. Ask to continue.
+**Step 7 — After confirmation:** explain context assembly. Show the `ctx.useContext()` addition. Update the entity file. Test with two agents in the same room. Ask to continue.
 
-**Step 8 — After confirmation:** explain how the frontend connects. Show Step 8 code (React UI). Create the UI files. Give commands to run it.
+**Step 8 — After confirmation:** explain live frontend queries. Show Step 8 code (React + TanStack DB `useLiveQuery`). Create UI files, add deps, give commands to run. Show how updates appear in real time.
 
 **Step 9 — Recap.**
 
@@ -281,80 +283,249 @@ export function registerPerspectives(registry: EntityRegistry) {
 
 Test: `pnpm electric-agents spawn /perspectives/test-3 && pnpm electric-agents send /perspectives/test-3 "Is remote work better than office work?" && pnpm electric-agents observe /perspectives/test-3`
 
-## Step 6: HTTP routes
+## Step 6: Shared state — a chatroom
 
-`routes.ts`:
+In the perspectives analyzer, workers reported back to a parent via `runFinished`. But what if agents need to coordinate in real time — reading and writing to the same data? That's **shared state**.
+
+Shared state is a durable stream that multiple entities can observe. One entity creates it with `ctx.mkdb()`, others connect with `ctx.observe(db(...))`. Both sides read and write the same collections.
+
+Let's build a chatroom: a shared message log that agents post to using a `send_message` tool.
+
+`entities/chatroom-schema.ts`:
 
 ```typescript
-import type { RuntimeServerClient } from '@electric-ax/agents-runtime'
+import { z } from 'zod'
 
-export function createRoutes(client: RuntimeServerClient) {
+export const messageSchema = z.object({
+  key: z.string().min(1),
+  role: z.enum(['user', 'agent']),
+  sender: z.string().min(1),
+  senderName: z.string().min(1),
+  text: z.string().min(1),
+  timestamp: z.number(),
+})
+
+export const chatroomSchema = {
+  messages: {
+    schema: messageSchema,
+    type: 'shared:message',
+    primaryKey: 'key',
+  },
+} as const
+```
+
+`entities/chat-agent.ts`:
+
+```typescript
+import { db } from '@electric-ax/agents-runtime'
+import { z } from 'zod'
+import { Type } from '@sinclair/typebox'
+import { chatroomSchema } from './chatroom-schema'
+import type {
+  EntityRegistry,
+  SharedStateHandle,
+  AgentTool,
+} from '@electric-ax/agents-runtime'
+
+type ChatroomState = SharedStateHandle<typeof chatroomSchema>
+
+const chatAgentArgs = z.object({ chatroomId: z.string().min(1) })
+
+function createSendMessageTool(
+  messages: ChatroomState['messages'],
+  senderName: string
+): AgentTool {
   return {
-    async handleAnalyze(req: Request): Promise<Response> {
-      const { question } = (await req.json()) as { question: string }
-      const id = `perspectives-${Date.now()}`
-
-      await client.spawnEntity({
-        entityType: 'perspectives',
-        entityId: id,
-        initialMessage: question,
+    name: 'send_message',
+    description: 'Post a message to the chatroom.',
+    parameters: Type.Object({
+      text: Type.String({ description: 'The message text' }),
+    }),
+    execute: async (_id, params) => {
+      const { text } = params as { text: string }
+      ;(messages as any).insert({
+        key: crypto.randomUUID(),
+        role: 'agent',
+        sender: senderName,
+        senderName,
+        text,
+        timestamp: Date.now(),
       })
-
-      return Response.json({ entityId: id, status: 'analyzing' })
-    },
-
-    async handleStatus(entityId: string): Promise<Response> {
-      const info = await client.getEntityInfo({
-        entityType: 'perspectives',
-        entityId,
-      })
-      return Response.json(info)
+      return {
+        content: [{ type: 'text' as const, text: 'Message sent.' }],
+        details: {},
+      }
     },
   }
 }
+
+function createWebSearchTool(): AgentTool {
+  return {
+    name: 'web_search',
+    description: 'Search the web for current information.',
+    parameters: Type.Object({
+      query: Type.String({ description: 'The search query' }),
+    }),
+    execute: async (_id, params) => {
+      const apiKey = process.env.BRAVE_SEARCH_API_KEY
+      if (!apiKey) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Web search unavailable: BRAVE_SEARCH_API_KEY not set.',
+            },
+          ],
+          details: {},
+        }
+      }
+      const { query } = params as { query: string }
+      const res = await fetch(
+        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+        { headers: { 'X-Subscription-Token': apiKey } }
+      )
+      if (!res.ok) {
+        return {
+          content: [
+            { type: 'text' as const, text: `Search failed: ${res.status}` },
+          ],
+          details: {},
+        }
+      }
+      const data = (await res.json()) as {
+        web?: {
+          results?: Array<{ title: string; url: string; description: string }>
+        }
+      }
+      const results = data.web?.results ?? []
+      const formatted = results
+        .map(
+          (r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description}`
+        )
+        .join('\n\n')
+      return {
+        content: [
+          { type: 'text' as const, text: formatted || 'No results found.' },
+        ],
+        details: { resultCount: results.length },
+      }
+    },
+  }
+}
+
+export function registerChatAgent(registry: EntityRegistry) {
+  registry.define('chat-agent', {
+    description: 'Chat agent that reads and writes to a shared chatroom',
+    creationSchema: chatAgentArgs,
+    async handler(ctx) {
+      const args = chatAgentArgs.parse(ctx.args)
+
+      // First wake: create the shared state
+      if (ctx.firstWake) {
+        ctx.mkdb(args.chatroomId, chatroomSchema)
+      }
+
+      // Observe shared state — wake when messages change
+      const chatroom = (await ctx.observe(db(args.chatroomId, chatroomSchema), {
+        wake: { on: 'change', collections: ['shared:message'] },
+      })) as unknown as ChatroomState
+
+      // On first wake, just register the wake — don't call the LLM
+      if (ctx.firstWake) return
+
+      ctx.useAgent({
+        systemPrompt:
+          'You are a helpful chat agent. Use web_search to find information and send_message to reply.',
+        model: 'claude-sonnet-4-6',
+        tools: [
+          createSendMessageTool(chatroom.messages, ctx.entityUrl),
+          createWebSearchTool(),
+        ],
+      })
+      await ctx.agent.run()
+    },
+  })
+}
 ```
 
-`server.ts` additions:
+Add to `server.ts`:
 
 ```typescript
-import { createRoutes } from './routes'
-import { createRuntimeServerClient } from '@electric-ax/agents-runtime'
-
-const client = createRuntimeServerClient({ baseUrl: ELECTRIC_AGENTS_URL })
-const routes = createRoutes(client)
-
-// Add inside the http.createServer callback, before the 404:
-if (req.url === '/api/analyze' && req.method === 'POST') {
-  const body = await new Promise<string>((resolve) => {
-    let data = ''
-    req.on('data', (chunk) => (data += chunk))
-    req.on('end', () => resolve(data))
-  })
-  const request = new Request('http://localhost', {
-    method: 'POST',
-    body,
-    headers: { 'content-type': 'application/json' },
-  })
-  const response = await routes.handleAnalyze(request)
-  res.writeHead(response.status, { 'content-type': 'application/json' })
-  res.end(await response.text())
-  return
-}
-
-const statusMatch = req.url?.match(/^\/api\/status\/(.+)$/)
-if (statusMatch && req.method === 'GET') {
-  const response = await routes.handleStatus(statusMatch[1]!)
-  res.writeHead(response.status, { 'content-type': 'application/json' })
-  res.end(await response.text())
-  return
-}
+import { registerChatAgent } from './entities/chat-agent'
+registerChatAgent(registry)
 ```
 
-Test: `curl -X POST http://localhost:3000/api/analyze -H 'Content-Type: application/json' -d '{"question": "Is remote work better than office work?"}'`
+Test:
 
-Then: `curl http://localhost:3000/api/status/<entityId>`
+```bash
+pnpm electric-agents spawn /chat-agent/agent-1 '{"chatroomId":"room-1"}' \
+  && pnpm electric-agents send /chat-agent/agent-1 "Hello! What can you help me with?" \
+  && pnpm electric-agents observe /chat-agent/agent-1
+```
 
-## Step 8: Frontend
+**Key concepts:**
+
+- `ctx.mkdb(id, schema)` — creates a shared state stream (only on first wake)
+- `ctx.observe(db(id, schema), { wake })` — connects to shared state and wakes on changes
+- `wake: { on: 'change', collections: ['shared:message'] }` — wake when specific event types appear
+- The observe + wake must run on first wake (before early return) so the wake registers
+- Custom tools (`send_message`, `web_search`) — agents interact with the world through tools you define
+
+## Step 7: Context assembly — agents that remember
+
+When an agent wakes, it only sees the current message in its inbox. But in a chatroom, it needs the full conversation history to respond intelligently. And if a new agent joins mid-conversation, it should catch up.
+
+`ctx.useContext()` injects external data into the agent's context before the LLM call. You configure sources with a token budget and cache strategy:
+
+Update the handler in `entities/chat-agent.ts` — add `useContext` between `observe` and `useAgent`:
+
+```typescript
+      // Read conversation history from shared state
+      const allMessages = (chatroom.messages as any).toArray as Array<{
+        senderName: string
+        text: string
+      }>
+      const history = allMessages
+        .map((m) => `[${m.senderName}]: ${m.text}`)
+        .join('\n')
+
+      // Inject as volatile context (changes every wake)
+      ctx.useContext({
+        sourceBudget: 50_000,
+        sources: {
+          conversation: {
+            cache: 'volatile',
+            content: async () =>
+              history ? `Conversation so far:\n${history}` : '',
+          },
+        },
+      })
+
+      ctx.useAgent({
+```
+
+Test — spawn two agents in the same room to see them share context:
+
+```bash
+pnpm electric-agents spawn /chat-agent/agent-2 '{"chatroomId":"room-1"}' \
+  && pnpm electric-agents send /chat-agent/agent-2 "What has been discussed so far?" \
+  && pnpm electric-agents observe /chat-agent/agent-2
+```
+
+Agent 2 sees agent 1's messages because both observe the same shared state.
+
+**Key concepts:**
+
+- `ctx.useContext()` — injects data into the LLM context (separate from the system prompt)
+- `sourceBudget` — limits total tokens so long conversations don't overflow
+- `cache: 'volatile'` — content changes every wake (vs `'stable'` for static docs, `'pinned'` for always-include)
+- The content function is `async` — you can fetch from any source
+
+## Step 8: Frontend — live queries
+
+The agents are chatting, but we can't see it. Let's build a frontend that subscribes to the shared state and updates in real time — no polling.
+
+The frontend uses `createAgentsClient` to connect to the agents server, then `useLiveQuery` from TanStack DB for reactive queries on durable stream collections.
 
 `ui/index.html`:
 
@@ -364,11 +535,11 @@ Then: `curl http://localhost:3000/api/status/<entityId>`
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Perspectives Analyzer</title>
-    <script type="module" src="./main.tsx"></script>
+    <title>Chat</title>
   </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
   </body>
 </html>
 ```
@@ -376,103 +547,126 @@ Then: `curl http://localhost:3000/api/status/<entityId>`
 `ui/main.tsx`:
 
 ```tsx
-import React, { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
+import { createAgentsClient, db } from '@electric-ax/agents-runtime'
+import { useLiveQuery } from '@tanstack/react-db'
+import type { Collection } from '@tanstack/db'
+import { chatroomSchema } from '../entities/chatroom-schema'
 
-function App() {
-  const [question, setQuestion] = useState('')
-  const [entityId, setEntityId] = useState<string | null>(null)
-  const [status, setStatus] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+const AGENTS_URL = 'http://localhost:4437'
+const ROOM_ID = 'room-1'
 
-  async function analyze() {
-    setLoading(true)
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ question }),
-    })
-    const data = await res.json()
-    setEntityId(data.entityId)
-    setLoading(false)
-    pollStatus(data.entityId)
-  }
+function Chat() {
+  const [collection, setCollection] = useState<Collection<any> | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
-  async function pollStatus(id: string) {
-    const interval = setInterval(async () => {
-      const res = await fetch(`/api/status/${id}`)
-      const data = await res.json()
-      setStatus(data)
-      if (data.status === 'completed' || data.status === 'failed') {
-        clearInterval(interval)
-      }
-    }, 2000)
-  }
+  useEffect(() => {
+    const client = createAgentsClient({ baseUrl: AGENTS_URL })
+    client
+      .observe(db(ROOM_ID, chatroomSchema))
+      .then((sdb: any) => setCollection(sdb.collections.messages))
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
+  const { data: messages = [] } = useLiveQuery(
+    collection
+      ? (q) =>
+          q
+            .from({ m: collection })
+            .orderBy(({ m }) => (m as any).timestamp, 'asc')
+            .select(({ m }) => m)
+      : () => null,
+    [collection]
+  )
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length])
+
+  if (error) return <div>Error: {error}</div>
+  if (!collection) return <div>Connecting...</div>
 
   return (
     <div
       style={{ maxWidth: 600, margin: '2rem auto', fontFamily: 'system-ui' }}
     >
-      <h1>Perspectives Analyzer</h1>
-      <div>
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask a question..."
-          style={{ width: '100%', padding: '0.5rem', fontSize: '1rem' }}
-        />
-        <button onClick={analyze} disabled={loading || !question}>
-          {loading ? 'Analyzing...' : 'Analyze'}
-        </button>
+      <h1>Chatroom: {ROOM_ID}</h1>
+      <div
+        style={{
+          border: '1px solid #ddd',
+          borderRadius: 8,
+          padding: 16,
+          minHeight: 300,
+        }}
+      >
+        {messages.map((m: any) => (
+          <div key={m.key} style={{ marginBottom: 8 }}>
+            <strong>{m.senderName}:</strong> {m.text}
+          </div>
+        ))}
+        <div ref={bottomRef} />
       </div>
-      {status && (
-        <div style={{ marginTop: '1rem' }}>
-          <h2>Status: {status.status}</h2>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>
-            {JSON.stringify(status, null, 2)}
-          </pre>
-        </div>
-      )}
     </div>
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(<Chat />)
 ```
 
-Add to `server.ts` — serve static files from `ui/`:
+Add dependencies: `pnpm add @tanstack/db @tanstack/react-db react react-dom` and dev dependencies: `pnpm add -D @types/react @types/react-dom @vitejs/plugin-react vite`
+
+Add a Vite config (`vite.config.ts`):
 
 ```typescript
-import fs from 'node:fs'
+import path from 'node:path'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-// Add inside http.createServer callback, before the 404:
-if (req.method === 'GET' && req.url?.startsWith('/ui')) {
-  const filePath = path.join(here, req.url)
-  if (fs.existsSync(filePath)) {
-    const ext = path.extname(filePath)
-    const types: Record<string, string> = {
-      '.html': 'text/html',
-      '.js': 'application/javascript',
-      '.tsx': 'application/javascript',
-      '.css': 'text/css',
-    }
-    res.writeHead(200, { 'content-type': types[ext] ?? 'text/plain' })
-    res.end(fs.readFileSync(filePath, 'utf-8'))
-    return
-  }
-}
+export default defineConfig({
+  root: 'ui',
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@tanstack/db': path.resolve(
+        import.meta.dirname,
+        'node_modules/@tanstack/db'
+      ),
+    },
+  },
+  server: { port: 5175 },
+  build: { outDir: '../dist', emptyOutDir: true },
+})
 ```
 
-Test: Open `http://localhost:3000/ui/index.html` in a browser.
+Run: `npx vite` (in a new terminal). Open `http://localhost:5175`.
+
+Then send a message to an agent in the room:
+
+```bash
+pnpm electric-agents send /chat-agent/agent-1 "What's the weather like today?"
+```
+
+Watch the frontend update in real time as the agent responds.
+
+**Key concepts:**
+
+- `createAgentsClient({ baseUrl })` — connects the frontend to the agents server
+- `client.observe(db(roomId, schema))` — subscribes to a shared state stream (SSE)
+- `useLiveQuery` — reactive query that re-renders when the collection changes
+- `.select(({ m }) => m)` — flattens the query result (removes the alias wrapper)
+- No polling — the durable stream pushes updates to the browser via SSE
 
 ## What you learned
 
-- `registry.define()` — entity types with description, state, handler
-- `ctx.useAgent()` + `ctx.agent.run()` — configure and run an LLM agent
-- `ctx.spawn()` — spawn child entities with custom prompts
-- Wake events — parents wake when children finish
-- State collections — track data across wakes
-- The worker pattern — one generic type, many roles
-- HTTP routes — expose entities as API endpoints
-- `createRuntimeServerClient()` — spawn and query entities programmatically
-- Frontend integration — build a UI that talks to your agent API
+| Step | Concept                 | API                                                             |
+| ---- | ----------------------- | --------------------------------------------------------------- |
+| 1    | Entity types & handlers | `registry.define()`, `ctx.useAgent()`, `ctx.agent.run()`        |
+| 2    | Spawning children       | `ctx.spawn()`, `wake: 'runFinished'`                            |
+| 3    | State collections       | `state: { children: { primaryKey: 'key' } }`                    |
+| 6    | Shared state            | `ctx.mkdb()`, `ctx.observe(db(...))`, cross-entity coordination |
+| 7    | Context assembly        | `ctx.useContext()`, `sourceBudget`, cache tiers                 |
+| 8    | Live frontend           | `createAgentsClient`, `useLiveQuery`, `.select()`               |
+
+For a complete multi-agent chat app with rooms, agent spawning, and a Slack-style UI, see the [agents-chat-starter](https://github.com/electric-sql/electric/tree/main/examples/agents-chat-starter) example.

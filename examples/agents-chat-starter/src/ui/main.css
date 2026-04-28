@@ -1,0 +1,101 @@
+.app-layout {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Reset */
+html,
+body,
+#root,
+.radix-themes {
+  height: 100%;
+  margin: 0;
+}
+
+/* Panels */
+.panel {
+  overflow: hidden;
+}
+
+.panel-rooms {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--gray-a2);
+  border-right: 1px solid var(--gray-a4);
+}
+
+.panel-members {
+  width: 200px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--gray-a4);
+}
+
+.panel-scroll {
+  overflow-y: auto;
+}
+
+.panel-footer {
+  border-top: 1px solid var(--gray-a4);
+}
+
+/* List rows */
+.list-row {
+  border-radius: var(--radius-2);
+  cursor: pointer;
+}
+
+.list-row:hover {
+  background: var(--gray-a3);
+}
+
+.list-row-active {
+  background: var(--accent-a3);
+}
+
+.list-row-active:hover {
+  background: var(--accent-a4);
+}
+
+/* Status dot */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Chat */
+.chat-header {
+  border-bottom: 1px solid var(--gray-a4);
+}
+
+.chat-error {
+  background: var(--red-a3);
+}
+
+.chat-messages {
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.message {
+  max-width: 70%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-3);
+  line-height: 1.5;
+}
+
+.message-user {
+  align-self: flex-end;
+  background: var(--accent-9);
+  color: white;
+}
+
+.message-agent {
+  align-self: flex-start;
+  background: var(--gray-a3);
+}

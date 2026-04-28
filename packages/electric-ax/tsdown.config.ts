@@ -8,6 +8,7 @@ const config: Options = {
     `src/observe-ui.tsx`,
     `src/types-table.tsx`,
     `src/entity-stream-db.ts`,
+    `src/init.ts`,
   ],
   format: [`esm`, `cjs`],
   platform: `node`,
