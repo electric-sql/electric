@@ -1435,8 +1435,8 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.3.6)
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
-        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
+        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
@@ -1496,11 +1496,11 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.3.6)
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
+        version: '@electric-ax/durable-streams-client-beta@0.3.1'
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
-        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
+        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
         version: 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
@@ -1551,8 +1551,8 @@ importers:
         version: 3.25.2(zod@4.3.6)
     devDependencies:
       '@durable-streams/server':
-        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.0
-        version: '@electric-ax/durable-streams-server-beta@0.3.0(typescript@5.8.3)'
+        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.2
+        version: '@electric-ax/durable-streams-server-beta@0.3.2(typescript@5.8.3)'
       '@types/jsdom':
         specifier: ^27.0.0
         version: 27.0.0
@@ -1581,14 +1581,14 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.3.6)
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
+        version: '@electric-ax/durable-streams-client-beta@0.3.1'
       '@durable-streams/server':
-        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.0
-        version: '@electric-ax/durable-streams-server-beta@0.3.0(typescript@5.8.3)'
+        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.2
+        version: '@electric-ax/durable-streams-server-beta@0.3.2(typescript@5.8.3)'
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
-        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
+        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
@@ -1663,8 +1663,8 @@ importers:
   packages/agents-server-conformance-tests:
     dependencies:
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
+        version: '@electric-ax/durable-streams-client-beta@0.3.1'
       '@electric-sql/client':
         specifier: ^1.5.14
         version: link:../typescript-client
@@ -1691,11 +1691,11 @@ importers:
   packages/agents-server-ui:
     dependencies:
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
+        version: '@electric-ax/durable-streams-client-beta@0.3.1'
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
-        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
+        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
@@ -3937,12 +3937,22 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@electric-ax/durable-streams-server-beta@0.3.0':
-    resolution: {integrity: sha512-EnM/zUIJ0Bv1wLQOQmeBcrHNyaz8jCdfC0GotvtFEyvz/Tivu996XNsmAecrXKj7AammLe7oX576n15OIbhQsw==}
+  '@electric-ax/durable-streams-client-beta@0.3.1':
+    resolution: {integrity: sha512-smWzyfwrkA5TyRTnyO/HEbElJm54lyifRe6hgQpcfYaW0M3l3jedI5voOEvu2GTHfBKuOsFrFWsbMB0ltGm6qg==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@electric-ax/durable-streams-server-beta@0.3.2':
+    resolution: {integrity: sha512-jo0siJmG6awFjMxaHbIkcUW+SGzmoT2JezxSLZ/wzKVt24Ao4HyWmBMjKXVaEm9Qtq8RjdYiSd6o8X8i0K/wHw==}
     engines: {node: '>=18.0.0'}
 
   '@electric-ax/durable-streams-state-beta@0.3.0':
     resolution: {integrity: sha512-/jJyT757kz765v6vhmElYTz4E1IMa547UXuOjEYEdHW6TjubLWVve+6bc7w4rXma1AXoE6e8j3sYi+JT0aJeZw==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@electric-ax/durable-streams-state-beta@0.3.1':
+    resolution: {integrity: sha512-84Y3/ERaJgXEtXRqkyK+lML59ABqg/zjsQD3YYR+EWysMsoy6f664GZ5QzTqbuxO/03nP83FuAYFDPw6jgIsCA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -21282,10 +21292,15 @@ snapshots:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
       fastq: 1.20.1
 
-  '@electric-ax/durable-streams-server-beta@0.3.0(typescript@5.8.3)':
+  '@electric-ax/durable-streams-client-beta@0.3.1':
     dependencies:
-      '@durable-streams/client': '@electric-ax/durable-streams-client-beta@0.3.0'
-      '@durable-streams/state': '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      fastq: 1.20.1
+
+  '@electric-ax/durable-streams-server-beta@0.3.2(typescript@5.8.3)':
+    dependencies:
+      '@electric-ax/durable-streams-client-beta': 0.3.1
+      '@electric-ax/durable-streams-state-beta': 0.3.1(typescript@5.8.3)
       '@neophi/sieve-cache': 1.5.0
       '@opentelemetry/api': 1.9.1
       lmdb: 3.5.4
@@ -21297,6 +21312,14 @@ snapshots:
   '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)':
     dependencies:
       '@durable-streams/client': '@electric-ax/durable-streams-client-beta@0.3.0'
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.6.5(typescript@5.8.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)':
+    dependencies:
+      '@electric-ax/durable-streams-client-beta': 0.3.1
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.6.5(typescript@5.8.3)
     transitivePeerDependencies:

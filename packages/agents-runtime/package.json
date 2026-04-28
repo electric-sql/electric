@@ -67,8 +67,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.0",
-    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
+    "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.1",
+    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.1",
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@mariozechner/pi-ai": "^0.70.2",
     "@mozilla/readability": "^0.6.0",
@@ -85,7 +85,7 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
-    "@durable-streams/server": "npm:@electric-ax/durable-streams-server-beta@^0.3.0",
+    "@durable-streams/server": "npm:@electric-ax/durable-streams-server-beta@^0.3.2",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.19.15",
     "@types/turndown": "^5.0.6",
