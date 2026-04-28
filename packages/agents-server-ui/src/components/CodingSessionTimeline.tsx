@@ -57,13 +57,18 @@ export function CodingSessionTimeline({
 function renderItems(
   events: Array<CodingSessionEventRow>
 ): Array<React.ReactNode> {
-  // Pair tool_call with tool_result by callId.
+  // Pair tool_call with tool_result by callId. We need both maps to
+  // detect orphan tool_results (results whose corresponding call lives
+  // before the tail cursor and isn't in `events`): looking the result
+  // up in `resultsByCallId` would always succeed (we just inserted it),
+  // so the orphan check has to query `callsByCallId` instead.
   const resultsByCallId = new Map<string, CodingSessionEventRow>()
+  const callsByCallId = new Map<string, CodingSessionEventRow>()
   for (const e of events) {
-    if (e.type === `tool_result`) {
-      const callId = (e.payload.callId as string | undefined) ?? e.callId
-      if (callId) resultsByCallId.set(callId, e)
-    }
+    const callId = (e.payload.callId as string | undefined) ?? e.callId
+    if (!callId) continue
+    if (e.type === `tool_result`) resultsByCallId.set(callId, e)
+    else if (e.type === `tool_call`) callsByCallId.set(callId, e)
   }
 
   const rendered = new Set<string>()
@@ -100,18 +105,16 @@ function renderItems(
         )
         break
       }
-      case `tool_result`:
-        // Rendered inline with its tool_call. Fall through — a stray
-        // result (no matching call) is uncommon; show it as a tiny note.
-        if (
-          e.callId &&
-          !resultsByCallId.has(
-            (e.payload.callId as string | undefined) ?? e.callId
-          )
-        ) {
+      case `tool_result`: {
+        // Rendered inline with its tool_call. A stray result (no
+        // matching call in this view, e.g. when the tail cursor lands
+        // mid-session) is uncommon; show it as a tiny note.
+        const callId = (e.payload.callId as string | undefined) ?? e.callId
+        if (callId && !callsByCallId.has(callId)) {
           items.push(<OrphanToolResult key={key} event={e} />)
         }
         break
+      }
       case `permission_request`:
         items.push(<PermissionRequestRow key={key} event={e} />)
         break
