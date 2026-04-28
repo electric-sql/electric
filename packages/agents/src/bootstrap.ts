@@ -9,6 +9,7 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import { serverLog } from './log'
+import { registerCodingSession } from './agents/coding-session'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
 import { createSkillsRegistry } from './skills/registry'
@@ -114,6 +115,9 @@ export async function createBuiltinAgentHandler(
 
   registerWorker(registry, { workingDirectory: cwd, streamFn })
   typeNames.push(`worker`)
+
+  registerCodingSession(registry, { defaultWorkingDirectory: cwd })
+  typeNames.push(`coder`)
 
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,

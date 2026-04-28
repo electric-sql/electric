@@ -11,6 +11,7 @@ import {
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { Flex, Text } from '@radix-ui/themes'
+import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
@@ -20,6 +21,7 @@ import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
+import { CodingSessionView } from './components/CodingSessionView'
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
@@ -128,12 +130,20 @@ function EntityPage(): React.ReactElement {
           direction="column"
           style={{ flex: 1, minWidth: 0, overflow: `hidden` }}
         >
-          <GenericEntityBody
-            baseUrl={baseUrl}
-            entityUrl={connectUrl}
-            entityStopped={entityStopped}
-            isSpawning={isSpawning}
-          />
+          {selectedEntity.type === CODING_SESSION_ENTITY_TYPE && connectUrl ? (
+            <CodingSessionView
+              baseUrl={baseUrl}
+              entityUrl={connectUrl}
+              entityStopped={entityStopped}
+            />
+          ) : (
+            <GenericEntityBody
+              baseUrl={baseUrl}
+              entityUrl={connectUrl}
+              entityStopped={entityStopped}
+              isSpawning={isSpawning}
+            />
+          )}
         </Flex>
         {stateExplorerOpen && (
           <>

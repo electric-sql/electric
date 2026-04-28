@@ -4,10 +4,13 @@ import { ChevronDown } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { nanoid } from 'nanoid'
+import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { ServerPicker } from './ServerPicker'
 import { EntityListItem, getEntityDisplayTitle } from './EntityListItem'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
+import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
+
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 200
@@ -53,6 +56,7 @@ export function Sidebar({
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [spawnDialogType, setSpawnDialogType] =
     useState<ElectricEntityType | null>(null)
+  const [codingDialogOpen, setCodingDialogOpen] = useState(false)
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
@@ -121,7 +125,17 @@ export function Sidebar({
       if (!spawnEntity) return
       setSpawnError(null)
       const name = nanoid(10)
-      const tx = spawnEntity({ type: typeName, name, args })
+      // Coder entities need a fresh-input event on the first wake to
+      // actually invoke the handler — `entity_created` alone is a
+      // management event and the runtime skips the initial handler
+      // pass when only management events are present. A sentinel inbox
+      // message delivers that fresh input; the coder handler ignores
+      // non-prompt payloads. Covers create, attach, and import modes.
+      const initialMessage =
+        typeName === CODING_SESSION_ENTITY_TYPE
+          ? { __bootstrap: true }
+          : undefined
+      const tx = spawnEntity({ type: typeName, name, args, initialMessage })
       onSelectEntity(`/${typeName}/${name}`)
       tx.isPersisted.promise.catch((err: Error) => {
         setSpawnError(
@@ -134,6 +148,10 @@ export function Sidebar({
 
   const handleNewSession = useCallback(
     (entityType: ElectricEntityType) => {
+      if (entityType.name === CODING_SESSION_ENTITY_TYPE) {
+        setCodingDialogOpen(true)
+        return
+      }
       if (hasSchemaProperties(entityType.creation_schema)) {
         setSpawnDialogType(entityType)
       } else {
@@ -352,6 +370,14 @@ export function Sidebar({
           }}
         />
       )}
+      <CodingSessionSpawnDialog
+        open={codingDialogOpen}
+        onOpenChange={setCodingDialogOpen}
+        onSpawn={(args) => {
+          doSpawn(CODING_SESSION_ENTITY_TYPE, args)
+          setCodingDialogOpen(false)
+        }}
+      />
     </Flex>
   )
 }
