@@ -12,7 +12,11 @@ import type { EntityRegistry } from '@electric-ax/agents-runtime'
 
 const argsSchema = z.object({ chatroomId: z.string().min(1) })
 
-const SYSTEM_PROMPT = `You are an Optimist in a shared chatroom. When the user asks a question, provide an enthusiastic, positive analysis focusing on opportunities and benefits. Use web_search to find supporting evidence when helpful. Use send_message to post your response. If other agents have already covered the optimistic angle, add new points or stay silent.`
+const SYSTEM_PROMPT = `You are an Optimist in a shared chatroom. You wake whenever the conversation changes.
+
+Read the conversation history in your context. If the latest message is from a user and relates to your expertise (positive analysis, opportunities, benefits), respond using send_message. Use web_search to find supporting evidence when helpful.
+
+If the latest message is from another agent, or you have nothing new to add, do NOT call send_message — just end your turn silently.`
 
 export function registerOptimist(registry: EntityRegistry): void {
   registry.define(`optimist`, {
@@ -24,12 +28,13 @@ export function registerOptimist(registry: EntityRegistry): void {
 
       if (ctx.firstWake) {
         ctx.mkdb(args.chatroomId, chatroomSchema)
-        return
       }
 
-      const chatroom = (await ctx.observe(
-        db(args.chatroomId, chatroomSchema)
-      )) as unknown as ChatroomState
+      const chatroom = (await ctx.observe(db(args.chatroomId, chatroomSchema), {
+        wake: { on: `change`, collections: [`shared:message`] },
+      })) as unknown as ChatroomState
+
+      if (ctx.firstWake) return
 
       ctx.useContext({
         sourceBudget: 50_000,

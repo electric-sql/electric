@@ -57,33 +57,6 @@ async function readJson(req: http.IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString(`utf8`))
 }
 
-/** Send a message to a single entity via the /send inbox endpoint */
-async function sendToEntity(
-  entityUrl: string,
-  text: string,
-  from: string
-): Promise<void> {
-  const res = await fetch(`${AGENTS_URL}${entityUrl}/send`, {
-    method: `POST`,
-    headers: { 'Content-Type': `application/json` },
-    body: JSON.stringify({ from, payload: text }),
-  })
-  if (!res.ok) {
-    console.warn(`[server] send to ${entityUrl} failed: ${res.status}`)
-  }
-}
-
-/** Broadcast a message to all agents in a room */
-async function broadcastToRoom(
-  room: Room,
-  text: string,
-  from: string
-): Promise<void> {
-  await Promise.all(
-    room.agents.map((a) => sendToEntity(a.entityUrl, text, from))
-  )
-}
-
 async function spawnAgent(room: Room, type: string): Promise<string> {
   const agentId = `${room.id}-${type}-${room.agents.length + 1}`
   const entityUrl = `/${type}/${agentId}`
@@ -173,7 +146,7 @@ const server = http.createServer(async (req, res) => {
   if (roomMatch) {
     const [, roomId, action] = roomMatch
 
-    // Send user message — write to shared state + broadcast to all agents
+    // Send user message — write to shared state (agents wake via observe)
     if (action === `message` && req.method === `POST`) {
       try {
         const body = (await readJson(req)) as { text?: string }
@@ -187,7 +160,6 @@ const server = http.createServer(async (req, res) => {
           return
         }
 
-        // Write to shared state so frontend sees it
         const event = {
           type: `shared:message`,
           headers: { operation: `insert` },
@@ -206,8 +178,6 @@ const server = http.createServer(async (req, res) => {
           body: JSON.stringify(event),
         })
 
-        // Send to all agents via inbox
-        await broadcastToRoom(room, body.text, `user`)
         writeJson(res, 200, { ok: true })
       } catch (err) {
         writeJson(res, 500, {
