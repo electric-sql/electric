@@ -123,6 +123,7 @@ defmodule Electric.Plug.UtilsTest do
 
       refute Map.has_key?(attrs, "http.body_param.table")
       refute Map.has_key?(attrs, "http.body_param.subset.params")
+
       refute Enum.any?(Map.keys(attrs), fn key ->
                is_binary(key) and String.starts_with?(key, "http.body_param.")
              end)
