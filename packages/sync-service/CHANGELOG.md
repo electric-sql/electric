@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.6.1
+
+### Patch Changes
+
+- 4da5618: Propagate OpenTelemetry context into spawned snapshot and move-in tasks so that spans created via `with_child_span` (e.g. `shape_snapshot.execute_for_shape`, `shape_snapshot.query_fn`, `shape_snapshot.checkout_wait`) are linked to the originating trace instead of being silently dropped.
+
 ## 1.6.0
 
 ### Minor Changes

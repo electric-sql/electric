@@ -1,5 +1,14 @@
 # @electric-ax/agents-server-ui
 
+## 0.1.4
+
+### Patch Changes
+
+- 89debcf: Coder-session UI improvements: a dedicated 3-tab Create / Attach / Import spawn dialog routed in from the sidebar's _New session_ flow, a timeline view that shows queued user prompts immediately as a "queued" bubble (matched against canonical `user_message` events by text so they swap cleanly when the CLI mirrors the JSONL back), and a session header that surfaces the full `nativeSessionId` for copy/paste against on-disk session files.
+- Updated dependencies [4987694]
+- Updated dependencies [89debcf]
+  - @electric-ax/agents-runtime@0.1.0
+
 ## 0.1.3
 
 ### Patch Changes
