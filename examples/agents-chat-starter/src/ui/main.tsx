@@ -16,10 +16,17 @@ interface Room {
   createdAt: number
 }
 
+function getRoomFromHash(): string | null {
+  const hash = window.location.hash.slice(1)
+  return hash || null
+}
+
 function App() {
   const [config, setConfig] = useState<{ agentsUrl: string } | null>(null)
   const [rooms, setRooms] = useState<Room[]>([])
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(
+    getRoomFromHash
+  )
   const [creating, setCreating] = useState(false)
 
   const activeRoom = rooms.find((r) => r.id === activeRoomId) ?? null
@@ -41,6 +48,18 @@ function App() {
   useEffect(() => {
     loadRooms()
   }, [loadRooms])
+
+  // Sync active room to URL hash
+  useEffect(() => {
+    window.location.hash = activeRoomId ?? ``
+  }, [activeRoomId])
+
+  // Restore active room on browser back/forward
+  useEffect(() => {
+    const onHashChange = () => setActiveRoomId(getRoomFromHash())
+    window.addEventListener(`hashchange`, onHashChange)
+    return () => window.removeEventListener(`hashchange`, onHashChange)
+  }, [])
 
   const createRoom = useCallback(async (name: string) => {
     setCreating(true)
