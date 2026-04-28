@@ -86,7 +86,14 @@ defmodule ElectricTelemetry.StackTelemetry do
         unit: {:native, :millisecond},
         keep: fn metadata -> metadata[:live] != true end
       ),
-      distribution("electric.shape_cache.create_snapshot_task.stop.duration",
+      counter("electric.plug.serve_shape.count",
+        keep: fn metadata -> metadata[:live] != true end
+      ),
+      sum("electric.plug.serve_shape.bytes",
+        unit: :byte,
+        keep: fn metadata -> metadata[:live] != true end
+      ),
+      distribution("electric.shape_snapshot.create_snapshot_task.stop.duration",
         unit: {:native, :millisecond}
       ),
       distribution("electric.storage.make_new_snapshot.stop.duration",
@@ -103,16 +110,19 @@ defmodule ElectricTelemetry.StackTelemetry do
       sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.count"),
+      sum("electric.storage.transaction_stored.operations"),
       sum("electric.storage.snapshot_stored.bytes", unit: :byte),
       sum("electric.storage.snapshot_stored.count"),
+      sum("electric.storage.snapshot_stored.operations"),
       sum("electric.subqueries.subset_result.bytes", unit: :byte),
       sum("electric.subqueries.subset_result.count"),
-      last_value("electric.shape_monitor.active_reader_count"),
+      sum("electric.subqueries.move_in_triggered.count"),
+      last_value("electric.postgres.info_looked_up.pg_version"),
+      distribution("electric.shape_db.pool.checkout.queue_time_μs", unit: :microsecond),
       last_value("electric.connection.consumers_ready.duration",
         unit: {:native, :millisecond}
       ),
       last_value("electric.connection.consumers_ready.total"),
-      last_value("electric.connection.consumers_ready.failed_to_recover"),
       last_value("electric.admission_control.acquire.current", tags: [:kind]),
       last_value("electric.admission_control.acquire.limit", tags: [:kind]),
       sum("electric.admission_control.reject.count", tags: [:kind]),

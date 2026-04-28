@@ -242,10 +242,36 @@
   ??INSERT
 
 [shell otel_collector]
+  # Verify that new measurement exports from this branch are present
+  # Order matches actual OTEL export order (not alphabetical)
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.plug\.serve_shape\.count
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.plug\.serve_shape\.bytes
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.storage\.snapshot_stored\.operations
+  """
+
   """?
   Metric #[0-9]+
   Descriptor:
        -> Name: electric\.storage\.transaction_stored\.bytes
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.storage\.transaction_stored\.operations
   """
 
 ###
