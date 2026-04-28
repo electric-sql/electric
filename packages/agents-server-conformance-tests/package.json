@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-server-conformance-tests",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Conformance test suite for Electric Agents server implementations",
   "author": "Durable Stream contributors",
