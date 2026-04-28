@@ -84,21 +84,7 @@ defmodule Electric.Plug.Utils do
 
   alias OpenTelemetry.SemConv, as: SC
   @max_telemetry_string_bytes 2000
-  @telemetry_body_root_keys ~w(
-    table
-    offset
-    handle
-    live
-    where
-    columns
-    replica
-    params
-    experimental_compaction
-    live_sse
-    experimental_live_sse
-    log
-  )
-  @telemetry_body_subset_keys ~w(where order_by limit offset params)
+  @telemetry_body_subset_keys ~w(where order_by limit offset)
 
   @doc false
   def redact_query_string(nil), do: nil
@@ -161,70 +147,64 @@ defmodule Electric.Plug.Utils do
   end
 
   # GET requests already expose raw query params in telemetry. For POST requests,
-  # mirror the supported JSON body params under http.body_param.* so subset filters
-  # and pagination remain visible without logging arbitrary JSON payloads.
+  # only mirror subset-defining body params so subset filters and pagination remain
+  # visible without trying to serialize the full request body.
   defp telemetry_body_params(body_params) when body_params == %{}, do: %{}
 
+  defp telemetry_body_params(%{"subset" => subset_params}) when is_map(subset_params) do
+    subset_telemetry_attrs(subset_params)
+  end
+
   defp telemetry_body_params(body_params) when is_map(body_params) do
-    {root_params, subset_params} = split_telemetry_body_params(body_params)
-
-    body_param_attrs(root_params, @telemetry_body_root_keys, "http.body_param")
-    |> Map.merge(body_param_attrs(subset_params, @telemetry_body_subset_keys, "http.body_param.subset"))
-  end
-
-  defp telemetry_body_params(_), do: %{}
-
-  defp split_telemetry_body_params(%{"subset" => subset_params} = body_params)
-       when is_map(subset_params) do
-    {Map.delete(body_params, "subset"), subset_params}
-  end
-
-  defp split_telemetry_body_params(body_params) do
-    {subset_params, root_params} = Map.split(body_params, @telemetry_body_subset_keys)
-    {root_params, subset_params}
-  end
-
-  defp body_param_attrs(params, keys, prefix) do
-    Enum.reduce(keys, %{}, fn key, attrs ->
-      case Map.fetch(params, key) do
-        {:ok, value} ->
-          Map.merge(attrs, body_param_attr(key, value, "#{prefix}.#{key}"))
-
-        :error ->
-          attrs
-      end
-    end)
-  end
-
-  defp body_param_attr(_key, nil, _prefix), do: %{}
-
-  defp body_param_attr("params", %{} = params, prefix), do: scalar_map_attrs(params, prefix)
-
-  defp body_param_attr("columns", columns, prefix) when is_list(columns) do
-    if Enum.all?(columns, &is_binary/1) do
-      %{prefix => truncate_telemetry_string(Enum.join(columns, ","))}
+    if Enum.any?(@telemetry_body_subset_keys, &Map.has_key?(body_params, &1)) do
+      subset_telemetry_attrs(body_params)
     else
       %{}
     end
   end
 
-  defp body_param_attr(_key, value, prefix) when is_binary(value) do
-    %{prefix => truncate_telemetry_string(value)}
-  end
+  defp telemetry_body_params(_), do: %{}
 
-  defp body_param_attr(_key, value, prefix) when is_boolean(value) or is_number(value) do
-    %{prefix => value}
-  end
+  defp subset_telemetry_attrs(params) do
+    subset_scalar_attrs =
+      Enum.reduce(@telemetry_body_subset_keys, %{}, fn key, attrs ->
+        prefix = "http.body_param.subset.#{key}"
 
-  defp body_param_attr(_key, _value, _prefix), do: %{}
+      case Map.fetch(params, key) do
+        {:ok, value} ->
+          Map.merge(attrs, body_param_scalar_attr(value, prefix))
 
-  defp scalar_map_attrs(params, prefix) do
-    Enum.reduce(params, %{}, fn {key, value}, attrs ->
-      case scalar_attr_value(value) do
-        {:ok, telemetry_value} -> Map.put(attrs, "#{prefix}.#{key}", telemetry_value)
-        :skip -> attrs
+        :error ->
+          attrs
       end
     end)
+
+    Map.merge(
+      subset_scalar_attrs,
+      scalar_map_attrs(Map.get(params, "params", %{}), "http.body_param.subset.params")
+    )
+  end
+
+  defp scalar_map_attrs(params, prefix) do
+    if is_map(params) do
+      Enum.reduce(params, %{}, fn {key, value}, attrs ->
+        case scalar_attr_value(value) do
+          {:ok, telemetry_value} -> Map.put(attrs, "#{prefix}.#{key}", telemetry_value)
+          :skip -> attrs
+        end
+      end)
+    else
+      %{}
+    end
+  end
+
+  defp body_param_scalar_attr(nil, _prefix), do: %{}
+
+  defp body_param_scalar_attr(value, prefix) do
+    case scalar_attr_value(value) do
+      {:ok, telemetry_value} -> %{prefix => telemetry_value}
+      :skip -> %{}
+    end
   end
 
   defp scalar_attr_value(nil), do: :skip
