@@ -44,7 +44,10 @@ export function ChatArea({
     [agentsCollection]
   )
 
-  const typingAgents = agents.filter((a: any) => a.status === `running`)
+  const hasUserMessages = messages.some((m: any) => m.role === `user`)
+  const typingAgents = hasUserMessages
+    ? agents.filter((a: any) => a.status === `running`)
+    : []
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: `smooth` })
