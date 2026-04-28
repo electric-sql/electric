@@ -31,7 +31,6 @@ jobs:
         with:
           node-version-file: '.tool-versions'
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
 
       - run: pnpm install --frozen-lockfile
 
@@ -57,11 +56,9 @@ jobs:
           pnpm run --filter '@electric-ax/agents' build
           pnpm run --filter 'electric-ax' build
 
-      # Publish with canary tag
+      # Publish with canary tag (uses OIDC provenance for auth, matching the release workflow)
       - name: Publish canary packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          pnpm publish --filter '@electric-ax/agents-runtime' --tag canary --no-git-checks --access public
-          pnpm publish --filter '@electric-ax/agents' --tag canary --no-git-checks --access public
-          pnpm publish --filter 'electric-ax' --tag canary --no-git-checks --access public
+          pnpm publish --filter '@electric-ax/agents-runtime' --tag canary --no-git-checks --access public --provenance
+          pnpm publish --filter '@electric-ax/agents' --tag canary --no-git-checks --access public --provenance
+          pnpm publish --filter 'electric-ax' --tag canary --no-git-checks --access public --provenance
