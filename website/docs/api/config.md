@@ -464,8 +464,8 @@ Feature flags enable advanced features and staged rollouts for capabilities that
 
 **Available flags:**
 
-- `allow_subqueries` - Enables subquery support in shape WHERE clauses
-- `tagged_subqueries` - Enables incremental subquery move handling, including compound boolean expressions with compatible clients
+- `allow_subqueries` - Enables preview subquery support in shape WHERE clauses
+- `tagged_subqueries` - Enables preview incremental subquery move handling, including compound boolean expressions with compatible clients
 
 </EnvVarConfig>
 
@@ -483,7 +483,7 @@ WHERE id IN (SELECT user_id FROM memberships WHERE org_id = 'org_123')
 
 This allows creating shapes that filter based on related data in other tables, enabling more complex data synchronization patterns.
 
-**Status:** General use. Disabled by default in production until enabled with `ELECTRIC_FEATURE_FLAGS`.
+**Status:** Preview. Disabled by default in production until enabled with `ELECTRIC_FEATURE_FLAGS`.
 
 ### tagged_subqueries
 
@@ -493,7 +493,7 @@ Before Electric 1.6, complex boolean combinations around subqueries could still 
 
 See [discussion #2931](https://github.com/electric-sql/electric/discussions/2931) for more details about this feature.
 
-**Status:** Rollout flag for subquery move handling. Disabled by default in production. Requires `allow_subqueries` to be enabled.
+**Status:** Preview rollout flag for subquery move handling. Disabled by default in production. Requires `allow_subqueries` to be enabled.
 
 ## Caching
 
