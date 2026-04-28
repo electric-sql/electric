@@ -16,7 +16,6 @@ COMPOSE_PROJECT="electric-agents-dev"
 AGENTS_SERVER_PORT="${ELECTRIC_AGENTS_PORT:-4437}"
 BUILTIN_PORT="${ELECTRIC_AGENTS_BUILTIN_PORT:-4448}"
 UI_PORT="${UI_PORT:-5173}"
-VIEWER_PORT="${VIEWER_PORT:-5174}"
 WORK_DIR="${ELECTRIC_AGENTS_WORKING_DIRECTORY:-/tmp/coding-session-test}"
 AGENTS_SERVER_URL="http://localhost:$AGENTS_SERVER_PORT"
 PG_PORT="${PG_HOST_PORT:-5432}"
@@ -119,25 +118,16 @@ UI_PID=$!
 echo "$UI_PID" > /tmp/coding-session-dev-ui.pid
 echo "    PID $UI_PID"
 
-# ── Coding-session viewer (local vite dev server) ──────────────────
-echo "==> Starting coding-session viewer..."
-pnpm --filter @electric-ax/coding-session-viewer dev --port "$VIEWER_PORT" &
-VIEWER_PID=$!
-echo "$VIEWER_PID" > /tmp/coding-session-dev-viewer.pid
-echo "    PID $VIEWER_PID"
-
 # ── Summary ────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  Everything running.                                         ║"
 echo "║                                                              ║"
 echo "║  Admin UI:       http://localhost:$UI_PORT                     ║"
-echo "║  Viewer:         http://localhost:$VIEWER_PORT                     ║"
 echo "║  Agents server:  $AGENTS_SERVER_URL                          ║"
 echo "║  Working dir:    $WORK_DIR                                   ║"
 echo "║                                                              ║"
 echo "║  Connect Admin UI to:  $AGENTS_SERVER_URL                    ║"
-echo "║  Viewer connect:       $AGENTS_SERVER_URL + /coding-session/<id> ║"
 echo "║                                                              ║"
 echo "║  Stop:  ./scripts/dev-coding-session.sh stop                 ║"
 echo "║    or:  Ctrl-C (kills this terminal's children)              ║"
@@ -145,5 +135,5 @@ echo "╚═══════════════════════�
 echo ""
 
 # Keep this terminal alive; forward Ctrl-C to children
-trap 'kill $AGENTS_SERVER_PID $BUILTIN_PID $UI_PID $VIEWER_PID 2>/dev/null; rm -f /tmp/coding-session-dev-*.pid' EXIT INT TERM
+trap 'kill $AGENTS_SERVER_PID $BUILTIN_PID $UI_PID 2>/dev/null; rm -f /tmp/coding-session-dev-*.pid' EXIT INT TERM
 wait

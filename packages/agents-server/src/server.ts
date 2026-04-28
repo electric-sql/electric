@@ -1972,8 +1972,8 @@ export class ElectricAgentsServer {
     })
     // Ensure CORS headers survive on proxied responses (e.g. shape stream
     // reads that get forwarded to the durable-streams upstream). Cross-origin
-    // browser clients (the coding-session-viewer deployed to CF, etc.) need
-    // these on every response, not just the top-level routes.
+    // browser clients need these on every response, not just the top-level
+    // routes.
     headers[`access-control-allow-origin`] = `*`
     headers[`access-control-expose-headers`] = `*`
     return headers
