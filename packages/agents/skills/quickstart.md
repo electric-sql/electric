@@ -357,6 +357,60 @@ function createSendMessageTool(
   }
 }
 
+function createWebSearchTool(): AgentTool {
+  return {
+    name: 'web_search',
+    description: 'Search the web for current information.',
+    parameters: Type.Object({
+      query: Type.String({ description: 'The search query' }),
+    }),
+    execute: async (_id, params) => {
+      const apiKey = process.env.BRAVE_SEARCH_API_KEY
+      if (!apiKey) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Web search unavailable: BRAVE_SEARCH_API_KEY not set.',
+            },
+          ],
+          details: {},
+        }
+      }
+      const { query } = params as { query: string }
+      const res = await fetch(
+        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+        { headers: { 'X-Subscription-Token': apiKey } }
+      )
+      if (!res.ok) {
+        return {
+          content: [
+            { type: 'text' as const, text: `Search failed: ${res.status}` },
+          ],
+          details: {},
+        }
+      }
+      const data = (await res.json()) as {
+        web?: {
+          results?: Array<{ title: string; url: string; description: string }>
+        }
+      }
+      const results = data.web?.results ?? []
+      const formatted = results
+        .map(
+          (r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description}`
+        )
+        .join('\n\n')
+      return {
+        content: [
+          { type: 'text' as const, text: formatted || 'No results found.' },
+        ],
+        details: { resultCount: results.length },
+      }
+    },
+  }
+}
+
 export function registerChatAgent(registry: EntityRegistry) {
   registry.define('chat-agent', {
     description: 'Chat agent that reads and writes to a shared chatroom',
@@ -377,9 +431,12 @@ export function registerChatAgent(registry: EntityRegistry) {
 
       ctx.useAgent({
         systemPrompt:
-          'You are a helpful chat agent. Use send_message to reply.',
+          'You are a helpful chat agent. Use web_search to find information and send_message to reply.',
         model: 'claude-sonnet-4-6',
-        tools: [createSendMessageTool(chatroom.messages, ctx.entityUrl)],
+        tools: [
+          createSendMessageTool(chatroom.messages, ctx.entityUrl),
+          createWebSearchTool(),
+        ],
       })
       await ctx.agent.run()
     },
@@ -407,7 +464,7 @@ pnpm electric-agents spawn /chat-agent/agent-1 '{"chatroomId":"room-1"}' \
 - `ctx.mkdb(id, schema)` — creates a shared state stream (only on first wake)
 - `ctx.observe(db(id, schema))` — connects to an existing shared state
 - Multiple entities can observe the same shared state by using the same `id`
-- The `send_message` tool writes directly to the shared state collections
+- Custom tools (`send_message`, `web_search`) — agents interact with the world through tools you define
 
 ## Step 7: Context assembly — agents that remember
 

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { chatroomSchema } from './schema.js'
 import {
   createSendMessageTool,
+  createWebSearchTool,
   createBroadcastFn,
   getConversationHistory,
   DEFAULT_MODEL,
@@ -12,7 +13,7 @@ import type { EntityRegistry } from '@electric-ax/agents-runtime'
 
 const argsSchema = z.object({ chatroomId: z.string().min(1) })
 
-const SYSTEM_PROMPT = `You are an Optimist in a shared chatroom. When the user asks a question, provide an enthusiastic, positive analysis focusing on opportunities and benefits. Use send_message to post your response. If other agents have already covered the optimistic angle, add new points or stay silent.`
+const SYSTEM_PROMPT = `You are an Optimist in a shared chatroom. When the user asks a question, provide an enthusiastic, positive analysis focusing on opportunities and benefits. Use web_search to find supporting evidence when helpful. Use send_message to post your response. If other agents have already covered the optimistic angle, add new points or stay silent.`
 
 export function registerOptimist(registry: EntityRegistry): void {
   registry.define(`optimist`, {
@@ -51,6 +52,7 @@ export function registerOptimist(registry: EntityRegistry): void {
             ctx.entityUrl,
             createBroadcastFn(args.chatroomId, ctx.entityUrl)
           ),
+          createWebSearchTool(),
         ],
       })
       await ctx.agent.run()

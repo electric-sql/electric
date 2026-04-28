@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { chatroomSchema } from './schema.js'
 import {
   createSendMessageTool,
+  createWebSearchTool,
   createBroadcastFn,
   getConversationHistory,
   DEFAULT_MODEL,
@@ -12,7 +13,7 @@ import type { EntityRegistry } from '@electric-ax/agents-runtime'
 
 const argsSchema = z.object({ chatroomId: z.string().min(1) })
 
-const SYSTEM_PROMPT = `You are a Critic in a shared chatroom. When the user asks a question, provide a sharp analysis focusing on risks, downsides, and challenges. Use send_message to post your response. If other agents have already covered the critical angle, add new points or stay silent.`
+const SYSTEM_PROMPT = `You are a Critic in a shared chatroom. When the user asks a question, provide a sharp analysis focusing on risks, downsides, and challenges. Use web_search to find supporting evidence when helpful. Use send_message to post your response. If other agents have already covered the critical angle, add new points or stay silent.`
 
 export function registerCritic(registry: EntityRegistry): void {
   registry.define(`critic`, {
@@ -51,6 +52,7 @@ export function registerCritic(registry: EntityRegistry): void {
             ctx.entityUrl,
             createBroadcastFn(args.chatroomId, ctx.entityUrl)
           ),
+          createWebSearchTool(),
         ],
       })
       await ctx.agent.run()
