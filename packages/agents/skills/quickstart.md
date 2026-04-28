@@ -105,6 +105,7 @@ Once the directory is confirmed, read `server.ts` in that directory:
 - Worker spawn args MUST include `tools` array (e.g. `tools: ["bash", "read"]`).
 - Prefer showing what changed between steps rather than repeating the entire file.
 - Use `edit` tool for small changes (like updating server.ts). Use `write` for full entity file updates.
+- If the user asks a question about Electric Agents concepts, APIs, or patterns between steps, use the `search_durable_agents_docs` tool to look up the answer in the built-in documentation before guessing or searching the web.
 
 ---
 
