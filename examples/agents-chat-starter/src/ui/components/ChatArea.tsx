@@ -2,17 +2,22 @@ import { useState, useRef, useEffect } from 'react'
 import { Box, Flex, Text, Button, Heading, TextField } from '@radix-ui/themes'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { Message } from '../../server/schema.js'
-import type { MessagesCollection } from '../hooks/useChatroom.js'
+import type {
+  MessagesCollection,
+  AgentsCollection,
+} from '../hooks/useChatroom.js'
 import { MessageBubble } from './MessageBubble.js'
 
 export function ChatArea({
   messagesCollection,
+  agentsCollection,
   connected,
   error,
   onSend,
   roomName,
 }: {
   messagesCollection: MessagesCollection | null
+  agentsCollection: AgentsCollection | null
   connected: boolean
   error: string | null
   onSend: (text: string) => void
@@ -31,6 +36,15 @@ export function ChatArea({
       : () => null,
     [messagesCollection]
   )
+
+  const { data: agents = [] } = useLiveQuery(
+    agentsCollection
+      ? (q) => q.from({ a: agentsCollection }).select(({ a }) => a)
+      : () => null,
+    [agentsCollection]
+  )
+
+  const typingAgents = agents.filter((a: any) => a.status === `running`)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: `smooth` })
@@ -83,6 +97,13 @@ export function ChatArea({
         {messages.map((msg: any) => (
           <MessageBubble key={msg.key} message={msg as Message} />
         ))}
+        {typingAgents.length > 0 && (
+          <Box className="message message-agent" style={{ opacity: 0.6 }}>
+            <Text size="1" color="gray">
+              {typingAgents.map((a: any) => a.type).join(`, `)} typing...
+            </Text>
+          </Box>
+        )}
         <div ref={bottomRef} />
       </Box>
 

@@ -138,6 +138,7 @@ function App() {
       />
       <ChatArea
         messagesCollection={messagesCollection}
+        agentsCollection={agentsCollection}
         connected={connected}
         error={error}
         onSend={sendMessage}
