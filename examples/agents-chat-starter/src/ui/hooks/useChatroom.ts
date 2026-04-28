@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { createAgentsClient, entities, db } from '@electric-ax/agents-runtime'
 import type { Collection } from '@tanstack/db'
 import { chatroomSchema, type Message } from '../../server/schema.js'
@@ -38,7 +38,6 @@ export function useChatroom(agentsUrl: string | null, roomId: string | null) {
     useState<AgentsCollection | null>(null)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const cleanupRef = useRef<Array<() => void>>([])
 
   useEffect(() => {
     if (!agentsUrl || !roomId) {
@@ -49,24 +48,25 @@ export function useChatroom(agentsUrl: string | null, roomId: string | null) {
     }
 
     let cancelled = false
+    const cleanups: Array<() => void> = []
 
     async function connect() {
       try {
         const client = createAgentsClient({ baseUrl: agentsUrl! })
 
-        // Track agents in the room by tag
         const entitiesDb = await client.observe(
           entities({ tags: { room_id: roomId! } })
         )
+        cleanups.push(() => (entitiesDb as any).close?.())
         const members = (entitiesDb as any).collections
           .members as AgentsCollection
         if (!cancelled) setAgentsCollection(members)
 
-        // Subscribe to chatroom shared state with retry
-        // (agents need time to create the shared state via ctx.mkdb())
         const chatroomDb = await retry(async () => {
+          if (cancelled) throw new Error(`cancelled`)
           return await client.observe(db(roomId!, chatroomSchema))
         })
+        cleanups.push(() => (chatroomDb as any).close?.())
         const messages = (chatroomDb as any).collections
           .messages as MessagesCollection
         if (!cancelled) {
@@ -74,11 +74,6 @@ export function useChatroom(agentsUrl: string | null, roomId: string | null) {
           setConnected(true)
           setError(null)
         }
-
-        cleanupRef.current.push(
-          () => (entitiesDb as any).close?.(),
-          () => (chatroomDb as any).close?.()
-        )
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err))
@@ -91,8 +86,7 @@ export function useChatroom(agentsUrl: string | null, roomId: string | null) {
 
     return () => {
       cancelled = true
-      for (const cleanup of cleanupRef.current) cleanup()
-      cleanupRef.current = []
+      for (const cleanup of cleanups) cleanup()
     }
   }, [agentsUrl, roomId])
 
