@@ -38,6 +38,15 @@ export function registerChatAgent(
 
       if (ctx.firstWake) return
 
+      // Only respond to user messages — skip if latest message is from an agent
+      const allMessages = (chatroom.messages as any).toArray as Array<{
+        role: string
+      }>
+      if (allMessages.length > 0) {
+        const latest = allMessages[allMessages.length - 1]!
+        if (latest.role !== `user`) return
+      }
+
       ctx.useContext({
         sourceBudget: 50_000,
         sources: {
