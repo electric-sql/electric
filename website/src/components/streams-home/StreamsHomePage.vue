@@ -21,6 +21,13 @@ import CuratedBlogPosts from "../CuratedBlogPosts.vue"
 import MarkdownContent from "../MarkdownContent.vue"
 import MdExportExplicit from "../MdExportExplicit.vue"
 import { useMarkdownExport } from "../../lib/useMarkdownExport"
+import { getVitepressData } from "../../lib/vitepressData"
+import type {
+  DemoListRow,
+  DemosPayload,
+  HomepageDemoCard,
+} from "../../types/data-loaders"
+import * as streamsDemoModule from "../../../data/streams-demos.data"
 
 /* Curated list of Streams-relevant blog posts that fill the panel
    below the 30-second tour. Order matters — first item appears
@@ -35,35 +42,22 @@ const streamsBlogPosts = [
 
 const isMarkdownExport = useMarkdownExport()
 
-const liveDemos = [
-  {
-    title: "Durable AI Chat",
-    description:
-      "Multi-user, multi-agent AI chat with resumable sessions across tabs and devices.",
-    href: "/streams/demos",
-    thumbClass: "ds-demo-thumb-chat",
-    glyph: "💬",
-  },
-  {
-    title: "Background Jobs",
-    description:
-      "Real-time job dashboard built on State Protocol. Live progress events into StreamDB.",
-    href: "/streams/demos",
-    thumbClass: "ds-demo-thumb-jobs",
-    glyph: "⚙",
-  },
-  {
-    title: "Yjs Collab Editor",
-    description:
-      "Multi-user collaborative editor over Yjs CRDTs and Electric Streams. No WebSocket server needed.",
-    href: "/streams/demos",
-    thumbClass: "ds-demo-thumb-yjs",
-    glyph: "✎",
-  },
-] as const
+function isLiveDemoCard(row: DemoListRow): row is HomepageDemoCard {
+  return (
+    typeof row.title === "string" &&
+    typeof row.description === "string" &&
+    typeof row.link === "string"
+  )
+}
+
+const liveDemos = getVitepressData<DemosPayload>(
+  streamsDemoModule
+).demos.filter(isLiveDemoCard)
 
 const liveDemosMarkdown = computed(() =>
-  liveDemos.map((demo) => `- [${demo.title}](${demo.href}): ${demo.description}`).join("\n")
+  liveDemos
+    .map((demo) => `- [${demo.title}](${demo.link}): ${demo.description}`)
+    .join("\n")
 )
 
 const stackExamples = [
@@ -596,12 +590,16 @@ ${example.code}
       <div class="ds-demo-strip md-exclude">
         <a
           v-for="demo in liveDemos"
-          :key="demo.title"
-          :href="demo.href"
+          :key="demo.link"
+          :href="demo.link"
           class="ds-demo-card"
         >
-          <div class="ds-demo-thumb" :class="demo.thumbClass">
-            <span class="ds-demo-glyph">{{ demo.glyph }}</span>
+          <div class="ds-demo-thumb">
+            <img
+              v-if="demo.listing_image || demo.image"
+              :src="demo.listing_image || demo.image"
+              :alt="demo.title"
+            />
           </div>
           <div class="ds-demo-body">
             <h3>{{ demo.title }}</h3>
@@ -1100,7 +1098,7 @@ ${example.code}
   color: var(--ea-text-2);
   padding-left: 20px;
 }
-/* ── §14 Demo strip (placeholder cards) ───────────────────────── */
+/* ── §14 Demo strip ───────────────────────────────────────────── */
 
 .ds-demo-strip {
   display: grid;
@@ -1124,32 +1122,16 @@ ${example.code}
 }
 .ds-demo-thumb {
   height: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--ea-surface-alt);
   border-bottom: 1px solid var(--ea-divider);
   position: relative;
   overflow: hidden;
 }
-.ds-demo-thumb::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    repeating-linear-gradient(
-      45deg,
-      transparent 0,
-      transparent 10px,
-      color-mix(in srgb, var(--vp-c-brand-1) 4%, transparent) 10px,
-      color-mix(in srgb, var(--vp-c-brand-1) 4%, transparent) 11px
-    );
-}
-.ds-demo-glyph {
-  font-size: 56px;
-  position: relative;
-  filter: grayscale(0.2);
-  opacity: 0.85;
+.ds-demo-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 .ds-demo-body {
   padding: 18px 20px 22px;

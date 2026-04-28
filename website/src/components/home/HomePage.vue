@@ -13,6 +13,12 @@ import AgentsCTAStrap from './straps/AgentsCTAStrap.vue'
 import ManagedCloudStrap from './straps/ManagedCloudStrap.vue'
 import NoSilosStrap from './straps/NoSilosStrap.vue'
 
+/* WhyEverythingSection — thesis strap that sits between the hero
+   and the product panels. Frames the platform value prop as
+   "Everything you need for multi-X collaboration" with a
+   scroll-driven rotator on `X` (agent / user / device). */
+import WhyEverythingSection from './why/WhyEverythingSection.vue'
+
 /* HomePage is the single page component for the site root. We render every
    strap / section as a sibling so each one is naturally full-bleed and can
    manage its own inner max-width container — exactly the pattern used by
@@ -39,15 +45,26 @@ onMounted(() => {
 
 <template>
   <div class="home-page-shell">
+    <!-- Bands run light / dark down the page to break the scroll
+         into distinct strata, but the rhythm is *not* a strict
+         alternation. The three product sections all sit on the
+         page's default surface so they read as a single
+         contiguous trio (the iso scene + canvas backgrounds want
+         a common backdrop); from there the per-section straps
+         below pick the alternation back up so each call-to-
+         action band lands on its own stratum, ending on the
+         tinted `AgentsCTAStrap` bookend. -->
     <HomeHero />
 
-    <HomeProductSection product="agents" :dark="true" />
-    <HomeProductSection product="streams" />
-    <HomeProductSection product="sync" :dark="true" />
+    <WhyEverythingSection :dark="true" />
 
-    <NoSilosStrap />
+    <HomeProductSection product="agents" />
+    <HomeProductSection product="streams" />
+    <HomeProductSection product="sync" />
+
+    <NoSilosStrap :dark="true" />
     <WorksWithSection />
-    <ManagedCloudStrap />
+    <ManagedCloudStrap :dark="true" />
     <ScalesToSection />
     <LatestNewsSection />
     <BackedBySection />

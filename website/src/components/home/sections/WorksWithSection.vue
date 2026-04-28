@@ -1,10 +1,17 @@
 <script setup>
 import EaSection from '../../agents-home/Section.vue'
 import WorksWithStack from '../WorksWithStack.vue'
+
+defineProps({
+  /* dark = true renders the underlying EaSection with its alt
+     (darker) background. Defaults to false so the section reads
+     as a light band in the homepage's L/D alternation. */
+  dark: { type: Boolean, default: false },
+})
 </script>
 
 <template>
-  <EaSection :dark="true">
+  <EaSection :dark="dark">
     <template #title>Works with your&nbsp;stack</template>
     <template #subtitle>
       Drop in Electric next to your existing API and database. Any web

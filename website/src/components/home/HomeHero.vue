@@ -32,9 +32,16 @@ const hero = {
     'Agents are long-lived entities in the data layer. The substrate for them is a sync engine.',
     'Electric is the first agent platform built on sync.',
   ],
+  /* Three top-level entry points into the platform — one button
+     per product landing page. `Agents` carries the brand theme as
+     the lead CTA (the rest of the page closes on the same Agents
+     CTA in `AgentsCTAStrap`); `Streams` and `Sync` are alt-themed
+     so the trio reads as "primary + two equally-weighted
+     secondaries". */
   actions: [
-    { text: 'Electric Cloud', href: '/cloud', theme: 'brand' },
-    { text: 'Quickstart', href: '/docs/agents/quickstart', theme: 'alt' },
+    { text: 'Agents', href: '/agents', theme: 'brand' },
+    { text: 'Streams', href: '/streams', theme: 'alt' },
+    { text: 'Sync', href: '/sync', theme: 'alt' },
   ],
 }
 const heroMarkdown = `# ${hero.markdownTitle}
@@ -43,7 +50,9 @@ ${hero.paragraphs[0]}
 
 ${hero.paragraphs[1]}
 
-[${hero.actions[0].text}](${hero.actions[0].href}) [${hero.actions[1].text}](${hero.actions[1].href})`
+${hero.actions
+  .map((a) => `[${a.text}](${a.href})`)
+  .join(' ')}`
 </script>
 
 <template>
@@ -193,6 +202,14 @@ ${hero.paragraphs[1]}
      the primary line above it. */
   font-size: 1.04em;
   color: var(--ea-text-1);
+  /* Hold the punchline on a single line at tablet+ widths — the
+     line is short enough (~50ch) to fit comfortably inside the
+     hero text column at desktop, and at tablet (480px column,
+     861–1199) the marginal overhang past the column cap reads as
+     intentional emphasis rather than a wrap. The mobile-stacked
+     ≤860 rule below resets it to normal wrapping so the line
+     re-flows once the column collapses to the gutter. */
+  white-space: nowrap;
 }
 
 .home-hero-actions {
@@ -410,6 +427,11 @@ ${hero.paragraphs[1]}
      56px once the scene falls away. */
   .home-hero-name {
     font-size: 48px;
+  }
+  /* Once the text column collapses to the gutter the punchline
+     can no longer fit on a single line; let it re-flow normally. */
+  .home-hero-sub-secondary {
+    white-space: normal;
   }
 }
 

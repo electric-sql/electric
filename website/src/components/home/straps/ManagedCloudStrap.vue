@@ -9,7 +9,16 @@ import { useMarkdownExport } from '../../../lib/useMarkdownExport'
    as the turnkey way to run the stack. Mirrors the visual language of
    NoSilosStrap (eyebrow chip, large title, tagline, CTA row) so the
    homepage reads as a sequence of consistent straps separating the
-   product panels and supporting sections. */
+   product panels and supporting sections.
+
+   `dark` swaps the band's background between the page's light surface
+   (`--ea-bg`, default) and the alt surface (`--ea-surface-alt`) so
+   callers can slot the strap into either side of the homepage's L/D
+   alternation. */
+
+defineProps({
+  dark: { type: Boolean, default: false },
+})
 
 const stripRef = ref()
 const isRevealed = ref(false)
@@ -57,7 +66,7 @@ onUnmounted(() => {
   <section
     v-else
     ref="stripRef"
-    :class="['mc-strap', { revealed: isRevealed }]"
+    :class="['mc-strap', { revealed: isRevealed, 'mc-strap--alt': dark }]"
   >
     <div class="mc-inner">
       <div class="mc-eyebrow mono">
@@ -96,6 +105,11 @@ onUnmounted(() => {
   isolation: isolate;
   overflow: hidden;
 }
+/* Alt-surface variant — used when the strap needs to be the dark
+   side of the homepage's L/D alternation. */
+.mc-strap--alt {
+  background: var(--ea-surface-alt);
+}
 .mc-strap::before {
   content: '';
   position: absolute;
@@ -107,6 +121,15 @@ onUnmounted(() => {
   );
   z-index: -1;
   opacity: 0.7;
+}
+.mc-strap--alt::before {
+  /* Bump the brand-tint mix on the dark variant so the wash holds
+     up against `--ea-surface-alt`. */
+  background: radial-gradient(
+    ellipse 70% 90% at 50% 0%,
+    color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent) 0%,
+    transparent 55%
+  );
 }
 
 .mc-inner {

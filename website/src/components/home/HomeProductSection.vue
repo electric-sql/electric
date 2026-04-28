@@ -510,13 +510,17 @@ const demoBindings = computed<Record<string, unknown>>(() => {
   }
 }
 
-/* Phone widths (<768px) — stack the scene on top with the text
-   beneath. Important: we deliberately do NOT reset
-   `--demo-scale: 1` and `max-width: 100%` here.
+/* Phone widths (<768px) — stack the text on top with the demo
+   beneath. The text leads on mobile so the headline + supporting
+   copy frame the demo as the answer to "what is this section
+   about?"; the demo then sits as the visual payoff after the copy
+   has set the context.
 
-   The earlier "let the demo fill the column at scale 1" approach
-   produced a noticeable jump because each demo's own narrow
-   layout kicks in at a different breakpoint:
+   Important: we deliberately do NOT reset `--demo-scale: 1` and
+   `max-width: 100%` here. The earlier "let the demo fill the
+   column at scale 1" approach produced a noticeable jump because
+   each demo's own narrow layout kicks in at a different
+   breakpoint:
      - agents (`SystemMonitorDemo`) stays in its full desktop
        layout down to 480px;
      - streams (`CollabSessionDemo`) goes narrow at 960px;
@@ -532,17 +536,19 @@ const demoBindings = computed<Record<string, unknown>>(() => {
     grid-template-columns: 1fr !important;
     gap: 0;
   }
-  /* Force the scene above the text regardless of which side it
-     sits on at desktop — the in-section preview should always lead. */
-  .home-product-scene {
-    order: 0 !important;
-    padding: 32px 0 4px;
-    min-height: 0;
-  }
+  /* Force the text above the scene regardless of which side the
+     scene sits on at desktop — on phones the headline + copy
+     leads and the in-section preview follows as the visual
+     payoff. */
   .home-product-text {
+    order: 0 !important;
+    padding-top: 56px;
+    padding-bottom: 16px;
+  }
+  .home-product-scene {
     order: 1 !important;
-    padding-top: 16px;
-    padding-bottom: 56px;
+    padding: 4px 0 32px;
+    min-height: 0;
   }
   .home-product {
     padding: 0 20px;
@@ -581,11 +587,11 @@ const demoBindings = computed<Record<string, unknown>>(() => {
     padding: 0 16px;
   }
   .home-product-text {
-    padding-top: 12px;
-    padding-bottom: 40px;
+    padding-top: 40px;
+    padding-bottom: 12px;
   }
   .home-product-scene {
-    padding: 24px 0 0;
+    padding: 0 0 24px;
   }
   .home-product--agents .home-product-scene-frame,
   .home-product--streams .home-product-scene-frame,
@@ -601,13 +607,13 @@ const demoBindings = computed<Record<string, unknown>>(() => {
    to compensate for the unused vertical space: CSS `%` margins are
    width-relative, not height-relative, so they over-pull at narrow
    widths and end up cropping demos with a tall natural height (e.g.
-   the streams pane). A small extra gap beneath the scaled demo is
-   fine — we trim the scene's bottom padding instead. Sync gets a
+   the streams pane). A small extra gap above the scaled demo is
+   fine — we trim the scene's top padding instead. Sync gets a
    sharper drop at each step because its 2-column "Web/Mobile +
    Agent" layout is taller than the agents/streams snapshots. */
 @media (max-width: 430px) {
   .home-product-scene {
-    padding-bottom: 0;
+    padding-top: 0;
   }
   .home-product--agents .home-product-scene-frame {
     --demo-scale: 0.85;

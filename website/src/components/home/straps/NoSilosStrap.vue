@@ -9,7 +9,16 @@ import { useMarkdownExport } from '../../../lib/useMarkdownExport'
    product panels and the supporting sections. Lifted to the same
    visual language as the landing-page CTA panels: --ea- tokens, mono
    eyebrow chip with a brand dot, large 800-weight title with an
-   optional gradient accent, and the standard VPButton row. */
+   optional gradient accent, and the standard VPButton row.
+
+   `dark` swaps the band's background between the page's light surface
+   (`--ea-bg`, default) and the alt surface (`--ea-surface-alt`) so
+   callers can slot the strap into either side of the homepage's L/D
+   alternation. */
+
+defineProps({
+  dark: { type: Boolean, default: false },
+})
 
 const stripRef = ref()
 const isRevealed = ref(false)
@@ -18,7 +27,7 @@ const isMarkdownExport = useMarkdownExport()
 const strap = {
   eyebrow: 'Open protocol · Apache 2.0 · just HTTP',
   title: 'No siloes. No black boxes.',
-  bodyPrefix: 'Just sync, solved, with',
+  bodyPrefix: 'Sync, solved, with',
   bodyLink: { text: 'standard web tech', href: '/docs/sync/api/http' },
   actions: [
     { text: 'Get started', href: '/docs/sync/quickstart', theme: 'brand' },
@@ -56,7 +65,7 @@ onUnmounted(() => {
   <section
     v-else
     ref="stripRef"
-    :class="['ns-strap', { revealed: isRevealed }]"
+    :class="['ns-strap', { revealed: isRevealed, 'ns-strap--alt': dark }]"
   >
     <div class="ns-inner">
       <div class="ns-eyebrow mono">
@@ -94,6 +103,13 @@ onUnmounted(() => {
   isolation: isolate;
   overflow: hidden;
 }
+/* Alt-surface variant — used when the strap needs to be the dark
+   side of the homepage's L/D alternation. The brand-tint gradient
+   below picks up its own dark-variant strength so it stays visible
+   against the darker base. */
+.ns-strap--alt {
+  background: var(--ea-surface-alt);
+}
 .ns-strap::before {
   content: '';
   position: absolute;
@@ -105,6 +121,17 @@ onUnmounted(() => {
   );
   z-index: -1;
   opacity: 0.7;
+}
+.ns-strap--alt::before {
+  /* Brand-tint mix is bumped on the dark variant so the wash holds
+     up against `--ea-surface-alt` — 6% looks subtle on the light
+     surface, but reads as nearly transparent against the darker
+     base. */
+  background: radial-gradient(
+    ellipse 70% 90% at 50% 0%,
+    color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent) 0%,
+    transparent 55%
+  );
 }
 
 .ns-inner {
