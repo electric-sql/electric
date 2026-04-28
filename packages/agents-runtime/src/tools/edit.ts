@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 import { Type } from '@sinclair/typebox'
-import { serverLog } from '../log'
+import { runtimeLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const READ_GUARD_MESSAGE = (rel: string): string =>
@@ -133,9 +133,9 @@ export function createEditTool(
           details: { replacements: count },
         }
       } catch (err) {
-        serverLog.warn(
-          `[edit tool] failed to edit ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-          err instanceof Error ? err : undefined
+        runtimeLog.warn(
+          `[edit tool]`,
+          `failed to edit ${filePath}: ${err instanceof Error ? err.message : String(err)}`
         )
         return {
           content: [

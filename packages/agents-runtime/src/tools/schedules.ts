@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { Type } from '@sinclair/typebox'
+import { runtimeLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+import type { EntityStreamDBWithActions } from '../entity-stream-db'
 
 type ScheduleManifest = {
   key: string
@@ -78,24 +79,24 @@ function withScheduleToolLogging<TParams>(
   ) => Promise<ToolResult>
 ): (toolCallId: string | undefined, params: TParams) => Promise<ToolResult> {
   return async (toolCallId, params) => {
-    console.info(`[agent-server] ${entityUrl} ${toolName} start`, {
-      toolCallId: toolCallId ?? null,
-      params: formatForLog(params),
-    })
+    runtimeLog.info(
+      `[${entityUrl}]`,
+      `${toolName} start toolCallId=${toolCallId ?? `none`} params=${formatForLog(params)}`
+    )
 
     try {
       const result = await execute(toolCallId, params)
-      console.info(`[agent-server] ${entityUrl} ${toolName} success`, {
-        toolCallId: toolCallId ?? null,
-        result: formatForLog(result),
-      })
+      runtimeLog.info(
+        `[${entityUrl}]`,
+        `${toolName} success toolCallId=${toolCallId ?? `none`} result=${formatForLog(result)}`
+      )
       return result
     } catch (error) {
-      console.error(`[agent-server] ${entityUrl} ${toolName} failed`, {
-        toolCallId: toolCallId ?? null,
-        params: formatForLog(params),
-        error,
-      })
+      runtimeLog.error(
+        `[${entityUrl}]`,
+        `${toolName} failed toolCallId=${toolCallId ?? `none`} params=${formatForLog(params)} error=${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined
+      )
       throw error
     }
   }
