@@ -208,8 +208,13 @@ const UserMessageRow = memo(function UserMessageRow({
 }): React.ReactElement {
   const text = getText(event, `text`)
   const user = event.payload.user as { name?: string } | undefined
+  const pending = event.payload._pending === true
   return (
-    <Flex direction="column" gap="1" style={{ maxWidth: `68ch` }}>
+    <Flex
+      direction="column"
+      gap="1"
+      style={{ maxWidth: `68ch`, opacity: pending ? 0.65 : 1 }}
+    >
       <Flex p="3" style={{ background: `var(--gray-a3)`, borderRadius: 12 }}>
         <Text size="2" style={{ lineHeight: 1.55, whiteSpace: `pre-wrap` }}>
           {text}
@@ -223,7 +228,7 @@ const UserMessageRow = memo(function UserMessageRow({
           ·
         </Text>
         <Text size="1" color="gray">
-          {formatTime(event.ts)}
+          {pending ? `queued` : formatTime(event.ts)}
         </Text>
       </Flex>
     </Flex>

@@ -53,10 +53,31 @@ export interface CodingSessionMetaRow {
 
 export interface UseCodingSessionResult {
   db: EntityStreamDBWithActions | null
+  /**
+   * Normalized session events from the CLI's JSONL transcript, plus
+   * synthetic user_message rows for any prompt that's been posted to
+   * the inbox but not yet reflected in the transcript. Synthetic rows
+   * carry `payload._pending: true` so the timeline can render them
+   * with a subtle "queued" affordance.
+   */
   events: Array<CodingSessionEventRow>
   meta: CodingSessionMetaRow | undefined
   loading: boolean
   error: string | null
+}
+
+interface InboxRowShape {
+  key: string
+  from?: string
+  payload?: { text?: unknown }
+  timestamp?: string
+  message_type?: string
+}
+
+interface CursorStateRowShape {
+  key: string
+  cursor?: string
+  lastProcessedInboxKey?: string
 }
 
 export function useCodingSession(
@@ -115,6 +136,8 @@ export function useCodingSession(
 
   const eventsCollection = db?.collections.events
   const metaCollection = db?.collections.sessionMeta
+  const cursorCollection = db?.collections.cursorState
+  const inboxCollection = db?.collections.inbox
 
   const { data: eventRows = [] } = useLiveQuery(
     (q) =>
@@ -127,15 +150,67 @@ export function useCodingSession(
     (q) => (metaCollection ? q.from({ m: metaCollection }) : undefined),
     [metaCollection]
   )
-
-  const events = useMemo(
-    () => eventRows as unknown as Array<CodingSessionEventRow>,
-    [eventRows]
+  const { data: cursorRows = [] } = useLiveQuery(
+    (q) => (cursorCollection ? q.from({ c: cursorCollection }) : undefined),
+    [cursorCollection]
   )
+  const { data: inboxRows = [] } = useLiveQuery(
+    (q) =>
+      inboxCollection
+        ? q.from({ i: inboxCollection }).orderBy(({ i }) => i.$key, `asc`)
+        : undefined,
+    [inboxCollection]
+  )
+
   const meta = useMemo(
     () => (metaRows as unknown as Array<CodingSessionMetaRow>)[0],
     [metaRows]
   )
+
+  const events = useMemo(() => {
+    const real = eventRows as unknown as Array<CodingSessionEventRow>
+    const cursor = (cursorRows as unknown as Array<CursorStateRowShape>)[0]
+    const lastProcessed = cursor?.lastProcessedInboxKey ?? ``
+    // Once a prompt's text shows up as a real user_message (mirrored
+    // from the CLI's JSONL), there's nothing for the pending bubble
+    // to add — drop it immediately to avoid a duplicate below the
+    // assistant's reply. Track remaining capacity per text so two
+    // identical prompts in a row each get matched at most once.
+    const realUserTextRemaining = new Map<string, number>()
+    for (const r of real) {
+      if (r.type !== `user_message`) continue
+      const t = (r.payload as { text?: unknown }).text
+      if (typeof t !== `string` || t.length === 0) continue
+      realUserTextRemaining.set(t, (realUserTextRemaining.get(t) ?? 0) + 1)
+    }
+    // Show inbox prompts that haven't been processed yet AND whose
+    // text hasn't already shown up as a real user_message in events.
+    // Inbox keys are durable-stream offsets that sort lexicographically.
+    const pending: Array<CodingSessionEventRow> = []
+    for (const row of inboxRows as unknown as Array<InboxRowShape>) {
+      if (row.key <= lastProcessed) continue
+      const text = row.payload?.text
+      if (typeof text !== `string` || text.length === 0) continue
+      const remaining = realUserTextRemaining.get(text) ?? 0
+      if (remaining > 0) {
+        realUserTextRemaining.set(text, remaining - 1)
+        continue
+      }
+      const ts = row.timestamp ? Date.parse(row.timestamp) : Date.now()
+      pending.push({
+        key: `pending:${row.key}`,
+        ts: Number.isFinite(ts) ? ts : Date.now(),
+        type: `user_message`,
+        payload: {
+          text,
+          user: row.from ? { name: row.from } : undefined,
+          _pending: true,
+        },
+      })
+    }
+    if (pending.length === 0) return real
+    return [...real, ...pending]
+  }, [eventRows, inboxRows, cursorRows])
 
   return { db, events, meta, loading, error }
 }
