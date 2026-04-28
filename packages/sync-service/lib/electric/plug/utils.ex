@@ -166,9 +166,8 @@ defmodule Electric.Plug.Utils do
   defp telemetry_body_params(_), do: %{}
 
   defp subset_telemetry_attrs(params) do
-    subset_scalar_attrs =
-      Enum.reduce(@telemetry_body_subset_keys, %{}, fn key, attrs ->
-        prefix = "http.body_param.subset.#{key}"
+    Enum.reduce(@telemetry_body_subset_keys, %{}, fn key, attrs ->
+      prefix = "http.body_param.subset.#{key}"
 
       case Map.fetch(params, key) do
         {:ok, value} ->
@@ -178,24 +177,6 @@ defmodule Electric.Plug.Utils do
           attrs
       end
     end)
-
-    Map.merge(
-      subset_scalar_attrs,
-      scalar_map_attrs(Map.get(params, "params", %{}), "http.body_param.subset.params")
-    )
-  end
-
-  defp scalar_map_attrs(params, prefix) do
-    if is_map(params) do
-      Enum.reduce(params, %{}, fn {key, value}, attrs ->
-        case scalar_attr_value(value) do
-          {:ok, telemetry_value} -> Map.put(attrs, "#{prefix}.#{key}", telemetry_value)
-          :skip -> attrs
-        end
-      end)
-    else
-      %{}
-    end
   end
 
   defp body_param_scalar_attr(nil, _prefix), do: %{}

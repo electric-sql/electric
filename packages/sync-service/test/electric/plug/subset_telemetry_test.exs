@@ -85,10 +85,10 @@ defmodule Electric.Plug.SubsetTelemetryTest do
 
   test "truncates large POST body strings to 2000 bytes in telemetry attrs", ctx do
     test_pid = self()
-    long_value = String.duplicate("a", 3_000)
+    long_where = "value ILIKE $1" <> String.duplicate(" ", 3_000)
 
     Repatch.patch(OpenTelemetry, :add_span_attributes, [mode: :shared], fn attrs ->
-      if is_map(attrs) and Map.has_key?(attrs, "http.body_param.subset.params.1") do
+      if is_map(attrs) and Map.has_key?(attrs, "http.body_param.subset.where") do
         send(test_pid, {:body_attrs, attrs})
       end
 
@@ -101,8 +101,8 @@ defmodule Electric.Plug.SubsetTelemetryTest do
         "/v1/shape?table=items&offset=-1&log=changes_only",
         Jason.encode!(%{
           "subset" => %{
-            "where" => "value ILIKE $1",
-            "params" => %{"1" => long_value}
+            "where" => long_where,
+            "params" => %{"1" => "%2"}
           }
         })
       )
@@ -111,7 +111,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
 
     assert conn.status == 200
     assert_receive {:body_attrs, attrs}
-    assert byte_size(attrs["http.body_param.subset.params.1"]) == 2_000
-    assert attrs["http.body_param.subset.params.1"] == binary_part(long_value, 0, 2_000)
+    assert byte_size(attrs["http.body_param.subset.where"]) == 2_000
+    assert attrs["http.body_param.subset.where"] == binary_part(long_where, 0, 2_000)
   end
 end
