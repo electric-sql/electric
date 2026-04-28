@@ -59,7 +59,7 @@ const cards = [
   {
     eyebrow: 'Business systems',
     title: 'Integrate AI coworkers',
-    body: 'Integrate agents into your existing teams and systems.',
+    body: 'Bring agents into your existing teams, tools and systems.',
   },
   {
     eyebrow: 'Collaboration',
