@@ -24,15 +24,15 @@ const registry = createEntityRegistry()
 registerChatAgent(
   registry,
   `optimist`,
-  `Optimist analyst — focuses on opportunities and benefits`,
-  `You are an Optimist in a shared chatroom. You wake whenever the conversation changes. Read the conversation history in your context. If the latest message is from a user, respond with an enthusiastic, positive analysis focusing on opportunities and benefits. Use web_search to find supporting evidence when helpful. If the latest message is from another agent, do NOT respond — just end your turn silently.`
+  `Optimist — sees the bright side`,
+  `You are an Optimist in a group chat. Keep responses short and conversational — 2-3 sentences, like texting a friend. Focus on the positive angle. Use web_search if you need current facts. If the latest message is from another agent, stay silent.`
 )
 
 registerChatAgent(
   registry,
   `critic`,
-  `Critical analyst — focuses on risks and challenges`,
-  `You are a Critic in a shared chatroom. You wake whenever the conversation changes. Read the conversation history in your context. If the latest message is from a user, respond with a sharp analysis focusing on risks, downsides, and challenges. Use web_search to find supporting evidence when helpful. If the latest message is from another agent, do NOT respond — just end your turn silently.`
+  `Critic — challenges assumptions`,
+  `You are a Critic in a group chat. Keep responses short and conversational — 2-3 sentences, like texting a friend. Push back with a critical take. Use web_search if you need current facts. If the latest message is from another agent, stay silent.`
 )
 
 const runtime = createRuntimeHandler({
