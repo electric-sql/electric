@@ -7,10 +7,12 @@ import type {
   AgentsCollection,
 } from '../hooks/useChatroom.js'
 import { MessageBubble } from './MessageBubble.js'
+import { TypingIndicators } from './TypingIndicator.js'
 
 export function ChatArea({
   messagesCollection,
   agentsCollection,
+  agentsUrl,
   connected,
   error,
   onSend,
@@ -18,6 +20,7 @@ export function ChatArea({
 }: {
   messagesCollection: MessagesCollection | null
   agentsCollection: AgentsCollection | null
+  agentsUrl: string
   connected: boolean
   error: string | null
   onSend: (text: string) => void
@@ -37,17 +40,7 @@ export function ChatArea({
     [messagesCollection]
   )
 
-  const { data: agents = [] } = useLiveQuery(
-    agentsCollection
-      ? (q) => q.from({ a: agentsCollection }).select(({ a }) => a)
-      : () => null,
-    [agentsCollection]
-  )
-
   const hasUserMessages = messages.some((m: any) => m.role === `user`)
-  const typingAgents = hasUserMessages
-    ? agents.filter((a: any) => a.status === `running`)
-    : []
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: `smooth` })
@@ -90,13 +83,11 @@ export function ChatArea({
         {messages.map((msg: any, idx: number) => (
           <MessageBubble key={msg.key ?? idx} message={msg as Message} />
         ))}
-        {typingAgents.length > 0 && (
-          <Box className="message message-agent" style={{ opacity: 0.6 }}>
-            <Text size="1" color="gray">
-              {typingAgents.map((a: any) => a.type).join(`, `)} thinking...
-            </Text>
-          </Box>
-        )}
+        <TypingIndicators
+          agentsCollection={agentsCollection}
+          agentsUrl={agentsUrl}
+          hasUserMessages={hasUserMessages}
+        />
         <div ref={bottomRef} />
       </Box>
 
