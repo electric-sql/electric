@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
+import {
+  CODING_SESSION_CURSOR_COLLECTION_TYPE,
+  CODING_SESSION_EVENT_COLLECTION_TYPE,
+  CODING_SESSION_META_COLLECTION_TYPE,
+} from '@electric-ax/agents-runtime'
 import { connectEntityStream } from '../lib/entity-connection'
 import type {
   CodingSessionEventRow,
@@ -13,15 +18,24 @@ import type {
 export type { CodingSessionEventRow, CodingSessionMetaRow, CodingSessionStatus }
 
 /**
- * Mirrors the state-collection shape declared by the `coding-session`
- * entity in `@electric-ax/agents/src/agents/coding-session.ts`. Kept in
- * sync by hand; collection names + event types are part of the entity
- * type's public contract.
+ * Mirror of the state-collection shape declared by the coder entity
+ * in `@electric-ax/agents/src/agents/coding-session.ts`. The
+ * collection-type strings are imported from agents-runtime so the
+ * entity contract has a single source of truth.
  */
 const CODING_SESSION_STATE = {
-  sessionMeta: { type: `coding_session_meta`, primaryKey: `key` },
-  cursorState: { type: `coding_session_cursor`, primaryKey: `key` },
-  events: { type: `coding_session_event`, primaryKey: `key` },
+  sessionMeta: {
+    type: CODING_SESSION_META_COLLECTION_TYPE,
+    primaryKey: `key`,
+  },
+  cursorState: {
+    type: CODING_SESSION_CURSOR_COLLECTION_TYPE,
+    primaryKey: `key`,
+  },
+  events: {
+    type: CODING_SESSION_EVENT_COLLECTION_TYPE,
+    primaryKey: `key`,
+  },
 } as const
 
 export type CodingSessionEventType =

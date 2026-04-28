@@ -17,6 +17,11 @@ import type {
   SerializedSessionCursor,
   SessionCursor,
 } from 'agent-session-protocol'
+import {
+  CODING_SESSION_CURSOR_COLLECTION_TYPE,
+  CODING_SESSION_EVENT_COLLECTION_TYPE,
+  CODING_SESSION_META_COLLECTION_TYPE,
+} from '@electric-ax/agents-runtime'
 import type {
   CodingAgentType,
   CodingSessionEventRow,
@@ -438,17 +443,17 @@ export function registerCodingSession(
     state: {
       sessionMeta: {
         schema: sessionMetaRowSchema,
-        type: `coding_session_meta`,
+        type: CODING_SESSION_META_COLLECTION_TYPE,
         primaryKey: `key`,
       },
       cursorState: {
         schema: cursorStateRowSchema,
-        type: `coding_session_cursor`,
+        type: CODING_SESSION_CURSOR_COLLECTION_TYPE,
         primaryKey: `key`,
       },
       events: {
         schema: eventRowSchema,
-        type: `coding_session_event`,
+        type: CODING_SESSION_EVENT_COLLECTION_TYPE,
         primaryKey: `key`,
       },
     },
