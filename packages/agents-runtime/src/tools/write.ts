@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { Type } from '@sinclair/typebox'
-import { serverLog } from '../log'
+import { runtimeLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 export function createWriteTool(
@@ -55,9 +55,9 @@ export function createWriteTool(
           details: { bytesWritten },
         }
       } catch (err) {
-        serverLog.warn(
-          `[write tool] failed to write ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-          err instanceof Error ? err : undefined
+        runtimeLog.warn(
+          `[write tool]`,
+          `failed to write ${filePath}: ${err instanceof Error ? err.message : String(err)}`
         )
         return {
           content: [

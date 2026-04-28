@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createEditTool } from '../../agents/src/tools/edit'
-import { createReadFileTool } from '../../agents/src/tools/read-file'
+import { createEditTool } from '../src/tools/edit'
+import { createReadFileTool } from '../src/tools/read-file'
 
 describe(`readSet isolation across handler invocations`, () => {
   let cwd: string

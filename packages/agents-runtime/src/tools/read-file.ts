@@ -1,7 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 import { Type } from '@sinclair/typebox'
-import { serverLog } from '../log'
+import { runtimeLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
@@ -72,9 +72,9 @@ export function createReadFileTool(
           details: { charCount: text.length },
         }
       } catch (err) {
-        serverLog.warn(
-          `[read tool] failed to read ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-          err instanceof Error ? err : undefined
+        runtimeLog.warn(
+          `[read tool]`,
+          `failed to read ${filePath}: ${err instanceof Error ? err.message : String(err)}`
         )
         return {
           content: [

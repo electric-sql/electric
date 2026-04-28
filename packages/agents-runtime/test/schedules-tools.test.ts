@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createScheduleTools } from '../../agents/src/tools/schedules'
+import { createScheduleTools } from '../src/tools/schedules'
 
 function createManifestDb(manifests: Array<unknown>) {
   return {
