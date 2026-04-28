@@ -11,6 +11,7 @@ import {
   Copy,
   Database,
   Eye,
+  GitFork,
   MoreHorizontal,
   Pin,
   PinOff,
@@ -31,16 +32,22 @@ export function EntityHeader({
   entity,
   pinned,
   onTogglePin,
+  onFork,
   onKill,
   killError,
+  forkError,
+  forking,
   stateExplorerOpen,
   onToggleStateExplorer,
 }: {
   entity: ElectricEntity
   pinned: boolean
   onTogglePin: () => void
+  onFork?: () => void
   onKill: () => void
   killError?: string | null
+  forkError?: string | null
+  forking?: boolean
   stateExplorerOpen?: boolean
   onToggleStateExplorer?: () => void
 }): React.ReactElement {
@@ -71,12 +78,34 @@ export function EntityHeader({
             {killError}
           </Text>
         )}
+        {forkError && (
+          <Text size="1" color="red">
+            {forkError}
+          </Text>
+        )}
       </Flex>
 
       <Flex ml="auto" align="center" gap="2">
         <Badge color={STATUS_COLOR[entity.status] ?? `gray`} variant="soft">
           {entity.status}
         </Badge>
+
+        {onFork && (
+          <Button
+            variant="soft"
+            size="1"
+            onClick={onFork}
+            disabled={forking || entity.status === `stopped`}
+            title={
+              entity.status === `idle`
+                ? `Fork subtree`
+                : `Fork subtree once idle`
+            }
+          >
+            <GitFork size={14} />
+            <Text size="1">{forking ? `Forking` : `Fork`}</Text>
+          </Button>
+        )}
 
         {onToggleStateExplorer && (
           <Button

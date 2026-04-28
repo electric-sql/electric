@@ -176,6 +176,35 @@ function createKillAction(
   })
 }
 
+function createForkEntity(baseUrl: string) {
+  return async (entityUrl: string): Promise<{ url: string }> => {
+    const res = await fetch(`${baseUrl}${entityUrl}/fork`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({}),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => ``)
+      let message = text || `Fork failed (${res.status})`
+      try {
+        const data = JSON.parse(text) as {
+          error?: { message?: string }
+          message?: string
+        }
+        message = data.error?.message ?? data.message ?? message
+      } catch {
+        // Keep the raw response text.
+      }
+      throw new Error(message)
+    }
+    const data = (await res.json()) as { root?: { url?: string } }
+    if (!data.root?.url) {
+      throw new Error(`Fork returned an invalid response`)
+    }
+    return { url: data.root.url }
+  }
+}
+
 // --- Context ---
 
 interface ElectricAgentsState {
@@ -183,6 +212,7 @@ interface ElectricAgentsState {
   entityTypesCollection: EntityTypesCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
+  forkEntity: ReturnType<typeof createForkEntity> | null
 }
 
 const ElectricAgentsContext = createContext<ElectricAgentsState>({
@@ -190,6 +220,7 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entityTypesCollection: null,
   spawnEntity: null,
   killEntity: null,
+  forkEntity: null,
 })
 
 export function ElectricAgentsProvider({
@@ -204,6 +235,7 @@ export function ElectricAgentsProvider({
     entityTypesCollection: null,
     spawnEntity: null,
     killEntity: null,
+    forkEntity: null,
   })
   const prevUrlRef = useRef<string | null>(null)
   const collectionsRef = useRef<{
@@ -226,6 +258,7 @@ export function ElectricAgentsProvider({
         entityTypesCollection: null,
         spawnEntity: null,
         killEntity: null,
+        forkEntity: null,
       })
       return
     }
@@ -240,6 +273,7 @@ export function ElectricAgentsProvider({
       entityTypesCollection: entityTypes,
       spawnEntity: createSpawnAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
+      forkEntity: createForkEntity(baseUrl),
     })
 
     return () => {
