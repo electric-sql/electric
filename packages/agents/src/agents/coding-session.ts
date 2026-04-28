@@ -641,7 +641,6 @@ export function registerCodingSession(
           }
 
           let nextCursorJson = runningCursor.cursor
-          let discoveredNativeId: string | undefined
 
           if (!runningMeta.nativeSessionId) {
             // First real prompt on a fresh session. Let the CLI create
@@ -684,7 +683,6 @@ export function registerCodingSession(
                 `[coding-session] ${runningMeta.agent} CLI succeeded but no new session file was found`
               )
             }
-            discoveredNativeId = foundId
             ctx.db.actions.sessionMeta_update({
               key: `current`,
               updater: (d: SessionMetaRow) => {
@@ -744,7 +742,6 @@ export function registerCodingSession(
               : ``
           }
 
-          void discoveredNativeId
           ctx.db.actions.cursorState_update({
             key: `current`,
             updater: (d: CursorStateRow) => {
