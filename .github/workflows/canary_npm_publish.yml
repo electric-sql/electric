@@ -1,0 +1,67 @@
+name: Publish canary npm packages
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - 'packages/agents/**'
+      - 'packages/agents-runtime/**'
+      - 'packages/electric-ax/**'
+
+concurrency:
+  group: canary-npm-publish
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish-canary:
+    name: Publish canary to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      # Set canary versions: <current>-canary.<short-sha>
+      - name: Set canary versions
+        run: |
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          for pkg in packages/agents packages/agents-runtime packages/electric-ax; do
+            current=$(jq -r '.version' "$pkg/package.json")
+            canary_version="${current}-canary.${SHORT_SHA}"
+            jq --arg v "$canary_version" '.version = $v' "$pkg/package.json" > tmp.json && mv tmp.json "$pkg/package.json"
+            echo "Set $pkg to $canary_version"
+          done
+
+      # Point canary CLI at canary Docker images
+      - name: Set canary image tag defaults
+        run: |
+          sed -i "s/= \`latest\`/= \`canary\`/g" packages/electric-ax/src/version.ts
+
+      # Build only the agent packages (in dependency order: runtime -> agents -> electric-ax)
+      - run: |
+          pnpm run --filter '@electric-ax/agents-runtime' build
+          pnpm run --filter '@electric-ax/agents' build
+          pnpm run --filter 'electric-ax' build
+
+      # Publish with canary tag
+      - name: Publish canary packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          pnpm publish --filter '@electric-ax/agents-runtime' --tag canary --no-git-checks --access public
+          pnpm publish --filter '@electric-ax/agents' --tag canary --no-git-checks --access public
+          pnpm publish --filter 'electric-ax' --tag canary --no-git-checks --access public
