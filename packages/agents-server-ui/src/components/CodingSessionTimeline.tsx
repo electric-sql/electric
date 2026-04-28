@@ -152,9 +152,13 @@ function MetaRow({ meta }: { meta: CodingSessionMetaRow }): React.ReactElement {
           <Text
             size="1"
             color="gray"
-            style={{ fontFamily: `var(--font-mono)` }}
+            style={{
+              fontFamily: `var(--font-mono)`,
+              wordBreak: `break-all`,
+            }}
+            title={meta.nativeSessionId}
           >
-            {meta.nativeSessionId.slice(0, 8)}…
+            {meta.nativeSessionId}
           </Text>
         )}
       </Flex>
