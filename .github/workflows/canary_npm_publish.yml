@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -47,10 +49,13 @@ jobs:
       # Point canary CLI at canary Docker images
       - name: Set canary image tag defaults
         run: |
-          sed -i "s/\`latest\`/\`canary\`/g" packages/electric-ax/src/version.ts
+          sed -i "s/= \`latest\`/= \`canary\`/g" packages/electric-ax/src/version.ts
 
-      # Build all packages (order matters — runtime before agents before electric-ax)
-      - run: pnpm run -r --filter './packages/**' build
+      # Build only the agent packages (in dependency order: runtime -> agents -> electric-ax)
+      - run: |
+          pnpm run --filter '@electric-ax/agents-runtime' build
+          pnpm run --filter '@electric-ax/agents' build
+          pnpm run --filter 'electric-ax' build
 
       # Publish with canary tag
       - name: Publish canary packages
