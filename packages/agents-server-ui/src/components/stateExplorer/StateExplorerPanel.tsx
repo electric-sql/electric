@@ -1,4 +1,4 @@
-import { Flex, Text } from '@radix-ui/themes'
+import { Badge, Flex, Select, Text } from '@radix-ui/themes'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MaterializedState,
@@ -11,6 +11,19 @@ import { StateTable } from './StateTable'
 import { EventSidebar } from './EventSidebar'
 import type { ChangeEvent, StateEvent } from '@durable-streams/state'
 
+type StreamLoadState = {
+  events: Array<StateEvent>
+  isLoading: boolean
+  error: string | null
+}
+
+type SharedStateSource = {
+  key: string
+  id: string
+  path: string
+  collections: Record<string, { type: string; primaryKey: string }>
+}
+
 /** Runtime guard — checks that the value has a `headers` object before
  *  delegating to the library's `isChangeEvent`/`isControlEvent` guards. */
 function isStateEvent(value: unknown): value is StateEvent {
@@ -22,49 +35,132 @@ function isStateEvent(value: unknown): value is StateEvent {
   )
 }
 
-export function StateExplorerPanel({
-  baseUrl,
-  entityUrl,
-}: {
-  baseUrl: string
-  entityUrl: string
-}) {
-  const [events, setEvents] = useState<Array<StateEvent>>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const liveTail = true
-  const [cursorIndex, setCursorIndex] = useState<number | null>(null)
-  const [selectedType, setSelectedType] = useState<string | null>(null)
-  const [focusedRow, setFocusedRow] = useState<{
-    type: string
-    key: string
-  } | null>(null)
-  const cancelRef = useRef<(() => void) | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [splitRatio, setSplitRatio] = useState(0.6) // top gets 60%
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === `object` && value !== null
+}
 
-  // Connect to the entity's main stream
+function getSharedStateStreamPath(id: string): string {
+  return `/_electric/shared-state/${id}`
+}
+
+function getManifestRecord(row: unknown): Record<string, unknown> | null {
+  if (!isRecord(row)) return null
+  const nested = row.manifest
+  if (isRecord(nested)) return nested
+  return row
+}
+
+function getCollections(
+  value: unknown
+): Record<string, { type: string; primaryKey: string }> | null {
+  if (!isRecord(value)) return null
+
+  const collections: Record<string, { type: string; primaryKey: string }> = {}
+  for (const [name, config] of Object.entries(value)) {
+    if (!isRecord(config)) continue
+    const type = config.type
+    const primaryKey = config.primaryKey
+    if (typeof type === `string` && typeof primaryKey === `string`) {
+      collections[name] = { type, primaryKey }
+    }
+  }
+
+  return Object.keys(collections).length > 0 ? collections : null
+}
+
+function materializeEvents(
+  events: Array<StateEvent>,
+  cursorIndex: number | null
+): MaterializedState {
+  const state = new MaterializedState()
+  const end = cursorIndex === null ? events.length : cursorIndex + 1
+  for (let i = 0; i < end; i++) {
+    const event = events[i]
+    if (isChangeEvent(event)) {
+      state.apply(event)
+    } else if (isControlEvent(event) && event.headers.control === `reset`) {
+      state.clear()
+    }
+  }
+  return state
+}
+
+function deriveSharedStateSources(
+  state: MaterializedState
+): Array<SharedStateSource> {
+  if (!state.types.includes(`manifest`)) return []
+
+  const sources = new Map<string, SharedStateSource>()
+  for (const row of state.getType(`manifest`).values()) {
+    const manifest = getManifestRecord(row)
+    if (!manifest) continue
+
+    if (manifest.kind === `shared-state` && typeof manifest.id === `string`) {
+      const collections = getCollections(manifest.collections)
+      if (!collections) continue
+      sources.set(manifest.id, {
+        key: `shared:${manifest.id}`,
+        id: manifest.id,
+        path: getSharedStateStreamPath(manifest.id),
+        collections,
+      })
+      continue
+    }
+
+    if (
+      manifest.kind === `source` &&
+      manifest.sourceType === `db` &&
+      typeof manifest.sourceRef === `string`
+    ) {
+      const config = isRecord(manifest.config) ? manifest.config : null
+      const collections = getCollections(config?.collections)
+      if (!collections || sources.has(manifest.sourceRef)) continue
+      sources.set(manifest.sourceRef, {
+        key: `shared:${manifest.sourceRef}`,
+        id: manifest.sourceRef,
+        path: getSharedStateStreamPath(manifest.sourceRef),
+        collections,
+      })
+    }
+  }
+
+  return Array.from(sources.values()).sort((a, b) => a.id.localeCompare(b.id))
+}
+
+function useStateStream(
+  baseUrl: string,
+  streamPath: string | null,
+  live: boolean
+): StreamLoadState {
+  const [events, setEvents] = useState<Array<StateEvent>>([])
+  const [isLoading, setIsLoading] = useState(Boolean(streamPath))
+  const [error, setError] = useState<string | null>(null)
+
   useEffect(() => {
     let cancelled = false
+    let cancel: (() => void) | null = null
+
+    setEvents([])
+    setError(null)
+
+    if (!streamPath) {
+      setIsLoading(false)
+      return
+    }
 
     const loadContent = async () => {
       setIsLoading(true)
-      setError(null)
-      setEvents([])
-      setCursorIndex(null)
 
       try {
-        const streamUrl = `${baseUrl}${entityUrl}/main`
-
         const res = await createStream({
-          url: streamUrl,
+          url: `${baseUrl}${streamPath}`,
           offset: `-1`,
-          live: liveTail,
+          live,
         })
 
-        cancelRef.current = () => res.cancel()
+        cancel = () => res.cancel()
 
-        res.subscribeJson(async (batch: { items: ReadonlyArray<unknown> }) => {
+        res.subscribeJson((batch: { items: ReadonlyArray<unknown> }) => {
           if (cancelled) return
           const rawItems = batch.items.flatMap((item: unknown) =>
             Array.isArray(item) ? (item as Array<unknown>) : [item]
@@ -83,30 +179,80 @@ export function StateExplorerPanel({
       }
     }
 
-    loadContent()
+    void loadContent()
 
     return () => {
       cancelled = true
-      if (cancelRef.current) {
-        cancelRef.current()
-        cancelRef.current = null
-      }
+      cancel?.()
     }
-  }, [baseUrl, entityUrl])
+  }, [baseUrl, streamPath, live])
+
+  return { events, isLoading, error }
+}
+
+export function StateExplorerPanel({
+  baseUrl,
+  entityUrl,
+}: {
+  baseUrl: string
+  entityUrl: string
+}) {
+  const liveTail = true
+  const [cursorIndex, setCursorIndex] = useState<number | null>(null)
+  const [selectedType, setSelectedType] = useState<string | null>(null)
+  const [selectedSourceKey, setSelectedSourceKey] = useState(`runtime`)
+  const [focusedRow, setFocusedRow] = useState<{
+    type: string
+    key: string
+  } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [splitRatio, setSplitRatio] = useState(0.6) // top gets 60%
+
+  const runtimeStreamPath = `${entityUrl}/main`
+  const runtimeStream = useStateStream(baseUrl, runtimeStreamPath, liveTail)
+  const runtimeState = useMemo(
+    () => materializeEvents(runtimeStream.events, null),
+    [runtimeStream.events]
+  )
+  const sharedSources = useMemo(
+    () => deriveSharedStateSources(runtimeState),
+    [runtimeState]
+  )
+
+  const selectedSharedSource =
+    sharedSources.find((source) => source.key === selectedSourceKey) ?? null
+  const sharedStream = useStateStream(
+    baseUrl,
+    selectedSharedSource?.path ?? null,
+    liveTail
+  )
+  const selectedStream = selectedSharedSource ? sharedStream : runtimeStream
+  const events = selectedStream.events
+  const isLoading = selectedStream.isLoading
+  const error =
+    selectedStream.error ??
+    (selectedSourceKey === `runtime` ? runtimeStream.error : null)
+  const sourceOptionsCount = 1 + sharedSources.length
+
+  useEffect(() => {
+    if (
+      selectedSourceKey !== `runtime` &&
+      !sharedSources.some((source) => source.key === selectedSourceKey)
+    ) {
+      setSelectedSourceKey(`runtime`)
+    }
+  }, [selectedSourceKey, sharedSources])
+
+  // Reset time-travel and focus when changing streams.
+  useEffect(() => {
+    setCursorIndex(null)
+    setSelectedType(null)
+    setFocusedRow(null)
+  }, [selectedSourceKey])
 
   // Derive materialized state at cursor
   const materializedState = useMemo(() => {
-    const state = new MaterializedState()
-    const end = cursorIndex === null ? events.length : cursorIndex + 1
-    for (let i = 0; i < end; i++) {
-      const event = events[i]
-      if (isChangeEvent(event)) {
-        state.apply(event)
-      } else if (isControlEvent(event) && event.headers.control === `reset`) {
-        state.clear()
-      }
-    }
-    return state
+    return materializeEvents(events, cursorIndex)
   }, [events, cursorIndex])
 
   // Auto-select first type, or reset if selected type disappears during time-travel
@@ -170,30 +316,72 @@ export function StateExplorerPanel({
 
   if (error) {
     return (
-      <Flex align="center" justify="center" py="8">
-        <Text size="1" color="red">
-          {error}
-        </Text>
+      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+        <StateSourceHeader
+          selectedSourceKey={selectedSourceKey}
+          sourceOptionsCount={sourceOptionsCount}
+          sharedSources={sharedSources}
+          onSelectSource={setSelectedSourceKey}
+        />
+        <Flex align="center" justify="center" py="8">
+          <Text size="1" color="red">
+            {error}
+          </Text>
+        </Flex>
+      </Flex>
+    )
+  }
+
+  if (runtimeStream.error && selectedSourceKey !== `runtime`) {
+    return (
+      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+        <StateSourceHeader
+          selectedSourceKey={selectedSourceKey}
+          sourceOptionsCount={sourceOptionsCount}
+          sharedSources={sharedSources}
+          onSelectSource={setSelectedSourceKey}
+        />
+        <Flex align="center" justify="center" py="8">
+          <Text size="1" color="red">
+            {runtimeStream.error}
+          </Text>
+        </Flex>
       </Flex>
     )
   }
 
   if (isLoading && events.length === 0) {
     return (
-      <Flex justify="center" align="center" py="8">
-        <Text size="1" color="gray">
-          Loading stream…
-        </Text>
+      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+        <StateSourceHeader
+          selectedSourceKey={selectedSourceKey}
+          sourceOptionsCount={sourceOptionsCount}
+          sharedSources={sharedSources}
+          onSelectSource={setSelectedSourceKey}
+        />
+        <Flex justify="center" align="center" py="8">
+          <Text size="1" color="gray">
+            Loading stream…
+          </Text>
+        </Flex>
       </Flex>
     )
   }
 
   if (events.length === 0) {
     return (
-      <Flex align="center" justify="center" py="8">
-        <Text size="1" color="gray">
-          No state events in this stream yet
-        </Text>
+      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+        <StateSourceHeader
+          selectedSourceKey={selectedSourceKey}
+          sourceOptionsCount={sourceOptionsCount}
+          sharedSources={sharedSources}
+          onSelectSource={setSelectedSourceKey}
+        />
+        <Flex align="center" justify="center" py="8">
+          <Text size="1" color="gray">
+            No state events in this stream yet
+          </Text>
+        </Flex>
       </Flex>
     )
   }
@@ -204,6 +392,13 @@ export function StateExplorerPanel({
       direction="column"
       style={{ flex: 1, minHeight: 0, overflow: `hidden` }}
     >
+      <StateSourceHeader
+        selectedSourceKey={selectedSourceKey}
+        sourceOptionsCount={sourceOptionsCount}
+        sharedSources={sharedSources}
+        onSelectSource={setSelectedSourceKey}
+      />
+
       {/* TypeList + StateTable */}
       <Flex
         style={{
@@ -270,6 +465,65 @@ export function StateExplorerPanel({
         onGoLive={handleGoLive}
         style={{ flex: `${1 - splitRatio} 1 0%`, minHeight: 0 }}
       />
+    </Flex>
+  )
+}
+
+function StateSourceHeader({
+  selectedSourceKey,
+  sourceOptionsCount,
+  sharedSources,
+  onSelectSource,
+}: {
+  selectedSourceKey: string
+  sourceOptionsCount: number
+  sharedSources: Array<SharedStateSource>
+  onSelectSource: (key: string) => void
+}) {
+  return (
+    <Flex
+      align="center"
+      gap="2"
+      px="3"
+      py="2"
+      style={{ borderBottom: `1px solid var(--gray-a5)`, flexShrink: 0 }}
+    >
+      <Text
+        size="1"
+        color="gray"
+        weight="medium"
+        style={{ textTransform: `uppercase` }}
+      >
+        StreamDB
+      </Text>
+      <Badge size="1" variant="soft" color="gray">
+        {sourceOptionsCount}
+      </Badge>
+      <Select.Root value={selectedSourceKey} onValueChange={onSelectSource}>
+        <Select.Trigger
+          variant="surface"
+          style={{ minWidth: 190, maxWidth: `100%` }}
+        />
+        <Select.Content>
+          <Select.Item value="runtime">Runtime state</Select.Item>
+          {sharedSources.map((source) => (
+            <Select.Item key={source.key} value={source.key}>
+              {`Shared: ${source.id}`}
+            </Select.Item>
+          ))}
+        </Select.Content>
+      </Select.Root>
+      {selectedSourceKey !== `runtime` && (
+        <Text size="1" color="gray" truncate>
+          {sharedSources.find((source) => source.key === selectedSourceKey)
+            ? Object.keys(
+                sharedSources.find(
+                  (source) => source.key === selectedSourceKey
+                )!.collections
+              ).join(`, `)
+            : null}
+        </Text>
+      )}
     </Flex>
   )
 }
