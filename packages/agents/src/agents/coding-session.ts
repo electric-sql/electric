@@ -107,7 +107,7 @@ const defaultCliRunner: CodingSessionCliRunner = {
   },
 }
 
-async function discoverNewestSession(
+export async function discoverNewestSession(
   agent: CodingAgentType,
   cwd: string,
   excludeIds: ReadonlySet<string>
@@ -130,7 +130,9 @@ async function discoverNewestSession(
  * non-realpath form. Return both candidates so the caller can union
  * their contents.
  */
-async function getClaudeProjectDirs(cwd: string): Promise<Array<string>> {
+export async function getClaudeProjectDirs(
+  cwd: string
+): Promise<Array<string>> {
   const home = homedir()
   const make = (c: string): string =>
     path.join(home, `.claude`, `projects`, c.replace(/\//g, `-`))
@@ -144,7 +146,9 @@ async function getClaudeProjectDirs(cwd: string): Promise<Array<string>> {
   return dirs
 }
 
-async function listClaudeJsonlIdsByCwd(cwd: string): Promise<Set<string>> {
+export async function listClaudeJsonlIdsByCwd(
+  cwd: string
+): Promise<Set<string>> {
   const ids = new Set<string>()
   for (const dir of await getClaudeProjectDirs(cwd)) {
     try {
@@ -168,7 +172,7 @@ async function listClaudeJsonlIdsByCwd(cwd: string): Promise<Set<string>> {
  * and diff its contents against a pre-run snapshot. Returns the newest
  * fresh sessionId or null. Codex falls back to discoverNewestSession.
  */
-async function findNewSessionAfterRun(
+export async function findNewSessionAfterRun(
   agent: CodingAgentType,
   cwd: string,
   preDirectIds: ReadonlySet<string>,
