@@ -83,9 +83,9 @@ defmodule Electric.Plug.SubsetTelemetryTest do
     assert query_attrs["subset.result_bytes"] > 0
   end
 
-  test "truncates large POST body strings to 256 bytes in telemetry attrs", ctx do
+  test "truncates large POST body strings to 2000 bytes in telemetry attrs", ctx do
     test_pid = self()
-    long_value = String.duplicate("a", 300)
+    long_value = String.duplicate("a", 3_000)
 
     Repatch.patch(OpenTelemetry, :add_span_attributes, [mode: :shared], fn attrs ->
       if is_map(attrs) and Map.has_key?(attrs, "http.body_param.subset.params.1") do
@@ -111,7 +111,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
 
     assert conn.status == 200
     assert_receive {:body_attrs, attrs}
-    assert byte_size(attrs["http.body_param.subset.params.1"]) == 256
-    assert attrs["http.body_param.subset.params.1"] == binary_part(long_value, 0, 256)
+    assert byte_size(attrs["http.body_param.subset.params.1"]) == 2_000
+    assert attrs["http.body_param.subset.params.1"] == binary_part(long_value, 0, 2_000)
   end
 end

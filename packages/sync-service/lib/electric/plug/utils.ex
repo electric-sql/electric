@@ -83,7 +83,7 @@ defmodule Electric.Plug.Utils do
   end
 
   alias OpenTelemetry.SemConv, as: SC
-  @max_telemetry_string_bytes 256
+  @max_telemetry_string_bytes 2000
   @telemetry_body_root_keys ~w(
     table
     offset
