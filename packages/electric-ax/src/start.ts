@@ -192,14 +192,23 @@ export async function startElectricAgentsDevEnvironment(
   const port = resolveElectricAgentsPort(env, fileEnv)
   const composeProjectName = resolveComposeProjectName(cwd, env)
 
-  await runDockerCompose([`compose`, `-f`, DOCKER_COMPOSE_FILE, `up`, `-d`], {
+  const composeEnv = {
     ...env,
     COMPOSE_PROJECT_NAME: composeProjectName,
     ELECTRIC_AGENTS_PORT: String(port),
     ELECTRIC_IMAGE_TAG: env.ELECTRIC_IMAGE_TAG ?? ELECTRIC_IMAGE_TAG,
     ELECTRIC_AGENTS_SERVER_IMAGE_TAG:
       env.ELECTRIC_AGENTS_SERVER_IMAGE_TAG ?? ELECTRIC_AGENTS_SERVER_IMAGE_TAG,
-  })
+  }
+
+  await runDockerCompose(
+    [`compose`, `-f`, DOCKER_COMPOSE_FILE, `pull`],
+    composeEnv
+  )
+  await runDockerCompose(
+    [`compose`, `-f`, DOCKER_COMPOSE_FILE, `up`, `-d`],
+    composeEnv
+  )
 
   const uiUrl = `http://localhost:${port}`
   await waitForElectricAgentsServer(uiUrl)
