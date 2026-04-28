@@ -11,7 +11,10 @@ Two agents — an **Optimist** and a **Critic** — join every room. Ask a quest
 npx electric-ax agents init my-chat-app
 cd my-chat-app
 
-# 2. Configure
+# 2. Start the agents infrastructure
+npx electric-ax agent quickstart
+
+# 3. Configure (in a new terminal)
 cp .env.example .env
 # Set ANTHROPIC_API_KEY in .env
 
