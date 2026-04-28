@@ -815,6 +815,15 @@ export class ElectricAgentsServer {
         sendJsonError(res, 401, `UNAUTHORIZED`, `Invalid write token`)
         return true
       }
+      if (this.electricAgentsManager.isForkWriteLockedEntity(entity.url)) {
+        sendJsonError(
+          res,
+          409,
+          `FORK_IN_PROGRESS`,
+          `Entity subtree is being forked`
+        )
+        return true
+      }
       if (entity.status === `stopped`) {
         sendJsonError(res, 409, `NOT_RUNNING`, `Entity is stopped`)
         return true
@@ -839,6 +848,17 @@ export class ElectricAgentsServer {
           }
         }
       }
+    } else if (
+      isSharedState &&
+      this.electricAgentsManager.isForkWriteLockedStream(path)
+    ) {
+      sendJsonError(
+        res,
+        409,
+        `FORK_IN_PROGRESS`,
+        `Entity subtree is being forked`
+      )
+      return true
     }
 
     const upstream = await this.forwardRequest(req, body)
@@ -1613,6 +1633,19 @@ export class ElectricAgentsServer {
         ])
 
         if (upsertPromise) await upsertPromise
+
+        if (
+          entity &&
+          this.electricAgentsManager!.isForkWorkLockedEntity(entity.url)
+        ) {
+          sendJsonError(
+            res,
+            409,
+            `FORK_IN_PROGRESS`,
+            `Entity subtree is being forked`
+          )
+          return
+        }
 
         if (entity && entity.status !== `stopped`) {
           rootSpan?.setAttribute(ATTR.ENTITY_URL, entity.url)

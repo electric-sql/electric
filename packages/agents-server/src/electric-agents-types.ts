@@ -144,3 +144,5 @@ export const ErrCodeUnknownEventType = `UNKNOWN_EVENT_TYPE`
 export const ErrCodeSchemaKeyExists = `SCHEMA_KEY_EXISTS`
 export const ErrCodeServeEndpointUnreachable = `SERVE_ENDPOINT_UNREACHABLE`
 export const ErrCodeServeEndpointNameMismatch = `SERVE_ENDPOINT_NAME_MISMATCH`
+export const ErrCodeForkInProgress = `FORK_IN_PROGRESS`
+export const ErrCodeForkWaitTimeout = `FORK_WAIT_TIMEOUT`

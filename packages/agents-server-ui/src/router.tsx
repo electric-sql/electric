@@ -68,7 +68,8 @@ function EntityPage(): React.ReactElement {
   const entityUrl = `/${_splat}`
   const { activeServer } = useServerConnection()
   const { pinnedUrls, togglePin } = usePinnedEntities()
-  const { entitiesCollection, killEntity } = useElectricAgents()
+  const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
+  const navigate = useNavigate()
 
   const { data: matchingEntities = [] } = useLiveQuery(
     (query) => {
@@ -87,6 +88,8 @@ function EntityPage(): React.ReactElement {
   const [statePanelWidth, setStatePanelWidth] = useState(0.5)
   const containerRef = useRef<HTMLDivElement>(null)
   const [killError, setKillError] = useState<string | null>(null)
+  const [forkError, setForkError] = useState<string | null>(null)
+  const [forking, setForking] = useState(false)
 
   const handleKill = useCallback(() => {
     if (!killEntity) return
@@ -96,6 +99,25 @@ function EntityPage(): React.ReactElement {
       setKillError(err.message)
     })
   }, [killEntity, entityUrl])
+
+  const handleFork = useCallback(() => {
+    if (!forkEntity || forking) return
+    setForkError(null)
+    setForking(true)
+    forkEntity(entityUrl)
+      .then((root) => {
+        navigate({
+          to: `/entity/$`,
+          params: { _splat: root.url.replace(/^\//, ``) },
+        })
+      })
+      .catch((err: Error) => {
+        setForkError(err.message)
+      })
+      .finally(() => {
+        setForking(false)
+      })
+  }, [entityUrl, forkEntity, forking, navigate])
 
   if (!selectedEntity) {
     return (
@@ -119,6 +141,9 @@ function EntityPage(): React.ReactElement {
         onTogglePin={() => togglePin(entityUrl)}
         onKill={handleKill}
         killError={killError}
+        onFork={forkEntity && !selectedEntity.parent ? handleFork : undefined}
+        forkError={forkError}
+        forking={forking}
         stateExplorerOpen={stateExplorerOpen}
         onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
       />
