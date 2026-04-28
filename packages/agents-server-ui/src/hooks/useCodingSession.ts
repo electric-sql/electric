@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { connectEntityStream } from '../lib/entity-connection'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+import type {
+  CodingSessionEventRow,
+  CodingSessionStatus,
+  EntityStreamDBWithActions,
+} from '@electric-ax/agents-runtime'
+
+// Re-export the canonical types so existing imports from this module
+// (e.g. CodingSessionTimeline) keep resolving without a churn.
+export type { CodingSessionEventRow, CodingSessionStatus }
 
 /**
  * Mirrors the state-collection shape declared by the `coding-session`
@@ -29,16 +37,6 @@ export type CodingSessionEventType =
   | `compaction`
   | `error`
   | `session_end`
-
-export interface CodingSessionEventRow {
-  key: string
-  ts: number
-  type: string
-  callId?: string
-  payload: Record<string, unknown>
-}
-
-export type CodingSessionStatus = `initializing` | `idle` | `running` | `error`
 
 export interface CodingSessionMetaRow {
   key: string
