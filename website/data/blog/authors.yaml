@@ -46,6 +46,12 @@ kevindeporre:
   image: /img/team/kevin.jpg
   url: /about/team#kevin
 
+rob:
+  name: "Rob A'Court"
+  title: Founding Engineer
+  image: /img/team/rob.jpg
+  url: /about/team#rob
+
 tdrz:
   name: Tudor Zaharia
   title: Founding Engineer
