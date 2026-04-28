@@ -49,7 +49,11 @@ const defaultCliRunner: CodingSessionCliRunner = {
       // --dangerously-skip-permissions because the session runs
       // autonomously — any tool call would otherwise block on an
       // interactive approval prompt and exit 1.
-      // Codex: prompt is an argv; stdin is ignored.
+      // Codex: prompt is an argv; stdin is ignored. Needs
+      // --skip-git-repo-check because `codex exec` refuses to run in
+      // a directory that isn't a trusted-dir and isn't a git repo,
+      // and we can't assume callers have configured trust for the
+      // cwd they pointed the entity at.
       const isClaude = opts.agent === `claude`
       const bin = isClaude ? `claude` : `codex`
       const args = isClaude
@@ -57,8 +61,14 @@ const defaultCliRunner: CodingSessionCliRunner = {
           ? [`-r`, opts.sessionId, `--dangerously-skip-permissions`, `-p`]
           : [`--dangerously-skip-permissions`, `-p`]
         : opts.sessionId
-          ? [`exec`, `resume`, opts.sessionId, opts.prompt]
-          : [`exec`, opts.prompt]
+          ? [
+              `exec`,
+              `--skip-git-repo-check`,
+              `resume`,
+              opts.sessionId,
+              opts.prompt,
+            ]
+          : [`exec`, `--skip-git-repo-check`, opts.prompt]
       const child = spawn(bin, args, {
         cwd: opts.cwd,
         stdio: [isClaude ? `pipe` : `ignore`, `pipe`, `pipe`],
