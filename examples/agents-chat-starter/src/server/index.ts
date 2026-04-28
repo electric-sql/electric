@@ -171,11 +171,13 @@ const server = http.createServer(async (req, res) => {
           return
         }
 
+        const msgKey = crypto.randomUUID()
         const event = {
           type: `shared:message`,
+          key: msgKey,
           headers: { operation: `insert` },
           value: {
-            key: crypto.randomUUID(),
+            key: msgKey,
             role: `user`,
             sender: `user`,
             senderName: `You`,

@@ -97,8 +97,8 @@ export function ChatArea({
             </Text>
           </Flex>
         )}
-        {messages.map((msg: any) => (
-          <MessageBubble key={msg.key} message={msg as Message} />
+        {messages.map((msg: any, idx: number) => (
+          <MessageBubble key={msg.key ?? idx} message={msg as Message} />
         ))}
         {typingAgents.length > 0 && (
           <Box className="message message-agent" style={{ opacity: 0.6 }}>
