@@ -15,15 +15,15 @@ import { useMarkdownExport } from '../../../lib/useMarkdownExport'
    stack-portability point so the cards can stay focused on what
    you *get* from the managed side.
 
-   The three cards trace the triple from the same call —
-   data wiring, communication, collaboration — but reframed as
-   concrete benefits rather than literal labels:
-     1. Data wiring  →  the messy plumbing is managed for you.
-     2. Communication →  agents wired into your business systems
-                         (line 18: "the software factory
-                         transformation applied to knowledge work").
-     3. Collaboration →  multi-user / multi-agent on shared state,
-                         enabling new modes of working (line 88).
+   Cards stay deliberately close to the Claude managed-agents
+   reference copy (`claude.com/blog/claude-managed-agents`) that
+   came up in review feedback — short noun-phrase title + a
+   single concrete sentence, with the technical framing kept off
+   the homepage. The eyebrows map back to the 28 Apr call's
+   data wiring · communication · collaboration triple:
+     1. Data wiring      →  Long-lived logical agents.
+     2. Business systems →  Integrate AI coworkers.
+     3. Collaboration    →  Multi-agent collaboration.
 
    No SVG / no animation beyond a soft reveal-on-scroll, so the
    band reads as a clean typographic beat between the hero
@@ -53,18 +53,18 @@ const head = {
 const cards = [
   {
     eyebrow: 'Data wiring',
-    title: 'No bespoke plumbing',
-    body: 'Durable streams, shared sync state, long-lived addressable agents — the infrastructure primitives of multi-agent systems, managed for you.',
+    title: 'Long-lived logical agents',
+    body: 'Deploy long-running, durable agents that scale to zero.',
   },
   {
     eyebrow: 'Business systems',
-    title: 'Wire agents into your stack',
-    body: 'Bring agents into the loop alongside your team, your tools and your data — the software factory transformation applied to knowledge work.',
+    title: 'Integrate AI coworkers',
+    body: 'Integrate agents into your existing teams and systems.',
   },
   {
     eyebrow: 'Collaboration',
-    title: 'Humans and agents, together',
-    body: 'Multi-user, multi-agent on the same shared state. Steer mid-flight, hand off, fork sessions, coordinate swarms — new modes of working, built in.',
+    title: 'Multi-agent collaboration',
+    body: 'Scale out multi-user, multi-agent systems with humans in the loop.',
   },
 ]
 
