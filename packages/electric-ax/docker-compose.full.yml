@@ -38,6 +38,7 @@ services:
 
   electric-agents:
     image: electricax/agents-server:${ELECTRIC_AGENTS_SERVER_IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     extra_hosts:
       - 'host.docker.internal:host-gateway'
