@@ -4,6 +4,7 @@ defmodule Electric.Shapes do
   alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
 
@@ -65,7 +66,7 @@ defmodule Electric.Shapes do
     ShapeCache.get_or_create_shape_handle(
       shape_def,
       stack_id,
-      otel_ctx: :otel_ctx.get_current()
+      otel_ctx: OpenTelemetry.get_current_context()
     )
   end
 
