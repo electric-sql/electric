@@ -28,7 +28,6 @@ services:
 
   electric:
     image: electricsql/electric:${ELECTRIC_IMAGE_TAG:-latest}
-    pull_policy: always
     restart: unless-stopped
     depends_on:
       postgres:
@@ -39,7 +38,6 @@ services:
 
   electric-agents:
     image: electricax/agents-server:${ELECTRIC_AGENTS_SERVER_IMAGE_TAG:-latest}
-    pull_policy: always
     restart: unless-stopped
     extra_hosts:
       - 'host.docker.internal:host-gateway'
