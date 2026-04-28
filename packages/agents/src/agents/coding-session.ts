@@ -792,6 +792,13 @@ export function registerCodingSession(
               d.lastProcessedInboxKey = inboxMsg.key
             },
           })
+          // Re-throw so the agent-runtime entity bridge surfaces the
+          // failure to observers (Horton wakes on `runFinished` with
+          // status=failed, the UI flips the badge to error). The
+          // failed prompt's inbox key was advanced above, so on the
+          // next wake the for-loop resumes from the *next* queued
+          // prompt — remaining inbox messages aren't dropped, just
+          // deferred until the framework re-wakes us.
           throw e
         }
       }
