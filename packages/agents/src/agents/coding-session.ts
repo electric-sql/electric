@@ -73,13 +73,22 @@ const defaultCliRunner: CodingSessionCliRunner = {
         cwd: opts.cwd,
         stdio: [isClaude ? `pipe` : `ignore`, `pipe`, `pipe`],
       })
+      // Cap how much output we hold on the heap. Only the first ~800
+      // chars of each stream show up in error messages, but a verbose
+      // CLI session can produce megabytes — keep just enough for a
+      // meaningful diagnostic and discard the rest.
+      const MAX_BUF_CHARS = 4096
       let stdout = ``
       let stderr = ``
       child.stdout?.on(`data`, (d: Buffer) => {
-        stdout += d.toString()
+        if (stdout.length < MAX_BUF_CHARS) {
+          stdout += d.toString().slice(0, MAX_BUF_CHARS - stdout.length)
+        }
       })
       child.stderr?.on(`data`, (d: Buffer) => {
-        stderr += d.toString()
+        if (stderr.length < MAX_BUF_CHARS) {
+          stderr += d.toString().slice(0, MAX_BUF_CHARS - stderr.length)
+        }
       })
       child.on(`error`, reject)
       child.on(`exit`, (code) => {
