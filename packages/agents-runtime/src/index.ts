@@ -24,6 +24,7 @@ export type {
   CodingSessionEventRow,
   CodingSessionHandle,
   CodingSessionMeta,
+  CodingSessionMetaRow,
   CodingSessionStatus,
   EntityDefinition,
   EntityTypeEntry,

@@ -613,6 +613,16 @@ export interface CodingSessionMeta {
   currentPromptInboxKey?: string
 }
 
+/**
+ * One row in a coding-session entity's `sessionMeta` collection. Same
+ * shape as `CodingSessionMeta` plus the table primary key. Exported so
+ * consumers (e.g. the agents-server-ui hook) don't have to redeclare
+ * the row type and risk drifting on optionality (`cwd`, etc.).
+ */
+export interface CodingSessionMetaRow extends CodingSessionMeta {
+  key: string
+}
+
 export interface UseCodingAgentOptions {
   agent: CodingAgentType
   /**
