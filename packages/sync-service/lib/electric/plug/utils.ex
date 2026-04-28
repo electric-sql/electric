@@ -83,7 +83,22 @@ defmodule Electric.Plug.Utils do
   end
 
   alias OpenTelemetry.SemConv, as: SC
-  @max_telemetry_string_bytes 64 * 1024
+  @max_telemetry_string_bytes 256
+  @telemetry_body_root_keys ~w(
+    table
+    offset
+    handle
+    live
+    where
+    columns
+    replica
+    params
+    experimental_compaction
+    live_sse
+    experimental_live_sse
+    log
+  )
+  @telemetry_body_subset_keys ~w(where order_by limit offset params)
 
   @doc false
   def redact_query_string(nil), do: nil
@@ -145,46 +160,86 @@ defmodule Electric.Plug.Utils do
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
   end
 
+  # GET requests already expose raw query params in telemetry. For POST requests,
+  # mirror the supported JSON body params under http.body_param.* so subset filters
+  # and pagination remain visible without logging arbitrary JSON payloads.
   defp telemetry_body_params(body_params) when body_params == %{}, do: %{}
 
-  defp telemetry_body_params(body_params) when is_map(body_params),
-    do: flatten_telemetry_params(body_params)
+  defp telemetry_body_params(body_params) when is_map(body_params) do
+    {root_params, subset_params} = split_telemetry_body_params(body_params)
+
+    body_param_attrs(root_params, @telemetry_body_root_keys, "http.body_param")
+    |> Map.merge(body_param_attrs(subset_params, @telemetry_body_subset_keys, "http.body_param.subset"))
+  end
 
   defp telemetry_body_params(_), do: %{}
 
-  defp flatten_telemetry_params(params, prefix \\ "http.body_param") do
+  defp split_telemetry_body_params(%{"subset" => subset_params} = body_params)
+       when is_map(subset_params) do
+    {Map.delete(body_params, "subset"), subset_params}
+  end
+
+  defp split_telemetry_body_params(body_params) do
+    {subset_params, root_params} = Map.split(body_params, @telemetry_body_subset_keys)
+    {root_params, subset_params}
+  end
+
+  defp body_param_attrs(params, keys, prefix) do
+    Enum.reduce(keys, %{}, fn key, attrs ->
+      case Map.fetch(params, key) do
+        {:ok, value} ->
+          Map.merge(attrs, body_param_attr(key, value, "#{prefix}.#{key}"))
+
+        :error ->
+          attrs
+      end
+    end)
+  end
+
+  defp body_param_attr(_key, nil, _prefix), do: %{}
+
+  defp body_param_attr("params", %{} = params, prefix), do: scalar_map_attrs(params, prefix)
+
+  defp body_param_attr("columns", columns, prefix) when is_list(columns) do
+    if Enum.all?(columns, &is_binary/1) do
+      %{prefix => truncate_telemetry_string(Enum.join(columns, ","))}
+    else
+      %{}
+    end
+  end
+
+  defp body_param_attr(_key, value, prefix) when is_binary(value) do
+    %{prefix => truncate_telemetry_string(value)}
+  end
+
+  defp body_param_attr(_key, value, prefix) when is_boolean(value) or is_number(value) do
+    %{prefix => value}
+  end
+
+  defp body_param_attr(_key, _value, _prefix), do: %{}
+
+  defp scalar_map_attrs(params, prefix) do
     Enum.reduce(params, %{}, fn {key, value}, attrs ->
-      Map.merge(attrs, flatten_telemetry_param(value, "#{prefix}.#{key}"))
+      case scalar_attr_value(value) do
+        {:ok, telemetry_value} -> Map.put(attrs, "#{prefix}.#{key}", telemetry_value)
+        :skip -> attrs
+      end
     end)
   end
 
-  defp flatten_telemetry_param(%{} = params, prefix), do: flatten_telemetry_params(params, prefix)
+  defp scalar_attr_value(nil), do: :skip
 
-  defp flatten_telemetry_param(params, prefix) when is_list(params) do
-    params
-    |> Enum.with_index()
-    |> Enum.reduce(%{}, fn {value, index}, attrs ->
-      Map.merge(attrs, flatten_telemetry_param(value, "#{prefix}.#{index}"))
-    end)
+  defp scalar_attr_value(value) when is_binary(value) do
+    {:ok, truncate_telemetry_string(value)}
   end
 
-  defp flatten_telemetry_param(nil, _prefix), do: %{}
+  defp scalar_attr_value(value) when is_boolean(value) or is_number(value), do: {:ok, value}
+  defp scalar_attr_value(_value), do: :skip
 
-  defp flatten_telemetry_param(value, prefix)
-       when is_binary(value) or is_boolean(value) or is_number(value) do
-    %{prefix => maybe_truncate_telemetry_string(value)}
-  end
-
-  defp flatten_telemetry_param(value, prefix) do
-    %{prefix => value |> inspect() |> maybe_truncate_telemetry_string()}
-  end
-
-  defp maybe_truncate_telemetry_string(value) when not is_binary(value), do: value
-
-  defp maybe_truncate_telemetry_string(value)
+  defp truncate_telemetry_string(value)
        when byte_size(value) <= @max_telemetry_string_bytes, do: value
 
-  defp maybe_truncate_telemetry_string(value) do
+  defp truncate_telemetry_string(value) do
     value
     |> binary_part(0, @max_telemetry_string_bytes)
     |> trim_invalid_utf8()
