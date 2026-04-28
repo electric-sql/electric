@@ -4,13 +4,13 @@ import { ChevronDown } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { nanoid } from 'nanoid'
+import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { ServerPicker } from './ServerPicker'
 import { EntityListItem, getEntityDisplayTitle } from './EntityListItem'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
 import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
 
-const CODING_SESSION_TYPE = `coder`
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 200
@@ -132,7 +132,9 @@ export function Sidebar({
       // message delivers that fresh input; the coder handler ignores
       // non-prompt payloads. Covers create, attach, and import modes.
       const initialMessage =
-        typeName === CODING_SESSION_TYPE ? { __bootstrap: true } : undefined
+        typeName === CODING_SESSION_ENTITY_TYPE
+          ? { __bootstrap: true }
+          : undefined
       const tx = spawnEntity({ type: typeName, name, args, initialMessage })
       onSelectEntity(`/${typeName}/${name}`)
       tx.isPersisted.promise.catch((err: Error) => {
@@ -146,7 +148,7 @@ export function Sidebar({
 
   const handleNewSession = useCallback(
     (entityType: ElectricEntityType) => {
-      if (entityType.name === CODING_SESSION_TYPE) {
+      if (entityType.name === CODING_SESSION_ENTITY_TYPE) {
         setCodingDialogOpen(true)
         return
       }
@@ -372,7 +374,7 @@ export function Sidebar({
         open={codingDialogOpen}
         onOpenChange={setCodingDialogOpen}
         onSpawn={(args) => {
-          doSpawn(CODING_SESSION_TYPE, args)
+          doSpawn(CODING_SESSION_ENTITY_TYPE, args)
           setCodingDialogOpen(false)
         }}
       />

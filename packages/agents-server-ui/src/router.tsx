@@ -11,6 +11,7 @@ import {
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { Flex, Text } from '@radix-ui/themes'
+import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
@@ -21,8 +22,6 @@ import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { CodingSessionView } from './components/CodingSessionView'
-
-const CODING_SESSION_TYPE = `coder`
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
@@ -131,7 +130,7 @@ function EntityPage(): React.ReactElement {
           direction="column"
           style={{ flex: 1, minWidth: 0, overflow: `hidden` }}
         >
-          {selectedEntity.type === CODING_SESSION_TYPE && connectUrl ? (
+          {selectedEntity.type === CODING_SESSION_ENTITY_TYPE && connectUrl ? (
             <CodingSessionView
               baseUrl={baseUrl}
               entityUrl={connectUrl}
