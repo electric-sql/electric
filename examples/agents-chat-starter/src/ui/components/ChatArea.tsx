@@ -103,7 +103,7 @@ export function ChatArea({
         {typingAgents.length > 0 && (
           <Box className="message message-agent" style={{ opacity: 0.6 }}>
             <Text size="1" color="gray">
-              {typingAgents.map((a: any) => a.type).join(`, `)} typing...
+              {typingAgents.map((a: any) => a.type).join(`, `)} thinking...
             </Text>
           </Box>
         )}
