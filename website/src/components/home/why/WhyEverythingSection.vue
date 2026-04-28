@@ -552,7 +552,7 @@ onUnmounted(() => {
     transparent 90%
   );
   z-index: -1;
-  opacity: 0.4;
+  opacity: 0.2;
   pointer-events: none;
 }
 .why-everything--alt::before {

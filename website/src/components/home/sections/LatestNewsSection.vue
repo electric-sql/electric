@@ -20,7 +20,7 @@ const isMarkdownExport = useMarkdownExport()
 </script>
 
 <template>
-  <EaSection :dark="true">
+  <EaSection>
     <template #title>
       Latest <span class="hidden-sm">news and</span>&nbsp;updates
     </template>

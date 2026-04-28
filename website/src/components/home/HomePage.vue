@@ -19,6 +19,12 @@ import NoSilosStrap from './straps/NoSilosStrap.vue'
    scroll-driven rotator on `X` (agent / user / device). */
 import WhyEverythingSection from './why/WhyEverythingSection.vue'
 
+/* WhyLoopsSection — "Managed agents without the lock-in" strap.
+   Sits directly under the hero as the unfold of the hero's claim:
+   centred title + 3-up benefit cards (data wiring / business
+   systems / collaboration) drawn from the 28 Apr review call. */
+import WhyLoopsSection from './why/WhyLoopsSection.vue'
+
 /* HomePage is the single page component for the site root. We render every
    strap / section as a sibling so each one is naturally full-bleed and can
    manage its own inner max-width container — exactly the pattern used by
@@ -56,7 +62,7 @@ onMounted(() => {
          tinted `AgentsCTAStrap` bookend. -->
     <HomeHero />
 
-    <WhyEverythingSection :dark="true" />
+    <WhyLoopsSection />
 
     <HomeProductSection product="agents" />
     <HomeProductSection product="streams" />
@@ -66,6 +72,9 @@ onMounted(() => {
     <WorksWithSection />
     <ManagedCloudStrap :dark="true" />
     <ScalesToSection />
+    
+    <WhyEverythingSection :dark="true" />
+
     <LatestNewsSection />
     <BackedBySection />
     <AgentsCTAStrap />
