@@ -225,8 +225,12 @@
 [endmacro]
 
 [macro setup_otel_collector]
-  [shell otel_collector]
+  [shell otel_collector_startup]
+    -$fail_pattern
+
+    # Start collector in detached mode
     !docker run \
+      --rm \
       --name $otel_collector_container_name \
       -p 4318:4318 \
       -v $(realpath ../support_files/otel-collector-config.yaml):/conf/otel-collector-config.yaml \
@@ -235,12 +239,16 @@
     # Allow time for docker to pull the image if not cached
     [timeout 120]
 
-    ??Starting HTTP server
-    ?"endpoint": "(0\.0\.0\.0|\[::\]):4318"
+    # Wait for collector to be ready
     ??Everything is ready. Begin running and processing data.
 
-    # Reset the timeout for subsequent pattern matching
+    -
     [timeout 10]
+[endmacro]
+
+[macro grep_otel_collector_output pat]
+  !docker logs $otel_collector_container_name 2>&1 | python3 $(realpath ../support_files/normalize-otel-output.py) | grep "$pat" && FOUND
+  ??FOUND
 [endmacro]
 
 [macro teardown_container container_name]
