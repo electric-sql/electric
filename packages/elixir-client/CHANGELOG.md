@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.10.1
+
+### Patch Changes
+
+- a56be3e: Sync CDN-resilience fixes from the TypeScript client: cache-buster on every 409, self-heal a stuck expired handle cache and synthetic must-refetch header response for all 409s
+
 ## 0.10.0
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # electric-ax
 
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies [1cb5020]
+- Updated dependencies [1cb5020]
+- Updated dependencies [1cb5020]
+  - @electric-ax/agents-runtime@0.1.2
+  - @electric-sql/client@1.5.16
+  - @electric-ax/agents@0.2.3
+
 ## 0.1.14
 
 ### Patch Changes

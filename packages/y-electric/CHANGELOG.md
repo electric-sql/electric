@@ -1,5 +1,13 @@
 # @electric-sql/y-electric
 
+## 0.1.42
+
+### Patch Changes
+
+- 1cb5020: chore: added keyword to support Tanstack Intent
+- Updated dependencies [1cb5020]
+  - @electric-sql/client@1.5.16
+
 ## 0.1.41
 
 ### Patch Changes

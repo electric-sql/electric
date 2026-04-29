@@ -1,5 +1,12 @@
 # @electric-ax/agents-runtime
 
+## 0.1.2
+
+### Patch Changes
+
+- 1cb5020: feat: add better typing to all agent callbacks (missed changeset in 6bb1c7a0dc72d1ca76ee439f0cbd4e1470e84e0c)
+- 1cb5020: fix: ensure fork doesn't reply last turn of the agent (missed changeset in 19f52f410f8a4fd7d3094b91d0aa2f3b39802a72)
+
 ## 0.1.1
 
 ### Patch Changes

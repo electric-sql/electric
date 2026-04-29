@@ -1,6 +1,6 @@
 {
   "name": "electric-ax",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "CLI for Electric Agents",
   "author": "ElectricSQL team and contributors",
   "license": "Apache-2.0",
@@ -49,7 +49,7 @@
     "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
     "@electric-ax/agents": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
-    "@electric-sql/client": "^1.5.14",
+    "@electric-sql/client": "^1.5.16",
     "@tanstack/db": "^0.6.4",
     "@tanstack/react-db": "^0.1.82",
     "commander": "^13.1.0",
