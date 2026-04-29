@@ -27,7 +27,6 @@ function ThemedApp(): React.ReactElement {
   return (
     <Theme
       appearance={darkMode ? `dark` : `light`}
-      accentColor={darkMode ? `cyan` : `gray`}
       grayColor="slate"
       radius="medium"
       panelBackground="solid"
