@@ -1,7 +1,7 @@
 ---
 layout: page
 title: 'Electric'
-titleTemplate: ':title | The data platform for multi-agent'
+titleTemplate: ':title | Agents on sync'
 sidebar: false
 pageClass: home-page
 mdExport:

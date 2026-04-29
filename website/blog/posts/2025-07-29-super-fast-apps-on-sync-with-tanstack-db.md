@@ -12,7 +12,7 @@ image: /img/blog/local-first-sync-with-tanstack-db/header2.jpg
 tags: [db, tanstack-db, postgres-sync]
 outline: [2, 3]
 homepageSolution: true
-homepageOrder: 10
+homepageOrder: 40
 post: true
 ---
 
