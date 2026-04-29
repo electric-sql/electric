@@ -42,7 +42,8 @@
     "electric-sql",
     "crdt",
     "collaboration",
-    "real-time"
+    "real-time",
+    "tanstack-intent"
   ],
   "exports": {
     "./package.json": "./package.json",
