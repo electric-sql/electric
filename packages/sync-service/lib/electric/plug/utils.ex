@@ -147,26 +147,7 @@ defmodule Electric.Plug.Utils do
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
   end
 
-  # GET requests already expose raw query params in telemetry. For POST requests,
-  # only mirror the documented top-level subset fields. Legacy nested
-  # %{"subset" => %{...}} bodies are still accepted by request parsing, but we
-  # intentionally do not surface them in telemetry.
-  defp telemetry_body_params(body_params) when body_params == %{}, do: %{}
-
-  defp telemetry_body_params(body_params) when is_map(body_params) do
-    if Enum.any?(
-         @telemetry_body_subset_keys ++ [@telemetry_body_subset_params_key],
-         &Map.has_key?(body_params, &1)
-       ) do
-      subset_telemetry_attrs(body_params)
-    else
-      %{}
-    end
-  end
-
-  defp telemetry_body_params(_), do: %{}
-
-  defp subset_telemetry_attrs(params) do
+  defp telemetry_body_params(params) when is_map(params) do
     Enum.reduce(@telemetry_body_subset_keys, %{}, fn key, attrs ->
       prefix = "http.body_param.subset.#{key}"
 
@@ -180,6 +161,8 @@ defmodule Electric.Plug.Utils do
     end)
     |> Map.merge(subset_params_telemetry_attr(params))
   end
+
+  defp telemetry_body_params(_), do: %{}
 
   defp subset_params_telemetry_attr(params) do
     case Map.fetch(params, @telemetry_body_subset_params_key) do
