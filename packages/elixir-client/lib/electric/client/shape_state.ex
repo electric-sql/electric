@@ -46,6 +46,7 @@ defmodule Electric.Client.ShapeState do
     tag_to_keys: %{},
     key_data: %{},
     stale_cache_retry_count: 0,
+    self_heal_attempted?: false,
     disjunct_positions: nil,
     recent_requests: [],
     fast_loop_consecutive_count: 0
@@ -63,6 +64,7 @@ defmodule Electric.Client.ShapeState do
           disjunct_positions: [[non_neg_integer()]] | nil,
           stale_cache_buster: String.t() | nil,
           stale_cache_retry_count: non_neg_integer(),
+          self_heal_attempted?: boolean(),
           recent_requests: [{integer(), Offset.t()}],
           fast_loop_consecutive_count: non_neg_integer()
         }
@@ -164,7 +166,8 @@ defmodule Electric.Client.ShapeState do
     %{
       state
       | stale_cache_buster: nil,
-        stale_cache_retry_count: 0
+        stale_cache_retry_count: 0,
+        self_heal_attempted?: false
     }
   end
 

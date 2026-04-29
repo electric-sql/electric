@@ -56,6 +56,14 @@ defmodule Electric.Client.ExpiredShapesCache do
   end
 
   @doc """
+  Clear the expired handle for a single shape key.
+  """
+  @spec clear_handle(String.t()) :: :ok
+  def clear_handle(shape_key) do
+    GenServer.call(__MODULE__, {:clear_handle, shape_key})
+  end
+
+  @doc """
   Get the current number of entries in the cache.
 
   Primarily for testing purposes.
@@ -99,6 +107,12 @@ defmodule Electric.Client.ExpiredShapesCache do
   @impl true
   def handle_call(:clear, _from, state) do
     :ets.delete_all_objects(@table_name)
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:clear_handle, shape_key}, _from, state) do
+    :ets.delete(@table_name, shape_key)
     {:reply, :ok, state}
   end
 

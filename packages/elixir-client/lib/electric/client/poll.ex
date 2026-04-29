@@ -144,7 +144,7 @@ defmodule Electric.Client.Poll do
     # the client loops infinitely (the URL never changes).
     cond do
       response_handle == expired_handle ->
-        handle_stale_response(state)
+        handle_stale_response(state, shape_key)
 
       # Normal: process response
       true ->
@@ -171,15 +171,35 @@ defmodule Electric.Client.Poll do
     {:ok, messages, new_state}
   end
 
-  defp handle_stale_response(state) do
-    if state.stale_cache_retry_count >= @max_stale_retries do
-      {:error,
-       %Client.Error{
-         message:
-           "CDN continues serving stale cached responses after #{@max_stale_retries} retry attempts"
-       }}
-    else
-      {:stale_retry, ShapeState.enter_stale_retry(state)}
+  defp handle_stale_response(state, shape_key) do
+    cond do
+      state.stale_cache_retry_count < @max_stale_retries ->
+        {:stale_retry, ShapeState.enter_stale_retry(state)}
+
+      state.self_heal_attempted? ->
+        {:error,
+         %Client.Error{
+           message:
+             "CDN continues serving stale cached responses after #{@max_stale_retries} " <>
+               "retry attempts and one self-heal attempt"
+         }}
+
+      true ->
+        # Self-heal: clear the expired entry from local cache so the next
+        # request omits the `expired_handle` param. Since the server never
+        # reuses handles (SPEC.md S0), the next response should bypass stale
+        # detection. If it doesn't (broken CDN), we error on the next pass via
+        # the `self_heal_attempted?` branch above.
+        ExpiredShapesCache.clear_handle(shape_key)
+
+        new_state =
+          ShapeState.enter_stale_retry(%{
+            state
+            | self_heal_attempted?: true,
+              stale_cache_retry_count: 0
+          })
+
+        {:stale_retry, new_state}
     end
   end
 
@@ -196,13 +216,25 @@ defmodule Electric.Client.Poll do
     new_state = ShapeState.reset(state, handle)
     new_state = handle_schema(resp, client, new_state)
     new_state = ShapeState.clear_stale_retry(new_state)
+    # Add a cache-buster on every 409 so that the next request URL cannot match
+    # a URL the CDN has cached. Without this, a CDN that strips the
+    # `expired_handle` query param from its cache key keeps serving the same
+    # cached 409 indefinitely.
+    new_state = %{new_state | stale_cache_buster: ShapeState.generate_cache_buster()}
 
-    %{value_mapper_fun: value_mapper_fun} = new_state
-
-    messages =
-      resp.body
-      |> ensure_enum()
-      |> Enum.flat_map(&Message.parse(&1, handle, value_mapper_fun, resp.request_timestamp))
+    # Always emit a synthetic must-refetch control message rather than
+    # forwarding whatever the server (or a misbehaving proxy) put in the 409
+    # body. Subscribers must receive the signal to clear local state on every
+    # 409, even when the body is empty or stripped of the control message.
+    # Any data rows present in the body refer to the old, expired handle, so
+    # discarding them is correct.
+    messages = [
+      %Message.ControlMessage{
+        control: :must_refetch,
+        handle: handle,
+        request_timestamp: resp.request_timestamp
+      }
+    ]
 
     {:must_refetch, messages, new_state}
   end

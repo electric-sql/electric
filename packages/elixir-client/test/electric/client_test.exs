@@ -2616,6 +2616,74 @@ defmodule Electric.ClientTest do
       assert params["expired_handle"] == "old-expired-handle"
     end
 
+    test "post-409 request includes cache-buster parameter", ctx do
+      # When a 409 response arrives, the next request URL must include a fresh
+      # cache-buster query param so it cannot match any URL the CDN has cached.
+      # Without this, a CDN that strips the `expired_handle` parameter from its
+      # cache key can keep serving the same stale 409 forever.
+      parent = self()
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body409 = Jason.encode!([%{"headers" => %{"control" => "must-refetch"}}])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+        send(parent, {:request, count, conn.query_params})
+
+        case count do
+          1 ->
+            bypass_resp(conn, body1,
+              shape_handle: "my-shape",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          2 ->
+            bypass_resp(conn, body409, status: 409, shape_handle: "my-shape-2")
+
+          _ ->
+            bypass_resp(conn, body2,
+              shape_handle: "my-shape-2",
+              last_offset: "1_0",
+              schema: schema
+            )
+        end
+      end)
+
+      stream(ctx, 5)
+
+      assert_receive {:request, 1, _params1}
+      assert_receive {:request, 2, _params2}
+      assert_receive {:request, 3, params3}
+
+      assert Map.has_key?(params3, "cache-buster"),
+             "Expected cache-buster on first request after 409, got params: #{inspect(params3)}. " <>
+               "Without cache-buster, a CDN that strips expired_handle from its cache key " <>
+               "can keep serving the cached 409 indefinitely."
+    end
+
     test "stale response triggers retry with cache-buster parameter", ctx do
       alias Electric.Client.ShapeKey
       alias Electric.Client.ExpiredShapesCache
@@ -2667,7 +2735,165 @@ defmodule Electric.ClientTest do
       assert Map.has_key?(params2, "cache-buster")
     end
 
-    test "fails after max stale cache retries exceeded", ctx do
+    test "self-heals after max stale retries by clearing expired entry and retrying without expired_handle",
+         ctx do
+      # If a proxy strips the cache-buster query param from its cache key, the
+      # CDN keeps serving the same stale response no matter how many retries
+      # we attempt. Once stale retries are exhausted, the client should clear
+      # the expired entry from its local cache and retry once without the
+      # `expired_handle` parameter — since the server never reuses handles,
+      # this lets the request bypass stale detection on subsequent responses.
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      parent = self()
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      ExpiredShapesCache.mark_expired(shape_key, "stuck-stale-handle")
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      body_fresh =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "fresh"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+        send(parent, {:request, count, conn.query_params})
+
+        if Map.has_key?(conn.query_params, "expired_handle") do
+          # Broken CDN: keeps serving the stale handle regardless of the
+          # cache-buster value.
+          bypass_resp(conn, "[]",
+            shape_handle: "stuck-stale-handle",
+            last_offset: "1_0",
+            schema: schema
+          )
+        else
+          # Self-heal succeeded: client dropped expired_handle, so we get
+          # a fresh response.
+          bypass_resp(conn, body_fresh,
+            shape_handle: "fresh-handle",
+            last_offset: "1_0",
+            schema: schema
+          )
+        end
+      end)
+
+      msgs = stream(ctx, 2)
+
+      insert =
+        Enum.find(msgs, &match?(%ChangeMessage{headers: %{operation: :insert}}, &1))
+
+      assert insert, "Expected client to recover via self-healing, got messages: #{inspect(msgs)}"
+      assert insert.value["id"] == "fresh"
+
+      # Expired entry should have been cleared during self-healing.
+      assert ExpiredShapesCache.get_expired_handle(shape_key) == nil,
+             "Expected expired entry to be cleared after self-healing"
+
+      # The first @max_stale_retries+1 requests should include expired_handle;
+      # the self-healing request must drop it.
+      heal_request_n =
+        Enum.reduce_while(1..10, nil, fn n, _ ->
+          receive do
+            {:request, ^n, params} ->
+              if Map.has_key?(params, "expired_handle"),
+                do: {:cont, nil},
+                else: {:halt, n}
+          after
+            500 -> {:halt, nil}
+          end
+        end)
+
+      assert heal_request_n != nil,
+             "Expected the client to drop expired_handle after exhausting stale retries"
+
+      assert heal_request_n >= 4,
+             "Self-heal fired too early at request #{heal_request_n}; " <>
+               "expected at least 4 requests with expired_handle before self-healing"
+    end
+
+    test "emits synthetic must-refetch control message when 409 body has none", ctx do
+      # The sync service does include a must-refetch control message in 409
+      # bodies, but a misbehaving proxy might strip it. The client must
+      # synthesise a must-refetch control message on every 409 so that
+      # downstream subscribers always receive the signal to clear local state.
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        offset = conn.query_params["offset"]
+        handle = conn.query_params["handle"]
+
+        case {offset, handle} do
+          {"-1", nil} ->
+            bypass_resp(conn, body1,
+              shape_handle: "my-shape",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          {"1_0", "my-shape"} ->
+            # 409 with EMPTY body — no must-refetch control message included.
+            # Subscribers should still see one (synthesised by the client).
+            bypass_resp(conn, "[]", status: 409, shape_handle: "my-shape-2")
+
+          {"-1", "my-shape-2"} ->
+            bypass_resp(conn, body2,
+              shape_handle: "my-shape-2",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          _ ->
+            # Live poll after recovery — return up-to-date with no changes.
+            bypass_resp(
+              conn,
+              Jason.encode!([
+                %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 10_000}}
+              ]),
+              shape_handle: "my-shape-2",
+              last_offset: "1_0"
+            )
+        end
+      end)
+
+      msgs = stream(ctx, 5)
+
+      assert Enum.any?(msgs, &match?(%ControlMessage{control: :must_refetch}, &1)),
+             "Expected a synthetic must-refetch ControlMessage in stream output. " <>
+               "Got: #{inspect(msgs)}"
+    end
+
+    test "raises when CDN is permanently broken (stale retries + self-heal both fail)", ctx do
       alias Electric.Client.ShapeKey
       alias Electric.Client.ExpiredShapesCache
 
@@ -2678,7 +2904,10 @@ defmodule Electric.ClientTest do
 
       schema = Jason.encode!(%{"id" => %{type: "text"}})
 
-      # Always return the stale handle (simulating broken CDN)
+      # Always return the stale handle (simulating broken CDN). After
+      # self-healing clears the expired entry, this same handle is accepted as
+      # fresh, but offset never advances — so fast-loop detection eventually
+      # fires.
       Bypass.expect(ctx.bypass, fn conn ->
         bypass_resp(conn, "[]",
           shape_handle: "permanently-stale-handle",
@@ -2687,8 +2916,7 @@ defmodule Electric.ClientTest do
         )
       end)
 
-      # Should raise error after 3 retries
-      assert_raise Client.Error, ~r/stale cached responses/, fn ->
+      assert_raise Client.Error, ~r/stale cached responses|fast retry loop/, fn ->
         stream(ctx) |> Enum.take(1)
       end
     end
