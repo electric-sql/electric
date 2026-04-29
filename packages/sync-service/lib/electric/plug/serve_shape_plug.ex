@@ -198,7 +198,7 @@ defmodule Electric.Plug.ServeShapePlug do
   @subset_keys ~w(where order_by limit offset params where_expr order_by_expr)
 
   defp validate_request(%Conn{assigns: %{config: config, body_params: body_params}} = conn, _) do
-    Logger.debug("Query String: #{conn.query_string}")
+    Logger.debug("Query String: #{Electric.Plug.Utils.redact_query_string(conn.query_string)}")
 
     query_params = Utils.extract_prefixed_keys_into_map(conn.query_params, "subset", "__")
     merged_params = merge_body_params(query_params, body_params)
