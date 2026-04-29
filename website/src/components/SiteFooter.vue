@@ -44,10 +44,7 @@ import MarkdownLink from './MarkdownLink.vue'
           <span class="vpi-social-x"></span>
           <span class="social-name">X</span>
         </a>
-        <a
-          href="https://bsky.app/profile/electric.ax"
-          aria-label="Bluesky"
-        >
+        <a href="https://bsky.app/profile/electric.ax" aria-label="Bluesky">
           <span class="vpi-social-bluesky"></span>
           <span class="social-name">Bluesky</span>
         </a>
