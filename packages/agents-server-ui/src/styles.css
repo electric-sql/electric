@@ -1,64 +1,236 @@
 /* Streamdown animation keyframes (fadeIn, blurIn, slideUp) */
 @import 'streamdown/styles.css';
 
-:root {
+/* ── Tokens shared between light + dark ────────────────────────────── */
+:root,
+.dark {
+  /* Legacy aliases — kept so anything still referring to them gets the
+     new accent colour. Prefer --vp-c-brand-1 / --durable-streams-color
+     in new code. */
+  --vp-c-indigo-1: var(--vp-c-brand-1);
+  --vp-c-indigo-2: var(--vp-c-brand-2);
+  --vp-c-indigo-3: var(--vp-c-brand-3);
+  --ddn-color: var(--durable-streams-color);
+
+  --vp-nav-logo-height: 30px;
+
+  --electric-color: #75fbfd;
+  --pglite-color: #f6f95c;
+  --durable-streams-color: #75fbfd;
+  --tanstack-db-color: #ff8c3b;
+
+  --vp-code-font-size: 0.875em;
+  --vp-font-family-base:
+    OpenSauceOne, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --vp-font-family-mono:
+    SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+
+  /* App-wide font tokens (kept on Inter; brand fonts can be a follow-up) */
   --heading-font: Inter, sans-serif;
   --body-font: Inter, sans-serif;
   --prose-font: var(--body-font);
 
-  /* Streamdown requires shadcn-style CSS custom properties */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  /* Streamdown shadcn-style vars — single declaration; resolves
+     differently per mode because the brand tokens themselves swap
+     between :root and .dark below. */
+  --background: var(--vp-c-bg-soft);
+  --foreground: var(--vp-c-text-1);
+  --card: var(--vp-c-bg-elv);
+  --card-foreground: var(--vp-c-text-1);
+  --muted: var(--ec-surface-2);
+  --muted-foreground: var(--vp-c-text-2);
+  --border: var(--ec-border-2);
+  --input: var(--ec-border-2);
+  --primary: var(--vp-c-brand-1);
+  --primary-foreground: var(--vp-button-brand-text);
   --radius: 0.625rem;
 }
 
-/* ── Theme: Editorial Observatory ──────────────────── */
-[data-theme='editorial'] {
-  --heading-font: 'Instrument Serif', Georgia, serif;
-  --body-font: 'Instrument Sans', Arial, sans-serif;
-  --prose-font: var(--body-font);
-}
-[data-theme='editorial'] .radix-themes {
-  --default-font-family: 'Instrument Sans', Arial, sans-serif;
-  --heading-font-family: 'Instrument Serif', Georgia, serif;
-  --code-font-family: 'Geist Mono', ui-monospace, monospace;
+/* ── Light theme ───────────────────────────────────────────────────── */
+:root {
+  /* Brand */
+  --vp-c-brand-1: #1a1a2e;
+  --vp-c-brand-2: #4a4a6a;
+  --vp-c-brand-3: #0f0f1e;
+  --vp-c-brand-soft: rgba(26, 26, 46, 0.1);
+
+  /* Buttons */
+  --vp-button-brand-bg: #1a1a2e;
+  --vp-button-brand-hover-bg: #3a3a56;
+  --vp-button-brand-active-bg: #0f0f1e;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+
+  color-scheme: light;
+
+  /* Page surfaces (warm stone) */
+  --vp-c-bg: #f7f7f5;
+  --vp-c-bg-alt: #f0efed;
+  --vp-c-bg-soft: #f0efed;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: #e4e3e0;
+
+  /* Text */
+  --vp-c-text-1: #1a1a2e;
+  --vp-c-text-1-5: rgba(26, 26, 46, 0.86);
+  --vp-c-text-2: #5c5c6e;
+  --vp-c-text-2-5: rgba(92, 92, 110, 0.85);
+  --vp-c-text-3: #999999;
+
+  /* Hero gradient */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #1a1a2e, #2d2d44);
+
+  /* Code blocks */
+  --vp-code-bg: var(--vp-c-bg-elv);
+  --vp-code-color: #1a1a2e;
+
+  /* Electric Agents homepage tokens */
+  --ea-bg: var(--vp-c-bg);
+  --ea-bg-soft: var(--vp-c-bg-soft);
+  --ea-surface: var(--vp-c-bg-elv);
+  --ea-surface-alt: var(--vp-c-bg-soft);
+  --ea-text-1: var(--vp-c-text-1);
+  --ea-text-2: var(--vp-c-text-2);
+  --ea-text-3: var(--vp-c-text-3);
+  --ea-divider: var(--vp-c-divider);
+  --ea-brand: #1a1a2e;
+
+  --ea-event-message: #3b82f6;
+  --ea-event-run: #8888a0;
+  --ea-event-tool-call: #d97706;
+  --ea-event-tool-result: #059669;
+  --ea-event-text: #1a1a2e;
+  --ea-event-error: #dc2626;
+  --ea-indicator-sleep: #c4c3c0;
+  --ea-indicator-active: #1a1a2e;
+
+  /* Surfaces & borders */
+  --ec-surface-1: #f0efed;
+  --ec-surface-2: #e8e7e3;
+  --ec-surface-3: #dedcd6;
+  --ec-border-1: #e6e5e1;
+  --ec-border-2: #d6d4ce;
+  --ec-overlay-strong: rgba(255, 255, 255, 0.6);
+  --ec-overlay-medium: rgba(255, 255, 255, 0.4);
+  --ec-overlay-soft: rgba(255, 255, 255, 0.2);
+
+  /* Homepage iso scene */
+  --home-iso-sync: #0d9aaa;
+  --home-iso-streams: #6f4dff;
+  --home-iso-agents: #d44a25;
+  --home-iso-neutral: 0, 0, 0;
 }
 
-/* ── Theme: Control Surface ────────────────────────── */
-[data-theme='control'] {
-  --heading-font: 'DM Serif Display', Georgia, serif;
-  --body-font: 'DM Sans', Arial, sans-serif;
-  --prose-font: var(--body-font);
-}
-[data-theme='control'] .radix-themes {
-  --default-font-family: 'DM Sans', Arial, sans-serif;
-  --heading-font-family: 'DM Serif Display', Georgia, serif;
-  --code-font-family: 'DM Mono', ui-monospace, monospace;
+/* ── Dark theme ────────────────────────────────────────────────────── */
+.dark {
+  /* Brand — accent teal */
+  --vp-c-brand-1: #75fbfd;
+  --vp-c-brand-2: #b8fdfe;
+  --vp-c-brand-3: #56e8ea;
+  --vp-c-brand-soft: rgba(117, 251, 253, 0.16);
+
+  /* Buttons */
+  --vp-button-brand-bg: #75fbfd;
+  --vp-button-brand-hover-bg: #56e8ea;
+  --vp-button-brand-active-bg: #3cd5d8;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-text: #1a1a1a;
+  --vp-button-brand-hover-text: #1a1a1a;
+  --vp-button-brand-active-text: #1a1a1a;
+
+  color-scheme: dark;
+
+  /* Page surfaces (deep night) */
+  --vp-c-bg: #111318;
+  --vp-c-bg-soft: #16181f;
+  --vp-c-bg-alt: var(--vp-c-bg-soft);
+  --vp-c-bg-elv: #22252f;
+  --vp-c-divider: #2a2d38;
+
+  /* Text */
+  --vp-c-text-1: rgba(255, 255, 245, 0.92);
+  --vp-c-text-1-5: rgba(235, 235, 245, 0.86);
+  --vp-c-text-2: rgba(235, 235, 245, 0.8);
+  --vp-c-text-2-5: rgba(235, 235, 245, 0.74);
+  --vp-c-text-3: rgba(235, 235, 245, 0.68);
+
+  /* Hero gradient */
+  --vp-home-hero-name-background: linear-gradient(135deg, #75fbfd, #56e8ea);
+
+  /* Code blocks */
+  --vp-code-bg: var(--vp-c-bg-elv);
+  --vp-code-color: #9ecbff;
+
+  /* Electric Agents homepage tokens */
+  --ea-bg: var(--vp-c-bg);
+  --ea-bg-soft: var(--vp-c-bg-soft);
+  --ea-surface: var(--ec-surface-1);
+  --ea-surface-alt: var(--vp-c-bg-soft);
+  --ea-text-1: var(--vp-c-text-1);
+  --ea-text-2: var(--vp-c-text-2);
+  --ea-text-3: var(--vp-c-text-3);
+  --ea-divider: var(--vp-c-divider);
+  --ea-brand: var(--vp-c-brand-1);
+
+  --ea-event-message: #60a5fa;
+  --ea-event-run: #6b7280;
+  --ea-event-tool-call: #fbbf24;
+  --ea-event-tool-result: #34d399;
+  --ea-event-text: #75fbfd;
+  --ea-event-error: #f87171;
+  --ea-indicator-sleep: #4a4d58;
+  --ea-indicator-active: #75fbfd;
+
+  /* Surfaces & borders */
+  --ec-surface-1: #1a1d27;
+  --ec-surface-2: #22252f;
+  --ec-surface-3: #2d3142;
+  --ec-border-1: #22252f;
+  --ec-border-2: #2a2d38;
+  --ec-overlay-strong: rgba(0, 0, 0, 0.65);
+  --ec-overlay-medium: rgba(0, 0, 0, 0.5);
+  --ec-overlay-soft: rgba(0, 0, 0, 0.3);
+
+  /* Override VitePress' warm-slate gray family with cool blue-blacks */
+  --vp-c-gray-1: #3a3f52;
+  --vp-c-gray-2: #2d3142;
+  --vp-c-gray-3: #22252f;
+  --vp-c-gray-soft: rgba(255, 255, 255, 0.05);
+
+  --vp-c-border: #2a2d38;
+  --vp-c-gutter: #0a0b0e;
+
+  /* Homepage iso scene — dark mode */
+  --home-iso-sync: #75fbfd;
+  --home-iso-streams: #a78bfa;
+  --home-iso-agents: #ff8a65;
+  --home-iso-neutral: 255, 255, 245;
 }
 
-/* ── Theme: Warm Workshop ──────────────────────────── */
-[data-theme='workshop'] {
-  --heading-font: 'Figtree', Arial, sans-serif;
-  --body-font: 'Figtree', Arial, sans-serif;
-  --prose-font: 'Newsreader', Georgia, serif;
+/* ── Radix surface mapping ─────────────────────────────────────────── */
+.radix-themes {
+  --color-background: var(--vp-c-bg);
+  --color-panel-solid: var(--vp-c-bg-elv);
+  --default-font-family: var(--body-font);
 }
-[data-theme='workshop'] .radix-themes {
-  --default-font-family: 'Figtree', Arial, sans-serif;
-  --heading-font-family: 'Figtree', Arial, sans-serif;
-  --code-font-family: 'Fira Code', ui-monospace, monospace;
-}
-[data-theme='workshop'] .agent-ui-markdown p,
-[data-theme='workshop'] .agent-ui-markdown li,
-[data-theme='workshop'] .agent-ui-markdown blockquote {
-  font-family: var(--prose-font);
+
+.radix-themes h1,
+.radix-themes h2,
+.radix-themes h3,
+.radix-themes h4,
+.radix-themes h5,
+.radix-themes h6,
+.radix-themes [class*='Heading'] {
+  font-family: var(--heading-font);
 }
 
 body {
@@ -73,43 +245,6 @@ body {
 .agent-ui-input:focus {
   border-color: var(--gray-a6);
   background: var(--color-background);
-}
-
-/* Disable capsize trims on markdown for non-Inter themes — the hardcoded
-   trim values in .agent-ui-markdown are Inter-specific and don't match other fonts */
-[data-theme] .agent-ui-markdown p::before,
-[data-theme] .agent-ui-markdown p::after,
-[data-theme] .agent-ui-markdown h1::before,
-[data-theme] .agent-ui-markdown h1::after,
-[data-theme] .agent-ui-markdown h2::before,
-[data-theme] .agent-ui-markdown h2::after,
-[data-theme] .agent-ui-markdown h3::before,
-[data-theme] .agent-ui-markdown h3::after,
-[data-theme] .agent-ui-markdown h4::before,
-[data-theme] .agent-ui-markdown h4::after,
-[data-theme] .agent-ui-markdown h5::before,
-[data-theme] .agent-ui-markdown h5::after,
-[data-theme] .agent-ui-markdown h6::before,
-[data-theme] .agent-ui-markdown h6::after,
-[data-theme] .agent-ui-markdown ul::before,
-[data-theme] .agent-ui-markdown ul::after,
-[data-theme] .agent-ui-markdown ol::before,
-[data-theme] .agent-ui-markdown ol::after {
-  display: none !important;
-}
-
-.radix-themes {
-  --default-font-family: var(--body-font);
-}
-
-.radix-themes h1,
-.radix-themes h2,
-.radix-themes h3,
-.radix-themes h4,
-.radix-themes h5,
-.radix-themes h6,
-.radix-themes [class*='Heading'] {
-  font-family: var(--heading-font);
 }
 
 /*
@@ -244,10 +379,7 @@ body {
   list-style: decimal;
 }
 /* Capsize trim on the list CONTAINER only — trims the top of the first
-   item and bottom of the last item without interfering with markers.
-   Putting ::before/::after on <li> inserts a block-level table box that
-   disrupts ::marker alignment (markers anchor to the first line box, but
-   the table box becomes the first box, so the marker and text diverge). */
+   item and bottom of the last item without interfering with markers. */
 .agent-ui-markdown ul::before,
 .agent-ui-markdown ol::before {
   content: '';
@@ -263,9 +395,6 @@ body {
 .agent-ui-markdown li {
   padding: 0;
 }
-/* Streamdown wraps li text in <p>. Collapse the <p> box so text flows
-   directly in <li>. No capsize on <li> or its <p> — the list container
-   handles trim at the boundary. */
 .agent-ui-markdown li > p {
   display: contents;
 }
@@ -379,7 +508,6 @@ body {
   margin-left: 0;
 }
 
-/* Streamdown renders actions in a sibling sticky wrapper; pin that wrapper to the header row. */
 .agent-ui-markdown
   [data-streamdown='code-block']
   > .pointer-events-none.sticky.top-2.z-10.flex.h-8.items-center.justify-end {
