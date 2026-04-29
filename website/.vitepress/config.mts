@@ -389,14 +389,16 @@ const agentsDemosSidebar = [
   {
     text: 'Demo apps',
     collapsed: false,
-    items: [{ text: 'Coming soon', link: '/agents/demos' }],
+    items: [
+      { text: 'Chat Starter', link: '/agents/demos/chat-starter' },
+      { text: 'Deep Survey', link: '/agents/demos/deep-survey' },
+    ],
   },
   {
     text: 'Technical examples',
     collapsed: false,
     items: [
       { text: 'Playground', link: '/docs/agents/examples/playground' },
-      { text: 'Mega Draw', link: '/docs/agents/examples/mega-draw' },
     ],
   },
 ]

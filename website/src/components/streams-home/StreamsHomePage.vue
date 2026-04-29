@@ -642,8 +642,8 @@ ${example.code}
     <!-- ───────────────── §14 — Live demos ───────────────── -->
     <EaSection
       id="live-demos"
-      title="Live&nbsp;demos"
-      subtitle="See Electric Streams in action. Every demo is open source — fork it, run it, learn from&nbsp;it."
+      title="Demos"
+      subtitle="Reference apps you can clone, run locally, and learn&nbsp;from."
     >
       <MdExportExplicit>
         <MarkdownContent>{{ liveDemosMarkdown }}</MarkdownContent>

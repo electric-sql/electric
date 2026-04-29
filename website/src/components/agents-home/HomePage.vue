@@ -13,6 +13,8 @@ import InstallPill from '../InstallPill.vue'
 import MidPageStrap from '../MidPageStrap.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
 import CuratedBlogPosts from '../CuratedBlogPosts.vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
 // VitePress data loader: the file exports `default { load }` at compile
 // time and VitePress synthesises a named `data` export at runtime. The
 // TS plugin can't see that synthesis, so we import the module untyped
@@ -20,12 +22,35 @@ import CuratedBlogPosts from '../CuratedBlogPosts.vue'
 // that need raw access to the posts list (the `<CuratedBlogPosts>`
 // component does the same internally).
 import { getVitepressData } from '../../lib/vitepressData'
-import type { PostListRow } from '../../types/data-loaders'
+import type {
+  DemoListRow,
+  DemosPayload,
+  HomepageDemoCard,
+  PostListRow,
+} from '../../types/data-loaders'
+import * as agentsDemoModule from '../../../data/agents-demos.data'
 import * as postsModule from '../../../data/posts.data'
 
 const allPosts = getVitepressData<PostListRow[]>(postsModule)
 
 const stackTab = ref<'server' | 'entities'>('server')
+
+function isLiveDemoCard(row: DemoListRow): row is HomepageDemoCard {
+  return (
+    typeof row.title === 'string' &&
+    typeof row.description === 'string' &&
+    typeof row.link === 'string'
+  )
+}
+
+const liveDemos =
+  getVitepressData<DemosPayload>(agentsDemoModule).demos.filter(isLiveDemoCard)
+
+const liveDemosMarkdown = computed(() =>
+  liveDemos
+    .map((demo) => `- [${demo.title}](${demo.link}): ${demo.description}`)
+    .join('\n')
+)
 
 /* "From the blog" panel — sits just before the bottom CTA. Source list
    is the global `posts.data.ts` filtered by the `agents` tag, so any
@@ -682,6 +707,49 @@ const hasAgentBlogPosts = computed(() =>
           />
         </div>
       </div>
+    </Section>
+
+    <!-- ───────────────── Live demos ───────────────── -->
+    <Section
+      id="live-demos"
+      title="Demos"
+      subtitle="Reference apps you can clone, run locally, and learn&nbsp;from."
+    >
+      <MdExportExplicit>
+        <MarkdownContent>{{ liveDemosMarkdown }}</MarkdownContent>
+      </MdExportExplicit>
+      <div
+        class="ea-demo-strip md-exclude"
+        :class="{ 'ea-demo-strip--two': liveDemos.length === 2 }"
+      >
+        <a
+          v-for="demo in liveDemos"
+          :key="demo.link"
+          :href="demo.link"
+          class="ea-demo-card"
+        >
+          <div class="ea-demo-thumb">
+            <img
+              v-if="demo.listing_image || demo.image"
+              :src="demo.listing_image || demo.image"
+              :alt="demo.title"
+            />
+          </div>
+          <div class="ea-demo-body">
+            <h3>{{ demo.title }}</h3>
+            <p>{{ demo.description }}</p>
+          </div>
+        </a>
+      </div>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="All demos"
+          href="/agents/demos"
+        />
+      </template>
     </Section>
 
     <!-- ───────────────── From the blog ─────────────────
@@ -1432,6 +1500,87 @@ const hasAgentBlogPosts = computed(() =>
   margin-top: 40px;
 }
 
+/* ── Live demos ───────────────────────────────────────────────────── */
+
+.ea-demo-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.ea-demo-strip--two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.ea-demo-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--ea-surface);
+  border: 1px solid var(--ea-divider);
+  border-radius: 10px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
+}
+
+.ea-demo-strip--two .ea-demo-card {
+  flex-direction: row;
+}
+
+.ea-demo-card:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-2px);
+}
+
+.ea-demo-thumb {
+  height: 180px;
+  background: var(--ea-surface-alt);
+  border-bottom: 1px solid var(--ea-divider);
+  position: relative;
+  overflow: hidden;
+}
+
+.ea-demo-strip--two .ea-demo-thumb {
+  flex: 0 0 44%;
+  height: auto;
+  min-height: 210px;
+  border-right: 1px solid var(--ea-divider);
+  border-bottom: none;
+}
+
+.ea-demo-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.ea-demo-body {
+  padding: 18px 20px 22px;
+}
+
+.ea-demo-strip--two .ea-demo-body {
+  flex: 1;
+  padding: 24px 26px;
+}
+
+.ea-demo-body h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--ea-text-1);
+}
+
+.ea-demo-body p {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ea-text-2);
+  margin: 0;
+}
+
 /* Mid-page CTA strap and bottom CTA strap are rendered by the
    shared `<MidPageStrap>` and `<BottomCtaStrap>` components
    (see `src/components/`). All visual styles for those straps
@@ -2103,6 +2252,22 @@ const hasAgentBlogPosts = computed(() =>
   .ea-first-agent-cta {
     flex-direction: column;
     align-items: center;
+  }
+  .ea-demo-strip {
+    grid-template-columns: 1fr;
+  }
+  .ea-demo-strip--two .ea-demo-card {
+    flex-direction: column;
+  }
+  .ea-demo-strip--two .ea-demo-thumb {
+    flex: none;
+    height: 180px;
+    min-height: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--ea-divider);
+  }
+  .ea-demo-strip--two .ea-demo-body {
+    padding: 18px 20px 22px;
   }
 }
 

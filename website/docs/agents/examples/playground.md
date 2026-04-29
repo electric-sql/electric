@@ -1,46 +1,62 @@
 ---
-title: Pattern references
+title: Playground
 titleTemplate: "... - Electric Agents"
 description: >-
-  Electric Agents pattern references for standalone, coordination, blackboard, and reactive designs.
+  Technical examples for experimenting with Electric Agents coordination patterns.
 outline: [2, 3]
 ---
 
-# Pattern references
+# Playground
 
-Electric Agents pattern references live in the monorepo under `packages/agents-runtime/skills/designing-entities/references/patterns/`.
+The [Electric Agents Playground](https://github.com/electric-sql/electric/tree/main/examples/agents-playground) is a collection of technical examples for trying coordination patterns against a local Electric Agents server.
 
 ## What it includes
 
-The patterns are organized into four categories.
+The playground currently includes two entity patterns.
 
-### Standalone
+### Perspectives
 
-- `single-agent` --- one entity handles the full task itself
+Perspectives is a manager-worker example. A manager agent spawns an optimist and a critic to examine the same question from different viewpoints, then synthesizes their responses into a balanced analysis.
 
-### Coordination
+It demonstrates:
 
-- `manager-worker` --- multi-perspective analysis (optimist/pessimist/pragmatist)
-- `dispatcher` --- routes tasks to the appropriate agent type
-- `pipeline` --- sequential worker stages
-- `map-reduce` --- parallel chunk processing
+- Spawning child agents from a custom tool.
+- Waking the manager when child runs finish.
+- Tracking child entity URLs in state.
+- Synthesizing worker outputs into a final response.
 
-### Blackboard (shared state)
+### Researcher
 
-- `blackboard` --- multiple workers coordinate through shared state
+Researcher is a coordinator example. It decomposes complex research questions into specialist sub-questions, spawns workers for each slice, and synthesizes the findings into a comprehensive answer with citations.
 
-### Reactive
+It demonstrates:
 
-- `reactive-observers` --- observes entity streams and reacts to changes
+- Dynamic fan-out based on the shape of the user's question.
+- Specialist worker agents focused on distinct research tasks.
+- Wake-on-finish coordination between coordinator and workers.
+- Final synthesis from multiple child reports.
 
-## Source references
+## Run it
 
-- [`single-agent`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/single-agent.md)
-- [`manager-worker`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/manager-worker.md)
-- [`dispatcher`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/dispatcher.md)
-- [`pipeline`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/pipeline.md)
-- [`map-reduce`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/map-reduce.md)
-- [`blackboard`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/blackboard.md)
-- [`reactive-observers`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/skills/designing-entities/references/patterns/reactive-observers.md)
+Start the local agents infrastructure from the monorepo root:
 
-See [Agents & Patterns](../usage/spawning-and-coordinating.md) for detailed documentation of each pattern.
+```bash
+npx electric-ax agents start
+```
+
+Then configure and run the playground:
+
+```bash
+cd examples/agents-playground
+cp .env.example .env
+pnpm install
+pnpm dev
+```
+
+The app server starts on port `3000` and registers entity types with the agent server on port `4437`.
+
+## Source
+
+The source code is in [`examples/agents-playground`](https://github.com/electric-sql/electric/tree/main/examples/agents-playground).
+
+See [spawning & coordinating](../usage/spawning-and-coordinating.md) for the underlying coordination concepts.
