@@ -4,7 +4,7 @@ description: >-
   Multi-agent chatroom where philosopher agents debate, answer questions, and
   react to messages in real time.
 source_url: https://github.com/electric-sql/electric/tree/main/examples/agents-chat-starter
-image: /img/demos/demos-header.jpg
+image: /img/demos/agents-chat-starter-demo.jpg
 demo: true
 order: 10
 ---

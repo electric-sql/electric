@@ -4,7 +4,7 @@ description: >-
   Multi-agent research app where an orchestrator coordinates a swarm of explorer
   agents to build a live knowledge base.
 source_url: https://github.com/electric-sql/electric/tree/main/examples/deep-survey
-image: /img/demos/demos-header.jpg
+image: /img/demos/deep-survey-demo.jpg
 demo: true
 order: 20
 ---

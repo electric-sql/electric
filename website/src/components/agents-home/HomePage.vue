@@ -25,7 +25,6 @@ import { getVitepressData } from '../../lib/vitepressData'
 import type {
   DemoListRow,
   DemosPayload,
-  HomepageDemoCard,
   PostListRow,
 } from '../../types/data-loaders'
 import * as agentsDemoModule from '../../../data/agents-demos.data'
@@ -35,7 +34,7 @@ const allPosts = getVitepressData<PostListRow[]>(postsModule)
 
 const stackTab = ref<'server' | 'entities'>('server')
 
-function isLiveDemoCard(row: DemoListRow): row is HomepageDemoCard {
+function hasDemoCardContent(row: DemoListRow): boolean {
   return (
     typeof row.title === 'string' &&
     typeof row.description === 'string' &&
@@ -44,7 +43,9 @@ function isLiveDemoCard(row: DemoListRow): row is HomepageDemoCard {
 }
 
 const liveDemos =
-  getVitepressData<DemosPayload>(agentsDemoModule).demos.filter(isLiveDemoCard)
+  getVitepressData<DemosPayload>(agentsDemoModule).demos.filter(
+    hasDemoCardContent
+  )
 
 const liveDemosMarkdown = computed(() =>
   liveDemos
