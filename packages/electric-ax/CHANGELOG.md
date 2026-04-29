@@ -1,5 +1,11 @@
 # electric-ax
 
+## 0.1.14
+
+### Patch Changes
+
+- 5fec5f1: Replace the abrupt `ANTHROPIC_API_KEY is required` fatal error in `agents quickstart` and `agents start-builtin` with a friendly interactive prompt that explains how the key is used (it never leaves the local machine) and lets the user choose between setting up `.env` manually or pasting the key once to have the CLI write `.env` for them. Non-interactive runs still fail fast with the original error.
+
 ## 0.1.13
 
 ### Patch Changes

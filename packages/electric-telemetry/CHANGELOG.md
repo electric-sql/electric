@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.2.4
+
+### Patch Changes
+
+- 29a8cde: Add subset telemetry for query result rows and bytes, capture POST body params as request telemetry attributes, and expose subset result rows in stack telemetry.
+
 ## 0.2.3
 
 ### Patch Changes
