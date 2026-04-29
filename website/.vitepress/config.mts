@@ -1,7 +1,11 @@
 import { defineConfig, type HeadConfig, type MarkdownOptions } from 'vitepress'
+import { readFile } from 'node:fs/promises'
+import { dirname, isAbsolute, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import llmstxt from 'vitepress-plugin-llms'
 import type { LanguageRegistration } from 'shiki'
+import type { Plugin, ViteDevServer } from 'vite'
 
 import caddyfileGrammar from './theme/syntax/caddyfile.json'
 import { exportMarkedPagesToMarkdown } from './markdown-export'
@@ -9,6 +13,71 @@ import { exportMarkedPagesToMarkdown } from './markdown-export'
 import { buildMetaImageUrl } from '../src/lib/meta-image'
 
 const MARKDOWN_EXPORT = process.env.MARKDOWN_EXPORT === '1'
+const WEBSITE_ROOT = dirname(dirname(fileURLToPath(import.meta.url))).replace(
+  /\\/g,
+  '/'
+)
+
+function toVitePressSourceId(id: string): string {
+  const normalized = id.replace(/\\/g, '/')
+  const root = `${WEBSITE_ROOT.replace(/\/$/, '')}/`
+
+  return normalized.startsWith(root) ? normalized.slice(root.length) : normalized
+}
+
+function resolveFromWebsiteRoot(filePath: string): string {
+  return isAbsolute(filePath) ? filePath : resolve(WEBSITE_ROOT, filePath)
+}
+
+function markdownAssetCandidates(relativePath: string): string[] {
+  if (!relativePath.endsWith('.md') || relativePath.endsWith('/index.md')) {
+    return [relativePath]
+  }
+
+  return [relativePath, relativePath.replace(/\.md$/, '/index.md')]
+}
+
+function markdownAssetDevServer(): Plugin {
+  return {
+    name: 'electric-markdown-asset-dev-server',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(async (req, res, next) => {
+        const rawUrl = req.url ?? ''
+        const pathname = rawUrl.split('?')[0]
+
+        // VitePress imports markdown pages as module URLs like
+        // `/docs/foo.md?import`. Only serve direct asset requests here;
+        // query-string requests must continue through Vite's transform stack.
+        if (rawUrl.includes('?') || !pathname.match(/\.(md|txt)$/)) {
+          next()
+          return
+        }
+
+        const relativePath = decodeURIComponent(pathname).replace(/^\/+/, '')
+        const vitepressConfig = server.config as typeof server.config & {
+          vitepress?: { outDir?: string }
+        }
+        const outDir = resolveFromWebsiteRoot(
+          vitepressConfig.vitepress?.outDir ?? '.vitepress/dist'
+        )
+
+        for (const candidate of markdownAssetCandidates(relativePath)) {
+          try {
+            const content = await readFile(resolve(outDir, candidate), 'utf8')
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+            res.end(content)
+            return
+          } catch {
+            // Try the next index-page alias candidate.
+          }
+        }
+
+        res.statusCode = 404
+        res.end('Not found')
+      })
+    },
+  }
+}
 
 const caddyfileLanguage: LanguageRegistration = {
   ...caddyfileGrammar,
@@ -506,6 +575,7 @@ export default defineConfig({
       exclude: ['@electric-sql/pglite'],
     },
     plugins: [
+      markdownAssetDevServer(),
       llmstxt({
         generateLLMsFullTxt: false,
         customLLMsTxtTemplate: `\
@@ -608,14 +678,16 @@ export default defineConfig({
     },
   },
   rewrites(id) {
-    if (id.startsWith('blog/posts')) {
+    const sourceId = toVitePressSourceId(id)
+
+    if (sourceId.startsWith('blog/posts')) {
       // 'blog/posts/:year-:month-:day-:slug.md': 'blog/:year/:month/:day/:slug.md'
-      return id.replace(
+      return sourceId.replace(
         /^blog\/posts\/(2[0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])-(.*)/,
         'blog/$1/$2/$3/$4'
       )
     }
-    return id
+    return sourceId
   },
   sitemap: {
     hostname: resolveSiteOrigin(),

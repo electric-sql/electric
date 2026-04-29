@@ -318,6 +318,18 @@ function resolveMdExportMode(frontmatter: Record<string, unknown>): ExportMode {
 }
 
 function toMarkdownPath(relativeHtmlPath: string) {
+  if (relativeHtmlPath === `index.html`) {
+    return `index.md`
+  }
+
+  if (relativeHtmlPath.endsWith(`/index.html`)) {
+    return `${relativeHtmlPath.slice(0, -`/index.html`.length)}.md`
+  }
+
+  return relativeHtmlPath.replace(/\.html$/, `.md`)
+}
+
+function toSourceMarkdownPath(relativeHtmlPath: string) {
   return relativeHtmlPath.replace(/\.html$/, `.md`)
 }
 
@@ -331,7 +343,7 @@ function deriveSourcePathFromHtml(relativeHtmlPath: string) {
     return `blog/posts/${year}-${month}-${day}-${slug}.md`
   }
 
-  return toMarkdownPath(relativeHtmlPath)
+  return toSourceMarkdownPath(relativeHtmlPath)
 }
 
 async function resolveExportTarget(
