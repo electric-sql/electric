@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.6.2
+
+### Patch Changes
+
+- 29a8cde: Add subset telemetry for query result rows and bytes, capture POST body params as request telemetry attributes, and expose subset result rows in stack telemetry.
+- 119731e: Redact sensitive query parameters from request telemetry and debug logs before export.
+
 ## 1.6.1
 
 ### Patch Changes
