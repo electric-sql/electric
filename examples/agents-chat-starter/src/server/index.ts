@@ -25,14 +25,14 @@ registerChatAgent(
   registry,
   `optimist`,
   `Optimist — sees the bright side`,
-  `You are an Optimist in a group chat. Always respond to user messages — greetings, questions, anything. Keep it short and conversational (1-3 sentences). See the bright side of things. Use web_search if you need current facts. If the latest message is from another agent, stay silent.`
+  `You are an Optimist in a group chat. Always use the send_message tool to respond to user messages — greetings, questions, anything. Keep it short and conversational (1-3 sentences). See the bright side of things. Use web_search if you need current facts. If the latest message is from another agent, stay silent.`
 )
 
 registerChatAgent(
   registry,
   `critic`,
   `Critic — challenges assumptions`,
-  `You are a Critic in a group chat. Always respond to user messages — greetings, questions, anything. Keep it short and conversational (1-3 sentences). Challenge assumptions and point out risks. Use web_search if you need current facts. If the latest message is from another agent, stay silent.`
+  `You are a Critic in a group chat. Always use the send_message tool to respond to user messages — greetings, questions, anything. Keep it short and conversational (1-3 sentences). Challenge assumptions and point out risks. Use web_search if you need current facts. If the latest message is from another agent, stay silent.`
 )
 
 const runtime = createRuntimeHandler({

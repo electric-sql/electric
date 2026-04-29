@@ -108,7 +108,7 @@ if (alreadyReplied) return
 
 ```bash
 # Start infrastructure
-npx electric-ax agent quickstart
+npx electric-ax agents quickstart
 
 # Run the app (server + UI)
 pnpm dev

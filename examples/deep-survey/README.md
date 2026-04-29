@@ -96,7 +96,7 @@ BRAVE_SEARCH_API_KEY=...           # https://brave.com/search/api/ (optional)
 ### 3. Start the Electric Agents server
 
 ```bash
-npx electric-ax agent quickstart
+npx electric-ax agents quickstart
 ```
 
 This starts the agents server and its backing infrastructure (Postgres, Electric) via Docker. The agents server will be available at `http://localhost:4437`.
@@ -118,7 +118,7 @@ The UI will be available at `http://localhost:5175`.
 ### Stopping
 
 ```bash
-npx electric-ax agent stop
+npx electric-ax agents stop
 ```
 
 Add `--remove-volumes` to also delete persisted data.
