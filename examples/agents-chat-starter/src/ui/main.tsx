@@ -153,6 +153,7 @@ function App() {
           <ChatArea
             messagesCollection={messagesCollection}
             agentsCollection={agentsCollection}
+            agentsUrl={config.agentsUrl}
             connected={connected}
             error={error}
             onSend={sendMessage}
