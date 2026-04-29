@@ -1,9 +1,5 @@
 import { Type } from '@sinclair/typebox'
-import type {
-  AgentTool,
-  SharedStateHandle,
-  StateCollectionProxy,
-} from '@electric-ax/agents-runtime'
+import type { AgentTool, SharedStateHandle } from '@electric-ax/agents-runtime'
 import {
   swarmSharedSchema,
   wikiEntrySchema,
@@ -22,16 +18,6 @@ function textResult(text: string, details: Record<string, unknown> = {}) {
     content: [{ type: `text` as const, text }],
     details,
   }
-}
-
-function wikiCollection(
-  shared: SwarmSharedState
-): StateCollectionProxy<WikiEntry> {
-  return shared.wiki as unknown as StateCollectionProxy<WikiEntry>
-}
-
-function xrefCollection(shared: SwarmSharedState): StateCollectionProxy<Xref> {
-  return shared.xrefs as unknown as StateCollectionProxy<Xref>
 }
 
 async function awaitPersisted(transaction: unknown): Promise<void> {
@@ -197,7 +183,7 @@ export function createWriteWikiTool(shared: SwarmSharedState): AgentTool {
     }),
     execute: async (_toolCallId, params) => {
       const parsed = wikiEntrySchema.parse(params)
-      const collection = wikiCollection(shared)
+      const collection = shared.wiki
       const existing = collection.get(parsed.key)
       const transaction = existing
         ? collection.update(parsed.key, (draft) => {
@@ -228,8 +214,8 @@ export function createReadWikiTool(shared: SwarmSharedState): AgentTool {
     }),
     execute: async (_toolCallId, params) => {
       const { query } = params as { query?: string }
-      const allEntries = wikiCollection(shared).toArray
-      const xrefs = xrefCollection(shared).toArray
+      const allEntries = shared.wiki.toArray
+      const xrefs = shared.xrefs.toArray
       const entries = query
         ? allEntries.filter((entry) => {
             const needle = query.toLowerCase()
@@ -279,7 +265,7 @@ export function createWriteXrefsTool(shared: SwarmSharedState): AgentTool {
         a: raw.a,
         b: raw.b,
       })
-      const collection = xrefCollection(shared)
+      const collection = shared.xrefs
       const existing = collection.get(parsed.key)
       const transaction = existing
         ? collection.update(parsed.key, (draft) => {

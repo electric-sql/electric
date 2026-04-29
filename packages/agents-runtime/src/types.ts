@@ -1,6 +1,7 @@
 import type {
   StandardJSONSchemaV1,
   StandardSchemaV1,
+  StandardTypedV1,
 } from '@standard-schema/spec'
 import type {
   StreamDB as BaseStreamDB,
@@ -10,6 +11,7 @@ import type {
 } from '@durable-streams/state'
 import type { EntityRegistry } from './define-entity'
 import type {
+  Collection as TanStackCollection,
   Context as QueryContext,
   DeltaEvent as TanStackDeltaEvent,
   Effect as TanStackEffect,
@@ -48,7 +50,16 @@ import type {
 import type { EntityTags, TagOperation } from './tags'
 
 export type EntityStreamDB = RuntimeEntityStreamDB
-export type EntityStreamDBWithActions = RuntimeEntityStreamDBWithActions
+export type EntityStreamDBWithActions<
+  TState extends EntityStateDefinition | undefined =
+    | EntityStateDefinition
+    | undefined,
+  TActions extends EntityActionMap = EntityActionMap,
+> = Omit<RuntimeEntityStreamDBWithActions, `actions` | `collections`> & {
+  collections: RuntimeEntityStreamDBWithActions[`collections`] &
+    EntityCollectionsFromState<TState>
+  actions: GeneratedStateActions<TState> & HandlerActions<TActions>
+}
 export type ChildStatus = ChildStatusEntry
 export type ObservationCollectionMap = Record<string, StateCollectionDefinition>
 export type ObservationStreamDB = BaseStreamDB<ObservationCollectionMap>
@@ -64,6 +75,125 @@ export type JsonValue =
   | null
   | Array<JsonValue>
   | { [key: string]: JsonValue }
+
+export type EntitySchema = StandardTypedV1<any, any>
+
+type AnyFunction = (...args: Array<any>) => unknown
+export type EntityActionMap = Record<string, AnyFunction>
+export type EntityStateDefinition = Record<string, CollectionDefinition>
+
+export interface EntityTransaction {
+  isPersisted: {
+    promise: Promise<unknown>
+  }
+}
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (value: T) => void : never
+) extends (value: infer R) => void
+  ? R
+  : never
+
+type ObjectOutput<T> = T extends object ? T : Record<string, unknown>
+
+export type SchemaInput<TSchema> = TSchema extends StandardTypedV1
+  ? StandardTypedV1.InferInput<TSchema>
+  : unknown
+
+export type SchemaOutput<TSchema> = TSchema extends StandardTypedV1
+  ? StandardTypedV1.InferOutput<TSchema>
+  : unknown
+
+type CollectionSchema<TCollection> = TCollection extends {
+  schema?: infer TSchema
+}
+  ? NonNullable<TSchema>
+  : never
+
+export type CollectionRow<TCollection> = [
+  CollectionSchema<TCollection>,
+] extends [never]
+  ? Record<string, unknown>
+  : ObjectOutput<SchemaOutput<CollectionSchema<TCollection>>>
+
+export type CollectionInsert<TCollection> = [
+  CollectionSchema<TCollection>,
+] extends [never]
+  ? CollectionRow<TCollection>
+  : ObjectOutput<SchemaInput<CollectionSchema<TCollection>>>
+
+export type CollectionKey<TCollection> = TCollection extends {
+  primaryKey: infer TPrimaryKey extends string
+}
+  ? TPrimaryKey extends keyof CollectionRow<TCollection>
+    ? Extract<CollectionRow<TCollection>[TPrimaryKey], string> extends never
+      ? string
+      : Extract<CollectionRow<TCollection>[TPrimaryKey], string>
+    : string
+  : `key` extends keyof CollectionRow<TCollection>
+    ? Extract<CollectionRow<TCollection>[`key`], string> extends never
+      ? string
+      : Extract<CollectionRow<TCollection>[`key`], string>
+    : string
+
+export type StateProxyFrom<TState> =
+  TState extends Record<string, unknown>
+    ? {
+        [K in keyof TState & string]: StateCollectionProxy<
+          CollectionRow<TState[K]>,
+          CollectionInsert<TState[K]>,
+          CollectionKey<TState[K]>
+        >
+      }
+    : {}
+
+type EntityCollectionsFromState<TState> =
+  TState extends Record<string, unknown>
+    ? {
+        [K in keyof TState & string]: TanStackCollection<
+          CollectionRow<TState[K]>,
+          CollectionKey<TState[K]>,
+          any,
+          any,
+          CollectionInsert<TState[K]>
+        >
+      }
+    : {}
+
+type GeneratedActionUnion<TState extends Record<string, unknown>> = {
+  [K in keyof TState & string]: {
+    [P in `${K}_insert`]: (args: {
+      row: CollectionInsert<TState[K]>
+    }) => EntityTransaction
+  } & {
+    [P in `${K}_update`]: (args: {
+      key: CollectionKey<TState[K]>
+      updater: (draft: CollectionRow<TState[K]>) => void
+    }) => EntityTransaction
+  } & {
+    [P in `${K}_delete`]: (args: {
+      key: CollectionKey<TState[K]>
+    }) => EntityTransaction
+  }
+}[keyof TState & string]
+
+export type GeneratedStateActions<TState> =
+  TState extends Record<string, unknown>
+    ? [keyof TState & string] extends [never]
+      ? {}
+      : UnionToIntersection<GeneratedActionUnion<TState>>
+    : {}
+
+export type HandlerActions<TActions extends EntityActionMap> = {
+  [K in keyof TActions]: TActions[K] extends (...args: infer TParams) => unknown
+    ? (...args: TParams) => EntityTransaction
+    : never
+}
+
+export type EntityArgs<TCreationSchema> =
+  TCreationSchema extends StandardTypedV1
+    ? Readonly<ObjectOutput<SchemaInput<TCreationSchema>>>
+    : Readonly<Record<string, unknown>>
 
 // Re-export TanStack DB effect types
 export type DeltaEvent<
@@ -261,11 +391,13 @@ export type EffectConfig<
  */
 export interface StateCollectionProxy<
   T extends object = Record<string, unknown>,
+  TInsert extends object = T,
+  TKey extends string = string,
 > {
-  insert: (row: T) => unknown // Transaction
-  update: (key: string, updater: (draft: T) => void) => unknown // Transaction
-  delete: (key: string) => unknown // Transaction
-  get: (key: string) => T | undefined
+  insert: (row: TInsert) => EntityTransaction
+  update: (key: TKey, updater: (draft: T) => void) => EntityTransaction
+  delete: (key: TKey) => EntityTransaction
+  get: (key: TKey) => T | undefined
   toArray: Array<T>
 }
 
@@ -276,9 +408,13 @@ export type StateProxy = Record<string, StateCollectionProxy>
  * Mirrors how entity `state:` collections are defined but is self-contained
  * so shared state schemas can be declared inline.
  */
-export interface SharedStateCollectionSchema {
+export interface SharedStateCollectionSchema<
+  TSchema extends StandardSchemaV1<any, any> | undefined =
+    | StandardSchemaV1<any, any>
+    | undefined,
+> {
   /** Zod (or any Standard Schema) validator for the row type */
-  schema?: StandardSchemaV1
+  schema?: TSchema
   /** Event type string used in the durable stream (e.g. `"finding"`) */
   type: string
   /** Primary key field name (must be a string field on the row) */
@@ -311,7 +447,11 @@ export type SharedStateHandle<
   /** The shared state stream identifier */
   id: string
 } & {
-  [K in keyof TSchema]: StateCollectionProxy
+  [K in keyof TSchema]: StateCollectionProxy<
+    CollectionRow<TSchema[K]>,
+    CollectionInsert<TSchema[K]>,
+    CollectionKey<TSchema[K]>
+  >
 }
 
 export interface RuntimeContext {
@@ -335,10 +475,10 @@ export interface RuntimeContext {
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }
   ) => Promise<EntityHandle>) &
-    ((
-      source: ObservationSource & { sourceType: `db` },
+    (<TSchema extends SharedStateSchemaMap>(
+      source: ObservationSource & { sourceType: `db`; schema: TSchema },
       opts?: { wake?: Wake }
-    ) => Promise<SharedStateHandle & ObservationHandle>) &
+    ) => Promise<SharedStateHandle<TSchema> & ObservationHandle>) &
     ((
       source: ObservationSource,
       opts?: { wake?: Wake }
@@ -411,17 +551,23 @@ export interface SourceHandleInfo {
   ) => void | Promise<void>
 }
 
-export interface CollectionDefinition {
-  schema?: StandardSchemaV1
+export interface CollectionDefinition<
+  TSchema extends StandardSchemaV1<any, any> | undefined =
+    | StandardSchemaV1<any, any>
+    | undefined,
+> {
+  schema?: TSchema
   /** Event type string used in the durable stream (e.g. `"counter_value"`). Defaults to `"state:${name}"`. */
   type?: string
   /** Primary key field name. Defaults to `"key"`. */
   primaryKey?: string
 }
 
-export interface EntityTypeEntry {
+export interface EntityTypeEntry<
+  TDefinition extends AnyEntityDefinition = AnyEntityDefinition,
+> {
   name: string
-  definition: EntityDefinition
+  definition: TDefinition
 }
 
 // Re-export upstream types used in signatures above so consumers can import from one place
@@ -733,16 +879,26 @@ export interface RunHandle {
   attachResponse(text: string): void
 }
 
-export interface HandlerContext<TState extends StateProxy = StateProxy> {
+export interface HandlerContext<
+  TState extends StateProxy = StateProxy,
+  TArgs extends Readonly<Record<string, unknown>> = Readonly<
+    Record<string, unknown>
+  >,
+  TActions extends Record<string, (...args: Array<any>) => unknown> = Record<
+    string,
+    (...args: Array<any>) => unknown
+  >,
+  TDb extends EntityStreamDBWithActions = EntityStreamDBWithActions,
+> {
   firstWake: boolean
   tags: Readonly<EntityTags>
   entityUrl: string
   entityType: string
-  args: Readonly<Record<string, unknown>>
-  db: EntityStreamDBWithActions
+  args: TArgs
+  db: TDb
   state: TState
   events: Array<ChangeEvent>
-  actions: Record<string, (...args: Array<unknown>) => unknown>
+  actions: TActions
   electricTools: Array<AgentTool>
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
@@ -773,10 +929,10 @@ export interface HandlerContext<TState extends StateProxy = StateProxy> {
     source: ObservationSource & { sourceType: `entity` },
     opts?: { wake?: Wake }
   ) => Promise<EntityHandle>) &
-    ((
-      source: ObservationSource & { sourceType: `db` },
+    (<TSchema extends SharedStateSchemaMap>(
+      source: ObservationSource & { sourceType: `db`; schema: TSchema },
       opts?: { wake?: Wake }
-    ) => Promise<SharedStateHandle & ObservationHandle>) &
+    ) => Promise<SharedStateHandle<TSchema> & ObservationHandle>) &
     ((
       source: ObservationSource,
       opts?: { wake?: Wake }
@@ -814,15 +970,44 @@ export interface HandlerContext<TState extends StateProxy = StateProxy> {
   removeTag: (key: string) => Promise<void>
 }
 
-export interface EntityDefinition {
+export type EntityActionsFactory<
+  TState extends EntityStateDefinition | undefined,
+  TActions extends EntityActionMap,
+> = (collections: EntityCollectionsFromState<TState>) => TActions
+
+export interface EntityDefinition<
+  TCreationSchema extends EntitySchema | undefined = EntitySchema | undefined,
+  TState extends EntityStateDefinition | undefined =
+    | EntityStateDefinition
+    | undefined,
+  TActions extends EntityActionMap = EntityActionMap,
+> {
   description?: string
-  state?: Record<string, CollectionDefinition>
-  actions?: (
-    collections: Record<string, unknown>
-  ) => Record<string, (...args: Array<unknown>) => void>
-  creationSchema?: StandardJSONSchemaV1
+  state?: TState
+  actions?: EntityActionsFactory<TState, TActions>
+  creationSchema?: TCreationSchema
   inboxSchemas?: Record<string, StandardJSONSchemaV1>
   outputSchemas?: Record<string, StandardJSONSchemaV1>
 
+  handler: (
+    ctx: HandlerContext<
+      StateProxyFrom<TState>,
+      EntityArgs<TCreationSchema>,
+      HandlerActions<TActions>,
+      EntityStreamDBWithActions<TState, TActions>
+    >,
+    wake: WakeEvent
+  ) => void | Promise<void>
+}
+
+export type AnyEntityDefinition = Omit<
+  EntityDefinition<
+    EntitySchema | undefined,
+    EntityStateDefinition | undefined,
+    EntityActionMap
+  >,
+  `actions` | `handler`
+> & {
+  actions?: (collections: Record<string, unknown>) => EntityActionMap
   handler: (ctx: HandlerContext, wake: WakeEvent) => void | Promise<void>
 }
