@@ -152,7 +152,7 @@ import { registerPerspectives } from './entities/perspectives'
 registerPerspectives(registry)
 ```
 
-Test: `pnpm electric-agents spawn /perspectives/test-1 && pnpm electric-agents send /perspectives/test-1 "Is remote work better than office work?" && pnpm electric-agents observe /perspectives/test-1`
+Test: `npx electric-ax agents spawn /perspectives/test-1 && npx electric-ax agents send /perspectives/test-1 "Is remote work better than office work?" && npx electric-ax agents observe /perspectives/test-1`
 
 ## Step 2: One worker
 
@@ -214,7 +214,7 @@ export function registerPerspectives(registry: EntityRegistry) {
 }
 ```
 
-Test: `pnpm electric-agents spawn /perspectives/test-2 && pnpm electric-agents send /perspectives/test-2 "Is remote work better than office work?" && pnpm electric-agents observe /perspectives/test-2`
+Test: `npx electric-ax agents spawn /perspectives/test-2 && npx electric-ax agents send /perspectives/test-2 "Is remote work better than office work?" && npx electric-ax agents observe /perspectives/test-2`
 
 ## Step 3: Two workers + state
 
@@ -293,7 +293,7 @@ export function registerPerspectives(registry: EntityRegistry) {
 }
 ```
 
-Test: `pnpm electric-agents spawn /perspectives/test-3 && pnpm electric-agents send /perspectives/test-3 "Is remote work better than office work?" && pnpm electric-agents observe /perspectives/test-3`
+Test: `npx electric-ax agents spawn /perspectives/test-3 && npx electric-ax agents send /perspectives/test-3 "Is remote work better than office work?" && npx electric-ax agents observe /perspectives/test-3`
 
 ## Step 4: Server routes
 
@@ -303,104 +303,60 @@ Next, we'll turn this into a real app. The server.ts you've been running is a pl
 
 `createRuntimeServerClient()` gives you a programmatic client for spawning entities and sending messages from your server code — the same operations you've been doing with the CLI.
 
-Update `server.ts` — add the runtime server client and an `/api/analyze` route:
+Update `server.ts` — add the runtime server client import and an `/api/analyze` route:
+
+Add `createRuntimeServerClient` to your imports from `@electric-ax/agents-runtime`, then create a client instance:
 
 ```typescript
-import http from 'node:http'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   createEntityRegistry,
   createRuntimeHandler,
-  createRuntimeServerClient,
+  createRuntimeServerClient, // ← add this
 } from '@electric-ax/agents-runtime'
-import { createElectricTools } from './lib/electric-tools'
-import { registerPerspectives } from './entities/perspectives'
 
-try {
-  const here = path.dirname(fileURLToPath(import.meta.url))
-  process.loadEnvFile(path.resolve(here, '.env'))
-} catch {}
-
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.warn(
-    '[app] ANTHROPIC_API_KEY is not set — agent.run() will throw on the first wake.'
-  )
-}
-
-const ELECTRIC_AGENTS_URL =
-  process.env.ELECTRIC_AGENTS_URL ?? 'http://localhost:4437'
-const PORT = Number(process.env.PORT ?? 3000)
-const SERVE_URL = process.env.SERVE_URL ?? `http://localhost:${PORT}`
-
-const registry = createEntityRegistry()
-registerPerspectives(registry)
-
-const runtime = createRuntimeHandler({
-  baseUrl: ELECTRIC_AGENTS_URL,
-  serveEndpoint: `${SERVE_URL}/webhook`,
-  registry,
-  createElectricTools,
-})
+// ... existing setup ...
 
 const client = createRuntimeServerClient({ baseUrl: ELECTRIC_AGENTS_URL })
+```
 
-async function readJson(req: http.IncomingMessage): Promise<unknown> {
-  const chunks: Array<Buffer> = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
-}
+Then add this route handler inside `http.createServer`, after the existing `/webhook` handler:
 
-const server = http.createServer(async (req, res) => {
-  if (req.url === '/webhook' && req.method === 'POST') {
-    await runtime.onEnter(req, res)
-    return
-  }
-
-  if (req.url === '/api/analyze' && req.method === 'POST') {
-    try {
-      const body = (await readJson(req)) as { question?: string }
-      if (!body.question) {
-        res.writeHead(400, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ error: 'Missing "question" field' }))
-        return
-      }
-
-      const id = `analysis-${crypto.randomUUID().slice(0, 8)}`
-
-      await client.spawnEntity({
-        type: 'perspectives',
-        id,
-        initialMessage: body.question,
-      })
-
-      res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(
-        JSON.stringify({
-          entityUrl: `/perspectives/${id}`,
-          optimistUrl: `/worker/${id}-optimist`,
-          criticUrl: `/worker/${id}-critic`,
-        })
-      )
-    } catch (err) {
-      res.writeHead(500, { 'content-type': 'application/json' })
-      res.end(
-        JSON.stringify({
-          error: err instanceof Error ? err.message : String(err),
-        })
-      )
+```typescript
+if (req.url === '/api/analyze' && req.method === 'POST') {
+  try {
+    const body = (await readJson(req)) as { question?: string }
+    if (!body.question) {
+      res.writeHead(400, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Missing "question" field' }))
+      return
     }
-    return
+
+    const id = `analysis-${crypto.randomUUID().slice(0, 8)}`
+
+    await client.spawnEntity({
+      type: 'perspectives',
+      id,
+      initialMessage: body.question,
+    })
+
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        entityUrl: `/perspectives/${id}`,
+        optimistUrl: `/worker/${id}-optimist`,
+        criticUrl: `/worker/${id}-critic`,
+      })
+    )
+  } catch (err) {
+    res.writeHead(500, { 'content-type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : String(err),
+      })
+    )
   }
-
-  res.writeHead(404)
-  res.end()
-})
-
-server.listen(PORT, async () => {
-  await runtime.registerTypes()
-  console.log(`App server ready on port ${PORT}`)
-})
+  return
+}
 ```
 
 Test with curl:
@@ -414,7 +370,7 @@ curl -X POST http://localhost:3000/api/analyze \
 Then observe the spawned entity:
 
 ```bash
-pnpm electric-agents observe /perspectives/analysis-<id>
+npx electric-ax agents observe /perspectives/analysis-<id>
 ```
 
 **Key concepts:**
