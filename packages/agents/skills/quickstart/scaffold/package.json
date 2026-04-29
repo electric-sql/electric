@@ -4,14 +4,27 @@
   "type": "module",
   "scripts": {
     "start": "tsx server.ts",
-    "dev": "tsx --watch server.ts"
+    "dev": "tsx --watch server.ts",
+    "dev:server": "tsx --watch server.ts",
+    "dev:ui": "vite",
+    "dev:all": "npm run dev:server & npm run dev:ui"
   },
   "dependencies": {
     "@electric-ax/agents-runtime": "latest",
-    "@sinclair/typebox": "^0.34.49"
+    "@radix-ui/themes": "^3.3.0",
+    "@sinclair/typebox": "^0.34.49",
+    "@tanstack/db": "^0.6.0",
+    "@tanstack/react-db": "^0.1.78",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "streamdown": "^2.5.0"
   },
   "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vite": "^7.2.4"
   }
 }

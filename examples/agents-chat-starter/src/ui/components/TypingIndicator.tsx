@@ -3,36 +3,17 @@ import { useLiveQuery } from '@tanstack/react-db'
 import type { AgentsCollection } from '../hooks/useChatroom.js'
 import { useEntityChatState } from '../hooks/useEntityChatState.js'
 
-/**
- * Renders a typing indicator for a single agent entity.
- * Uses useChat internally to detect `working` state.
- */
-function AgentTypingStatus({
-  agentsUrl,
-  entityUrl,
-  agentType,
-}: {
+function useWorkingAgents(
+  agents: Array<any>,
   agentsUrl: string
-  entityUrl: string
-  agentType: string
-}) {
-  const state = useEntityChatState(agentsUrl, entityUrl)
-
-  if (state !== `working`) return null
-
-  return (
-    <Box className="message message-agent" style={{ opacity: 0.6 }}>
-      <Text size="1" color="gray">
-        {agentType} thinking...
-      </Text>
-    </Box>
-  )
+): Array<string> {
+  const states = agents.map((agent: any) => ({
+    type: agent.type as string,
+    state: useEntityChatState(agentsUrl, agent.url),
+  }))
+  return states.filter((s) => s.state === `working`).map((s) => s.type)
 }
 
-/**
- * Renders typing indicators for all agents in a room that are
- * actively generating (chat.state === 'working').
- */
 export function TypingIndicators({
   agentsCollection,
   agentsUrl,
@@ -49,18 +30,20 @@ export function TypingIndicators({
     [agentsCollection]
   )
 
-  if (!hasUserMessages) return null
+  const workingNames = useWorkingAgents(agents as Array<any>, agentsUrl)
+
+  if (!hasUserMessages || workingNames.length === 0) return null
+
+  const label =
+    workingNames.length === 1
+      ? `${workingNames[0]} is thinking...`
+      : `${workingNames.join(`, `)} are thinking...`
 
   return (
-    <>
-      {agents.map((agent: any) => (
-        <AgentTypingStatus
-          key={agent.url}
-          agentsUrl={agentsUrl}
-          entityUrl={agent.url}
-          agentType={agent.type}
-        />
-      ))}
-    </>
+    <Box className="message message-agent" style={{ opacity: 0.6 }}>
+      <Text size="1" color="gray">
+        {label}
+      </Text>
+    </Box>
   )
 }
