@@ -1,6 +1,7 @@
 defmodule Electric.PhoenixExample.MixProject do
   use Mix.Project
 
+  # CHANGE
   def project do
     [
       app: :electric_phoenix_example,
