@@ -138,7 +138,7 @@ const reelStack = computed(() => {
   return out
 })
 
-const wordStep = ref(INITIAL_WORD_STEP)
+const wordStep = ref<number>(INITIAL_WORD_STEP)
 const activeStackIdx = computed(() => Math.max(0, REEL_BASE - wordStep.value))
 /* Narrow-mode flag — true when the viewport is ≤670px and the
    headline is rendered as two forced lines with the rotator on
