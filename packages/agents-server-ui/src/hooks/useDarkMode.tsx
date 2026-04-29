@@ -9,19 +9,34 @@ import {
 
 const STORAGE_KEY = `electric-agents-ui.dark-mode`
 
+export type ThemePreference = `light` | `dark` | `system`
+
 type DarkModeContextValue = {
   darkMode: boolean
-  toggleDarkMode: () => void
+  preference: ThemePreference
+  cyclePreference: () => void
 }
 
 const DarkModeContext = createContext<DarkModeContextValue | null>(null)
 
-function readInitial(): boolean {
-  if (typeof window === `undefined`) return false
+function readInitialPreference(): ThemePreference {
+  if (typeof window === `undefined`) return `system`
   const stored = window.localStorage.getItem(STORAGE_KEY)
-  if (stored === `true`) return true
-  if (stored === `false`) return false
+  // Migrate legacy boolean strings written before the 3-state toggle
+  if (stored === `true` || stored === `dark`) return `dark`
+  if (stored === `false` || stored === `light`) return `light`
+  return `system`
+}
+
+function systemPrefersDark(): boolean {
+  if (typeof window === `undefined`) return false
   return window.matchMedia?.(`(prefers-color-scheme: dark)`).matches ?? false
+}
+
+const cycleOrder: Record<ThemePreference, ThemePreference> = {
+  light: `dark`,
+  dark: `system`,
+  system: `light`,
 }
 
 export function DarkModeProvider({
@@ -29,23 +44,36 @@ export function DarkModeProvider({
 }: {
   children: React.ReactNode
 }): React.ReactElement {
-  const [darkMode, setDarkMode] = useState<boolean>(readInitial)
+  const [preference, setPreference] = useState<ThemePreference>(
+    readInitialPreference
+  )
+  const [systemDark, setSystemDark] = useState<boolean>(systemPrefersDark)
+
+  useEffect(() => {
+    if (typeof window === `undefined`) return
+    const mql = window.matchMedia(`(prefers-color-scheme: dark)`)
+    const onChange = (e: MediaQueryListEvent): void => setSystemDark(e.matches)
+    mql.addEventListener(`change`, onChange)
+    return () => mql.removeEventListener(`change`, onChange)
+  }, [])
+
+  const darkMode = preference === `system` ? systemDark : preference === `dark`
 
   useEffect(() => {
     document.documentElement.classList.toggle(`dark`, darkMode)
   }, [darkMode])
 
-  const toggleDarkMode = useCallback(() => {
-    setDarkMode((current) => {
-      const next = !current
-      window.localStorage.setItem(STORAGE_KEY, String(next))
+  const cyclePreference = useCallback(() => {
+    setPreference((current) => {
+      const next = cycleOrder[current]
+      window.localStorage.setItem(STORAGE_KEY, next)
       return next
     })
   }, [])
 
   const value = useMemo(
-    () => ({ darkMode, toggleDarkMode }),
-    [darkMode, toggleDarkMode]
+    () => ({ darkMode, preference, cyclePreference }),
+    [darkMode, preference, cyclePreference]
   )
 
   return (
