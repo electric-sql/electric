@@ -236,9 +236,9 @@ Each of them independently arrived at a piece of the same architectural picture.
 
 Electric Agents is an open implementation of these patterns based on composable sync primitives. It makes no assumptions about which models you choose or where you run your compute. It's brownfield compatible with existing web systems, APIs and cloud native compute infrastructure.
 
-The [code is fully open source](#) and comes with a conformance suite and a reference implementation in TypeScript for the server and runtime. The [protocol is open](#). Implementations in other languages are welcome and encouraged.
+The [code is fully open source](https://github.com/electric-sql/electric/tree/main/packages/agents-runtime) and comes with a [conformance suite](https://github.com/electric-sql/electric/tree/main/packages/agents-server-conformance-tests) and a reference implementation in TypeScript for the [server](https://github.com/electric-sql/electric/tree/main/packages/agents-server) and [runtime](https://github.com/electric-sql/electric/tree/main/packages/agents-runtime). Implementations in other languages are welcome and encouraged.
 
-You can host the data primitivs yourself, or use [Electric Cloud](/cloud/). We'll be offering a managed agent runtime service soon. But you will also always be able to run your own, on your own infrastructure, on your own terms.
+You can host the data primitives yourself, or use [Electric Cloud](/cloud/). We'll be offering a managed agent runtime service soon. But you will also always be able to run your own, on your own infrastructure, on your own terms.
 
 Open source. Your model, your infrastructure. [Durable Streams](/streams/) under the hood.
 
