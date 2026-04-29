@@ -1,5 +1,15 @@
 # electric-ax
 
+## 0.1.13
+
+### Patch Changes
+
+- b0af010: Fix CLI command references and package dependencies for agents chat starter.
+- Updated dependencies [4d8e452]
+- Updated dependencies [b0af010]
+- Updated dependencies [b0af010]
+  - @electric-ax/agents@0.2.2
+
 ## 0.1.12
 
 ### Patch Changes
