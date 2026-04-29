@@ -47,6 +47,7 @@ defmodule Electric.Plug.UtilsTest do
       assert attrs["http.query_param.offset"] == "-1"
       assert attrs["http.query_param.flag"] == ""
     end
+
     test "includes documented top-level subset body params alongside query params" do
       conn =
         Plug.Test.conn(:post, "/v1/shape?foo=bar")
