@@ -16,6 +16,7 @@ export { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
 const DEFAULT_BUILTIN_AGENTS_PORT = 4448
+const DEFAULT_BUILTIN_AGENTS_HOST = `0.0.0.0`
 const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
@@ -57,6 +58,17 @@ export function resolveBuiltinAgentsPort(
     throw new Error(`ELECTRIC_AGENTS_BUILTIN_PORT must be a positive integer`)
   }
   return parsed
+}
+
+export function resolveBuiltinAgentsHost(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): string {
+  return (
+    env.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
+    fileEnv.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
+    DEFAULT_BUILTIN_AGENTS_HOST
+  )
 }
 
 export function resolveElectricAgentsPort(
@@ -288,6 +300,7 @@ export async function startBuiltinAgentsServer(
   const cwd = params.cwd ?? process.cwd()
   const fileEnv = readDotEnvFile(cwd)
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
+  const host = resolveBuiltinAgentsHost(env, fileEnv)
   const port = resolveBuiltinAgentsPort(env, fileEnv)
   const agentServerUrl =
     params.agentServerUrl ??
@@ -299,6 +312,7 @@ export async function startBuiltinAgentsServer(
 
   const server = new BuiltinAgentsServer({
     agentServerUrl,
+    host,
     port,
     workingDirectory: cwd,
   })

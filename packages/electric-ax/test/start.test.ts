@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
+  resolveBuiltinAgentsHost,
   resolveBuiltinAgentsPort,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
@@ -79,6 +80,30 @@ describe(`resolveBuiltinAgentsPort`, () => {
 
   it(`defaults to 4448`, () => {
     expect(resolveBuiltinAgentsPort({}, {})).toBe(4448)
+  })
+})
+
+describe(`resolveBuiltinAgentsHost`, () => {
+  it(`uses process env when present`, () => {
+    expect(
+      resolveBuiltinAgentsHost(
+        { ELECTRIC_AGENTS_BUILTIN_HOST: `127.0.0.1` },
+        {}
+      )
+    ).toBe(`127.0.0.1`)
+  })
+
+  it(`falls back to .env`, () => {
+    expect(
+      resolveBuiltinAgentsHost(
+        {},
+        { ELECTRIC_AGENTS_BUILTIN_HOST: `localhost` }
+      )
+    ).toBe(`localhost`)
+  })
+
+  it(`defaults to all interfaces so Docker can reach the host runtime`, () => {
+    expect(resolveBuiltinAgentsHost({}, {})).toBe(`0.0.0.0`)
   })
 })
 
