@@ -71,16 +71,16 @@
   ?Metric electric\.connection\.consumers_ready\.total custom\.attr=electric\.val instance\.id=[-a-f0-9]+ \
      name=metrics service\.name=electric service\.version=[0-9.]+ stack_id=single_stack
 
-  ??Metric electric.plug.serve_shape.bytes
-  ??Metric electric.plug.serve_shape.count
+  ?Metric electric\.plug\.serve_shape\.bytes .*stack_id=single_stack
+  ?Metric electric\.plug\.serve_shape\.count .*stack_id=single_stack
 
   ?Metric electric\.postgres\.replication\.pg_wal_offset .*stack_id=single_stack
   ?Metric electric\.postgres\.replication\.slot_confirmed_flush_lsn_lag .*stack_id=single_stack
   ?Metric electric\.postgres\.replication\.slot_retained_wal_size .*stack_id=single_stack
 
-  ??Metric electric.storage.snapshot_stored.operations
-  ??Metric electric.storage.transaction_stored.bytes
-  ??Metric electric.storage.transaction_stored.operations
+  ?Metric electric\.storage\.snapshot_stored\.operations .*stack_id=single_stack
+  ?Metric electric\.storage\.transaction_stored\.bytes .*stack_id=single_stack
+  ?Metric electric\.storage\.transaction_stored\.operations .*stack_id=single_stack
 
   # Export of process memory metrics by application telemetry
   ?Metric process\.bin_memory\.avg_bin_count .*process_type=A_memory_hog.*Value=[.0-9]+
