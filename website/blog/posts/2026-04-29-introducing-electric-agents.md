@@ -36,7 +36,6 @@ published: true
     aspect-ratio: 5.6 / 4;
     margin-bottom: -10px;
   }
-
   @media (max-width: 860px) {
     .layers-illustration-wrapper {
       aspect-ratio: 7 / 4;
@@ -184,43 +183,145 @@ Each layer is a view of the one below it. The code stays small because the conce
 
 Let's see what this looks like in practice.
 
-### Shared sessions
+### Quickstart
 
-<!-- Demo 1: Multiple readers on the same session, falling out of the architecture for free. -->
+<!-- Demo 2: The multi-agent chat demo built by the quickstart. -->
 
-Invite a colleague to a running agent. They join with their own identity, see the live state, interact in real time. Multiple readers on the same session — not a collaboration feature you built, but what sync does by default.
+The quickstart starts the runtime server, registers the built-in entity types, and scaffolds the chat starter so you can see agents coordinating through shared state in a real app.
 
-<!-- ASSET: Shareable sessions demo — recording or screenshot -->
-<!-- ASSET: Code snippet — minimal code to share a session -->
+```bash
+npx electric-ax agents quickstart
+```
+
+Follow the [Agents quickstart](/docs/agents/quickstart) to bring up Horton, then ask anything about how the system works. You can also ask it to walk you through building a demo app, and it will scaffold something like the perspectives analyzer shown below.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 75.208914%">
+    <YoutubeEmbed video-id="0GS5fIwvDII" title="Electric Agents quickstart demo" />
+  </div>
+</figure>
+
+### Shared coding sessions
+
+<!-- Demo 1: Import or start coding agent sessions inside the Electric Agents framework. -->
+
+Start a Claude Code or Codex session from inside Electric Agents, or import an existing local coding session into the framework. The coding agent becomes a durable entity with its own addressable stream.
+
+That means the session is no longer trapped on one machine or inside one terminal. You can share it with colleagues, let others join and observe the work in real time, and have other agents subscribe to the same session or continue prompting it later.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.367432%">
+    <YoutubeEmbed video-id="hyxZKgOa5AI" title="Electric Agents shared coding sessions demo" />
+  </div>
+</figure>
+
+This is the example code to spawn a [`coder` entity](https://github.com/electric-sql/electric/blob/main/packages/agents/src/agents/coding-session.ts) that wraps a Claude Code or Codex session, so it can be orchestrated with your other agents.
+
+```ts
+import { createRuntimeServerClient } from "@electric-ax/agents-runtime"
+
+// Connect to the Electric Agents runtime server.
+const client = createRuntimeServerClient({
+  baseUrl: "https://agents.example.com",
+})
+
+const coder = await client.spawnEntity({
+  // "coder" is the built-in coding-session entity type.
+  type: "coder",
+  id: "landing-page-build",
+  args: {
+    // Run the session through Claude Code in the target repo.
+    agent: "claude",
+    cwd: "/workspace/my-app",
+  },
+  // The first prompt is written to the coder entity's inbox and starts the run.
+  initialMessage: {
+    text: "Build a landing page with pricing cards and run the tests.",
+  },
+  tags: {
+    project: "my-app",
+  },
+})
+
+// The coder now has a stable URL that can be observed or prompted again.
+console.log(coder.entityUrl) // "/coder/landing-page-build"
+```
 
 ### Agent swarms
 
 <!-- Demo 4: Multi-agent coordination emerging from the data layer, no centralized orchestrator. -->
 
-Point a swarm at a codebase. Ten agents fan out — each takes a subsystem, reads the code, writes documentation. They converge through the shared sync layer: each writes its findings to a shared stream, the others read and cross-reference, a synthesis agent subscribes to all of them and produces a coherent wiki. No centralized orchestrator, no hand-wired message routing — just agents subscribing to what they need and producing what others consume.
+[Deep Survey](/agents/demos/deep-survey) is a demo that shows this swarm pattern in practice. Give it a topic and an orchestrator maps the terrain, breaks the target into subtopics, and spawns explorer agents to investigate them in parallel. Each explorer writes wiki entries and cross-references into shared state, while the live dashboard renders the growing knowledge graph as it happens.
 
-Every other multi-agent framework needs a coordinator because state lives in each agent's process. When state lives in a shared stream, the stream is the coordinator.
+Once the survey completes, you can ask follow-up questions against the accumulated wiki. The coordination comes from the data layer: agents write what they discover, subscribe to what others produce, and converge through shared state rather than hand-wired message routing.
 
-<!-- ASSET: Agent swarm demo — recording or screenshot -->
-<!-- ASSET: Code snippet — swarm setup, minimal orchestration code -->
+<figure>
+  <div class="embed-container" style="padding-bottom: 75.208914%">
+    <YoutubeEmbed video-id="6zkRDOQQ7w4" title="Electric Agents Deep Survey demo" />
+  </div>
+</figure>
 
-### Supervisors
+This is the core pattern: create shared state, spawn one worker per topic, and let the workers write back into the same durable store.
 
-<!-- Demo 2: Governance as message passing between addressable actors — no orchestration framework. -->
+```ts
+registry.define("orchestrator", {
+  async handler(ctx) {
+    const swarmId = ctx.entityUrl.split("/").pop()!
+    const sharedStateId = `wiki-swarm-${swarmId}`
 
-Spawn an agent with judgment criteria. The supervisor subscribes to the main agent's stream, evaluates each output against the criteria, and sends pass/fail messages back. Governance as message passing between addressable actors — no orchestration framework, just agents talking to agents through durable streams.
+    if (ctx.firstWake) {
+      // Create one shared state stream for the whole swarm.
+      ctx.mkdb(sharedStateId, swarmSharedSchema)
+    }
 
-<!-- ASSET: Supervisor demo — recording or screenshot -->
-<!-- ASSET: Code snippet — supervisor setup, show how little code -->
+    // The orchestrator and all workers read/write the same wiki DB.
+    const shared = await ctx.observe(db(sharedStateId, swarmSharedSchema))
+
+    for (const topic of topics) {
+      // Fan out one worker per topic. The parent wakes as each worker finishes.
+      await ctx.spawn(
+        "survey_worker",
+        `${swarmId}-${slugify(topic)}`,
+        { topic, sharedStateId },
+        {
+          initialMessage: "Explore this topic and write a wiki entry.",
+          wake: "runFinished",
+          tags: { swarm_id: swarmId, topic },
+        }
+      )
+    }
+
+    // Synthesis is just a projection over the accumulated shared state.
+    await synthesizeFrom(shared.wiki.toArray)
+  },
+})
+```
 
 ### Forking
 
 <!-- Demo 3: Version control for agent execution. Concrete, distinctive. Something linear session models don't foreground. -->
 
-The agent goes off the rails at step 7. Fork the stream at step 6. The fork inherits the full prefix — all prior context preserved. Continue from the fork with a different approach. Version control for agent execution, falling out of the log-centric architecture naturally.
+Because agents are backed by Durable Streams, they inherit [Durable Streams' native support for forking](/blog/2026/04/15/fork-branching-for-durable-streams). You can branch an agent from a specific point in its history and continue from there as a new, independent session.
 
-<!-- ASSET: Fork demo — recording or screenshot showing the branch point -->
-<!-- ASSET: Code snippet — fork operation -->
+For example, in the Electric Agents web UI you can start one session, ask the agent to investigate something, and then fork it as shown in the demo below. The original session spawns a subagent to search and gather context; the fork branches from that known-good point so you can ask different follow-up questions without disturbing the original.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 75.630252%">
+    <YoutubeEmbed video-id="Wo8Ub_CLTqI" title="Electric Agents forking demo" />
+  </div>
+</figure>
+
+Create the fork with a single HTTP operation:
+
+```http
+PUT /v1/stream/agents/research-session-1-follow-up
+Content-Type: application/json
+
+Stream-Forked-From: /v1/stream/agents/research-session-1
+Stream-Fork-Offset: 002f_0cf0
+```
+
+Forking an entity carries its children with it, so the new session starts with the same coordinated agent tree and then diverges independently.
 
 ## Managed agents
 
