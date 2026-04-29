@@ -159,17 +159,19 @@ export function entities(query: EntitiesQuery): EntitiesObservationSource {
   }
 }
 
-export interface DbObservationSource extends ObservationSource {
+export interface DbObservationSource<
+  TSchema extends SharedStateSchemaMap = SharedStateSchemaMap,
+> extends ObservationSource {
   readonly sourceType: `db`
   readonly dbId: string
-  readonly schema: SharedStateSchemaMap
+  readonly schema: TSchema
   readonly streamUrl: string
 }
 
-export function db(
+export function db<const TSchema extends SharedStateSchemaMap>(
   id: string,
-  dbSchema: SharedStateSchemaMap
-): DbObservationSource {
+  dbSchema: TSchema
+): DbObservationSource<TSchema> {
   const streamPath = getSharedStateStreamPath(id)
   return {
     sourceType: `db`,

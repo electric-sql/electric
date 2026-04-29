@@ -5,7 +5,6 @@ import {
   createFetchUrlTool,
   createSharedWikiTools,
   createWebSearchTool,
-  type SwarmSharedState,
 } from './shared-tools.js'
 import { surveyWorkerModelConfig } from './model-config.js'
 import type { EntityRegistry } from '@electric-ax/agents-runtime'
@@ -23,10 +22,10 @@ export function registerSurveyWorker(registry: EntityRegistry): void {
     creationSchema: surveyWorkerArgsSchema,
 
     async handler(ctx) {
-      const args = surveyWorkerArgsSchema.parse(ctx.args)
-      const shared = (await ctx.observe(
+      const args = ctx.args
+      const shared = await ctx.observe(
         db(args.sharedStateId, swarmSharedSchema)
-      )) as unknown as SwarmSharedState
+      )
 
       ctx.useAgent({
         systemPrompt: args.systemPrompt,

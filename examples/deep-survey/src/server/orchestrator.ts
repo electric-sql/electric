@@ -319,9 +319,7 @@ export function registerOrchestrator(registry: EntityRegistry) {
         ctx.mkdb(sharedStateId, swarmSharedSchema)
       }
 
-      const shared = (await ctx.observe(
-        db(sharedStateId, swarmSharedSchema)
-      )) as unknown as SwarmSharedState
+      const shared = await ctx.observe(db(sharedStateId, swarmSharedSchema))
 
       ctx.useAgent({
         systemPrompt: ORCHESTRATOR_SYSTEM_PROMPT,

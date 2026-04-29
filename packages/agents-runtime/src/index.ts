@@ -27,7 +27,15 @@ export type {
   CodingSessionMetaRow,
   CodingSessionStatus,
   EntityDefinition,
+  EntityActionsFactory,
+  EntityActionMap,
+  EntityArgs,
+  EntitySchema,
+  EntityStateDefinition,
+  EntityStreamDB,
+  EntityStreamDBWithActions,
   EntityTypeEntry,
+  AnyEntityDefinition,
   SharedStateHandleInfo,
   SpawnHandleInfo,
   UseCodingAgentOptions,
@@ -49,8 +57,17 @@ export type {
   ContextInserted,
   ContextRemoved,
   ContextEntryAttrs,
+  CollectionInsert,
+  CollectionKey,
+  CollectionRow,
+  EntityTransaction,
+  GeneratedStateActions,
+  HandlerActions,
   ManifestContextEntry as ManifestContextRow,
+  SchemaInput,
+  SchemaOutput,
   SourceConfig,
+  StateProxyFrom,
   TimelineItem,
   TimelineProjectionOpts,
   TimestampedMessage,
@@ -87,10 +104,6 @@ export type {
 } from './entity-schema'
 
 export { createEntityStreamDB } from './entity-stream-db'
-export type {
-  EntityStreamDB,
-  EntityStreamDBWithActions,
-} from './entity-stream-db'
 export {
   assertTags,
   buildTagsIndex,

@@ -1,15 +1,29 @@
-import type { EntityDefinition, EntityTypeEntry } from './types'
+import type {
+  AnyEntityDefinition,
+  EntityActionMap,
+  EntityDefinition,
+  EntitySchema,
+  EntityStateDefinition,
+  EntityTypeEntry,
+} from './types'
 
 export class EntityRegistry {
   private entries = new Map<string, EntityTypeEntry>()
 
-  define(name: string, definition: EntityDefinition): void {
+  define<
+    const TCreationSchema extends EntitySchema | undefined = undefined,
+    const TState extends EntityStateDefinition | undefined = undefined,
+    TActions extends EntityActionMap = {},
+  >(
+    name: string,
+    definition: EntityDefinition<TCreationSchema, TState, TActions>
+  ): void {
     if (this.entries.has(name)) {
       throw new Error(`Entity type "${name}" is already registered`)
     }
     this.entries.set(name, {
       name,
-      definition,
+      definition: definition as AnyEntityDefinition,
     })
   }
 
@@ -38,7 +52,14 @@ export function createEntityRegistry(): EntityRegistry {
  * Registers the entity definition (handler, state, actions)
  * with the runtime. On each run the runtime calls `handler(ctx, wake)`.
  */
-export function defineEntity(name: string, definition: EntityDefinition): void {
+export function defineEntity<
+  const TCreationSchema extends EntitySchema | undefined = undefined,
+  const TState extends EntityStateDefinition | undefined = undefined,
+  TActions extends EntityActionMap = {},
+>(
+  name: string,
+  definition: EntityDefinition<TCreationSchema, TState, TActions>
+): void {
   defaultRegistry.define(name, definition)
 }
 
@@ -62,6 +83,6 @@ export function clearRegistry(): void {
  */
 export function resolveDefine(
   registry?: EntityRegistry
-): (name: string, definition: EntityDefinition) => void {
+): (name: string, definition: AnyEntityDefinition) => void {
   return registry ? registry.define.bind(registry) : defineEntity
 }

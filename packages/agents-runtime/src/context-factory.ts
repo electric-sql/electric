@@ -534,11 +534,11 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       useContextRegistrations: () => useContextRegistrations,
     },
     agent,
-    observe(source: ObservationSource, opts?: { wake?: Wake }) {
+    observe: ((source: ObservationSource, opts?: { wake?: Wake }) => {
       return config.doObserve(source, opts?.wake) as Promise<
         ObservationHandle & EntityHandle & SharedStateHandle
       >
-    },
+    }) as DebugHandlerContext<TState>[`observe`],
     spawn(
       type: string,
       id: string,
