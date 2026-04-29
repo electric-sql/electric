@@ -10,7 +10,7 @@ import { chatroomSchema } from './schema.js'
 
 export type ChatroomState = SharedStateHandle<typeof chatroomSchema>
 
-export const DEFAULT_MODEL = `claude-sonnet-4-5-20250929`
+export const DEFAULT_MODEL = `claude-sonnet-4-6`
 
 const chatAgentArgs = z.object({ chatroomId: z.string().min(1) })
 
