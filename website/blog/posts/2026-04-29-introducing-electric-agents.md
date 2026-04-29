@@ -104,7 +104,7 @@ Agents running locally and/or bolted onto apps are early wave transitional state
 
 The end state is every organization running millions of persistent, addressable, online agents reacting to their environment. Agents will be the basis of all software. With apps and systems built around them, not the other way around.
 
-That's a different kind of infrastructure problem. It means envisaging a very different kind of substrate for agents. One that's addresible, reactive and multi-agent by default.
+That's a different kind of infrastructure problem. It means envisaging a very different kind of substrate for agents. One that's addresible, reactive and multi-agent.
 
 ### Multi-player by default
 
@@ -343,16 +343,12 @@ Open source. Your model, your infrastructure. [Durable Streams](/streams/) under
 
 ## Next steps
 
-You can use [Electric Agents](/agents/) today. See [how the system works](/agents/), read the [documentation](/docs/agents/) and jump in to follow the [Quickstart](/docs/agents/quickstart) to wire in your first agent today:
+Agents are not compute. Agents are data. Multi-agent is a sync problem. [Electric Agents](/agents/) is the first agent platform built on sync.
+
+See [how the system works](/agents/), read the [documentation](/docs/agents/) and jump in to follow the [Quickstart](/docs/agents/quickstart) to wire in your first agent today:
 
 ```bash
 npx electric-ax agents quickstart
 ```
 
 And follow the instructions! If you need support or have any questions, join our [community Discord](https://discord.electric-sql.com) and say hello there.
-
-***
-
-Agents are long-lived, logical entities that live in the data layer. Collaborative, multi-agent systems are a distributed data problem. The substrate for that is a sync engine.
-
-[Electric Agents](/agents/) is the first agent platform built on sync. Use it to build scalable, multi-agent systems, enable rich multi-user, multi-agent collaboration and integrate agents into your online systems.
