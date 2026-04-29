@@ -57,15 +57,15 @@
   --vp-c-brand-soft: rgba(26, 26, 46, 0.1);
 
   /* Buttons */
-  --vp-button-brand-bg: #1a1a2e;
-  --vp-button-brand-hover-bg: #3a3a56;
-  --vp-button-brand-active-bg: #0f0f1e;
+  --vp-button-brand-bg: #56e8ea;
+  --vp-button-brand-hover-bg: #3cd5d8;
+  --vp-button-brand-active-bg: #27bfc2;
   --vp-button-brand-border: transparent;
   --vp-button-brand-hover-border: transparent;
   --vp-button-brand-active-border: transparent;
-  --vp-button-brand-text: #ffffff;
-  --vp-button-brand-hover-text: #ffffff;
-  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-text: #1a1a1a;
+  --vp-button-brand-hover-text: #1a1a1a;
+  --vp-button-brand-active-text: #1a1a1a;
 
   color-scheme: light;
 
@@ -101,6 +101,10 @@
   --ea-text-3: var(--vp-c-text-3);
   --ea-divider: var(--vp-c-divider);
   --ea-brand: #1a1a2e;
+  --ea-accent: #56e8ea;
+  --ea-accent-hover: #3cd5d8;
+  --ea-accent-active: #27bfc2;
+  --ea-accent-text: #0b6f78;
 
   --ea-event-message: #3b82f6;
   --ea-event-run: #8888a0;
@@ -180,6 +184,10 @@
   --ea-text-3: var(--vp-c-text-3);
   --ea-divider: var(--vp-c-divider);
   --ea-brand: var(--vp-c-brand-1);
+  --ea-accent: var(--vp-c-brand-1);
+  --ea-accent-hover: var(--vp-c-brand-3);
+  --ea-accent-active: #3cd5d8;
+  --ea-accent-text: var(--vp-c-brand-1);
 
   --ea-event-message: #60a5fa;
   --ea-event-run: #6b7280;
@@ -218,8 +226,36 @@
 
 /* ── Radix surface mapping ─────────────────────────────────────────── */
 .radix-themes {
-  --color-background: var(--vp-c-bg);
-  --color-panel-solid: var(--vp-c-bg-elv);
+  --color-background: var(--ea-bg);
+  --color-panel-solid: var(--ea-surface);
+  --accent-1: color-mix(in oklab, var(--ea-accent) 8%, var(--ea-bg));
+  --accent-2: color-mix(in oklab, var(--ea-accent) 13%, var(--ea-bg));
+  --accent-3: color-mix(in oklab, var(--ea-accent) 20%, var(--ea-bg));
+  --accent-4: color-mix(in oklab, var(--ea-accent) 28%, var(--ea-bg));
+  --accent-5: color-mix(in oklab, var(--ea-accent) 38%, var(--ea-bg));
+  --accent-6: color-mix(in oklab, var(--ea-accent) 50%, var(--ea-bg));
+  --accent-7: color-mix(in oklab, var(--ea-accent) 64%, var(--ea-bg));
+  --accent-8: color-mix(in oklab, var(--ea-accent) 78%, var(--ea-bg));
+  --accent-9: var(--ea-accent);
+  --accent-10: var(--ea-accent-hover);
+  --accent-11: var(--ea-accent-text);
+  --accent-12: var(--ea-brand);
+  --accent-a1: color-mix(in oklab, var(--ea-accent) 8%, transparent);
+  --accent-a2: color-mix(in oklab, var(--ea-accent) 13%, transparent);
+  --accent-a3: color-mix(in oklab, var(--ea-accent) 20%, transparent);
+  --accent-a4: color-mix(in oklab, var(--ea-accent) 28%, transparent);
+  --accent-a5: color-mix(in oklab, var(--ea-accent) 38%, transparent);
+  --accent-a6: color-mix(in oklab, var(--ea-accent) 50%, transparent);
+  --accent-a7: color-mix(in oklab, var(--ea-accent) 64%, transparent);
+  --accent-a8: color-mix(in oklab, var(--ea-accent) 78%, transparent);
+  --accent-a9: color-mix(in oklab, var(--ea-accent) 88%, transparent);
+  --accent-a10: color-mix(in oklab, var(--ea-accent-hover) 88%, transparent);
+  --accent-a11: var(--ea-accent-text);
+  --accent-a12: var(--ea-brand);
+  --accent-contrast: #1a1a1a;
+  --accent-surface: color-mix(in oklab, var(--ea-accent) 20%, transparent);
+  --accent-indicator: var(--ea-accent);
+  --accent-track: var(--ea-accent);
   --default-font-family: var(--body-font);
 }
 
@@ -587,6 +623,11 @@ body {
 .agent-ui-markdown [data-streamdown='code-block-body'] code span[style] {
   color: var(--sdm-c, inherit);
   background-color: var(--sdm-tbg, transparent);
+}
+
+.dark .agent-ui-markdown [data-streamdown='code-block-body'] code span[style] {
+  color: var(--shiki-dark, var(--sdm-c, inherit));
+  background-color: var(--shiki-dark-bg, var(--sdm-tbg, transparent));
 }
 
 /* --- Streamdown table structure --- */

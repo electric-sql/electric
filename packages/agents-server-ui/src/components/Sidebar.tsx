@@ -222,7 +222,7 @@ export function Sidebar({
                 cursor: `pointer`,
                 fontSize: `var(--font-size-2)`,
                 fontWeight: 500,
-                color: `white`,
+                color: `var(--accent-contrast)`,
                 background: `var(--accent-9)`,
                 borderRadius: `var(--radius-2)`,
                 opacity: !spawnEntity || entityTypes.length === 0 ? 0.4 : 1,
