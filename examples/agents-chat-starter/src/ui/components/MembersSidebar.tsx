@@ -14,7 +14,7 @@ export function MembersSidebar({
   onSpawn: (type: string) => void
   connected: boolean
 }) {
-  const CHAT_AGENT_TYPES = [`optimist`, `critic`]
+  const CHAT_AGENT_TYPES = [`socrates`, `camus`, `simone`]
   const chatAgentTypes = entityTypes.filter((et) =>
     CHAT_AGENT_TYPES.includes(et.name)
   )

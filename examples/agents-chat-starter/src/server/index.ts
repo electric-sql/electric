@@ -172,8 +172,9 @@ const server = http.createServer(async (req, res) => {
       const room: Room = { id, name, agents: [], createdAt: Date.now() }
       rooms.set(id, room)
 
-      await spawnAgent(room, `optimist`)
-      await spawnAgent(room, `critic`)
+      await spawnAgent(room, `socrates`)
+      await spawnAgent(room, `camus`)
+      await spawnAgent(room, `simone`)
 
       writeJson(res, 200, {
         id: room.id,
