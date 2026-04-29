@@ -43,11 +43,9 @@ published: true
   }
 </style>
 
-Agents are long-lived, logical entities that live in the data layer. Collaborative, multi-agent systems are a distributed data problem. The substrate for that is a sync engine.
+Agents are not compute. Agents are data. Multi-agent is a sync problem. Today we're introducing [Electric Agents](/agents/), the first agent platform built on sync.
 
-Today we're introducing [Electric Agents](/agents/): the first agent platform built on sync.
-
-Use it to build scalable, multi-agent systems, enable rich multi-user, multi-agent collaboration and integrate agents into your online systems.
+Use it to build scalable, long-lived multi-agent systems, enable <span class="no-wrap">multi-user</span>, <span class="no-wrap">multi-agent</span> collaboration and integrate agents into your online systems.
 
 > [!Warning] ✨&nbsp; Get started with Electric Agents
 > See the [Overview](/agents/), [Docs](/docs/agents/) and [Quickstart](/docs/agents/quickstart) guide.
