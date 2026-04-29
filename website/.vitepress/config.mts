@@ -655,7 +655,7 @@ export default defineConfig({
       'script',
       {
         defer: 'defer',
-        'data-domain': 'electric-sql.com',
+        'data-domain': 'electric-sql.com,electric.ax',
         src: 'https://plausible.io/js/script.js',
       },
     ],
