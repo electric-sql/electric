@@ -29,8 +29,8 @@ homepage: false
   import { data as demosData } from '../../data/demos.data.ts'
   const { demos } = demosData
 
-  const notesDemo = demos.find(x => x.link === '/demos/notes')
-  const pixelArtDemo = demos.find(x => x.link === '/demos/pixel-art')
+  const notesDemo = demos.find(x => x.link === '/sync/demos/notes')
+  const pixelArtDemo = demos.find(x => x.link === '/sync/demos/pixel-art')
 
   onMounted(async () => {
     if (typeof window !== 'undefined' && document.querySelector) {
@@ -52,15 +52,15 @@ homepage: false
 
 With version [`1.0.0-beta.1`](https://github.com/electric-sql/electric/releases) the Electric sync engine is now in BETA!
 
-If you haven't checked out Electric recently, it's a great time to [take another look](/docs/intro).
+If you haven't checked out Electric recently, it's a great time to [take another look](/docs/sync/).
 
 ## What is Electric?
 
-[Electric](/primitives/postgres-sync) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
+[Electric](/sync/) is a Postgres sync engine. We do real-time [partial replication](/docs/sync/guides/shapes) of Postgres data into local apps and services.
 
-Use Electric to swap out data _fetching_ for [data _sync_](/sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
+Use Electric to swap out data _fetching_ for [data _sync_](/sync/). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
 
-We also develop [PGlite](/primitives/pglite), a lightweight WASM Postgres you can run in the browser.
+We also develop [PGlite](/sync/pglite), a lightweight WASM Postgres you can run in the browser.
 
 ## The path to BETA
 
@@ -89,15 +89,15 @@ Electric and PGlite are being used in production by companies including [Google]
 
 So many real-time sync systems demo well but break under real load.
 
-Electric has been [engineered from the ground up](/docs/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres.
+Electric has been [engineered from the ground up](/docs/sync/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres.
 
-The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1 million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
+The chart below is from our [cloud benchmarks](/docs/sync/reference/benchmarks#cloud), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1 million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
 
 <figure>
   <ScalabilityChart />
 </figure>
 
-You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100k issues and their comments through Electric into PGlite (~150mb of data). Once loaded, it's fully interactive and feels instant to use:
+You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/sync/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100k issues and their comments through Electric into PGlite (~150mb of data). Once loaded, it's fully interactive and feels instant to use:
 
 <figure>
   <p>
@@ -116,15 +116,15 @@ You can also see how large-scale apps built with Electric feel to use with our u
 
 We've iterated a lot on our APIs to make them as simple and powerful as possible. There should be no breaking changes in minor or patch releases moving forward.
 
-We've updated our [Documentation](/docs/intro), with a new [Quickstart](/docs/quickstart) and guides for topics like:
+We've updated our [Documentation](/docs/sync/), with a new [Quickstart](/docs/sync/quickstart) and guides for topics like:
 
-- how to do [auth](/docs/guides/auth)
-- how to handle [local writes](/docs/guides/writes)
-- how to do [partial replication with Shapes](/docs/guides/shapes)
-- how to [deploy Electric](/docs/guides/deployment)
-- how to [write your own client](/docs/guides/client-development) for any language or environment
+- how to do [auth](/docs/sync/guides/auth)
+- how to handle [local writes](/docs/sync/guides/writes)
+- how to do [partial replication with Shapes](/docs/sync/guides/shapes)
+- how to [deploy Electric](/docs/sync/guides/deployment)
+- how to [write your own client](/docs/sync/guides/client-development) for any language or environment
 
-We have [client libraries](/docs/api/clients/typescript), [integration docs](/docs/integrations/react), [demo apps](/demos) and [technical examples](/demos#technical-examples) showing how to use Electric with different patterns and frameworks:
+We have [client libraries](/docs/sync/api/clients/typescript), [integration docs](/docs/sync/integrations/react), [demo apps](/sync/demos/) and [technical examples](/sync/demos/#technical-examples) showing how to use Electric with different patterns and frameworks:
 
 #### Interactive demos
 
@@ -158,7 +158,7 @@ const MyComponent = () => {
 }
 ```
 
-Swap it out for code like this (replacing the `fetch` in the `useEffect` with [`useShape`](/docs/integrations/react)):
+Swap it out for code like this (replacing the `fetch` in the `useEffect` with [`useShape`](/docs/sync/integrations/react)):
 
 ```tsx
 import { useShape } from '@electric-sql/react'
@@ -175,13 +175,13 @@ const MyComponent = () => {
 }
 ```
 
-This works with _any_ Postgres [data model and host](/docs/guides/deployment), any data type, extension and Postgres feature. Including [pgvector](https://github.com/pgvector/pgvector), [PostGIS](https://postgis.net), sequential IDs, unique constraints, etc. You don't have to change your data model or your migrations to use Electric.
+This works with _any_ Postgres [data model and host](/docs/sync/guides/deployment), any data type, extension and Postgres feature. Including [pgvector](https://github.com/pgvector/pgvector), [PostGIS](https://postgis.net), sequential IDs, unique constraints, etc. You don't have to change your data model or your migrations to use Electric.
 
 ### With your existing API
 
-Because Electric syncs [over HTTP](/docs/api/http), you can use it together [with your existing API](/blog/2024/11/21/local-first-with-your-existing-api).
+Because Electric syncs [over HTTP](/docs/sync/api/http), you can use it together [with your existing API](/blog/2024/11/21/local-first-with-your-existing-api).
 
-This allows you to handle concerns like [auth](/docs/guides/auth) and [writes](/docs/guides/writes) with your existing code and web service integrations. You don't need to codify your auth logic into database rules. You don't need to replace your API endpoints and middleware stack.
+This allows you to handle concerns like [auth](/docs/sync/guides/auth) and [writes](/docs/sync/guides/writes) with your existing code and web service integrations. You don't need to codify your auth logic into database rules. You don't need to replace your API endpoints and middleware stack.
 
 ## Take another look
 
@@ -190,14 +190,14 @@ With this BETA release, Electric is stable and ready for prime time use. If you 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
-        href="/docs/quickstart"
+        href="/docs/sync/quickstart"
         text="Quickstart"
         theme="brand"
     />
   </div>
   <div class="action">
     <VPButton
-        href="/docs/intro"
+        href="/docs/sync/"
         text="Documentation"
         theme="alt"
     />
@@ -206,7 +206,7 @@ With this BETA release, Electric is stable and ready for prime time use. If you 
 
 ### Signup for early access to Electric Cloud
 
-We're also building [Electric Cloud](/cloud), which provides managed Electric hosting (for those that don't want to [host Electric themselves](/docs/guides/deployment)).
+We're also building [Electric Cloud](/cloud/), which provides managed Electric hosting (for those that don't want to [host Electric themselves](/docs/sync/guides/deployment)).
 
 If you're interested in using Electric Cloud, you can sign up for early access here:
 

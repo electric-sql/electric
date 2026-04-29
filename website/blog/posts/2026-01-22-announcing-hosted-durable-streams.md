@@ -6,7 +6,7 @@ excerpt: >-
   Hosted durable streams are live on Electric Cloud. You can now sync and stream AI sessions and low-latency real-time data alongside structured database changes.
 authors: [kyle]
 image: /img/blog/announcing-hosted-durable-streams/hero.png
-tags: [durable-streams, cloud, agentic, AI]
+tags: [agents, durable-streams, cloud, agentic, AI]
 outline: [2, 3]
 post: true
 ---
@@ -25,7 +25,7 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
 We spent 3 years [building a Postgres-native sync engine](/blog/2025/03/17/electricsql-1.0-released). Along the way, we realized the most important thing we built wasn't Postgres sync. It was the primitive underneath.
 
-We [released](/blog/2025/12/09/announcing-durable-streams) this primitive as [Durable&nbsp;Streams](/primitives/durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable&nbsp;Streams on [Electric Cloud](/cloud).
+We [released](/blog/2025/12/09/announcing-durable-streams) this primitive as [Durable&nbsp;Streams](/streams/) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable&nbsp;Streams on [Electric Cloud](/cloud/).
 
 ## A new coordination model
 
@@ -35,7 +35,7 @@ Today infrastructure is the bottleneck. However, it's not just infrastructure, i
 
 [Request/response assumes two parties taking turns](/blog/2026/01/12/durable-sessions-for-collaborative-ai#evolving-the-interaction-paradigm). Agentic apps have multiple agents and multiple users all acting at once. That requires a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
 
-So it turns out we'd built exactly the right primitive for this moment: [Durable&nbsp;Streams](/primitives/durable-streams). Persistent, resumable event streams over HTTP.
+So it turns out we'd built exactly the right primitive for this moment: [Durable&nbsp;Streams](/streams/). Persistent, resumable event streams over HTTP.
 
 ## The missing primitive
 
@@ -48,14 +48,14 @@ This is the coordination model that multi-agent and multi-user systems need. A s
 Here's a demo—a multiplayer AI chat where multiple users and agents share a session with full history replay and seamless reconnection:
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="81KXwxld7dw" />
+  <YoutubeEmbed video-id="81KXwxld7dw" title="TanStack AI - Durable Sessions demo" />
 </div>
 
 With 0.2.0, the protocol is mature—we're ready for more people to build with it. For the full technical details, see the [0.1.0 announcement](/blog/2025/12/09/announcing-durable-streams).
 
 ## What's shipping
 
-Hosted durable streams is now live on [Electric Cloud](/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/primitives/postgres-sync), so you can combine real-time streams with synced relational data in the same app.
+Hosted durable streams is now live on [Electric Cloud](/cloud/), our managed sync platform. Electric Cloud also hosts [Postgres sync](/sync/), so you can combine real-time streams with synced relational data in the same app.
 
 - **Reads don't hit origin.** Electric Cloud's Sync CDN serves all reads. We've tested to 1M concurrent connections per stream.
 - **Fast writes.** 240K writes/second for small messages, with 15-25 MB/sec sustained throughput.
@@ -65,7 +65,7 @@ Hosted durable streams is now live on [Electric Cloud](/cloud), our managed sync
 
 ## Get started
 
-Sign up for [Electric Cloud](/cloud) and create a service. Then create your first stream:
+Sign up for [Electric Cloud](/cloud/) and create a service. Then create your first stream:
 
 ```bash
 curl -X PUT \
@@ -77,7 +77,7 @@ curl -X PUT \
 Write to it, read from it, tail for live updates—all plain HTTP.
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="y81PbquFq9I" />
+  <YoutubeEmbed video-id="y81PbquFq9I" title="Hosted Durable Streams demo" />
 </div>
 
 ### Coming soon
@@ -92,4 +92,4 @@ We're early. Docs are sparse, guides are coming, and you'll be figuring some thi
 
 What we're still learning is ergonomics. What does it feel like to build with this? What do you wish it did? We're all learning together how to build sophisticated, malleable, agentic applications and we'd love your feedback and contributions to building the infra we all need.
 
-You can [get started with Cloud here](/cloud) and you can [join our community Discord here](https://discord.electric-sql.com).
+You can [get started with Cloud here](/cloud/) and you can [join our community Discord here](https://discord.electric-sql.com).

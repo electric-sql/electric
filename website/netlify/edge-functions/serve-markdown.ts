@@ -1,4 +1,4 @@
-import type { Context } from 'https://edge.netlify.com'
+import type { Context } from '@netlify/edge-functions'
 
 import { isSocialMediaBot } from '../../src/lib/social-bot-detection.ts'
 
@@ -50,6 +50,29 @@ function transformBlogPostPath(pathname: string): string | null {
   return `/blog/posts/${year}-${month}-${day}-${cleanSlug}.md`
 }
 
+function markdownPathCandidates(pathname: string): string[] {
+  if (!pathname.endsWith(`.md`) || pathname.endsWith(`/index.md`)) {
+    return [pathname]
+  }
+
+  return [pathname, pathname.replace(/\.md$/, `/index.md`)]
+}
+
+async function fetchMarkdownAsset(
+  origin: string,
+  pathname: string
+): Promise<Response | null> {
+  for (const candidate of markdownPathCandidates(pathname)) {
+    const mdResponse = await fetch(new URL(candidate, origin))
+
+    if (mdResponse.ok) {
+      return mdResponse
+    }
+  }
+
+  return null
+}
+
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url)
   const acceptHeader = request.headers.get(`accept`) || ``
@@ -87,10 +110,9 @@ export default async (request: Request, context: Context) => {
         isExplicitMdRequest || !acceptHeader.includes(`text/html`)
 
       if (shouldServeMd) {
-        const mdUrl = new URL(mdPath, url.origin)
-        const mdResponse = await fetch(mdUrl)
+        const mdResponse = await fetchMarkdownAsset(url.origin, mdPath)
 
-        if (mdResponse.ok) {
+        if (mdResponse) {
           return new Response(mdResponse.body, {
             headers: { 'Content-Type': `text/markdown; charset=utf-8` },
           })
@@ -121,10 +143,9 @@ export default async (request: Request, context: Context) => {
         : `${url.pathname}.md`
     }
 
-    const mdUrl = new URL(targetPath, url.origin)
-    const mdResponse = await fetch(mdUrl)
+    const mdResponse = await fetchMarkdownAsset(url.origin, targetPath)
 
-    if (mdResponse.ok) {
+    if (mdResponse) {
       return new Response(mdResponse.body, {
         headers: { 'Content-Type': `text/markdown; charset=utf-8` },
       })

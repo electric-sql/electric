@@ -59,10 +59,10 @@ const outlineSlots = Array.from(
         <!-- pulse overlay (LLM_THINKING) -->
         <path
           v-if="pulseActive"
-          class="pulse-slice"
+          class="pulse-slice brand-stroke"
           :d="SPAWN_PATH"
-          fill="rgba(117, 251, 253, 0.05)"
-          stroke="#75fbfd"
+          fill="none"
+          stroke="currentColor"
           stroke-width="1"
         />
 
@@ -73,8 +73,9 @@ const outlineSlots = Array.from(
             v-for="(rotation, i) in outlineSlots"
             :key="`outline-slot-${i}`"
             :d="SPAWN_PATH"
+            class="brand-stroke"
             fill="none"
-            stroke="#75fbfd"
+            stroke="currentColor"
             stroke-width="1"
             stroke-opacity="0.18"
             :style="{
@@ -90,8 +91,8 @@ const outlineSlots = Array.from(
             v-for="slice in slices"
             :key="`fill-${slice.id}`"
             :d="SPAWN_PATH"
-            class="slice"
-            fill="#75fbfd"
+            class="slice brand-fill"
+            fill="currentColor"
             :fill-opacity="slice.fillOpacity"
             stroke="none"
             :clip-path="`url(#clip-${slice.id})`"
@@ -117,6 +118,7 @@ const outlineSlots = Array.from(
   width: 100%;
   height: 100%;
   overflow: visible;
+  color: var(--durable-streams-color);
 }
 
 .slice {

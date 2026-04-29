@@ -26,27 +26,27 @@ Since we shipped our [first developer preview](https://www.npmjs.com/package/ele
 
 Projects like the [Riffle and Overtone collaboration](https://www.youtube.com/watch?v=zjl7CpG9h3w) and [Cambria](https://www.inkandswitch.com/cambria/) have dived deep into the challenges of reactivity, performance and schema evolution. App and framework builders both articulate the need for a sync layer that supports dynamic partial replication.
 
-Right now, [local-first systems](/docs/reference/alternatives) are also all greenfield. They don't integrate with your existing data model or backend systems. They expect you to start from scratch or build your own bridges. And they still bubble complexity up into the application domain.
+Right now, [local-first systems](/docs/sync/reference/alternatives) are also all greenfield. They don't integrate with your existing data model or backend systems. They expect you to start from scratch or build your own bridges. And they still bubble complexity up into the application domain.
 
 For local-first to go mainstream, it can't all be greenfield. There needs to be an adoption pathway for existing systems. You need to be able to drop local-first onto your existing data model, like you can do with [REST](https://postgrest.org) and [GraphQL](https://hasura.io).
 
-And this needs to actually work. Which means it syncs the right data and handles all the [concurrency stuff](/docs/reference/literature) without leaking complexity into your app.
+And this needs to actually work. Which means it syncs the right data and handles all the [concurrency stuff](/docs/sync/reference/literature) without leaking complexity into your app.
 
 ## Electric - Sync for modern apps
 
 So that's what we decided to build. A local-first sync layer that works with your existing data model and solves dynamic partial replication. That supports real world schema evolution and provides expressive, type-safe sync and data-access APIs.
 
-To be honest, we also really wanted to [build on our research](/docs/reference/literature) on [preserving invariants in an AP database system](/blog/2022/05/03/introducing-rich-crdts) to do real SQL with integrity in a local-first setting (see [example](https://legacy.electric-sql.com/docs/intro/offline#preserving-data-integrity)). Plus we wanted to build a system that's open source and designed for self-host, so it's easy to adopt without the lock-in you get from proprietary and hosted services.
+To be honest, we also really wanted to [build on our research](/docs/sync/reference/literature) on [preserving invariants in an AP database system](/blog/2022/05/03/introducing-rich-crdts) to do real SQL with integrity in a local-first setting (see [example](https://legacy.electric-sql.com/docs/sync//offline#preserving-data-integrity)). Plus we wanted to build a system that's open source and designed for self-host, so it's easy to adopt without the lock-in you get from proprietary and hosted services.
 
-We're still early stage but [the code is live and the system works](/docs/quickstart). You can use it today to build reactive, realtime, local-first apps. Using standard Postgres and SQLite.
+We're still early stage but [the code is live and the system works](/docs/sync/quickstart). You can use it today to build reactive, realtime, local-first apps. Using standard Postgres and SQLite.
 
 ### Reactive, realtime, local-first apps
 
-By sync layer, we mean [bi-directional active-active replication](https://legacy.electric-sql.com/docs/intro/active-active) with [transactional causal+ consistency](https://legacy.electric-sql.com/docs/reference/consistency) between Postgres in the cloud (usually!) and SQLite on the local-device.
+By sync layer, we mean [bi-directional active-active replication](https://legacy.electric-sql.com/docs/sync//active-active) with [transactional causal+ consistency](https://legacy.electric-sql.com/docs/reference/consistency) between Postgres in the cloud (usually!) and SQLite on the local-device.
 
 Apps read and write data directly from and to a local embedded SQLite database. Writes immediately trigger reactivity, so data is visible and components re-render instantly. Data then syncs in the background through Postgres, in realtime, between users and devices.
 
-As a result, apps built with Electric [feel instant to use](https://legacy.electric-sql.com/docs/intro/local-first), naturally support [realtime multi-user collaboration](https://legacy.electric-sql.com/docs/intro/multi-user) and default to [working offline](https://legacy.electric-sql.com/docs/intro/offline). Because it's a [conflict-free and rollback-free system](https://legacy.electric-sql.com/docs/reference/consistency), apps naturally also handle concurrency and overlapping writes.
+As a result, apps built with Electric [feel instant to use](https://legacy.electric-sql.com/docs/sync//local-first), naturally support [realtime multi-user collaboration](https://legacy.electric-sql.com/docs/sync//multi-user) and default to [working offline](https://legacy.electric-sql.com/docs/sync//offline). Because it's a [conflict-free and rollback-free system](https://legacy.electric-sql.com/docs/reference/consistency), apps naturally also handle concurrency and overlapping writes.
 
 ### Open source, self-host
 
@@ -100,7 +100,7 @@ One of the key design goals for ElectricSQL is to deliver real SQL support. We'r
 - all built-in Postgres data types, most common extension data types and an extension mechanism to support arbitrary data types
 - all relational invariants, including referential integrity, referential integrity across replication boundaries, unique constraints and check constraints
 
-In this we're building on [research we authored](/docs/reference/literature) and are [implementing as Rich-CRDTs](/blog/2022/05/03/introducing-rich-crdts).
+In this we're building on [research we authored](/docs/sync/reference/literature) and are [implementing as Rich-CRDTs](/blog/2022/05/03/introducing-rich-crdts).
 
 ### Type-safe, auto-generated client
 
@@ -227,10 +227,10 @@ We hope that gives you a sense of the [v0.6 release of ElectricSQL](https://lega
 
 You get apps that are:
 
-- [snappy, instant feeling](https://legacy.electric-sql.com/docs/intro/local-first) &mdash; with no lag or loading spinners
-- [naturally realtime](https://legacy.electric-sql.com/docs/intro/multi-user) &mdash; with native support for multi-user collaboration
-- [naturally offline-capable](https://legacy.electric-sql.com/docs/intro/offline) &mdash; with conflict-free concurrency and integrity guarantees
-- [naturally local-first](https://legacy.electric-sql.com/docs/intro/active-active) &mdash; with data ownership built in and cloud-sync optional
+- [snappy, instant feeling](https://legacy.electric-sql.com/docs/sync//local-first) &mdash; with no lag or loading spinners
+- [naturally realtime](https://legacy.electric-sql.com/docs/sync//multi-user) &mdash; with native support for multi-user collaboration
+- [naturally offline-capable](https://legacy.electric-sql.com/docs/sync//offline) &mdash; with conflict-free concurrency and integrity guarantees
+- [naturally local-first](https://legacy.electric-sql.com/docs/sync//active-active) &mdash; with data ownership built in and cloud-sync optional
 
 Using standard open-source technologies:
 

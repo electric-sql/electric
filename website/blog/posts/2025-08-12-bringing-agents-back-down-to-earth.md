@@ -6,7 +6,7 @@ excerpt: >-
   Agentic AI, beneath all the hype, is actually just normal software. You can build agentic systems with a database, standard web tooling and real-time sync.
 authors: [thruflo]
 image: /img/blog/bringing-agents-back-down-to-earth/header2.jpg
-tags: [db, tanstack-db, postgres-sync]
+tags: [agents, db, tanstack-db, postgres-sync]
 outline: [2, 3]
 post: true
 ---
@@ -59,11 +59,11 @@ There's a lot of hype around agentic system development. Concepts like agentic m
 But when you dig into it, these all collapse to processes and database state. In fact, you can build agentic systems with a database, standard web tooling and real-time sync.
 
 > [!Warning] Agentic demo app
-> See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn). It's an agentic system built on Postgres and real-time sync, designed to illustrate the concepts in this post.
+> See the [🔥 Burn demo app](/sync/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn). It's an agentic system built on Postgres and real-time sync, designed to illustrate the concepts in this post.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="4QpErQ9nVEc" />
+    <YoutubeEmbed video-id="4QpErQ9nVEc" title="Burn intro" />
   </div>
 </figure>
 
@@ -105,13 +105,13 @@ Ultimately, processes are a [standard software primitive](https://hexdocs.pm/eli
 
 ## Building an agentic system
 
-[🔥 Burn is an agentic demo app](/demos/burn) where the UI, the agentic control flow and the context engineering are all driven by database state and [real-time sync](/blog/2025/04/09/building-ai-apps-on-sync).
+[🔥 Burn is an agentic demo app](/sync/demos/burn) where the UI, the agentic control flow and the context engineering are all driven by database state and [real-time sync](/blog/2025/04/09/building-ai-apps-on-sync).
 
 It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create and join threads. Each thread has [a producer agent, called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex), who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/jerry.ex) and [Frankie Boyle](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex)) who monitor the facts and roast the users when they have enough to go on.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="2DhGHnk3Ebc" />
+    <YoutubeEmbed video-id="2DhGHnk3Ebc" title="Burn usage" />
   </div>
 </figure>
 
@@ -185,7 +185,7 @@ Phoenix also has a sync library, [Phoenix.Sync](https://hexdocs.pm/phoenix_sync)
 
 <figure>
   <div style="aspect-ratio: 16/9" class="embed-container">
-    <YoutubeEmbed video-id="rlzL5wnWa9o" />
+    <YoutubeEmbed video-id="rlzL5wnWa9o" title="Introducing Phoenix.Sync - James Arthur at ElixirConf 2025" />
   </div>
 </figure>
 
@@ -330,7 +330,7 @@ export const userCollection = createCollection(
 )
 ```
 
-Electric collections use the [Electric sync engine](/primitives/postgres-sync) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
+Electric collections use the [Electric sync engine](/sync/) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
 
 ```tsx
 // From `assets/src/components/ChatArea.tsx`
@@ -360,7 +360,7 @@ Live queries are reactive and built on a [super-fast, query engine](/blog/2025/0
 
 <figure>
   <div class="embed-container" style="padding-bottom: 62.5%">
-    <YoutubeEmbed video-id="_5__QSphP24" />
+    <YoutubeEmbed video-id="_5__QSphP24" title="Burn multi-user" />
   </div>
 </figure>
 
@@ -374,7 +374,7 @@ The memory collects facts in the database. The facts sync into the front-end, wh
 
 <figure>
   <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="qEs8ITbb1ZA" />
+    <YoutubeEmbed video-id="qEs8ITbb1ZA" title="Burn computer" />
   </div>
 </figure>
 
@@ -437,7 +437,7 @@ This retrieval and rendering process _is_ the context engineering behind the sys
 
 <figure>
   <div class="embed-container" style="padding-bottom: 56.25%">
-    <YoutubeEmbed video-id="sUpFc9qO0jA" />
+    <YoutubeEmbed video-id="sUpFc9qO0jA" title="Burn closing thoughts" />
   </div>
 </figure>
 
@@ -447,12 +447,12 @@ There's a lot of hype around agentic system development. Concepts like agentic m
 
 When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
 
-See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack&nbsp;DB](/primitives/tanstack-db).
+See the [🔥 Burn demo app](/sync/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack&nbsp;DB](/sync/tanstack-db).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta hidden-sm">
     <VPButton
-      href="/demos/burn"
+      href="/sync/demos/burn"
       text="Burn demo app"
       theme="brand"
     />
@@ -471,7 +471,7 @@ See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/e
   </div>
   <div class="action cloud-cta hidden-xs block-sm">
     <VPButton
-      href="/demos/burn"
+      href="/sync/demos/burn"
       text="Burn"
       theme="brand"
     />
@@ -490,7 +490,7 @@ See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/e
   </div>
   <div class="action cloud-cta block-xs">
     <VPButton
-      href="/demos/burn"
+      href="/sync/demos/burn"
       text="Burn"
       theme="brand"
     />

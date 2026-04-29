@@ -1,4 +1,9 @@
 <script setup>
+import { computed } from 'vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+
 const { comparisonPlans, config } = defineProps(['comparisonPlans', 'config'])
 
 function formatNumber(num) {
@@ -91,6 +96,8 @@ const serviceList =
     ? Object.entries(config.serviceCosts).map(([id, svc]) => ({ id, ...svc }))
     : []
 
+const isMarkdownExport = useMarkdownExport()
+
 function formatServiceAdditional(plan, service) {
   if (plan.type === 'enterprise') return 'Custom'
   const discount = (plan.discountPercent || 0) / 100
@@ -122,10 +129,44 @@ function computeScenarioCost(plan, scenario) {
     maximumFractionDigits: 2,
   }).format(total)
 }
+
+const comparisonMarkdown = computed(() => {
+  const sections = comparisonPlans.map((plan) => {
+    const lines = [
+      `### ${plan.name}`,
+      `- Monthly fee: ${formatFee(plan)}`,
+      `- Usage discount: ${formatDiscount(plan)}`,
+      `- Writes: ${formatWriteRate(plan)}`,
+      `- Retention: ${formatRetentionRate(plan)}`,
+      `- Billing behavior: ${getBillingBehavior(plan)}`,
+      `- Commitment: ${getCommitment(plan)}`,
+      `- Max databases: ${getLimitValue(plan, 'maxDatabases')}`,
+      `- Max users / workspace: ${getLimitValue(plan, 'maxUsersPerWorkspace')}`,
+      `- Postgres subqueries: ${getFeatureGate(plan, 'postgresSubqueries')}`,
+      `- Support: ${getSupport(plan)}`,
+      ...serviceList.map(
+        (service) =>
+          `- ${service.label} additional cost: ${formatServiceAdditional(plan, service)}`
+      ),
+      `[${plan.ctaText}](${plan.ctaHref})`,
+    ]
+
+    return lines.join('\n')
+  })
+
+  const footnote = serviceList.length
+    ? `\n\n* Additional cost for incremental writes emitted to the shape log from the Postgres replication stream. Initial sync and subsets are billed at the base write rate only.`
+    : ''
+
+  return sections.join('\n\n') + footnote
+})
 </script>
 
 <template>
-  <div class="comparison-table">
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ comparisonMarkdown }}</MarkdownContent>
+  </MdExportExplicit>
+  <div v-else class="comparison-table">
     <div class="table-header">
       <div class="metric-column header-spacer"></div>
       <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
@@ -356,8 +397,8 @@ function computeScenarioCost(plan, scenario) {
 <style scoped>
 .comparison-table {
   margin: 40px 0;
-  background: rgba(255, 255, 255, 0.015);
-  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  background: var(--ec-surface-1);
+  border: 1px solid var(--ec-border-1);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -367,7 +408,7 @@ function computeScenarioCost(plan, scenario) {
   font-size: 0.75rem;
   color: var(--vp-c-text-3);
   line-height: 1.5;
-  border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 @media (max-width: 959px) {
@@ -380,7 +421,7 @@ function computeScenarioCost(plan, scenario) {
 .table-header {
   display: grid;
   grid-template-columns: 2fr repeat(4, 1fr);
-  border-bottom: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--ec-border-1);
   background: var(--vp-sidebar-bg-color);
 }
 
@@ -390,7 +431,7 @@ function computeScenarioCost(plan, scenario) {
 
 .table-header .plan-column {
   padding: 16px 14px 14px;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
 }
 
 .header-spacer {
@@ -435,7 +476,7 @@ function computeScenarioCost(plan, scenario) {
 }
 
 .section {
-  border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 .first-section {
@@ -443,7 +484,7 @@ function computeScenarioCost(plan, scenario) {
 }
 
 .section:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.0375);
+  background: var(--ec-surface-2);
 }
 
 .section-header {
@@ -470,13 +511,13 @@ function computeScenarioCost(plan, scenario) {
 
 .section-header .plan-column {
   padding: 10px;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
 }
 
 .metric-row {
   display: grid;
   grid-template-columns: 2fr 4fr;
-  border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 .metric-row:first-of-type {
@@ -494,7 +535,7 @@ function computeScenarioCost(plan, scenario) {
 
 .metric-row .plan-column {
   padding: 0;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
@@ -503,7 +544,7 @@ function computeScenarioCost(plan, scenario) {
 .metric-row .plan-column .metric-value {
   padding: 10px;
   text-align: center;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
 }
 
 .metric-row .plan-column .metric-value:first-child {
@@ -525,7 +566,7 @@ function computeScenarioCost(plan, scenario) {
 .cta-row {
   display: grid;
   grid-template-columns: 2fr repeat(4, 1fr);
-  border-top: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 .cta-row .metric-column {
@@ -534,7 +575,7 @@ function computeScenarioCost(plan, scenario) {
 
 .cta-row .plan-column {
   padding: 18px 14px 22px;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -551,7 +592,7 @@ function computeScenarioCost(plan, scenario) {
     z-index: 100;
     background: var(--vp-sidebar-bg-color);
     padding: 0;
-    border-bottom: 1.5px solid rgb(45, 45, 49);
+    border-bottom: 1px solid var(--ec-border-1);
     border-radius: 12px 12px 0 0;
   }
 
@@ -646,7 +687,7 @@ function computeScenarioCost(plan, scenario) {
 
   .metric-row .metric-column {
     padding: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--ec-border-1);
   }
 
   .metric-row .metric-label {
@@ -667,7 +708,7 @@ function computeScenarioCost(plan, scenario) {
   .metric-row .plan-column .metric-value {
     text-align: center;
     padding: 10px 6px;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 1px solid var(--ec-border-1);
   }
 
   .metric-row .plan-column .metric-value:first-child {

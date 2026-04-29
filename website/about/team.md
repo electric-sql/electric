@@ -8,12 +8,11 @@ outline: deep
 
 <script setup>
 import TeamMembers from '../src/components/TeamMembers.vue'
+import AngelsGrid from '../src/components/AngelsGrid.vue'
+import VCsGrid from '../src/components/VCsGrid.vue'
 import { data } from '../data/team.data.ts'
-import { data as activeJobs } from '../data/activeJobs.data.ts'
 
 const { advisors, angels, team, vcs } = data
-
-const currentlyHiring = activeJobs.length > 0
 </script>
 
 <style scoped>
@@ -23,13 +22,6 @@ const currentlyHiring = activeJobs.length > 0
 </style>
 
 # Team
-
-<div v-if="currentlyHiring">
-
-> [!TIP] We're hiring!
-> See the [jobs page](/about/jobs/) for active roles.
-
-</div>
 
 ## Core team
 
@@ -43,8 +35,8 @@ const currentlyHiring = activeJobs.length > 0
 
 ### Angels
 
-<TeamMembers :items="angels" />
+<AngelsGrid :items="angels" />
 
 ### VCs
 
-<TeamMembers :items="vcs" />
+<VCsGrid :items="vcs" />

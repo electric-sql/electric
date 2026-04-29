@@ -327,18 +327,41 @@ function findLatestQuestion(
 }
 
 export function resolveDocsRoot(workingDirectory: string): string | null {
+  const envDocsRoot = process.env.HORTON_DOCS_ROOT
   const candidates = [
-    process.env.HORTON_DOCS_ROOT,
-    path.resolve(workingDirectory, `electric-agents-docs/docs`),
-    path.resolve(process.cwd(), `electric-agents-docs/docs`),
-    path.resolve(MODULE_DIR, `../docs`),
-    path.resolve(MODULE_DIR, `../../docs`),
-    path.resolve(MODULE_DIR, `../../../../../electric-agents-docs/docs`),
-  ].filter((value): value is string => typeof value === `string`)
+    envDocsRoot ? { path: envDocsRoot, requireIndex: false } : null,
+    {
+      path: path.resolve(workingDirectory, `electric-agents-docs/docs`),
+      requireIndex: false,
+    },
+    {
+      path: path.resolve(process.cwd(), `electric-agents-docs/docs`),
+      requireIndex: false,
+    },
+    { path: path.resolve(MODULE_DIR, `../docs`), requireIndex: true },
+    { path: path.resolve(MODULE_DIR, `../../docs`), requireIndex: true },
+    {
+      path: path.resolve(MODULE_DIR, `../../../../website/docs/agents`),
+      requireIndex: true,
+    },
+    {
+      path: path.resolve(
+        MODULE_DIR,
+        `../../../../../electric-agents-docs/docs`
+      ),
+      requireIndex: false,
+    },
+  ].filter((value): value is { path: string; requireIndex: boolean } =>
+    Boolean(value)
+  )
 
   for (const candidate of candidates) {
-    if (fsSync.existsSync(candidate)) {
-      return candidate
+    if (
+      fsSync.existsSync(candidate.path) &&
+      (!candidate.requireIndex ||
+        fsSync.existsSync(path.join(candidate.path, `index.md`)))
+    ) {
+      return candidate.path
     }
   }
 

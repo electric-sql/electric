@@ -15,7 +15,7 @@ const actions = [
     theme: 'brand',
   },
   {
-    href: '/docs/guides/shapes',
+    href: '/docs/sync/guides/shapes',
     text: 'Partial replication',
   },
 ]
@@ -23,18 +23,18 @@ const actions = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Electric solves sync </template>
+    <template #title> Electric solves&nbsp;sync </template>
     <template #tagline>
       Electric is a Postgres sync engine. It&nbsp;solves
       <span class="hidden-sm">
         the hard&nbsp;problems of
         <span class="hidden-lg"> sync for you, including</span></span
       >
-      <a href="/docs/guides/shapes"> partial&nbsp;replication</a>,
-      <a href="/docs/api/http#caching" class="no-wrap"> fan-out</a>,
+      <a href="/docs/sync/guides/shapes"> partial&nbsp;replication</a>,
+      <a href="/docs/sync/api/http#caching" class="no-wrap"> fan-out</a>,
       <span class="no-wrap">
         and
-        <a href="/docs/api/http"> data&nbsp;delivery</a></span
+        <a href="/docs/sync/api/http"> data&nbsp;delivery</a></span
       >.
     </template>
     <PartialReplicationDiagramme />

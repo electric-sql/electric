@@ -1,32 +1,94 @@
+<script setup>
+/* Footer is intentionally empty of script — the appearance switcher
+   was removed when the site was forced to dark-only via
+   `appearance: 'force-dark'` in `.vitepress/config.mts`. */
+import MarkdownLink from './MarkdownLink.vue'
+</script>
+
+<template>
+  <footer class="VPFooter">
+    <div class="container">
+      <p class="footer-logo">
+        <img
+          class="footer-logo-img footer-logo-dark"
+          src="/img/brand/logo.svg"
+          alt="Electric"
+        />
+        <img
+          class="footer-logo-img footer-logo-light"
+          src="/img/brand/logo.inverse.svg"
+          alt="Electric"
+        />
+      </p>
+
+      <nav class="footer-nav">
+        <a href="/about/community">About</a>
+        <a href="/about/contact">Contact</a>
+        <a href="/about/legal/terms">Legal</a>
+        <a href="/docs/sync/">Docs</a>
+        <a href="/sync/demos/">Demos</a>
+        <a href="/blog">Blog</a>
+        <a href="https://dashboard.electric-sql.cloud/">Sign up</a>
+      </nav>
+
+      <nav class="footer-social">
+        <a href="https://tanstack.com/db" aria-label="TanStack DB">
+          <span class="vpi-social-tanstack"></span>
+          <span class="social-name">TanStack DB</span>
+        </a>
+        <a href="https://pglite.dev" aria-label="PGlite">
+          <span class="vpi-social-pglite"></span>
+          <span class="social-name">PGlite</span>
+        </a>
+        <a href="https://x.com/ElectricSQL" aria-label="X">
+          <span class="vpi-social-x"></span>
+          <span class="social-name">X</span>
+        </a>
+        <a
+          href="https://bsky.app/profile/electric-sql.com"
+          aria-label="Bluesky"
+        >
+          <span class="vpi-social-bluesky"></span>
+          <span class="social-name">Bluesky</span>
+        </a>
+        <a href="https://discord.electric-sql.com" aria-label="Discord">
+          <span class="vpi-social-discord"></span>
+          <span class="social-name">Discord</span>
+        </a>
+        <a href="https://github.com/electric-sql" aria-label="GitHub">
+          <span class="vpi-social-github"></span>
+          <span class="social-name">GitHub</span>
+        </a>
+      </nav>
+
+      <p class="copyright">
+        © {{ new Date().getFullYear() }} Electric DB Inc. Released under the
+        <a
+          href="https://github.com/electric-sql/electric/blob/main/LICENSE"
+          target="_blank"
+          >Apache 2.0</a
+        >
+        License.
+      </p>
+      <div class="footer-markdown-link">
+        <MarkdownLink variant="footer" />
+      </div>
+    </div>
+  </footer>
+</template>
+
 <style scoped>
 .VPFooter {
   position: relative;
   z-index: var(--vp-z-index-footer);
-  border-top: 1px solid var(--vp-sidebar-bg-color);
-  padding: 80px 24px 32px !important;
-  /*    background-color: black;*/
-  margin-bottom: 0.5rem;
+  border-top: 1px solid var(--vp-c-divider);
+  padding: 40px 24px 32px !important;
+  margin-bottom: 0;
   display: block;
 }
 
 .VPFooter.has-sidebar {
   display: none;
-}
-
-.VPFooter :deep(a) {
-  text-decoration-line: underline;
-  text-underline-offset: 2px;
-  transition: color 0.25s;
-}
-
-.VPFooter :deep(a:hover) {
-  color: var(--vp-c-text-1);
-}
-
-@media (min-width: 768px) {
-  .VPFooter {
-    padding: 32px;
-  }
 }
 
 .container {
@@ -35,64 +97,70 @@
   text-align: center;
 }
 
-.message,
-.copyright {
-  line-height: 24px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--vp-c-text-2);
+/* Logo — kept but smaller and softer than before */
+.footer-logo {
+  margin: 0 0 18px;
+}
+.footer-logo img {
+  width: 88px;
+  margin: 0 auto;
+  opacity: 0.85;
+}
+.footer-logo-light {
+  display: inline-block;
+}
+.footer-logo-dark {
+  display: none;
+}
+:deep(html.dark) .footer-logo-light,
+.dark .footer-logo-light {
+  display: none;
+}
+:deep(html.dark) .footer-logo-dark,
+.dark .footer-logo-dark {
+  display: inline-block;
 }
 
-.VPFooter p {
-  margin-bottom: 12px;
-}
-.VPFooter p.footer-nav {
+/* Nav rows — flat, muted, no underlines, no brand colour */
+.footer-nav,
+.footer-social {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 0.9rem;
-}
-.VPFooter .footer-nav-inner {
-  flex-direction: row;
   align-items: center;
-  margin: 0.3rem 0 0.7rem;
+  gap: 20px 24px;
+  margin: 0 0 14px;
 }
-@media (max-width: 449px) {
-  .VPFooter p.footer-nav {
-    flex-direction: column;
-  }
+
+.footer-nav a,
+.footer-social a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: color 0.2s;
 }
-.VPFooter p.footer-nav a {
-  margin: 0.3rem 0.5rem 0.5rem 0.5rem;
+.footer-nav a:hover,
+.footer-nav a:focus-visible,
+.footer-social a:hover,
+.footer-social a:focus-visible {
+  color: var(--vp-c-text-1);
+  text-decoration: underline;
 }
-.VPFooter p.footer-nav .vpi-social-tanstack,
-.VPFooter p.footer-nav .vpi-social-pglite,
-.VPFooter p.footer-nav .vpi-social-x,
-.VPFooter p.footer-nav .vpi-social-bluesky,
-.VPFooter p.footer-nav .vpi-social-discord,
-.VPFooter p.footer-nav .vpi-social-github {
+
+/* Social icons */
+.footer-social .vpi-social-tanstack,
+.footer-social .vpi-social-pglite,
+.footer-social .vpi-social-x,
+.footer-social .vpi-social-bluesky,
+.footer-social .vpi-social-discord,
+.footer-social .vpi-social-github {
   display: inline-block;
-  width: 1.24rem;
-  height: 1.24rem;
-  position: relative;
-}
-@media (max-width: 599px) {
-  .VPFooter p.footer-nav .vpi-social-tanstack,
-  .VPFooter p.footer-nav .vpi-social-pglite,
-  .VPFooter p.footer-nav .vpi-social-x,
-  .VPFooter p.footer-nav .vpi-social-bluesky,
-  .VPFooter p.footer-nav .vpi-social-discord,
-  .VPFooter p.footer-nav .vpi-social-github {
-    color: var(--vp-c-text-1);
-  }
-}
-.VPFooter p.footer-nav .vpi-social-tanstack,
-.VPFooter p.footer-nav .vpi-social-pglite,
-.VPFooter p.footer-nav .vpi-social-x,
-.VPFooter p.footer-nav .vpi-social-bluesky,
-.VPFooter p.footer-nav .vpi-social-discord,
-.VPFooter p.footer-nav .vpi-social-github {
-  margin: 2px 4px -5px 0;
+  width: 16px;
+  height: 16px;
 }
 
 .vpi-social-x {
@@ -108,95 +176,51 @@
   --icon: url('https://api.iconify.design/simple-icons/tanstack.svg');
 }
 
-.VPFooter .footer-logo {
-  text-align: center;
-  width: 100%;
-}
-.VPFooter .footer-logo img {
-  width: 108px;
-  margin: 12px auto;
-}
-.VPFooter a {
-  text-decoration: none !important;
-  color: var(--vp-c-indigo-1);
-}
-
-.footer-nav-inner a .social-name {
-  color: var(--vp-c-text-1);
-  margin-left: 0.2rem;
-}
+/* Hide the social labels on small screens — icons remain */
 @media (max-width: 599px) {
-  .footer-nav-inner a .social-name {
+  .footer-social .social-name {
     display: none;
   }
+  .footer-social {
+    gap: 18px;
+  }
+}
+
+/* Copyright — smallest, faintest line */
+.copyright {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vp-c-text-3, var(--vp-c-text-2));
+}
+.copyright a {
+  color: var(--vp-c-text-2);
+  text-decoration: underline;
+}
+.copyright a:hover,
+.copyright a:focus-visible {
+  color: var(--vp-c-text-1);
+  text-decoration: underline;
+}
+
+.footer-markdown-link {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.footer-markdown-link :deep(.markdown-link-footer) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-markdown-link :deep(.markdown-link-footer:hover) {
+  color: var(--vp-c-text-1);
 }
 </style>
-
-<template>
-  <footer class="VPFooter">
-    <div class="container">
-      <p class="footer-logo">
-        <img src="/img/brand/logo.svg" />
-      </p>
-      <p class="footer-nav message">
-        <span class="footer-nav-inner">
-          <span class="no-wrap">
-            <a href="/about/community"> About</a>
-            <a href="/about/contact"> Contact</a>
-            <a href="/about/legal/terms"> Legal</a>
-            <a href="/docs/intro"> Docs</a>
-          </span>
-          <span class="no-wrap">
-            <a href="/demos"> Demos</a>
-            <a href="/blog"> Blog</a>
-            <a href="https://dashboard.electric-sql.cloud/"> Sign up</a>
-          </span>
-        </span>
-        <span class="footer-nav-inner">
-          <span class="no-wrap">
-            <a href="https://tanstack.com/db">
-              <span class="vpi-social-tanstack"></span>
-              <span class="social-name">TanStack DB</span></a
-            >
-            <a href="https://pglite.dev">
-              <span class="vpi-social-pglite"></span>
-              <span class="social-name">PGlite</span></a
-            >
-            <a href="https://x.com/ElectricSQL">
-              <span class="vpi-social-x"></span>
-              <span class="social-name">X</span></a
-            >
-          </span>
-          <span class="no-wrap">
-            <a href="https://bsky.app/profile/electric-sql.com">
-              <span class="vpi-social-bluesky"></span>
-              <span class="social-name">Bluesky</span></a
-            >
-            <a href="https://discord.electric-sql.com">
-              <span class="vpi-social-discord"></span>
-              <span class="social-name">Discord</span></a
-            >
-            <a href="https://github.com/electric-sql">
-              <span class="vpi-social-github"></span>
-              <span class="social-name">GitHub</span></a
-            >
-          </span>
-        </span>
-      </p>
-      <p class="copyright">
-        Released under the
-        <a
-          href="https://github.com/electric-sql/electric/blob/main/LICENSE"
-          target="_blank"
-        >
-          Apache 2.0</a
-        >
-        License.
-        <span class="no-wrap">
-          © {{ new Date().getFullYear() }}
-          Electric DB Inc.
-        </span>
-      </p>
-    </div>
-  </footer>
-</template>

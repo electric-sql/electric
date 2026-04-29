@@ -30,7 +30,7 @@ Here at Electric we're keen to help organise future meet-ups, both in London and
 Brief welcome and introduction to the event by organiser [Sam Willis](https://twitter.com/samwillis) of ElectricSQL.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="yy17Zn7UhOY" />
+  <YoutubeEmbed video-id="yy17Zn7UhOY" title="Welcome - Local-first Software London Meet-up, October 2023" />
 </div>
 
 ## Everything's better with Friends - PartyKit
@@ -38,7 +38,7 @@ Brief welcome and introduction to the event by organiser [Sam Willis](https://tw
 [Sunil Pai](https://twitter.com/threepointone) delivers a talk on [PartyKit](http://partykit.io) and how to use it to build real-time into your apps.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="xusQ4Rwyfos" />
+  <YoutubeEmbed video-id="xusQ4Rwyfos" title="'Everything's better with Friends' - Sunil Pai - Local-first Software London Meet-up" />
 </div>
 
 ## Secsync - End to end encryption for CRDTs
@@ -46,7 +46,7 @@ Brief welcome and introduction to the event by organiser [Sam Willis](https://tw
 An overview of [Secsync](https://github.com/serenity-kit/secsync) - an end to end encryption system for CRDTs by [Nik Graf](https://twitter.com/nikgraf)
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="dCGpD8F4isw" />
+  <YoutubeEmbed video-id="dCGpD8F4isw" title="'Secsync' - Nik Graf - Local-first Software London Meet-up, October 2023" />
 </div>
 
 ## DDLX - Permissions for Local-first sync
@@ -54,7 +54,7 @@ An overview of [Secsync](https://github.com/serenity-kit/secsync) - an end to en
 [Paul Harter](https://twitter.com/paulharter) talks about the permission system built for ElectricSQL.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="UQMOnKdO1O0" />
+  <YoutubeEmbed video-id="UQMOnKdO1O0" title="DDLX - Paul Harter - Local-first Software London Meet-up, October 2023" />
 </div>
 
 ## DXOS - Realtime collaborative application
@@ -62,7 +62,7 @@ An overview of [Secsync](https://github.com/serenity-kit/secsync) - an end to en
 [Rich Burdon](https://twitter.com/richburdon) introduces [DXOS](https://dxos.org), a platform for building collaborative real-time application.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="cYWMUdS71OQ" />
+  <YoutubeEmbed video-id="cYWMUdS71OQ" title="DXOS - Rich Burdon - Local-first Software London Meet-up, October 2023" />
 </div>
 
 ## The Local-first Web Development online meet-ups

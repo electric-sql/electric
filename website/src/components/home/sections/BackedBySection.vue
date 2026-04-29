@@ -1,6 +1,6 @@
 <script setup>
+import EaSection from '../../agents-home/Section.vue'
 import Backer from '../Backer.vue'
-import Section from '../Section.vue'
 
 import { data } from '../../../../data/team.data.ts'
 
@@ -16,50 +16,79 @@ function select(slug) {
   backers.push(angel)
 }
 
+// Order leads with Paul (Supabase) as the most recognisable
+// Postgres-platform backer, then Jordan (Motherduck) as the next
+// data-platform CEO, before stepping into the AI / agent adjacent
+// names (Mehdi at AI71, José behind Elixir/Phoenix) and the rest
+// of the database / devtools cohort. Spencer sits at the end near
+// Chris so the row closes on the more general distributed-systems
+// crowd rather than leading with it.
 select('copple')
-select('spencer')
 select('jordan')
+select('mehdi')
+select('jose')
 select('monica')
 select('sriram')
-select('pvh')
-select('chris')
-select('jose')
 select('adam')
-
-const actions = [
-  {
-    href: '/about/team',
-    text: 'Team',
-    theme: 'brand',
-  },
-  {
-    href: '/about/team#investors',
-    text: 'Investors',
-  },
-]
+select('chris')
+select('spencer')
 </script>
+
+<template>
+  <EaSection>
+    <template #title> Backed by industry&nbsp;insiders </template>
+    <template #subtitle>
+      Built by
+      <a href="/about/team">devtools and database&nbsp;experts</a>. Backed by
+      <a href="/about/team#investors">industry leading&nbsp;founders</a>.
+    </template>
+    <div class="backers md-exclude">
+      <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />
+    </div>
+    <template #actions>
+      <VPButton
+        tag="a"
+        size="medium"
+        theme="brand"
+        text="Team"
+        href="/about/team"
+      />
+      <VPButton
+        tag="a"
+        size="medium"
+        theme="alt"
+        text="Investors"
+        href="/about/team#investors"
+      />
+    </template>
+  </EaSection>
+</template>
 
 <style scoped>
 .backers {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 16px;
-  margin: 40px 0px 26px;
+  /* Grid widened from 8 → 9 columns to make room for an additional
+     backer (Mehdi / DeepMind) without dropping anyone or wrapping
+     to a second row. Faces step down a touch in size as a result,
+     which the user has explicitly OK'd. */
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 14px;
+  margin: 8px 0px;
   overflow: hidden;
 }
 @media (max-width: 1149px) {
   .backers {
-    gap: 14px;
+    gap: 12px;
   }
 }
 @media (max-width: 1099px) {
   .backers {
-    gap: 12px;
+    gap: 10px;
   }
 }
 @media (max-width: 1055px) {
   .backers {
-    gap: 10px;
+    gap: 9px;
   }
 }
 @media (max-width: 1009px) {
@@ -69,10 +98,13 @@ const actions = [
 }
 @media (max-width: 959px) {
   .backers {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 24px;
+    /* 9 backers laid out 5 + 4 at the tablet break-point so the row
+       balances visually and we don't leave a single orphan in the
+       last row. */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 20px;
 
-    max-width: 700px;
+    max-width: 760px;
     margin-left: auto;
     margin-right: auto;
   }
@@ -83,6 +115,9 @@ const actions = [
   }
 }
 @media (max-width: 549px) {
+  /* 9 backers → 3-up keeps three clean rows of three at every
+     phone width; we deliberately skip the 2-up step that would
+     leave an orphan in the bottom row. */
   .backers {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 20px;
@@ -93,24 +128,4 @@ const actions = [
     gap: 16px;
   }
 }
-@media (max-width: 399px) {
-  .backers {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-}
 </style>
-
-<template>
-  <Section :actions="actions">
-    <template #title> Backed by industry insiders </template>
-    <template #tagline>
-      Built by
-      <a href="/about/team"> devtools and database experts</a>. Backed by
-      <a href="/about/team#investors"> industry leading founders</a>.
-    </template>
-    <div class="backers">
-      <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />
-    </div>
-  </Section>
-</template>

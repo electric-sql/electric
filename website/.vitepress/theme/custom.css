@@ -71,28 +71,25 @@
   src: url('./fonts/SourceCodePro-Regular.woff2') format('woff2');
 }
 
+/* ── Tokens shared between light + dark ────────────────────────────── */
+
 :root,
 .dark {
-  --vp-c-indigo-1: #d0bcff;
-  --vp-c-indigo-2: #998fe7;
-  --vp-c-indigo-3: #7e78db;
+  /* Legacy aliases — kept so anything still referring to them gets the
+     new accent colour. Prefer --vp-c-brand-1 / --durable-streams-color
+     in new code. */
+  --vp-c-indigo-1: var(--vp-c-brand-1);
+  --vp-c-indigo-2: var(--vp-c-brand-2);
+  --vp-c-indigo-3: var(--vp-c-brand-3);
+  --ddn-color: var(--durable-streams-color);
 
   --vp-nav-logo-height: 30px;
 
-  --vp-c-text-1: rgba(255, 255, 245, 0.92);
-  --vp-c-text-1-5: rgba(235, 235, 245, 0.86);
-  --vp-c-text-2: rgba(235, 235, 245, 0.8);
-  --vp-c-text-2-5: rgba(235, 235, 245, 0.74);
-  --vp-c-text-3: rgba(235, 235, 245, 0.68);
-
-  --electric-color: #00d2a0;
-  --ddn-color: #d0bcff;
+  --electric-color: #75fbfd;
   --pglite-color: #f6f95c;
   --durable-streams-color: #75fbfd;
-  --tanstack-db-color: #FF8C3B;
+  --tanstack-db-color: #ff8c3b;
 
-  --vp-code-bg: var(--vp-c-bg-elv);
-  --vp-code-color: #9ecbff;
   --vp-code-font-size: 0.875em;
   --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif,
     'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
@@ -100,8 +97,282 @@
     'Liberation Mono', 'Courier New', monospace;
 }
 
+/* ── Light theme ──────────────────────────────────────────────────────
+   Ported from darix-docs.  Brand is the deep ink colour, accent teal is
+   reserved for the dark theme — in light mode the brand reads as the
+   strong navy text colour. */
+
+:root {
+  /* Brand */
+  --vp-c-brand-1: #1a1a2e;
+  --vp-c-brand-2: #4a4a6a;
+  --vp-c-brand-3: #0f0f1e;
+  --vp-c-brand-soft: rgba(26, 26, 46, 0.1);
+
+  /* Buttons */
+  --vp-button-brand-bg: #1a1a2e;
+  --vp-button-brand-hover-bg: #3a3a56;
+  --vp-button-brand-active-bg: #0f0f1e;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+
+  color-scheme: light;
+
+  /* Page surfaces (warm stone) */
+  --vp-c-bg: #f7f7f5;
+  --vp-c-bg-alt: #f0efed;
+  --vp-c-bg-soft: #f0efed;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: #e4e3e0;
+
+  /* Text */
+  --vp-c-text-1: #1a1a2e;
+  --vp-c-text-1-5: rgba(26, 26, 46, 0.86);
+  --vp-c-text-2: #5c5c6e;
+  --vp-c-text-2-5: rgba(92, 92, 110, 0.85);
+  --vp-c-text-3: #999999;
+
+  /* Hero gradient */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #1a1a2e, #2d2d44);
+
+  /* Code blocks */
+  --vp-code-bg: var(--vp-c-bg-elv);
+  --vp-code-color: #1a1a2e;
+
+  /* Electric Agents homepage tokens — alias the main palette so the
+     agents page stays in the same colour family as the rest of the site. */
+  --ea-bg: var(--vp-c-bg);
+  --ea-bg-soft: var(--vp-c-bg-soft);
+  --ea-surface: var(--vp-c-bg-elv);
+  --ea-surface-alt: var(--vp-c-bg-soft);
+  --ea-text-1: var(--vp-c-text-1);
+  --ea-text-2: var(--vp-c-text-2);
+  --ea-text-3: var(--vp-c-text-3);
+  --ea-divider: var(--vp-c-divider);
+  --ea-brand: #1a1a2e;
+
+  --ea-event-message: #3b82f6;
+  --ea-event-run: #8888a0;
+  --ea-event-tool-call: #d97706;
+  --ea-event-tool-result: #059669;
+  --ea-event-text: #1a1a2e;
+  --ea-event-error: #dc2626;
+  --ea-indicator-sleep: #c4c3c0;
+  --ea-indicator-active: #1a1a2e;
+
+  /* Surfaces & borders ─ used across cards, pricing, home, etc.
+     Light theme: warm stone ladder that steps cleanly off the page bg
+     so cards stay in the same colour family rather than picking up a
+     muddy neutral grey from a transparent overlay. */
+  --ec-surface-1: #f0efed;
+  --ec-surface-2: #e8e7e3;
+  --ec-surface-3: #dedcd6;
+  --ec-border-1: #e6e5e1;
+  --ec-border-2: #d6d4ce;
+  --ec-overlay-strong: rgba(255, 255, 255, 0.6);
+  --ec-overlay-medium: rgba(255, 255, 255, 0.4);
+  --ec-overlay-soft: rgba(255, 255, 255, 0.2);
+
+  /* Homepage iso scene — three-substrate accents. Tuned so the three land
+     within ±5 perceptual L of each other in light mode. Sync uses a slightly
+     desaturated teal (option 2 of the brand mitigation), so the brand teal
+     stays the umbrella in the rest of the site. Light-mode coral is dialled
+     to land near the same L as the desaturated teal. */
+  --home-iso-sync: #0d9aaa;
+  --home-iso-streams: #6f4dff;
+  --home-iso-agents: #d44a25;
+  --home-iso-neutral: 0, 0, 0;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────── */
+
+.dark {
+  /* Brand — accent teal */
+  --vp-c-brand-1: #75fbfd;
+  --vp-c-brand-2: #b8fdfe;
+  --vp-c-brand-3: #56e8ea;
+  --vp-c-brand-soft: rgba(117, 251, 253, 0.16);
+
+  /* Buttons */
+  --vp-button-brand-bg: #75fbfd;
+  --vp-button-brand-hover-bg: #56e8ea;
+  --vp-button-brand-active-bg: #3cd5d8;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-text: #1a1a1a;
+  --vp-button-brand-hover-text: #1a1a1a;
+  --vp-button-brand-active-text: #1a1a1a;
+
+  color-scheme: dark;
+
+  /* Page surfaces (deep night) */
+  --vp-c-bg: #111318;
+  --vp-c-bg-soft: #16181f;
+  --vp-c-bg-alt: var(--vp-c-bg-soft);
+  --vp-c-bg-elv: #22252f;
+  --vp-c-divider: #2a2d38;
+
+  /* Text */
+  --vp-c-text-1: rgba(255, 255, 245, 0.92);
+  --vp-c-text-1-5: rgba(235, 235, 245, 0.86);
+  --vp-c-text-2: rgba(235, 235, 245, 0.8);
+  --vp-c-text-2-5: rgba(235, 235, 245, 0.74);
+  --vp-c-text-3: rgba(235, 235, 245, 0.68);
+
+  /* Hero gradient */
+  --vp-home-hero-name-background: linear-gradient(135deg, #75fbfd, #56e8ea);
+
+  /* Code blocks */
+  --vp-code-bg: var(--vp-c-bg-elv);
+  --vp-code-color: #9ecbff;
+
+  /* Electric Agents homepage tokens — alias the main palette so the
+     agents page stays in the same colour family as the rest of the site. */
+  --ea-bg: var(--vp-c-bg);
+  --ea-bg-soft: var(--vp-c-bg-soft);
+  --ea-surface: var(--ec-surface-1);
+  --ea-surface-alt: var(--vp-c-bg-soft);
+  --ea-text-1: var(--vp-c-text-1);
+  --ea-text-2: var(--vp-c-text-2);
+  --ea-text-3: var(--vp-c-text-3);
+  --ea-divider: var(--vp-c-divider);
+  --ea-brand: var(--vp-c-brand-1);
+
+  --ea-event-message: #60a5fa;
+  --ea-event-run: #6b7280;
+  --ea-event-tool-call: #fbbf24;
+  --ea-event-tool-result: #34d399;
+  --ea-event-text: #75fbfd;
+  --ea-event-error: #f87171;
+  --ea-indicator-sleep: #4a4d58;
+  --ea-indicator-active: #75fbfd;
+
+  /* Surfaces & borders ─ cool blue-black ladder that steps off the page
+     bg in the same colour family (no neutral white-overlay muddiness). */
+  --ec-surface-1: #1a1d27;
+  --ec-surface-2: #22252f;
+  --ec-surface-3: #2d3142;
+  --ec-border-1: #22252f;
+  --ec-border-2: #2a2d38;
+  --ec-overlay-strong: rgba(0, 0, 0, 0.65);
+  --ec-overlay-medium: rgba(0, 0, 0, 0.5);
+  --ec-overlay-soft: rgba(0, 0, 0, 0.3);
+
+  /* Override VitePress' warm-slate gray family with cool blue-blacks
+     that match the page palette. These tokens flow into --vp-c-default-*,
+     which in turn drives --vp-button-alt-*, code blocks, badges, callouts
+     and other neutral surfaces. */
+  --vp-c-gray-1: #3a3f52;
+  --vp-c-gray-2: #2d3142;
+  --vp-c-gray-3: #22252f;
+  --vp-c-gray-soft: rgba(255, 255, 255, 0.05);
+
+  --vp-c-border: #2a2d38;
+  --vp-c-gutter: #0a0b0e;
+
+  /* Homepage iso scene — three-substrate accents tuned for dark mode.
+     All three sit at high enough L to read on the deep navy background but
+     are within ±5 of each other so no one accent dominates. */
+  --home-iso-sync: #75fbfd;
+  --home-iso-streams: #a78bfa;
+  --home-iso-agents: #ff8a65;
+  --home-iso-neutral: 255, 255, 245;
+}
+
 .Layout {
-  overflow-x: hidden;
+  /* `overflow-x: clip` (not `hidden`) is important: `hidden` on one
+     axis silently forces the other axis to compute to `auto`, which
+     turns `.Layout` into a scroll container. That scroll container
+     then clips any upward (negative-margin-top) bleed at its own top
+     edge — which is the bug that was hiding the homepage hero's
+     mobile iso scene bleed: the scene was correctly shifted up by
+     -100vw, but `.Layout`'s implicit scroll container was cropping
+     the visible portion at the navbar's bottom edge instead of
+     letting it extend up under the (translucent) navbar. `clip`
+     leaves `overflow-y: visible` untouched so the bleed renders
+     naturally above the hero, while still preventing horizontal
+     overflow scrollbars from elements that intentionally bleed
+     past the viewport sides (the homepage hero's 140vw scene,
+     etc.). */
+  overflow-x: clip;
+}
+
+/* ── OG image cards ────────────────────────────────────────────────────
+   Pages under `/og/*` exist purely as a screenshot surface for the
+   social-card generation pipeline (see
+   `scripts/generate-og-images.mjs`). They render a single 1200x630
+   card and need to be stripped of every piece of normal page chrome —
+   navbar, footer, release banner, content padding — so the card sits
+   flush in the top-left of the viewport and can be captured by
+   clipping the viewport directly.
+
+   The frontmatter on each `og/*.md` already disables most of this
+   (`navbar: false`, `sidebar: false`, etc.), but VitePress still
+   reserves space for the navbar via CSS variables and renders the
+   release banner / site footer from our custom Layout. The rules
+   below take care of the rest. */
+.og-page {
+  /* Make the html/body fit the card exactly so the screenshot pipeline
+     can clip the viewport without any cropping math. */
+  background: #0c0e14 !important;
+  --vp-nav-height: 0px;
+  --vp-layout-top-height: 0px;
+}
+
+.og-page .VPNav,
+.og-page .VPLocalNav,
+.og-page .VPSidebar,
+.og-page .VPNavScreen,
+.og-page .VPHomeFeatures,
+.og-page .release-banner,
+.og-page .markdown-link-local-nav-container,
+.og-page .markdown-link-footer-container,
+.og-page .custom-local-nav-dropdown {
+  display: none !important;
+}
+
+.og-page .VPContent {
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+}
+
+/* VitePress renders a fixed `.VPLocalNav` shell on mobile even when a
+   `layout: page` route has no docs sidebar. In that state it becomes
+   an empty black strip at the top of marketing/landing pages. Sidebar
+   pages intentionally keep VPLocalNav for the mobile menu button. */
+.nav-relative .VPLocalNav {
+  display: none !important;
+}
+
+.og-page .VPPage {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Hide the bottom site footer on OG pages even though our Layout only
+   renders it when there's no sidebar — `/og/*` has no sidebar so it
+   would render by default. */
+.og-page footer,
+.og-page .site-footer {
+  display: none !important;
+}
+
+/* Lock the page itself to the social-card box. The OgFrame component
+   sizes itself to 1200x630, but we also clamp the surrounding wrapper
+   so any stray Layout chrome can never push the card off-screen. */
+html:has(.og-page),
+body:has(.og-page) {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #0c0e14 !important;
+  overflow: hidden;
 }
 
 .vpi-electric-icon {
@@ -396,13 +667,91 @@ span.no-visual {
   padding-top: 1px;
 }
 
-/* Hide navbar bottom divider on home pages regardless of scroll position */
+/* Hide navbar bottom divider on home pages regardless of scroll position.
+   Includes `.ea-homepage` (Electric Agents landing page),
+   `.ds-homepage` (Durable Streams landing page), `.sync-page` (Electric
+   Sync landing page), `.pricing-page` (Cloud pricing) and `.home-page`
+   (the site root homepage), all of which use `layout: page` rather than
+   `layout: home` and so don't pick up the `.VPNavBar.home` class on
+   their own. */
 @media (min-width: 960px) {
-  .VPNavBar.home:not(.top) {
+  .VPNavBar.home:not(.top),
+  .ea-homepage .VPNavBar:not(.top),
+  .ds-homepage .VPNavBar:not(.top),
+  .sync-page .VPNavBar:not(.top),
+  .pricing-page .VPNavBar:not(.top),
+  .home-page .VPNavBar:not(.top) {
     background-color: transparent !important;
   }
   .VPNavBar.home .divider,
-  .VPNavBar.home .divider-line {
+  .VPNavBar.home .divider-line,
+  .ea-homepage .VPNavBar .divider,
+  .ea-homepage .VPNavBar .divider-line,
+  .ds-homepage .VPNavBar .divider,
+  .ds-homepage .VPNavBar .divider-line,
+  .sync-page .VPNavBar .divider,
+  .sync-page .VPNavBar .divider-line,
+  .pricing-page .VPNavBar .divider,
+  .pricing-page .VPNavBar .divider-line,
+  .home-page .VPNavBar .divider,
+  .home-page .VPNavBar .divider-line {
+    background-color: transparent !important;
+  }
+}
+
+/* Mobile (< 960px) on the site root homepage: replace the default
+   opaque mobile navbar background with a *semi-transparent + blurred*
+   one so the hero's iso composition can bleed upward past the hero's
+   top edge and remain partially visible behind the navbar — but
+   knocked back enough that the navbar's logo / hamburger / nav items
+   still read clearly against it.
+
+   Why semi-transparent rather than fully transparent: the iso
+   composition's labelled bands extend up under the navbar area, and
+   without any backdrop the brand-coloured borders / labels compete
+   with the navbar text and reduce legibility. The translucent fill +
+   blur softens the bled iso into an out-of-focus background while
+   keeping the bleed effect visible. (Without *any* background, the
+   default VitePress mobile navbar would otherwise be opaque once
+   scrolled, which would crop the bleed entirely at the navbar's
+   bottom edge — visually erasing the bleed effect.)
+
+   The navbar elements themselves stay fully opaque and tappable on
+   top of the iso composition (which has `pointer-events: none`).
+   Scoped to `.home-page` only so other mobile pages keep their solid
+   navbar for content readability while scrolling. */
+@media (max-width: 959px) {
+  .home-page .VPNavBar {
+    /* ~70% of the page background + a small blur. Uses
+       `color-mix` against `--vp-c-bg` so the navbar tint
+       follows the active theme (light / dark) without
+       hard-coding rgba values.
+
+       The fill is intentionally applied *only* to `.VPNavBar` and
+       not to its inner `.content-body`. VitePress only paints a
+       `.content-body` background at ≥960px (see VPNavBar.vue
+       scoped styles), so at mobile the inner element is transparent
+       by default and inherits the navbar tint behind it — applying
+       the fill here too is redundant and visibly broken: the
+       `.content-body` is the full nav-height tall and sits inside
+       `.VPNavBar`'s box, so its bg paints across the bottom 1px
+       where the `.VPNavBar.screen-open` `border-bottom` lives,
+       cropping the open-menu divider line on the right portion of
+       the bar (where `.content-body` extends) but leaving it
+       visible on the left (under the wrapper's left padding and
+       the `.title` cell, neither of which has a fill). Letting the
+       navbar provide the only fill keeps the open-menu border
+       continuous across the full width. */
+    background-color: color-mix(
+      in srgb,
+      var(--vp-c-bg) 70%,
+      transparent
+    ) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+  }
+  .home-page .VPNavBar .divider,
+  .home-page .VPNavBar .divider-line {
     background-color: transparent !important;
   }
 }
@@ -574,13 +923,24 @@ span.no-visual {
 .DocSearch-Button .DocSearch-Button-Placeholder {
   padding-right: 14px;
 }
+
+/* In dark mode lift the navbar search button a step above the page surface
+   so it stands out clearly without needing a border. Light mode keeps the
+   default `--vp-c-bg-alt` tint (which already reads as slightly darker than
+   the page background). */
+.dark .VPNavBarSearch .DocSearch-Button {
+  background-color: var(--vp-c-bg-elv);
+}
+.dark .VPNavBarSearch .DocSearch-Button:hover {
+  background-color: var(--vp-c-default-soft);
+}
 @media (max-width: 767px) {
   .DocSearch-Button {
-    width: 38px;
-    margin-right: -8px;
+    width: 48px;
+    margin-right: 0;
   }
   .VPNavBarHamburger {
-    width: 38px !important;
+    width: 48px !important;
     margin-right: 4px;
   }
 }
@@ -777,10 +1137,10 @@ span.no-visual {
   }
 }
 .img-border {
-  border: 1px #ccc solid;
+  border: 1px solid var(--vp-c-divider);
   border-radius: 10px;
   padding: 10px;
-  background: rgb(20, 21, 23);
+  background: var(--vp-c-bg-elv);
 }
 figure {
   margin: 40px 0;
@@ -800,6 +1160,78 @@ iframe {
 
 .VPHome {
   margin-bottom: 0 !important;
+}
+
+/* ── Landing-page shared text styles ───────────────────────────────────────
+   Body-copy typography shared by the product landing pages
+   (`.ea-homepage` Agents, `.ds-homepage` Streams, `.sync-page` Sync).
+   These rules used to be duplicated in each page's scoped <style> block,
+   which caused the body-copy colour and mobile font-size to drift apart.
+
+   Canonical pattern (matches `.ea-section-subtitle` in
+   `agents-home/Section.vue`):
+     • body  = --ea-text-2 (grey)
+     • <strong> = --ea-text-1 (white) at font-weight 600
+     • <a>    = brand colour with subtle underline
+     • mobile cascade: 17 → 15 → 14px in lockstep with section subtitles
+
+   Selectors are scoped to the page-class so they don't leak into docs /
+   blog / generic VitePress content. `:is()` keeps the rule lists short. */
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose {
+  font-family: var(--vp-font-family-base);
+  font-size: 17px;
+  line-height: 1.7;
+  text-wrap: pretty;
+  color: var(--ea-text-2);
+  margin: 0 0 16px;
+  max-width: 640px;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose:last-child {
+  margin-bottom: 0;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose strong {
+  color: var(--ea-text-1);
+  font-weight: 600;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose a {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 35%, transparent);
+  transition: border-bottom-color 0.2s;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose a:hover {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+@media (max-width: 768px) {
+  :is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose {
+    font-size: 15px;
+  }
+}
+@media (max-width: 480px) {
+  :is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose {
+    font-size: 14px;
+  }
+}
+
+/* Site root homepage: `layout: page` with `pageClass: home-page`. Each
+   section / strap inside `<HomePage />` manages its own full-bleed band
+   and centred inner container (matching the agents / streams / sync
+   landing pages), so no outer container is needed here — we just zero out
+   all the padding that VitePress's VPPage / VPDoc / .content wrappers
+   would otherwise apply. */
+.home-page .VPPage,
+.home-page .VPDoc,
+.home-page .VPDoc .container,
+.home-page .VPDoc .content,
+.home-page .VPDoc .content-container,
+.home-page .VPDoc .main {
+  padding: 0 !important;
+  max-width: none !important;
+}
+.home-page .VPPage {
+  overflow-x: clip;
 }
 
 @media (max-width: 639px) {
@@ -927,7 +1359,7 @@ iframe {
   background:
     linear-gradient(to right, var(--vp-c-bg) 45%, transparent 85%),
     linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
-    linear-gradient(rgba(26, 27, 30, 0.5), rgba(26, 27, 30, 0.5)),
+    linear-gradient(var(--ec-overlay-medium), var(--ec-overlay-medium)),
     url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
   overflow: hidden;
   padding: 20px 0 88px;
@@ -943,7 +1375,7 @@ iframe {
     background:
       linear-gradient(to right, var(--vp-c-bg) 35%, transparent 80%),
       linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
-      linear-gradient(rgba(26, 27, 30, 0.6), rgba(26, 27, 30, 0.6)),
+      linear-gradient(var(--ec-overlay-medium), var(--ec-overlay-medium)),
       url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
   }
 }
@@ -953,7 +1385,7 @@ iframe {
     background:
       linear-gradient(to right, var(--vp-c-bg) 25%, transparent 75%),
       linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
-      linear-gradient(rgba(26, 27, 30, 0.8), rgba(26, 27, 30, 0.8)),
+      linear-gradient(var(--ec-overlay-strong), var(--ec-overlay-strong)),
       url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
   }
 
@@ -1001,6 +1433,16 @@ iframe {
 pre {
   max-width: 100%;
   overflow-x: scroll;
+}
+
+/* Accessibility: bump Shiki's github-dark comment color (#6A737D) to a
+   higher-contrast gray. The default ~4.06:1 fails WCAG AA (4.5:1 min);
+   #8b949e gives ~5.39:1 against the dark code-block background. The
+   `i` flag makes the attribute selector case-insensitive so this still
+   matches if Shiki ever changes its inline-style casing. !important is
+   required to override Shiki's inline `style="color:..."`. */
+.shiki span[style*="#6A737D" i] {
+  color: #8b949e !important;
 }
 
 ul.benefits {
@@ -1066,6 +1508,27 @@ ul.benefits {
 .vp-doc h1 > .VPBadge {
   margin-top: 8px;
   font-size: 14px;
+}
+
+/* Blog posts: tighten the top padding of the doc area. The post header carries
+   its own visual rhythm (back link → image → title → byline) so the default
+   VPDoc 48px top padding leaves an awkward gap above the back link.
+
+   We deliberately leave the right-hand `.aside-container` at its default
+   position so "On this page" continues to align with the article body (where
+   the H1 would sit on a normal docs page), only moving the main content up. */
+.VPDoc:has(.post-header) {
+  padding-top: 8px;
+}
+@media (min-width: 768px) {
+  .VPDoc:has(.post-header) {
+    padding-top: 12px;
+  }
+}
+@media (min-width: 960px) {
+  .VPDoc:has(.post-header) {
+    padding-top: 8px;
+  }
 }
 
 .demos-grid {
@@ -1161,18 +1624,18 @@ ul.demo-actions li .VPButton {
 
 /* Primary CTA button styling */
 .primary-cta-button {
-  background-color: #7c40ff; /* Match your brand purple color */
-  color: white !important;
+  background-color: var(--vp-button-brand-bg);
+  color: var(--vp-button-brand-text) !important;
   padding: 0.5rem 1.2rem;
   border-radius: 6px;
   font-weight: 500;
   margin-left: 1rem;
   transition: background-color 0.2s;
-  order: 4; /* Ensure it appears after search */
+  order: 4;
 }
 
 .primary-cta-button:hover {
-  background-color: #6930d9; /* Darker shade for hover */
+  background-color: var(--vp-button-brand-hover-bg);
   text-decoration: none;
 }
 
@@ -1198,7 +1661,7 @@ ul.demo-actions li .VPButton {
     padding: 0.8rem;
     width: 100%;
     border-radius: 0;
-    background-color: #7c40ff;
+    background-color: var(--vp-button-brand-bg);
   }
 
   /* Add a divider above the button in mobile view */
@@ -1206,7 +1669,7 @@ ul.demo-actions li .VPButton {
     content: '';
     display: block;
     height: 1px;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--vp-c-divider);
     margin-bottom: 1rem;
   }
 }
@@ -1272,8 +1735,9 @@ ul.demo-actions li .VPButton {
   .custom-local-nav-dropdown {
     display: flex;
     justify-content: flex-end;
-    position: fixed;
-    top: calc(var(--vp-nav-height) + var(--vp-layout-top-height, 0px));
+    position: absolute;
+    top: 0;
+    height: 48px;
     left: 0;
     right: 0;
     z-index: calc(var(--vp-z-index-local-nav) + 1);
@@ -1285,30 +1749,586 @@ ul.demo-actions li .VPButton {
   }
 
   /* Hide the default dropdown button at small screens but keep spacing */
-  .VPLocalNav .VPLocalNavOutlineDropdown {
+  .VPLocalNav > .VPLocalNavOutlineDropdown {
     opacity: 0;
     pointer-events: none;
   }
 }
 
-/* Footer: Position the markdown link right-aligned next to Edit this page */
+/* === MegaNav: custom mega-menu nav (replaces VPNavBarMenu items) ============ */
 
-/* Make VPDocFooter relative for absolute positioning of children */
-.VPDocFooter {
-  position: relative;
+/* Safety net: hide default VPNavBarMenu links / social links if VitePress
+   ever re-renders them. The :not(.mega-nav-link) escape-hatch lets MegaNav
+   reuse .VPNavBarMenuLink styling without being hidden. */
+.VPNavBar .VPNavBarMenu > a.VPNavBarMenuLink:not(.mega-nav-link) {
+  display: none !important;
+}
+.VPNavBar .VPNavBarSocialLinks {
+  display: none !important;
+}
+.VPNavBar .VPNavBarSocialLinks::before,
+.VPNavBar .VPNavBarSocialLinks::after {
+  display: none !important;
 }
 
-/* The container wraps around edit-info height and positions link at right */
-.markdown-link-footer-container {
-  position: absolute;
-  right: 0;
-  top: 0;
-  height: auto;
+/* Container for the MegaNav: replaces the old .VPNavBarMenu items. Hidden
+   on mobile (the mobile screen menu uses MegaNavMobile instead). */
+.MegaNav {
+  display: none;
+  align-items: center;
+  height: var(--vp-nav-height);
+}
+@media (min-width: 768px) {
+  .MegaNav {
+    display: flex;
+  }
+}
+
+.MegaNav .mega-nav-trigger-wrap {
+  position: relative;
   display: flex;
   align-items: center;
+  height: 100%;
 }
 
-/* Make sure edit-info doesn't overlap with our positioned link */
-.VPDocFooter .edit-info {
-  padding-right: 120px;
+.MegaNav .mega-nav-link {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px !important;
+  font-weight: 500;
+  line-height: var(--vp-nav-height);
+  padding: 0 8px !important;
+  color: var(--vp-c-text-1);
+  transition: color 0.25s;
 }
+.MegaNav .mega-nav-link:hover,
+.MegaNav .mega-nav-link.active,
+.MegaNav .mega-nav-link.open {
+  color: var(--vp-c-brand-1);
+}
+
+/* Defeat VitePress default `.VPNavBarMenuLink:last-of-type{display:none!important}`
+   which would hide the last <a> (Pricing) and the last <button> in MegaNav. */
+.MegaNav .mega-nav-link {
+  display: inline-flex !important;
+}
+
+.MegaNav .mega-nav-fallback-pricing,
+.MegaNav .mega-nav-fallback-blog {
+  display: none !important;
+}
+
+@media (max-width: 1059px) {
+  .MegaNav .mega-nav-top-pricing {
+    display: none !important;
+  }
+  .MegaNav .mega-nav-fallback-pricing {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 959px) {
+  .MegaNav .mega-nav-top-blog {
+    display: none !important;
+  }
+  .MegaNav .mega-nav-fallback-blog {
+    display: flex !important;
+  }
+}
+
+.MegaNav .mega-nav-link.mega-nav-trigger {
+  gap: 4px;
+}
+
+/* Give the `More v` trigger a touch more breathing room before the
+   signup button on the right. */
+.MegaNav .mega-nav-trigger-wrap[data-id='resources'] {
+  margin-right: 8px;
+}
+
+.MegaNav .mega-nav-chevron {
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+.MegaNav .mega-nav-trigger.open .mega-nav-chevron {
+  transform: rotate(180deg);
+}
+
+.MegaNav .mega-nav-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--vp-c-divider);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1200px) {
+  .MegaNav .mega-nav-divider {
+    margin: 0 10px;
+  }
+}
+
+/* Hide group dividers when buttons compress hardest, to claw back room. */
+@media (max-width: 1059px) {
+  .MegaNav .mega-nav-divider {
+    display: none;
+  }
+}
+
+/* Popdown panel positioning */
+.MegaNav .mega-nav-panel-wrap {
+  position: absolute;
+  top: calc(var(--vp-nav-height) - 8px);
+  left: -8px;
+  right: auto;
+  z-index: calc(var(--vp-z-index-nav) + 1);
+  /* The padding acts as an invisible hover bridge between the trigger
+     and the visible panel, preventing accidental dismissal. */
+  padding: 12px 8px 0;
+}
+.MegaNav .mega-nav-trigger-wrap[data-id='resources'] .mega-nav-panel-wrap {
+  left: auto;
+  right: -8px;
+}
+
+/* Popdown panel chrome */
+.mega-nav-panel {
+  background: var(--vp-c-bg-elv);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  box-shadow: var(--vp-shadow-3);
+  padding: 8px;
+  min-width: 240px;
+  max-width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--vp-nav-height) - 16px);
+  overflow-y: auto;
+}
+.mega-nav-panel:has(.mega-nav-panel-grid-2col) {
+  min-width: 520px;
+}
+
+.mega-nav-panel-section {
+  display: flex;
+  flex-direction: column;
+}
+.mega-nav-panel-extras {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+/* Product panel grid: single column by default, two columns when the
+   product has a secondary section (Sync). */
+.mega-nav-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+.mega-nav-panel-grid-2col {
+  grid-template-columns: minmax(220px, 1fr) minmax(240px, 1fr);
+  gap: 0 8px;
+}
+.mega-nav-panel-grid-2col .mega-nav-panel-secondary {
+  border-left: 1px solid var(--vp-c-divider);
+  padding-left: 12px;
+  margin-left: 4px;
+}
+@media (max-width: 599px) {
+  .mega-nav-panel-grid-2col {
+    grid-template-columns: 1fr;
+  }
+  .mega-nav-panel-grid-2col .mega-nav-panel-secondary {
+    border-left: none;
+    border-top: 1px solid var(--vp-c-divider);
+    padding-left: 0;
+    margin-left: 0;
+    padding-top: 8px;
+    margin-top: 8px;
+  }
+}
+
+.mega-nav-panel-heading {
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.mega-nav-panel-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.mega-nav-panel-item:hover {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+}
+.mega-nav-panel-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.mega-nav-panel-sublabel {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Item with leading icon: horizontal row, icon on the left, text stacked
+   on the right. Defined AFTER .mega-nav-panel-item so it wins the cascade. */
+.mega-nav-panel-item.mega-nav-panel-item-icon {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.mega-nav-panel-item-img {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  object-fit: contain;
+  /* Align with the main label cap-height rather than the full link box. */
+  margin-top: -1px;
+}
+.mega-nav-panel-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Resources panel uses the same `.mega-nav-panel-grid-2col` layout as
+   the product panels (LEFT = text links, RIGHT = social icons +
+   AGENTS.md), but with a compact single-line item style — no
+   sublabels, no brand header. */
+.mega-nav-panel-item.mega-nav-panel-item-compact {
+  flex-direction: row;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 10px;
+}
+.mega-nav-panel-item.mega-nav-panel-item-compact .mega-nav-panel-label {
+  font-weight: 500;
+}
+
+/* The resources panel only contains compact (single-line, no-sublabel)
+   items, so its columns can shrink down a lot from the wide product
+   panels. Override both the panel min-width and the grid template. */
+.mega-nav-panel.mega-nav-panel-resources {
+  min-width: 0;
+}
+.mega-nav-panel.mega-nav-panel-resources .mega-nav-panel-grid-2col {
+  grid-template-columns: minmax(120px, auto) minmax(180px, auto);
+}
+
+/* RHS items: leading icon (or invisible spacer for AGENTS.md so the
+   text labels still align with the icon labels above). */
+.mega-nav-panel-item-rhs-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--vp-c-text-2);
+  transition: color 0.15s ease;
+}
+.mega-nav-panel-item-rhs:hover .mega-nav-panel-item-rhs-icon {
+  color: var(--vp-c-brand-1);
+}
+.mega-nav-panel-item-rhs-icon-spacer {
+  background: transparent;
+}
+
+.mega-nav-social-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+}
+
+/* Brand item: emphasize the product home link at the top of each panel */
+.mega-nav-panel-item-brand .mega-nav-panel-label {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* Global vpi-social-* icon definitions (SiteFooter scopes these so they
+   are not available in MegaNav otherwise; without --icon they render as
+   solid white squares via the default vpi mask). */
+.vpi-social-x {
+  --icon: url('https://api.iconify.design/simple-icons/x.svg');
+}
+.vpi-social-discord {
+  --icon: url('https://api.iconify.design/simple-icons/discord.svg');
+}
+.vpi-social-bluesky {
+  --icon: url('https://api.iconify.design/simple-icons/bluesky.svg');
+}
+/* Document/markdown icon for the AGENTS.md entry in the resources
+   dropdown — line-style to read as "a doc" rather than a brand. */
+.vpi-social-agents {
+  --icon: url('https://api.iconify.design/lucide/file-text.svg');
+}
+
+/* Open/close transition */
+.mega-nav-fade-enter-active,
+.mega-nav-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.mega-nav-fade-enter-from,
+.mega-nav-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mega-nav-fade-enter-active,
+  .mega-nav-fade-leave-active,
+  .MegaNav .mega-nav-chevron,
+  .MegaNavMobile .mega-nav-mobile-chevron {
+    transition: none !important;
+  }
+}
+
+/* === MegaNavMobile: left-aligned accordion menu =========================== */
+
+.MegaNavMobile {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+}
+
+/* Defeat VitePress's default centered nav-screen alignment for our items. */
+.VPNavScreen .container .MegaNavMobile,
+.VPNavScreen .MegaNavMobile {
+  align-items: stretch;
+}
+
+/* Top-level row: applies to leaf links and accordion triggers alike. */
+.MegaNavMobile .mega-nav-mobile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  text-decoration: none;
+  color: var(--vp-c-text-1);
+  padding: 14px 4px;
+  transition: color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-row:hover,
+.MegaNavMobile .mega-nav-mobile-row:active {
+  color: var(--vp-c-brand-1);
+}
+
+.MegaNavMobile .mega-nav-mobile-row-label {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.MegaNavMobile .mega-nav-mobile-row-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.2s ease;
+}
+.MegaNavMobile .mega-nav-mobile-group.open .mega-nav-mobile-row-chevron {
+  transform: rotate(180deg);
+}
+
+.MegaNavMobile .mega-nav-mobile-divider {
+  border: none;
+  border-top: 1px solid var(--vp-c-divider);
+  margin: 8px 0;
+  width: 100%;
+}
+
+/* Submenu indented under the trigger. */
+.MegaNavMobile .mega-nav-mobile-submenu {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0 8px 16px;
+  border-left: 1px solid var(--vp-c-divider);
+  margin: 0 0 4px 6px;
+}
+
+.MegaNavMobile .mega-nav-mobile-subrow {
+  display: block;
+  padding: 10px 4px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-subrow:hover,
+.MegaNavMobile .mega-nav-mobile-subrow:active {
+  color: var(--vp-c-brand-1);
+}
+
+/* Brand row at the top of a product submenu. */
+.MegaNavMobile .mega-nav-mobile-subrow-brand {
+  padding: 8px 4px 12px;
+}
+.MegaNavMobile .mega-nav-mobile-brand-label {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--vp-c-text-1);
+}
+.MegaNavMobile .mega-nav-mobile-brand-sublabel {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+}
+
+/* Social row on the resources submenu. */
+.MegaNavMobile .mega-nav-mobile-social-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 0 0 4px;
+}
+.MegaNavMobile .mega-nav-mobile-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-social-link:hover {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+}
+.MegaNavMobile .mega-nav-mobile-social-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--vp-font-family-mono);
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-social-text:hover {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+}
+
+/* ── Appearance toggle is rendered in the footer, hide from navbar ── */
+
+.VPNavBar .content-body .appearance,
+.VPNavScreenAppearance {
+  display: none !important;
+}
+.VPNavBar .content-body .appearance::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* ── Home page footer spacing ──────────────────────────────────────────
+   The strap immediately above the footer (AgentsCTAStrap) has its own
+   `border-bottom`, which already provides a clean visual close to the
+   page content. Drop the footer's own `border-top` on the home page
+   and add some breathing room above it so the footer reads as a
+   distinct sign-off block rather than a tightly-attached extension
+   of the CTA strap. */
+
+.home-page .VPFooter {
+  border-top: none;
+  margin-top: 64px;
+}
+@media (max-width: 768px) {
+  .home-page .VPFooter {
+    margin-top: 40px;
+  }
+}
+
+/* ── Brand Toys (internal recording stage) ──────────────────────────────
+   `/brand-toys` is an unlinked internal page for capturing clean
+   recordings of marketing-site animations. We hide the site chrome —
+   nav, release banner and footer — so only the stage and control drawer
+   are visible. The page itself takes full viewport ownership via
+   `position: fixed` on its root, so we also kill vitepress's default
+   page padding + max-width. */
+
+.brand-toys-page .VPNav,
+.brand-toys-page .VPNavBar,
+.brand-toys-page .VPLocalNav,
+.brand-toys-page .VPFooter,
+.brand-toys-page .VPBackdrop,
+.brand-toys-page .release-banner {
+  display: none !important;
+}
+
+.brand-toys-page .VPContent {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.brand-toys-page .VPPage {
+  padding: 0 !important;
+}
+.brand-toys-page .VPDoc,
+.brand-toys-page .VPDoc .container,
+.brand-toys-page .VPDoc .content,
+.brand-toys-page .VPDoc .content-container {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+}
+.brand-toys-page main .vp-doc {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+}
+
+.brand-toys-page {
+  --vp-layout-max-width: 100vw;
+}
+html:has(.brand-toys-page),
+body:has(.brand-toys-page) {
+  /* Match the toy + index dark surface so the chrome-less page doesn't
+     flash a different background colour during loads. We force the
+     `.dark` class on `<html>` from `BrandToysPage.vue` so this resolves
+     to the dark page bg (`#111318`) regardless of the visitor's theme
+     preference. The index page scrolls naturally; only the toy stage
+     locks scroll (see below). */
+  background: var(--vp-c-bg, #111318);
+}
+
+/* The single-toy view mounts a fixed-position stage and adds this class
+   to <body>; we kill page scroll only while it's active so the index
+   grid above can scroll on its own. */
+body.bt-toy-fixed {
+  overflow: hidden;
+}
+

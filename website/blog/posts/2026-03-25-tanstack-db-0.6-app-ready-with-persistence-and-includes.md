@@ -20,18 +20,18 @@ TanStack DB 0.6 adds two core features: persistence and includes.
 
 For Electric users, this is more than a point release. With persisted local state, app restarts are fast since data can be loaded locally from disk. With includes, query results can match UI shape without custom projection layers.
 
-Together with [Postgres&nbsp;Sync](/primitives/postgres-sync) and [Durable&nbsp;Streams](/primitives/durable-streams), this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
+Together with [Postgres&nbsp;Sync](/sync/) and [Durable&nbsp;Streams](/streams/), this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
 
 > [!WARNING] 🪧&nbsp; Quicklinks
 > - TanStack release post: [TanStack DB 0.6 now includes persistence, offline support, and hierarchical data](https://tanstack.com/blog/tanstack-db-0.6-app-ready-with-persistence-and-includes)
 > - Electric + TanStack DB guide: [Build super-fast apps on sync with TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 > - Incremental adoption guide: [Local-first with your existing API](/blog/2024/11/21/local-first-with-your-existing-api)
-> - Electric docs: [Introduction](/docs/intro), [Quickstart](/docs/quickstart)
-> - Shape docs: [Shapes](/docs/guides/shapes)
+> - Electric docs: [Introduction](/docs/sync/), [Quickstart](/docs/sync/quickstart)
+> - Shape docs: [Shapes](/docs/sync/guides/shapes)
 
 ## How this fits the Electric stack
 
-Electric and TanStack&nbsp;DB pair naturally: [Postgres&nbsp;Sync](/primitives/postgres-sync) syncs normalized shapes from Postgres to clients using incremental sync, and TanStack&nbsp;DB handles local query execution, optimistic state, and reactive UI updates. [Durable&nbsp;Streams](/primitives/durable-streams) extends the same model beyond Postgres — real-time event data, AI sessions, and collaborative state all flow through TanStack&nbsp;DB collections via [StreamDB](https://durablestreams.com/stream-db).
+Electric and TanStack&nbsp;DB pair naturally: [Postgres&nbsp;Sync](/sync/) syncs normalized shapes from Postgres to clients using incremental sync, and TanStack&nbsp;DB handles local query execution, optimistic state, and reactive UI updates. [Durable&nbsp;Streams](/streams/) extends the same model beyond Postgres — real-time event data, AI sessions, and collaborative state all flow through TanStack&nbsp;DB collections via [StreamDB](https://durablestreams.com/stream-db).
 
 That stack already delivered fast, sync-powered apps. What was missing was local state that survives reloads and restarts. TanStack&nbsp;DB 0.6 closes that gap with SQLite-backed persistence across browser, Node, React&nbsp;Native, Expo, Capacitor, and edge runtimes like Cloudflare Durable Objects.
 
@@ -60,7 +60,7 @@ This gives you a complete app data model you can adopt incrementally.
 The React Native shopping list demo shows this stack end to end: an Electric collection syncing in real time, with state persisted locally through SQLite for offline support.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="EBXOjQds8hU" />
+  <YoutubeEmbed video-id="EBXOjQds8hU" title="TanStack DB 0.6 Now Includes Persistence, Offline Support, and Hierarchical Data" />
 </div>
 
 Source code: [react-native/shopping-list example on GitHub](https://github.com/TanStack/db/tree/main/examples/react-native/shopping-list).
@@ -76,7 +76,7 @@ A practical way to start is with one focused app slice, then expand as you go.
 Begin from an Electric + TanStack DB setup:
 
 - [Electric + TanStack DB guide](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
-- [Electric quickstart](/docs/quickstart)
+- [Electric quickstart](/docs/sync/quickstart)
 
 ### 2) Add persistence where it pays off first
 
@@ -159,6 +159,6 @@ If you're starting a new app, begin with Electric + TanStack DB and add persiste
 
 - [Read the TanStack DB 0.6 post](https://tanstack.com/blog/tanstack-db-0.6-app-ready-with-persistence-and-includes)
 - [Build with Electric + TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
-- [Try the Electric quickstart](/docs/quickstart)
+- [Try the Electric quickstart](/docs/sync/quickstart)
 - [Join Discord](https://discord.electric-sql.com)
 

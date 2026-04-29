@@ -60,10 +60,10 @@ For example, if Alice posts a comment on a collaborative document and Bob then r
 
 <div class="side-by-side-videos">
   <div class="embed-container">
-    <YoutubeEmbed video-id="OKHIdpOAxto" />
+    <YoutubeEmbed video-id="OKHIdpOAxto" title="Distributed Systems 3.3: Causality and happens-before" />
   </div>
   <div class="embed-container">
-    <YoutubeEmbed video-id="x-D8iFU1d-o" />
+    <YoutubeEmbed video-id="x-D8iFU1d-o" title="Distributed Systems 4.1: Logical time" />
   </div>
 </div>
 

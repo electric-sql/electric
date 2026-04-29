@@ -1,16 +1,16 @@
 ---
 title: CLI
 description: >-
-  Command-line interface for managing Electric Cloud resources, including Postgres sync services and durable streams.
+  Command-line interface for managing Electric Cloud resources — Electric Sync sources and Electric Streams services.
 image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 
-<img src="/img/icons/ddn.svg" class="product-icon" />
-
 # CLI
 
-Command-line interface for [Electric Cloud](https://dashboard.electric-sql.cloud) — manage workspaces, projects, environments, and services from the terminal. The CLI provides full control over your Electric Cloud resources, from provisioning [Postgres sync](/primitives/postgres-sync) services and [durable streams](/primitives/durable-streams) to managing per-PR environments in CI/CD pipelines. All commands support JSON output for scripting and automation.
+Command-line interface for [Electric Cloud](https://dashboard.electric-sql.cloud) &mdash; manage workspaces, projects, environments and services from the terminal. The CLI provides full control over your Cloud resources, from provisioning [Electric&nbsp;Sync](/sync/) sources and [Electric&nbsp;Streams](/streams/) services to managing per-PR environments in CI/CD pipelines. All commands support JSON output for scripting and&nbsp;automation.
+
+For an overview of what these resources are, see the [Usage guide](/cloud/usage).
 
 ## Installation
 
@@ -57,7 +57,7 @@ Pass a token directly for one-off commands or scripts:
 electric projects list --token sv_live_...
 ```
 
-## Provision a Postgres sync service
+## Provision an Electric Sync source
 
 ```shell
 electric projects create --name "my-app"
@@ -68,7 +68,7 @@ electric services create postgres \
   --region us-east-1
 ```
 
-## Provision a durable streams service
+## Provision an Electric Streams service
 
 ```shell
 electric services create streams \

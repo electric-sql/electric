@@ -12,7 +12,7 @@ outline: [2, 3]
 post: true
 ---
 
-Today, we're open-sourcing [Durable&nbsp;Streams](/primitives/durable-streams): a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications.
+Today, we're open-sourcing [Durable&nbsp;Streams](/streams/): a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications.
 
 We originally built Durable&nbsp;Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
 

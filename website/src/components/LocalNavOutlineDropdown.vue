@@ -1,6 +1,7 @@
 <script setup>
 import { onContentUpdated, useData } from 'vitepress'
 import { nextTick, ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { toMarkdownUrl } from '../lib/markdownUrl'
 
 const props = defineProps({
   headers: {
@@ -25,8 +26,7 @@ const showMarkdownLink = computed(() => {
 })
 
 const markdownUrl = computed(() => {
-  const path = (page.value.relativePath ?? '').replace(/\.md$/, '')
-  return `/${path}.md`
+  return toMarkdownUrl(page.value.relativePath)
 })
 
 function resolveTitle(theme) {

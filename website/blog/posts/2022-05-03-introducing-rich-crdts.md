@@ -157,7 +157,7 @@ In the absence of conflicts, these additional effects are not observable.
 :::
 
 :::note
-You can play with an interactive demo of this example on the [Introduction -> Active-active replication](https://legacy.electric-sql.com/docs/intro/active-active) page.
+You can play with an interactive demo of this example on the [Introduction -> Active-active replication](https://legacy.electric-sql.com/docs/sync//active-active) page.
 :::
 
 ## Reservations
@@ -177,7 +177,7 @@ A bounded counter is an example of a Rich CRDT that uses the reservations techni
 You give each of 10 nodes an allocation of 100 ticket reservations. When any given node runs out of its allocation of tickets, it can coordinate with other peers to get more reservations. In this way, it’s possible to validate an operation without having to coordinate every time.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="oWUNCsFy-r0" />
+  <YoutubeEmbed video-id="oWUNCsFy-r0" title="Just-right consistency with Antidote" />
 </div>
 
 One of the key optimisations with escrow reservations is to proactively allocate and re-balance the reservations so they are held by the nodes/clusters that require them. If the Justin Bieber concert is in San Francisco and all the tickets are being bought through the US-West cluster, then the rich-CRDT system can notice (or predict) this and pro-actively give the US-West cluster more reservations.
@@ -212,4 +212,4 @@ To do this, developers might make use of a lock CRDT. When a particular node hol
 
 ## Next steps
 
-Hopefully that was a useful intro to rich-CRDTs and how they can help simplify working with invariants and complex data objects. ElectricSQL uses rich-CRDT techniques to provide support for referential integrity and constraints in a local-first setting. See the [reference docs](/docs/reference/literature) for more information.
+Hopefully that was a useful intro to rich-CRDTs and how they can help simplify working with invariants and complex data objects. ElectricSQL uses rich-CRDT techniques to provide support for referential integrity and constraints in a local-first setting. See the [reference docs](/docs/sync/reference/literature) for more information.

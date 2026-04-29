@@ -12,7 +12,7 @@ image: /img/blog/local-first-sync-with-tanstack-db/header2.jpg
 tags: [db, tanstack-db, postgres-sync]
 outline: [2, 3]
 homepageSolution: true
-homepageOrder: 10
+homepageOrder: 40
 post: true
 ---
 
@@ -44,14 +44,14 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack&nbsp;DB](/primitives/tanstack-db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Postgres&nbsp;Sync](/primitives/postgres-sync), it provides an optimal end-to-end sync stack<span class="no-wrap-sm"> for app development</span>.
+[Tanstack&nbsp;DB](/sync/tanstack-db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Postgres&nbsp;Sync](/sync/), it provides an optimal end-to-end sync stack<span class="no-wrap-sm"> for app development</span>.
 
 </div>
 <div class="block-xs">
 
-[Tanstack&nbsp;DB](/primitives/tanstack-db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
+[Tanstack&nbsp;DB](/sync/tanstack-db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
-Paired with [Postgres&nbsp;Sync](/primitives/postgres-sync), it provides an optimal end-to-end sync stack for app&nbsp;development.
+Paired with [Postgres&nbsp;Sync](/sync/), it provides an optimal end-to-end sync stack for app&nbsp;development.
 
 </div>
 
@@ -67,7 +67,7 @@ Type-safe, declarative, incrementally adoptable and insanely fast, it's the futu
 
 ## The next frontier for front&#8209;end
 
-Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains<span class="inline-md">,</span> <span class="hidden-md">across UX, DX and AX</span> lies in [local-first<span class="hidden-md">,</span> sync<span class="hidden-md"> engine architecture</span>](/sync).
+Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains<span class="inline-md">,</span> <span class="hidden-md">across UX, DX and AX</span> lies in [local-first<span class="hidden-md">,</span> sync<span class="hidden-md"> engine architecture</span>](/sync/).
 
 Sync-based apps like [Linear](https://linear.app/blog/scaling-the-linear-sync-engine) and [Figma](https://www.figma.com/blog/how-figmas-multiplayer-technology-works) are instant to use and naturally collaborative. Eliminating stale data, loading spinners and manual data&nbsp;wiring.
 
@@ -82,7 +82,7 @@ Developed by an open collective, stewarded by [Tanner Linsley](https://github.co
 Tanner has long wanted to add local-first sync to TanStack: <em>&ldquo;I think ideally every developer would love to be able to interact with their APIs as if they were local-first. I have no doubt that that is what everybody wants.&rdquo;</em>.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="hy9pNJMFfyM" />
+  <YoutubeEmbed video-id="hy9pNJMFfyM" title="#25 – Tanner Linsley: TanStack DB" />
 </div>
 
 When Electric co-founder [Kyle Mathews](/about/team#kyle) approached Tanner to work on this, they immediately aligned on DX and a vision for incrementally adoptable local-first app development. There was still once piece missing though: a reactive query engine fast enough to make the vision a reality.
@@ -148,7 +148,7 @@ function Todos() {
 
 So, we see that TanStack already handles data loading and local optimistic writes. What exactly do we need to add to TanStack for it to support local-first sync?
 
-Well, local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/sync#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) out of the app code (into the sync engine where it can be system optimized).
+Well, local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/sync/#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) out of the app code (into the sync engine where it can be system optimized).
 
 So, the first thing we need is a local store primitive to sync data into that the app code can talk to. Let's call it a **Collection**.
 
@@ -195,7 +195,7 @@ If we have these three things &mdash; collections, live queries and mutations th
 
 ## Introducing TanStack&nbsp;DB
 
-[TanStack&nbsp;DB](/primitives/tanstack-db) is a reactive client store that extends TanStack Query with:
+[TanStack&nbsp;DB](/sync/tanstack-db) is a reactive client store that extends TanStack Query with:
 
 - [collections](#collections)
 - [live queries](#live-queries)
@@ -252,7 +252,7 @@ Sync collections automatically and efficiently keep the data in the collection u
 
 There are already a number of TanStack&nbsp;DB collections for different sync engines built-in or under development, including [Electric](/), [Firebase](https://firebase.google.com/), [Materialize](https://materialize.com) and [Trailbase](https://trailbase.io).
 
-Electric is our open-source, Postgres-native, super fast sync engine. To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/api/clients/typescript) when defining a [Shape](/docs/guides/shapes). A shape is a [filtered view on a database table](/docs/guides/shapes#where-clause) that Electric syncs out-of Postgres, into the client for you:
+Electric is our open-source, Postgres-native, super fast sync engine. To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/sync/api/clients/typescript) when defining a [Shape](/docs/sync/guides/shapes). A shape is a [filtered view on a database table](/docs/sync/guides/shapes#where-clause) that Electric syncs out-of Postgres, into the client for you:
 
 ```ts
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
@@ -620,7 +620,7 @@ When TanStack&nbsp;DB is paired with Electric, it gives you an optimal, end-to-e
 
 As we've seen, TanStack&nbsp;DB query engine is [based on differential dataflow](https://github.com/electric-sql/d2ts), when the data changes, it incrementally updates just the relevant part of the result set and the reactivity is sub-millisecond.
 
-For data delivery and fan-out, Electric serves data through existing CDN infrastructure. This handles millions of concurrent users out of the box. For example, our [cloud benchmarks](/docs/reference/benchmarks#cloud) show Electric syncing an 80Gbps workload to a million concurrent clients with flat, low latency and memory use:
+For data delivery and fan-out, Electric serves data through existing CDN infrastructure. This handles millions of concurrent users out of the box. For example, our [cloud benchmarks](/docs/sync/reference/benchmarks#cloud) show Electric syncing an 80Gbps workload to a million concurrent clients with flat, low latency and memory use:
 
 <figure>
   <ScalabilityChart />
@@ -642,7 +642,7 @@ For type-safety, collections support passing in any [Standard Schema](https://st
 
 TanStack&nbsp;DB allows you to load data from different sources, including existing API and external services and handle writes with your existing API. It has framework adapters for [common reactivity frameworks](https://tanstack.com/db/latest/docs/framework) and allows you to incrementally adopt sync one fetch, one route, one component at a time.
 
-Electric syncs data through [standard HTTP and JSON](/docs/api/http) and works [with your existing API](/blog/2024/11/21/local-first-with-your-existing-api). The combination is designed to provide a practical pathway to incrementally adopting real-time sync, without needing to re-write your code.
+Electric syncs data through [standard HTTP and JSON](/docs/sync/api/http) and works [with your existing API](/blog/2024/11/21/local-first-with-your-existing-api). The combination is designed to provide a practical pathway to incrementally adopting real-time sync, without needing to re-write your code.
 
 For example, to migrate an existing API-based app using TanStack Query:
 
@@ -656,7 +656,7 @@ Each step will make your app faster and more resilient, as well as providing a p
 
 ## Next steps
 
-[TanStack&nbsp;DB](/primitives/tanstack-db) with Electric [Postgres&nbsp;Sync](/primitives/postgres-sync) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
+[TanStack&nbsp;DB](/sync/tanstack-db) with Electric [Postgres&nbsp;Sync](/sync/) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
 
 To get started, check out the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for web and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for&nbsp;mobile.
 

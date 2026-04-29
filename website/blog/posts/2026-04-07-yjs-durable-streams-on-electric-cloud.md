@@ -12,14 +12,14 @@ post: true
 published: true
 ---
 
-[Yjs](https://yjs.dev) is the de facto library for collaborative editing on the web — battle-proven, CRDT-based, and powering tools like [TipTap](https://tiptap.dev), [CodeMirror](https://codemirror.net), and [BlockNote](https://www.blocknotejs.org/). Today we're releasing [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/y-durable-streams) — a new Yjs provider built on [Durable&nbsp;Streams](/primitives/durable-streams), now live on [Electric&nbsp;Cloud](/cloud). It brings built-in persistence, compaction, and real-time presence to collaborative apps and agentic&nbsp;systems.
+[Yjs](https://yjs.dev) is the de facto library for collaborative editing on the web — battle-proven, CRDT-based, and powering tools like [TipTap](https://tiptap.dev), [CodeMirror](https://codemirror.net), and [BlockNote](https://www.blocknotejs.org/). Today we're releasing [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/y-durable-streams) — a new Yjs provider built on [Durable&nbsp;Streams](/streams/), now live on [Electric&nbsp;Cloud](/cloud/). It brings built-in persistence, compaction, and real-time presence to collaborative apps and agentic&nbsp;systems.
 
 >[!info] 🚀&nbsp; Try it now
->[Create a Yjs service](https://dashboard.electric-sql.cloud/?intent=create&serviceType=yjs), see the [integration docs](https://durablestreams.com/yjs), [source&nbsp;code](https://github.com/durable-streams/durable-streams/tree/main/packages/y-durable-streams), and [demo&nbsp;app](/demos/territory-wars).
+>[Create a Yjs service](https://dashboard.electric-sql.cloud/?intent=create&serviceType=yjs), see the [integration docs](https://durablestreams.com/yjs), [source&nbsp;code](https://github.com/durable-streams/durable-streams/tree/main/packages/y-durable-streams), and [demo&nbsp;app](/streams/demos/territory-wars).
 
 ## Yjs on Durable Streams
 
-[Durable&nbsp;Streams](/primitives/durable-streams) is an open HTTP protocol for persistent, resumable, real-time streams. Data is durably stored, synced over plain HTTP, and cacheable at the&nbsp;edge.
+[Durable&nbsp;Streams](/streams/) is an open HTTP protocol for persistent, resumable, real-time streams. Data is durably stored, synced over plain HTTP, and cacheable at the&nbsp;edge.
 
 Most Yjs setups rely on WebSocket relay servers that maintain persistent point-to-point connections to sync changes to clients in real time. As agentic systems bring more participants into collaborative documents, they challenge the scalability of these&nbsp;setups.
 
@@ -37,10 +37,10 @@ For the full details, see the [Yjs Durable Streams Protocol](https://github.com/
 
 ## Demo
 
-Try [Territory Wars](/demos/territory-wars) — a multiplayer territory capture game running `y-durable-streams` live on Electric&nbsp;Cloud. The game board is a Yjs Y.Map where each cell is a last-writer-wins register. Players move to claim cells and enclose territory. Player presence is tracked via awareness streams. Game state is managed via [StreamDB](/blog/2026/03/26/stream-db).
+Try [Territory Wars](/streams/demos/territory-wars) — a multiplayer territory capture game running `y-durable-streams` live on Electric&nbsp;Cloud. The game board is a Yjs Y.Map where each cell is a last-writer-wins register. Players move to claim cells and enclose territory. Player presence is tracked via awareness streams. Game state is managed via [StreamDB](/blog/2026/03/26/stream-db).
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="r3i25BGom0s" />
+  <YoutubeEmbed video-id="r3i25BGom0s" title="y-durable-streams. A Yjs provider built on top of Durable Streams." />
 </div>
 
 ## Get started
@@ -94,6 +94,6 @@ Electric Cloud implements the protocol faithfully — no proprietary extensions,
 
 - [Create a Yjs service](https://dashboard.electric-sql.cloud/?intent=create&serviceType=yjs) on Electric Cloud
 - [Integration docs](https://durablestreams.com/yjs) and [protocol spec](https://github.com/durable-streams/durable-streams/blob/main/packages/y-durable-streams/YJS-PROTOCOL.md)
-- [Territory Wars demo](/demos/territory-wars) and [collaborative editor example](https://github.com/durable-streams/durable-streams/tree/main/examples/yjs-demo) on GitHub
+- [Territory Wars demo](/streams/demos/territory-wars) and [collaborative editor example](https://github.com/durable-streams/durable-streams/tree/main/examples/yjs-demo) on GitHub
 
 Join us on [Discord](https://discord.electric-sql.com) with any&nbsp;questions.

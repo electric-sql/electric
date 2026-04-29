@@ -16,7 +16,7 @@ const { background, body, href, icon, image, title } = defineProps([
   flex-direction: column;
   border-radius: 12px;
   background-color: var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
 
   overflow: hidden;
 
@@ -78,8 +78,14 @@ const { background, body, href, icon, image, title } = defineProps([
     calc(var(--padding-height) - 4px) var(--padding-width);
   background: var(--vp-c-bg-soft);
 }
+/* Self-styled h3 so the card looks right outside the .vp-doc context. Matches
+   the title scale used in the agents/streams/sync landing page cards. */
 .body :deep(h3) {
   margin: -12px 0 0.65rem 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--vp-c-text-1);
 }
 .body :deep(p) {
   position: relative;

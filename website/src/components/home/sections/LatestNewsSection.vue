@@ -1,92 +1,87 @@
 <script setup>
-import BlogPostListing from '../../BlogPostListing.vue'
-import BlueskyPosts from '../BlueskyPosts.vue'
-import Section from '../Section.vue'
+import { computed } from 'vue'
+
+import EaSection from '../../agents-home/Section.vue'
+import LandscapeBlogPostListing from '../../LandscapeBlogPostListing.vue'
+import MarkdownContent from '../../MarkdownContent.vue'
+import MdExportExplicit from '../../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../../lib/useMarkdownExport'
 
 import { data } from '../../../../data/posts.data.ts'
-const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
+const posts = data.filter((post) => post.homepage !== false).slice(0, 6)
 
-const actions = [
-  {
-    href: '/blog',
-    text: 'Electric Blog',
-    theme: 'brand',
-  },
-  {
-    href: 'https://x.com/ElectricSQL',
-    text: 'Follow @ElectricSQL',
-    classes: 'hidden-xs',
-  },
-  {
-    href: 'https://x.com/ElectricSQL',
-    text: 'Follow',
-    classes: 'block-xs',
-  },
-]
+const postsMarkdown = computed(() =>
+  posts
+    .map((post) => `- [${post.title}](${post.path}) - ${post.excerpt}`)
+    .join('\n')
+)
+
+const isMarkdownExport = useMarkdownExport()
 </script>
 
-<style scoped>
-.listing {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
-  margin: 48px 0px;
-  overflow: hidden;
-}
-@media (max-width: 1049px) {
-  .listing {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-@media (max-width: 949px) {
-  .listing {
-    margin: 36px 0px;
-  }
-}
-@media (max-width: 749px) {
-  .listing {
-    margin: 32px 0px;
-    grid-template-columns: 1fr;
-  }
-}
-
-.listing :deep(.post-body h3) {
-  font-size: 18px;
-  color: var(--vp-c-text-1);
-  font-weight: 500;
-}
-
-.listing :deep(p.post-author span) {
-  color: var(--vp-c-text-2);
-}
-
-.listing :deep(.post-body > p) {
-  font-size: 14px;
-  line-height: 24px;
-  color: var(--vp-c-text-3);
-}
-</style>
-
 <template>
-  <Section :actions="actions">
+  <EaSection>
     <template #title>
-      Latest <span class="hidden-sm">news and</span> updates</template
-    >
-    <template #tagline>
+      Latest <span class="hidden-sm">news and</span>&nbsp;updates
+    </template>
+    <template #subtitle>
       Subscribe to the
       <a href="/blog">Electric Blog</a>
     </template>
-    <div class="listing">
-      <BlogPostListing v-for="post in posts" :key="post.slug" :post="post" />
+    <MdExportExplicit v-if="isMarkdownExport">
+      <MarkdownContent>{{ postsMarkdown }}</MarkdownContent>
+    </MdExportExplicit>
+    <div v-else class="listing">
+      <LandscapeBlogPostListing
+        v-for="post in posts"
+        :key="post.slug"
+        :post="post"
+      />
     </div>
-    <!--template #outline>
-      Follow
-      <a href="https://bsky.app/profile/electric-sql.com"> @electric-sql.com</a>
-      on Bluesky and&nbsp;<a href="https://x.com/ElectricSQL"> @ElectricSQL</a>
-      on X:
+    <template #actions>
+      <VPButton
+        tag="a"
+        size="medium"
+        theme="brand"
+        text="Electric Blog"
+        href="/blog"
+      />
+      <VPButton
+        tag="a"
+        size="medium"
+        theme="alt"
+        text="Follow @ElectricSQL"
+        href="https://x.com/ElectricSQL"
+        class="hidden-xs"
+      />
+      <VPButton
+        tag="a"
+        size="medium"
+        theme="alt"
+        text="Follow"
+        href="https://x.com/ElectricSQL"
+        class="block-xs"
+      />
     </template>
-    <template #outbody>
-      <BlueskyPosts did="did:plc:kuwyhfwegvfzugctjd6cwrlg" :limit="2" />
-    </template-->
-  </Section>
+  </EaSection>
 </template>
+
+<style scoped>
+/* 6 posts laid out 2-up across three rows. The post card is a
+   horizontal image-then-text composition — at three columns the
+   text panel becomes too cramped to read comfortably, so we keep
+   the proven 2-up rhythm and use the extra two slots to fill out
+   the section without changing the card design. */
+.listing {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 8px 0px;
+}
+@media (max-width: 749px) {
+  .listing {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+</style>

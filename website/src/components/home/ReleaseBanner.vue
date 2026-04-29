@@ -14,7 +14,7 @@
 <style scoped>
 .banner {
   color: var(--vp-c-text-1);
-  border-bottom: 1px solid var(--vp-c-indigo-2);
+  border-bottom: 1px solid var(--vp-c-brand-2);
   font-weight: 500;
 
   padding: 22px 20px 17px;
@@ -27,7 +27,7 @@
   padding: 18px 24px;
 }
 .banner a:hover {
-  color: var(--vp-c-indigo-1);
+  color: var(--vp-c-brand-1);
 }
 @media (max-width: 559px) {
   .banner {

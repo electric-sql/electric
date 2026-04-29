@@ -24,7 +24,7 @@ const { cases } = defineProps(['cases'])
   padding: 12px;
 }
 .use-cases .case:hover {
-  border-color: var(--ddn-color);
+  border-color: var(--durable-streams-color);
 }
 @media (min-width: 560px) {
   .use-cases .case {
@@ -49,7 +49,7 @@ const { cases } = defineProps(['cases'])
 }
 .use-cases .case-image img {
   width: 100%;
-  filter: drop-shadow(1px 2px calc(2px + 0.5vw) var(--vp-c-indigo-1));
+  filter: drop-shadow(1px 2px calc(2px + 0.5vw) var(--vp-c-brand-1));
 }
 .use-cases .case-content {
   width: 40vw;

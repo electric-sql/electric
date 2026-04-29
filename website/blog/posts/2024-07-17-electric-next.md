@@ -27,11 +27,11 @@ Electric Next was a clean rebuild of the Electric sync engine that now forms the
 
 We created a new repo and started by porting the absolute minimum code necessary from the [previous repo](https://github.com/electric-sql/electric-old). Once we were confident that Electric Next was the way forward, we froze the old system and moved the new code into our main repo at [https://github.com/electric-sql/electric](https://github.com/electric-sql/electric).
 
-The new approach provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/integrations/react). It's also simple to write your own client in any language.
+The new approach provides an [HTTP API](/docs/sync/api/http) for syncing [Shapes](/docs/sync/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/sync/api/clients/typescript) and [integrations](/docs/sync/integrations/react). It's also simple to write your own client in any language.
 
 ## Why build a new system?
 
-Electric has its [heritage](https://electric-sql.com/about/team#advisors) in [distributed database research](/docs/reference/literature). When we started, our plan was to use this research to build a next-generation distributed database. Cockroach for the AP side of the CAP theorem. However, the adoption dynamics for creating a new database from scratch are tough. So we pivoted to building a replication layer for existing databases.
+Electric has its [heritage](https://electric-sql.com/about/team#advisors) in [distributed database research](/docs/sync/reference/literature). When we started, our plan was to use this research to build a next-generation distributed database. Cockroach for the AP side of the CAP theorem. However, the adoption dynamics for creating a new database from scratch are tough. So we pivoted to building a replication layer for existing databases.
 
 This allowed us to do active-active replication between multiple Postgres instances, in the cloud or at the edge. However, rather than stopping at the edge, we kept seeing that it was more optimal to take the database-grade replication guarantees all the way into the client.
 
@@ -106,13 +106,13 @@ So, hopefully now our motivation is clear. We needed to find a way to simplify E
 
 ## What's changed?
 
-Electric Next is a [sync engine](/primitives/postgres-sync), not a local-first software platform.
+Electric Next is a [sync engine](/sync/), not a local-first software platform.
 
-It can be used for a wide range of [use cases](/sync), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
+It can be used for a wide range of [use cases](/sync/), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
 
 ### Sync engine
 
-When we look at our stack, the part that we see as most core is the [sync engine](/primitives/postgres-sync).
+When we look at our stack, the part that we see as most core is the [sync engine](/sync/).
 
 This is the component of Electric that syncs data between Postgres and local clients. Consuming Postgres logical replication, managing partial replication using Shapes and syncing data to and from clients over a replication protocol. It’s where there’s the most complexity. Where we can add the most value and is hardest to develop yourself.
 
@@ -140,7 +140,7 @@ The diagram above and table below summarise what we see as core and what we've p
 | Aspect                                              | Is it core? | Who should/can provide?                                                                                                                                                                                                                      |
 | --------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Syncing data                                        | yes         | Electric                                                                                                                                                                                                                                     |
-| Partial replication ([Shapes](/docs/guides/shapes)) | yes         | Electric                                                                                                                                                                                                                                     |
+| Partial replication ([Shapes](/docs/sync/guides/shapes)) | yes         | Electric                                                                                                                                                                                                                                     |
 | Schema management / propagation / matching          | partial     | Application specific. In some cases it may be useful or necessary to replicate and validate schema information. In others, it can be the responsibility of the client to connect with the correct schema.                                    |
 | Type safety in the client                           | partial     | Important in many cases for DX and can be assisted by the sync service (e.g.: by providing an endpoint to query types for a shape). But use of types is optional and in many cases types can be provided by ORMs and other client-libraries. |
 | Permissions / authorization                         | no          | There are many valid patterns here. Auth middleware, proxies, rule systems. Authorize at connect, per shape, per row/operation. A sync engine may provide some hooks and options but should not prescribe a solution.                        |
@@ -157,7 +157,7 @@ One of the key aspects that has changed in the core sync engine is a switch from
 
 Switching to an HTTP protocol may at first seem like a regression or a strange fit. Web sockets are built on top of HTTP specifically to serve the kind of realtime data stream that Electric provides. However, they are also more stateful and harder to cache.
 
-By switching to the [new HTTP API](/docs/api/http), the new system:
+By switching to the [new HTTP API](/docs/sync/api/http), the new system:
 
 - minimises state, making the sync engine more reliable and easier to scale out
 - integrates with standard HTTP tooling, including proxies and CDNs
@@ -235,8 +235,8 @@ The core use case for Electric is to sync subsets of data out of Postgres into l
 You can sync data into:
 
 - apps, replacing data fetching with data sync
-- development environments, for example syncing data into [an embedded PGlite](/primitives/pglite)
-- edge workers and services, for example maintaining a low-latency [edge data cache](/docs/integrations/redis)
+- development environments, for example syncing data into [an embedded PGlite](/sync/pglite)
+- edge workers and services, for example maintaining a low-latency [edge data cache](/docs/sync/integrations/redis)
 - local AI systems running RAG, as per the example below
 
 <figure>
@@ -270,8 +270,8 @@ At the time of writing this document, we are early in the development of Electri
 
 However, even just with the first release of Electric Next you can already sync partial subsets of data from a Postgres database into a wide variety of clients and environments, for example:
 
-- syncing data into local apps using the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients
-- replacing hot-path data fetching and database queries in apps using [React](/docs/integrations/react), [MobX](/docs/integrations/react) and [TanStack](/docs/integrations/tanstack)
+- syncing data into local apps using the [TypeScript](/docs/sync/api/clients/typescript) and [Elixir](/docs/sync/api/clients/elixir) clients
+- replacing hot-path data fetching and database queries in apps using [React](/docs/sync/integrations/react), [MobX](/docs/sync/integrations/react) and [TanStack](/docs/sync/integrations/tanstack)
 - maintain live caches with automatic invalidation, as per [our Redis example](https://github.com/electric-sql/electric/blob/main/examples/redis-sync/src/index.ts)
 
 ### Roadmap
@@ -288,9 +288,9 @@ Electric Next is available to use today. We welcome community contributions.
 
 See the:
 
-- [Quickstart](/docs/quickstart)
-- [HTTP API](/docs/api/http)
-- [Examples](/demos)
+- [Quickstart](/docs/sync/quickstart)
+- [HTTP API](/docs/sync/api/http)
+- [Examples](/sync/demos/)
 
 If you have any questions or need support, ask on the `#help-and-support` channel in the [Electric Discord](https://discord.electric-sql.com).
 

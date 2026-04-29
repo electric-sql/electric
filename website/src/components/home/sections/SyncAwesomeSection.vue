@@ -23,7 +23,7 @@ const syncTargets = [
         <span class="no-wrap">
           users in sync </span>&nbsp;&nbsp;&nbsp;
       `,
-    href: '/demos/ai-chat',
+    href: '/sync/demos/ai-chat',
   },
   {
     slug: 'app',
@@ -37,7 +37,7 @@ const syncTargets = [
         <span class="no-wrap">
           and collaborative</span>
       `,
-    href: '/demos/linearlite',
+    href: '/sync/demos/linearlite',
   },
   {
     slug: 'dashboard',
@@ -61,27 +61,27 @@ const syncTargets = [
             at the edge</span>
         </span>
       `,
-    href: '/docs/integrations/cloudflare',
+    href: '/docs/sync/integrations/cloudflare',
   },
 ]
 </script>
 
 <template>
   <Section :actions="actions">
-    <template #title> Sync makes apps awesome </template>
+    <template #title> Sync makes apps&nbsp;awesome </template>
     <template #tagline>
       Sync is the magic
       <span class="hidden-lg"> ingredient</span>
       behind
       <span class="hidden-lg"> fast,</span>
       modern software. From apps
-      <a href="/demos/linearlite">
+      <a href="/sync/demos/linearlite">
         like
         <span class="hidden-559"> Figma and</span>
         Linear</a
       >
       to
-      <a href="/demos/ai-chat">
+      <a href="/sync/demos/ai-chat">
         <span class="no-wrap">multi-user</span>,
         <span class="no-wrap">multi-agent</span>
         <span class="no-wrap">AI apps</span></a

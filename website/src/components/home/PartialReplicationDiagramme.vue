@@ -123,7 +123,7 @@ import Card from './Card.vue'
 }
 .label-text {
   padding: 2px 8px;
-  background: rgba(27, 27, 31, 0.5);
+  background: var(--ec-overlay-medium);
 
   position: relative;
   display: block;

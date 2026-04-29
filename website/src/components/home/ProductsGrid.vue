@@ -1,18 +1,31 @@
 <script setup>
+import { computed } from 'vue'
 import Card from './Card.vue'
 import { data as products } from '../../../data/primitives.data.ts'
 
-const { productPage } = defineProps({
+const { productPage, excludeSlug } = defineProps({
   productPage: {
     type: Boolean,
     default: false,
   },
+  excludeSlug: {
+    type: String,
+    default: '',
+  },
 })
+
+const visibleProducts = computed(() =>
+  excludeSlug ? products.filter((p) => p.slug !== excludeSlug) : products
+)
 </script>
 
 <template>
   <div class="products-grid" :class="{ 'product-page': productPage }">
-    <div v-for="product in products" :key="product.slug" class="product-card">
+    <div
+      v-for="product in visibleProducts"
+      :key="product.slug"
+      class="product-card"
+    >
       <Card :href="product.href" :icon="product.icon" :title="product.title">
         <template v-if="productPage">
           <p class="body-p">

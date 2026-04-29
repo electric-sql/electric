@@ -1,8 +1,12 @@
 <script setup>
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+
 const { plan } = defineProps(['plan'])
 
 const priceColorVar = (() => {
-  if (plan.priceColor === 'ddn') return 'var(--ddn-color)'
+  if (plan.priceColor === 'ddn') return 'var(--durable-streams-color)'
   if (plan.priceColor === 'gray') return 'var(--vp-c-text-1)'
   return 'var(--electric-color)'
 })()
@@ -33,10 +37,40 @@ const commitmentLabel = (() => {
 
 const hasPaidPrice = plan.type === 'tier' && plan.monthlyFee > 0
 const label = plan.shortName || plan.name
+const isMarkdownExport = useMarkdownExport()
+
+const markdown = [
+  `### ${label}`,
+  hasPaidPrice
+    ? `${formatPrice(plan)}${plan.priceQualifier || ''}`
+    : plan.type === 'enterprise'
+      ? formatPrice(plan)
+      : plan.name,
+  plan.who
+    ? `${plan.who}${hasCommitment ? ` — ${commitmentLabel}` : ''}`
+    : hasCommitment
+      ? commitmentLabel
+      : '',
+  plan.billingBehavior || '',
+  plan.effectiveWriteRate !== undefined
+    ? `- ${formatRate(plan.effectiveWriteRate)} per 1M writes${plan.discountPercent ? ` (${plan.discountPercent}% discount)` : ''}`
+    : '',
+  plan.effectiveRetentionRate !== undefined
+    ? `- ${formatRate(plan.effectiveRetentionRate)} per GB-month${plan.discountPercent ? ` (${plan.discountPercent}% discount)` : ''}`
+    : '',
+  plan.support || '',
+  `[${plan.ctaText}](${plan.ctaHref})`,
+]
+  .filter(Boolean)
+  .join('\n\n')
 </script>
 
 <template>
+  <MdExportExplicit v-if="isMarkdownExport">
+    <MarkdownContent>{{ markdown }}</MarkdownContent>
+  </MdExportExplicit>
   <div
+    v-else
     :class="['pricing-card', { 'pricing-card-highlighted': plan.highlighted }]"
   >
     <div class="card-header">
@@ -109,17 +143,21 @@ const label = plan.shortName || plan.name
 
 <style scoped>
 .pricing-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  background: var(--ec-surface-1);
+  border: 1px solid var(--ec-border-1);
   border-radius: 12px;
   padding: 32px 30px;
   display: flex;
   flex-direction: column;
   height: 100%;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
 
 .pricing-card-highlighted {
-  border: 1.5px solid var(--electric-color);
+  border-color: var(--electric-color);
 }
 
 .card-header {
@@ -140,7 +178,7 @@ const label = plan.shortName || plan.name
 
 .card-hero-name {
   font-size: 1.75rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--vp-c-text-1);
   line-height: 1.2;
 }

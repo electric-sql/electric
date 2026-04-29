@@ -1,7 +1,6 @@
 <script setup>
-import { watch, onMounted, computed, ref } from 'vue'
+import { watch, onMounted, computed, nextTick, ref } from 'vue'
 import { useData, useRouter } from 'vitepress'
-import { posthog } from 'posthog-js'
 import { useSidebar, useLocalNav } from 'vitepress/theme'
 
 import DefaultTheme from 'vitepress/theme-without-fonts'
@@ -13,19 +12,29 @@ import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
+import DocsSidebarHero from './components/DocsSidebarHero.vue'
+import MegaNav from './components/MegaNav.vue'
+import MegaNavMobile from './components/MegaNavMobile.vue'
+
 import ReleaseBanner from '../../src/components/home/ReleaseBanner.vue'
 
-import HomeFeaturesAfter from '../../src/partials/home-features-after.md'
-import HomeFeaturesBefore from '../../src/partials/home-features-before.md'
+const POSTHOG_ENABLED_HOSTNAMES = new Set([
+  `electric-sql.com`,
+  `www.electric-sql.com`,
+  `electric.ax`,
+  `www.electric.ax`,
+])
 
 // Posthog analytics
 const router = useRouter()
 onMounted(() => {
   // Only run PostHog tracking in production
-  if (window.location.hostname === 'electric-sql.com') {
+  if (POSTHOG_ENABLED_HOSTNAMES.has(window.location.hostname)) {
+    const posthogPromise = import('posthog-js')
     watch(
       () => router.route.data.relativePath,
-      (path) => {
+      async () => {
+        const { posthog } = await posthogPromise
         posthog.init('phc_o4xENyuuSCdNPG2CWtfdqzYYXs6v8SbmVDzm3CP0Qwn', {
           api_host: `https://admin.electric-sql.cloud/api/ph`,
           ui_host: 'https://us.i.posthog.com',
@@ -39,15 +48,40 @@ onMounted(() => {
   }
 })
 
+// Accessibility: VitePress's default Layout doesn't wrap the content
+// area in a <main> landmark and doesn't expose a slot that lets us add
+// one. Patch role="main" onto the content wrapper on every route change
+// so screen reader users get a proper main landmark to jump to (WCAG
+// 2.4.1 "Bypass Blocks"). The skip-to-content link VitePress already
+// provides targets the same #VPContent element, so the skip link and
+// the landmark stay consistent.
+onMounted(() => {
+  watch(
+    () => router.route.data.relativePath,
+    () => {
+      requestAnimationFrame(() => {
+        const contentEl =
+          document.querySelector('.VPContent') ||
+          document.querySelector('.VPHome')
+        if (contentEl && !contentEl.hasAttribute('role')) {
+          contentEl.setAttribute('role', 'main')
+        }
+      })
+    },
+    { immediate: true }
+  )
+})
+
 const { Layout } = DefaultTheme
 
 const { frontmatter, page } = useData()
 const { hasSidebar } = useSidebar()
 const { headers } = useLocalNav()
+const canTeleportLocalNav = ref(false)
 
-// Show markdown link on docs pages (same pages that show edit link)
+// Show markdown link in the doc footer on all sidebar pages.
 const showMarkdownLink = computed(() => {
-  return page.value.relativePath?.startsWith('docs') ?? false
+  return hasSidebar.value
 })
 
 // Local nav height for dropdown positioning
@@ -57,29 +91,61 @@ onMounted(() => {
   navHeight.value = parseInt(
     getComputedStyle(document.documentElement).getPropertyValue('--vp-nav-height')
   )
+
+  watch(
+    () => router.route.data.relativePath,
+    async () => {
+      await nextTick()
+      canTeleportLocalNav.value = Boolean(document.querySelector('.VPLocalNav'))
+    },
+    { immediate: true }
+  )
 })
 const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
+
+const layoutClass = computed(() => {
+  const classes = []
+  if (!hasSidebar.value) classes.push('nav-relative')
+  if (frontmatter.value?.pageClass) classes.push(frontmatter.value.pageClass)
+  return classes.join(' ')
+})
 </script>
 
 <template>
-  <Layout :class="!hasSidebar ? 'nav-relative' : ''">
+  <Layout :class="layoutClass">
     <template #layout-top>
       <template v-if="shouldShowReleasebanner">
         <ReleaseBanner />
       </template>
     </template>
+    <template #nav-bar-content-before>
+      <MegaNav />
+    </template>
     <template #nav-bar-content-after>
       <NavSignupButton />
+    </template>
+    <template #nav-screen-content-before>
+      <MegaNavMobile />
+    </template>
+    <template #sidebar-nav-before>
+      <DocsSidebarHero />
     </template>
     <template #doc-top>
       <!-- Local nav bar: Medium screens - markdown link floats right -->
       <div v-if="showMarkdownLink" class="markdown-link-local-nav-container">
         <MarkdownLink variant="local-nav" />
       </div>
-      <!-- Small screens: Custom dropdown with markdown link -->
-      <div v-if="showMarkdownLink" class="custom-local-nav-dropdown">
-        <LocalNavOutlineDropdown :headers="headers" :navHeight="navHeight" />
-      </div>
+      <Teleport
+        v-if="showMarkdownLink && canTeleportLocalNav"
+        to=".VPLocalNav"
+      >
+        <!-- Small screens: custom dropdown with markdown link, mounted into
+             VitePress's own local-nav bar so it shares the Menu button's
+             sticky/fixed behaviour exactly. -->
+        <div class="custom-local-nav-dropdown">
+          <LocalNavOutlineDropdown :headers="headers" :navHeight="navHeight" />
+        </div>
+      </Teleport>
     </template>
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">
@@ -92,12 +158,6 @@ const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
     <template #aside-outline-before>
       <!-- Wide screens: Above "On this page" -->
       <MarkdownLink v-if="showMarkdownLink" variant="aside" />
-    </template>
-    <template #doc-footer-before>
-      <!-- Footer: Right-aligned next to "Edit this page" -->
-      <div v-if="showMarkdownLink" class="markdown-link-footer-container">
-        <MarkdownLink variant="footer" />
-      </div>
     </template>
     <template #layout-bottom>
       <SiteFooter v-if="!hasSidebar" />

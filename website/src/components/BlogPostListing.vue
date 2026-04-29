@@ -9,10 +9,10 @@ const { post } = defineProps(['post'])
 .post {
   border-radius: 12px;
   background-color: var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
 }
 .post:hover {
-  /*    border-color: var(--ddn-color);*/
+  /*    border-color: var(--durable-streams-color);*/
 }
 
 .post a {
@@ -67,8 +67,8 @@ const { post } = defineProps(['post'])
   position: relative;
   display: block;
 
-  border-top: 1px solid rgb(46, 46, 50);
-  color: var(--vp-c-indigo-1);
+  border-top: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-brand-1);
 
   padding: 18px 0 24px;
   margin: 6px 24px 0;
@@ -119,7 +119,7 @@ const { post } = defineProps(['post'])
           {{ post.title }}
         </h3>
         <p class="post-author">
-          <img :src="authors[post.authors[0]].image" />
+          <img :src="authors[post.authors[0]].image" alt="" />
           <span>
             {{ authors[post.authors[0]].name }}
           </span>

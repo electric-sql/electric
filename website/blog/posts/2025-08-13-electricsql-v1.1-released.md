@@ -47,7 +47,7 @@ The result? 102X faster writes and 73X faster reads on SSD. This is the story of
 
 ## How Electric works
 
-The core primitive for controlling sync in Electric is the [**shape**](/docs/guides/shapes). A shape is a partial replica of a table that includes the subset of rows matching a user-defined WHERE clause. Electric continuously tails Postgres's logical replication stream for changes, matches them against registered shapes, appends them to the corresponding **[shape logs](/docs/api/http#shape-log)**, and sends them to clients using HTTP long polling.
+The core primitive for controlling sync in Electric is the [**shape**](/docs/sync/guides/shapes). A shape is a partial replica of a table that includes the subset of rows matching a user-defined WHERE clause. Electric continuously tails Postgres's logical replication stream for changes, matches them against registered shapes, appends them to the corresponding **[shape logs](/docs/sync/api/http#shape-log)**, and sends them to clients using HTTP long polling.
 
 :::info Why this architecture is different
 
@@ -118,7 +118,7 @@ Following the lessons from [CockroachDB](https://www.cockroachlabs.com/) when th
 
 ## Implementation overview
 
-Our new storage architecture is elegantly simple. For each shape, we maintain two files: the **shape log**, which contains the raw data for the shape, and the **offset index**, which is a list of pointers into the shape log for fast lookup of offsets. Addressing shape logs by offset matches how [clients request shapes](/docs/api/http#shape-log).
+Our new storage architecture is elegantly simple. For each shape, we maintain two files: the **shape log**, which contains the raw data for the shape, and the **offset index**, which is a list of pointers into the shape log for fast lookup of offsets. Addressing shape logs by offset matches how [clients request shapes](/docs/sync/api/http#shape-log).
 
 <figure style="margin: 1rem auto 2rem auto; text-align: center; max-width: 100%;">
   <img :src="StorageEngineDiagram" alt="Storage engine diagram – look-up of shape log offset" style="max-width: 80%; height: auto; display: block; margin: 0 auto;" />
@@ -141,7 +141,7 @@ The shape index provides fast shape offset lookup through a sparse indexing stra
 
 **Finding a chunk**: When a client requests data starting from a specific offset, we do a binary search on the index to locate the appropriate chunk pointer, retrieve that chunk, and scan it from there, as explained above.
 
-**Lock‑free**: Because shape logs are append‑only, offset pointers are always added to the end of the index. This means that the index can be read and written without any locking. We keep a number of chunk pointers in memory to avoid reading the index from disk for [live requests](/docs/api/http#live-mode).
+**Lock‑free**: Because shape logs are append‑only, offset pointers are always added to the end of the index. This means that the index can be read and written without any locking. We keep a number of chunk pointers in memory to avoid reading the index from disk for [live requests](/docs/sync/api/http#live-mode).
 
 ### Read-only mode
 
@@ -211,7 +211,7 @@ In this case, the baseline latency for CubDB is quite high due to the number of 
 
 ### End-to-End benchmarks
 
-The following [benchmarks](/docs/reference/benchmarks) run the full Electric stack end-to-end and report application‑level latency. The results give a clearer picture of potential improvements at runtime. We ran these experiments in AWS in the same setting as the micro-benchmarks (t2.medium instances with EFS).
+The following [benchmarks](/docs/sync/reference/benchmarks) run the full Electric stack end-to-end and report application‑level latency. The results give a clearer picture of potential improvements at runtime. We ran these experiments in AWS in the same setting as the micro-benchmarks (t2.medium instances with EFS).
 
 #### Shape creation
 

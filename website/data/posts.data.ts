@@ -1,11 +1,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parse } from 'yaml'
+import type { PostFrontmatter, PostListRow } from '../src/types/data-loaders'
+
+function parsePostFrontmatter(raw: string): PostFrontmatter {
+  return parse(raw) as PostFrontmatter
+}
 
 export default {
   watch: [`../blog/posts/*.md`],
 
-  load(files) {
+  load(files: string[]) {
     return files
       .map((file) => {
         const base = path.basename(file, `.md`)
@@ -19,18 +24,25 @@ export default {
         const contents = fs.readFileSync(file, `utf-8`)
         const frontmatter = contents.split(`---\n`)[1]
 
-        const data = parse(frontmatter)
-        const excerpt =
-          data.excerpt ||
-          contents.split(`---\n`)[2].split(`<!--truncate-->`)[0].trim()
+        const parsed = parsePostFrontmatter(frontmatter)
+        const excerpt = typeof parsed.excerpt === `string` ? parsed.excerpt : ``
+        const bodyExcerpt = contents
+          .split(`---\n`)[2]
+          .split(`<!--truncate-->`)[0]
+          .trim()
+        const resolvedExcerpt = excerpt || bodyExcerpt
 
-        data.date = `${year}-${month}-${day}`
-        data.path = `/blog/${year}/${month}/${day}/${slug}`
-        data.excerpt = excerpt
+        const date = `${year}-${month}-${day}`
+        const blogPath = `/blog/${year}/${month}/${day}/${slug}`
 
-        return data
+        return {
+          ...parsed,
+          date,
+          path: blogPath,
+          excerpt: resolvedExcerpt,
+        } satisfies PostListRow
       })
-      .filter((x) => x.published !== false)
+      .filter((row) => row.published !== false)
       .sort((a, b) => (a.path < b.path ? 1 : -1))
   },
 }

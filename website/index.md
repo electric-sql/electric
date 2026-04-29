@@ -1,49 +1,29 @@
 ---
-layout: home
-title: "Electric"
-titleTemplate: ":title | Data platform for multi-agent"
-hero:
-  name: 'The data platform'
-  text: '<br />for multi-agent'
-  tagline: >-
-    Electric provides the data primitives and&nbsp;infra to build collaborative,
-    <span class="no-wrap">multi-agent systems</span>
-  actions:
-    - theme: brand
-      text: Start building now »
-      link: https://dashboard.electric-sql.cloud/
-  image:
-    src: /img/home/zap-with-halo.svg
+layout: page
+title: 'Electric'
+titleTemplate: ':title | Agents on sync'
+sidebar: false
+pageClass: home-page
+mdExport:
+  mode: parse-html
+# TODO(meta-image): the default meta image
+# (/img/meta/electric-sync-primitives.jpg, defined in
+# .vitepress/config.mts) still shows the legacy four-card grid and
+# no longer reflects the agent-platform positioning. Replace with a
+# hero-style composition based on the new homepage hero — title +
+# product graphic. Two practical approaches:
+#   1. CSS-hack a 1200x630 view of `HomeHero` and screenshot/crop it
+#      (cleanest path; the hero already has the right composition).
+#   2. Re-design as a static JPG in Figma / similar.
+# Note: Twitter/X does NOT autoplay GIFs in cards (animated embeds
+# fall back to the first frame), so prefer a static JPG that
+# captures the hero at a strong moment, then add an `image:`
+# frontmatter override here once the asset is in
+# /public/img/meta/.
 ---
 
 <script setup>
-import { onMounted } from 'vue'
-
-import {
-  BackedBySection,
-  DeploymentSection,
-  GetStartedStrap,
-  LatestNewsSection,
-  NoSilosStrap,
-  OpenSourceSection,
-  ProductsSection,
-  ScalesToSection,
-  SolutionsSection,
-  WorksWithSection
-} from './src/components/home'
-
-onMounted(() => {
-  if (typeof window !== 'undefined' && document.querySelector) {
-    document.querySelectorAll('.actions a[href^="https://github.com"]').forEach((link) => {
-      if (!link.querySelector('.vpi-social-github')) {
-        const icon = document.createElement('span')
-        icon.classList.add('vpi-social-github')
-
-        link.prepend(icon)
-      }
-    })
-  }
-})
+import HomePage from './src/components/home/HomePage.vue'
 </script>
 
 <div data-template="true" class="hidden" id="works-with-sql-template">
@@ -76,13 +56,6 @@ const Todos = () => {
 
 </div>
 
-<SolutionsSection />
-<ProductsSection />
-<WorksWithSection />
-<DeploymentSection />
-<ScalesToSection />
-<NoSilosStrap />
-<LatestNewsSection />
-<GetStartedStrap />
-<BackedBySection />
-<OpenSourceSection />
+<MdExportParseHtml>
+  <HomePage />
+</MdExportParseHtml>

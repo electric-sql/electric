@@ -4,13 +4,13 @@ import ProductsGrid from '../ProductsGrid.vue'
 
 const actions = [
   {
-    href: '/primitives',
-    text: 'Primitives',
+    href: '/sync',
+    text: 'Sync',
     theme: 'brand',
   },
   {
-    href: '/docs',
-    text: 'Docs',
+    href: '/streams',
+    text: 'Streams',
   },
 ]
 </script>

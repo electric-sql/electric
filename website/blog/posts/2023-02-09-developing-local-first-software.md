@@ -19,7 +19,7 @@ post: true
 
 <!--truncate-->
 
-There's a [range of local-first tooling](/docs/reference/alternatives) now emerging. Not just [Electric](https://electric-sql.com) but also projects like [Evolu](https://github.com/evoluhq/evolu), [Homebase](https://homebase.io), [Instant](https://www.instantdb.com), [lo-fi](https://github.com/a-type/lo-fi), [Replicache](https://replicache.dev), [sqlite_crdt](https://github.com/cachapa/sqlite_crdt) and [Vlcn](https://vlcn.io). With these, and others, local-first is becoming more accessible. However, it's still a fundamentally different paradigm. You code directly against a local, embedded database. Your data access code runs in an untrusted environment. You have to work within the limitations of what you can store and sync onto the device &mdash; and what your users allow you to sync off it.
+There's a [range of local-first tooling](/docs/sync/reference/alternatives) now emerging. Not just [Electric](https://electric-sql.com) but also projects like [Evolu](https://github.com/evoluhq/evolu), [Homebase](https://homebase.io), [Instant](https://www.instantdb.com), [lo-fi](https://github.com/a-type/lo-fi), [Replicache](https://replicache.dev), [sqlite_crdt](https://github.com/cachapa/sqlite_crdt) and [Vlcn](https://vlcn.io). With these, and others, local-first is becoming more accessible. However, it's still a fundamentally different paradigm. You code directly against a local, embedded database. Your data access code runs in an untrusted environment. You have to work within the limitations of what you can store and sync onto the device &mdash; and what your users allow you to sync off it.
 
 This post aims to walk through the key differences and trade-offs, from working directly against a local database to the challenges of concurrent writes, partitioning and partial replication.
 
@@ -72,7 +72,7 @@ GRANT ALL ON items TO admin;
 
 This is an example of transposing auth logic into security rules. But, actually, row-level security is typically _not_ what you need for local-first applications. Because with standard RLS the user is set by the database connection string and the rules are scoped to tables. Instead, what you need is to connect the rules to the end-user of the application and to the context in which the data is being loaded through.
 
-For example, [Supabase extends RLS](https://supabase.com/docs/guides/auth/row-level-security) with an `auth` context. This allows rules to be connected to the end-user of the application, rather than the user in the database connection string:
+For example, [Supabase extends RLS](https://supabase.com/docs/sync/guides/auth/row-level-security) with an `auth` context. This allows rules to be connected to the end-user of the application, rather than the user in the database connection string:
 
 ```sql
 CREATE TABLE items (
@@ -306,7 +306,7 @@ The algorithm(s) that your or your framework uses for keeping the results in syn
 
 Distributed systems tend to be framed in terms of the [CAP Theorem](https://en.wikipedia.org/wiki/CAP_theorem) and the [consistency models](https://jepsen.io/consistency) they can provide. With local-first, devices need to accept writes when offline and can be offline ("partitioned") for weeks. This dictates that local-first systems can't use consensus or coordination to maintain consistency. So they have to embrace eventual consistency and come at things from the AP side of the CAP Theorem.
 
-The good news is that [recent advances in the research base](/docs/reference/literature) have strengthened the guarantees that AP systems can provide. Specifically, it's now possible to build systems that provide transactional atomicity, causal consistency and conflict free merge semantics using [CRDTs](https://crdt.tech). This provides a much stronger programming model that weak eventual consistency. With Electric, we build on it to also provide referential integrity and constraints using [Rich-CRDTs](/blog/2022/05/03/introducing-rich-crdts).
+The good news is that [recent advances in the research base](/docs/sync/reference/literature) have strengthened the guarantees that AP systems can provide. Specifically, it's now possible to build systems that provide transactional atomicity, causal consistency and conflict free merge semantics using [CRDTs](https://crdt.tech). This provides a much stronger programming model that weak eventual consistency. With Electric, we build on it to also provide referential integrity and constraints using [Rich-CRDTs](/blog/2022/05/03/introducing-rich-crdts).
 
 However, application developers still need to accept that writes can be made concurrently and that data may therefore "move around" underneath you. There are different approaches to this. You can reject conflicting writes, leading to rollbacks. Or you can always merge writes in. This allows you to write with _finality_ and avoid rollbacks but updates may still be "built on" by concurrent writes made elsewhere.
 
@@ -316,4 +316,4 @@ This can result in data states that are unexpected if you're used to thinking ab
 
 Hopefully this has been a useful walk through some of the design and architectural considerations to bear in mind when adopting and building local-first. Essentially, you need to codify auth, filtering and validation into database security rules. Bind live queries to your components in the client application. Write directly to the local database and use event sourcing to trigger server-side workflows. As a result you get modern, realtime multi-user experience, with built in offline support, resilience, privacy and data ownership.
 
-If you're interested in local-first development, you can get started right now with our [Introduction](/docs/quickstart) and [Quickstart](/docs/quickstart) guides.
+If you're interested in local-first development, you can get started right now with our [Introduction](/docs/sync/quickstart) and [Quickstart](/docs/sync/quickstart) guides.

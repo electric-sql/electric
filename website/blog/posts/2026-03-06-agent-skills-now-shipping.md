@@ -8,7 +8,7 @@ authors: [kyle]
 image: /img/blog/agent-skills-now-shipping/hero.png
 imageWidth: 2752
 imageHeight: 1536
-tags: [agentic, AI, development]
+tags: [agents, agentic, AI, development]
 outline: [2, 3]
 post: true
 ---
@@ -25,7 +25,7 @@ This loads a skill *inside your agent* that installs the relevant skills for you
 
 ## Why This Matters
 
-If you've used a coding agent with a fast-moving library, you've felt the pain. The agent confidently writes code against APIs renamed two versions ago. For newer libraries like [Durable Streams](/primitives/durable-streams), agents know nothing — the library falls outside their training data. You paste in docs; the agent half-reads them. You point it at a rules file on GitHub; it's already stale.
+If you've used a coding agent with a fast-moving library, you've felt the pain. The agent confidently writes code against APIs renamed two versions ago. For newer libraries like [Durable Streams](/streams/), agents know nothing — the library falls outside their training data. You paste in docs; the agent half-reads them. You point it at a rules file on GitHub; it's already stale.
 
 As we wrote on the TanStack blog, the core problem is version fragmentation: "once a breaking change ships, models don't 'catch up.' They develop a permanent split-brain — training data contains both versions forever with no way to disambiguate."
 

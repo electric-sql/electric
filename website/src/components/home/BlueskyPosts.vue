@@ -344,7 +344,7 @@ onMounted(() => {
 .no-posts {
   padding: 1rem;
   text-align: center;
-  color: #666;
+  color: var(--vp-c-text-2);
 }
 
 .error {
@@ -366,11 +366,11 @@ onMounted(() => {
 }
 
 .post {
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   padding: 1rem;
-  background: #202127;
-  color: #fff;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
 }
 
 .post-header {
@@ -408,7 +408,7 @@ onMounted(() => {
 }
 
 .handle {
-  color: #9ca3af;
+  color: var(--vp-c-text-3);
   font-size: 0.8rem;
 }
 
@@ -417,7 +417,7 @@ onMounted(() => {
 }
 
 .post-date {
-  color: #9ca3af;
+  color: var(--vp-c-text-3);
   font-size: 0.8rem;
   padding-top: 2px;
 }
@@ -446,7 +446,7 @@ onMounted(() => {
 .post-footer {
   display: flex;
   justify-content: flex-end;
-  border-top: 1px solid #2a2c34;
+  border-top: 1px solid var(--vp-c-divider);
   padding-top: 0.75rem;
   margin-top: 0.5rem;
 }

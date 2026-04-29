@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useData } from 'vitepress'
+import { toMarkdownUrl } from '../lib/markdownUrl'
 
 const props = defineProps({
   variant: {
@@ -12,9 +13,7 @@ const props = defineProps({
 const { page } = useData()
 
 const markdownUrl = computed(() => {
-  // Get current path and append .md
-  const path = (page.value.relativePath ?? '').replace(/\.md$/, '')
-  return `/${path}.md`
+  return toMarkdownUrl(page.value.relativePath)
 })
 </script>
 
@@ -77,7 +76,7 @@ const markdownUrl = computed(() => {
 
 .markdown-link-aside .title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--vp-c-text-2);
 }
 

@@ -20,7 +20,7 @@ hero:
       link: /product/cloud/sign-up
     - theme: alt
       text: Quickstart
-      link: /docs/quickstart
+      link: /docs/sync/quickstart
     - theme: alt
       text: '​'
       target: '_blank'

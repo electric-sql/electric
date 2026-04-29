@@ -2,7 +2,7 @@
 layout: page
 title: Blog
 description: >-
-  The latest news and updates from ElectricSQL.
+  The latest news and updates from Electric.
 image: /static/img/blog/electric-elephant.jpg
 sidebar: false
 ---
@@ -50,24 +50,26 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+  /* Match the landing-page sections' outer rhythm: a flat 24px of side
+     padding from the viewport, with the inner content allowed to stretch
+     to the full 1152px `.container` cap. The header and listing each get
+     `margin: ... 24px` so titles and cards align with the same vertical
+     rule the landing pages use, instead of carrying the older 40-48px
+     gutter that made the listing look narrower than the rest of the
+     site at wider widths. */
   .header {
     text-align: center;
     padding: 0;
-    margin: 60px 48px 32px;
+    margin: 0 24px 32px;
   }
   .header img {
     width: 100%;
     max-width: 720px;
     margin: 0 auto 36px;
   }
-  @media (max-width: 949px) {
+  @media (max-width: 959px) {
     .header {
-      margin: 58px 40px 32px;
-    }
-  }
-  @media (max-width: 749px) {
-    .header {
-      margin: 54px 32px 32px;
+      margin: 54px 24px 32px;
     }
   }
   @media (max-width: 549px) {
@@ -85,29 +87,13 @@ onMounted(async () => {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 32px;
-    margin: 24px 48px;
+    margin: 24px;
     overflow: hidden;
-  }
-  @media (max-width: 1049px) {
-    .listing {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-  @media (max-width: 949px) {
-    .listing {
-      gap: 32px;
-      margin: 24px 40px;
-    }
   }
   @media (max-width: 749px) {
     .listing {
       grid-template-columns: 1fr;
       gap: 32px;
-      margin: 20px 32px;
-    }
-  }
-  @media (max-width: 549px) {
-    .listing {
       margin: 20px 24px;
     }
   }
@@ -120,16 +106,11 @@ onMounted(async () => {
   <div class="container">
     <main>
       <div class="header">
-        <NetlifyImage
-          :src="ElectricElephant"
-          :width="720"
-          :height="440"
-        />
         <h1>
-          ElectricSQL Blog
+          Electric Blog
         </h1>
         <p>
-          The latest news and updates from the ElectricSQL&nbsp;project.
+          The latest news and updates from&nbsp;Electric.
         </p>
         <div class="actions cta-actions">
           <div class="action hidden-sm">

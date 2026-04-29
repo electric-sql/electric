@@ -3,11 +3,11 @@ openapi: 3.1.0
 info:
   title: Electric HTTP API
   description: |-
-    [HTTP API](https://electric-sql.com/docs/api/http) to sync
+    [HTTP API](https://electric-sql.com/docs/sync/api/http) to sync
     partial replicas of your Postgres data into local apps
     and services.
 
-    See the [Electric documentation](https://electric-sql.com/docs/intro)
+    See the [Electric documentation](https://electric-sql.com/docs/sync/)
     for more information.
   version: __PLACEHOLDER_SYNC_SERVICE_VERSION__
 
@@ -177,7 +177,7 @@ paths:
             This should be a valid PostgreSQL WHERE clause using SQL syntax.
 
             For more details on what is supported and what is optimal,
-            see the [where clause documentation](https://electric-sql.com/docs/guides/shapes#where-clause).
+            see the [where clause documentation](https://electric-sql.com/docs/sync/guides/shapes#where-clause).
 
             If this where clause uses a positional parameter, it's value must be provided under `params[n]=`
             query parameter.

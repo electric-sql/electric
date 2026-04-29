@@ -170,7 +170,7 @@ When local-first is done right, developers can create reactive, realtime, multi-
 
 With the [right system and concurrency semantics](/blog/2022/05/03/introducing-rich-crdts), you can also write locally with _finality_ as opposed to _tentativity_. I.e.: with the certainty that your writes will not be rejected once they've been accepted locally <sup>[1]</sup>. Instead of having to implement both the `updater` and `optimisticUpdater` callbacks of the GraphQL `commitMutation` API we saw above, you simply write to the local database and if your write succeeds locally, you're done.
 
-> <span class="text-small">[1]</span> See the [Highly Available Transactions](https://doi.org/10.14778/2732232.2732237) and [Cure](https://doi.org/10.1109/ICDCS.2016.98) papers, both listed on our [literature&nbsp;page](/docs/reference/literature).
+> <span class="text-small">[1]</span> See the [Highly Available Transactions](https://doi.org/10.14778/2732232.2732237) and [Cure](https://doi.org/10.1109/ICDCS.2016.98) papers, both listed on our [literature&nbsp;page](/docs/sync/reference/literature).
 
 ### Optimal placement and movement of data
 

@@ -1,18 +1,22 @@
 ---
 title: About
 description: >-
-  ElectricSQL is an open source project. We welcome new users,
-  contributors, supporters and community members.
+  Electric creates and maintains open source projects including ElectricSQL,
+  PGlite, Durable Streams, and TanStack DB. We welcome contributors and
+  community members.
 outline: deep
 ---
 
+<script setup>
+import CommunityRepoGrid from '../src/components/community/CommunityRepoGrid.vue'
+import SocialLinks from '../src/components/SocialLinks.vue'
+</script>
+
 # Community
 
-ElectricSQL is an open source project. We welcome new users, developers, contributors, advocates and <span class="no-wrap">community members :)</span>
+Electric creates and maintains a family of open source projects — ElectricSQL, PGlite, Durable Streams, and TanStack DB — all released under Apache 2.0 or MIT licenses. We welcome new users, developers, contributors, and community members.
 
-## Source code
-
-The code is at [github.com/electric-sql](https://github.com/electric-sql) released under the [Apache 2.0 License](https://github.com/electric-sql/electric/blob/main/LICENSE).
+<CommunityRepoGrid />
 
 ## Contributing
 
@@ -27,6 +31,7 @@ Guidelines on contributing are in the repo, including:
 We have an [open community Discord](https://discord.electric-sql.com). If you're interested in the project, please come and say hello.
 
 <iframe src="https://discord.com/widget?id=933657521581858818&theme=dark"
+    title="Electric community on Discord"
     width="350"
     height="500"
     sandbox="allow-popups allow-same-origin allow-popups-to-escape-sandbox allow-scripts"
@@ -47,9 +52,7 @@ If you have feature requests or want to post ideas for discussion, please post o
 
 You can also find us on:
 
-- Bluesky as [@electric-sql.com](https://bsky.app/profile/@electric-sql.com) and [@pglite.dev](https://bsky.app/profile/@pglite.dev)
-- X as [@ElectricSQL](https://x.com/ElectricSQL)
-- LinkedIn as [company/ElectricSQL](https://www.linkedin.com/company/electric-sql)
+<SocialLinks />
 
 ## Wider community
 
