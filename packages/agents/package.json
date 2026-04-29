@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Built-in Electric Agents runtimes such as Horton and worker",
   "repository": {
     "type": "git",
