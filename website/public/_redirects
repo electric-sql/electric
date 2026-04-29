@@ -29,7 +29,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/usage/quickstart          /docs/sync/quickstart
 /docs/usage/reactivity          /docs/sync
 /docs/usage/replication         /docs/sync
-/legal                          /legal/terms
+/legal                          /about/legal/terms
 
 # Bumped the introducing post date and version
 
@@ -52,13 +52,13 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /search                         /
 /about/partnerships             /about/community
 /docs/api                       /docs/sync/api/http
-/docs/api/*                     /docs/sync/api/http
+/docs/api/*                     /docs/sync/api/:splat
 /docs/deployment                /docs/sync/guides/deployment
 /docs/deployment/*              /docs/sync/guides/deployment
 /docs/examples                  /sync/demos
 /docs/examples/*                /sync/demos
 /docs/integrations              /docs/sync/integrations/react
-/docs/integrations/*            /docs/sync/integrations/react
+/docs/integrations/*            /docs/sync/integrations/:splat
 /docs/intro/*                   /docs/sync
 /docs/recipes                   /docs/sync
 /docs/recipes/*                 /docs/sync
@@ -92,7 +92,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/guides/writing-your-own-client                /docs/sync/guides/client-development
 /use-cases/state-transfer                           /use-cases/data-sync
 /product/cloud/sign-up                              https://dashboard.electric-sql.cloud
-/product/cloud/onboarding                           /cloud/overview
+/product/cloud/onboarding                           /cloud
 /product/cloud/usage                                /cloud/usage
 /docs/guides/llms                                   /llms
 /blog/2025/07/29/local-first-sync-with-tanstack-db  /blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db
@@ -138,11 +138,13 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/streams/deployment          https://durablestreams.com/deployment
 /docs/streams/benchmarking        https://durablestreams.com/benchmarking
 
-# Jobs page renamed to Careers
-/about/jobs                       /about/careers
-/about/jobs/*                     /about/careers/:splat
+# Jobs pages were removed; send old listings and role pages to About.
+/about/jobs                       /about
+/about/jobs/*                     /about
 
 # Demos moved under /sync/demos
+/demos/durable-doom               /streams/demos/durable-doom
+/demos/territory-wars             /streams/demos/territory-wars
 /demos                            /sync/demos
 /demos/*                          /sync/demos/:splat
 
