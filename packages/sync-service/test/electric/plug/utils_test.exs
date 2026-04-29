@@ -94,7 +94,7 @@ defmodule Electric.Plug.UtilsTest do
       refute Map.has_key?(attrs, "http.body_param.where")
     end
 
-    test "truncates large body param strings to 2000 bytes and keeps valid UTF-8" do
+    test "truncates large body param strings to 2000 graphemes and keeps valid UTF-8" do
       long_value = String.duplicate("😀", 20_000)
 
       conn =
@@ -108,7 +108,7 @@ defmodule Electric.Plug.UtilsTest do
       truncated = attrs["http.body_param.subset.where"]
 
       assert String.valid?(truncated)
-      assert byte_size(truncated) <= 2000
+      assert String.length(truncated) == 2_000
       assert byte_size(truncated) < byte_size(long_value)
       assert String.starts_with?(long_value, truncated)
     end
@@ -127,7 +127,24 @@ defmodule Electric.Plug.UtilsTest do
       truncated = attrs["http.body_param.subset.where"]
 
       assert String.valid?(truncated)
-      assert truncated == String.duplicate("a", 1_999)
+      assert truncated == String.duplicate("a", 2_000)
+    end
+
+    test "drops invalid bytes from body param strings that do not need truncation" do
+      value = "prefix" <> <<255>> <> "suffix"
+
+      conn =
+        Plug.Test.conn(:post, "/v1/shape")
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.assign(:body_params, %{
+          "where" => value
+        })
+
+      attrs = Utils.common_open_telemetry_attrs(conn)
+      sanitized = attrs["http.body_param.subset.where"]
+
+      assert String.valid?(sanitized)
+      assert sanitized == "prefixsuffix"
     end
 
     test "records subset params as a single truncated string attr" do
@@ -144,7 +161,7 @@ defmodule Electric.Plug.UtilsTest do
       params_attr = attrs["http.body_param.subset.params"]
 
       assert String.valid?(params_attr)
-      assert byte_size(params_attr) <= 2000
+      assert String.length(params_attr) <= 2_000
       assert String.starts_with?(params_attr, ~s(%{"1" => "aaaa))
     end
 

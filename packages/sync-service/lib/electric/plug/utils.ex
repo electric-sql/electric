@@ -83,7 +83,7 @@ defmodule Electric.Plug.Utils do
   end
 
   alias OpenTelemetry.SemConv, as: SC
-  @max_telemetry_string_bytes 2000
+  @max_telemetry_string_graphemes 2000
   @telemetry_body_subset_keys ~w(where order_by limit offset)
   @telemetry_body_subset_params_key "params"
 
@@ -197,13 +197,10 @@ defmodule Electric.Plug.Utils do
   defp scalar_attr_value(value) when is_boolean(value) or is_number(value), do: {:ok, value}
   defp scalar_attr_value(_value), do: :skip
 
-  defp truncate_telemetry_string(value)
-       when byte_size(value) <= @max_telemetry_string_bytes, do: value
-
   defp truncate_telemetry_string(value) do
     value
-    |> binary_part(0, @max_telemetry_string_bytes)
     |> trim_invalid_utf8()
+    |> String.slice(0, @max_telemetry_string_graphemes)
   end
 
   defp trim_invalid_utf8(value) do

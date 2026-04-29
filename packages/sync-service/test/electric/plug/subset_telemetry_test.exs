@@ -82,7 +82,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
     assert query_attrs["subset.result_bytes"] > 0
   end
 
-  test "truncates large POST body strings to 2000 bytes in telemetry attrs", ctx do
+  test "truncates large POST body strings to 2000 graphemes in telemetry attrs", ctx do
     test_pid = self()
     long_where = "value ILIKE $1" <> String.duplicate(" ", 3_000)
 
@@ -108,7 +108,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
 
     assert conn.status == 200
     assert_receive {:body_attrs, attrs}
-    assert byte_size(attrs["http.body_param.subset.where"]) == 2_000
-    assert attrs["http.body_param.subset.where"] == binary_part(long_where, 0, 2_000)
+    assert String.length(attrs["http.body_param.subset.where"]) == 2_000
+    assert attrs["http.body_param.subset.where"] == String.slice(long_where, 0, 2_000)
   end
 end
