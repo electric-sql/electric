@@ -6,7 +6,7 @@ import {
 } from './hooks/useServerConnection'
 import { PinnedEntitiesProvider } from './hooks/usePinnedEntities'
 import { ElectricAgentsProvider } from './lib/ElectricAgentsProvider'
-import { ThemeSwitcher, useTheme } from './components/ThemeSwitcher'
+import { DarkModeProvider, useDarkModeContext } from './hooks/useDarkMode'
 import { router } from './router'
 
 function AppInner(): React.ReactElement {
@@ -21,19 +21,28 @@ function AppInner(): React.ReactElement {
   )
 }
 
-export function App(): React.ReactElement {
-  const { themeId, theme, setThemeId } = useTheme()
+function ThemedApp(): React.ReactElement {
+  const { darkMode } = useDarkModeContext()
 
   return (
     <Theme
-      accentColor={theme.accentColor}
-      grayColor={theme.grayColor}
-      radius={theme.radius}
+      appearance={darkMode ? `dark` : `light`}
+      accentColor={darkMode ? `cyan` : `gray`}
+      grayColor="slate"
+      radius="medium"
+      panelBackground="solid"
     >
       <ServerConnectionProvider>
         <AppInner />
-        <ThemeSwitcher themeId={themeId} onSwitch={setThemeId} />
       </ServerConnectionProvider>
     </Theme>
+  )
+}
+
+export function App(): React.ReactElement {
+  return (
+    <DarkModeProvider>
+      <ThemedApp />
+    </DarkModeProvider>
   )
 }
