@@ -21,7 +21,7 @@ const cards: Card[] = [
   {
     lang: 'TypeScript',
     icon: 'TS',
-    tagline: 'browser · Node · Edge · Workers',
+    tagline: 'Browser · Node · Workers',
     lines: [
       {
         html: `<span class="kw">import</span> { stream } <span class="kw">from</span> <span class="str">'@durable-streams/client'</span>`,
@@ -37,7 +37,7 @@ const cards: Card[] = [
   {
     lang: 'Python',
     icon: 'Py',
-    tagline: 'data scientists · workers',
+    tagline: 'Data scientists · Workers',
     lines: [
       {
         html: `<span class="kw">from</span> durable_streams <span class="kw">import</span> stream`,
@@ -56,7 +56,7 @@ const cards: Card[] = [
   {
     lang: 'Swift',
     icon: 'Sw',
-    tagline: 'iOS · macOS app',
+    tagline: 'iOS · macOS',
     lines: [
       { html: `<span class="kw">let</span> task = URLSession.shared` },
       { html: `  .dataTask(with: URLRequest(url: URL(...)))` },
@@ -70,7 +70,7 @@ const cards: Card[] = [
   {
     lang: 'Go',
     icon: 'Go',
-    tagline: 'servers · AnyCable · Rails',
+    tagline: 'Servers',
     lines: [
       { html: `resp, _ := http.Get(STREAM_URL)` },
       { html: `scanner := bufio.NewScanner(resp.Body)` },
@@ -82,7 +82,7 @@ const cards: Card[] = [
   {
     lang: 'curl',
     icon: '$_',
-    tagline: 'shell · scripts · debugging',
+    tagline: 'Shell · Scripts · Debugging',
     lines: [
       { html: `curl -N <span class="str">"$URL?live=sse"</span>` },
       { html: '' },
