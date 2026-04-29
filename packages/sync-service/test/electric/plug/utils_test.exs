@@ -110,6 +110,23 @@ defmodule Electric.Plug.UtilsTest do
       assert String.starts_with?(long_value, truncated)
     end
 
+    test "drops invalid leading bytes when truncating body param strings" do
+      long_value = <<255>> <> String.duplicate("a", 3_000)
+
+      conn =
+        Plug.Test.conn(:post, "/v1/shape")
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.assign(:body_params, %{
+          "where" => long_value
+        })
+
+      attrs = Utils.common_open_telemetry_attrs(conn)
+      truncated = attrs["http.body_param.subset.where"]
+
+      assert String.valid?(truncated)
+      assert truncated == String.duplicate("a", 1_999)
+    end
+
     test "ignores non-subset top-level POST body params" do
       conn =
         Plug.Test.conn(:post, "/v1/shape")

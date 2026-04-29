@@ -203,13 +203,14 @@ defmodule Electric.Plug.Utils do
     |> trim_invalid_utf8()
   end
 
-  defp trim_invalid_utf8(value) when value == "", do: value
-
   defp trim_invalid_utf8(value) do
     if String.valid?(value) do
       value
     else
-      trim_invalid_utf8(binary_part(value, 0, byte_size(value) - 1))
+      value
+      |> String.chunk(:valid)
+      |> Enum.filter(&String.valid?/1)
+      |> Enum.join()
     end
   end
 
