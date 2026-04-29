@@ -1,5 +1,11 @@
 # @electric-ax/agents
 
+## 0.2.4
+
+### Patch Changes
+
+- 1aec196: feat: CLI quickstart readability and clarity improvements
+
 ## 0.2.3
 
 ### Patch Changes

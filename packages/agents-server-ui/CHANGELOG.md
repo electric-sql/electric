@@ -1,5 +1,12 @@
 # @electric-ax/agents-server-ui
 
+## 0.2.8
+
+### Patch Changes
+
+- d13820e: Tune the agents server UI accent colors and restore readable dark-mode code snippets.
+- c0037aa: fix: update the ui
+
 ## 0.1.6
 
 ### Patch Changes

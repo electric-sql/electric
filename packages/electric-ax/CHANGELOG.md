@@ -1,5 +1,13 @@
 # electric-ax
 
+## 0.1.16
+
+### Patch Changes
+
+- 1aec196: feat: CLI quickstart readability and clarity improvements
+- Updated dependencies [1aec196]
+  - @electric-ax/agents@0.2.4
+
 ## 0.1.15
 
 ### Patch Changes
