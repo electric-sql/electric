@@ -36,7 +36,7 @@ jobs:
         image: 'ghcr.io/${{ github.repository }}/postgres:${{ matrix.postgres_version }}-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
-        options: >-
+        options: &postgres_health_check >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
@@ -44,7 +44,7 @@ jobs:
         ports:
           - 54321:5432
 
-      pgbouncer:
+      pgbouncer: &pgbouncer_service
         image: bitnamilegacy/pgbouncer:latest
         env:
           PGBOUNCER_AUTH_TYPE: trust
@@ -57,17 +57,21 @@ jobs:
         ports:
           - 65432:6432
     steps:
-      - uses: actions/checkout@v4
+      - &checkout_source
+        uses: actions/checkout@v4
 
-      - name: Seed the database
+      - &seed_database
+        name: Seed the database
         run: psql -d postgresql://postgres:password@localhost:54321/postgres?sslmode=disable -f dev/init.sql
 
-      - uses: erlef/setup-beam@v1
+      - &setup_beam
+        uses: erlef/setup-beam@v1
         with:
           version-type: strict
           version-file: '.tool-versions'
 
-      - name: Cache dependencies
+      - &cache_dependencies
+        name: Cache dependencies
         uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
@@ -77,7 +81,8 @@ jobs:
             ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}
             ${{ runner.os }}-sync-service-deps
 
-      - name: Cache compiled code
+      - &cache_compiled_code
+        name: Cache compiled code
         uses: actions/cache@v4
         with:
           path: |
@@ -90,10 +95,12 @@ jobs:
             ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}
             ${{ runner.os }}-sync-service-build
 
-      - name: Install dependencies
+      - &install_dependencies
+        name: Install dependencies
         run: mix do deps.get + deps.compile
 
-      - name: Compile package
+      - &compile_package
+        name: Compile package
         run: mix compile
 
       - name: Run tests
@@ -138,65 +145,19 @@ jobs:
         image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        options: *postgres_health_check
         ports:
           - 54321:5432
 
-      pgbouncer:
-        image: bitnamilegacy/pgbouncer:latest
-        env:
-          PGBOUNCER_AUTH_TYPE: trust
-          PGBOUNCER_DATABASE: '*'
-          PGBOUNCER_POOL_MODE: transaction
-          POSTGRESQL_HOST: postgres
-          POSTGRESQL_DATABASE: electric
-          POSTGRESQL_USERNAME: postgres
-          POSTGRESQL_PASSWORD: password
-        ports:
-          - 65432:6432
+      pgbouncer: *pgbouncer_service
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Seed the database
-        run: psql -d postgresql://postgres:password@localhost:54321/postgres?sslmode=disable -f dev/init.sql
-
-      - uses: erlef/setup-beam@v1
-        with:
-          version-type: strict
-          version-file: '.tool-versions'
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}
-            ${{ runner.os }}-sync-service-deps
-
-      - name: Cache compiled code
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-            !packages/sync-service/_build/*/lib/electric_telemetry
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}
-            ${{ runner.os }}-sync-service-build
-
-      - name: Install dependencies
-        run: mix do deps.get + deps.compile
-
-      - name: Compile package
-        run: mix compile
+      - *checkout_source
+      - *seed_database
+      - *setup_beam
+      - *cache_dependencies
+      - *cache_compiled_code
+      - *install_dependencies
+      - *compile_package
 
       - name: Run oracle property test
         run: mix test --only oracle test/integration/oracle_property_test.exs
@@ -227,65 +188,19 @@ jobs:
         image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        options: *postgres_health_check
         ports:
           - 54321:5432
 
-      pgbouncer:
-        image: bitnamilegacy/pgbouncer:latest
-        env:
-          PGBOUNCER_AUTH_TYPE: trust
-          PGBOUNCER_DATABASE: '*'
-          PGBOUNCER_POOL_MODE: transaction
-          POSTGRESQL_HOST: postgres
-          POSTGRESQL_DATABASE: electric
-          POSTGRESQL_USERNAME: postgres
-          POSTGRESQL_PASSWORD: password
-        ports:
-          - 65432:6432
+      pgbouncer: *pgbouncer_service
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Seed the database
-        run: psql -d postgresql://postgres:password@localhost:54321/postgres?sslmode=disable -f dev/init.sql
-
-      - uses: erlef/setup-beam@v1
-        with:
-          version-type: strict
-          version-file: '.tool-versions'
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}
-            ${{ runner.os }}-sync-service-deps
-
-      - name: Cache compiled code
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-            !packages/sync-service/_build/*/lib/electric_telemetry
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}
-            ${{ runner.os }}-sync-service-build
-
-      - name: Install dependencies
-        run: mix do deps.get + deps.compile
-
-      - name: Compile package
-        run: mix compile
+      - *checkout_source
+      - *seed_database
+      - *setup_beam
+      - *cache_dependencies
+      - *cache_compiled_code
+      - *install_dependencies
+      - *compile_package
 
       - name: Run performance test
         run: SKIP_REPATCH_PREWARM=true mix test --only performance
