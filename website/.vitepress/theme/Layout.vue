@@ -1,5 +1,5 @@
 <script setup>
-import { watch, onMounted, computed, ref } from 'vue'
+import { watch, onMounted, computed, nextTick, ref } from 'vue'
 import { useData, useRouter } from 'vitepress'
 import { useSidebar, useLocalNav } from 'vitepress/theme'
 
@@ -77,6 +77,7 @@ const { Layout } = DefaultTheme
 const { frontmatter, page } = useData()
 const { hasSidebar } = useSidebar()
 const { headers } = useLocalNav()
+const canTeleportLocalNav = ref(false)
 
 // Show markdown link in the doc footer on all sidebar pages.
 const showMarkdownLink = computed(() => {
@@ -89,6 +90,15 @@ const navHeight = ref(0)
 onMounted(() => {
   navHeight.value = parseInt(
     getComputedStyle(document.documentElement).getPropertyValue('--vp-nav-height')
+  )
+
+  watch(
+    () => router.route.data.relativePath,
+    async () => {
+      await nextTick()
+      canTeleportLocalNav.value = Boolean(document.querySelector('.VPLocalNav'))
+    },
+    { immediate: true }
   )
 })
 const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
@@ -125,10 +135,17 @@ const layoutClass = computed(() => {
       <div v-if="showMarkdownLink" class="markdown-link-local-nav-container">
         <MarkdownLink variant="local-nav" />
       </div>
-      <!-- Small screens: Custom dropdown with markdown link -->
-      <div v-if="showMarkdownLink" class="custom-local-nav-dropdown">
-        <LocalNavOutlineDropdown :headers="headers" :navHeight="navHeight" />
-      </div>
+      <Teleport
+        v-if="showMarkdownLink && canTeleportLocalNav"
+        to=".VPLocalNav"
+      >
+        <!-- Small screens: custom dropdown with markdown link, mounted into
+             VitePress's own local-nav bar so it shares the Menu button's
+             sticky/fixed behaviour exactly. -->
+        <div class="custom-local-nav-dropdown">
+          <LocalNavOutlineDropdown :headers="headers" :navHeight="navHeight" />
+        </div>
+      </Teleport>
     </template>
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">

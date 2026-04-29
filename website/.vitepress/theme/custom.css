@@ -343,6 +343,14 @@
   min-height: 0 !important;
 }
 
+/* VitePress renders a fixed `.VPLocalNav` shell on mobile even when a
+   `layout: page` route has no docs sidebar. In that state it becomes
+   an empty black strip at the top of marketing/landing pages. Sidebar
+   pages intentionally keep VPLocalNav for the mobile menu button. */
+.nav-relative .VPLocalNav {
+  display: none !important;
+}
+
 .og-page .VPPage {
   padding: 0 !important;
   margin: 0 !important;
@@ -1727,8 +1735,9 @@ ul.demo-actions li .VPButton {
   .custom-local-nav-dropdown {
     display: flex;
     justify-content: flex-end;
-    position: fixed;
-    top: calc(var(--vp-nav-height) + var(--vp-layout-top-height, 0px));
+    position: absolute;
+    top: 0;
+    height: 48px;
     left: 0;
     right: 0;
     z-index: calc(var(--vp-z-index-local-nav) + 1);
@@ -1740,7 +1749,7 @@ ul.demo-actions li .VPButton {
   }
 
   /* Hide the default dropdown button at small screens but keep spacing */
-  .VPLocalNav .VPLocalNavOutlineDropdown {
+  .VPLocalNav > .VPLocalNavOutlineDropdown {
     opacity: 0;
     pointer-events: none;
   }
