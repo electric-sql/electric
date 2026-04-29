@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Box, Text } from '@radix-ui/themes'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { AgentsCollection } from '../hooks/useChatroom.js'
@@ -19,8 +19,7 @@ function AgentWorkingStatus({
   const state = useEntityChatState(agentsUrl, entityUrl)
   const isWorking = state === `working`
 
-  // Report status up via callback (not a hook violation — just a side effect)
-  useMemo(() => {
+  useEffect(() => {
     onStatus(agentType, isWorking)
   }, [agentType, isWorking, onStatus])
 
@@ -45,15 +44,12 @@ export function TypingIndicators({
 
   const [workingMap, setWorkingMap] = useState<Record<string, boolean>>({})
 
-  const handleStatus = useMemo(
-    () => (type: string, working: boolean) => {
-      setWorkingMap((prev) => {
-        if (prev[type] === working) return prev
-        return { ...prev, [type]: working }
-      })
-    },
-    []
-  )
+  const handleStatus = useCallback((type: string, working: boolean) => {
+    setWorkingMap((prev) => {
+      if (prev[type] === working) return prev
+      return { ...prev, [type]: working }
+    })
+  }, [])
 
   const workingNames = Object.entries(workingMap)
     .filter(([, working]) => working)

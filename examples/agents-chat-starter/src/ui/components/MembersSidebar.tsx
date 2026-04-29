@@ -86,25 +86,34 @@ export function MembersSidebar({
             Add agent
           </Text>
         </Box>
-        {chatAgentTypes.map((et) => (
-          <Flex
-            key={et.name}
-            align="center"
-            gap="2"
-            px="2"
-            py="1"
-            className={connected ? `list-row` : ``}
-            onClick={() => connected && onSpawn(et.name)}
-            style={{ opacity: connected ? 1 : 0.4 }}
-          >
-            <Text size="1" color="gray" style={{ flexShrink: 0 }}>
-              +
-            </Text>
-            <Text size="2" style={{ textTransform: `capitalize` }}>
-              {et.name}
-            </Text>
-          </Flex>
-        ))}
+        {chatAgentTypes.map((et) => {
+          const alreadyInRoom = agents.some(
+            (a: any) => (a.type as string) === et.name
+          )
+          const canAdd = connected && !alreadyInRoom
+          return (
+            <Flex
+              key={et.name}
+              align="center"
+              gap="2"
+              px="2"
+              py="1"
+              className={canAdd ? `list-row` : ``}
+              onClick={() => canAdd && onSpawn(et.name)}
+              style={{
+                opacity: canAdd ? 1 : 0.4,
+                cursor: canAdd ? `pointer` : `default`,
+              }}
+            >
+              <Text size="1" color="gray" style={{ flexShrink: 0 }}>
+                {alreadyInRoom ? `✓` : `+`}
+              </Text>
+              <Text size="2" style={{ textTransform: `capitalize` }}>
+                {et.name}
+              </Text>
+            </Flex>
+          )
+        })}
       </Box>
     </Flex>
   )
