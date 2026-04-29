@@ -76,6 +76,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
     assert request_attrs["http.body_param.subset.limit"] == 1
     assert request_attrs["http.body_param.subset.offset"] == 0
     assert request_attrs["http.body_param.subset.where"] == "value ILIKE $1"
+    assert request_attrs["http.body_param.subset.params"] == ~s(%{"1" => "%2"})
 
     assert query_attrs["subset.rows"] == 1
     assert query_attrs["subset.result_bytes"] > 0

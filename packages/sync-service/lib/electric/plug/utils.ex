@@ -85,6 +85,7 @@ defmodule Electric.Plug.Utils do
   alias OpenTelemetry.SemConv, as: SC
   @max_telemetry_string_bytes 2000
   @telemetry_body_subset_keys ~w(where order_by limit offset)
+  @telemetry_body_subset_params_key "params"
 
   @doc false
   def redact_query_string(nil), do: nil
@@ -153,7 +154,10 @@ defmodule Electric.Plug.Utils do
   defp telemetry_body_params(body_params) when body_params == %{}, do: %{}
 
   defp telemetry_body_params(body_params) when is_map(body_params) do
-    if Enum.any?(@telemetry_body_subset_keys, &Map.has_key?(body_params, &1)) do
+    if Enum.any?(
+         @telemetry_body_subset_keys ++ [@telemetry_body_subset_params_key],
+         &Map.has_key?(body_params, &1)
+       ) do
       subset_telemetry_attrs(body_params)
     else
       %{}
@@ -174,6 +178,22 @@ defmodule Electric.Plug.Utils do
           attrs
       end
     end)
+    |> Map.merge(subset_params_telemetry_attr(params))
+  end
+
+  defp subset_params_telemetry_attr(params) do
+    case Map.fetch(params, @telemetry_body_subset_params_key) do
+      {:ok, value} ->
+        %{
+          "http.body_param.subset.params" =>
+            value
+            |> inspect(limit: :infinity, printable_limit: :infinity)
+            |> truncate_telemetry_string()
+        }
+
+      :error ->
+        %{}
+    end
   end
 
   defp body_param_scalar_attr(nil, _prefix), do: %{}
