@@ -31,6 +31,8 @@ jobs:
       MIX_ENV: test
       MIX_TARGET: application
       POSTGRES_VERSION: '${{ matrix.postgres_version }}0000'
+      CODECOV_FLAGS: elixir,unit-tests,sync-service,postgres-${{ matrix.postgres_version }}0000
+      CODECOV_TEST_RESULTS_FILES: ./junit/regular-test-junit-report.xml,./junit/telemetry-test-junit-report.xml
     services:
       postgres:
         image: 'ghcr.io/${{ github.repository }}/postgres:${{ matrix.postgres_version }}-alpine-logical'
@@ -110,10 +112,11 @@ jobs:
         uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          flags: elixir,unit-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
+          flags: ${{ env.CODECOV_FLAGS }}
           files: ./cover/excoveralls.json
 
-      - name: Upload test results to CodeCov
+      - &upload_test_results_to_codecov
+        name: Upload test results to CodeCov
         uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
         if: ${{ !cancelled() }}
         env:
@@ -121,8 +124,8 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
-          flags: elixir,unit-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
-          files: ./junit/regular-test-junit-report.xml,./junit/telemetry-test-junit-report.xml
+          flags: ${{ env.CODECOV_FLAGS }}
+          files: ${{ env.CODECOV_TEST_RESULTS_FILES }}
 
   oracle_property_test:
     name: 'Oracle property test, pg17'
@@ -134,6 +137,8 @@ jobs:
       MIX_ENV: test
       MIX_TARGET: application
       POSTGRES_VERSION: '170000'
+      CODECOV_FLAGS: elixir,oracle-tests,sync-service,postgres-170000
+      CODECOV_TEST_RESULTS_FILES: ./junit/regular-test-junit-report.xml
       CHECK_TIMEOUT: 60000
       SHAPE_COUNT: 200
       MUTATIONS_PER_TXN: 10
@@ -162,16 +167,7 @@ jobs:
       - name: Run oracle property test
         run: mix test --only oracle test/integration/oracle_property_test.exs
 
-      - name: Upload test results to CodeCov
-        uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
-        if: ${{ !cancelled() }}
-        env:
-          DUMMY_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}-dummy
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
-          flags: elixir,oracle-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
-          files: ./junit/regular-test-junit-report.xml
+      - *upload_test_results_to_codecov
 
   performance_test:
     name: 'Performance test, pg17'
@@ -183,6 +179,8 @@ jobs:
       MIX_ENV: test
       MIX_TARGET: application
       POSTGRES_VERSION: '170000'
+      CODECOV_FLAGS: elixir,performance-tests,sync-service,postgres-170000
+      CODECOV_TEST_RESULTS_FILES: ./junit/regular-test-junit-report.xml
     services:
       postgres:
         image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
@@ -205,13 +203,4 @@ jobs:
       - name: Run performance test
         run: SKIP_REPATCH_PREWARM=true mix test --only performance
 
-      - name: Upload test results to CodeCov
-        uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
-        if: ${{ !cancelled() }}
-        env:
-          DUMMY_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}-dummy
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
-          flags: elixir,performance-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
-          files: ./junit/regular-test-junit-report.xml
+      - *upload_test_results_to_codecov
