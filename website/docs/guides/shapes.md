@@ -116,7 +116,7 @@ Where clauses have the following constraints:
 
 1. can't use non-deterministic SQL functions like `count()` or `now()`
 
-#### Subqueries (experimental)
+#### Subqueries
 
 Electric supports subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables cross-table filtering patterns—for example, syncing only users who belong to a specific organization:
 
