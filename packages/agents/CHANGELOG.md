@@ -1,5 +1,13 @@
 # @electric-ax/agents
 
+## 0.2.2
+
+### Patch Changes
+
+- 4d8e452: Bundle Electric Agents documentation with the package so Horton can search docs without an external docs directory. Copies 39 markdown files from the docs site into `packages/agents/docs/` and updates `resolveDocsRoot` to find them relative to the module directory in both development and production builds.
+- b0af010: Fix chat starter typing indicator: inline multiple agent names in a single line and use useChat state for reliable detection.
+- b0af010: Redesign quickstart tutorial: replace chatroom steps with perspectives analyzer UI, add scaffold-based frontend with Radix Themes and Streamdown markdown, improve Horton prompt for docs search priority, add checkpoint with multiple paths after entity-building steps.
+
 ## 0.2.1
 
 ### Patch Changes
