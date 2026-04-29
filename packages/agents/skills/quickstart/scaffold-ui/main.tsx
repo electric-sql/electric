@@ -143,11 +143,11 @@ function App() {
     2000
   )
 
-  const allMessages = [
-    ...analyserMessages,
-    ...optimistMessages,
-    ...criticMessages,
-  ]
+  const hasWorkerMessages =
+    optimistMessages.length > 0 || criticMessages.length > 0
+  // First analyser message is the intro; the rest is synthesis after workers
+  const analyserIntro = analyserMessages.slice(0, 1)
+  const analyserSynthesis = hasWorkerMessages ? analyserMessages.slice(1) : []
 
   useEffect(() => {
     const el = bottomRef.current?.parentElement
@@ -188,7 +188,7 @@ function App() {
   return (
     <Theme appearance="light" accentColor="blue" radius="medium">
       <style>{`@keyframes blink { 50% { opacity: 0; } }`}</style>
-      <Box maxWidth="700px" mx="auto" p="5">
+      <Box maxWidth="900px" mx="auto" p="5">
         <Heading size="6" mb="1">
           Perspectives Analyzer
         </Heading>
@@ -217,14 +217,41 @@ function App() {
         </Flex>
 
         <Flex direction="column" gap="3">
-          {urls && allMessages.length === 0 && (
+          {urls && analyserIntro.length === 0 && (
             <Text color="gray" size="2">
               Waiting for agents to respond...
             </Text>
           )}
-          {allMessages.map((msg, i) => (
-            <MessageBubble key={`${msg.agent}-${i}`} msg={msg} />
+
+          {/* Analyser intro — full width */}
+          {analyserIntro.map((msg, i) => (
+            <MessageBubble
+              key={`analyser-intro-${i}`}
+              msg={hasWorkerMessages ? { ...msg, isStreaming: false } : msg}
+            />
           ))}
+
+          {/* Workers side-by-side */}
+          {hasWorkerMessages && (
+            <Flex gap="3">
+              <Flex direction="column" gap="3" style={{ flex: 1, minWidth: 0 }}>
+                {optimistMessages.map((msg, i) => (
+                  <MessageBubble key={`optimist-${i}`} msg={msg} />
+                ))}
+              </Flex>
+              <Flex direction="column" gap="3" style={{ flex: 1, minWidth: 0 }}>
+                {criticMessages.map((msg, i) => (
+                  <MessageBubble key={`critic-${i}`} msg={msg} />
+                ))}
+              </Flex>
+            </Flex>
+          )}
+
+          {/* Analyser synthesis — full width */}
+          {analyserSynthesis.map((msg, i) => (
+            <MessageBubble key={`analyser-synth-${i}`} msg={msg} />
+          ))}
+
           <div ref={bottomRef} />
         </Flex>
       </Box>

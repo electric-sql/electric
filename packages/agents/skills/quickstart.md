@@ -492,7 +492,7 @@ Blue for the analyser, green for the optimist, red for the critic. `Streamdown` 
 
 ### Wiring it together
 
-The `App` component subscribes to all three entities and renders messages inline:
+The `App` component subscribes to all three entities and renders them in sections — the analyser's intro at full width, then the optimist and critic side-by-side in two columns, then the analyser's synthesis at full width:
 
 ```tsx
 const analyserMessages = useAgentMessages(urls?.entityUrl ?? null, 'analyser')
@@ -503,14 +503,13 @@ const optimistMessages = useAgentMessages(
 )
 const criticMessages = useAgentMessages(urls?.criticUrl ?? null, 'critic', 2000)
 
-const allMessages = [
-  ...analyserMessages,
-  ...optimistMessages,
-  ...criticMessages,
-]
+const hasWorkerMessages =
+  optimistMessages.length > 0 || criticMessages.length > 0
+const analyserIntro = analyserMessages.slice(0, 1)
+const analyserSynthesis = hasWorkerMessages ? analyserMessages.slice(1) : []
 ```
 
-Workers get `retryMs=2000` because they're spawned asynchronously — the manager calls `analyze_question`, which spawns them, but they may not exist yet when the UI first tries to connect.
+The layout transitions naturally: first the analyser's intro appears full-width, then two columns open up as workers start streaming, and finally the synthesis appears full-width below. Workers get `retryMs=2000` because they're spawned asynchronously.
 
 After explaining, tell the user to restart with `npm run dev:all` (starts both server and Vite). Open `http://localhost:5175`.
 
