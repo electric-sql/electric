@@ -29,8 +29,9 @@ const hero = {
   titleAccent: 'sync',
   markdownTitle: 'Electric: The agent platform built on sync',
   paragraphs: [
-    'Agents are long-lived entities in the data layer. The substrate for them is a sync\u00A0engine.',
-    'Electric is the first agent platform built on\u00A0sync.',
+    'Agents are long-lived entities that live in the\u00A0data\u00A0layer. The\u00A0substrate for them is a\u00A0sync\u00A0engine.',
+    'Agents are long-lived entities in the\u00A0data\u00A0layer. The\u00A0substrate for them is a\u00A0sync\u00A0engine.',
+    'Electric is the first agent platform built\u00A0on\u00A0sync.',
   ],
   /* Three top-level entry points into the platform — one button
      per product landing page. `Agents` carries the brand theme as
@@ -48,7 +49,7 @@ const heroMarkdown = `# ${hero.markdownTitle}
 
 ${hero.paragraphs[0]}
 
-${hero.paragraphs[1]}
+${hero.paragraphs[2]}
 
 ${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
 </script>
@@ -69,11 +70,16 @@ ${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
           </h1>
           <p class="home-hero-sub">
             <span class="home-hero-sub-primary">
-              {{ hero.paragraphs[0] }}
+              <span class="a">
+                {{ hero.paragraphs[0] }}
+              </span>
+              <span class="b">
+                {{ hero.paragraphs[1] }}
+              </span>
             </span>
             <br /><br />
             <span class="home-hero-sub-secondary">
-              {{ hero.paragraphs[1] }}
+              {{ hero.paragraphs[2] }}
             </span>
           </p>
           <div v-if="!hideActions" class="home-hero-actions">
@@ -106,7 +112,7 @@ ${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
      landing-page heroes (which use 100px). The homepage hero already adds
      visual height via the eyebrow + isometric scene, so this keeps the
      content starting close to the navbar. */
-  padding: 8px 24px 48px;
+  padding: 8px 24px 60px;
   /* `overflow: visible` lets the iso composition stack bleed past the
      border-bottom into the start of the next product section. The
      scene cell sits on `z-index: 2` so its protruding lower layers
@@ -192,6 +198,20 @@ ${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
 .home-hero-sub-primary {
   font-size: 1.04em;
 }
+.home-hero-sub-primary .a {
+  display: inline;
+}
+.home-hero-sub-primary .b {
+  display: none;
+}
+@media (min-width: 861px) and (max-width: 1199px) {
+  .home-hero-sub-primary .a {
+    display: none;
+  }
+  .home-hero-sub-primary .b {
+    display: inline;
+  }
+}
 
 .home-hero-sub-secondary {
   /* Match the primary supporting paragraph size — keeps the two-block
@@ -243,7 +263,7 @@ ${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
    on the right has a bit more breathing room. */
 @media (min-width: 1200px) {
   .home-hero-text {
-    margin-left: -16px;
+    margin-left: 16px;
   }
 }
 
@@ -355,7 +375,7 @@ ${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
        horizontal scrolling from the side bleeds without turning
        the page into a scroll container, so the upward bleed isn't
        clipped by an ancestor before it reaches the viewport top. */
-    padding: 0 24px 48px;
+    padding: 0 24px 60px;
   }
   .home-hero-grid {
     /* Switch from grid to flex column at mobile. CSS Grid's
@@ -455,7 +475,7 @@ ${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
 
 @media (max-width: 768px) {
   .home-hero {
-    padding: 0 20px 48px;
+    padding: 0 20px 60px;
   }
   /* Step the headline down a notch at narrow phones — 48px crowds
      the column once the gutter shrinks. */

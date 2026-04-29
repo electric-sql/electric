@@ -125,7 +125,7 @@ onUnmounted(() => {
 <style scoped>
 .why-loops {
   position: relative;
-  padding: 96px 24px;
+  padding: 80px 24px;
   background: var(--ea-bg);
   border-bottom: 1px solid var(--ea-divider);
   isolation: isolate;
@@ -288,7 +288,7 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .why-loops {
-    padding: 72px 20px;
+    padding: 64px 20px;
   }
   .why-loops-head {
     margin-bottom: 32px;
@@ -313,7 +313,7 @@ onUnmounted(() => {
 
 @media (max-width: 480px) {
   .why-loops {
-    padding: 56px 16px;
+    padding: 52px 16px;
   }
   .why-loops-title {
     font-size: 26px;
