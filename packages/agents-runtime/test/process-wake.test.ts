@@ -1247,6 +1247,62 @@ describe(`processWake`, () => {
     ])
   })
 
+  it(`skips copied fork history when catch-up ends with fork reconciliation`, async () => {
+    const handler = vi.fn()
+
+    defineEntity(`test-agent`, {
+      handler,
+    })
+
+    mockDbOffset.value = `20_0`
+    mockStreamOffset.value = `20_0`
+    mockDbPreload.mockImplementationOnce(async () => {
+      mockEntityOnBatch.current?.({
+        items: [
+          ev(
+            `message_received`,
+            `m-old`,
+            `insert`,
+            { payload: `historical prompt` },
+            { offset: `1_0` }
+          ),
+          ev(`run`, `run-old`, `update`, {
+            status: `completed`,
+          }),
+          ev(
+            `entity_created`,
+            `entity-created`,
+            `insert`,
+            {},
+            { offset: `20_0`, forkedFrom: `/test-agent/source` }
+          ),
+        ],
+        offset: `20_0`,
+      })
+    })
+
+    await processWake(
+      makeNotification({
+        triggerEvent: `message_received`,
+        streams: [{ path: `/streams/entity:agent-1`, offset: `0_0` }],
+      }),
+      { ...BASE_CONFIG, idleTimeout: 1 }
+    )
+
+    expect(handler).not.toHaveBeenCalled()
+
+    const doneCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/_electric/wakes/wake-abc`)
+    )
+    const lastDoneCall = doneCalls[doneCalls.length - 1]!
+    const body = JSON.parse(lastDoneCall[1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `20_0` },
+    ])
+  })
+
   it(`collapses consecutive pending wake batches into one handler pass using the newest wake`, async () => {
     const wakeSummaries: Array<string> = []
     let firstPassSeenResolve: (() => void) | null = null

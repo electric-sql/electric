@@ -905,11 +905,56 @@ export async function processWebhookWake(
             }
             return compareOffsets(offset, offsetBound) >= 0
           })
+    const eventOffset = (event: ChangeEvent): string | null => {
+      const offset = event.headers.offset
+      return typeof offset === `string` ? offset : null
+    }
+    const latestForkReconciliationOffset = (
+      events: Array<ChangeEvent>
+    ): string | null => {
+      let latest: string | null = null
+      for (const event of events) {
+        const headers = event.headers as Record<string, unknown>
+        if (typeof headers.forkedFrom !== `string`) {
+          continue
+        }
+        const offset = eventOffset(event)
+        if (!offset) {
+          continue
+        }
+        if (latest === null || compareOffsets(offset, latest) > 0) {
+          latest = offset
+        }
+      }
+      return latest
+    }
+    const filterEventsAfterOffset = (
+      events: Array<ChangeEvent>,
+      offsetBound: string | null
+    ): Array<ChangeEvent> => {
+      if (offsetBound === null) {
+        return events
+      }
+      return events.filter((event) => {
+        const offset = eventOffset(event)
+        if (offset === null) {
+          return true
+        }
+        return compareOffsets(offset, offsetBound) > 0
+      })
+    }
     const eventsAtOrAfterNotification =
       filterEventsAtOrAboveOffset(notificationOffset)
+    const forkReconciliationOffset = latestForkReconciliationOffset(
+      eventsAtOrAfterNotification
+    )
+    const actionableEventsAtOrAfterNotification = filterEventsAfterOffset(
+      eventsAtOrAfterNotification,
+      forkReconciliationOffset
+    )
     const initialFromCatchUp = notification.wakeEvent
       ? null
-      : selectWakeFromEvents(eventsAtOrAfterNotification, entityUrl)
+      : selectWakeFromEvents(actionableEventsAtOrAfterNotification, entityUrl)
     if (initialFromCatchUp) {
       currentWakeEvent = initialFromCatchUp.wakeEvent
       currentWakeOffset = initialFromCatchUp.offset ?? notificationOffset
@@ -921,7 +966,10 @@ export async function processWebhookWake(
     notifyCurrentWakeReady()
 
     const computeCurrentNotificationEvents = (): Array<ChangeEvent> =>
-      filterEventsAtOrAboveOffset(currentWakeOffset)
+      filterEventsAfterOffset(
+        filterEventsAtOrAboveOffset(currentWakeOffset),
+        forkReconciliationOffset
+      )
 
     const currentNotificationEvents = computeCurrentNotificationEvents()
 
@@ -934,8 +982,10 @@ export async function processWebhookWake(
       currentNotificationEvents.every(isManagementEvent)
     const shouldSkipInitialHandlerPass =
       !notification.wakeEvent &&
-      currentNotificationEvents.length > 0 &&
-      (!hasFreshCatchUpInput || hasOnlyManagementCatchUp)
+      ((currentNotificationEvents.length > 0 &&
+        (!hasFreshCatchUpInput || hasOnlyManagementCatchUp)) ||
+        (forkReconciliationOffset !== null &&
+          currentNotificationEvents.length === 0))
     if (debugWakeTypes) {
       log.info(
         `wake input type=${currentWakeEvent.type} offset=${currentWakeOffset}`
