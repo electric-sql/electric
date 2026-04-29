@@ -1,5 +1,13 @@
 # @electric-ax/agents-server-ui
 
+## 0.1.5
+
+### Patch Changes
+
+- e0b588f: Bump `@electric-ax/durable-streams-*-beta` dependencies to the latest published versions (`client@^0.3.1`, `state@^0.3.1`, `server@^0.3.2`).
+- Updated dependencies [e0b588f]
+  - @electric-ax/agents-runtime@0.1.1
+
 ## 0.1.4
 
 ### Patch Changes
