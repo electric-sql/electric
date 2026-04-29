@@ -24,7 +24,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
          "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')",
          "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')"
        ]
-  test "adds POST body attrs and subset query attrs for POST subset requests", ctx do
+  test "adds POST body attrs and subset query attrs for documented POST subset requests", ctx do
     test_pid = self()
 
     Repatch.patch(OpenTelemetry, :add_span_attributes, [mode: :shared], fn attrs ->
@@ -42,13 +42,11 @@ defmodule Electric.Plug.SubsetTelemetryTest do
         "POST",
         "/v1/shape?table=items&offset=-1&log=changes_only",
         Jason.encode!(%{
-          "subset" => %{
-            "where" => "value ILIKE $1",
-            "params" => %{"1" => "%2"},
-            "limit" => 1,
-            "offset" => 0,
-            "order_by" => "value ASC"
-          }
+          "where" => "value ILIKE $1",
+          "params" => %{"1" => "%2"},
+          "limit" => 1,
+          "offset" => 0,
+          "order_by" => "value ASC"
         })
       )
       |> Plug.Conn.put_req_header("content-type", "application/json")
@@ -100,10 +98,8 @@ defmodule Electric.Plug.SubsetTelemetryTest do
         "POST",
         "/v1/shape?table=items&offset=-1&log=changes_only",
         Jason.encode!(%{
-          "subset" => %{
-            "where" => long_where,
-            "params" => %{"1" => "%2"}
-          }
+          "where" => long_where,
+          "params" => %{"1" => "%2"}
         })
       )
       |> Plug.Conn.put_req_header("content-type", "application/json")

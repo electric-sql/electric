@@ -147,13 +147,10 @@ defmodule Electric.Plug.Utils do
   end
 
   # GET requests already expose raw query params in telemetry. For POST requests,
-  # only mirror subset-defining body params so subset filters and pagination remain
-  # visible without trying to serialize the full request body.
+  # only mirror the documented top-level subset fields. Legacy nested
+  # %{"subset" => %{...}} bodies are still accepted by request parsing, but we
+  # intentionally do not surface them in telemetry.
   defp telemetry_body_params(body_params) when body_params == %{}, do: %{}
-
-  defp telemetry_body_params(%{"subset" => subset_params}) when is_map(subset_params) do
-    subset_telemetry_attrs(subset_params)
-  end
 
   defp telemetry_body_params(body_params) when is_map(body_params) do
     if Enum.any?(@telemetry_body_subset_keys, &Map.has_key?(body_params, &1)) do
