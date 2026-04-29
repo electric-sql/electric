@@ -1,5 +1,15 @@
 # electric-ax
 
+## 0.1.12
+
+### Patch Changes
+
+- 125c276: Improve Horton's onboarding: add warm greeting for initial messages and present multiple onboarding paths instead of defaulting to the quickstart skill.
+- Updated dependencies [125c276]
+- Updated dependencies [e0b588f]
+  - @electric-ax/agents@0.2.1
+  - @electric-ax/agents-runtime@0.1.1
+
 ## 0.1.11
 
 ### Patch Changes

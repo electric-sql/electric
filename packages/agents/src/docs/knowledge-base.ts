@@ -331,6 +331,8 @@ export function resolveDocsRoot(workingDirectory: string): string | null {
     process.env.HORTON_DOCS_ROOT,
     path.resolve(workingDirectory, `electric-agents-docs/docs`),
     path.resolve(process.cwd(), `electric-agents-docs/docs`),
+    path.resolve(MODULE_DIR, `../docs`),
+    path.resolve(MODULE_DIR, `../../docs`),
     path.resolve(MODULE_DIR, `../../../../../electric-agents-docs/docs`),
   ].filter((value): value is string => typeof value === `string`)
 

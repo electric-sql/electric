@@ -1,5 +1,14 @@
 # @electric-ax/agents-server
 
+## 0.2.5
+
+### Patch Changes
+
+- 1b334eb: Expose shared-state StreamDB sources in the embedded agents server UI state explorer.
+- e0b588f: Bump `@electric-ax/durable-streams-*-beta` dependencies to the latest published versions (`client@^0.3.1`, `state@^0.3.1`, `server@^0.3.2`).
+- Updated dependencies [e0b588f]
+  - @electric-ax/agents-runtime@0.1.1
+
 ## 0.2.4
 
 ### Patch Changes

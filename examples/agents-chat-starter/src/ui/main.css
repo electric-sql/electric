@@ -66,8 +66,13 @@ body,
 }
 
 /* Chat */
+.panel-header {
+  border-bottom: 1px solid var(--gray-a4);
+}
+
 .chat-header {
   border-bottom: 1px solid var(--gray-a4);
+  background: var(--gray-a2);
 }
 
 .chat-error {

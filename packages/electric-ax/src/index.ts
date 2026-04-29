@@ -159,7 +159,7 @@ function resolveCommandName(argv: Array<string>): string {
 }
 
 function commandExample(commandName: string): string {
-  return `${commandName} agent`
+  return `${commandName} agents`
 }
 
 export function resolveCommandPrefix(
@@ -169,10 +169,10 @@ export function resolveCommandPrefix(
   if (env.npm_command === `exec`) {
     const userAgent = env.npm_config_user_agent ?? ``
     if (userAgent.startsWith(`pnpm/`)) {
-      return `pnpx electric-ax agent`
+      return `pnpx electric-ax agents`
     }
     if (userAgent.startsWith(`npm/`)) {
-      return `npx electric-ax agent`
+      return `npx electric-ax agents`
     }
   }
 
@@ -588,8 +588,7 @@ export function createElectricProgram({
     .addHelpText(`after`, getHelpText(commandName))
 
   const agentsCommand = program
-    .command(`agent`)
-    .alias(`agents`)
+    .command(`agents`)
     .description(`Manage Electric Agents`)
 
   const typesCommand = agentsCommand
@@ -737,7 +736,7 @@ Setup (add to your shell init file):
   Fish:  ${commandName} --completion-fish | source    # add to config.fish
 
 Auto-install (detects your shell and updates init file):
-  ${commandName} agent completion install
+  ${commandName} agents completion install
 `
     )
     .action((action?: string) => {
@@ -758,7 +757,7 @@ Auto-install (detects your shell and updates init file):
       console.log(`Add to your shell init file:`)
       console.log(`  Bash/Zsh:  eval "$(${commandName} --completion)"`)
       console.log(`  Fish:      ${commandName} --completion-fish | source\n`)
-      console.log(`Or auto-install:  ${commandName} agent completion install`)
+      console.log(`Or auto-install:  ${commandName} agents completion install`)
     })
 
   completionCommand.alias(`completions`)

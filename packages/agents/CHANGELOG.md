@@ -1,5 +1,14 @@
 # @electric-ax/agents
 
+## 0.2.1
+
+### Patch Changes
+
+- 125c276: Improve Horton's onboarding: add warm greeting for initial messages and present multiple onboarding paths instead of defaulting to the quickstart skill.
+- e0b588f: Bump `@electric-ax/durable-streams-*-beta` dependencies to the latest published versions (`client@^0.3.1`, `state@^0.3.1`, `server@^0.3.2`).
+- Updated dependencies [e0b588f]
+  - @electric-ax/agents-runtime@0.1.1
+
 ## 0.2.0
 
 ### Minor Changes

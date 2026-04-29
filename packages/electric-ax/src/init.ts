@@ -37,7 +37,7 @@ export async function initProject(projectName?: string): Promise<void> {
   console.log(`Get one at https://console.anthropic.com/settings/keys`)
   console.log(``)
   console.log(`Start infrastructure and run:`)
-  console.log(`  npx electric-ax agent quickstart  # in one terminal`)
+  console.log(`  npx electric-ax agents quickstart  # in one terminal`)
   console.log(`  pnpm dev                          # in another terminal`)
   console.log(``)
 }

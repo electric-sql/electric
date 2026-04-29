@@ -120,20 +120,20 @@ async function parse(argv: Array<string>, handlers = createHandlers()) {
 
 describe(`createElectricProgram`, () => {
   it(`dispatches the root types command`, async () => {
-    const handlers = await parse([`agent`, `types`])
+    const handlers = await parse([`agents`, `types`])
 
     expect(handlers.listTypes).toHaveBeenCalledTimes(1)
   })
 
   it(`dispatches nested type inspection`, async () => {
-    const handlers = await parse([`agent`, `types`, `inspect`, `chat`])
+    const handlers = await parse([`agents`, `types`, `inspect`, `chat`])
 
     expect(handlers.inspectType).toHaveBeenCalledWith(`chat`)
   })
 
   it(`passes spawn options through commander`, async () => {
     const handlers = await parse([
-      `agent`,
+      `agents`,
       `spawn`,
       `/chat/test`,
       `--args`,
@@ -150,7 +150,7 @@ describe(`createElectricProgram`, () => {
 
   it(`joins variadic send message args and keeps options`, async () => {
     const handlers = await parse([
-      `agent`,
+      `agents`,
       `send`,
       `/chat/test`,
       `hello`,
@@ -170,7 +170,7 @@ describe(`createElectricProgram`, () => {
 
   it(`passes ps filters through commander options`, async () => {
     const handlers = await parse([
-      `agent`,
+      `agents`,
       `ps`,
       `--type`,
       `chat`,
@@ -191,7 +191,7 @@ describe(`createElectricProgram`, () => {
 
   it(`passes observe offsets through commander options`, async () => {
     const handlers = await parse([
-      `agent`,
+      `agents`,
       `observe`,
       `/chat/test`,
       `--from`,
@@ -207,14 +207,14 @@ describe(`createElectricProgram`, () => {
   })
 
   it(`dispatches start without anthropic options`, async () => {
-    const handlers = await parse([`agent`, `start`])
+    const handlers = await parse([`agents`, `start`])
 
     expect(handlers.start).toHaveBeenCalledWith({})
   })
 
   it(`passes start-builtin options through commander`, async () => {
     const handlers = await parse([
-      `agent`,
+      `agents`,
       `start-builtin`,
       `--anthropic-api-key`,
       `sk-ant-test`,
@@ -228,7 +228,7 @@ describe(`createElectricProgram`, () => {
   })
 
   it(`passes stop options through commander`, async () => {
-    const handlers = await parse([`agent`, `stop`, `--remove-volumes`])
+    const handlers = await parse([`agents`, `stop`, `--remove-volumes`])
 
     expect(handlers.stop).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -239,7 +239,7 @@ describe(`createElectricProgram`, () => {
 
   it(`dispatches quickstart`, async () => {
     const handlers = await parse([
-      `agent`,
+      `agents`,
       `quickstart`,
       `--anthropic-api-key`,
       `sk-ant-test`,
@@ -280,18 +280,12 @@ describe(`createElectricProgram`, () => {
       handlers: createHandlers(),
       commandName: `electric`,
     })
-    const agentsCmd = program.commands.find((c) => c.name() === `agent`)
+    const agentsCmd = program.commands.find((c) => c.name() === `agents`)
     const completionCmd = agentsCmd?.commands.find(
       (c) => c.name() === `completion`
     )
     expect(completionCmd).toBeDefined()
     expect(completionCmd!.description()).toMatch(/shell completion/i)
-  })
-
-  it(`keeps the plural alias working`, async () => {
-    const handlers = await parse([`agents`, `types`])
-
-    expect(handlers.listTypes).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -302,7 +296,7 @@ describe(`run`, () => {
         npm_command: `exec`,
         npm_config_user_agent: `pnpm/10.12.1 npm/? node/v24.11.1 darwin arm64`,
       })
-    ).toBe(`pnpx electric-ax agent`)
+    ).toBe(`pnpx electric-ax agents`)
   })
 
   it(`resolves npx command prefixes`, () => {
@@ -311,12 +305,12 @@ describe(`run`, () => {
         npm_command: `exec`,
         npm_config_user_agent: `npm/11.6.2 node/v24.11.1 darwin arm64`,
       })
-    ).toBe(`npx electric-ax agent`)
+    ).toBe(`npx electric-ax agents`)
   })
 
   it(`resolves direct electric binary prefixes`, () => {
     expect(resolveCommandPrefix([`node`, `/usr/local/bin/electric`], {})).toBe(
-      `electric agent`
+      `electric agents`
     )
   })
 
