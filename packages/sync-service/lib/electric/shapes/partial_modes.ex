@@ -77,6 +77,11 @@ defmodule Electric.Shapes.PartialModes do
             "shape.root_table": shape.root_table
           }
         )
+
+        OpenTelemetry.add_span_attributes(%{
+          "subset.rows" => rows,
+          "subset.result_bytes" => bytes
+        })
       end
     )
   end

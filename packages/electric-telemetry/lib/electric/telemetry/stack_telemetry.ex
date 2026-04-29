@@ -115,6 +115,7 @@ defmodule ElectricTelemetry.StackTelemetry do
       sum("electric.storage.snapshot_stored.count"),
       sum("electric.storage.snapshot_stored.operations"),
       sum("electric.subqueries.subset_result.bytes", unit: :byte),
+      sum("electric.subqueries.subset_result.rows"),
       sum("electric.subqueries.subset_result.count"),
       sum("electric.subqueries.move_in_triggered.count"),
       last_value("electric.postgres.info_looked_up.pg_version"),

@@ -83,6 +83,9 @@ defmodule Electric.Plug.Utils do
   end
 
   alias OpenTelemetry.SemConv, as: SC
+  @max_telemetry_string_graphemes 2000
+  @telemetry_body_subset_keys ~w(where order_by limit offset)
+  @telemetry_body_subset_params_key "params"
 
   @doc false
   def redact_query_string(nil), do: nil
@@ -105,6 +108,11 @@ defmodule Electric.Plug.Utils do
           {"http.query_param.#{k}", redact_query_param_value(k, v)}
         end)
       end
+
+    body_params_map =
+      assigns
+      |> Map.get(:body_params, %{})
+      |> telemetry_body_params()
 
     %{
       "error.type" => assigns[:error_str],
@@ -134,8 +142,76 @@ defmodule Electric.Plug.Utils do
     |> Map.filter(fn {_k, v} -> not is_nil(v) end)
     |> Map.merge(Map.get(conn.private, :telemetry_span_attrs, %{}))
     |> Map.merge(query_params_map)
+    |> Map.merge(body_params_map)
     |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
+  end
+
+  defp telemetry_body_params(params) when is_map(params) do
+    Enum.reduce(@telemetry_body_subset_keys, %{}, fn key, attrs ->
+      prefix = "http.body_param.subset.#{key}"
+
+      case Map.fetch(params, key) do
+        {:ok, value} ->
+          Map.merge(attrs, body_param_scalar_attr(value, prefix))
+
+        :error ->
+          attrs
+      end
+    end)
+    |> Map.merge(subset_params_telemetry_attr(params))
+  end
+
+  defp telemetry_body_params(_), do: %{}
+
+  defp subset_params_telemetry_attr(params) do
+    case Map.fetch(params, @telemetry_body_subset_params_key) do
+      {:ok, value} ->
+        %{
+          "http.body_param.subset.params" =>
+            value
+            |> inspect()
+            |> truncate_telemetry_string()
+        }
+
+      :error ->
+        %{}
+    end
+  end
+
+  defp body_param_scalar_attr(nil, _prefix), do: %{}
+
+  defp body_param_scalar_attr(value, prefix) do
+    case scalar_attr_value(value) do
+      {:ok, telemetry_value} -> %{prefix => telemetry_value}
+      :skip -> %{}
+    end
+  end
+
+  defp scalar_attr_value(nil), do: :skip
+
+  defp scalar_attr_value(value) when is_binary(value) do
+    {:ok, truncate_telemetry_string(value)}
+  end
+
+  defp scalar_attr_value(value) when is_boolean(value) or is_number(value), do: {:ok, value}
+  defp scalar_attr_value(_value), do: :skip
+
+  defp truncate_telemetry_string(value) do
+    value
+    |> trim_invalid_utf8()
+    |> String.slice(0, @max_telemetry_string_graphemes)
+  end
+
+  defp trim_invalid_utf8(value) do
+    if String.valid?(value) do
+      value
+    else
+      value
+      |> String.chunk(:valid)
+      |> Enum.filter(&String.valid?/1)
+      |> Enum.join()
+    end
   end
 
   defp user_agent(%Plug.Conn{} = conn) do
