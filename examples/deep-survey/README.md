@@ -88,9 +88,8 @@ pnpm install && pnpm --filter @electric-ax/agents-runtime build
 Create a `.env` file in this directory:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...       # https://console.anthropic.com/ (optional if MOONSHOT_API_KEY is set)
-MOONSHOT_API_KEY=sk-...            # https://platform.moonshot.ai/ (optional if ANTHROPIC_API_KEY is set)
-BRAVE_SEARCH_API_KEY=...           # https://brave.com/search/api/ (optional)
+ANTHROPIC_API_KEY=sk-ant-...
+BRAVE_SEARCH_API_KEY=...           # optional
 ```
 
 ### 3. Start the Electric Agents server

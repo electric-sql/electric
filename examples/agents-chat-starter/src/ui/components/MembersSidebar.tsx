@@ -63,12 +63,12 @@ export function MembersSidebar({
               style={{
                 background:
                   agent.status === `running`
-                    ? `#3b82f6`
+                    ? `var(--blue-9)`
                     : agent.status === `idle`
-                      ? `#22c55e`
+                      ? `var(--green-9)`
                       : agent.status === `spawning`
-                        ? `#eab308`
-                        : `#cbd5e1`,
+                        ? `var(--yellow-9)`
+                        : `var(--gray-7)`,
               }}
             />
             <Box style={{ minWidth: 0 }}>

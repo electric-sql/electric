@@ -1,13 +1,31 @@
 import { StrictMode, useState, useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Theme, Flex, Text, Box, Heading } from '@radix-ui/themes'
+import { Theme, Flex, Text, Heading, IconButton } from '@radix-ui/themes'
+import { SunIcon, MoonIcon, DesktopIcon } from '@radix-ui/react-icons'
 import '@radix-ui/themes/styles.css'
 import { useChatroom } from './hooks/useChatroom.js'
 import { useEntityTypes } from './hooks/useEntityTypes.js'
+import {
+  DarkModeProvider,
+  useDarkModeContext,
+  type ThemePreference,
+} from './hooks/useDarkMode.js'
 import { RoomsSidebar } from './components/RoomsSidebar.js'
 import { ChatArea } from './components/ChatArea.js'
 import { MembersSidebar } from './components/MembersSidebar.js'
 import './main.css'
+
+function themeButtonIcon(preference: ThemePreference) {
+  if (preference === `light`) return <SunIcon />
+  if (preference === `dark`) return <MoonIcon />
+  return <DesktopIcon />
+}
+
+function themeButtonAriaLabel(preference: ThemePreference): string {
+  if (preference === `light`) return `Switch to dark mode`
+  if (preference === `dark`) return `Switch to system theme`
+  return `Switch to light mode`
+}
 
 interface Room {
   id: string
@@ -19,6 +37,35 @@ interface Room {
 function getRoomFromHash(): string | null {
   const hash = window.location.hash.slice(1)
   return hash || null
+}
+
+function ThemeToggle() {
+  const { preference, cyclePreference } = useDarkModeContext()
+  return (
+    <IconButton
+      variant="ghost"
+      size="2"
+      color="gray"
+      onClick={cyclePreference}
+      aria-label={themeButtonAriaLabel(preference)}
+    >
+      {themeButtonIcon(preference)}
+    </IconButton>
+  )
+}
+
+function ThemedApp() {
+  const { darkMode } = useDarkModeContext()
+  return (
+    <Theme
+      accentColor="indigo"
+      grayColor="mauve"
+      radius="medium"
+      appearance={darkMode ? `dark` : `light`}
+    >
+      <App />
+    </Theme>
+  )
 }
 
 function App() {
@@ -137,7 +184,13 @@ function App() {
         creating={creating}
       />
       <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
-        <Box px="3" py="3" className="chat-header">
+        <Flex
+          px="3"
+          py="3"
+          align="center"
+          justify="between"
+          className="chat-header"
+        >
           {activeRoom ? (
             <Heading size="3">
               <Text color="gray"># </Text>
@@ -148,7 +201,8 @@ function App() {
               Chat
             </Heading>
           )}
-        </Box>
+          <ThemeToggle />
+        </Flex>
         <Flex flexGrow="1" style={{ minHeight: 0 }}>
           <ChatArea
             messagesCollection={messagesCollection}
@@ -173,8 +227,8 @@ function App() {
 
 createRoot(document.getElementById(`root`)!).render(
   <StrictMode>
-    <Theme accentColor="indigo" grayColor="mauve" radius="medium">
-      <App />
-    </Theme>
+    <DarkModeProvider>
+      <ThemedApp />
+    </DarkModeProvider>
   </StrictMode>
 )
