@@ -222,12 +222,19 @@ defmodule Electric.Client.Poll do
     # cached 409 indefinitely.
     new_state = %{new_state | stale_cache_buster: ShapeState.generate_cache_buster()}
 
-    %{value_mapper_fun: value_mapper_fun} = new_state
-
-    messages =
-      resp.body
-      |> ensure_enum()
-      |> Enum.flat_map(&Message.parse(&1, handle, value_mapper_fun, resp.request_timestamp))
+    # Always emit a synthetic must-refetch control message rather than
+    # forwarding whatever the server (or a misbehaving proxy) put in the 409
+    # body. Subscribers must receive the signal to clear local state on every
+    # 409, even when the body is empty or stripped of the control message.
+    # Any data rows present in the body refer to the old, expired handle, so
+    # discarding them is correct.
+    messages = [
+      %Message.ControlMessage{
+        control: :must_refetch,
+        handle: handle,
+        request_timestamp: resp.request_timestamp
+      }
+    ]
 
     {:must_refetch, messages, new_state}
   end

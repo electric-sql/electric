@@ -2822,6 +2822,77 @@ defmodule Electric.ClientTest do
                "expected at least 4 requests with expired_handle before self-healing"
     end
 
+    test "emits synthetic must-refetch control message when 409 body has none", ctx do
+      # The sync service does include a must-refetch control message in 409
+      # bodies, but a misbehaving proxy might strip it. The client must
+      # synthesise a must-refetch control message on every 409 so that
+      # downstream subscribers always receive the signal to clear local state.
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        offset = conn.query_params["offset"]
+        handle = conn.query_params["handle"]
+
+        case {offset, handle} do
+          {"-1", nil} ->
+            bypass_resp(conn, body1,
+              shape_handle: "my-shape",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          {"1_0", "my-shape"} ->
+            # 409 with EMPTY body — no must-refetch control message included.
+            # Subscribers should still see one (synthesised by the client).
+            bypass_resp(conn, "[]", status: 409, shape_handle: "my-shape-2")
+
+          {"-1", "my-shape-2"} ->
+            bypass_resp(conn, body2,
+              shape_handle: "my-shape-2",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          _ ->
+            # Live poll after recovery — return up-to-date with no changes.
+            bypass_resp(
+              conn,
+              Jason.encode!([
+                %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 10_000}}
+              ]),
+              shape_handle: "my-shape-2",
+              last_offset: "1_0"
+            )
+        end
+      end)
+
+      msgs = stream(ctx, 5)
+
+      assert Enum.any?(msgs, &match?(%ControlMessage{control: :must_refetch}, &1)),
+             "Expected a synthetic must-refetch ControlMessage in stream output. " <>
+               "Got: #{inspect(msgs)}"
+    end
+
     test "raises when CDN is permanently broken (stale retries + self-heal both fail)", ctx do
       alias Electric.Client.ShapeKey
       alias Electric.Client.ExpiredShapesCache
