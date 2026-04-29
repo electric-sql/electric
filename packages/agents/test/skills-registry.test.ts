@@ -184,6 +184,10 @@ keywords: [keyword-a-${i}, keyword-b-${i}, keyword-c-${i}]
 
     await createSkillsRegistry({ baseSkillsDir: skillsDir, cacheDir })
 
+    await expect(
+      fs.readFile(path.join(cacheDir, `.gitignore`), `utf-8`)
+    ).resolves.toBe(`*\n`)
+
     const cacheFile = path.join(cacheDir, `skills-cache.json`)
     const cacheContent = await fs.readFile(cacheFile, `utf-8`)
     const cache = JSON.parse(cacheContent)
