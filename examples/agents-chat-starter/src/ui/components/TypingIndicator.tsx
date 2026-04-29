@@ -1,17 +1,30 @@
+import { useState, useMemo } from 'react'
 import { Box, Text } from '@radix-ui/themes'
 import { useLiveQuery } from '@tanstack/react-db'
 import type { AgentsCollection } from '../hooks/useChatroom.js'
 import { useEntityChatState } from '../hooks/useEntityChatState.js'
 
-function useWorkingAgents(
-  agents: Array<any>,
+/** One component per agent — each calls useEntityChatState (a hook) at the top level */
+function AgentWorkingStatus({
+  agentsUrl,
+  entityUrl,
+  agentType,
+  onStatus,
+}: {
   agentsUrl: string
-): Array<string> {
-  const states = agents.map((agent: any) => ({
-    type: agent.type as string,
-    state: useEntityChatState(agentsUrl, agent.url),
-  }))
-  return states.filter((s) => s.state === `working`).map((s) => s.type)
+  entityUrl: string
+  agentType: string
+  onStatus: (type: string, working: boolean) => void
+}) {
+  const state = useEntityChatState(agentsUrl, entityUrl)
+  const isWorking = state === `working`
+
+  // Report status up via callback (not a hook violation — just a side effect)
+  useMemo(() => {
+    onStatus(agentType, isWorking)
+  }, [agentType, isWorking, onStatus])
+
+  return null
 }
 
 export function TypingIndicators({
@@ -30,20 +43,44 @@ export function TypingIndicators({
     [agentsCollection]
   )
 
-  const workingNames = useWorkingAgents(agents as Array<any>, agentsUrl)
+  const [workingMap, setWorkingMap] = useState<Record<string, boolean>>({})
 
-  if (!hasUserMessages || workingNames.length === 0) return null
+  const handleStatus = useMemo(
+    () => (type: string, working: boolean) => {
+      setWorkingMap((prev) => {
+        if (prev[type] === working) return prev
+        return { ...prev, [type]: working }
+      })
+    },
+    []
+  )
 
-  const label =
-    workingNames.length === 1
-      ? `${workingNames[0]} is thinking...`
-      : `${workingNames.join(`, `)} are thinking...`
+  const workingNames = Object.entries(workingMap)
+    .filter(([, working]) => working)
+    .map(([type]) => type)
+
+  if (!hasUserMessages) return null
 
   return (
-    <Box className="message message-agent" style={{ opacity: 0.6 }}>
-      <Text size="1" color="gray">
-        {label}
-      </Text>
-    </Box>
+    <>
+      {(agents as Array<any>).map((agent: any) => (
+        <AgentWorkingStatus
+          key={agent.url}
+          agentsUrl={agentsUrl}
+          entityUrl={agent.url}
+          agentType={agent.type}
+          onStatus={handleStatus}
+        />
+      ))}
+      {workingNames.length > 0 && (
+        <Box className="message message-agent" style={{ opacity: 0.6 }}>
+          <Text size="1" color="gray">
+            {workingNames.length === 1
+              ? `${workingNames[0]} is thinking...`
+              : `${workingNames.join(`, `)} are thinking...`}
+          </Text>
+        </Box>
+      )}
+    </>
   )
 }
