@@ -3,7 +3,7 @@
    the bottom CTA strap on the streams landing page (and any other
    surface that wants to render the same evidence) can pull from a
    single source of truth alongside the hero. */
-export const installCommand = "npm i @durable-streams/client"
+export const installCommand = 'npm i @durable-streams/client'
 </script>
 
 <script setup lang="ts">
@@ -13,10 +13,10 @@ export const installCommand = "npm i @durable-streams/client"
    styling. The two surfaces stay in lockstep: any text or layout
    tweak made here propagates to the live page and the OG capture
    together. */
-import { ref } from "vue"
-import { VPButton } from "vitepress/theme"
-import StreamFlowBg from "./StreamFlowBg.vue"
-import InstallPill from "../InstallPill.vue"
+import { ref } from 'vue'
+import { VPButton } from 'vitepress/theme'
+import StreamFlowBg from './StreamFlowBg.vue'
+import InstallPill from '../InstallPill.vue'
 
 withDefaults(
   defineProps<{
@@ -40,9 +40,19 @@ withDefaults(
     /* extraExcludeRects forwards to `<StreamFlowBg>`. Used by the
        OG capture to reserve the wordmark's bbox in the frame's
        top-left corner so rails never paint under the brand mark. */
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
-  { paused: false, hideActions: false, hideCopy: false, extraExcludeRects: () => [] }
+  {
+    paused: false,
+    hideActions: false,
+    hideCopy: false,
+    extraExcludeRects: () => [],
+  }
 )
 
 const heroInnerRef = ref<HTMLElement>()
@@ -60,9 +70,7 @@ const heroInnerRef = ref<HTMLElement>()
       <h1 class="ds-hero-name">
         Electric&nbsp;<span class="ds-hero-accent">Streams</span>
       </h1>
-      <p class="ds-hero-text">
-        The data primitive for the agent&nbsp;loop
-      </p>
+      <p class="ds-hero-text">The data primitive for the agent&nbsp;loop</p>
 
       <div class="ds-hero-install-row">
         <!-- Accent the package name only: every other token (`npm`,

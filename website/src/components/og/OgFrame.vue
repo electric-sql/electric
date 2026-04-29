@@ -21,11 +21,7 @@
     <div class="og-frame-stage">
       <slot />
     </div>
-    <img
-      class="og-frame-logo"
-      src="/img/brand/logo.svg"
-      alt="Electric"
-    />
+    <img class="og-frame-logo" src="/img/brand/logo.svg" alt="Electric" />
   </div>
 </template>
 

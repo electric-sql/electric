@@ -12,7 +12,7 @@
    Everything else (size presets, bg presets, control toggles) is
    owned by the parent `BrandToysToy.vue` via its `ControlPanel`. */
 
-import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue"
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps<{
   width: number
@@ -20,21 +20,21 @@ const props = defineProps<{
   /** CSS px of breathing room around the stage frame inside the shell. */
   padding?: number
   background?:
-    | "dark"
-    | "surface"
-    | "elv"
-    | "light"
-    | "transparent"
-    | "black"
-    | "white"
+    | 'dark'
+    | 'surface'
+    | 'elv'
+    | 'light'
+    | 'transparent'
+    | 'black'
+    | 'white'
   showRuler?: boolean
   showBorder?: boolean
   fullBleed?: boolean
 }>()
 
 const emit = defineEmits<{
-  (e: "update:width", value: number): void
-  (e: "update:height", value: number): void
+  (e: 'update:width', value: number): void
+  (e: 'update:height', value: number): void
 }>()
 
 const frameRef = ref<HTMLElement>()
@@ -54,8 +54,8 @@ function updateFromFrame() {
   // unmounted by HMR, or before the element has been laid out). Without
   // this we'd silently overwrite the user's stage size with `0×0`.
   if (w === 0 || h === 0) return
-  if (w !== props.width) emit("update:width", w)
-  if (h !== props.height) emit("update:height", h)
+  if (w !== props.width) emit('update:width', w)
+  if (h !== props.height) emit('update:height', h)
 }
 
 onMounted(() => {
@@ -115,7 +115,7 @@ const contentStyle = computed(() => {
   }
 })
 
-const bgClass = computed(() => `bg-${props.background ?? "dark"}`)
+const bgClass = computed(() => `bg-${props.background ?? 'dark'}`)
 
 const dimBadge = computed(() => `${props.width} × ${props.height}`)
 
@@ -173,7 +173,10 @@ const vertTicks = computed(() => {
       <div
         ref="frameRef"
         class="stage-frame"
-        :class="[bgClass, { 'with-border': showBorder, 'full-bleed': fullBleed }]"
+        :class="[
+          bgClass,
+          { 'with-border': showBorder, 'full-bleed': fullBleed },
+        ]"
         :style="frameStyle"
       >
         <div class="stage-content" :style="contentStyle">
@@ -219,7 +222,11 @@ const vertTicks = computed(() => {
     linear-gradient(45deg, transparent 75%, var(--vp-c-bg-soft, #16181f) 75%),
     linear-gradient(-45deg, transparent 75%, var(--vp-c-bg-soft, #16181f) 75%);
   background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, 10px 0px;
+  background-position:
+    0 0,
+    0 10px,
+    10px -10px,
+    10px 0px;
 }
 
 .stage-frame-outer {
@@ -277,7 +284,11 @@ const vertTicks = computed(() => {
     linear-gradient(45deg, transparent 75%, var(--vp-c-divider, #2a2d38) 75%),
     linear-gradient(-45deg, transparent 75%, var(--vp-c-divider, #2a2d38) 75%);
   background-size: 16px 16px;
-  background-position: 0 0, 0 8px, 8px -8px, 8px 0px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    8px 0px;
 }
 
 .stage-content {

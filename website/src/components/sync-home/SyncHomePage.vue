@@ -18,20 +18,20 @@
      §11  CTA ............. shared BottomCtaStrap
 */
 
-import { ref } from "vue"
-import { VPButton } from "vitepress/theme"
-import { defineClientComponent } from "vitepress"
+import { ref } from 'vue'
+import { VPButton } from 'vitepress/theme'
+import { defineClientComponent } from 'vitepress'
 
-import EaSection from "../agents-home/Section.vue"
-import SyncHero, { installCommand } from "./SyncHero.vue"
-import ComposeStackGrid from "./ComposeStackGrid.vue"
-import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
-import InstallPill from "../InstallPill.vue"
-import BottomCtaStrap from "../BottomCtaStrap.vue"
-import CuratedBlogPosts from "../CuratedBlogPosts.vue"
-import MarkdownContent from "../MarkdownContent.vue"
-import MdExportExplicit from "../MdExportExplicit.vue"
-import { useMarkdownExport } from "../../lib/useMarkdownExport"
+import EaSection from '../agents-home/Section.vue'
+import SyncHero, { installCommand } from './SyncHero.vue'
+import ComposeStackGrid from './ComposeStackGrid.vue'
+import MultiClientPulseDemo from './MultiClientPulseDemo.vue'
+import InstallPill from '../InstallPill.vue'
+import BottomCtaStrap from '../BottomCtaStrap.vue'
+import CuratedBlogPosts from '../CuratedBlogPosts.vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 
 // PGlite REPL is browser-only (WASM + DOM in the child module), so we use
 // defineClientComponent: the import only runs in onMounted, so the WASM stack
@@ -40,16 +40,16 @@ import { useMarkdownExport } from "../../lib/useMarkdownExport"
 // file loaded repeatedly unless the devtools "Disable cache" is on.
 const pgliteReplLoading = ref(true)
 const PGliteReplDemo = defineClientComponent(
-  () => import("./PGliteReplDemo.vue"),
+  () => import('./PGliteReplDemo.vue'),
   undefined,
   () => {
     pgliteReplLoading.value = false
   }
 )
 
-import { getVitepressData } from "../../lib/vitepressData"
-import type { DemosPayload, HomepageDemoCard } from "../../types/data-loaders"
-import * as demoModule from "../../../data/demos.data"
+import { getVitepressData } from '../../lib/vitepressData'
+import type { DemosPayload, HomepageDemoCard } from '../../types/data-loaders'
+import * as demoModule from '../../../data/demos.data'
 
 const featuredDemos: HomepageDemoCard[] = getVitepressData<DemosPayload>(
   demoModule
@@ -61,32 +61,32 @@ const isMarkdownExport = useMarkdownExport()
 // the bottom CTA. Slugs are the trailing path segment of the blog post
 // filename (date prefix stripped).
 const syncBlogPosts = [
-  "data-primitive-agent-loop",
-  "super-fast-apps-on-sync-with-tanstack-db",
-  "tanstack-db-0.6-app-ready-with-persistence-and-includes",
-  "local-first-with-your-existing-api",
+  'data-primitive-agent-loop',
+  'super-fast-apps-on-sync-with-tanstack-db',
+  'tanstack-db-0.6-app-ready-with-persistence-and-includes',
+  'local-first-with-your-existing-api',
 ]
 
 const pillars = [
   {
-    title: "Super-fast reactivity",
-    body: "Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.",
-    href: "/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db",
+    title: 'Super-fast reactivity',
+    body: 'Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.',
+    href: '/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db',
   },
   {
-    title: "Resilient transport",
-    body: "Build apps that work reliably, even with patchy connectivity. Resilient transport that ensures data is never lost.",
-    href: "/blog/2026/03/24/durable-transport-ai-sdks",
+    title: 'Resilient transport',
+    body: 'Build apps that work reliably, even with patchy connectivity. Resilient transport that ensures data is never lost.',
+    href: '/blog/2026/03/24/durable-transport-ai-sdks',
   },
   {
-    title: "Real-time collaboration",
-    body: "Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.",
-    href: "/blog/2026/01/12/durable-sessions-for-collaborative-ai",
+    title: 'Real-time collaboration',
+    body: 'Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.',
+    href: '/blog/2026/01/12/durable-sessions-for-collaborative-ai',
   },
   {
-    title: "Durable state",
-    body: "Build multi-step agentic workflows that survive crashes and restarts. Agents and workers resume from the same durable state.",
-    href: "/blog/2026/04/08/data-primitive-agent-loop",
+    title: 'Durable state',
+    body: 'Build multi-step agentic workflows that survive crashes and restarts. Agents and workers resume from the same durable state.',
+    href: '/blog/2026/04/08/data-primitive-agent-loop',
   },
 ] as const
 
@@ -98,11 +98,11 @@ ${pillar.body}
 
 [Read more](${pillar.href})`
   )
-  .join("\n\n")
+  .join('\n\n')
 
 const demosMarkdown = featuredDemos
   .map((demo) => `- [${demo.title}](${demo.link}): ${demo.description}`)
-  .join("\n")
+  .join('\n')
 </script>
 
 <template>
@@ -127,7 +127,11 @@ const demosMarkdown = featuredDemos
       <div class="sh-primitive sh-primitive-two-col">
         <div class="sh-primitive-prose">
           <div class="sh-primitive-head">
-            <img src="/img/icons/electric.svg" alt="" class="sh-primitive-icon md-exclude" />
+            <img
+              src="/img/icons/electric.svg"
+              alt=""
+              class="sh-primitive-icon md-exclude"
+            />
             <h2 class="sh-primitive-title">Postgres&nbsp;Sync</h2>
           </div>
           <p class="ea-prose">
@@ -168,19 +172,25 @@ const demosMarkdown = featuredDemos
       <div class="sh-primitive sh-primitive-two-col sh-primitive-reversed">
         <div class="sh-primitive-prose">
           <div class="sh-primitive-head">
-            <img src="/img/icons/tanstack.svg" alt="" class="sh-primitive-icon md-exclude" />
+            <img
+              src="/img/icons/tanstack.svg"
+              alt=""
+              class="sh-primitive-icon md-exclude"
+            />
             <h2 class="sh-primitive-title">TanStack&nbsp;DB</h2>
           </div>
           <p class="ea-prose">
-            <strong>A reactive client store for building super-fast apps.</strong>
+            <strong
+              >A reactive client store for building super-fast apps.</strong
+            >
             Sub-millisecond reactivity, instant local writes, and live
             cross-collection queries powered by differential&nbsp;dataflow.
           </p>
           <p class="ea-prose">
             Loads data from any source &mdash; including
             <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a> and
-            <a href="/streams/">Electric&nbsp;Streams</a> &mdash; with optimistic
-            mutations that reconcile against your&nbsp;backend.
+            <a href="/streams/">Electric&nbsp;Streams</a> &mdash; with
+            optimistic mutations that reconcile against your&nbsp;backend.
           </p>
           <div class="sh-primitive-actions">
             <VPButton
@@ -202,7 +212,9 @@ const demosMarkdown = featuredDemos
         <div class="sh-primitive-visual">
           <div class="sh-fs-panel">
             <div class="code-file-header mono">app/Todos.tsx</div>
-            <pre class="code-block annotated"><code><span class="tk-kw">const</span> <span class="tk-v">todos</span> = <span class="tk-fn">createCollection</span>(
+            <pre
+              class="code-block annotated"
+            ><code><span class="tk-kw">const</span> <span class="tk-v">todos</span> = <span class="tk-fn">createCollection</span>(
   <span class="tk-fn">electricCollectionOptions</span>({<span class="ann-marker" data-n="1"></span>
     <span class="tk-prop">shapeOptions</span>: { <span class="tk-prop">url</span>: <span class="tk-str">"/api/todos"</span> },
     <span class="tk-prop">getKey</span>: (<span class="tk-v">row</span>) <span class="tk-kw">=&gt;</span> <span class="tk-v">row</span>.<span class="tk-prop">id</span>,
@@ -222,18 +234,18 @@ const demosMarkdown = featuredDemos
                 <span class="num">1</span>
                 <div>
                   <strong>Electric collection.</strong>
-                  Subscribes to a server-defined shape. Synced rows
-                  live locally &mdash; persisted, reactive, and shared
-                  across every component that queries them.
+                  Subscribes to a server-defined shape. Synced rows live locally
+                  &mdash; persisted, reactive, and shared across every component
+                  that queries them.
                 </div>
               </li>
               <li>
                 <span class="num">2</span>
                 <div>
                   <strong>Live incremental reactivity.</strong>
-                  Differential dataflow keeps the result set up to
-                  date as rows arrive or change &mdash; sub-millisecond
-                  updates, only the diff re-renders.
+                  Differential dataflow keeps the result set up to date as rows
+                  arrive or change &mdash; sub-millisecond updates, only the
+                  diff re-renders.
                 </div>
               </li>
             </ol>
@@ -247,14 +259,18 @@ const demosMarkdown = featuredDemos
       <div class="sh-primitive sh-primitive-two-col">
         <div class="sh-primitive-prose">
           <div class="sh-primitive-head">
-            <img src="/img/icons/pglite.product.svg" alt="" class="sh-primitive-icon md-exclude" />
+            <img
+              src="/img/icons/pglite.product.svg"
+              alt=""
+              class="sh-primitive-icon md-exclude"
+            />
             <h2 class="sh-primitive-title">PGlite</h2>
           </div>
           <p class="ea-prose">
             <strong>Embeddable Postgres with reactivity and sync.</strong>
-            A lightweight WASM build of Postgres &mdash; under 3MB gzipped &mdash;
-            that runs in the browser, Node.js, Bun and Deno, with built-in live
-            query and sync&nbsp;primitives.
+            A lightweight WASM build of Postgres &mdash; under 3MB gzipped
+            &mdash; that runs in the browser, Node.js, Bun and Deno, with
+            built-in live query and sync&nbsp;primitives.
           </p>
           <p class="ea-prose">
             Pair it with <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a>
@@ -286,10 +302,7 @@ const demosMarkdown = featuredDemos
               <span class="sh-pglite-meta">WASM Postgres · in this page</span>
             </div>
             <div class="sh-pglite-body">
-              <div
-                v-if="pgliteReplLoading"
-                class="sh-pglite-loading mono"
-              >
+              <div v-if="pgliteReplLoading" class="sh-pglite-loading mono">
                 Booting PGlite&hellip;
               </div>
               <PGliteReplDemo />
@@ -309,14 +322,14 @@ const demosMarkdown = featuredDemos
           <p class="ea-prose">
             Agents work on shared data &mdash; and they change it while users
             are still looking at it. Without sync, your UI shows stale state,
-            users have to refresh, and teams lose track of what each agent
-            is doing.
+            users have to refresh, and teams lose track of what each agent is
+            doing.
           </p>
           <p class="ea-prose">
             With Electric, every user, device, and teammate sees agent changes
-            in real time. The same shared state powers multi-tab,
-            multi-device, multi-user, and multi-agent collaboration &mdash;
-            out of the&nbsp;box.
+            in real time. The same shared state powers multi-tab, multi-device,
+            multi-user, and multi-agent collaboration &mdash; out of
+            the&nbsp;box.
           </p>
           <div class="sh-section-foot sh-section-foot-tight left">
             <a href="/blog/2026/04/08/data-primitive-agent-loop">
@@ -362,16 +375,38 @@ const demosMarkdown = featuredDemos
       <div class="sh-pillars md-exclude">
         <a
           v-for="(p, i) in [
-            { id: 'reactivity', title: 'Super-fast reactivity', body: 'Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.', href: '/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db' },
-            { id: 'resilience', title: 'Resilient transport', body: 'Build apps that work reliably, even with patchy connectivity. Resilient transport that ensures data is never lost.', href: '/blog/2026/03/24/durable-transport-ai-sdks' },
-            { id: 'collaboration', title: 'Real-time collaboration', body: 'Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.', href: '/blog/2026/01/12/durable-sessions-for-collaborative-ai' },
-            { id: 'durability', title: 'Durable state', body: 'Build multi-step agentic workflows that survive crashes and restarts. Agents and workers resume from the same durable state.', href: '/blog/2026/04/08/data-primitive-agent-loop' },
+            {
+              id: 'reactivity',
+              title: 'Super-fast reactivity',
+              body: 'Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.',
+              href: '/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db',
+            },
+            {
+              id: 'resilience',
+              title: 'Resilient transport',
+              body: 'Build apps that work reliably, even with patchy connectivity. Resilient transport that ensures data is never lost.',
+              href: '/blog/2026/03/24/durable-transport-ai-sdks',
+            },
+            {
+              id: 'collaboration',
+              title: 'Real-time collaboration',
+              body: 'Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.',
+              href: '/blog/2026/01/12/durable-sessions-for-collaborative-ai',
+            },
+            {
+              id: 'durability',
+              title: 'Durable state',
+              body: 'Build multi-step agentic workflows that survive crashes and restarts. Agents and workers resume from the same durable state.',
+              href: '/blog/2026/04/08/data-primitive-agent-loop',
+            },
           ]"
           :key="p.id"
           :href="p.href"
           class="sh-pillar"
         >
-          <div class="sh-pillar-num mono">{{ ['01', '02', '03', '04'][i] }}</div>
+          <div class="sh-pillar-num mono">
+            {{ ['01', '02', '03', '04'][i] }}
+          </div>
           <h4 class="sh-pillar-title">{{ p.title }}</h4>
           <p class="sh-pillar-body">{{ p.body }}</p>
           <span class="sh-pillar-link">Read more &rarr;</span>
@@ -380,12 +415,11 @@ const demosMarkdown = featuredDemos
     </EaSection>
 
     <!-- ───────────── §8 — Your first sync, end to end ───────────── -->
-    <EaSection
-      id="first-sync"
-      title="Your first sync, end to&nbsp;end"
-    >
+    <EaSection id="first-sync" title="Your first sync, end to&nbsp;end">
       <template #eyebrow>
-        <span class="md-exclude">Postgres&nbsp;Sync &nbsp;+&nbsp; TanStack&nbsp;DB</span>
+        <span class="md-exclude"
+          >Postgres&nbsp;Sync &nbsp;+&nbsp; TanStack&nbsp;DB</span
+        >
       </template>
       <template #subtitle>
         Compose <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a> with
@@ -397,8 +431,14 @@ const demosMarkdown = featuredDemos
         <div class="sh-first-sync-grid">
           <div class="sh-fs-col">
             <div class="sh-fs-panel">
-              <div class="code-file-header mono">api/todos.ts &nbsp;<span class="muted">&mdash; server proxy</span></div>
-              <pre class="code-block annotated"><code><span class="tk-kw">export const</span> <span class="tk-v">ServerRoute</span> = <span class="tk-fn">createServerFileRoute</span>(<span class="tk-str">"/api/todos"</span>).<span class="tk-fn">methods</span>({
+              <div class="code-file-header mono">
+                api/todos.ts &nbsp;<span class="muted"
+                  >&mdash; server proxy</span
+                >
+              </div>
+              <pre
+                class="code-block annotated"
+              ><code><span class="tk-kw">export const</span> <span class="tk-v">ServerRoute</span> = <span class="tk-fn">createServerFileRoute</span>(<span class="tk-str">"/api/todos"</span>).<span class="tk-fn">methods</span>({
   <span class="tk-prop">GET</span>: <span class="tk-kw">async</span> ({ <span class="tk-v">request</span> }) <span class="tk-kw">=&gt;</span> {
     <span class="tk-kw">const</span> <span class="tk-v">url</span> = <span class="tk-kw">new</span> <span class="tk-v">URL</span>(<span class="tk-v">request</span>.<span class="tk-prop">url</span>)
     <span class="tk-kw">const</span> <span class="tk-v">origin</span> = <span class="tk-kw">new</span> <span class="tk-v">URL</span>(<span class="tk-str">"https://api.electric-sql.cloud/v1/shape"</span>)<span class="ann-marker" data-n="1"></span>
@@ -416,8 +456,12 @@ const demosMarkdown = featuredDemos
             </div>
 
             <div class="sh-fs-panel">
-              <div class="code-file-header mono">app/Todos.tsx &nbsp;<span class="muted">&mdash; client</span></div>
-              <pre class="code-block annotated"><code><span class="tk-kw">export const</span> <span class="tk-v">todoCollection</span> = <span class="tk-fn">createCollection</span>(
+              <div class="code-file-header mono">
+                app/Todos.tsx &nbsp;<span class="muted">&mdash; client</span>
+              </div>
+              <pre
+                class="code-block annotated"
+              ><code><span class="tk-kw">export const</span> <span class="tk-v">todoCollection</span> = <span class="tk-fn">createCollection</span>(
   <span class="tk-fn">electricCollectionOptions</span>({<span class="ann-marker" data-n="5"></span>
     <span class="tk-prop">id</span>: <span class="tk-str">"todos"</span>,
     <span class="tk-prop">shapeOptions</span>: { <span class="tk-prop">url</span>: <span class="tk-str">"/api/todos"</span> },
@@ -440,42 +484,60 @@ const demosMarkdown = featuredDemos
                 <span class="num">1</span>
                 <div>
                   <strong>Server-side proxy.</strong>
-                  <p>Forward the request to your Electric instance. Keep the source secret on the server.</p>
+                  <p>
+                    Forward the request to your Electric instance. Keep the
+                    source secret on the server.
+                  </p>
                 </div>
               </li>
               <li class="sh-fs-anno">
                 <span class="num">2</span>
                 <div>
                   <strong>Pin the table.</strong>
-                  <p>The shape is defined server-side, not by the client. The client can't ask for tables it shouldn't see.</p>
+                  <p>
+                    The shape is defined server-side, not by the client. The
+                    client can't ask for tables it shouldn't see.
+                  </p>
                 </div>
               </li>
               <li class="sh-fs-anno">
                 <span class="num">3</span>
                 <div>
                   <strong>Tenant isolation.</strong>
-                  <p>Bind the <code>where</code> clause to the authenticated user &mdash; every client gets its own slice.</p>
+                  <p>
+                    Bind the <code>where</code> clause to the authenticated user
+                    &mdash; every client gets its own slice.
+                  </p>
                 </div>
               </li>
               <li class="sh-fs-anno">
                 <span class="num">4</span>
                 <div>
                   <strong>It's just HTTP.</strong>
-                  <p>Shapes stream over plain HTTP. Cache, log and rate-limit them with the middleware you already use.</p>
+                  <p>
+                    Shapes stream over plain HTTP. Cache, log and rate-limit
+                    them with the middleware you already use.
+                  </p>
                 </div>
               </li>
               <li class="sh-fs-anno">
                 <span class="num">5</span>
                 <div>
                   <strong>Mount a collection.</strong>
-                  <p>An Electric collection in TanStack DB &mdash; local, reactive, persisted.</p>
+                  <p>
+                    An Electric collection in TanStack DB &mdash; local,
+                    reactive, persisted.
+                  </p>
                 </div>
               </li>
               <li class="sh-fs-anno">
                 <span class="num">6</span>
                 <div>
                   <strong>Render a live query.</strong>
-                  <p>Sub-millisecond reactivity over the local data. Updates flow in as the shape changes.</p>
+                  <p>
+                    Sub-millisecond reactivity over the local data. Updates flow
+                    in as the shape changes.
+                  </p>
                 </div>
               </li>
             </ol>
@@ -483,8 +545,20 @@ const demosMarkdown = featuredDemos
         </div>
 
         <div class="sh-fs-cta">
-          <VPButton tag="a" size="medium" theme="brand" text="Quickstart" href="/docs/sync/quickstart" />
-          <VPButton tag="a" size="medium" theme="alt" text="Read the Docs" href="/docs/sync" />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="brand"
+            text="Quickstart"
+            href="/docs/sync/quickstart"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="Read the Docs"
+            href="/docs/sync"
+          />
         </div>
       </div>
     </EaSection>
@@ -538,14 +612,14 @@ const demosMarkdown = featuredDemos
     <!-- ───────────── §7 — Bottom CTA ───────────── -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        <span class="md-exclude">Open source &middot; Apache&nbsp;2.0 &middot; ★&nbsp;9.5k</span>
+        <span class="md-exclude"
+          >Open source &middot; Apache&nbsp;2.0 &middot; ★&nbsp;9.5k</span
+        >
       </template>
-      <template #title>
-        Start syncing in&nbsp;minutes
-      </template>
+      <template #title> Start syncing in&nbsp;minutes </template>
       <template #tagline>
-        Spin up the starter, point it at Postgres, and ship a real-time app
-        on top of your existing&nbsp;stack.
+        Spin up the starter, point it at Postgres, and ship a real-time app on
+        top of your existing&nbsp;stack.
       </template>
       <template #install>
         <InstallPill
@@ -610,8 +684,12 @@ const demosMarkdown = featuredDemos
   align-items: center;
 }
 
-.sh-primitive-reversed .sh-primitive-prose { order: 2; }
-.sh-primitive-reversed .sh-primitive-visual { order: 1; }
+.sh-primitive-reversed .sh-primitive-prose {
+  order: 2;
+}
+.sh-primitive-reversed .sh-primitive-visual {
+  order: 1;
+}
 
 .sh-primitive-prose,
 .sh-primitive-visual {
@@ -703,13 +781,19 @@ const demosMarkdown = featuredDemos
   font-size: 14px;
   text-align: right;
 }
-.sh-section-foot.left { text-align: left; }
+.sh-section-foot.left {
+  text-align: left;
+}
 .sh-section-foot a {
   color: var(--vp-c-brand-1);
   text-decoration: none;
 }
-.sh-section-foot a:hover { text-decoration: underline; }
-.sh-section-foot-tight { margin-top: 16px; }
+.sh-section-foot a:hover {
+  text-decoration: underline;
+}
+.sh-section-foot-tight {
+  margin-top: 16px;
+}
 
 /* ── Agent loop section (humans + agents on a shared bus) ──────── */
 
@@ -723,9 +807,13 @@ const demosMarkdown = featuredDemos
   color: var(--ea-text-3);
 }
 .sh-paradigm-label .dot {
-  width: 7px; height: 7px; border-radius: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
 }
-.dot-good { background: var(--vp-c-brand-1); }
+.dot-good {
+  background: var(--vp-c-brand-1);
+}
 
 .sh-agent-loop-diagram-v {
   --tick-len: 22px;
@@ -749,8 +837,12 @@ const demosMarkdown = featuredDemos
   justify-content: space-around;
   gap: 4px;
 }
-.vbus-users { align-items: flex-end; }
-.vbus-agents { align-items: flex-start; }
+.vbus-users {
+  align-items: flex-end;
+}
+.vbus-agents {
+  align-items: flex-start;
+}
 
 .sh-agent-loop-diagram-v .node.small {
   padding: 3px 8px;
@@ -763,7 +855,7 @@ const demosMarkdown = featuredDemos
 }
 
 .vbus-users .node::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 100%;
   top: 50%;
@@ -773,7 +865,7 @@ const demosMarkdown = featuredDemos
   pointer-events: none;
 }
 .vbus-agents .node::before {
-  content: "";
+  content: '';
   position: absolute;
   right: 100%;
   top: 50%;
@@ -789,7 +881,8 @@ const demosMarkdown = featuredDemos
   justify-content: center;
   width: 56px;
   background: color-mix(in srgb, var(--vp-c-brand-1) 8%, var(--ea-surface));
-  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 35%, var(--ea-divider));
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 35%, var(--ea-divider));
   border-radius: 4px;
 }
 .vbus-rail-label {
@@ -811,8 +904,13 @@ const demosMarkdown = featuredDemos
   font-size: 11px;
   color: var(--ea-text-1);
 }
-.node.small { padding: 1px 6px; font-size: 10.5px; }
-.node-agent { color: var(--vp-c-brand-1); }
+.node.small {
+  padding: 1px 6px;
+  font-size: 10.5px;
+}
+.node-agent {
+  color: var(--vp-c-brand-1);
+}
 .node-device {
   color: var(--ea-text-2);
   border-style: dashed;
@@ -835,7 +933,9 @@ const demosMarkdown = featuredDemos
   text-decoration: none;
   transition: border-color 0.2s;
 }
-.sh-pillar:hover { border-color: var(--vp-c-brand-1); }
+.sh-pillar:hover {
+  border-color: var(--vp-c-brand-1);
+}
 .sh-pillar-num {
   font-size: 10.5px;
   letter-spacing: 0.08em;
@@ -892,7 +992,9 @@ const demosMarkdown = featuredDemos
 /* Code panels used as the visual next to a primitive's prose: nudge type
    up slightly and add a touch more breathing room so they hold the
    right-hand column with similar visual weight to the demo. */
-.sh-primitive-visual .sh-fs-panel { width: 100%; }
+.sh-primitive-visual .sh-fs-panel {
+  width: 100%;
+}
 .sh-primitive-visual .code-block.annotated {
   font-size: 13.5px;
   padding: 18px 20px;
@@ -1009,7 +1111,9 @@ const demosMarkdown = featuredDemos
   border-bottom: 1px solid var(--ea-divider);
   background: var(--ea-surface-alt);
 }
-.code-file-header .muted { color: var(--ea-text-3); }
+.code-file-header .muted {
+  color: var(--ea-text-3);
+}
 
 .code-block.annotated {
   margin: 0;
@@ -1021,15 +1125,33 @@ const demosMarkdown = featuredDemos
   color: var(--ea-text-1);
   overflow-x: auto;
 }
-.code-block .tk-kw { color: #d73a49; }
-.dark .code-block .tk-kw { color: #ff7b72; }
-.code-block .tk-str { color: #032f62; }
-.dark .code-block .tk-str { color: #a5d6ff; }
-.code-block .tk-fn { color: #6f42c1; }
-.dark .code-block .tk-fn { color: #d2a8ff; }
-.code-block .tk-prop { color: #005cc5; }
-.dark .code-block .tk-prop { color: #79c0ff; }
-.code-block .tk-v { color: var(--ea-text-1); }
+.code-block .tk-kw {
+  color: #d73a49;
+}
+.dark .code-block .tk-kw {
+  color: #ff7b72;
+}
+.code-block .tk-str {
+  color: #032f62;
+}
+.dark .code-block .tk-str {
+  color: #a5d6ff;
+}
+.code-block .tk-fn {
+  color: #6f42c1;
+}
+.dark .code-block .tk-fn {
+  color: #d2a8ff;
+}
+.code-block .tk-prop {
+  color: #005cc5;
+}
+.dark .code-block .tk-prop {
+  color: #79c0ff;
+}
+.code-block .tk-v {
+  color: var(--ea-text-1);
+}
 .code-block .ann-marker {
   display: inline-block;
   width: 18px;
@@ -1119,7 +1241,9 @@ const demosMarkdown = featuredDemos
   overflow: hidden;
   transition: border-color 0.2s;
 }
-.sh-demo:hover { border-color: var(--vp-c-brand-1); }
+.sh-demo:hover {
+  border-color: var(--vp-c-brand-1);
+}
 
 .sh-demo-frame {
   aspect-ratio: 16 / 9;

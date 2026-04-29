@@ -15,13 +15,13 @@ import {
   onBeforeUnmount,
   ref,
   watch,
-} from "vue"
+} from 'vue'
 
-import StageFrame from "./StageFrame.vue"
-import ControlPanel from "./ControlPanel.vue"
-import type { ToyDef, ControlDef } from "./toys"
+import StageFrame from './StageFrame.vue'
+import ControlPanel from './ControlPanel.vue'
+import type { ToyDef, ControlDef } from './toys'
 
-type StageBackground = NonNullable<ToyDef["background"]>
+type StageBackground = NonNullable<ToyDef['background']>
 
 function isStageBackground(s: string): s is StageBackground {
   switch (s) {
@@ -61,16 +61,16 @@ const ToyComponent = computed(() =>
 // ───────────── URL-state helpers ─────────────
 
 function readQuery(): URLSearchParams {
-  if (typeof window === "undefined") return new URLSearchParams()
+  if (typeof window === 'undefined') return new URLSearchParams()
   return new URLSearchParams(window.location.search)
 }
 
 function writeQuery(mutate: (q: URLSearchParams) => void) {
-  if (typeof window === "undefined") return
+  if (typeof window === 'undefined') return
   const q = readQuery()
   mutate(q)
   const next = `${window.location.pathname}?${q.toString()}`
-  window.history.replaceState({}, "", next)
+  window.history.replaceState({}, '', next)
 }
 
 // ───────────── Initial values from registry + URL ─────────────
@@ -85,16 +85,16 @@ function controlDefaults(toy: ToyDef): Record<string, unknown> {
 
 function parseControl(c: ControlDef, raw: string): unknown {
   switch (c.type) {
-    case "boolean":
-      return raw === "1" || raw === "true"
-    case "number": {
+    case 'boolean':
+      return raw === '1' || raw === 'true'
+    case 'number': {
       const n = parseFloat(raw)
       return Number.isFinite(n) ? n : c.default
     }
-    case "multiselect":
-      return raw ? raw.split(",") : []
-    case "select":
-    case "string":
+    case 'multiselect':
+      return raw ? raw.split(',') : []
+    case 'select':
+    case 'string':
     default:
       return raw
   }
@@ -103,11 +103,11 @@ function parseControl(c: ControlDef, raw: string): unknown {
 function serializeControl(c: ControlDef, v: unknown): string | null {
   if (v === undefined || v === null) return null
   switch (c.type) {
-    case "boolean":
-      return v ? "1" : "0"
-    case "multiselect":
-      return Array.isArray(v) ? v.join(",") : null
-    case "number":
+    case 'boolean':
+      return v ? '1' : '0'
+    case 'multiselect':
+      return Array.isArray(v) ? v.join(',') : null
+    case 'number':
       return String(v)
     default:
       return String(v)
@@ -116,7 +116,7 @@ function serializeControl(c: ControlDef, v: unknown): string | null {
 
 function isDefault(c: ControlDef, v: unknown): boolean {
   if (c.default === undefined) return false
-  if (c.type === "multiselect") {
+  if (c.type === 'multiselect') {
     const d = c.default
     if (!Array.isArray(v) || !Array.isArray(d)) return false
     if (v.length !== d.length) return false
@@ -135,7 +135,7 @@ const defaultPadding = 30
 const width = ref(defaultSize.w)
 const height = ref(defaultSize.h)
 const padding = ref(defaultPadding)
-const background = ref<StageBackground>(props.toy.background ?? "dark")
+const background = ref<StageBackground>(props.toy.background ?? 'dark')
 const showRuler = ref(false)
 const showBorder = ref(true)
 const collapsed = ref(false)
@@ -154,8 +154,8 @@ function dispatchScrollSignal() {
   // bypasses that gate on `/brand-toys`, but a synthetic scroll event
   // also nudges any other lazy/observer-based logic into action right
   // away after a (re)mount.
-  if (typeof window === "undefined") return
-  window.dispatchEvent(new Event("scroll"))
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event('scroll'))
 }
 
 function remount() {
@@ -168,7 +168,7 @@ function remount() {
 // time rather than storing null in the URL. Applies generally to any
 // select whose "none" should mean "don't pass".
 function effectiveValue(c: ControlDef, v: unknown): unknown {
-  if (c.type === "select" && v === "none") return null
+  if (c.type === 'select' && v === 'none') return null
   return v
 }
 
@@ -185,21 +185,21 @@ const effectiveValues = computed(() => {
 onMounted(() => {
   const q = readQuery()
 
-  const w = parseInt(q.get("w") ?? "", 10)
-  const h = parseInt(q.get("h") ?? "", 10)
+  const w = parseInt(q.get('w') ?? '', 10)
+  const h = parseInt(q.get('h') ?? '', 10)
   if (Number.isFinite(w) && w > 0) width.value = w
   if (Number.isFinite(h) && h > 0) height.value = h
 
-  const p = parseInt(q.get("p") ?? "", 10)
+  const p = parseInt(q.get('p') ?? '', 10)
   if (Number.isFinite(p) && p >= 0) padding.value = p
 
-  const bg = q.get("bg")
+  const bg = q.get('bg')
   if (bg && isStageBackground(bg)) {
     background.value = bg
   }
-  if (q.get("ruler") === "1") showRuler.value = true
-  if (q.get("border") === "0") showBorder.value = false
-  if (q.get("panel") === "off") collapsed.value = true
+  if (q.get('ruler') === '1') showRuler.value = true
+  if (q.get('border') === '0') showBorder.value = false
+  if (q.get('panel') === 'off') collapsed.value = true
 
   const next = { ...values.value }
   for (const c of props.toy.controls ?? []) {
@@ -208,12 +208,12 @@ onMounted(() => {
   }
   values.value = next
 
-  window.addEventListener("keydown", onKey)
+  window.addEventListener('keydown', onKey)
 
   // Lock body scroll while the toy stage is showing — the index page
   // wants to scroll, but the stage is a fixed-position viewport.
-  if (typeof document !== "undefined") {
-    document.body.classList.add("bt-toy-fixed")
+  if (typeof document !== 'undefined') {
+    document.body.classList.add('bt-toy-fixed')
   }
 
   mounted = true
@@ -222,7 +222,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKey)
+  window.removeEventListener('keydown', onKey)
   if (resizeRemountTimer) {
     clearTimeout(resizeRemountTimer)
     resizeRemountTimer = null
@@ -231,9 +231,9 @@ onBeforeUnmount(() => {
     clearTimeout(propRemountTimer)
     propRemountTimer = null
   }
-  if (typeof document !== "undefined") {
-    document.body.classList.remove("bt-toy-fixed")
-    document.body.classList.remove("bt-recording")
+  if (typeof document !== 'undefined') {
+    document.body.classList.remove('bt-toy-fixed')
+    document.body.classList.remove('bt-recording')
   }
 })
 
@@ -258,12 +258,10 @@ watch([width, height], () => {
 // values produces one remount at the end rather than one per tick.
 let propRemountTimer: ReturnType<typeof setTimeout> | null = null
 const remountPropNames = computed(() =>
-  (props.toy.controls ?? [])
-    .filter((c) => c.remountOnChange)
-    .map((c) => c.name),
+  (props.toy.controls ?? []).filter((c) => c.remountOnChange).map((c) => c.name)
 )
 const remountPropValues = computed(() =>
-  remountPropNames.value.map((n) => values.value[n]),
+  remountPropNames.value.map((n) => values.value[n])
 )
 watch(remountPropValues, () => {
   if (!mounted) return
@@ -278,27 +276,36 @@ watch(remountPropValues, () => {
 // ───────────── Write state → URL ─────────────
 
 watch(
-  [width, height, padding, background, showRuler, showBorder, collapsed, values],
+  [
+    width,
+    height,
+    padding,
+    background,
+    showRuler,
+    showBorder,
+    collapsed,
+    values,
+  ],
   () => {
     writeQuery((q) => {
-      if (width.value !== defaultSize.w) q.set("w", String(width.value))
-      else q.delete("w")
-      if (height.value !== defaultSize.h) q.set("h", String(height.value))
-      else q.delete("h")
-      if (padding.value !== defaultPadding) q.set("p", String(padding.value))
-      else q.delete("p")
+      if (width.value !== defaultSize.w) q.set('w', String(width.value))
+      else q.delete('w')
+      if (height.value !== defaultSize.h) q.set('h', String(height.value))
+      else q.delete('h')
+      if (padding.value !== defaultPadding) q.set('p', String(padding.value))
+      else q.delete('p')
 
-      if (background.value !== (props.toy.background ?? "dark")) {
-        q.set("bg", background.value)
+      if (background.value !== (props.toy.background ?? 'dark')) {
+        q.set('bg', background.value)
       } else {
-        q.delete("bg")
+        q.delete('bg')
       }
-      if (showRuler.value) q.set("ruler", "1")
-      else q.delete("ruler")
-      if (!showBorder.value) q.set("border", "0")
-      else q.delete("border")
-      if (collapsed.value) q.set("panel", "off")
-      else q.delete("panel")
+      if (showRuler.value) q.set('ruler', '1')
+      else q.delete('ruler')
+      if (!showBorder.value) q.set('border', '0')
+      else q.delete('border')
+      if (collapsed.value) q.set('panel', 'off')
+      else q.delete('panel')
 
       for (const c of props.toy.controls ?? []) {
         const v = values.value[c.name]
@@ -320,17 +327,17 @@ watch(
 function onKey(e: KeyboardEvent) {
   if (e.target instanceof HTMLElement) {
     const tag = e.target.tagName
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     if (e.target.isContentEditable) return
   }
-  if (e.key === "h" || e.key === "H") {
-    document.body.classList.toggle("bt-recording")
+  if (e.key === 'h' || e.key === 'H') {
+    document.body.classList.toggle('bt-recording')
   }
-  if (e.key === "." || e.key === "p" || e.key === "P") {
+  if (e.key === '.' || e.key === 'p' || e.key === 'P') {
     collapsed.value = !collapsed.value
   }
-  if (e.key === "Escape") {
-    window.location.href = "/brand-toys"
+  if (e.key === 'Escape') {
+    window.location.href = '/brand-toys'
   }
 }
 
@@ -338,7 +345,7 @@ function onKey(e: KeyboardEvent) {
 
 const toastVisible = ref(false)
 function onCopyLink() {
-  if (typeof window === "undefined") return
+  if (typeof window === 'undefined') return
   navigator.clipboard
     .writeText(window.location.href)
     .then(() => {
@@ -355,7 +362,7 @@ function onReset() {
   width.value = defaultSize.w
   height.value = defaultSize.h
   padding.value = defaultPadding
-  background.value = props.toy.background ?? "dark"
+  background.value = props.toy.background ?? 'dark'
   showRuler.value = false
   showBorder.value = true
   // Force a fresh remount so the toy re-initialises against the

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted, onUnmounted } from 'vue'
 
 // Hero background that conveys the Durable Streams mental model:
 //   parallel append-only logs with events streaming left → right,
@@ -46,7 +46,12 @@ const props = withDefaults(
     // the rects measured from `excludeEl`. See SyncFanOutBg for the
     // motivation — used by the OG capture to reserve the Electric
     // wordmark's bbox in the frame's top-left corner.
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
   {
     density: 1,
@@ -55,7 +60,7 @@ const props = withDefaults(
     tokenSpeed: 1,
     branchActivity: 1,
     extraExcludeRects: () => [],
-  },
+  }
 )
 
 const canvas = ref<HTMLCanvasElement>()
@@ -74,16 +79,16 @@ let running = false
 let spawnBranchAtImpl: (x: number, y: number) => void = () => {}
 
 const STREAM_NAMES = [
-  "chat",
-  "agent",
-  "tokens",
-  "events",
-  "audit",
-  "tasks",
-  "ingest",
-  "logs",
-  "plan",
-  "trace",
+  'chat',
+  'agent',
+  'tokens',
+  'events',
+  'audit',
+  'tasks',
+  'ingest',
+  'logs',
+  'plan',
+  'trace',
 ]
 
 interface Rail {
@@ -157,10 +162,10 @@ onMounted(() => {
   const el = canvas.value
   const tt = tooltip.value
   if (!el || !tt) return
-  const ctx = el.getContext("2d")
+  const ctx = el.getContext('2d')
   if (!ctx) return
 
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   let dpr = 1
   let w = 0
@@ -221,7 +226,7 @@ onMounted(() => {
       }
     }
     element
-      .querySelectorAll("a, button, svg, img, input, .ds-hero-install")
+      .querySelectorAll('a, button, svg, img, input, .ds-hero-install')
       .forEach((child) => {
         const r = child.getBoundingClientRect()
         if (r.width > 0 && r.height > 0) rects.push(r)
@@ -306,8 +311,7 @@ onMounted(() => {
       // straight rail tokens. Without this the paused image looks
       // emptier than the active one.
       if (props.paused && Math.random() < 0.7 && rail.tokens.length > 0) {
-        const seed =
-          rail.tokens[Math.floor(Math.random() * rail.tokens.length)]
+        const seed = rail.tokens[Math.floor(Math.random() * rail.tokens.length)]
         const dir = Math.random() < 0.5 ? 1 : -1
         const offset = 26 + Math.random() * 30
         const consumerY =
@@ -350,8 +354,8 @@ onMounted(() => {
     h = parent.clientHeight
     el!.width = w * dpr
     el!.height = h * dpr
-    el!.style.width = w + "px"
-    el!.style.height = h + "px"
+    el!.style.width = w + 'px'
+    el!.style.height = h + 'px'
     ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
     exclusions = measureExclusions()
     buildRails()
@@ -373,9 +377,9 @@ onMounted(() => {
     })
   })
 
-  window.addEventListener("resize", resize)
+  window.addEventListener('resize', resize)
 
-  const isDark = () => document.documentElement.classList.contains("dark")
+  const isDark = () => document.documentElement.classList.contains('dark')
 
   // Radial fade — strong centre, soft outer. Same shape as Agents/Sync,
   // so the headline is always sitting on a quiet pool.
@@ -479,7 +483,7 @@ onMounted(() => {
     )
     ctx!.strokeStyle = grad
     ctx!.lineWidth = hot ? 2 : 1.4
-    ctx!.lineCap = "round"
+    ctx!.lineCap = 'round'
     ctx!.beginPath()
     ctx!.moveTo(token.x - tailLen, rail.y)
     ctx!.lineTo(token.x, rail.y)
@@ -487,7 +491,14 @@ onMounted(() => {
 
     // Soft glow halo
     const gr = hot ? 14 : 10
-    const glow = ctx!.createRadialGradient(token.x, rail.y, 0, token.x, rail.y, gr)
+    const glow = ctx!.createRadialGradient(
+      token.x,
+      rail.y,
+      0,
+      token.x,
+      rail.y,
+      gr
+    )
     glow.addColorStop(
       0,
       `rgba(${baseR},${baseG},${baseB},${(hot ? 0.65 : 0.45) * a})`
@@ -551,7 +562,12 @@ onMounted(() => {
       // sprinkle frozen tokens at fixed positions
       for (let i = 0; i < 3; i++) {
         const x = w * (0.18 + 0.32 * i + ((rail.y * 7) % 100) * 0.001)
-        drawToken(rail, { x, speed: 0, age: 1, trail: 18, offset: 0 }, dark, false)
+        drawToken(
+          rail,
+          { x, speed: 0, age: 1, trail: 18, offset: 0 },
+          dark,
+          false
+        )
       }
     }
   }
@@ -679,7 +695,10 @@ onMounted(() => {
     return best
   }
 
-  function findTokenAt(mx: number, my: number): { rail: number; idx: number } | null {
+  function findTokenAt(
+    mx: number,
+    my: number
+  ): { rail: number; idx: number } | null {
     for (let ri = 0; ri < rails.length; ri++) {
       const r = rails[ri]
       if (Math.abs(r.y - my) > 10) continue
@@ -700,8 +719,8 @@ onMounted(() => {
     if (hitsExclusion(mx, my, exclusions, 4)) {
       hoveredRail = -1
       hoveredToken = null
-      tt!.style.opacity = "0"
-      el!.style.cursor = ""
+      tt!.style.opacity = '0'
+      el!.style.cursor = ''
       return
     }
 
@@ -711,11 +730,11 @@ onMounted(() => {
       hoveredRail = tk.rail
       const r = rails[tk.rail]
       const t = r.tokens[tk.idx]
-      tt!.textContent = `/${r.name} @ offset 0x${t.offset.toString(16).padStart(4, "0")}`
-      tt!.style.opacity = "1"
+      tt!.textContent = `/${r.name} @ offset 0x${t.offset.toString(16).padStart(4, '0')}`
+      tt!.style.opacity = '1'
       tt!.style.left = `${t.x}px`
       tt!.style.top = `${r.y - 22}px`
-      el!.style.cursor = "pointer"
+      el!.style.cursor = 'pointer'
       return
     }
 
@@ -725,23 +744,23 @@ onMounted(() => {
       hoveredToken = null
       const r = rails[ri]
       tt!.textContent = `/${r.name}`
-      tt!.style.opacity = "1"
+      tt!.style.opacity = '1'
       tt!.style.left = `${mx}px`
       tt!.style.top = `${r.y - 22}px`
-      el!.style.cursor = "pointer"
+      el!.style.cursor = 'pointer'
     } else {
       hoveredRail = -1
       hoveredToken = null
-      tt!.style.opacity = "0"
-      el!.style.cursor = ""
+      tt!.style.opacity = '0'
+      el!.style.cursor = ''
     }
   }
 
   function onMouseLeave() {
     hoveredRail = -1
     hoveredToken = null
-    tt!.style.opacity = "0"
-    el!.style.cursor = ""
+    tt!.style.opacity = '0'
+    el!.style.cursor = ''
   }
 
   function onClick(e: MouseEvent) {
@@ -766,9 +785,7 @@ onMounted(() => {
     // pulses immediately — tactile feedback for the click.
     const dir = my > r.y ? 1 : -1
     const consumerY =
-      dir === 1
-        ? Math.min(h - 14, r.y + 32)
-        : Math.max(14, r.y - 32)
+      dir === 1 ? Math.min(h - 14, r.y + 32) : Math.max(14, r.y - 32)
     r.branches.push({
       startX: mx,
       consumerY,
@@ -780,17 +797,17 @@ onMounted(() => {
     })
   }
 
-  el.addEventListener("mousemove", onMouseMove)
-  el.addEventListener("mouseleave", onMouseLeave)
-  el.addEventListener("click", onClick)
+  el.addEventListener('mousemove', onMouseMove)
+  el.addEventListener('mouseleave', onMouseLeave)
+  el.addEventListener('click', onClick)
 
   onUnmounted(() => {
     running = false
     cancelAnimationFrame(raf)
-    window.removeEventListener("resize", resize)
-    el.removeEventListener("mousemove", onMouseMove)
-    el.removeEventListener("mouseleave", onMouseLeave)
-    el.removeEventListener("click", onClick)
+    window.removeEventListener('resize', resize)
+    el.removeEventListener('mousemove', onMouseMove)
+    el.removeEventListener('mouseleave', onMouseLeave)
+    el.removeEventListener('click', onClick)
     spawnBranchAtImpl = () => {}
   })
 })

@@ -50,9 +50,7 @@ ${hero.paragraphs[0]}
 
 ${hero.paragraphs[1]}
 
-${hero.actions
-  .map((a) => `[${a.text}](${a.href})`)
-  .join(' ')}`
+${hero.actions.map((a) => `[${a.text}](${a.href})`).join(' ')}`
 </script>
 
 <template>
@@ -62,35 +60,37 @@ ${hero.actions
   <section v-else class="home-hero">
     <div class="home-hero-inner">
       <div class="home-hero-grid">
-      <div class="home-hero-text">
-        <h1 class="home-hero-name">
-          {{ hero.titleLeading }}<br />
-          {{ hero.titlePrefix }}&nbsp;<span class="home-hero-accent">{{ hero.titleAccent }}</span>
-        </h1>
-        <p class="home-hero-sub">
-          <span class="home-hero-sub-primary">
-            {{ hero.paragraphs[0] }}
-          </span>
-          <br /><br />
-          <span class="home-hero-sub-secondary">
-            {{ hero.paragraphs[1] }}
-          </span>
-        </p>
-        <div v-if="!hideActions" class="home-hero-actions">
-          <VPButton
-            v-for="action in hero.actions"
-            :key="action.href"
-            tag="a"
-            size="medium"
-            :theme="action.theme"
-            :text="action.text"
-            :href="action.href"
-          />
+        <div class="home-hero-text">
+          <h1 class="home-hero-name">
+            {{ hero.titleLeading }}<br />
+            {{ hero.titlePrefix }}&nbsp;<span class="home-hero-accent">{{
+              hero.titleAccent
+            }}</span>
+          </h1>
+          <p class="home-hero-sub">
+            <span class="home-hero-sub-primary">
+              {{ hero.paragraphs[0] }}
+            </span>
+            <br /><br />
+            <span class="home-hero-sub-secondary">
+              {{ hero.paragraphs[1] }}
+            </span>
+          </p>
+          <div v-if="!hideActions" class="home-hero-actions">
+            <VPButton
+              v-for="action in hero.actions"
+              :key="action.href"
+              tag="a"
+              size="medium"
+              :theme="action.theme"
+              :text="action.text"
+              :href="action.href"
+            />
+          </div>
         </div>
-      </div>
-      <div class="home-hero-scene md-exclude">
-        <HomeCompositionHero :paused="paused" />
-      </div>
+        <div class="home-hero-scene md-exclude">
+          <HomeCompositionHero :paused="paused" />
+        </div>
       </div>
     </div>
   </section>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Script: a single timeline drives both cards in lock-step so they read as a
@@ -8,7 +8,7 @@ import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemo
 // optionally flashes it as "new" for ~300ms).
 // ────────────────────────────────────────────────────────────────────────────
 
-type EventKind = "show" | "drop" | "retry" | "settle" | "reset"
+type EventKind = 'show' | 'drop' | 'retry' | 'settle' | 'reset'
 
 interface TimelineEvent {
   t: number
@@ -18,37 +18,37 @@ interface TimelineEvent {
 
 // Loop ≈ 6.0s of action + 1.0s hold = 7.0s cycle.
 const TIMELINE: TimelineEvent[] = [
-  { t: 0, kind: "reset" },
+  { t: 0, kind: 'reset' },
 
   // ── Initial stream (both cards in parallel) ──────────────────────────
-  { t: 400, kind: "show", id: "bad-tok-1" },
-  { t: 400, kind: "show", id: "good-tok-1" },
-  { t: 900, kind: "show", id: "bad-tok-2" },
-  { t: 900, kind: "show", id: "good-tok-2" },
+  { t: 400, kind: 'show', id: 'bad-tok-1' },
+  { t: 400, kind: 'show', id: 'good-tok-1' },
+  { t: 900, kind: 'show', id: 'bad-tok-2' },
+  { t: 900, kind: 'show', id: 'good-tok-2' },
 
   // ── Drop ────────────────────────────────────────────────────────────
-  { t: 1400, kind: "drop", id: "bad-drop" },
-  { t: 1400, kind: "drop", id: "good-drop" },
+  { t: 1400, kind: 'drop', id: 'bad-drop' },
+  { t: 1400, kind: 'drop', id: 'good-drop' },
 
   // ── 1.5s gap, then divergence ───────────────────────────────────────
-  { t: 2900, kind: "show", id: "bad-retry" },
-  { t: 2900, kind: "show", id: "good-resume" },
+  { t: 2900, kind: 'show', id: 'bad-retry' },
+  { t: 2900, kind: 'show', id: 'good-resume' },
 
-  { t: 3100, kind: "show", id: "bad-post-2" },
-  { t: 3100, kind: "show", id: "good-get" },
+  { t: 3100, kind: 'show', id: 'bad-post-2' },
+  { t: 3100, kind: 'show', id: 'good-get' },
 
   // Top card re-streams from scratch (wasted work).
-  { t: 3500, kind: "show", id: "bad-tok-r1" },
-  { t: 4000, kind: "show", id: "bad-tok-r2" },
+  { t: 3500, kind: 'show', id: 'bad-tok-r1' },
+  { t: 4000, kind: 'show', id: 'bad-tok-r2' },
 
   // Bottom card resumes — only the missing tokens.
-  { t: 3500, kind: "show", id: "good-tok-r" },
+  { t: 3500, kind: 'show', id: 'good-tok-r' },
 
   // The "exactly-once" payoff line lands last, in brand teal.
-  { t: 4700, kind: "show", id: "good-check" },
+  { t: 4700, kind: 'show', id: 'good-check' },
 
   // Hold the final state for ~1.3s before reset.
-  { t: 6000, kind: "settle" },
+  { t: 6000, kind: 'settle' },
 ]
 
 const CYCLE_MS = 7000
@@ -113,20 +113,20 @@ function resetVisible() {
 
 function showAllFinalState() {
   visible.value = new Set([
-    "bad-tok-1",
-    "bad-tok-2",
-    "bad-drop",
-    "bad-retry",
-    "bad-post-2",
-    "bad-tok-r1",
-    "bad-tok-r2",
-    "good-tok-1",
-    "good-tok-2",
-    "good-drop",
-    "good-resume",
-    "good-get",
-    "good-tok-r",
-    "good-check",
+    'bad-tok-1',
+    'bad-tok-2',
+    'bad-drop',
+    'bad-retry',
+    'bad-post-2',
+    'bad-tok-r1',
+    'bad-tok-r2',
+    'good-tok-1',
+    'good-tok-2',
+    'good-drop',
+    'good-resume',
+    'good-get',
+    'good-tok-r',
+    'good-check',
   ])
   isNew.value = new Set()
 }
@@ -140,9 +140,9 @@ function runOnce() {
     timers.push(
       setTimeout(() => {
         if (myId !== cycleId || !running) return
-        if (ev.kind === "reset") resetVisible()
-        else if (ev.kind === "show" && ev.id) reveal(ev.id)
-        else if (ev.kind === "drop" && ev.id) dropMark(ev.id)
+        if (ev.kind === 'reset') resetVisible()
+        else if (ev.kind === 'show' && ev.id) reveal(ev.id)
+        else if (ev.kind === 'drop' && ev.id) dropMark(ev.id)
         // "settle" is a no-op marker — used only to anchor the hold period.
       }, ev.t)
     )
@@ -170,8 +170,8 @@ let visibilityWatcher: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   reduced.value =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   if (reduced.value) {
     showAllFinalState()
@@ -442,7 +442,9 @@ const isFresh = computed(() => (id: string) => isNew.value.has(id))
 .cd-req--retry {
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  transition:
+    opacity 0.25s ease-out,
+    transform 0.25s ease-out;
 }
 
 .cd-req--retry.on {
@@ -494,7 +496,9 @@ const isFresh = computed(() => (id: string) => isNew.value.has(id))
   color: var(--ea-text-1);
   opacity: 0;
   transform: translateY(-2px);
-  transition: color 0.32s ease-out, opacity 0.18s ease-out,
+  transition:
+    color 0.32s ease-out,
+    opacity 0.18s ease-out,
     transform 0.18s ease-out;
   white-space: pre;
 }
@@ -547,7 +551,9 @@ const isFresh = computed(() => (id: string) => isNew.value.has(id))
   color: var(--ea-text-2);
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  transition:
+    opacity 0.25s ease-out,
+    transform 0.25s ease-out;
   letter-spacing: 0.02em;
 }
 
@@ -565,7 +571,9 @@ const isFresh = computed(() => (id: string) => isNew.value.has(id))
   font-weight: 600;
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  transition:
+    opacity 0.4s ease-out,
+    transform 0.4s ease-out;
 }
 
 .cd-check.on {

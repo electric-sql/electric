@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted, onUnmounted } from 'vue'
 
 // Hero background that conveys the Electric Sync mental model:
 //   a database table of rows, with SHAPES (where-clauses) carving
@@ -79,7 +79,12 @@ const props = withDefaults(
     // e.g. the OG capture wraps this hero inside a frame that
     // overlays the Electric wordmark in the top-left, and feeds the
     // wordmark's bbox in here so no canvas geometry paints under it.
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
   {
     density: 1,
@@ -90,7 +95,7 @@ const props = withDefaults(
     dieRate: 0,
     emitDotLit: false,
     extraExcludeRects: () => [],
-  },
+  }
 )
 
 const emit = defineEmits<{
@@ -119,13 +124,13 @@ let raf = 0
 let running = false
 
 const SHAPE_LIBRARY: { name: string; clause: string }[] = [
-  { name: "open_tickets", clause: "where status = 'open'" },
-  { name: "my_team", clause: "where team = $me" },
-  { name: "recent", clause: "where updated > now() - 1d" },
-  { name: "critical", clause: "where priority = 'P0'" },
-  { name: "in_review", clause: "where status = 'review'" },
-  { name: "by_owner", clause: "where owner_id = $me" },
-  { name: "active_users", clause: "where active = true" },
+  { name: 'open_tickets', clause: "where status = 'open'" },
+  { name: 'my_team', clause: 'where team = $me' },
+  { name: 'recent', clause: 'where updated > now() - 1d' },
+  { name: 'critical', clause: "where priority = 'P0'" },
+  { name: 'in_review', clause: "where status = 'review'" },
+  { name: 'by_owner', clause: 'where owner_id = $me' },
+  { name: 'active_users', clause: 'where active = true' },
 ]
 
 interface Row {
@@ -144,7 +149,7 @@ interface Shape {
   rowIndices: number[]
   bbox: { left: number; top: number; right: number; bottom: number }
   clientIds: number[]
-  labelSide: "above" | "below"
+  labelSide: 'above' | 'below'
   // Birth / death tween clocks (ms). `birthT` accumulates from 0
   // on add and is capped at `SHAPE_BIRTH_DURATION`; the shape
   // renders alpha-faded by `birthT/SHAPE_BIRTH_DURATION` until
@@ -195,7 +200,7 @@ function hitsExclusion(
   x: number,
   y: number,
   zones: ExcludeRect[],
-  margin: number,
+  margin: number
 ): boolean {
   for (const z of zones) {
     if (
@@ -212,7 +217,7 @@ function hitsExclusion(
 function rectHitsExclusion(
   bbox: { left: number; top: number; right: number; bottom: number },
   zones: ExcludeRect[],
-  margin: number,
+  margin: number
 ): boolean {
   for (const z of zones) {
     if (
@@ -227,9 +232,10 @@ function rectHitsExclusion(
 }
 
 function randomRowId(): string {
-  const chars = "abcdef0123456789"
-  let s = ""
-  for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  const chars = 'abcdef0123456789'
+  let s = ''
+  for (let i = 0; i < 4; i++)
+    s += chars[Math.floor(Math.random() * chars.length)]
   return s
 }
 
@@ -237,10 +243,10 @@ onMounted(() => {
   const el = canvas.value
   const tt = tooltip.value
   if (!el || !tt) return
-  const c = el.getContext("2d")
+  const c = el.getContext('2d')
   if (!c) return
 
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   let dpr = 1
   let w = 0
@@ -272,9 +278,7 @@ onMounted(() => {
     if (s.dead) return 0
     const born = Math.min(1, s.birthT / SHAPE_BIRTH_DURATION)
     const dying =
-      s.dyingT > 0
-        ? Math.max(0, 1 - s.dyingT / SHAPE_DEATH_DURATION)
-        : 1
+      s.dyingT > 0 ? Math.max(0, 1 - s.dyingT / SHAPE_DEATH_DURATION) : 1
     return born * dying
   }
 
@@ -298,7 +302,7 @@ onMounted(() => {
       for (let i = 0; i < nodeRects.length; i++) rects.push(nodeRects[i])
     }
     element
-      .querySelectorAll("a, button, svg, img, input, .sh-hero-install")
+      .querySelectorAll('a, button, svg, img, input, .sh-hero-install')
       .forEach((child) => {
         const r = child.getBoundingClientRect()
         if (r.width > 0 && r.height > 0) rects.push(r)
@@ -386,7 +390,7 @@ onMounted(() => {
     minRows: number,
     maxRows: number,
     attempts = 50,
-    allowOverlap = false,
+    allowOverlap = false
   ): { rowIndices: number[]; bbox: ExcludeRect } | null {
     // Restrict candidate seeds to rows that already live inside this
     // region so the shape lands where we want it on the hero. When
@@ -471,13 +475,13 @@ onMounted(() => {
       { x: w * 0.5, y: h * 0.96 },
     ]
     const valid = anchors.filter(
-      (a) => !hitsExclusion(a.x, a.y, exclusions, 36),
+      (a) => !hitsExclusion(a.x, a.y, exclusions, 36)
     )
     // Five anchors when they all clear the headline — gives the second,
     // overlapping pass somewhere new to point its tokens.
     clients = valid.slice(0, Math.min(5, valid.length)).map((a, i) => ({
       id: i,
-      name: "",
+      name: '',
       x: a.x,
       y: a.y,
       pulse: 0,
@@ -485,7 +489,9 @@ onMounted(() => {
     }))
   }
 
-  function clientsByDistance(bbox: ExcludeRect): { id: number; dist: number }[] {
+  function clientsByDistance(
+    bbox: ExcludeRect
+  ): { id: number; dist: number }[] {
     const cx = (bbox.left + bbox.right) / 2
     const cy = (bbox.top + bbox.bottom) / 2
     return clients
@@ -512,10 +518,30 @@ onMounted(() => {
     const midX = w / 2
     const midY = h / 2
     const quadrants: ExcludeRect[] = [
-      { left: margin, top: margin, right: midX - margin / 2, bottom: midY - margin / 2 },
-      { left: midX + margin / 2, top: margin, right: w - margin, bottom: midY - margin / 2 },
-      { left: margin, top: midY + margin / 2, right: midX - margin / 2, bottom: h - margin },
-      { left: midX + margin / 2, top: midY + margin / 2, right: w - margin, bottom: h - margin },
+      {
+        left: margin,
+        top: margin,
+        right: midX - margin / 2,
+        bottom: midY - margin / 2,
+      },
+      {
+        left: midX + margin / 2,
+        top: margin,
+        right: w - margin,
+        bottom: midY - margin / 2,
+      },
+      {
+        left: margin,
+        top: midY + margin / 2,
+        right: midX - margin / 2,
+        bottom: h - margin,
+      },
+      {
+        left: midX + margin / 2,
+        top: midY + margin / 2,
+        right: w - margin,
+        bottom: h - margin,
+      },
     ]
     // Shuffle the quadrant order so shape names rotate around the hero
     // on each mount instead of always starting top-left.
@@ -524,30 +550,31 @@ onMounted(() => {
       .sort(() => Math.random() - 0.5)
 
     let id = 0
-    const placeShape = (
-      placed: { rowIndices: number[]; bbox: ExcludeRect },
-    ) => {
+    const placeShape = (placed: {
+      rowIndices: number[]
+      bbox: ExcludeRect
+    }) => {
       const def = lib[id % lib.length]
       const clientId = nearestClientTo(placed.bbox)
       if (
         clients[clientId] &&
         Math.hypot(
           (placed.bbox.left + placed.bbox.right) / 2 - clients[clientId].x,
-          (placed.bbox.top + placed.bbox.bottom) / 2 - clients[clientId].y,
+          (placed.bbox.top + placed.bbox.bottom) / 2 - clients[clientId].y
         ) < 70
       ) {
         return false
       }
-      const labelSide: "above" | "below" =
+      const labelSide: 'above' | 'below' =
         placed.bbox.top - 18 > 4 &&
         !hitsExclusion(
           (placed.bbox.left + placed.bbox.right) / 2,
           placed.bbox.top - 14,
           exclusions,
-          6,
+          6
         )
-          ? "above"
-          : "below"
+          ? 'above'
+          : 'below'
       const shape: Shape = {
         id,
         name: def.name,
@@ -618,8 +645,8 @@ onMounted(() => {
     h = parent.clientHeight
     el!.width = w * dpr
     el!.height = h * dpr
-    el!.style.width = w + "px"
-    el!.style.height = h + "px"
+    el!.style.width = w + 'px'
+    el!.style.height = h + 'px'
     c!.setTransform(dpr, 0, 0, dpr, 0, 0)
     exclusions = measureExclusions()
     tokens = []
@@ -639,9 +666,7 @@ onMounted(() => {
       for (const shape of shapes) {
         if (shape.rowIndices.length === 0) continue
         const rowIdx =
-          shape.rowIndices[
-            Math.floor(Math.random() * shape.rowIndices.length)
-          ]
+          shape.rowIndices[Math.floor(Math.random() * shape.rowIndices.length)]
         const row = rows[rowIdx]
         if (!row) continue
         row.flash = 1
@@ -679,9 +704,9 @@ onMounted(() => {
     })
   })
 
-  window.addEventListener("resize", resize)
+  window.addEventListener('resize', resize)
 
-  const isDark = () => document.documentElement.classList.contains("dark")
+  const isDark = () => document.documentElement.classList.contains('dark')
 
   function radialFade(x: number, y: number): number {
     if (props.noEdgeFade) return 1
@@ -702,15 +727,13 @@ onMounted(() => {
   }
 
   function muted(dark: boolean, alpha: number): string {
-    return dark
-      ? `rgba(255,255,255,${alpha})`
-      : `rgba(0,0,0,${alpha})`
+    return dark ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`
   }
 
   function roundRect(
     ctx: CanvasRenderingContext2D,
     bbox: ExcludeRect,
-    radius: number,
+    radius: number
   ) {
     const { left: x0, top: y0, right: x1, bottom: y1 } = bbox
     const r = Math.min(radius, (x1 - x0) / 2, (y1 - y0) / 2)
@@ -781,17 +804,11 @@ onMounted(() => {
     // Soft fill so the subset reads as a region.
     c!.save()
     roundRect(c!, shape.bbox, 12)
-    c!.fillStyle = teal(
-      dark,
-      (hovered ? 0.09 : dim ? 0.015 : 0.035) * life,
-    )
+    c!.fillStyle = teal(dark, (hovered ? 0.09 : dim ? 0.015 : 0.035) * life)
     c!.fill()
     c!.lineWidth = hovered ? 1.2 : 1
     c!.setLineDash([3, 4])
-    c!.strokeStyle = teal(
-      dark,
-      (hovered ? 0.7 : dim ? 0.12 : 0.36) * life,
-    )
+    c!.strokeStyle = teal(dark, (hovered ? 0.7 : dim ? 0.12 : 0.36) * life)
     c!.stroke()
     c!.restore()
 
@@ -801,7 +818,7 @@ onMounted(() => {
       if (!client) continue
       const fadeMid = Math.max(
         0.45,
-        radialFade((cx + client.x) / 2, (cy + client.y) / 2),
+        radialFade((cx + client.x) / 2, (cy + client.y) / 2)
       )
       const a = (hovered ? 0.5 : dim ? 0.08 : 0.22) * fadeMid * life
       if (a < 0.03) continue
@@ -826,15 +843,14 @@ onMounted(() => {
     const showName = !props.labelsOnHover || hovered
     if (showName) {
       const labelY =
-        shape.labelSide === "above" ? shape.bbox.top - 8 : shape.bbox.bottom + 16
+        shape.labelSide === 'above'
+          ? shape.bbox.top - 8
+          : shape.bbox.bottom + 16
       c!.save()
       c!.font = `11px var(--vp-font-family-mono)`
-      c!.textAlign = "center"
-      c!.textBaseline = "alphabetic"
-      c!.fillStyle = teal(
-        dark,
-        (hovered ? 0.95 : dim ? 0.28 : 0.6) * life,
-      )
+      c!.textAlign = 'center'
+      c!.textBaseline = 'alphabetic'
+      c!.fillStyle = teal(dark, (hovered ? 0.95 : dim ? 0.28 : 0.6) * life)
       c!.fillText(`shape:${shape.name}`, cx, labelY)
       if (hovered) {
         c!.font = `11px var(--vp-font-family-mono)`
@@ -842,7 +858,7 @@ onMounted(() => {
         c!.fillText(
           shape.clause,
           cx,
-          shape.labelSide === "above" ? labelY - 14 : labelY + 14,
+          shape.labelSide === 'above' ? labelY - 14 : labelY + 14
         )
       }
       c!.restore()
@@ -864,20 +880,14 @@ onMounted(() => {
 
     // Outer ring
     c!.save()
-    c!.strokeStyle = teal(
-      dark,
-      hovered ? 0.95 : dim ? 0.22 : 0.5 + pulse * 0.3,
-    )
+    c!.strokeStyle = teal(dark, hovered ? 0.95 : dim ? 0.22 : 0.5 + pulse * 0.3)
     c!.lineWidth = 1.2
     c!.beginPath()
     c!.arc(client.x, client.y, ringR, 0, Math.PI * 2)
     c!.stroke()
 
     // Inner core
-    c!.fillStyle = teal(
-      dark,
-      hovered ? 1 : dim ? 0.4 : 0.7 + pulse * 0.2,
-    )
+    c!.fillStyle = teal(dark, hovered ? 1 : dim ? 0.4 : 0.7 + pulse * 0.2)
     c!.beginPath()
     c!.arc(client.x, client.y, 3, 0, Math.PI * 2)
     c!.fill()
@@ -886,12 +896,9 @@ onMounted(() => {
     // homepage scenes stay quiet until the user investigates.
     if (!props.labelsOnHover || hovered) {
       c!.font = `11px var(--vp-font-family-mono)`
-      c!.textAlign = "center"
-      c!.textBaseline = "top"
-      c!.fillStyle = teal(
-        dark,
-        hovered ? 0.95 : dim ? 0.32 : 0.65,
-      )
+      c!.textAlign = 'center'
+      c!.textBaseline = 'top'
+      c!.fillStyle = teal(dark, hovered ? 0.95 : dim ? 0.32 : 0.65)
       c!.fillText(client.name, client.x, client.y + ringR + 6)
     }
     c!.restore()
@@ -922,7 +929,7 @@ onMounted(() => {
     grad.addColorStop(1, teal(dark, 0.7 * a))
     c!.strokeStyle = grad
     c!.lineWidth = 1.6
-    c!.lineCap = "round"
+    c!.lineCap = 'round'
     c!.beginPath()
     c!.moveTo(tx, ty)
     c!.lineTo(x, y)
@@ -979,10 +986,30 @@ onMounted(() => {
     const midX = w / 2
     const midY = h / 2
     const quadrants: ExcludeRect[] = [
-      { left: margin, top: margin, right: midX - margin / 2, bottom: midY - margin / 2 },
-      { left: midX + margin / 2, top: margin, right: w - margin, bottom: midY - margin / 2 },
-      { left: margin, top: midY + margin / 2, right: midX - margin / 2, bottom: h - margin },
-      { left: midX + margin / 2, top: midY + margin / 2, right: w - margin, bottom: h - margin },
+      {
+        left: margin,
+        top: margin,
+        right: midX - margin / 2,
+        bottom: midY - margin / 2,
+      },
+      {
+        left: midX + margin / 2,
+        top: margin,
+        right: w - margin,
+        bottom: midY - margin / 2,
+      },
+      {
+        left: margin,
+        top: midY + margin / 2,
+        right: midX - margin / 2,
+        bottom: h - margin,
+      },
+      {
+        left: midX + margin / 2,
+        top: midY + margin / 2,
+        right: w - margin,
+        bottom: h - margin,
+      },
     ]
     const order = quadrants
       .map((q) => ({ q, k: Math.random() }))
@@ -995,9 +1022,7 @@ onMounted(() => {
     // is taken is purely defensive — `MAX_SHAPES` (8) is below
     // the library size (7 today), but the fallback keeps us safe
     // if the library shrinks in the future.
-    const usedNames = new Set(
-      shapes.filter((s) => !s.dead).map((s) => s.name),
-    )
+    const usedNames = new Set(shapes.filter((s) => !s.dead).map((s) => s.name))
     const available = SHAPE_LIBRARY.filter((d) => !usedNames.has(d.name))
     const pool = available.length > 0 ? available : SHAPE_LIBRARY
     const def = pool[Math.floor(Math.random() * pool.length)]
@@ -1014,11 +1039,11 @@ onMounted(() => {
       // pass — keeps the connector readable rather than collapsing
       // a label on top of the client glyph.
       if (Math.hypot(cx - cl.x, cy - cl.y) < 70) continue
-      const labelSide: "above" | "below" =
+      const labelSide: 'above' | 'below' =
         placed.bbox.top - 18 > 4 &&
         !hitsExclusion(cx, placed.bbox.top - 14, exclusions, 6)
-          ? "above"
-          : "below"
+          ? 'above'
+          : 'below'
       const newId = shapes.length
       const shape: Shape = {
         id: newId,
@@ -1091,7 +1116,7 @@ onMounted(() => {
         .map((sid) => shapes[sid])
         .filter((s) => s && !s.dead)
       if (survivors.length === 0) {
-        cl.name = ""
+        cl.name = ''
       } else {
         cl.name = `/${survivors[survivors.length - 1].name}`
       }
@@ -1216,7 +1241,7 @@ onMounted(() => {
             ) {
               targetClient.pulse = 1
               if (props.emitDotLit) {
-                emit("dotLit", targetClient.x, targetClient.y)
+                emit('dotLit', targetClient.x, targetClient.y)
               }
             }
           }
@@ -1339,25 +1364,26 @@ onMounted(() => {
       // as a glitch.
       if (!shapeAlive(shapes[i])) continue
       const b = shapes[i].bbox
-      if (mx >= b.left && mx <= b.right && my >= b.top && my <= b.bottom) return i
+      if (mx >= b.left && mx <= b.right && my >= b.top && my <= b.bottom)
+        return i
     }
     return -1
   }
 
   function setTooltip(text: string, x: number, y: number) {
     tt!.textContent = text
-    tt!.style.opacity = "1"
+    tt!.style.opacity = '1'
     tt!.style.left = `${x}px`
     tt!.style.top = `${y}px`
-    el!.style.cursor = "pointer"
+    el!.style.cursor = 'pointer'
   }
 
   function clearTooltip() {
     hoveredRow = -1
     hoveredShape = -1
     hoveredClient = -1
-    tt!.style.opacity = "0"
-    el!.style.cursor = ""
+    tt!.style.opacity = '0'
+    el!.style.cursor = ''
   }
 
   function onMouseMove(e: MouseEvent) {
@@ -1380,12 +1406,8 @@ onMounted(() => {
       const subs = client.shapeIds
         .filter((sid) => shapes[sid] && shapeAlive(shapes[sid]))
         .map((sid) => `shape:${shapes[sid].name}`)
-        .join(", ")
-      setTooltip(
-        `${client.name} · ${subs || "—"}`,
-        client.x,
-        client.y - 26,
-      )
+        .join(', ')
+      setTooltip(`${client.name} · ${subs || '—'}`, client.x, client.y - 26)
       return
     }
 
@@ -1398,11 +1420,11 @@ onMounted(() => {
       const inShapes = row.shapeIds
         .filter((sid) => shapes[sid] && shapeAlive(shapes[sid]))
         .map((sid) => `shape:${shapes[sid].name}`)
-        .join(", ")
+        .join(', ')
       setTooltip(
-        `row:${row.rowId}  ${inShapes ? "·  " + inShapes : "·  not in any shape"}`,
+        `row:${row.rowId}  ${inShapes ? '·  ' + inShapes : '·  not in any shape'}`,
         row.x,
-        row.y - 18,
+        row.y - 18
       )
       return
     }
@@ -1414,11 +1436,7 @@ onMounted(() => {
       hoveredRow = -1
       hoveredClient = -1
       const cx = (shape.bbox.left + shape.bbox.right) / 2
-      setTooltip(
-        `shape:${shape.name}  ${shape.clause}`,
-        cx,
-        shape.bbox.top - 8,
-      )
+      setTooltip(`shape:${shape.name}  ${shape.clause}`, cx, shape.bbox.top - 8)
       return
     }
 
@@ -1441,7 +1459,8 @@ onMounted(() => {
       // doesn't re-flash the dying shape's rows.
       for (const sid of clients[cIdx].shapeIds) {
         const shape = shapes[sid]
-        if (!shape || !shapeAlive(shape) || shape.rowIndices.length === 0) continue
+        if (!shape || !shapeAlive(shape) || shape.rowIndices.length === 0)
+          continue
         const ri =
           shape.rowIndices[Math.floor(Math.random() * shape.rowIndices.length)]
         fireRow(ri, sid)
@@ -1465,17 +1484,17 @@ onMounted(() => {
     }
   }
 
-  el.addEventListener("mousemove", onMouseMove)
-  el.addEventListener("mouseleave", onMouseLeave)
-  el.addEventListener("click", onClick)
+  el.addEventListener('mousemove', onMouseMove)
+  el.addEventListener('mouseleave', onMouseLeave)
+  el.addEventListener('click', onClick)
 
   onUnmounted(() => {
     running = false
     cancelAnimationFrame(raf)
-    window.removeEventListener("resize", resize)
-    el.removeEventListener("mousemove", onMouseMove)
-    el.removeEventListener("mouseleave", onMouseLeave)
-    el.removeEventListener("click", onClick)
+    window.removeEventListener('resize', resize)
+    el.removeEventListener('mousemove', onMouseMove)
+    el.removeEventListener('mouseleave', onMouseLeave)
+    el.removeEventListener('click', onClick)
   })
 })
 </script>

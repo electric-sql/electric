@@ -47,7 +47,7 @@ withDefaults(
        still rather than catching the canvases mid-animation. */
     paused?: boolean
   }>(),
-  { labelOrientation: 'standing', paused: false },
+  { labelOrientation: 'standing', paused: false }
 )
 
 // Wrapper element so we can mutate two CSS custom properties on
@@ -60,7 +60,9 @@ const root = ref<HTMLDivElement>()
 // fire an on-streams branch animation in response to a `dotLit` from
 // the agents or sync layer above/below — re-using the existing rail
 // branch visual so the bridge "lands" naturally on streams.
-const streamsRef = ref<{ spawnBranchAt: (x: number, y: number) => void } | null>(null)
+const streamsRef = ref<{
+  spawnBranchAt: (x: number, y: number) => void
+} | null>(null)
 
 let raf = 0
 let prefersReducedMotion = false
@@ -145,7 +147,7 @@ const bridgeSlots = reactive<BridgeSlot[]>(
     active: false,
     transform: '',
     spawnId: 0,
-  })),
+  }))
 )
 
 function spawnBridge(source: 'agents' | 'sync', x: number, y: number) {
@@ -168,8 +170,7 @@ function spawnBridge(source: 'agents' | 'sync', x: number, y: number) {
   // The concrete Z values come from CSS custom properties on
   // .hch-stage so the two responsive breakpoints (intermediate /
   // mobile) override them without touching this code path.
-  const zVar =
-    source === 'agents' ? 'var(--hch-z-agents)' : 'var(--hch-z-sync)'
+  const zVar = source === 'agents' ? 'var(--hch-z-agents)' : 'var(--hch-z-sync)'
   const rotY = source === 'agents' ? 90 : -90
   slot.transform = `translate3d(${stageX.toFixed(2)}px, ${stageY.toFixed(2)}px, ${zVar}) rotateY(${rotY}deg)`
   // Bumping `spawnId` flips the v-for `:key` so Vue mounts a fresh
@@ -186,7 +187,7 @@ function spawnBridge(source: 'agents' | 'sync', x: number, y: number) {
   // the bridge endpoint and reads as a small "split tip".
   streamsRef.value?.spawnBranchAt(
     stageX - BAND_BORDER_PX,
-    stageY - BAND_BORDER_PX,
+    stageY - BAND_BORDER_PX
   )
 }
 
@@ -223,7 +224,7 @@ function onScroll() {
 onMounted(() => {
   if (typeof window === 'undefined') return
   prefersReducedMotion = window.matchMedia(
-    '(prefers-reduced-motion: reduce)',
+    '(prefers-reduced-motion: reduce)'
   ).matches
   if (prefersReducedMotion) return
   window.addEventListener('scroll', onScroll, { passive: true })
@@ -290,15 +291,18 @@ onBeforeUnmount(() => {
       <span
         class="hch-band-label hch-band-label--sync"
         :class="{ 'hch-band-label--standing': labelOrientation === 'standing' }"
-      >sync</span>
+        >sync</span
+      >
       <span
         class="hch-band-label hch-band-label--streams"
         :class="{ 'hch-band-label--standing': labelOrientation === 'standing' }"
-      >streams</span>
+        >streams</span
+      >
       <span
         class="hch-band-label hch-band-label--agents"
         :class="{ 'hch-band-label--standing': labelOrientation === 'standing' }"
-      >agents</span>
+        >agents</span
+      >
       <!-- Bridge pool: thin dotted strips parented inside the 3D
            stage so they inherit the iso transform. Each slot is
            pre-rendered once and reused — `is-active` triggers the
@@ -385,10 +389,7 @@ onBeforeUnmount(() => {
      onto the stack — steep enough that you read each layer's
      surface clearly, gentle enough that the protruding edges
      still extend out and read as separate planes. */
-  transform:
-    translateY(var(--hch-shift-y, 0px))
-    rotateX(64deg)
-    rotateZ(-32deg);
+  transform: translateY(var(--hch-shift-y, 0px)) rotateX(64deg) rotateZ(-32deg);
   transform-origin: center center;
   /* Smooth out micro-jitter from the rAF-throttled scroll
      handler without making the motion feel laggy. */
@@ -412,7 +413,8 @@ onBeforeUnmount(() => {
      the chrome uses. The 92% alpha keeps a touch of show-through
      between layers. */
   background: color-mix(in srgb, var(--vp-sidebar-bg-color) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+  border: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
   border-radius: 14px;
   overflow: hidden;
   /* Soft drop shadow for depth — strongest on the topmost layer
@@ -440,24 +442,42 @@ onBeforeUnmount(() => {
    the next section. The wider spread also makes the three layers
    feel like distinctly separate strata of a system rather than a
    tightly compressed sandwich. */
-.hch-band--agents   { transform: translateZ(var(--hch-z-agents)); }
-.hch-band--streams  { transform: translateZ(var(--hch-z-streams)); }
-.hch-band--sync     { transform: translateZ(var(--hch-z-sync)); }
+.hch-band--agents {
+  transform: translateZ(var(--hch-z-agents));
+}
+.hch-band--streams {
+  transform: translateZ(var(--hch-z-streams));
+}
+.hch-band--sync {
+  transform: translateZ(var(--hch-z-sync));
+}
 
 /* Subtle layer-tint accent: a brand-coloured wash on each layer's
    border helps you parse the three planes as distinct strata
    even before you read the labels. */
 .hch-band--sync {
-  border-color: color-mix(in srgb, var(--vp-c-brand-1) 14%, var(--vp-c-divider));
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 14%,
+    var(--vp-c-divider)
+  );
   box-shadow:
     0 12px 32px -10px rgba(0, 0, 0, 0.38),
     0 4px 10px -4px rgba(0, 0, 0, 0.25);
 }
 .hch-band--streams {
-  border-color: color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-divider));
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 22%,
+    var(--vp-c-divider)
+  );
 }
 .hch-band--agents {
-  border-color: color-mix(in srgb, var(--vp-c-brand-1) 32%, var(--vp-c-divider));
+  border-color: color-mix(
+    in srgb,
+    var(--vp-c-brand-1) 32%,
+    var(--vp-c-divider)
+  );
   box-shadow:
     0 28px 60px -12px rgba(0, 0, 0, 0.55),
     0 10px 22px -8px rgba(0, 0, 0, 0.35);
@@ -519,12 +539,11 @@ onBeforeUnmount(() => {
   height: 1px;
   pointer-events: none;
   transform-origin: 0 50% 0;
-  background:
-    repeating-linear-gradient(
-      to right,
-      var(--vp-c-brand-1) 0 1px,
-      transparent 1px 4px
-    );
+  background: repeating-linear-gradient(
+    to right,
+    var(--vp-c-brand-1) 0 1px,
+    transparent 1px 4px
+  );
   opacity: 0;
   /* Keep the strip composited on its own layer so the per-spawn
      transform updates don't trigger layout in the rest of the
@@ -544,10 +563,18 @@ onBeforeUnmount(() => {
 }
 
 @keyframes hch-bridge-life {
-  0%   { opacity: 0; }
-  18%  { opacity: 0.55; }
-  78%  { opacity: 0.55; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  78% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -619,9 +646,15 @@ onBeforeUnmount(() => {
      were visible. */
   backface-visibility: hidden;
 }
-.hch-band-label--agents  { --hch-z-label: var(--hch-z-agents); }
-.hch-band-label--streams { --hch-z-label: var(--hch-z-streams); }
-.hch-band-label--sync    { --hch-z-label: var(--hch-z-sync); }
+.hch-band-label--agents {
+  --hch-z-label: var(--hch-z-agents);
+}
+.hch-band-label--streams {
+  --hch-z-label: var(--hch-z-streams);
+}
+.hch-band-label--sync {
+  --hch-z-label: var(--hch-z-sync);
+}
 .hch-band-label--standing {
   bottom: 0;
   transform: translateZ(var(--hch-z-label, 0)) rotateX(-90deg);
@@ -636,9 +669,7 @@ onBeforeUnmount(() => {
   }
   .hch-stage {
     width: 64%;
-    transform:
-      translateY(var(--hch-shift-y, 0px))
-      rotateX(62deg)
+    transform: translateY(var(--hch-shift-y, 0px)) rotateX(62deg)
       rotateZ(-30deg);
     /* Tighter Z spread for the side-by-side hero column so the
        stack reads as a compact model, not an oversized one. The
@@ -687,9 +718,7 @@ onBeforeUnmount(() => {
        The slightly steeper rotateX (66° vs the base's 64°) flattens
        the iso a touch so the bands' vertical footprint is more
        compact — useful when the visible strip itself is short. */
-    transform:
-      translateY(var(--hch-shift-y, 0px))
-      rotateX(66deg)
+    transform: translateY(var(--hch-shift-y, 0px)) rotateX(66deg)
       rotateZ(-30deg);
     /* Z-spread expressed in vw so the separation scales with viewport
        width. Sync sits well below the page (-12vw) so its protruding

@@ -15,7 +15,10 @@ const section = {
     { value: '99%', label: 'CDN cache hit rate' },
     { value: '∞', label: 'DB load stays flat' },
   ],
-  link: { text: 'Read the benchmarks', href: '/docs/sync/reference/benchmarks' },
+  link: {
+    text: 'Read the benchmarks',
+    href: '/docs/sync/reference/benchmarks',
+  },
 }
 const markdown = `## ${section.title}
 
@@ -39,7 +42,8 @@ ${section.stats.map((stat) => `- \`${stat.value}\` ${stat.label}`).join('\n')}
         <p class="st-prose">
           Electric streams over plain HTTP, so
           <a :href="section.bodyLink.href">{{ section.bodyLink.text }}</a>
-          fan out high-throughput data delivery without ever touching your database.
+          fan out high-throughput data delivery without ever touching your
+          database.
         </p>
         <ul class="st-stats">
           <li v-for="stat in section.stats" :key="stat.label">

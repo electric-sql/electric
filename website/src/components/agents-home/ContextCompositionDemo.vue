@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed } from 'vue'
 
 interface Source {
   key: string
   label: string
   color: string
-  tier: "pinned" | "stable" | "slow-changing" | "volatile"
+  tier: 'pinned' | 'stable' | 'slow-changing' | 'volatile'
   tierLabel: string
   tokens: number
   max: number
@@ -16,49 +16,49 @@ const TOTAL_BUDGET = 32_768
 
 const sources = ref<Source[]>([
   {
-    key: "system",
-    label: "system prompt",
-    color: "#6b7280",
-    tier: "pinned",
-    tierLabel: "pinned",
+    key: 'system',
+    label: 'system prompt',
+    color: '#6b7280',
+    tier: 'pinned',
+    tierLabel: 'pinned',
     tokens: 2_048,
     max: 4_096,
-    description: "Never changes between requests",
+    description: 'Never changes between requests',
   },
   {
-    key: "tools",
-    label: "tool definitions",
-    color: "#8b5cf6",
-    tier: "stable",
-    tierLabel: "stable",
+    key: 'tools',
+    label: 'tool definitions',
+    color: '#8b5cf6',
+    tier: 'stable',
+    tierLabel: 'stable',
     tokens: 5_120,
     max: 6_144,
-    description: "Changes rarely — high cache hit rate",
+    description: 'Changes rarely — high cache hit rate',
   },
   {
-    key: "codebase",
-    label: "codebase context",
-    color: "#f59e0b",
-    tier: "slow-changing",
-    tierLabel: "slow-changing",
+    key: 'codebase',
+    label: 'codebase context',
+    color: '#f59e0b',
+    tier: 'slow-changing',
+    tierLabel: 'slow-changing',
     tokens: 14_336,
     max: 16_384,
-    description: "Updates as files change",
+    description: 'Updates as files change',
   },
   {
-    key: "conversation",
-    label: "conversation",
-    color: "#0ea5e9",
-    tier: "volatile",
-    tierLabel: "volatile",
+    key: 'conversation',
+    label: 'conversation',
+    color: '#0ea5e9',
+    tier: 'volatile',
+    tierLabel: 'volatile',
     tokens: 7_552,
     max: 16_384,
-    description: "Changes every turn — placed last",
+    description: 'Changes every turn — placed last',
   },
 ])
 
 const filledTokens = computed(() =>
-  sources.value.reduce((sum, s) => sum + s.tokens, 0),
+  sources.value.reduce((sum, s) => sum + s.tokens, 0)
 )
 
 function segmentPercent(tokens: number): number {
@@ -66,14 +66,17 @@ function segmentPercent(tokens: number): number {
 }
 
 function formatTokens(n: number): string {
-  return n.toLocaleString("en-US")
+  return n.toLocaleString('en-US')
 }
 
 const hoveredSource = ref<string | null>(null)
 
 const cacheHitPercent = computed(() => {
   const stableTokens = sources.value
-    .filter((s) => s.tier === "pinned" || s.tier === "stable" || s.tier === "slow-changing")
+    .filter(
+      (s) =>
+        s.tier === 'pinned' || s.tier === 'stable' || s.tier === 'slow-changing'
+    )
     .reduce((sum, s) => sum + s.tokens, 0)
   return Math.round((stableTokens / filledTokens.value) * 100)
 })
@@ -86,7 +89,9 @@ const cacheHitPercent = computed(() => {
       <div class="demo-main">
         <div class="bar-header">
           <span class="bar-title">Context Window</span>
-          <span class="bar-budget">{{ formatTokens(TOTAL_BUDGET) }} tokens</span>
+          <span class="bar-budget"
+            >{{ formatTokens(TOTAL_BUDGET) }} tokens</span
+          >
         </div>
 
         <div class="bar-track">
@@ -111,7 +116,9 @@ const cacheHitPercent = computed(() => {
 
         <div class="cache-indicator">
           <div class="cache-line" :style="{ width: cacheHitPercent + '%' }">
-            <span class="cache-label">← cacheable prefix ({{ cacheHitPercent }}%)</span>
+            <span class="cache-label"
+              >← cacheable prefix ({{ cacheHitPercent }}%)</span
+            >
           </div>
         </div>
 
@@ -127,14 +134,14 @@ const cacheHitPercent = computed(() => {
           >
             <span class="source-dot" :style="{ background: src.color }" />
             <span class="source-name">{{ src.label }}</span>
-            <span class="source-tier" :class="src.tier">{{ src.tierLabel }}</span>
+            <span class="source-tier" :class="src.tier">{{
+              src.tierLabel
+            }}</span>
             <span class="source-tokens">{{ formatTokens(src.tokens) }}</span>
             <span class="source-desc">{{ src.description }}</span>
           </div>
         </div>
       </div>
-
-      
     </div>
   </div>
 </template>

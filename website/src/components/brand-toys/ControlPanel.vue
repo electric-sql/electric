@@ -10,10 +10,10 @@
    viewport. The whole panel hides via `body.bt-recording` so you
    can capture a clean shot with a single keypress.  */
 
-import { computed } from "vue"
+import { computed } from 'vue'
 
-import type { ToyDef } from "./toys"
-import { GROUP_LABELS } from "./toys"
+import type { ToyDef } from './toys'
+import { GROUP_LABELS } from './toys'
 
 const props = defineProps<{
   toy: ToyDef
@@ -34,17 +34,17 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: "update:values", values: Record<string, unknown>): void
-  (e: "update:width", w: number): void
-  (e: "update:height", h: number): void
-  (e: "update:padding", p: number): void
-  (e: "update:background", v: string): void
-  (e: "update:showRuler", v: boolean): void
-  (e: "update:showBorder", v: boolean): void
-  (e: "update:collapsed", v: boolean): void
-  (e: "copy-link"): void
-  (e: "reset"): void
-  (e: "remount"): void
+  (e: 'update:values', values: Record<string, unknown>): void
+  (e: 'update:width', w: number): void
+  (e: 'update:height', h: number): void
+  (e: 'update:padding', p: number): void
+  (e: 'update:background', v: string): void
+  (e: 'update:showRuler', v: boolean): void
+  (e: 'update:showBorder', v: boolean): void
+  (e: 'update:collapsed', v: boolean): void
+  (e: 'copy-link'): void
+  (e: 'reset'): void
+  (e: 'remount'): void
 }>()
 
 interface SizePreset {
@@ -53,43 +53,43 @@ interface SizePreset {
   h: number
 }
 const SIZE_PRESETS: SizePreset[] = [
-  { label: "1920 × 1080 — FHD landscape", w: 1920, h: 1080 },
-  { label: "1280 × 720 — HD landscape", w: 1280, h: 720 },
-  { label: "1600 × 900 — 16:9 widescreen", w: 1600, h: 900 },
-  { label: "1080 × 1080 — square (social)", w: 1080, h: 1080 },
-  { label: "1080 × 1350 — portrait (social)", w: 1080, h: 1350 },
-  { label: "1200 × 630 — OG card", w: 1200, h: 630 },
-  { label: "2400 × 1260 — OG @2x", w: 2400, h: 1260 },
-  { label: "1440 × 900 — desktop", w: 1440, h: 900 },
-  { label: "375 × 812 — mobile", w: 375, h: 812 },
+  { label: '1920 × 1080 — FHD landscape', w: 1920, h: 1080 },
+  { label: '1280 × 720 — HD landscape', w: 1280, h: 720 },
+  { label: '1600 × 900 — 16:9 widescreen', w: 1600, h: 900 },
+  { label: '1080 × 1080 — square (social)', w: 1080, h: 1080 },
+  { label: '1080 × 1350 — portrait (social)', w: 1080, h: 1350 },
+  { label: '1200 × 630 — OG card', w: 1200, h: 630 },
+  { label: '2400 × 1260 — OG @2x', w: 2400, h: 1260 },
+  { label: '1440 × 900 — desktop', w: 1440, h: 900 },
+  { label: '375 × 812 — mobile', w: 375, h: 812 },
 ]
 
 const BG_PRESETS: { id: string; label: string }[] = [
-  { id: "dark", label: "Dark — page (#111318)" },
-  { id: "surface", label: "Surface — soft (#16181f)" },
-  { id: "elv", label: "Elevated — card (#22252f)" },
-  { id: "light", label: "Light (#f5f5f5)" },
-  { id: "white", label: "White" },
-  { id: "black", label: "Black" },
-  { id: "transparent", label: "Transparent (checker)" },
+  { id: 'dark', label: 'Dark — page (#111318)' },
+  { id: 'surface', label: 'Surface — soft (#16181f)' },
+  { id: 'elv', label: 'Elevated — card (#22252f)' },
+  { id: 'light', label: 'Light (#f5f5f5)' },
+  { id: 'white', label: 'White' },
+  { id: 'black', label: 'Black' },
+  { id: 'transparent', label: 'Transparent (checker)' },
 ]
 
 const presetValue = computed(() => {
   const match = SIZE_PRESETS.find(
     (p) => p.w === props.width && p.h === props.height
   )
-  return match ? `${match.w}x${match.h}` : "custom"
+  return match ? `${match.w}x${match.h}` : 'custom'
 })
 
 function applyPreset(v: string) {
-  if (v === "custom") return
-  const [w, h] = v.split("x").map((n) => parseInt(n, 10))
-  if (Number.isFinite(w)) emit("update:width", w)
-  if (Number.isFinite(h)) emit("update:height", h)
+  if (v === 'custom') return
+  const [w, h] = v.split('x').map((n) => parseInt(n, 10))
+  if (Number.isFinite(w)) emit('update:width', w)
+  if (Number.isFinite(h)) emit('update:height', h)
 }
 
 function setValue(name: string, v: unknown) {
-  emit("update:values", { ...props.values, [name]: v })
+  emit('update:values', { ...props.values, [name]: v })
 }
 
 function isMultiSelected(name: string, opt: string) {
@@ -107,7 +107,6 @@ function toggleMulti(name: string, opt: string) {
 }
 
 const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
-
 </script>
 
 <template>
@@ -134,7 +133,8 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
             :href="`https://github.com/electric-sql/electric/blob/main/website/${toy.source}`"
             target="_blank"
             rel="noopener"
-          >source ↗</a>
+            >source ↗</a
+          >
         </div>
       </header>
 
@@ -170,7 +170,8 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
               @change="
                 emit(
                   'update:width',
-                  parseInt(($event.target as HTMLInputElement).value, 10) || width
+                  parseInt(($event.target as HTMLInputElement).value, 10) ||
+                    width
                 )
               "
             />
@@ -185,7 +186,8 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
               @change="
                 emit(
                   'update:height',
-                  parseInt(($event.target as HTMLInputElement).value, 10) || height
+                  parseInt(($event.target as HTMLInputElement).value, 10) ||
+                    height
                 )
               "
             />
@@ -217,7 +219,10 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
           <select
             :value="background"
             @change="
-              emit('update:background', ($event.target as HTMLSelectElement).value)
+              emit(
+                'update:background',
+                ($event.target as HTMLSelectElement).value
+              )
             "
           >
             <option v-for="b in BG_PRESETS" :key="b.id" :value="b.id">
@@ -244,7 +249,10 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
             type="checkbox"
             :checked="showRuler"
             @change="
-              emit('update:showRuler', ($event.target as HTMLInputElement).checked)
+              emit(
+                'update:showRuler',
+                ($event.target as HTMLInputElement).checked
+              )
             "
           />
           <span>Show ruler ticks</span>
@@ -294,7 +302,9 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
             />
             <span>
               {{ c.label ?? c.name }}
-              <em v-if="c.description" class="bt-hint-inline">{{ c.description }}</em>
+              <em v-if="c.description" class="bt-hint-inline">{{
+                c.description
+              }}</em>
             </span>
           </label>
 
@@ -307,9 +317,13 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
                 setValue(c.name, ($event.target as HTMLSelectElement).value)
               "
             >
-              <option v-for="o in c.options" :key="o" :value="o">{{ o }}</option>
+              <option v-for="o in c.options" :key="o" :value="o">
+                {{ o }}
+              </option>
             </select>
-            <em v-if="c.description" class="bt-hint-inline">{{ c.description }}</em>
+            <em v-if="c.description" class="bt-hint-inline">{{
+              c.description
+            }}</em>
           </label>
 
           <!-- Multi-select -->
@@ -327,7 +341,9 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
                 {{ o }}
               </button>
             </div>
-            <em v-if="c.description" class="bt-hint-inline">{{ c.description }}</em>
+            <em v-if="c.description" class="bt-hint-inline">{{
+              c.description
+            }}</em>
           </div>
 
           <!-- Number — renders an extra range slider above the
@@ -369,7 +385,9 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
                 )
               "
             />
-            <em v-if="c.description" class="bt-hint-inline">{{ c.description }}</em>
+            <em v-if="c.description" class="bt-hint-inline">{{
+              c.description
+            }}</em>
           </label>
 
           <!-- String -->
@@ -382,7 +400,9 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
                 setValue(c.name, ($event.target as HTMLInputElement).value)
               "
             />
-            <em v-if="c.description" class="bt-hint-inline">{{ c.description }}</em>
+            <em v-if="c.description" class="bt-hint-inline">{{
+              c.description
+            }}</em>
           </label>
         </template>
       </section>
@@ -530,7 +550,7 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
   font-size: 13px;
   font-family: inherit;
 }
-.bt-field input[type="number"] {
+.bt-field input[type='number'] {
   font-family: var(--vp-font-family-mono, ui-monospace, monospace);
 }
 
@@ -555,7 +575,7 @@ const groupLabel = computed(() => GROUP_LABELS[props.toy.group])
   min-width: 28px;
   text-align: right;
 }
-.bt-field input.bt-range[type="range"] {
+.bt-field input.bt-range[type='range'] {
   /* Override the generic `.bt-field input` background/border/padding
      — range inputs render a track + thumb chrome and need to be
      left to the browser styling for legibility. */

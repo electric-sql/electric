@@ -11,9 +11,9 @@
  * at thumbnail size, plus the wordmark's bbox fed in as an extra
  * exclusion rect so the mesh-of-streams canvas doesn't paint
  * underneath the brand mark in the frame's top-left corner. */
-import CloudHero from "../cloud-home/CloudHero.vue"
-import OgFrame from "./OgFrame.vue"
-import { OG_LOGO_EXCLUDE_RECT } from "./ogLogoRect"
+import CloudHero from '../cloud-home/CloudHero.vue'
+import OgFrame from './OgFrame.vue'
+import { OG_LOGO_EXCLUDE_RECT } from './ogLogoRect'
 </script>
 
 <template>

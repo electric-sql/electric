@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
-type Author = "Alice" | "agent" | "Bob"
-type ClientState = "live" | "offline"
+type Author = 'Alice' | 'agent' | 'Bob'
+type ClientState = 'live' | 'offline'
 
 interface ScriptEvent {
   who: Author
@@ -27,24 +27,24 @@ const props = withDefaults(
   { paused: false }
 )
 
-const ALL_CLIENTS: Author[] = ["Alice", "agent", "Bob"]
+const ALL_CLIENTS: Author[] = ['Alice', 'agent', 'Bob']
 const CLIENTS = computed<Author[]>(() => props.clients ?? ALL_CLIENTS)
 
 const SCRIPT: ScriptEvent[] = [
-  { who: "Alice", body: "PR #214 needs review" },
-  { who: "agent", body: "Found 3 issues" },
-  { who: "Bob",   body: "👍 on it" },
-  { who: "agent", body: "drafting fix…" },
+  { who: 'Alice', body: 'PR #214 needs review' },
+  { who: 'agent', body: 'Found 3 issues' },
+  { who: 'Bob', body: '👍 on it' },
+  { who: 'agent', body: 'drafting fix…' },
 ]
 
 /* ── Timing ─────────────────────────────────────────────────────── */
-const APPEND_EVERY_MS    = 1300
+const APPEND_EVERY_MS = 1300
 const PROPAGATE_DELAY_MS = 200
-const BOB_OFFLINE_AT_IDX = 2   // Bob goes offline right after his own message lands
-const BOB_BACK_AT_IDX    = 3   // Bob reconnects after the next event lands
+const BOB_OFFLINE_AT_IDX = 2 // Bob goes offline right after his own message lands
+const BOB_BACK_AT_IDX = 3 // Bob reconnects after the next event lands
 const HOLD_AFTER_LAST_MS = 2200
-const RESET_FADE_MS      = 500
-const REPLAY_GAP_MS      = 220
+const RESET_FADE_MS = 500
+const REPLAY_GAP_MS = 220
 
 const rootRef = ref<HTMLElement>()
 const isActive = useDemoVisibility(rootRef)
@@ -53,7 +53,9 @@ const prefersReducedMotion = ref(false)
 const stream = ref<Row[]>([])
 const clients = ref<Record<Author, Row[]>>({ Alice: [], agent: [], Bob: [] })
 const states = ref<Record<Author, ClientState>>({
-  Alice: "live", agent: "live", Bob: "live",
+  Alice: 'live',
+  agent: 'live',
+  Bob: 'live',
 })
 
 let timers: number[] = []
@@ -71,7 +73,7 @@ function schedule(ms: number, fn: () => void) {
 function reset() {
   stream.value = []
   clients.value = { Alice: [], agent: [], Bob: [] }
-  states.value = { Alice: "live", agent: "live", Bob: "live" }
+  states.value = { Alice: 'live', agent: 'live', Bob: 'live' }
 }
 
 function appendToStream(ev: ScriptEvent, thisCycle: number) {
@@ -82,7 +84,7 @@ function appendToStream(ev: ScriptEvent, thisCycle: number) {
   CLIENTS.value.forEach((name, i) => {
     schedule(PROPAGATE_DELAY_MS + i * 80, () => {
       if (cycleId !== thisCycle) return
-      if (states.value[name] !== "live") return
+      if (states.value[name] !== 'live') return
       clients.value[name] = [...clients.value[name], row]
     })
   })
@@ -90,7 +92,7 @@ function appendToStream(ev: ScriptEvent, thisCycle: number) {
 
 function bobReconnect(thisCycle: number) {
   if (cycleId !== thisCycle) return
-  states.value.Bob = "live"
+  states.value.Bob = 'live'
   const missed = stream.value.filter(
     (r) => !clients.value.Bob.find((m) => m.id === r.id)
   )
@@ -114,11 +116,13 @@ function runCycle() {
     if (i === BOB_OFFLINE_AT_IDX) {
       schedule(t + PROPAGATE_DELAY_MS + 2 * 80 + 240, () => {
         if (cycleId !== thisCycle) return
-        states.value.Bob = "offline"
+        states.value.Bob = 'offline'
       })
     }
     if (i === BOB_BACK_AT_IDX) {
-      schedule(t + PROPAGATE_DELAY_MS + 2 * 80 + 380, () => bobReconnect(thisCycle))
+      schedule(t + PROPAGATE_DELAY_MS + 2 * 80 + 380, () =>
+        bobReconnect(thisCycle)
+      )
     }
     t += APPEND_EVERY_MS
   })
@@ -156,8 +160,8 @@ watch(isActive, (v) => {
 })
 
 onMounted(() => {
-  if (typeof window !== "undefined") {
-    const mql = window.matchMedia("(prefers-reduced-motion: reduce)")
+  if (typeof window !== 'undefined') {
+    const mql = window.matchMedia('(prefers-reduced-motion: reduce)')
     prefersReducedMotion.value = mql.matches
   }
   if (props.paused) renderStaticEndState()
@@ -170,7 +174,7 @@ onBeforeUnmount(stop)
 const srDescription = computed(
   () =>
     "Three clients reading the same session URL. Bob's connection drops, " +
-    "the others keep going, then Bob reconnects and catches up."
+    'the others keep going, then Bob reconnects and catches up.'
 )
 </script>
 
@@ -183,7 +187,12 @@ const srDescription = computed(
       <span class="csd-url-path">/v1/stream/session/design-review</span>
     </div>
 
-    <div class="csd-grid" :style="{ gridTemplateColumns: `repeat(${CLIENTS.length}, minmax(0, 1fr))` }">
+    <div
+      class="csd-grid"
+      :style="{
+        gridTemplateColumns: `repeat(${CLIENTS.length}, minmax(0, 1fr))`,
+      }"
+    >
       <article
         v-for="name in CLIENTS"
         :key="name"
@@ -194,15 +203,11 @@ const srDescription = computed(
           <span class="csd-dot" />
           <span class="csd-name">{{ name }}</span>
           <span class="csd-flag">
-            {{ states[name] === "offline" ? "offline" : "live" }}
+            {{ states[name] === 'offline' ? 'offline' : 'live' }}
           </span>
         </header>
         <TransitionGroup name="csd-row" tag="div" class="csd-rows">
-          <div
-            v-for="row in clients[name]"
-            :key="row.id"
-            class="csd-row"
-          >
+          <div v-for="row in clients[name]" :key="row.id" class="csd-row">
             <span class="csd-who">{{ row.who }}</span>
             <span class="csd-body">{{ row.body }}</span>
           </div>
@@ -226,8 +231,10 @@ const srDescription = computed(
 
 .sr-only {
   position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
@@ -281,7 +288,9 @@ const srDescription = computed(
   background: var(--ea-surface);
   overflow: hidden;
   min-width: 0;
-  transition: border-color 280ms ease, opacity 280ms ease;
+  transition:
+    border-color 280ms ease,
+    opacity 280ms ease;
 }
 .csd-pane--offline {
   border-color: color-mix(in srgb, var(--csd-warn) 50%, var(--ea-divider));
@@ -299,7 +308,8 @@ const srDescription = computed(
   background: var(--ea-surface-alt);
 }
 .csd-dot {
-  width: 6px; height: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--vp-c-brand-1);
   box-shadow: 0 0 5px color-mix(in srgb, var(--vp-c-brand-1) 70%, transparent);
@@ -368,8 +378,9 @@ const srDescription = computed(
 
 /* ── Animations ── */
 .csd-row-enter-active {
-  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.3, 1),
-              opacity 240ms ease;
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    opacity 240ms ease;
 }
 .csd-row-leave-active {
   transition: opacity 200ms ease;
@@ -384,14 +395,23 @@ const srDescription = computed(
 }
 
 @keyframes csd-blink {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .csd-dot { animation: none !important; }
+  .csd-dot {
+    animation: none !important;
+  }
   .csd-row-enter-active,
-  .csd-row-leave-active { transition: none !important; }
+  .csd-row-leave-active {
+    transition: none !important;
+  }
 }
 
 /* ── Mobile ── */

@@ -31,18 +31,18 @@
  *                 capturing — useful when iterating on a card design.
  */
 
-import { spawn } from "node:child_process"
-import { mkdir } from "node:fs/promises"
-import { existsSync } from "node:fs"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { spawn } from 'node:child_process'
+import { mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-import { chromium } from "playwright"
-import sharp from "sharp"
+import { chromium } from 'playwright'
+import sharp from 'sharp'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const websiteDir = path.resolve(__dirname, "..")
-const OUTPUT_DIR = path.resolve(websiteDir, "public/img/meta")
+const websiteDir = path.resolve(__dirname, '..')
+const OUTPUT_DIR = path.resolve(websiteDir, 'public/img/meta')
 
 const PORT = Number(process.env.OG_PORT ?? 5290)
 const HOST = `http://127.0.0.1:${PORT}`
@@ -53,7 +53,7 @@ const VIEWPORT = { width: 1200, height: 630 }
 // edge-anti-aliasing on the typography without bloating the file.
 const DEVICE_SCALE_FACTOR = 2
 const PER_PAGE_TIMEOUT_MS = Number(process.env.OG_TIMEOUT_MS ?? 30_000)
-const KEEP_SERVER_RUNNING = process.env.OG_KEEP === "1"
+const KEEP_SERVER_RUNNING = process.env.OG_KEEP === '1'
 
 /**
  * Manifest of OG cards. `slug` maps to the markdown route under
@@ -65,18 +65,18 @@ const KEEP_SERVER_RUNNING = process.env.OG_KEEP === "1"
  */
 const TARGETS = [
   // Site-wide social fallback (`DEFAULT_IMAGE` in config.mts).
-  { slug: "default", out: "electric.jpg" },
+  { slug: 'default', out: 'electric.jpg' },
   // Four landing pages.
-  { slug: "sync", out: "electric-sync.jpg" },
-  { slug: "streams", out: "electric-streams.jpg" },
-  { slug: "agents", out: "electric-agents.jpg" },
-  { slug: "cloud", out: "electric-cloud.jpg" },
+  { slug: 'sync', out: 'electric-sync.jpg' },
+  { slug: 'streams', out: 'electric-streams.jpg' },
+  { slug: 'agents', out: 'electric-agents.jpg' },
+  { slug: 'cloud', out: 'electric-cloud.jpg' },
 ]
 
 function parseArgs() {
   const args = process.argv.slice(2)
   if (args.length === 0) return { only: null }
-  if (args.length === 1 && args[0] !== "--help" && args[0] !== "-h") {
+  if (args.length === 1 && args[0] !== '--help' && args[0] !== '-h') {
     return { only: args[0] }
   }
   printUsageAndExit()
@@ -85,13 +85,13 @@ function parseArgs() {
 function printUsageAndExit() {
   console.log(
     [
-      "Usage: pnpm build-og-images [slug]",
-      "",
-      "  slug   Optional. Regenerate a single card. One of:",
+      'Usage: pnpm build-og-images [slug]',
+      '',
+      '  slug   Optional. Regenerate a single card. One of:',
       ...TARGETS.map((t) => `           ${t.slug}  →  ${t.out}`),
-      "",
-      "  Run with no arguments to regenerate every card.",
-    ].join("\n")
+      '',
+      '  Run with no arguments to regenerate every card.',
+    ].join('\n')
   )
   process.exit(0)
 }
@@ -103,20 +103,12 @@ function printUsageAndExit() {
 async function startDevServer() {
   console.log(`▸ Starting VitePress dev server on :${PORT}…`)
   const child = spawn(
-    "npx",
-    [
-      "vitepress",
-      "dev",
-      ".",
-      "--port",
-      String(PORT),
-      "--host",
-      "127.0.0.1",
-    ],
+    'npx',
+    ['vitepress', 'dev', '.', '--port', String(PORT), '--host', '127.0.0.1'],
     {
       cwd: websiteDir,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, NODE_ENV: "development" },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, NODE_ENV: 'development' },
     }
   )
 
@@ -128,15 +120,15 @@ async function startDevServer() {
       //   ➜  Local:   http://127.0.0.1:5290/
       if (
         !resolved &&
-        (s.includes("Local:") || s.includes(`localhost:${PORT}`))
+        (s.includes('Local:') || s.includes(`localhost:${PORT}`))
       ) {
         resolved = true
         resolve(child)
       }
     }
-    child.stdout.on("data", onChunk)
-    child.stderr.on("data", onChunk)
-    child.on("exit", (code) => {
+    child.stdout.on('data', onChunk)
+    child.stderr.on('data', onChunk)
+    child.on('exit', (code) => {
       if (!resolved)
         reject(
           new Error(`vitepress dev exited before becoming ready (code ${code})`)
@@ -145,9 +137,9 @@ async function startDevServer() {
     setTimeout(() => {
       if (!resolved) {
         try {
-          child.kill("SIGTERM")
+          child.kill('SIGTERM')
         } catch {}
-        reject(new Error("Timed out waiting for VitePress dev server (60s)"))
+        reject(new Error('Timed out waiting for VitePress dev server (60s)'))
       }
     }, 60_000)
   })
@@ -192,7 +184,7 @@ async function captureOne(page, target) {
   const start = Date.now()
   console.log(`▸ ${target.slug.padEnd(14)}  ${url}`)
   await page.goto(url, {
-    waitUntil: "networkidle",
+    waitUntil: 'networkidle',
     timeout: PER_PAGE_TIMEOUT_MS,
   })
   await settle(page)
@@ -202,16 +194,19 @@ async function captureOne(page, target) {
   // sharp downscales that to the final 1200x630 JPEG below for crisp
   // edges on the typography.
   const png = await page.screenshot({
-    type: "png",
+    type: 'png',
     clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height },
     omitBackground: false,
   })
 
   const outPath = path.join(OUTPUT_DIR, target.out)
   const info = await sharp(png)
-    .resize(VIEWPORT.width, VIEWPORT.height, { fit: "cover", kernel: "lanczos3" })
-    .flatten({ background: "#0c0e14" })
-    .jpeg({ quality: 82, mozjpeg: true, chromaSubsampling: "4:2:0" })
+    .resize(VIEWPORT.width, VIEWPORT.height, {
+      fit: 'cover',
+      kernel: 'lanczos3',
+    })
+    .flatten({ background: '#0c0e14' })
+    .jpeg({ quality: 82, mozjpeg: true, chromaSubsampling: '4:2:0' })
     .toFile(outPath)
   const elapsed = Date.now() - start
   const kb = (info.size / 1024).toFixed(1)
@@ -222,9 +217,7 @@ async function captureOne(page, target) {
 
 async function main() {
   const { only } = parseArgs()
-  const targets = only
-    ? TARGETS.filter((t) => t.slug === only)
-    : TARGETS
+  const targets = only ? TARGETS.filter((t) => t.slug === only) : TARGETS
 
   if (only && targets.length === 0) {
     console.error(`Unknown OG slug: ${only}`)
@@ -249,7 +242,7 @@ async function main() {
       // production site. (The site is `force-dark`, so the OG cards
       // render in dark mode regardless, but pinning this avoids any
       // ambiguity from the browser's own preference probe.)
-      colorScheme: "dark",
+      colorScheme: 'dark',
     })
     const page = await context.newPage()
 
@@ -261,7 +254,7 @@ async function main() {
   } finally {
     if (browser) await browser.close()
     if (server && !KEEP_SERVER_RUNNING) {
-      server.kill("SIGTERM")
+      server.kill('SIGTERM')
       // Give the child a moment to clean up before the script exits.
       await new Promise((r) => setTimeout(r, 200))
     }
@@ -275,7 +268,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("\n✗ OG image generation failed:")
+  console.error('\n✗ OG image generation failed:')
   console.error(err)
   process.exit(1)
 })

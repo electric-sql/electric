@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
-import MarkdownContent from "./MarkdownContent.vue"
-import MdExportExplicit from "./MdExportExplicit.vue"
-import { useMarkdownExport } from "../lib/useMarkdownExport"
+import { computed, ref } from 'vue'
+import MarkdownContent from './MarkdownContent.vue'
+import MdExportExplicit from './MdExportExplicit.vue'
+import { useMarkdownExport } from '../lib/useMarkdownExport'
 
 /* InstallPill — single source of truth for the "$ npx … " install
    snippets that appear in landing-page hero rows and end-of-page CTA
@@ -31,7 +31,7 @@ import { useMarkdownExport } from "../lib/useMarkdownExport"
              this when the multi-colour highlighting reads as noisy
              and you only want to draw the eye to one keyword (e.g.
              `accent="agents"` on the agents landing pill). */
-type Tone = "raised" | "sunken"
+type Tone = 'raised' | 'sunken'
 
 const props = withDefaults(
   defineProps<{
@@ -47,7 +47,7 @@ const props = withDefaults(
        on a screenshot. */
     hideCopy?: boolean
   }>(),
-  { clipboard: "", tone: "raised", accent: "", hideCopy: false }
+  { clipboard: '', tone: 'raised', accent: '', hideCopy: false }
 )
 
 const tokens = computed(() => props.command.trim().split(/\s+/))

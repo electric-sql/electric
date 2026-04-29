@@ -204,8 +204,8 @@ const demoBindings = computed<Record<string, unknown>>(() => {
         class="home-product-bg md-exclude"
       />
       <div class="home-product-inner">
-      <div class="home-product-grid">
-        <!-- Foreground preview: one demo from the corresponding
+        <div class="home-product-grid">
+          <!-- Foreground preview: one demo from the corresponding
              landing page, sat on top of the section's canvas
              background. Each demo already wires up its own
              `useDemoVisibility` intersection observer and only
@@ -221,31 +221,27 @@ const demoBindings = computed<Record<string, unknown>>(() => {
              composition, and three live canvases plus three live
              demos plus the hero would compete with the page copy
              for attention. The framed demo is the call-to-look. -->
-        <div class="home-product-scene md-exclude">
-          <div class="home-product-scene-frame">
-            <component
-              :is="demo"
-              :paused="false"
-              v-bind="demoBindings"
-            />
+          <div class="home-product-scene md-exclude">
+            <div class="home-product-scene-frame">
+              <component :is="demo" :paused="false" v-bind="demoBindings" />
+            </div>
+          </div>
+          <div ref="textRef" class="home-product-text">
+            <p class="home-product-eyebrow">{{ copy.eyebrow }}</p>
+            <p class="home-product-name">{{ copy.name }}</p>
+            <h2 class="home-product-title" v-html="copy.title" />
+            <p class="home-product-sub" v-html="copy.sub" />
+            <div class="home-product-actions">
+              <VPButton
+                tag="a"
+                size="medium"
+                theme="brand"
+                :text="copy.cta.text"
+                :href="copy.cta.href"
+              />
+            </div>
           </div>
         </div>
-        <div ref="textRef" class="home-product-text">
-          <p class="home-product-eyebrow">{{ copy.eyebrow }}</p>
-          <p class="home-product-name">{{ copy.name }}</p>
-          <h2 class="home-product-title" v-html="copy.title" />
-          <p class="home-product-sub" v-html="copy.sub" />
-          <div class="home-product-actions">
-            <VPButton
-              tag="a"
-              size="medium"
-              theme="brand"
-              :text="copy.cta.text"
-              :href="copy.cta.href"
-            />
-          </div>
-        </div>
-      </div>
       </div>
     </div>
   </section>
@@ -322,21 +318,65 @@ const demoBindings = computed<Record<string, unknown>>(() => {
    the time it reaches the headline. */
 .home-product.scene-first .home-product-bg {
   -webkit-mask-image:
-    linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%),
-    linear-gradient(to right, black 28%, rgba(0, 0, 0, 0.12) 50%, transparent 70%);
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 8%,
+      black 92%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to right,
+      black 28%,
+      rgba(0, 0, 0, 0.12) 50%,
+      transparent 70%
+    );
   mask-image:
-    linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%),
-    linear-gradient(to right, black 28%, rgba(0, 0, 0, 0.12) 50%, transparent 70%);
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 8%,
+      black 92%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to right,
+      black 28%,
+      rgba(0, 0, 0, 0.12) 50%,
+      transparent 70%
+    );
   -webkit-mask-composite: source-in;
   mask-composite: intersect;
 }
 .home-product:not(.scene-first) .home-product-bg {
   -webkit-mask-image:
-    linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%),
-    linear-gradient(to left, black 28%, rgba(0, 0, 0, 0.12) 50%, transparent 70%);
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 8%,
+      black 92%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to left,
+      black 28%,
+      rgba(0, 0, 0, 0.12) 50%,
+      transparent 70%
+    );
   mask-image:
-    linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%),
-    linear-gradient(to left, black 28%, rgba(0, 0, 0, 0.12) 50%, transparent 70%);
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 8%,
+      black 92%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to left,
+      black 28%,
+      rgba(0, 0, 0, 0.12) 50%,
+      transparent 70%
+    );
   -webkit-mask-composite: source-in;
   mask-composite: intersect;
 }

@@ -17,9 +17,7 @@ const cloudUrl = '/cloud'
 
 <template>
   <EaSection id="deployment">
-    <template #title>
-      Managed cloud or&nbsp;self&#8209;hosted
-    </template>
+    <template #title> Managed cloud or&nbsp;self&#8209;hosted </template>
     <template #subtitle>
       Vendor agnostic, infra agnostic. Sign up for
       <a :href="cloudUrl">Electric&nbsp;Cloud</a> or self-host the
@@ -39,9 +37,7 @@ const cloudUrl = '/cloud'
             <img src="/img/icons/ddn.svg" alt="Electric Cloud" />
           </div>
           <div class="dp-cloud-text">
-            <h3>
-              Start building on Electric&nbsp;Cloud
-            </h3>
+            <h3>Start building on Electric&nbsp;Cloud</h3>
             <p>
               <span class="hidden-sm">Scalable, turnkey</span>
               <span class="inline-sm">Scalable</span>
@@ -75,8 +71,8 @@ const cloudUrl = '/cloud'
             <h4>Local development</h4>
           </div>
           <p>
-            Spin up the starter, point it at Postgres and ship a real-time
-            app on top of your existing&nbsp;stack.
+            Spin up the starter, point it at Postgres and ship a real-time app
+            on top of your existing&nbsp;stack.
           </p>
           <div class="dp-card-foot mono">
             <span>Quickstart</span>
@@ -134,7 +130,9 @@ const cloudUrl = '/cloud'
   isolation: isolate;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .dp-cloud:hover {
@@ -224,7 +222,9 @@ const cloudUrl = '/cloud'
   background: var(--ea-surface);
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .dp-card:hover {

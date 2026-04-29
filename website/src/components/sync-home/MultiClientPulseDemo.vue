@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 const props = defineProps<{
   // When true, render a static snapshot — three populated client
@@ -23,14 +23,14 @@ interface Row {
 }
 
 const SEED: Row[] = [
-  { id: "01F7", text: "Reviewed PR #214", user: "alex" },
-  { id: "01F8", text: "Closed issue #87", user: "sam" },
-  { id: "01F9", text: "Deployed v0.9.3", user: "jen" },
-  { id: "01FA", text: "Tagged release", user: "alex" },
-  { id: "01FB", text: "Merged main → prod", user: "kai" },
-  { id: "01FC", text: "Updated runbook", user: "sam" },
-  { id: "01FD", text: "Triaged inbox", user: "jen" },
-  { id: "01FE", text: "Approved design", user: "alex" },
+  { id: '01F7', text: 'Reviewed PR #214', user: 'alex' },
+  { id: '01F8', text: 'Closed issue #87', user: 'sam' },
+  { id: '01F9', text: 'Deployed v0.9.3', user: 'jen' },
+  { id: '01FA', text: 'Tagged release', user: 'alex' },
+  { id: '01FB', text: 'Merged main → prod', user: 'kai' },
+  { id: '01FC', text: 'Updated runbook', user: 'sam' },
+  { id: '01FD', text: 'Triaged inbox', user: 'jen' },
+  { id: '01FE', text: 'Approved design', user: 'alex' },
 ]
 
 interface PulseState {
@@ -95,13 +95,13 @@ function pushRow(target: { value: Row[] }, row: Row, max = 4) {
 }
 
 const prefersReducedMotion =
-  typeof window !== "undefined"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  typeof window !== 'undefined'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
     : false
 
 function runPulse(
   target: { value: PulseState },
-  end: { x: number; y: number },
+  end: { x: number; y: number }
 ) {
   if (prefersReducedMotion) return
   const start = performance.now()
@@ -128,7 +128,7 @@ let emitCounter = 0
 
 function emitOne() {
   const base = SEED[emitCounter % SEED.length]
-  const seq = emitCounter.toString(16).toUpperCase().padStart(3, "0")
+  const seq = emitCounter.toString(16).toUpperCase().padStart(3, '0')
   const row = { ...base, id: `01F${seq}` }
   sourcePulse.value = Date.now()
   sourceTick.value += 1
@@ -203,10 +203,10 @@ function handleMql(e: MediaQueryListEvent | MediaQueryList) {
 }
 
 onMounted(() => {
-  if (typeof window !== "undefined" && window.matchMedia) {
-    mql = window.matchMedia("(max-width: 760px)")
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    mql = window.matchMedia('(max-width: 760px)')
     isCompact.value = mql.matches
-    mql.addEventListener("change", handleMql)
+    mql.addEventListener('change', handleMql)
   }
 
   // Pre-seed the full row budget (4) so the cards never grow once
@@ -248,7 +248,7 @@ watch(isCompact, () => {
 onUnmounted(() => {
   mounted = false
   stop()
-  mql?.removeEventListener("change", handleMql)
+  mql?.removeEventListener('change', handleMql)
 })
 </script>
 
@@ -256,9 +256,20 @@ onUnmounted(() => {
   <div ref="rootRef" class="mcp-demo" :class="{ started: hasStarted }">
     <div class="mcp-stage">
       <!-- Source -->
-      <div class="mcp-source" :class="{ pulse: sourcePulse > 0 }" :key="sourcePulse">
+      <div
+        class="mcp-source"
+        :class="{ pulse: sourcePulse > 0 }"
+        :key="sourcePulse"
+      >
         <div class="mcp-source-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5">
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
             <ellipse cx="12" cy="5" rx="8" ry="3" />
             <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
             <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
@@ -266,16 +277,25 @@ onUnmounted(() => {
         </div>
         <div class="mcp-source-text">
           <div class="mcp-source-label">Postgres</div>
-          <div class="mcp-source-shape">shape: <span class="mono">events</span></div>
+          <div class="mcp-source-shape">
+            shape: <span class="mono">events</span>
+          </div>
         </div>
-        <div class="mcp-source-tick mono">tx&nbsp;{{ sourceTick.toString().padStart(3, "0") }}</div>
+        <div class="mcp-source-tick mono">
+          tx&nbsp;{{ sourceTick.toString().padStart(3, '0') }}
+        </div>
       </div>
 
       <!-- Fan-out lines + pulses (all in viewBox space so pulses
            travel exactly along the rendered lines). Endpoints are
            bound to FAN_TARGETS so they shift in to a 2-card layout
            at the compact breakpoint along with the client grid. -->
-      <svg class="mcp-fan" viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true">
+      <svg
+        class="mcp-fan"
+        viewBox="0 0 600 80"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
         <line
           class="fan-line"
           x1="300"
@@ -333,7 +353,11 @@ onUnmounted(() => {
             <span class="client-meta mono">react</span>
           </div>
           <ul class="client-list">
-            <li v-for="row in webRows" :key="`w-${row.id}`" class="client-row card-row">
+            <li
+              v-for="row in webRows"
+              :key="`w-${row.id}`"
+              class="client-row card-row"
+            >
               <span class="row-id mono">{{ row.id }}</span>
               <span class="row-text">{{ row.text }}</span>
               <span class="row-user mono">@{{ row.user }}</span>
@@ -348,7 +372,11 @@ onUnmounted(() => {
             <span class="client-meta mono">expo</span>
           </div>
           <ul class="client-list">
-            <li v-for="row in mobileRows" :key="`m-${row.id}`" class="client-row chat-row">
+            <li
+              v-for="row in mobileRows"
+              :key="`m-${row.id}`"
+              class="client-row chat-row"
+            >
               <span class="row-text">{{ row.text }}</span>
               <span class="row-user mono">@{{ row.user }}</span>
             </li>
@@ -362,7 +390,11 @@ onUnmounted(() => {
             <span class="client-meta mono">handler</span>
           </div>
           <ul class="client-list">
-            <li v-for="row in agentRows" :key="`a-${row.id}`" class="client-row term-row">
+            <li
+              v-for="row in agentRows"
+              :key="`a-${row.id}`"
+              class="client-row term-row"
+            >
               <span class="row-id mono">[{{ row.id }}]</span>
               <span class="row-text mono">{{ row.text }}</span>
             </li>
@@ -403,7 +435,7 @@ onUnmounted(() => {
 }
 
 .mcp-source.pulse::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: -2px;
   border-radius: 10px;
@@ -413,8 +445,14 @@ onUnmounted(() => {
 }
 
 @keyframes mcp-source-flash {
-  0% { opacity: 0.9; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.04); }
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
 }
 
 .mcp-source-icon {
@@ -565,8 +603,14 @@ onUnmounted(() => {
 }
 
 @keyframes mcp-row-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Web style: card-list */

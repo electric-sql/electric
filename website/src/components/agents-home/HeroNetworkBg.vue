@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -98,7 +98,12 @@ const props = withDefaults(
     // the rects measured from `excludeEl`. Used by the OG capture to
     // reserve the Electric wordmark's bbox in the frame's top-left
     // corner so the mesh never paints under the brand mark.
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
   {
     density: 1,
@@ -116,7 +121,7 @@ const props = withDefaults(
     initialNodes: -1,
     emitDotLit: false,
     extraExcludeRects: () => [],
-  },
+  }
 )
 
 const emit = defineEmits<{
@@ -129,22 +134,22 @@ let raf = 0
 let running = false
 
 const ENTITY_TYPES = [
-  "assistant",
-  "researcher",
-  "writer",
-  "reviewer",
-  "planner",
-  "indexer",
-  "summarizer",
-  "classifier",
-  "monitor",
-  "scheduler",
-  "dispatcher",
-  "validator",
-  "encoder",
-  "fetcher",
-  "parser",
-  "analyst",
+  'assistant',
+  'researcher',
+  'writer',
+  'reviewer',
+  'planner',
+  'indexer',
+  'summarizer',
+  'classifier',
+  'monitor',
+  'scheduler',
+  'dispatcher',
+  'validator',
+  'encoder',
+  'fetcher',
+  'parser',
+  'analyst',
 ]
 
 interface Node {
@@ -194,16 +199,15 @@ interface Message {
 }
 
 function randomId(): string {
-  const chars = "abcdef0123456789"
-  let s = ""
-  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  const chars = 'abcdef0123456789'
+  let s = ''
+  for (let i = 0; i < 6; i++)
+    s += chars[Math.floor(Math.random() * chars.length)]
   return s
 }
 
 // Delaunay triangulation (Bowyer-Watson)
-function delaunay(
-  points: { x: number; y: number }[]
-): [number, number][] {
+function delaunay(points: { x: number; y: number }[]): [number, number][] {
   const n = points.length
   if (n < 2) return []
 
@@ -212,21 +216,30 @@ function delaunay(
   const st1 = { x: margin * 3, y: -margin }
   const st2 = { x: -margin, y: margin * 3 }
   const allPts = [...points, st0, st1, st2]
-  const si0 = n, si1 = n + 1, si2 = n + 2
+  const si0 = n,
+    si1 = n + 1,
+    si2 = n + 2
 
   let triangles: [number, number, number][] = [[si0, si1, si2]]
 
   function inCircumcircle(
-    px: number, py: number,
-    a: number, b: number, c: number
+    px: number,
+    py: number,
+    a: number,
+    b: number,
+    c: number
   ) {
-    const ax = allPts[a].x - px, ay = allPts[a].y - py
-    const bx = allPts[b].x - px, by = allPts[b].y - py
-    const cx = allPts[c].x - px, cy = allPts[c].y - py
+    const ax = allPts[a].x - px,
+      ay = allPts[a].y - py
+    const bx = allPts[b].x - px,
+      by = allPts[b].y - py
+    const cx = allPts[c].x - px,
+      cy = allPts[c].y - py
     return (
       (ax * ax + ay * ay) * (bx * cy - cx * by) -
-      (bx * bx + by * by) * (ax * cy - cx * ay) +
-      (cx * cx + cy * cy) * (ax * by - bx * ay) > 0
+        (bx * bx + by * by) * (ax * cy - cx * ay) +
+        (cx * cx + cy * cy) * (ax * by - bx * ay) >
+      0
     )
   }
 
@@ -240,7 +253,9 @@ function delaunay(
     const boundary: [number, number][] = []
     for (const tri of bad) {
       const sides: [number, number][] = [
-        [tri[0], tri[1]], [tri[1], tri[2]], [tri[2], tri[0]],
+        [tri[0], tri[1]],
+        [tri[1], tri[2]],
+        [tri[2], tri[0]],
       ]
       for (const [a, b] of sides) {
         const shared = bad.some(
@@ -282,8 +297,10 @@ interface ExcludeRect {
 }
 
 function hitsExclusion(
-  x: number, y: number,
-  zones: ExcludeRect[], margin: number
+  x: number,
+  y: number,
+  zones: ExcludeRect[],
+  margin: number
 ): boolean {
   for (const z of zones) {
     if (
@@ -291,14 +308,19 @@ function hitsExclusion(
       x <= z.right + margin &&
       y >= z.top - margin &&
       y <= z.bottom + margin
-    ) return true
+    )
+      return true
   }
   return false
 }
 
 function createNodes(
-  w: number, h: number, exclusions: ExcludeRect[],
-  density: number, maxNodes: number, initialNodes: number,
+  w: number,
+  h: number,
+  exclusions: ExcludeRect[],
+  density: number,
+  maxNodes: number,
+  initialNodes: number
 ): Node[] {
   const nodes: Node[] = []
   // When the caller passes a non-negative `initialNodes`, honour it
@@ -330,11 +352,15 @@ function createNodes(
     } while (
       tries < 120 &&
       (nodes.some((n) => Math.hypot(n.x - x, n.y - y) < minDist) ||
-       hitsExclusion(x, y, exclusions, excludeMargin))
+        hitsExclusion(x, y, exclusions, excludeMargin))
     )
     if (!hitsExclusion(x, y, exclusions, excludeMargin)) {
       nodes.push({
-        x, y, targetX: x, targetY: y, awake: 0,
+        x,
+        y,
+        targetX: x,
+        targetY: y,
+        awake: 0,
         // Initial layout pre-populates the mesh; treat all nodes
         // as fully born so the canvas is rendered at full intensity
         // on first paint, not fading in.
@@ -349,7 +375,9 @@ function createNodes(
 }
 
 function pruneEdges(
-  edges: [number, number][], nodes: Node[], maxLen: number
+  edges: [number, number][],
+  nodes: Node[],
+  maxLen: number
 ): [number, number][] {
   return edges.filter(([a, b]) => {
     const d = Math.hypot(nodes[a].x - nodes[b].x, nodes[a].y - nodes[b].y)
@@ -370,7 +398,7 @@ onMounted(() => {
   const el = canvas.value
   const tt = tooltip.value
   if (!el || !tt) return
-  const c = el.getContext("2d")
+  const c = el.getContext('2d')
   if (!c) return
 
   const DEBUG = false
@@ -423,10 +451,12 @@ onMounted(() => {
       }
     }
     // Also measure any inline elements like buttons, inputs, SVGs
-    element.querySelectorAll("a, button, svg, img, input, .ea-hero-install").forEach((child) => {
-      const r = child.getBoundingClientRect()
-      if (r.width > 0 && r.height > 0) rects.push(r)
-    })
+    element
+      .querySelectorAll('a, button, svg, img, input, .ea-hero-install')
+      .forEach((child) => {
+        const r = child.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) rects.push(r)
+      })
     return rects
   }
 
@@ -470,16 +500,28 @@ onMounted(() => {
     h = parent.clientHeight
     el!.width = w * dpr
     el!.height = h * dpr
-    el!.style.width = w + "px"
-    el!.style.height = h + "px"
+    el!.style.width = w + 'px'
+    el!.style.height = h + 'px'
     c!.setTransform(dpr, 0, 0, dpr, 0, 0)
     const exclusions = measureExclusions()
     debugExclusions = exclusions
     if (DEBUG) {
-      console.log('Hero exclusion zones:', exclusions.length, exclusions, 'canvas size:', w, h)
+      console.log(
+        'Hero exclusion zones:',
+        exclusions.length,
+        exclusions,
+        'canvas size:',
+        w,
+        h
+      )
     }
     nodes = createNodes(
-      w, h, exclusions, props.density, props.maxNodes, props.initialNodes,
+      w,
+      h,
+      exclusions,
+      props.density,
+      props.maxNodes,
+      props.initialNodes
     )
     const raw = delaunay(nodes)
     edges = pruneEdges(raw, nodes, 200)
@@ -527,10 +569,9 @@ onMounted(() => {
       doLayout()
     })
   })
-  window.addEventListener("resize", resize)
+  window.addEventListener('resize', resize)
 
-  const isDark = () =>
-    document.documentElement.classList.contains("dark")
+  const isDark = () => document.documentElement.classList.contains('dark')
 
   function edgeFade(x: number, y: number): number {
     if (props.noEdgeFade) return 1
@@ -582,7 +623,7 @@ onMounted(() => {
     if (idx < 0 || idx >= nodes.length) return
     const n = nodes[idx]
     if (!n || !isAlive(n)) return
-    emit("dotLit", n.x, n.y)
+    emit('dotLit', n.x, n.y)
   }
 
   function wakeAndSend(idx: number) {
@@ -590,7 +631,10 @@ onMounted(() => {
     notifyDotLit(idx)
     const neighbors = getNeighbors(idx, edges).filter((n) => isAlive(nodes[n]))
     if (neighbors.length > 0) {
-      const howMany = Math.min(neighbors.length, 1 + Math.floor(Math.random() * 3))
+      const howMany = Math.min(
+        neighbors.length,
+        1 + Math.floor(Math.random() * 3)
+      )
       const shuffled = neighbors.sort(() => Math.random() - 0.5)
       for (let k = 0; k < howMany; k++) {
         const target = shuffled[k]
@@ -778,10 +822,10 @@ onMounted(() => {
     if (idx < 0 || idx >= nodes.length) return
     edges = edges
       .filter(([a, b]) => a !== idx && b !== idx)
-      .map(([a, b]) => [
-        a > idx ? a - 1 : a,
-        b > idx ? b - 1 : b,
-      ] as [number, number])
+      .map(
+        ([a, b]) =>
+          [a > idx ? a - 1 : a, b > idx ? b - 1 : b] as [number, number]
+      )
     messages = messages
       .filter((m) => m.from !== idx && m.to !== idx)
       .map((m) => ({
@@ -805,27 +849,27 @@ onMounted(() => {
     if (idx >= 0) {
       // Cursor stays "pointer" so click-to-wake / spawn-on-click
       // still feel interactive even when labels are off.
-      el!.style.cursor = "pointer"
+      el!.style.cursor = 'pointer'
       if (props.hideLabels) {
-        tt!.style.opacity = "0"
+        tt!.style.opacity = '0'
       } else {
         const node = nodes[idx]
-        const state = node.awake > 0.1 ? "active" : "idle"
+        const state = node.awake > 0.1 ? 'active' : 'idle'
         tt!.textContent = `/${node.entityType}/${node.instanceId}  ·  ${state}`
-        tt!.style.opacity = "1"
+        tt!.style.opacity = '1'
         tt!.style.left = `${node.x}px`
         tt!.style.top = `${node.y - 28}px`
       }
     } else {
-      tt!.style.opacity = "0"
-      el!.style.cursor = ""
+      tt!.style.opacity = '0'
+      el!.style.cursor = ''
     }
   }
 
   function onMouseLeave() {
     hoveredNode = -1
-    tt!.style.opacity = "0"
-    el!.style.cursor = ""
+    tt!.style.opacity = '0'
+    el!.style.cursor = ''
   }
 
   function onClick(e: MouseEvent) {
@@ -854,9 +898,9 @@ onMounted(() => {
     addNodeAt(mx, my)
   }
 
-  el.addEventListener("mousemove", onMouseMove)
-  el.addEventListener("mouseleave", onMouseLeave)
-  el.addEventListener("click", onClick)
+  el.addEventListener('mousemove', onMouseMove)
+  el.addEventListener('mouseleave', onMouseLeave)
+  el.addEventListener('click', onClick)
 
   running = true
   let lastTime = performance.now()
@@ -957,7 +1001,7 @@ onMounted(() => {
       grad.addColorStop(1, teal(0.7 * a))
       c!.strokeStyle = grad
       c!.lineWidth = 1.6
-      c!.lineCap = "round"
+      c!.lineCap = 'round'
       c!.beginPath()
       c!.moveTo(tx, ty)
       c!.lineTo(x, y)
@@ -1023,18 +1067,14 @@ onMounted(() => {
 
         // Active filled circle
         const fa = (0.45 + level * 0.5) * fade * life
-        c!.fillStyle = dark
-          ? `rgba(0,210,190,${fa})`
-          : `rgba(0,180,160,${fa})`
+        c!.fillStyle = dark ? `rgba(0,210,190,${fa})` : `rgba(0,180,160,${fa})`
         c!.beginPath()
         c!.arc(node.x, node.y, 4 * scale, 0, Math.PI * 2)
         c!.fill()
       } else {
         // Idle: smaller, muted dot
         const ia = (dark ? 0.18 : 0.12) * fade * life
-        c!.fillStyle = dark
-          ? `rgba(255,255,255,${ia})`
-          : `rgba(0,0,0,${ia})`
+        c!.fillStyle = dark ? `rgba(255,255,255,${ia})` : `rgba(0,0,0,${ia})`
         c!.beginPath()
         c!.arc(node.x, node.y, 2.5 * scale, 0, Math.PI * 2)
         c!.fill()
@@ -1052,8 +1092,8 @@ onMounted(() => {
     // node to avoid double-stacking the same string.
     if (!props.labelsOnHover && !props.hideLabels) {
       c!.font = `11px var(--vp-font-family-mono)`
-      c!.textAlign = "center"
-      c!.textBaseline = "top"
+      c!.textAlign = 'center'
+      c!.textBaseline = 'top'
       for (let ni = 0; ni < nodes.length; ni++) {
         if (ni === hoveredNode) continue
         const node = nodes[ni]
@@ -1065,13 +1105,11 @@ onMounted(() => {
         const baseAlpha = isActive ? 0.7 : dark ? 0.42 : 0.5
         const a = baseAlpha * fade * life
         if (a < 0.04) continue
-        c!.fillStyle = dark
-          ? `rgba(0,210,190,${a})`
-          : `rgba(0,180,160,${a})`
+        c!.fillStyle = dark ? `rgba(0,210,190,${a})` : `rgba(0,180,160,${a})`
         c!.fillText(
           `/${node.entityType}/${node.instanceId}`,
           node.x,
-          node.y + 10,
+          node.y + 10
         )
       }
     }
@@ -1079,7 +1117,7 @@ onMounted(() => {
     // --- Debug: draw exclusion zones ---
     if (DEBUG && debugExclusions.length > 0) {
       const margin = 4
-      c!.strokeStyle = "rgba(255,0,0,0.5)"
+      c!.strokeStyle = 'rgba(255,0,0,0.5)'
       c!.lineWidth = 1
       c!.setLineDash([4, 4])
       for (const z of debugExclusions) {
@@ -1090,7 +1128,7 @@ onMounted(() => {
           z.bottom - z.top + margin * 2
         )
       }
-      c!.fillStyle = "rgba(255,0,0,0.05)"
+      c!.fillStyle = 'rgba(255,0,0,0.05)'
       for (const z of debugExclusions) {
         c!.fillRect(
           z.left - margin,
@@ -1132,10 +1170,7 @@ onMounted(() => {
       // in the draw loop above). This both stops the dangling token
       // from rendering and prevents the arrival branch below from
       // dereferencing a missing node.
-      if (
-        messages[i].from >= nodes.length ||
-        messages[i].to >= nodes.length
-      ) {
+      if (messages[i].from >= nodes.length || messages[i].to >= nodes.length) {
         messages.splice(i, 1)
         continue
       }
@@ -1282,28 +1317,32 @@ onMounted(() => {
           aliveStarts[Math.floor(Math.random() * aliveStarts.length)]
         nodes[startNode].awake = Math.min(1, nodes[startNode].awake + 0.95)
         notifyDotLit(startNode)
-        const neighbors = getNeighbors(startNode, edges).filter(
-          (n) => isAlive(nodes[n])
+        const neighbors = getNeighbors(startNode, edges).filter((n) =>
+          isAlive(nodes[n])
         )
         if (neighbors.length > 0) {
           const howMany = Math.random() < 0.3 ? 2 : 1
           const shuffled = neighbors.sort(() => Math.random() - 0.5)
           for (let k = 0; k < Math.min(howMany, shuffled.length); k++) {
             const target = shuffled[k]
-            setTimeout(() => {
-              if (!running) return
-              // Same topology check as cascades — the mesh may
-              // have re-triangulated during the launch delay.
-              if (startNode >= nodes.length || target >= nodes.length) return
-              if (!isAlive(nodes[startNode]) || !isAlive(nodes[target])) return
-              if (!hasEdge(startNode, target)) return
-              messages.push({
-                from: startNode,
-                to: target,
-                progress: 0,
-                speed: tokenSpeed(),
-              })
-            }, 200 + Math.random() * 400)
+            setTimeout(
+              () => {
+                if (!running) return
+                // Same topology check as cascades — the mesh may
+                // have re-triangulated during the launch delay.
+                if (startNode >= nodes.length || target >= nodes.length) return
+                if (!isAlive(nodes[startNode]) || !isAlive(nodes[target]))
+                  return
+                if (!hasEdge(startNode, target)) return
+                messages.push({
+                  from: startNode,
+                  to: target,
+                  progress: 0,
+                  speed: tokenSpeed(),
+                })
+              },
+              200 + Math.random() * 400
+            )
           }
         }
       }
@@ -1317,10 +1356,10 @@ onMounted(() => {
   onUnmounted(() => {
     running = false
     cancelAnimationFrame(raf)
-    window.removeEventListener("resize", resize)
-    el.removeEventListener("mousemove", onMouseMove)
-    el.removeEventListener("mouseleave", onMouseLeave)
-    el.removeEventListener("click", onClick)
+    window.removeEventListener('resize', resize)
+    el.removeEventListener('mousemove', onMouseMove)
+    el.removeEventListener('mouseleave', onMouseLeave)
+    el.removeEventListener('click', onClick)
   })
 })
 </script>

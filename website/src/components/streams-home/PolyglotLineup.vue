@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import MarkdownContent from "../MarkdownContent.vue"
-import MdExportExplicit from "../MdExportExplicit.vue"
-import { useMarkdownExport } from "../../lib/useMarkdownExport"
-import { ref, watch, onMounted, onBeforeUnmount } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 interface CardLine {
   html: string
@@ -19,14 +19,14 @@ interface Card {
 
 const cards: Card[] = [
   {
-    lang: "TypeScript",
-    icon: "TS",
-    tagline: "browser · Node · Edge · Workers",
+    lang: 'TypeScript',
+    icon: 'TS',
+    tagline: 'browser · Node · Edge · Workers',
     lines: [
       {
         html: `<span class="kw">import</span> { stream } <span class="kw">from</span> <span class="str">'@durable-streams/client'</span>`,
       },
-      { html: "" },
+      { html: '' },
       {
         html: `<span class="kw">for await</span> (<span class="kw">const</span> m <span class="kw">of</span> stream({`,
       },
@@ -35,14 +35,14 @@ const cards: Card[] = [
     ],
   },
   {
-    lang: "Python",
-    icon: "Py",
-    tagline: "data scientists · workers",
+    lang: 'Python',
+    icon: 'Py',
+    tagline: 'data scientists · workers',
     lines: [
       {
         html: `<span class="kw">from</span> durable_streams <span class="kw">import</span> stream`,
       },
-      { html: "" },
+      { html: '' },
       {
         html: `<span class="kw">with</span> stream(STREAM_URL, live=<span class="str">'sse'</span>) <span class="kw">as</span> r:`,
       },
@@ -54,9 +54,9 @@ const cards: Card[] = [
     ],
   },
   {
-    lang: "Swift",
-    icon: "Sw",
-    tagline: "iOS · macOS app",
+    lang: 'Swift',
+    icon: 'Sw',
+    tagline: 'iOS · macOS app',
     lines: [
       { html: `<span class="kw">let</span> task = URLSession.shared` },
       { html: `  .dataTask(with: URLRequest(url: URL(...)))` },
@@ -68,9 +68,9 @@ const cards: Card[] = [
     ],
   },
   {
-    lang: "Go",
-    icon: "Go",
-    tagline: "servers · AnyCable · Rails",
+    lang: 'Go',
+    icon: 'Go',
+    tagline: 'servers · AnyCable · Rails',
     lines: [
       { html: `resp, _ := http.Get(STREAM_URL)` },
       { html: `scanner := bufio.NewScanner(resp.Body)` },
@@ -80,12 +80,12 @@ const cards: Card[] = [
     ],
   },
   {
-    lang: "curl",
-    icon: "$_",
-    tagline: "shell · scripts · debugging",
+    lang: 'curl',
+    icon: '$_',
+    tagline: 'shell · scripts · debugging',
     lines: [
       { html: `curl -N <span class="str">"$URL?live=sse"</span>` },
-      { html: "" },
+      { html: '' },
       { html: `<span class="cm"># prints SSE</span>` },
       { html: `<span class="cm"># data: lines</span>`, receive: true },
     ],
@@ -100,10 +100,10 @@ const markdownCards = [
 ${card.tagline}
 
 \`\`\`
-${card.lines.map((line) => line.html.replace(/<[^>]+>/g, "")).join("\n")}
+${card.lines.map((line) => line.html.replace(/<[^>]+>/g, '')).join('\n')}
 \`\`\``
   ),
-].join("\n\n")
+].join('\n\n')
 
 interface BannerEvent {
   text: string
@@ -180,9 +180,9 @@ function start() {
 
 function reducedMotion(): boolean {
   return (
-    typeof window !== "undefined" &&
+    typeof window !== 'undefined' &&
     window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
   )
 }
 
@@ -213,8 +213,8 @@ onBeforeUnmount(() => {
   <div v-else ref="rootRef" class="pl">
     <span class="sr-only">
       A single HTTP stream URL is consumed by five clients written in
-      TypeScript, Python, Swift, Go and curl. Each receives the same
-      server-sent events.
+      TypeScript, Python, Swift, Go and curl. Each receives the same server-sent
+      events.
     </span>
 
     <div class="pl-banner" aria-hidden="true">
@@ -381,11 +381,15 @@ onBeforeUnmount(() => {
   transform: translateY(-6px);
 }
 .pl-line-enter-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 .pl-line-leave-active {
   position: absolute;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 .pl-line-leave-to {
   opacity: 0;

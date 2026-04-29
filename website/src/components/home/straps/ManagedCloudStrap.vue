@@ -29,7 +29,8 @@ const strap = {
   title: 'Fully managed cloud',
   bodyPrefix: 'Deploy on',
   bodyLink: { text: 'Electric Cloud', href: '/cloud' },
-  bodySuffix: 'a globally distributed data delivery network with usage-based pricing.',
+  bodySuffix:
+    'a globally distributed data delivery network with usage-based pricing.',
   actions: [
     { text: 'Electric Cloud', href: '/cloud', theme: 'brand' },
     { text: 'See pricing', href: '/pricing', theme: 'alt' },

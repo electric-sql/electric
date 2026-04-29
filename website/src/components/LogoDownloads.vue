@@ -8,11 +8,7 @@
 
 <template>
   <div class="ld-grid">
-    <a
-      class="ld-tile"
-      href="/img/brand/logo.svg"
-      download="electric-logo.svg"
-    >
+    <a class="ld-tile" href="/img/brand/logo.svg" download="electric-logo.svg">
       <div class="ld-preview ld-preview-dark">
         <img src="/img/brand/logo.svg" alt="Electric logo on dark" />
       </div>

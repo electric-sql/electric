@@ -139,9 +139,7 @@ const reelStack = computed(() => {
 })
 
 const wordStep = ref(INITIAL_WORD_STEP)
-const activeStackIdx = computed(() =>
-  Math.max(0, REEL_BASE - wordStep.value)
-)
+const activeStackIdx = computed(() => Math.max(0, REEL_BASE - wordStep.value))
 /* Narrow-mode flag — true when the viewport is ≤670px and the
    headline is rendered as two forced lines with the rotator on
    the second line. The reel layout flips from "active centred
@@ -364,8 +362,9 @@ onMounted(() => {
      into the correct widths instead of getting stuck at the
      fallback-font measurements. */
   if (typeof document !== 'undefined') {
-    const fonts = (document as unknown as { fonts?: { ready?: Promise<unknown> } })
-      .fonts
+    const fonts = (
+      document as unknown as { fonts?: { ready?: Promise<unknown> } }
+    ).fonts
     if (fonts?.ready) {
       fonts.ready.then(() => measureWords()).catch(() => {})
     }
@@ -435,25 +434,22 @@ onUnmounted(() => {
            the prefix anchors at the line's left edge and only
            the suffix " collaboration" translates as the active
            cycle word changes. -->
-      <span
-        aria-hidden="true"
-        class="title-line"
-        :style="lineStyle"
-      ><!-- "Everything you need for " — held in its own span
+      <span aria-hidden="true" class="title-line" :style="lineStyle"
+        ><!-- "Everything you need for " — held in its own span
            so the narrow-mode CSS can flip it to display:
            block and force the second line's break right after
            "for". The trailing space stays on the lead so the
            tail starts cleanly with "multi-" without a visible
            leading space at the start of the wrapped line. --><span
           class="title-lead"
-        >{{ headlineLead }}</span><!-- "multi-{rotator} collaboration" — kept together as
+          >{{ headlineLead }}</span
+        ><!-- "multi-{rotator} collaboration" — kept together as
            a single inline-block in narrow mode so the entire
            second line can be centred (and translated) as one
-           unit. --><span
-          class="title-tail"
-          :style="tailStyle"
-        >{{ headlineMid }}<span class="rotator"
-        ><!-- In-flow spacer carrying the *default* cycle word
+           unit. --><span class="title-tail" :style="tailStyle"
+          >{{ headlineMid
+          }}<span class="rotator"
+            ><!-- In-flow spacer carrying the *default* cycle word
              (visibility hidden). Sets both the rotator's
              intrinsic width — anchored to the default word
              ("agent", first in the cycle) — and the rotator's
@@ -464,45 +460,46 @@ onUnmounted(() => {
              initial transform animation. Wider words ("device")
              overflow horizontally; that overflow is allowed
              by `.rotator-window`'s clip-path. -->
-        <span class="rotator-spacer">{{ defaultWord }}</span>
-        <!-- Hidden measurement copies of each cycle word; live
+            <span class="rotator-spacer">{{ defaultWord }}</span>
+            <!-- Hidden measurement copies of each cycle word; live
              inside `.rotator` so they inherit the exact font /
              letter-spacing the visible reel will use. -->
-        <span
-          v-for="(w, i) in cycle"
-          :key="`m-${i}`"
-          ref="measureRefs"
-          class="rotator-measure"
-        >{{ w }}</span>
-        <span
-          class="rotator-window"
-          :style="maxWidth > 0 ? { width: `${maxWidth}px` } : undefined"
-        >
-          <span
-            class="rotator-stack"
-            :style="{ transform: `translateY(${reelOffsetLh}lh)` }"
-          >
             <span
-              v-for="(w, i) in reelStack"
-              :key="i"
-              class="rotator-lane"
-              :style="{ top: `${i}lh`, opacity: laneOpacity(i) }"
-            >{{ w }}</span>
-          </span>
-        </span>
-      </span><span
-        class="title-suffix"
-        :style="suffixStyle"
-      >{{ headlineSuffix }}</span></span></span>
+              v-for="(w, i) in cycle"
+              :key="`m-${i}`"
+              ref="measureRefs"
+              class="rotator-measure"
+              >{{ w }}</span
+            >
+            <span
+              class="rotator-window"
+              :style="maxWidth > 0 ? { width: `${maxWidth}px` } : undefined"
+            >
+              <span
+                class="rotator-stack"
+                :style="{ transform: `translateY(${reelOffsetLh}lh)` }"
+              >
+                <span
+                  v-for="(w, i) in reelStack"
+                  :key="i"
+                  class="rotator-lane"
+                  :style="{ top: `${i}lh`, opacity: laneOpacity(i) }"
+                  >{{ w }}</span
+                >
+              </span>
+            </span> </span
+          ><span class="title-suffix" :style="suffixStyle">{{
+            headlineSuffix
+          }}</span></span
+        ></span
+      >
       <!-- Hidden ghost: the default-variant rendered headline.
            Lives at the end of the title and is taken out of
            flow so it doesn't push other content; its measured
            width feeds `.title-line`'s `min-width` above. -->
-      <span
-        ref="ghostRef"
-        aria-hidden="true"
-        class="title-ghost"
-      >{{ headlinePrefix }}{{ defaultWord }}{{ headlineSuffix }}</span>
+      <span ref="ghostRef" aria-hidden="true" class="title-ghost"
+        >{{ headlinePrefix }}{{ defaultWord }}{{ headlineSuffix }}</span
+      >
     </h2>
   </section>
 </template>

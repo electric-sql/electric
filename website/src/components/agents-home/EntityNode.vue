@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineProps<{
   name: string
-  status?: "active" | "sleeping" | "idle" | "crashed" | "busy"
+  status?: 'active' | 'sleeping' | 'idle' | 'crashed' | 'busy'
   compact?: boolean
 }>()
 </script>
@@ -10,7 +10,7 @@ defineProps<{
   <div class="entity-node" :class="[status ?? 'idle', { compact }]">
     <div class="entity-indicator" />
     <span class="entity-name">{{ name }}</span>
-    <span class="entity-status-label">{{ status ?? "idle" }}</span>
+    <span class="entity-status-label">{{ status ?? 'idle' }}</span>
   </div>
 </template>
 
@@ -23,7 +23,9 @@ defineProps<{
   background: var(--ea-surface);
   border: 1px solid var(--ea-divider);
   border-radius: 8px;
-  transition: border-color 0.3s, box-shadow 0.3s;
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
   white-space: nowrap;
 }
 
@@ -36,7 +38,8 @@ defineProps<{
 .entity-node.active,
 .entity-node.busy {
   border-color: var(--ea-indicator-active);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--ea-indicator-active) 25%, transparent);
+  box-shadow: 0 0 8px
+    color-mix(in srgb, var(--ea-indicator-active) 25%, transparent);
 }
 
 .entity-node.crashed {
@@ -48,7 +51,9 @@ defineProps<{
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  transition: background 0.3s, box-shadow 0.3s;
+  transition:
+    background 0.3s,
+    box-shadow 0.3s;
 }
 
 .entity-node.active .entity-indicator,

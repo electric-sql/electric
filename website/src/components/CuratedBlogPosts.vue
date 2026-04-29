@@ -17,14 +17,14 @@
    grid of `LandscapeBlogPostListing` cards on desktop, single
    column on mobile, matching the homepage `LatestNewsSection`. */
 
-import { computed } from "vue"
-import { getVitepressData } from "../lib/vitepressData"
-import type { PostListRow } from "../types/data-loaders"
-import * as postsModule from "../../data/posts.data"
-import LandscapeBlogPostListing from "./LandscapeBlogPostListing.vue"
-import MarkdownContent from "./MarkdownContent.vue"
-import MdExportExplicit from "./MdExportExplicit.vue"
-import { useMarkdownExport } from "../lib/useMarkdownExport"
+import { computed } from 'vue'
+import { getVitepressData } from '../lib/vitepressData'
+import type { PostListRow } from '../types/data-loaders'
+import * as postsModule from '../../data/posts.data'
+import LandscapeBlogPostListing from './LandscapeBlogPostListing.vue'
+import MarkdownContent from './MarkdownContent.vue'
+import MdExportExplicit from './MdExportExplicit.vue'
+import { useMarkdownExport } from '../lib/useMarkdownExport'
 
 const allPosts = getVitepressData<PostListRow[]>(postsModule)
 
@@ -64,7 +64,7 @@ const curated = computed((): PostListRow[] => {
 const curatedMarkdown = computed(() =>
   curated.value
     .map((post) => `- [${String(post.title ?? post.path)}](${post.path})`)
-    .join("\n")
+    .join('\n')
 )
 
 const isMarkdownExport = useMarkdownExport()

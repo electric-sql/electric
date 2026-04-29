@@ -39,11 +39,7 @@
         </div>
         <div class="ssd-client">
           <!-- Inline TypeScript brand mark (no asset in /img/icons). -->
-          <svg
-            class="ssd-client-icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
+          <svg class="ssd-client-icon" viewBox="0 0 24 24" aria-hidden="true">
             <rect width="24" height="24" rx="3" fill="#3178c6" />
             <text
               x="12"
@@ -54,7 +50,9 @@
               font-family="system-ui, -apple-system, Segoe UI, sans-serif"
               fill="#fff"
               letter-spacing="0.5"
-            >TS</text>
+            >
+              TS
+            </text>
           </svg>
           <span class="ssd-client-text">
             <span class="ssd-client-name mono">@electric-sql/client</span>
@@ -125,11 +123,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-areas:
-    "app    app"
-    "arrU1  arrD1"
-    "eng    api"
-    "arrU2  arrD2"
-    "pg     pg";
+    'app    app'
+    'arrU1  arrD1'
+    'eng    api'
+    'arrU2  arrD2'
+    'pg     pg';
   column-gap: 14px;
   row-gap: 0;
 
@@ -139,14 +137,30 @@
   margin-right: auto;
 }
 
-.ssd-app    { grid-area: app; }
-.ssd-engine { grid-area: eng; }
-.ssd-api    { grid-area: api; }
-.ssd-pg     { grid-area: pg; }
-.ssd-arrow[data-pos="left-top"]     { grid-area: arrU1; }
-.ssd-arrow[data-pos="right-top"]    { grid-area: arrD1; }
-.ssd-arrow[data-pos="left-bottom"]  { grid-area: arrU2; }
-.ssd-arrow[data-pos="right-bottom"] { grid-area: arrD2; }
+.ssd-app {
+  grid-area: app;
+}
+.ssd-engine {
+  grid-area: eng;
+}
+.ssd-api {
+  grid-area: api;
+}
+.ssd-pg {
+  grid-area: pg;
+}
+.ssd-arrow[data-pos='left-top'] {
+  grid-area: arrU1;
+}
+.ssd-arrow[data-pos='right-top'] {
+  grid-area: arrD1;
+}
+.ssd-arrow[data-pos='left-bottom'] {
+  grid-area: arrU2;
+}
+.ssd-arrow[data-pos='right-bottom'] {
+  grid-area: arrD2;
+}
 
 /* Tiers ────────────────────────────────────────────────────────── */
 
@@ -180,7 +194,10 @@
 
 /* App tier ─────────────────────────────────────────────────────── */
 
-.ssd-app { text-align: left; padding: 7px 8px 6px; }
+.ssd-app {
+  text-align: left;
+  padding: 7px 8px 6px;
+}
 .ssd-clients {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -289,8 +306,12 @@
   stroke-linejoin: round;
   flex-shrink: 0;
 }
-.ssd-arrow-up   .ssd-arrow-svg { stroke: var(--read);  }
-.ssd-arrow-down .ssd-arrow-svg { stroke: var(--write); }
+.ssd-arrow-up .ssd-arrow-svg {
+  stroke: var(--read);
+}
+.ssd-arrow-down .ssd-arrow-svg {
+  stroke: var(--write);
+}
 
 .ssd-arrow-label {
   font-size: 10px;
@@ -302,18 +323,40 @@
 /* Narrow viewports ────────────────────────────────────────────── */
 
 @media (max-width: 720px) {
-  .ssd { column-gap: 10px; }
-  .ssd-arrow { min-height: 34px; }
-  .ssd-arrow-svg { height: 16px; }
-  .ssd-arrow-label { font-size: 9.5px; }
+  .ssd {
+    column-gap: 10px;
+  }
+  .ssd-arrow {
+    min-height: 34px;
+  }
+  .ssd-arrow-svg {
+    height: 16px;
+  }
+  .ssd-arrow-label {
+    font-size: 9.5px;
+  }
   .ssd-engine-name,
   .ssd-api-name,
-  .ssd-pg-name { font-size: 12px; }
-  .ssd-client { gap: 6px; padding: 5px 6px; }
-  .ssd-client-name { font-size: 11px; }
-  .ssd-client-name.mono { font-size: 10px; }
-  .ssd-client-meta { font-size: 9px; }
-  .ssd-client-icon { width: 16px; height: 16px; }
+  .ssd-pg-name {
+    font-size: 12px;
+  }
+  .ssd-client {
+    gap: 6px;
+    padding: 5px 6px;
+  }
+  .ssd-client-name {
+    font-size: 11px;
+  }
+  .ssd-client-name.mono {
+    font-size: 10px;
+  }
+  .ssd-client-meta {
+    font-size: 9px;
+  }
+  .ssd-client-icon {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* On phones, keep the parallel structure but compress aggressively
@@ -321,23 +364,49 @@
    icon-beside-text layout is preserved — when space is really tight
    the long mono name is allowed to wrap onto two lines. */
 @media (max-width: 480px) {
-  .ssd { column-gap: 6px; }
-  .ssd-tier { padding: 6px 6px 5px; }
-  .ssd-clients { gap: 4px; }
-  .ssd-client { padding: 5px 4px; gap: 5px; }
-  .ssd-client-name { font-size: 10px; }
+  .ssd {
+    column-gap: 6px;
+  }
+  .ssd-tier {
+    padding: 6px 6px 5px;
+  }
+  .ssd-clients {
+    gap: 4px;
+  }
+  .ssd-client {
+    padding: 5px 4px;
+    gap: 5px;
+  }
+  .ssd-client-name {
+    font-size: 10px;
+  }
   .ssd-client-name.mono {
     font-size: 9px;
     white-space: normal;
     word-break: break-word;
   }
-  .ssd-client-meta { font-size: 8.5px; }
-  .ssd-client-icon { width: 14px; height: 14px; }
-  .ssd-arrow { min-height: 30px; padding: 3px 0; }
-  .ssd-arrow-svg { height: 14px; width: 10px; }
-  .ssd-arrow-label { font-size: 9px; }
+  .ssd-client-meta {
+    font-size: 8.5px;
+  }
+  .ssd-client-icon {
+    width: 14px;
+    height: 14px;
+  }
+  .ssd-arrow {
+    min-height: 30px;
+    padding: 3px 0;
+  }
+  .ssd-arrow-svg {
+    height: 14px;
+    width: 10px;
+  }
+  .ssd-arrow-label {
+    font-size: 9px;
+  }
   .ssd-engine-name,
   .ssd-api-name,
-  .ssd-pg-name { font-size: 11px; }
+  .ssd-pg-name {
+    font-size: 11px;
+  }
 }
 </style>

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps<{
   active?: boolean
-  direction?: "down" | "up" | "right" | "left"
+  direction?: 'down' | 'up' | 'right' | 'left'
   dashed?: boolean
   label?: string
 }>()
@@ -32,10 +32,7 @@ defineExpose({ animatePulse })
 </script>
 
 <template>
-  <div
-    class="message-line"
-    :class="[direction ?? 'down', { dashed, active }]"
-  >
+  <div class="message-line" :class="[direction ?? 'down', { dashed, active }]">
     <div class="line-track">
       <div ref="dotRef" v-if="active" class="line-dot" :class="{ animating }" />
     </div>

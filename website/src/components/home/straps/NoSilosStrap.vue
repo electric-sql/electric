@@ -77,7 +77,8 @@ onUnmounted(() => {
       </h2>
       <p class="ns-tagline">
         {{ strap.bodyPrefix }}
-        <a :href="strap.bodyLink.href">{{ strap.bodyLink.text }}</a>.
+        <a :href="strap.bodyLink.href">{{ strap.bodyLink.text }}</a
+        >.
       </p>
       <div class="ns-actions">
         <VPButton

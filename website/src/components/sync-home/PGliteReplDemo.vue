@@ -49,7 +49,7 @@ const codeStyles = Object.fromEntries(
     '--vp-code-block-bg',
     '--vp-code-line-highlight-color',
     '--vp-c-brand-1',
-  ].map((prop) => [prop, rootStyle.getPropertyValue(prop)]),
+  ].map((prop) => [prop, rootStyle.getPropertyValue(prop)])
 )
 const theme = defaultDarkThemeInit({
   settings: {
@@ -84,7 +84,7 @@ watch(
       `
       repl.value.shadowRoot.insertBefore(
         styleEl,
-        repl.value.shadowRoot.firstChild,
+        repl.value.shadowRoot.firstChild
       )
 
       inputEl.addEventListener('focus', () => {
@@ -108,14 +108,14 @@ watch(
             }
           })
         },
-        { threshold: 1.0 },
+        { threshold: 1.0 }
       )
 
       observer.observe(repl.value)
       createPausePromise()
       animateInput(inputEl)
     }
-  },
+  }
 )
 
 onBeforeUnmount(() => {

@@ -169,11 +169,7 @@ const comparisonMarkdown = computed(() => {
   <div v-else class="comparison-table">
     <div class="table-header">
       <div class="metric-column header-spacer"></div>
-      <div
-        v-for="plan in comparisonPlans"
-        :key="plan.slug"
-        class="plan-column"
-      >
+      <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
         <div class="plan-name">
           <span class="plan-name-full">{{ plan.name }}</span
           ><span v-if="plan.shortName" class="plan-name-short">{{
@@ -381,11 +377,7 @@ const comparisonMarkdown = computed(() => {
 
     <div class="cta-row">
       <div class="metric-column"></div>
-      <div
-        v-for="plan in comparisonPlans"
-        :key="plan.slug"
-        class="plan-column"
-      >
+      <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
         <VPButton
           :href="plan.ctaHref"
           :text="plan.ctaText"

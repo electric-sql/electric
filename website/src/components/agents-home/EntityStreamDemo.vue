@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from "vue"
-import StreamViewer from "./StreamViewer.vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, watch, onUnmounted } from 'vue'
+import StreamViewer from './StreamViewer.vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 interface StreamEvent {
   id: string
   timestamp: string
-  direction: "inbound" | "outbound"
-  type: "message" | "run" | "tool_call" | "tool_result" | "text" | "error"
+  direction: 'inbound' | 'outbound'
+  type: 'message' | 'run' | 'tool_call' | 'tool_result' | 'text' | 'error'
   label: string
   content?: string
 }
 
 interface ScriptStep {
   delay: number
-  event?: { localId: string } & Omit<StreamEvent, "id">
-  status?: "active" | "sleeping"
+  event?: { localId: string } & Omit<StreamEvent, 'id'>
+  status?: 'active' | 'sleeping'
   highlightLine?: number | null
 }
 
@@ -23,47 +23,47 @@ const SCRIPT: ScriptStep[] = [
   {
     delay: 0,
     event: {
-      localId: "1",
-      timestamp: "0:00.0",
-      direction: "inbound",
-      type: "message",
-      label: "wake",
-      content: "message received",
+      localId: '1',
+      timestamp: '0:00.0',
+      direction: 'inbound',
+      type: 'message',
+      label: 'wake',
+      content: 'message received',
     },
-    status: "active",
+    status: 'active',
     highlightLine: 1,
   },
   {
     delay: 800,
     event: {
-      localId: "2",
-      timestamp: "0:00.8",
-      direction: "outbound",
-      type: "run",
-      label: "run.start",
+      localId: '2',
+      timestamp: '0:00.8',
+      direction: 'outbound',
+      type: 'run',
+      label: 'run.start',
     },
     highlightLine: 7,
   },
   {
     delay: 1400,
     event: {
-      localId: "3",
-      timestamp: "0:01.4",
-      direction: "outbound",
-      type: "text",
-      label: "text",
-      content: "Let me calculate that...",
+      localId: '3',
+      timestamp: '0:01.4',
+      direction: 'outbound',
+      type: 'text',
+      label: 'text',
+      content: 'Let me calculate that...',
     },
     highlightLine: 4,
   },
   {
     delay: 2200,
     event: {
-      localId: "4",
-      timestamp: "0:02.2",
-      direction: "outbound",
-      type: "tool_call",
-      label: "tool_call",
+      localId: '4',
+      timestamp: '0:02.2',
+      direction: 'outbound',
+      type: 'tool_call',
+      label: 'tool_call',
       content: 'calculator({ expr: "2+2" })',
     },
     highlightLine: 5,
@@ -71,87 +71,87 @@ const SCRIPT: ScriptStep[] = [
   {
     delay: 2600,
     event: {
-      localId: "5",
-      timestamp: "0:02.6",
-      direction: "inbound",
-      type: "tool_result",
-      label: "tool_result",
-      content: "4",
+      localId: '5',
+      timestamp: '0:02.6',
+      direction: 'inbound',
+      type: 'tool_result',
+      label: 'tool_result',
+      content: '4',
     },
     highlightLine: 5,
   },
   {
     delay: 3400,
     event: {
-      localId: "6",
-      timestamp: "0:03.4",
-      direction: "outbound",
-      type: "text",
-      label: "text",
-      content: "The answer is 4.",
+      localId: '6',
+      timestamp: '0:03.4',
+      direction: 'outbound',
+      type: 'text',
+      label: 'text',
+      content: 'The answer is 4.',
     },
     highlightLine: 4,
   },
   {
     delay: 3800,
     event: {
-      localId: "7",
-      timestamp: "0:03.8",
-      direction: "outbound",
-      type: "run",
-      label: "run.end",
+      localId: '7',
+      timestamp: '0:03.8',
+      direction: 'outbound',
+      type: 'run',
+      label: 'run.end',
     },
     highlightLine: 7,
   },
-  { delay: 4200, status: "sleeping", highlightLine: null },
+  { delay: 4200, status: 'sleeping', highlightLine: null },
   {
     delay: 7000,
     event: {
-      localId: "8",
-      timestamp: "0:07.0",
-      direction: "inbound",
-      type: "message",
-      label: "wake",
-      content: "new message received",
+      localId: '8',
+      timestamp: '0:07.0',
+      direction: 'inbound',
+      type: 'message',
+      label: 'wake',
+      content: 'new message received',
     },
-    status: "active",
+    status: 'active',
     highlightLine: 1,
   },
   {
     delay: 7400,
     event: {
-      localId: "9",
-      timestamp: "0:07.4",
-      direction: "outbound",
-      type: "run",
-      label: "run.start",
+      localId: '9',
+      timestamp: '0:07.4',
+      direction: 'outbound',
+      type: 'run',
+      label: 'run.start',
     },
     highlightLine: 7,
   },
   {
     delay: 8000,
     event: {
-      localId: "10",
-      timestamp: "0:08.0",
-      direction: "outbound",
-      type: "text",
-      label: "text",
-      content: "Hello again! I remember our last conversation.",
+      localId: '10',
+      timestamp: '0:08.0',
+      direction: 'outbound',
+      type: 'text',
+      label: 'text',
+      content: 'Hello again! I remember our last conversation.',
     },
     highlightLine: 4,
   },
   {
     delay: 8600,
     event: {
-      localId: "11",
-      timestamp: "0:08.6",
-      direction: "outbound",
-      type: "run",
-      label: "run.end",
+      localId: '11',
+      timestamp: '0:08.6',
+      direction: 'outbound',
+      type: 'run',
+      label: 'run.end',
     },
     highlightLine: 7,
   },
-  { delay: 9000, status: "sleeping", highlightLine: null },
+  { delay: 9000, status: 'sleeping', highlightLine: null },
 ]
 
 const CYCLE_MS = 13000
@@ -163,15 +163,15 @@ const CODE_LINES = [
   '      <span class="tk-prop">systemPrompt</span>: <span class="tk-str">"You are a helpful assistant."</span>,',
   '      <span class="tk-prop">model</span>: <span class="tk-str">"claude-sonnet-4-5-20250929"</span>,',
   '      <span class="tk-prop">tools</span>: [<span class="tk-v">calculatorTool</span>, ...<span class="tk-v">ctx</span>.<span class="tk-v">darixTools</span>],',
-  "    })",
+  '    })',
   '    <span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-v">agent</span>.<span class="tk-fn">run</span>()',
-  "  },",
-  "})",
+  '  },',
+  '})',
 ]
 
 const rootRef = ref<HTMLElement>()
 const events = ref<StreamEvent[]>([])
-const status = ref<"active" | "sleeping">("sleeping")
+const status = ref<'active' | 'sleeping'>('sleeping')
 const highlightLine = ref<number | null>(null)
 const isVisible = useDemoVisibility(rootRef)
 
@@ -186,7 +186,7 @@ function clearTimers() {
 function runCycle() {
   clearTimers()
   events.value = []
-  status.value = "sleeping"
+  status.value = 'sleeping'
   highlightLine.value = null
   cycleId++
   const thisCycle = cycleId
@@ -312,7 +312,9 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  transition: background 0.3s, box-shadow 0.3s;
+  transition:
+    background 0.3s,
+    box-shadow 0.3s;
 }
 
 .entity-dot.active {
@@ -383,7 +385,9 @@ onUnmounted(() => {
   white-space: pre;
   color: var(--ea-text-2);
   border-left: 2px solid transparent;
-  transition: background 0.25s, border-color 0.25s;
+  transition:
+    background 0.25s,
+    border-color 0.25s;
 }
 
 .code-line.highlight {

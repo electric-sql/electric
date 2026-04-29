@@ -9,19 +9,19 @@
    `<ClientOnly>` so SSR just renders an empty stub and the real UI
    materialises on hydrate. */
 
-import { computed, onMounted, onBeforeUnmount, ref } from "vue"
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 
-import BrandToysIndex from "./BrandToysIndex.vue"
-import BrandToysToy from "./BrandToysToy.vue"
-import { findToy } from "./toys"
+import BrandToysIndex from './BrandToysIndex.vue'
+import BrandToysToy from './BrandToysToy.vue'
+import { findToy } from './toys'
 
 // Reactive copy of `window.location.search`. Re-read whenever the
 // history changes so in-page navigation (index → toy → back) works
 // without a full reload.
-const search = ref("")
+const search = ref('')
 
 function syncSearch() {
-  if (typeof window === "undefined") return
+  if (typeof window === 'undefined') return
   search.value = window.location.search
 }
 
@@ -31,13 +31,13 @@ function syncSearch() {
 // is set to light. We restore whatever was there before on unmount.
 let prevDarkClass: boolean | null = null
 function forceDarkMode() {
-  if (typeof document === "undefined") return
-  prevDarkClass = document.documentElement.classList.contains("dark")
-  document.documentElement.classList.add("dark")
+  if (typeof document === 'undefined') return
+  prevDarkClass = document.documentElement.classList.contains('dark')
+  document.documentElement.classList.add('dark')
 }
 function restoreDarkMode() {
-  if (typeof document === "undefined" || prevDarkClass === null) return
-  if (!prevDarkClass) document.documentElement.classList.remove("dark")
+  if (typeof document === 'undefined' || prevDarkClass === null) return
+  if (!prevDarkClass) document.documentElement.classList.remove('dark')
   prevDarkClass = null
 }
 
@@ -53,20 +53,20 @@ function onNavigate() {
 onMounted(() => {
   forceDarkMode()
   syncSearch()
-  window.addEventListener("popstate", syncSearch)
-  window.addEventListener("brand-toys:navigate", onNavigate)
+  window.addEventListener('popstate', syncSearch)
+  window.addEventListener('brand-toys:navigate', onNavigate)
 })
 onBeforeUnmount(() => {
   restoreDarkMode()
-  if (typeof window !== "undefined") {
-    window.removeEventListener("popstate", syncSearch)
-    window.removeEventListener("brand-toys:navigate", onNavigate)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('popstate', syncSearch)
+    window.removeEventListener('brand-toys:navigate', onNavigate)
   }
 })
 
 const activeToy = computed(() => {
   const q = new URLSearchParams(search.value)
-  return findToy(q.get("id"))
+  return findToy(q.get('id'))
 })
 </script>
 

@@ -20,16 +20,12 @@
 
 defineProps<{
   id?: string
-  tone?: "bg" | "surface"
+  tone?: 'bg' | 'surface'
 }>()
 </script>
 
 <template>
-  <section
-    class="mid-strap"
-    :class="`mid-strap--${tone ?? 'bg'}`"
-    :id="id"
-  >
+  <section class="mid-strap" :class="`mid-strap--${tone ?? 'bg'}`" :id="id">
     <div class="mid-strap-inner">
       <div v-if="$slots.eyebrow" class="mid-strap-eyebrow mono">
         <span class="dot" />
@@ -63,7 +59,7 @@ defineProps<{
   background: var(--ea-surface);
 }
 .mid-strap::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background: radial-gradient(

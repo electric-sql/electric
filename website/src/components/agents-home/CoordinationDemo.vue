@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { reactive, ref, watch, onUnmounted } from "vue"
-import EntityNode from "./EntityNode.vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { reactive, ref, watch, onUnmounted } from 'vue'
+import EntityNode from './EntityNode.vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 const rootRef = ref<HTMLElement>()
 const isVisible = useDemoVisibility(rootRef)
@@ -15,7 +15,7 @@ function clearTimers() {
 
 type Step = { d: number; fn: () => void }
 
-type EntityStatus = "active" | "idle" | "sleeping" | "crashed" | "busy"
+type EntityStatus = 'active' | 'idle' | 'sleeping' | 'crashed' | 'busy'
 
 const spawn = reactive<{
   planner: EntityStatus
@@ -24,19 +24,19 @@ const spawn = reactive<{
   pr: { active: boolean; label: string; reverse: boolean }
   pw: { active: boolean; label: string; reverse: boolean }
 }>({
-  planner: "sleeping",
-  researcher: "sleeping",
-  writer: "sleeping",
-  pr: { active: false, label: "", reverse: false },
-  pw: { active: false, label: "", reverse: false },
+  planner: 'sleeping',
+  researcher: 'sleeping',
+  writer: 'sleeping',
+  pr: { active: false, label: '', reverse: false },
+  pw: { active: false, label: '', reverse: false },
 })
 
 function resetSpawn() {
-  spawn.planner = "sleeping"
-  spawn.researcher = "sleeping"
-  spawn.writer = "sleeping"
-  spawn.pr = { active: false, label: "", reverse: false }
-  spawn.pw = { active: false, label: "", reverse: false }
+  spawn.planner = 'sleeping'
+  spawn.researcher = 'sleeping'
+  spawn.writer = 'sleeping'
+  spawn.pr = { active: false, label: '', reverse: false }
+  spawn.pw = { active: false, label: '', reverse: false }
 }
 
 const observe = reactive<{
@@ -46,18 +46,18 @@ const observe = reactive<{
   label: string
   dots: boolean
 }>({
-  monitor: "sleeping",
-  worker: "sleeping",
+  monitor: 'sleeping',
+  worker: 'sleeping',
   active: false,
-  label: "",
+  label: '',
   dots: false,
 })
 
 function resetObserve() {
-  observe.monitor = "sleeping"
-  observe.worker = "sleeping"
+  observe.monitor = 'sleeping'
+  observe.worker = 'sleeping'
   observe.active = false
-  observe.label = ""
+  observe.label = ''
   observe.dots = false
 }
 
@@ -70,57 +70,180 @@ const shared = reactive<{
   l2: { active: boolean; label: string }
   l3: { active: boolean; label: string }
 }>({
-  a1: "sleeping",
-  a2: "sleeping",
-  a3: "sleeping",
+  a1: 'sleeping',
+  a2: 'sleeping',
+  a3: 'sleeping',
   pulse: false,
-  l1: { active: false, label: "" },
-  l2: { active: false, label: "" },
-  l3: { active: false, label: "" },
+  l1: { active: false, label: '' },
+  l2: { active: false, label: '' },
+  l3: { active: false, label: '' },
 })
 
 function resetShared() {
-  shared.a1 = "sleeping"
-  shared.a2 = "sleeping"
-  shared.a3 = "sleeping"
+  shared.a1 = 'sleeping'
+  shared.a2 = 'sleeping'
+  shared.a3 = 'sleeping'
   shared.pulse = false
-  shared.l1 = { active: false, label: "" }
-  shared.l2 = { active: false, label: "" }
-  shared.l3 = { active: false, label: "" }
+  shared.l1 = { active: false, label: '' }
+  shared.l2 = { active: false, label: '' }
+  shared.l3 = { active: false, label: '' }
 }
 
 const SPAWN_STEPS: Step[] = [
   { d: 0, fn: resetSpawn },
-  { d: 500, fn() { spawn.planner = "active" } },
-  { d: 1100, fn() { spawn.pr = { active: true, label: "spawn", reverse: false } } },
-  { d: 1600, fn() { spawn.researcher = "sleeping"; spawn.pr = { active: false, label: "", reverse: false } } },
-  { d: 2200, fn() { spawn.pw = { active: true, label: "spawn", reverse: false } } },
-  { d: 2700, fn() { spawn.writer = "sleeping"; spawn.pw = { active: false, label: "", reverse: false } } },
-  { d: 3300, fn() { spawn.pr = { active: true, label: "send", reverse: false } } },
-  { d: 3800, fn() { spawn.researcher = "active"; spawn.pr = { active: false, label: "", reverse: false } } },
-  { d: 4400, fn() { spawn.pr = { active: true, label: "results", reverse: true } } },
-  { d: 5000, fn() { spawn.pr = { active: false, label: "", reverse: false }; spawn.pw = { active: true, label: "send", reverse: false } } },
-  { d: 5500, fn() { spawn.writer = "active"; spawn.pw = { active: false, label: "", reverse: false } } },
-  { d: 6100, fn() { spawn.pw = { active: true, label: "draft ready", reverse: true } } },
+  {
+    d: 500,
+    fn() {
+      spawn.planner = 'active'
+    },
+  },
+  {
+    d: 1100,
+    fn() {
+      spawn.pr = { active: true, label: 'spawn', reverse: false }
+    },
+  },
+  {
+    d: 1600,
+    fn() {
+      spawn.researcher = 'sleeping'
+      spawn.pr = { active: false, label: '', reverse: false }
+    },
+  },
+  {
+    d: 2200,
+    fn() {
+      spawn.pw = { active: true, label: 'spawn', reverse: false }
+    },
+  },
+  {
+    d: 2700,
+    fn() {
+      spawn.writer = 'sleeping'
+      spawn.pw = { active: false, label: '', reverse: false }
+    },
+  },
+  {
+    d: 3300,
+    fn() {
+      spawn.pr = { active: true, label: 'send', reverse: false }
+    },
+  },
+  {
+    d: 3800,
+    fn() {
+      spawn.researcher = 'active'
+      spawn.pr = { active: false, label: '', reverse: false }
+    },
+  },
+  {
+    d: 4400,
+    fn() {
+      spawn.pr = { active: true, label: 'results', reverse: true }
+    },
+  },
+  {
+    d: 5000,
+    fn() {
+      spawn.pr = { active: false, label: '', reverse: false }
+      spawn.pw = { active: true, label: 'send', reverse: false }
+    },
+  },
+  {
+    d: 5500,
+    fn() {
+      spawn.writer = 'active'
+      spawn.pw = { active: false, label: '', reverse: false }
+    },
+  },
+  {
+    d: 6100,
+    fn() {
+      spawn.pw = { active: true, label: 'draft ready', reverse: true }
+    },
+  },
   { d: 6900, fn: resetSpawn },
 ]
 
 const OBSERVE_STEPS: Step[] = [
   { d: 0, fn: resetObserve },
-  { d: 500, fn() { observe.monitor = "active"; observe.active = true; observe.label = "observe" } },
-  { d: 1300, fn() { observe.worker = "active"; observe.label = "events"; observe.dots = true } },
-  { d: 4300, fn() { observe.worker = "sleeping"; observe.dots = false; observe.label = "completed" } },
+  {
+    d: 500,
+    fn() {
+      observe.monitor = 'active'
+      observe.active = true
+      observe.label = 'observe'
+    },
+  },
+  {
+    d: 1300,
+    fn() {
+      observe.worker = 'active'
+      observe.label = 'events'
+      observe.dots = true
+    },
+  },
+  {
+    d: 4300,
+    fn() {
+      observe.worker = 'sleeping'
+      observe.dots = false
+      observe.label = 'completed'
+    },
+  },
   { d: 5500, fn: resetObserve },
 ]
 
 const SHARED_STEPS: Step[] = [
   { d: 0, fn: resetShared },
-  { d: 500, fn() { shared.a1 = "active"; shared.l1 = { active: true, label: "write" } } },
-  { d: 1100, fn() { shared.a2 = "active"; shared.a3 = "active"; shared.l2 = { active: true, label: "read" }; shared.l3 = { active: true, label: "read" } } },
-  { d: 1900, fn() { shared.pulse = true } },
-  { d: 2300, fn() { shared.pulse = false; shared.l1 = { active: false, label: "" }; shared.l2 = { active: true, label: "sync" }; shared.l3 = { active: true, label: "sync" } } },
-  { d: 3100, fn() { shared.l2 = { active: true, label: "write" }; shared.l3 = { active: false, label: "" }; shared.pulse = true } },
-  { d: 3500, fn() { shared.pulse = false; shared.l1 = { active: true, label: "sync" }; shared.l2 = { active: false, label: "" }; shared.l3 = { active: true, label: "sync" } } },
+  {
+    d: 500,
+    fn() {
+      shared.a1 = 'active'
+      shared.l1 = { active: true, label: 'write' }
+    },
+  },
+  {
+    d: 1100,
+    fn() {
+      shared.a2 = 'active'
+      shared.a3 = 'active'
+      shared.l2 = { active: true, label: 'read' }
+      shared.l3 = { active: true, label: 'read' }
+    },
+  },
+  {
+    d: 1900,
+    fn() {
+      shared.pulse = true
+    },
+  },
+  {
+    d: 2300,
+    fn() {
+      shared.pulse = false
+      shared.l1 = { active: false, label: '' }
+      shared.l2 = { active: true, label: 'sync' }
+      shared.l3 = { active: true, label: 'sync' }
+    },
+  },
+  {
+    d: 3100,
+    fn() {
+      shared.l2 = { active: true, label: 'write' }
+      shared.l3 = { active: false, label: '' }
+      shared.pulse = true
+    },
+  },
+  {
+    d: 3500,
+    fn() {
+      shared.pulse = false
+      shared.l1 = { active: true, label: 'sync' }
+      shared.l2 = { active: false, label: '' }
+      shared.l3 = { active: true, label: 'sync' }
+    },
+  },
   { d: 4500, fn: resetShared },
 ]
 
@@ -128,7 +251,11 @@ const CYCLE_MS = 8500
 
 function scheduleSteps(steps: Step[], id: number) {
   for (const s of steps) {
-    timers.push(setTimeout(() => { if (cycleId === id) s.fn() }, s.d))
+    timers.push(
+      setTimeout(() => {
+        if (cycleId === id) s.fn()
+      }, s.d)
+    )
   }
 }
 
@@ -137,7 +264,11 @@ function runCycle(id: number) {
   scheduleSteps(SPAWN_STEPS, id)
   scheduleSteps(OBSERVE_STEPS, id)
   scheduleSteps(SHARED_STEPS, id)
-  timers.push(setTimeout(() => { if (cycleId === id) runCycle(id) }, CYCLE_MS))
+  timers.push(
+    setTimeout(() => {
+      if (cycleId === id) runCycle(id)
+    }, CYCLE_MS)
+  )
 }
 
 function restart() {
@@ -166,21 +297,77 @@ onUnmounted(() => {
       <!-- Spawn & Send -->
       <div class="tile">
         <h3 class="tile-title">Spawn &amp; Send</h3>
-        <p class="tile-desc"><code>spawn</code> creates a new entity. <code>send</code> delivers a message to any entity — waking it if it's sleeping. The entity replays from its stream, handles the message, then scales back to zero.</p>
+        <p class="tile-desc">
+          <code>spawn</code> creates a new entity. <code>send</code> delivers a
+          message to any entity — waking it if it's sleeping. The entity replays
+          from its stream, handles the message, then scales back to zero.
+        </p>
         <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
-            <line x1="66" y1="100" x2="225" y2="44" :class="['conn', { active: spawn.pr.active }]" />
-            <line x1="66" y1="100" x2="225" y2="156" :class="['conn', { active: spawn.pw.active }]" />
+            <line
+              x1="66"
+              y1="100"
+              x2="225"
+              y2="44"
+              :class="['conn', { active: spawn.pr.active }]"
+            />
+            <line
+              x1="66"
+              y1="100"
+              x2="225"
+              y2="156"
+              :class="['conn', { active: spawn.pw.active }]"
+            />
           </svg>
-          <div v-if="spawn.pr.active" :key="'pr-' + spawn.pr.label" class="dot" :class="spawn.pr.reverse ? 'dot-from-r' : 'dot-to-r'" />
-          <div v-if="spawn.pw.active" :key="'pw-' + spawn.pw.label" class="dot" :class="spawn.pw.reverse ? 'dot-from-w' : 'dot-to-w'" />
-          <span v-if="spawn.pr.label" class="line-label" style="left: 48%; top: 28%">{{ spawn.pr.label }}</span>
-          <span v-if="spawn.pw.label" class="line-label" style="left: 48%; top: 72%">{{ spawn.pw.label }}</span>
-          <EntityNode name="planner" :status="spawn.planner" compact class="node" style="left: 22%; top: 50%" />
-          <EntityNode name="researcher" :status="spawn.researcher" compact class="node" style="left: 75%; top: 22%" />
-          <EntityNode name="writer" :status="spawn.writer" compact class="node" style="left: 75%; top: 78%" />
+          <div
+            v-if="spawn.pr.active"
+            :key="'pr-' + spawn.pr.label"
+            class="dot"
+            :class="spawn.pr.reverse ? 'dot-from-r' : 'dot-to-r'"
+          />
+          <div
+            v-if="spawn.pw.active"
+            :key="'pw-' + spawn.pw.label"
+            class="dot"
+            :class="spawn.pw.reverse ? 'dot-from-w' : 'dot-to-w'"
+          />
+          <span
+            v-if="spawn.pr.label"
+            class="line-label"
+            style="left: 48%; top: 28%"
+            >{{ spawn.pr.label }}</span
+          >
+          <span
+            v-if="spawn.pw.label"
+            class="line-label"
+            style="left: 48%; top: 72%"
+            >{{ spawn.pw.label }}</span
+          >
+          <EntityNode
+            name="planner"
+            :status="spawn.planner"
+            compact
+            class="node"
+            style="left: 22%; top: 50%"
+          />
+          <EntityNode
+            name="researcher"
+            :status="spawn.researcher"
+            compact
+            class="node"
+            style="left: 75%; top: 22%"
+          />
+          <EntityNode
+            name="writer"
+            :status="spawn.writer"
+            compact
+            class="node"
+            style="left: 75%; top: 78%"
+          />
         </div>
-        <pre class="tile-code"><code><span class="tk-comment">// create new entities</span>
+        <pre
+          class="tile-code"
+        ><code><span class="tk-comment">// create new entities</span>
 <span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-fn">spawn</span>(<span class="tk-str">"researcher"</span>, <span class="tk-str">"r1"</span>)
 <span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-fn">spawn</span>(<span class="tk-str">"writer"</span>, <span class="tk-str">"w1"</span>)
 
@@ -193,19 +380,53 @@ onUnmounted(() => {
       <!-- Observe -->
       <div class="tile">
         <h3 class="tile-title">Observe</h3>
-        <p class="tile-desc">Watch another entity's stream in real time. When the observed entity appends an event, the observer wakes to process it — no polling, no open connections while&nbsp;idle.</p>
+        <p class="tile-desc">
+          Watch another entity's stream in real time. When the observed entity
+          appends an event, the observer wakes to process it — no polling, no
+          open connections while&nbsp;idle.
+        </p>
         <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
-            <line x1="75" y1="100" x2="225" y2="100" :class="['conn', { active: observe.active }]" />
+            <line
+              x1="75"
+              y1="100"
+              x2="225"
+              y2="100"
+              :class="['conn', { active: observe.active }]"
+            />
           </svg>
           <template v-if="observe.dots">
-            <div v-for="i in 4" :key="i" class="dot dot-observe" :style="{ animationDelay: `${(i - 1) * 0.3}s` }" />
+            <div
+              v-for="i in 4"
+              :key="i"
+              class="dot dot-observe"
+              :style="{ animationDelay: `${(i - 1) * 0.3}s` }"
+            />
           </template>
-          <span v-if="observe.label" class="line-label" style="left: 50%; top: 38%">{{ observe.label }}</span>
-          <EntityNode name="monitor" :status="observe.monitor" compact class="node" style="left: 25%; top: 50%" />
-          <EntityNode name="worker" :status="observe.worker" compact class="node" style="left: 75%; top: 50%" />
+          <span
+            v-if="observe.label"
+            class="line-label"
+            style="left: 50%; top: 38%"
+            >{{ observe.label }}</span
+          >
+          <EntityNode
+            name="monitor"
+            :status="observe.monitor"
+            compact
+            class="node"
+            style="left: 25%; top: 50%"
+          />
+          <EntityNode
+            name="worker"
+            :status="observe.worker"
+            compact
+            class="node"
+            style="left: 75%; top: 50%"
+          />
         </div>
-        <pre class="tile-code"><code><span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-fn">observe</span>(
+        <pre
+          class="tile-code"
+        ><code><span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-fn">observe</span>(
   <span class="tk-fn">entity</span>(<span class="tk-str">"/worker/task-1"</span>),
   { <span class="tk-prop">wake</span>: <span class="tk-str">"runFinished"</span> }
 )
@@ -217,25 +438,89 @@ onUnmounted(() => {
       <!-- Shared State -->
       <div class="tile">
         <h3 class="tile-title">Shared State</h3>
-        <p class="tile-desc">Multiple entities read and write to a shared state object backed by a stream. Changes propagate automatically — each writer wakes readers when state&nbsp;updates.</p>
+        <p class="tile-desc">
+          Multiple entities read and write to a shared state object backed by a
+          stream. Changes propagate automatically — each writer wakes readers
+          when state&nbsp;updates.
+        </p>
         <div class="diagram md-exclude">
           <svg class="diagram-svg" viewBox="0 0 300 200">
-            <line x1="150" y1="28" x2="150" y2="80" :class="['conn', { active: shared.l1.active }]" />
-            <line x1="75" y1="166" x2="138" y2="108" :class="['conn', { active: shared.l2.active }]" />
-            <line x1="225" y1="166" x2="162" y2="108" :class="['conn', { active: shared.l3.active }]" />
-            <rect x="134" y="82" width="32" height="28" rx="4" :class="['state-box', { pulse: shared.pulse }]" />
+            <line
+              x1="150"
+              y1="28"
+              x2="150"
+              y2="80"
+              :class="['conn', { active: shared.l1.active }]"
+            />
+            <line
+              x1="75"
+              y1="166"
+              x2="138"
+              y2="108"
+              :class="['conn', { active: shared.l2.active }]"
+            />
+            <line
+              x1="225"
+              y1="166"
+              x2="162"
+              y2="108"
+              :class="['conn', { active: shared.l3.active }]"
+            />
+            <rect
+              x="134"
+              y="82"
+              width="32"
+              height="28"
+              rx="4"
+              :class="['state-box', { pulse: shared.pulse }]"
+            />
             <line x1="140" y1="90" x2="160" y2="90" class="state-line" />
             <line x1="140" y1="96" x2="160" y2="96" class="state-line" />
             <line x1="140" y1="102" x2="155" y2="102" class="state-line" />
           </svg>
-          <span v-if="shared.l1.label" class="line-label" style="left: 56%; top: 28%">{{ shared.l1.label }}</span>
-          <span v-if="shared.l2.label" class="line-label" style="left: 28%; top: 66%">{{ shared.l2.label }}</span>
-          <span v-if="shared.l3.label" class="line-label" style="left: 68%; top: 66%">{{ shared.l3.label }}</span>
-          <EntityNode name="writer" :status="shared.a1" compact class="node" style="left: 50%; top: 14%" />
-          <EntityNode name="reader-a" :status="shared.a2" compact class="node" style="left: 25%; top: 83%" />
-          <EntityNode name="reader-b" :status="shared.a3" compact class="node" style="left: 75%; top: 83%" />
+          <span
+            v-if="shared.l1.label"
+            class="line-label"
+            style="left: 56%; top: 28%"
+            >{{ shared.l1.label }}</span
+          >
+          <span
+            v-if="shared.l2.label"
+            class="line-label"
+            style="left: 28%; top: 66%"
+            >{{ shared.l2.label }}</span
+          >
+          <span
+            v-if="shared.l3.label"
+            class="line-label"
+            style="left: 68%; top: 66%"
+            >{{ shared.l3.label }}</span
+          >
+          <EntityNode
+            name="writer"
+            :status="shared.a1"
+            compact
+            class="node"
+            style="left: 50%; top: 14%"
+          />
+          <EntityNode
+            name="reader-a"
+            :status="shared.a2"
+            compact
+            class="node"
+            style="left: 25%; top: 83%"
+          />
+          <EntityNode
+            name="reader-b"
+            :status="shared.a3"
+            compact
+            class="node"
+            style="left: 75%; top: 83%"
+          />
         </div>
-        <pre class="tile-code"><code><span class="tk-kw">const</span> <span class="tk-v">state</span> =
+        <pre
+          class="tile-code"
+        ><code><span class="tk-kw">const</span> <span class="tk-v">state</span> =
   <span class="tk-v">ctx</span>.<span class="tk-fn">createSharedState</span>(<span class="tk-str">"research"</span>, <span class="tk-v">schema</span>)
 
 <span class="tk-comment">// other entities:</span>
@@ -337,7 +622,9 @@ onUnmounted(() => {
   stroke: var(--ea-divider);
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
-  transition: stroke 0.3s, filter 0.3s;
+  transition:
+    stroke 0.3s,
+    filter 0.3s;
 }
 
 .state-box.pulse {
@@ -366,17 +653,76 @@ onUnmounted(() => {
   transform: translate(-50%, -50%);
 }
 
-.dot-to-r { animation: to-r 0.55s ease-out forwards; }
-.dot-from-r { animation: from-r 0.55s ease-out forwards; }
-.dot-to-w { animation: to-w 0.55s ease-out forwards; }
-.dot-from-w { animation: from-w 0.55s ease-out forwards; }
-.dot-observe { animation: obs 1.2s linear infinite both; left: 75%; top: 50%; }
+.dot-to-r {
+  animation: to-r 0.55s ease-out forwards;
+}
+.dot-from-r {
+  animation: from-r 0.55s ease-out forwards;
+}
+.dot-to-w {
+  animation: to-w 0.55s ease-out forwards;
+}
+.dot-from-w {
+  animation: from-w 0.55s ease-out forwards;
+}
+.dot-observe {
+  animation: obs 1.2s linear infinite both;
+  left: 75%;
+  top: 50%;
+}
 
-@keyframes to-r { from { left: 22%; top: 50%; } to { left: 75%; top: 22%; } }
-@keyframes from-r { from { left: 75%; top: 22%; } to { left: 22%; top: 50%; } }
-@keyframes to-w { from { left: 22%; top: 50%; } to { left: 75%; top: 78%; } }
-@keyframes from-w { from { left: 75%; top: 78%; } to { left: 22%; top: 50%; } }
-@keyframes obs { from { left: 75%; top: 50%; opacity: 1; } to { left: 25%; top: 50%; opacity: 0; } }
+@keyframes to-r {
+  from {
+    left: 22%;
+    top: 50%;
+  }
+  to {
+    left: 75%;
+    top: 22%;
+  }
+}
+@keyframes from-r {
+  from {
+    left: 75%;
+    top: 22%;
+  }
+  to {
+    left: 22%;
+    top: 50%;
+  }
+}
+@keyframes to-w {
+  from {
+    left: 22%;
+    top: 50%;
+  }
+  to {
+    left: 75%;
+    top: 78%;
+  }
+}
+@keyframes from-w {
+  from {
+    left: 75%;
+    top: 78%;
+  }
+  to {
+    left: 22%;
+    top: 50%;
+  }
+}
+@keyframes obs {
+  from {
+    left: 75%;
+    top: 50%;
+    opacity: 1;
+  }
+  to {
+    left: 25%;
+    top: 50%;
+    opacity: 0;
+  }
+}
 
 /* ── Line labels ─────────────────────────────────────────────────────── */
 
@@ -394,12 +740,26 @@ onUnmounted(() => {
 
 /* ── Syntax tokens ───────────────────────────────────────────────────── */
 
-.tile-code :deep(.tk-kw) { color: var(--vp-c-brand-1); }
-.tile-code :deep(.tk-fn) { color: var(--ea-event-message); }
-.tile-code :deep(.tk-str) { color: var(--ea-event-tool-result); }
-.tile-code :deep(.tk-prop) { color: var(--ea-event-tool-call); }
-.tile-code :deep(.tk-v) { color: var(--ea-text-1); }
-.tile-code :deep(.tk-comment) { color: var(--ea-text-2); opacity: 0.6; font-style: italic; }
+.tile-code :deep(.tk-kw) {
+  color: var(--vp-c-brand-1);
+}
+.tile-code :deep(.tk-fn) {
+  color: var(--ea-event-message);
+}
+.tile-code :deep(.tk-str) {
+  color: var(--ea-event-tool-result);
+}
+.tile-code :deep(.tk-prop) {
+  color: var(--ea-event-tool-call);
+}
+.tile-code :deep(.tk-v) {
+  color: var(--ea-text-1);
+}
+.tile-code :deep(.tk-comment) {
+  color: var(--ea-text-2);
+  opacity: 0.6;
+  font-style: italic;
+}
 
 /* ── Responsive ──────────────────────────────────────────────────────── */
 

@@ -4,7 +4,7 @@
    Flat, searchable grid of every registered toy. Clicking a card
    navigates to `/brand-toys?id=<slug>` which mounts the toy stage. */
 
-import { computed, ref } from "vue"
+import { computed, ref } from 'vue'
 
 import {
   GROUP_LABELS,
@@ -13,22 +13,22 @@ import {
   isAnimated,
   type ToyGroup,
   type ToyDef,
-} from "./toys"
+} from './toys'
 
-type AnimationFilter = "all" | "animated" | "static"
+type AnimationFilter = 'all' | 'animated' | 'static'
 
-const query = ref("")
-const activeGroup = ref<ToyGroup | "all">("all")
-const animationFilter = ref<AnimationFilter>("all")
+const query = ref('')
+const activeGroup = ref<ToyGroup | 'all'>('all')
+const animationFilter = ref<AnimationFilter>('all')
 
 const filtered = computed<ToyDef[]>(() => {
   const q = query.value.trim().toLowerCase()
   return TOYS.filter((t) => {
-    if (activeGroup.value !== "all" && t.group !== activeGroup.value) {
+    if (activeGroup.value !== 'all' && t.group !== activeGroup.value) {
       return false
     }
-    if (animationFilter.value === "animated" && !isAnimated(t)) return false
-    if (animationFilter.value === "static" && isAnimated(t)) return false
+    if (animationFilter.value === 'animated' && !isAnimated(t)) return false
+    if (animationFilter.value === 'static' && isAnimated(t)) return false
     if (!q) return true
     return (
       t.label.toLowerCase().includes(q) ||
@@ -76,9 +76,9 @@ function onCardClick(e: MouseEvent, t: ToyDef) {
   }
   e.preventDefault()
   const url = hrefFor(t)
-  if (typeof window !== "undefined") {
-    window.history.pushState({}, "", url)
-    window.dispatchEvent(new CustomEvent("brand-toys:navigate"))
+  if (typeof window !== 'undefined') {
+    window.history.pushState({}, '', url)
+    window.dispatchEvent(new CustomEvent('brand-toys:navigate'))
     window.scrollTo(0, 0)
   }
 }
@@ -90,7 +90,7 @@ function groupClass(g: string) {
 // Strip the noisy `src/components/` prefix so the on-card path stays
 // short and scannable. The full path is preserved in the `title`.
 function shortPath(source: string): string {
-  return source.replace(/^src\/components\//, "")
+  return source.replace(/^src\/components\//, '')
 }
 </script>
 
@@ -100,9 +100,9 @@ function shortPath(source: string): string {
       <div class="bt-index-eyebrow mono">Electric</div>
       <h1 class="bt-index-title">Brand Toys</h1>
       <p class="bt-index-sub">
-        Every animated scene and widget from the marketing site, in a
-        resizable recording stage with per-toy controls. Unlinked from
-        the nav — bookmark this URL. Not indexed, not listed.
+        Every animated scene and widget from the marketing site, in a resizable
+        recording stage with per-toy controls. Unlinked from the nav — bookmark
+        this URL. Not indexed, not listed.
       </p>
     </header>
 
@@ -181,7 +181,11 @@ function shortPath(source: string): string {
             <span
               class="bt-index-card-tag mono"
               :class="isAnimated(t) ? 'tag-animated' : 'tag-static'"
-              :title="isAnimated(t) ? 'Toy moves on its own' : 'Static layout — no animation'"
+              :title="
+                isAnimated(t)
+                  ? 'Toy moves on its own'
+                  : 'Static layout — no animation'
+              "
             >
               {{ isAnimated(t) ? 'animated' : 'static' }}
             </span>
@@ -194,8 +198,13 @@ function shortPath(source: string): string {
           </p>
           <div class="bt-index-card-foot mono">
             <span class="bt-index-card-id">{{ t.id }}</span>
-            <span v-if="t.controls && t.controls.length" class="bt-index-card-ctrls">
-              {{ t.controls.length }} control{{ t.controls.length === 1 ? '' : 's' }}
+            <span
+              v-if="t.controls && t.controls.length"
+              class="bt-index-card-ctrls"
+            >
+              {{ t.controls.length }} control{{
+                t.controls.length === 1 ? '' : 's'
+              }}
             </span>
           </div>
           <div class="bt-index-card-path mono" :title="t.source">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 // Section 3: "Shape — the unit of sync".
 // A SQL query on the left visibly "carves" matching rows out of a Postgres
@@ -10,20 +10,68 @@ import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemo
 interface Row {
   id: number
   assignee: string
-  status: "open" | "done" | "blocked"
-  priority: "P0" | "P1" | "P2"
+  status: 'open' | 'done' | 'blocked'
+  priority: 'P0' | 'P1' | 'P2'
   text: string
 }
 
 const TABLE: Row[] = [
-  { id: 101, assignee: "alex", status: "open",    priority: "P0", text: "Wire new auth flow" },
-  { id: 102, assignee: "jen",  status: "done",    priority: "P2", text: "Update changelog" },
-  { id: 103, assignee: "alex", status: "open",    priority: "P1", text: "Fix race in worker" },
-  { id: 104, assignee: "kai",  status: "blocked", priority: "P0", text: "Postgres upgrade" },
-  { id: 105, assignee: "sam",  status: "done",    priority: "P1", text: "Refactor router" },
-  { id: 106, assignee: "alex", status: "open",    priority: "P2", text: "Doc the API" },
-  { id: 107, assignee: "jen",  status: "open",    priority: "P0", text: "Customer demo prep" },
-  { id: 108, assignee: "kai",  status: "done",    priority: "P0", text: "Ship release notes" },
+  {
+    id: 101,
+    assignee: 'alex',
+    status: 'open',
+    priority: 'P0',
+    text: 'Wire new auth flow',
+  },
+  {
+    id: 102,
+    assignee: 'jen',
+    status: 'done',
+    priority: 'P2',
+    text: 'Update changelog',
+  },
+  {
+    id: 103,
+    assignee: 'alex',
+    status: 'open',
+    priority: 'P1',
+    text: 'Fix race in worker',
+  },
+  {
+    id: 104,
+    assignee: 'kai',
+    status: 'blocked',
+    priority: 'P0',
+    text: 'Postgres upgrade',
+  },
+  {
+    id: 105,
+    assignee: 'sam',
+    status: 'done',
+    priority: 'P1',
+    text: 'Refactor router',
+  },
+  {
+    id: 106,
+    assignee: 'alex',
+    status: 'open',
+    priority: 'P2',
+    text: 'Doc the API',
+  },
+  {
+    id: 107,
+    assignee: 'jen',
+    status: 'open',
+    priority: 'P0',
+    text: 'Customer demo prep',
+  },
+  {
+    id: 108,
+    assignee: 'kai',
+    status: 'done',
+    priority: 'P0',
+    text: 'Ship release notes',
+  },
 ]
 
 interface ShapeDef {
@@ -35,16 +83,16 @@ interface ShapeDef {
 
 const SHAPES: ShapeDef[] = [
   {
-    id: "alex-open",
+    id: 'alex-open',
     label: "Alex's open issues",
     sql: `WHERE assignee = 'alex'\n  AND status = 'open'`,
-    match: (r) => r.assignee === "alex" && r.status === "open",
+    match: (r) => r.assignee === 'alex' && r.status === 'open',
   },
   {
-    id: "p0",
-    label: "All P0 work",
+    id: 'p0',
+    label: 'All P0 work',
     sql: `WHERE priority = 'P0'`,
-    match: (r) => r.priority === "P0",
+    match: (r) => r.priority === 'P0',
   },
 ]
 
@@ -143,7 +191,9 @@ onUnmounted(stopRotation)
           </div>
           <div class="sc-meta-item">
             <span class="mono kv-k">scope</span>
-            <span class="mono kv-v">{{ matched.length }} / {{ TABLE.length }}</span>
+            <span class="mono kv-v"
+              >{{ matched.length }} / {{ TABLE.length }}</span
+            >
           </div>
         </div>
       </div>
@@ -164,8 +214,12 @@ onUnmounted(stopRotation)
           >
             <span class="cell id mono">#{{ row.id }}</span>
             <span class="cell user mono">{{ row.assignee }}</span>
-            <span class="cell pri mono" :data-pri="row.priority">{{ row.priority }}</span>
-            <span class="cell status mono" :data-status="row.status">{{ row.status }}</span>
+            <span class="cell pri mono" :data-pri="row.priority">{{
+              row.priority
+            }}</span>
+            <span class="cell status mono" :data-status="row.status">{{
+              row.status
+            }}</span>
             <span class="cell text">{{ row.text }}</span>
           </li>
         </ul>
@@ -175,11 +229,25 @@ onUnmounted(stopRotation)
     <!-- BOTTOM: arrow + client -->
     <div class="sc-flow">
       <svg class="sc-flow-arrow" viewBox="0 0 80 24" aria-hidden="true">
-        <path d="M0 12 H66 M58 6 L66 12 L58 18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" />
+        <path
+          d="M0 12 H66 M58 6 L66 12 L58 18"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.25"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
       </svg>
       <div class="sc-flow-label mono">streams to&nbsp;client</div>
       <svg class="sc-flow-arrow" viewBox="0 0 80 24" aria-hidden="true">
-        <path d="M0 12 H66 M58 6 L66 12 L58 18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" />
+        <path
+          d="M0 12 H66 M58 6 L66 12 L58 18"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.25"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
       </svg>
     </div>
 
@@ -198,7 +266,9 @@ onUnmounted(stopRotation)
         >
           <span class="cell id mono">#{{ row.id }}</span>
           <span class="cell user mono">{{ row.assignee }}</span>
-          <span class="cell pri mono" :data-pri="row.priority">{{ row.priority }}</span>
+          <span class="cell pri mono" :data-pri="row.priority">{{
+            row.priority
+          }}</span>
           <span class="cell text">{{ row.text }}</span>
         </li>
       </ul>
@@ -244,7 +314,10 @@ onUnmounted(stopRotation)
   font-size: 12.5px;
   font-family: var(--vp-font-family-base);
   cursor: pointer;
-  transition: border-color 0.18s, color 0.18s, background 0.18s;
+  transition:
+    border-color 0.18s,
+    color 0.18s,
+    background 0.18s;
 }
 .sc-pill:hover {
   border-color: var(--vp-c-brand-1);
@@ -320,8 +393,12 @@ onUnmounted(stopRotation)
 }
 
 @keyframes sql-where-flash {
-  0% { background: color-mix(in srgb, var(--vp-c-brand-1) 18%, transparent); }
-  100% { background: transparent; }
+  0% {
+    background: color-mix(in srgb, var(--vp-c-brand-1) 18%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 .sc-meta {
@@ -378,7 +455,10 @@ onUnmounted(stopRotation)
   background: transparent;
   border: 1px solid transparent;
   opacity: 0.45;
-  transition: opacity 0.35s, background 0.35s, border-color 0.35s;
+  transition:
+    opacity 0.35s,
+    background 0.35s,
+    border-color 0.35s;
 }
 .sc-row.matched {
   opacity: 1;
@@ -407,18 +487,37 @@ onUnmounted(stopRotation)
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cell.id { color: var(--ea-text-3); }
-.cell.user { color: var(--ea-text-2); }
-.cell.text { color: var(--ea-text-1); white-space: normal; }
+.cell.id {
+  color: var(--ea-text-3);
+}
+.cell.user {
+  color: var(--ea-text-2);
+}
+.cell.text {
+  color: var(--ea-text-1);
+  white-space: normal;
+}
 .cell.pri {
   font-weight: 600;
 }
-.cell.pri[data-pri="P0"] { color: #d73a49; }
-.cell.pri[data-pri="P1"] { color: #b08800; }
-.cell.pri[data-pri="P2"] { color: var(--ea-text-3); }
-.cell.status[data-status="open"] { color: var(--vp-c-brand-1); }
-.cell.status[data-status="done"] { color: var(--ea-text-3); }
-.cell.status[data-status="blocked"] { color: #d73a49; }
+.cell.pri[data-pri='P0'] {
+  color: #d73a49;
+}
+.cell.pri[data-pri='P1'] {
+  color: #b08800;
+}
+.cell.pri[data-pri='P2'] {
+  color: var(--ea-text-3);
+}
+.cell.status[data-status='open'] {
+  color: var(--vp-c-brand-1);
+}
+.cell.status[data-status='done'] {
+  color: var(--ea-text-3);
+}
+.cell.status[data-status='blocked'] {
+  color: #d73a49;
+}
 
 /* ── Flow arrow ─────────────────────────────────────────────────── */
 
@@ -496,8 +595,14 @@ onUnmounted(stopRotation)
 }
 
 @keyframes sc-client-in {
-  0% { opacity: 0; transform: translateY(6px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .mono {

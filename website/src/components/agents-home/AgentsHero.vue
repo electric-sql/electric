@@ -3,7 +3,7 @@
    the bottom CTA strap on the agents landing page (and any other
    surface that wants to render the same evidence) can pull from a
    single source of truth alongside the hero. */
-export const installCommand = "npx electric-ax agents quickstart"
+export const installCommand = 'npx electric-ax agents quickstart'
 </script>
 
 <script setup lang="ts">
@@ -13,10 +13,10 @@ export const installCommand = "npx electric-ax agents quickstart"
    styling. The two surfaces stay in lockstep: any text or layout
    tweak made here propagates to the live page and the OG capture
    together. */
-import { ref } from "vue"
-import { VPButton } from "vitepress/theme"
-import HeroNetworkBg from "./HeroNetworkBg.vue"
-import InstallPill from "../InstallPill.vue"
+import { ref } from 'vue'
+import { VPButton } from 'vitepress/theme'
+import HeroNetworkBg from './HeroNetworkBg.vue'
+import InstallPill from '../InstallPill.vue'
 
 withDefaults(
   defineProps<{
@@ -40,9 +40,19 @@ withDefaults(
     /* extraExcludeRects forwards to `<HeroNetworkBg>`. Used by the
        OG capture to reserve the wordmark's bbox in the frame's
        top-left corner so the mesh never paints under the brand mark. */
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
-  { paused: false, hideActions: false, hideCopy: false, extraExcludeRects: () => [] }
+  {
+    paused: false,
+    hideActions: false,
+    hideCopy: false,
+    extraExcludeRects: () => [],
+  }
 )
 
 const heroInnerRef = ref<HTMLElement>()
@@ -63,9 +73,7 @@ const heroInnerRef = ref<HTMLElement>()
       <h1 class="ea-hero-name">
         Electric&nbsp;<span class="ea-hero-accent">Agents</span>
       </h1>
-      <p class="ea-hero-text">
-        The durable runtime for long-lived&nbsp;agents
-      </p>
+      <p class="ea-hero-text">The durable runtime for long-lived&nbsp;agents</p>
       <div class="ea-hero-install-row">
         <InstallPill
           :command="installCommand"

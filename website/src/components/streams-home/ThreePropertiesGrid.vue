@@ -1,37 +1,34 @@
 <script setup lang="ts">
-import MarkdownContent from "../MarkdownContent.vue"
-import MdExportExplicit from "../MdExportExplicit.vue"
-import { useMarkdownExport } from "../../lib/useMarkdownExport"
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 
 const cards = [
   {
-    glyph: "{ url }",
-    title: "URL-addressable",
-    body: "Every stream lives at its own URL. Works with curl, fetch, any load balancer, any CDN.",
+    glyph: '{ url }',
+    title: 'URL-addressable',
+    body: 'Every stream lives at its own URL. Works with curl, fetch, any load balancer, any CDN.',
     code: [
-      "PUT   /v1/stream/hello",
-      "POST  /v1/stream/hello",
-      "GET   /v1/stream/hello",
+      'PUT   /v1/stream/hello',
+      'POST  /v1/stream/hello',
+      'GET   /v1/stream/hello',
     ],
   },
   {
-    glyph: "▤ append-only",
-    title: "Append-only",
-    body: "Once data is at an offset, it never changes. Offsets are opaque cursors that always sort in order.",
+    glyph: '▤ append-only',
+    title: 'Append-only',
+    body: 'Once data is at an offset, it never changes. Offsets are opaque cursors that always sort in order.',
     code: [
-      "POST  → 200 OK",
-      "      Stream-Next-Offset:",
-      "         01JQXK5V00",
+      'POST  → 200 OK',
+      '      Stream-Next-Offset:',
+      '         01JQXK5V00',
     ],
   },
   {
-    glyph: "↻ resumable",
-    title: "Resumable",
-    body: "Reads return Stream-Next-Offset. Reconnect with ?offset=… and pick up exactly where you left off.",
-    code: [
-      "GET ?offset=01JQXK5V00",
-      "    → next chunk only",
-    ],
+    glyph: '↻ resumable',
+    title: 'Resumable',
+    body: 'Reads return Stream-Next-Offset. Reconnect with ?offset=… and pick up exactly where you left off.',
+    code: ['GET ?offset=01JQXK5V00', '    → next chunk only'],
   },
 ]
 
@@ -42,10 +39,10 @@ const markdownCards = cards
 ${card.body}
 
 \`\`\`
-${card.code.join("\n")}
+${card.code.join('\n')}
 \`\`\``
   )
-  .join("\n\n")
+  .join('\n\n')
 
 const isMarkdownExport = useMarkdownExport()
 </script>
@@ -60,7 +57,9 @@ const isMarkdownExport = useMarkdownExport()
       <h3 class="tpg-title">{{ card.title }}</h3>
       <p class="tpg-body">{{ card.body }}</p>
       <div class="tpg-code">
-        <div v-for="(line, i) in card.code" :key="i" class="tpg-code-line">{{ line }}</div>
+        <div v-for="(line, i) in card.code" :key="i" class="tpg-code-line">
+          {{ line }}
+        </div>
       </div>
     </div>
   </div>
@@ -79,7 +78,9 @@ const isMarkdownExport = useMarkdownExport()
   background: var(--ea-surface);
   border: 1px solid var(--ea-divider);
   border-radius: 10px;
-  transition: border-color 0.2s, transform 0.2s;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
 .tpg-card:hover {
   border-color: color-mix(in srgb, var(--vp-c-brand-1) 40%, var(--ea-divider));

@@ -1,30 +1,55 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
-import StreamViewer from "./StreamViewer.vue"
-import type { StreamEvent } from "./StreamViewer.vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, onMounted, onUnmounted } from 'vue'
+import StreamViewer from './StreamViewer.vue'
+import type { StreamEvent } from './StreamViewer.vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
-type Phase = "active" | "crash" | "recovery" | "pause"
+type Phase = 'active' | 'crash' | 'recovery' | 'pause'
 
-const SCRIPT: Omit<StreamEvent, "id" | "timestamp">[] = [
-  { direction: "inbound", type: "message", label: "wake", content: undefined },
-  { direction: "outbound", type: "run", label: "run.start", content: undefined },
-  { direction: "outbound", type: "text", label: "text", content: '"Let me look into that..."' },
-  { direction: "outbound", type: "tool_call", label: "tool_call", content: 'search({query: "..."})' },
-  { direction: "inbound", type: "tool_result", label: "tool_result", content: '"Found 3 results"' },
-  { direction: "outbound", type: "text", label: "text", content: '"Based on my research..."' },
+const SCRIPT: Omit<StreamEvent, 'id' | 'timestamp'>[] = [
+  { direction: 'inbound', type: 'message', label: 'wake', content: undefined },
+  {
+    direction: 'outbound',
+    type: 'run',
+    label: 'run.start',
+    content: undefined,
+  },
+  {
+    direction: 'outbound',
+    type: 'text',
+    label: 'text',
+    content: '"Let me look into that..."',
+  },
+  {
+    direction: 'outbound',
+    type: 'tool_call',
+    label: 'tool_call',
+    content: 'search({query: "..."})',
+  },
+  {
+    direction: 'inbound',
+    type: 'tool_result',
+    label: 'tool_result',
+    content: '"Found 3 results"',
+  },
+  {
+    direction: 'outbound',
+    type: 'text',
+    label: 'text',
+    content: '"Based on my research..."',
+  },
 ]
 
 const PHASE_LABELS: Record<Phase, string> = {
-  active: "Active",
-  crash: "Crashed!",
-  recovery: "Recovering...",
-  pause: "Sleeping",
+  active: 'Active',
+  crash: 'Crashed!',
+  recovery: 'Recovering...',
+  pause: 'Sleeping',
 }
 
 const events = ref<StreamEvent[]>([])
-const phase = ref<Phase>("pause")
-const status = ref<"active" | "sleeping" | "crashed">("sleeping")
+const phase = ref<Phase>('pause')
+const status = ref<'active' | 'sleeping' | 'crashed'>('sleeping')
 const replayingIndex = ref(-1)
 const showCrashOverlay = ref(false)
 const showReplayLabel = ref(false)
@@ -49,7 +74,7 @@ function makeTimestamp(index: number): string {
   const s = index * 2
   const mins = Math.floor(s / 60)
   const secs = s % 60
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }
 
 function makeEvent(index: number): StreamEvent {
@@ -72,8 +97,8 @@ async function runLoop() {
 
     // Phase 1 — ACTIVE
     events.value = []
-    phase.value = "active"
-    status.value = "active"
+    phase.value = 'active'
+    status.value = 'active'
     replayingIndex.value = -1
     showCrashOverlay.value = false
     showReplayLabel.value = false
@@ -88,16 +113,16 @@ async function runLoop() {
     if (!running) return
 
     // Phase 2 — CRASH
-    phase.value = "crash"
-    status.value = "crashed"
+    phase.value = 'crash'
+    status.value = 'crashed'
     showCrashOverlay.value = true
     await later(2000)
 
     if (!running) return
 
     // Phase 3 — RECOVERY
-    phase.value = "recovery"
-    status.value = "active"
+    phase.value = 'recovery'
+    status.value = 'active'
     showCrashOverlay.value = false
     showReplayLabel.value = true
 
@@ -114,9 +139,9 @@ async function runLoop() {
     const continueEvent: StreamEvent = {
       id: `${Date.now()}-continue`,
       timestamp: makeTimestamp(SCRIPT.length),
-      direction: "outbound",
-      type: "text",
-      label: "text",
+      direction: 'outbound',
+      type: 'text',
+      label: 'text',
       content: '"Continuing where I left off..."',
     }
     events.value = [...events.value, continueEvent]
@@ -127,9 +152,9 @@ async function runLoop() {
     const endEvent: StreamEvent = {
       id: `${Date.now()}-end`,
       timestamp: makeTimestamp(SCRIPT.length + 1),
-      direction: "outbound",
-      type: "run",
-      label: "run.end",
+      direction: 'outbound',
+      type: 'run',
+      label: 'run.end',
     }
     events.value = [...events.value, endEvent]
     await later(900)
@@ -137,8 +162,8 @@ async function runLoop() {
     if (!running) return
 
     // Phase 4 — PAUSE
-    phase.value = "pause"
-    status.value = "sleeping"
+    phase.value = 'pause'
+    status.value = 'sleeping'
     await later(2000)
   }
 }
@@ -157,7 +182,9 @@ onUnmounted(() => {
   <div ref="rootRef" class="crash-demo">
     <div class="demo-status-bar">
       <span class="demo-entity-path">/agents/research-agent</span>
-      <span class="demo-phase-label" :class="phase">{{ PHASE_LABELS[phase] }}</span>
+      <span class="demo-phase-label" :class="phase">{{
+        PHASE_LABELS[phase]
+      }}</span>
     </div>
 
     <div class="demo-viewer-wrap">
@@ -183,9 +210,7 @@ onUnmounted(() => {
 
       <!-- Replay label -->
       <Transition name="replay-label">
-        <div v-if="showReplayLabel" class="replay-label">
-          Replaying stream…
-        </div>
+        <div v-if="showReplayLabel" class="replay-label">Replaying stream…</div>
       </Transition>
 
       <!-- Per-event replay flash overlay -->
@@ -226,7 +251,9 @@ onUnmounted(() => {
   letter-spacing: 0.05em;
   padding: 2px 8px;
   border-radius: 4px;
-  transition: color 0.3s, background 0.3s;
+  transition:
+    color 0.3s,
+    background 0.3s;
 }
 
 .demo-phase-label.active {
@@ -295,7 +322,8 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--ea-event-error);
-  box-shadow: 0 4px 24px color-mix(in srgb, var(--ea-event-error) 15%, transparent);
+  box-shadow: 0 4px 24px
+    color-mix(in srgb, var(--ea-event-error) 15%, transparent);
 }
 
 .crash-icon {

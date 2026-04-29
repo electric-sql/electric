@@ -460,14 +460,7 @@ const calculatorMarkdown = computed(() => {
   width: 10px;
   height: 10px;
   background: #1a1a1a;
-  clip-path: polygon(
-    14% 44%,
-    0 65%,
-    35% 100%,
-    100% 16%,
-    80% 0%,
-    35% 67%
-  );
+  clip-path: polygon(14% 44%, 0 65%, 35% 100%, 100% 16%, 80% 0%, 35% 67%);
 }
 
 .toggle-text {

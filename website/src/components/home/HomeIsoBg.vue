@@ -65,7 +65,9 @@ const props = withDefaults(
      * the bleed to actually be seen — typically the page-level band
      * still has `overflow: hidden` as a safety clip.
      */
-    bleed?: number | { top?: number; right?: number; bottom?: number; left?: number }
+    bleed?:
+      | number
+      | { top?: number; right?: number; bottom?: number; left?: number }
     /**
      * If true, applies a CSS `mask-image` radial/linear gradient to the
      * canvas so the rectangular edges feather softly into the page
@@ -88,9 +90,15 @@ const props = withDefaults(
 
 const bleedInsets = computed(() => {
   const b = props.bleed
-  const sides = typeof b === 'number'
-    ? { top: b, right: b, bottom: b, left: b }
-    : { top: b.top ?? 0, right: b.right ?? 0, bottom: b.bottom ?? 0, left: b.left ?? 0 }
+  const sides =
+    typeof b === 'number'
+      ? { top: b, right: b, bottom: b, left: b }
+      : {
+          top: b.top ?? 0,
+          right: b.right ?? 0,
+          bottom: b.bottom ?? 0,
+          left: b.left ?? 0,
+        }
   return {
     top: `${-sides.top * 100}%`,
     right: `${-sides.right * 100}%`,
@@ -126,7 +134,9 @@ const reducedMotion = ref(false)
 
 const aspect = ref<'desktop' | 'mobile'>('desktop')
 
-const activeCrop = computed<CameraCrop>(() => pickCrop(props.crop, aspect.value === 'mobile'))
+const activeCrop = computed<CameraCrop>(() =>
+  pickCrop(props.crop, aspect.value === 'mobile')
+)
 const tweaks = computed(() => TWEAKS[props.crop])
 const scripts = computed(() => SCRIPTS[props.crop])
 
@@ -136,12 +146,17 @@ function resolvedFilter(): Substrate | null {
 }
 
 function isDark(): boolean {
-  return typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  return (
+    typeof document !== 'undefined' &&
+    document.documentElement.classList.contains('dark')
+  )
 }
 
 function recomputeAspect() {
   if (typeof window === 'undefined') return
-  aspect.value = window.matchMedia('(max-width: 767px)').matches ? 'mobile' : 'desktop'
+  aspect.value = window.matchMedia('(max-width: 767px)').matches
+    ? 'mobile'
+    : 'desktop'
 }
 
 function getTextRects(element: Element): DOMRect[] {
@@ -220,11 +235,16 @@ function currentCrop(): CameraCrop {
   return {
     ...target,
     worldBounds: lerpBounds(start.worldBounds, target.worldBounds, eased),
-    fadeMargin: start.fadeMargin + (target.fadeMargin - start.fadeMargin) * eased,
+    fadeMargin:
+      start.fadeMargin + (target.fadeMargin - start.fadeMargin) * eased,
   }
 }
 
-function lerpBounds(a: CameraCrop['worldBounds'], b: CameraCrop['worldBounds'], k: number) {
+function lerpBounds(
+  a: CameraCrop['worldBounds'],
+  b: CameraCrop['worldBounds'],
+  k: number
+) {
   return {
     minX: a.minX + (b.minX - a.minX) * k,
     maxX: a.maxX + (b.maxX - a.maxX) * k,
@@ -240,7 +260,10 @@ function easeOutCubic(t: number): number {
   return 1 - u * u * u
 }
 
-function findHover(mx: number, my: number): { surface: string | null; actorId: string | null } {
+function findHover(
+  mx: number,
+  my: number
+): { surface: string | null; actorId: string | null } {
   if (!proj) return { surface: null, actorId: null }
   // Actors first (they're sprites and easy to hit).
   let bestActorD = 22
@@ -294,7 +317,12 @@ function findHover(mx: number, my: number): { surface: string | null; actorId: s
             zoneOrigin[2] + fu.at[2],
           ]
           if (fu.kind === 'screen') {
-            const d = screenDistance([at[0], at[1], at[2] + (fu.h ?? 0.5) * 0.5], mx, my, proj)
+            const d = screenDistance(
+              [at[0], at[1], at[2] + (fu.h ?? 0.5) * 0.5],
+              mx,
+              my,
+              proj
+            )
             if (d < bestSurfD) {
               bestSurfD = d
               bestSurface = fu.surface
@@ -326,24 +354,39 @@ function sampleAlong(path: readonly Vec3[], t: number): Vec3 {
   if (path.length === 1) return path[0]
   let total = 0
   for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1], b = path[i]
-    total += Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
+    const a = path[i - 1],
+      b = path[i]
+    total += Math.sqrt(
+      (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+    )
   }
   if (total === 0) return path[0]
   let target = Math.max(0, Math.min(1, t)) * total
   for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1], b = path[i]
-    const seg = Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
+    const a = path[i - 1],
+      b = path[i]
+    const seg = Math.sqrt(
+      (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+    )
     if (target <= seg) {
       const k = seg === 0 ? 0 : target / seg
-      return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]
+      return [
+        a[0] + (b[0] - a[0]) * k,
+        a[1] + (b[1] - a[1]) * k,
+        a[2] + (b[2] - a[2]) * k,
+      ]
     }
     target -= seg
   }
   return path[path.length - 1]
 }
 
-function showTooltip(surface: string | null, actorId: string | null, mx: number, my: number) {
+function showTooltip(
+  surface: string | null,
+  actorId: string | null,
+  mx: number,
+  my: number
+) {
   const tt = tooltipEl.value
   if (!tt) return
   if (actorId) {
@@ -355,7 +398,7 @@ function showTooltip(surface: string | null, actorId: string | null, mx: number,
     tt.textContent = `/${a.kind}/${a.id}  ·  ${a.walking ? 'walking' : 'idle'}`
     tt.style.opacity = '1'
     tt.style.left = mx + 'px'
-    tt.style.top = (my - 24) + 'px'
+    tt.style.top = my - 24 + 'px'
     return
   }
   if (surface) {
@@ -367,12 +410,14 @@ function showTooltip(surface: string | null, actorId: string | null, mx: number,
       tt.textContent = `/${parts[1]}  ·  in flight`
     } else {
       // Find the thread that contains this surface, if any.
-      const t = state.scene.threads.find((x) => x.manifestations.includes(surface))
+      const t = state.scene.threads.find((x) =>
+        x.manifestations.includes(surface)
+      )
       tt.textContent = t ? `/${t.id}  ·  ${surface}` : `/${surface}`
     }
     tt.style.opacity = '1'
     tt.style.left = mx + 'px'
-    tt.style.top = (my - 24) + 'px'
+    tt.style.top = my - 24 + 'px'
     return
   }
   tt.style.opacity = '0'
@@ -392,7 +437,9 @@ function onPointerMove(e: PointerEvent) {
     if (surface && !surface.startsWith('__')) {
       // Highlight the hovered surface and its thread mates.
       state.highlights.set(surface, 1)
-      const t = state.scene.threads.find((x) => x.manifestations.includes(surface))
+      const t = state.scene.threads.find((x) =>
+        x.manifestations.includes(surface)
+      )
       if (t) {
         for (const m of t.manifestations) {
           state.highlights.set(m, Math.max(state.highlights.get(m) ?? 0, 0.7))
@@ -408,9 +455,13 @@ function onPointerMove(e: PointerEvent) {
     } else if (actorId) {
       const a = state.scene.actors.find((x) => x.id === actorId)
       if (a) {
-        const path: Vec3[] = a.walking?.points && a.walking.points.length >= 2
-          ? [...a.walking.points]
-          : a.homeLoop ?? [a.position, [a.position[0] + 0.5, a.position[1] + 0.5, a.position[2]]]
+        const path: Vec3[] =
+          a.walking?.points && a.walking.points.length >= 2
+            ? [...a.walking.points]
+            : (a.homeLoop ?? [
+                a.position,
+                [a.position[0] + 0.5, a.position[1] + 0.5, a.position[2]],
+              ])
         emitArc('agents', path)
       }
     }
@@ -527,14 +578,19 @@ function onClick(e: MouseEvent) {
     const a = state.scene.actors.find((x) => x.id === actorId)
     if (a) {
       a.walking = {
-        points: [a.position, [a.position[0] + 1, a.position[1] - 0.4, a.position[2]]],
+        points: [
+          a.position,
+          [a.position[0] + 1, a.position[1] - 0.4, a.position[2]],
+        ],
         t: 0,
         speed: 2.0,
       }
     }
   } else if (surface && !surface.startsWith('__')) {
     state.highlights.set(surface, 1)
-    const t = state.scene.threads.find((x) => x.manifestations.includes(surface))
+    const t = state.scene.threads.find((x) =>
+      x.manifestations.includes(surface)
+    )
     if (t) state.lastPulseMs.set(t.id, state.elapsedMs)
   } else if (surface && surface.startsWith('__comet__')) {
     // Spawn a fresh comet on the same channel.
@@ -557,7 +613,14 @@ function tick(now: number) {
 
   if (visible) {
     state.filter = resolvedFilter()
-    tickScene(state, dt, tweaks.value, activeCrop.value, scripts.value, reducedMotion.value)
+    tickScene(
+      state,
+      dt,
+      tweaks.value,
+      activeCrop.value,
+      scripts.value,
+      reducedMotion.value
+    )
   }
 
   // Advance crop-zoom interpolation if active.
@@ -661,12 +724,12 @@ function setupObserver() {
   observer.observe(wrapEl.value)
 }
 
-const mql = typeof window !== 'undefined'
-  ? window.matchMedia('(prefers-reduced-motion: reduce)')
-  : null
-const mqlAspect = typeof window !== 'undefined'
-  ? window.matchMedia('(max-width: 767px)')
-  : null
+const mql =
+  typeof window !== 'undefined'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)')
+    : null
+const mqlAspect =
+  typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)') : null
 
 function syncReducedMotion() {
   reducedMotion.value = !!mql?.matches
@@ -732,7 +795,6 @@ onUnmounted(() => {
     c.removeEventListener('click', onClick)
   }
 })
-
 </script>
 
 <template>
@@ -764,12 +826,36 @@ onUnmounted(() => {
    otherwise be cut. */
 .home-iso-wrap--feather {
   -webkit-mask-image:
-    linear-gradient(to right, transparent 0%, #000 10%, #000 90%, transparent 100%),
-    linear-gradient(to bottom, transparent 0%, #000 28%, #000 72%, transparent 100%);
+    linear-gradient(
+      to right,
+      transparent 0%,
+      #000 10%,
+      #000 90%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 28%,
+      #000 72%,
+      transparent 100%
+    );
   -webkit-mask-composite: source-in;
   mask-image:
-    linear-gradient(to right, transparent 0%, #000 10%, #000 90%, transparent 100%),
-    linear-gradient(to bottom, transparent 0%, #000 28%, #000 72%, transparent 100%);
+    linear-gradient(
+      to right,
+      transparent 0%,
+      #000 10%,
+      #000 90%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 28%,
+      #000 72%,
+      transparent 100%
+    );
   mask-composite: intersect;
 }
 

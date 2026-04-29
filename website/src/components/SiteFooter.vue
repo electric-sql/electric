@@ -9,8 +9,16 @@ import MarkdownLink from './MarkdownLink.vue'
   <footer class="VPFooter">
     <div class="container">
       <p class="footer-logo">
-        <img class="footer-logo-img footer-logo-dark" src="/img/brand/logo.svg" alt="Electric" />
-        <img class="footer-logo-img footer-logo-light" src="/img/brand/logo.inverse.svg" alt="Electric" />
+        <img
+          class="footer-logo-img footer-logo-dark"
+          src="/img/brand/logo.svg"
+          alt="Electric"
+        />
+        <img
+          class="footer-logo-img footer-logo-light"
+          src="/img/brand/logo.inverse.svg"
+          alt="Electric"
+        />
       </p>
 
       <nav class="footer-nav">
@@ -36,7 +44,10 @@ import MarkdownLink from './MarkdownLink.vue'
           <span class="vpi-social-x"></span>
           <span class="social-name">X</span>
         </a>
-        <a href="https://bsky.app/profile/electric-sql.com" aria-label="Bluesky">
+        <a
+          href="https://bsky.app/profile/electric-sql.com"
+          aria-label="Bluesky"
+        >
           <span class="vpi-social-bluesky"></span>
           <span class="social-name">Bluesky</span>
         </a>
@@ -52,7 +63,11 @@ import MarkdownLink from './MarkdownLink.vue'
 
       <p class="copyright">
         © {{ new Date().getFullYear() }} Electric DB Inc. Released under the
-        <a href="https://github.com/electric-sql/electric/blob/main/LICENSE" target="_blank">Apache 2.0</a>
+        <a
+          href="https://github.com/electric-sql/electric/blob/main/LICENSE"
+          target="_blank"
+          >Apache 2.0</a
+        >
         License.
       </p>
       <div class="footer-markdown-link">

@@ -21,7 +21,11 @@ const visibleProducts = computed(() =>
 
 <template>
   <div class="products-grid" :class="{ 'product-page': productPage }">
-    <div v-for="product in visibleProducts" :key="product.slug" class="product-card">
+    <div
+      v-for="product in visibleProducts"
+      :key="product.slug"
+      class="product-card"
+    >
       <Card :href="product.href" :icon="product.icon" :title="product.title">
         <template v-if="productPage">
           <p class="body-p">

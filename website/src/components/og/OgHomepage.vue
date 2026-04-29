@@ -26,16 +26,13 @@
  *     and bump min/max-height so it fills more of the 630px frame
  *     vertically.
  */
-import HomeHero from "../home/HomeHero.vue"
-import OgFrame from "./OgFrame.vue"
+import HomeHero from '../home/HomeHero.vue'
+import OgFrame from './OgFrame.vue'
 </script>
 
 <template>
   <OgFrame>
-    <HomeHero
-      :paused="true"
-      :hide-actions="true"
-    />
+    <HomeHero :paused="true" :hide-actions="true" />
   </OgFrame>
 </template>
 

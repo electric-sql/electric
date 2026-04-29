@@ -1,70 +1,69 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
-import { VPButton } from "vitepress/theme"
+import { computed, ref } from 'vue'
+import { VPButton } from 'vitepress/theme'
 
-import EaSection from "../agents-home/Section.vue"
+import EaSection from '../agents-home/Section.vue'
 
-import StreamsHero, { installCommand } from "./StreamsHero.vue"
-import AgentLoopFillDemo from "./AgentLoopFillDemo.vue"
-import ConnectionDropDemo from "./ConnectionDropDemo.vue"
-import QuickstartPlaybackDemo from "./QuickstartPlaybackDemo.vue"
-import ThreePropertiesGrid from "./ThreePropertiesGrid.vue"
-import OffsetReplayDemo from "./OffsetReplayDemo.vue"
-import PolyglotLineup from "./PolyglotLineup.vue"
-import LayersGrid from "./LayersGrid.vue"
-import CollabSessionDemo from "./CollabSessionDemo.vue"
-import IntegrationsGrid from "./IntegrationsGrid.vue"
-import InstallPill from "../InstallPill.vue"
-import MidPageStrap from "../MidPageStrap.vue"
-import BottomCtaStrap from "../BottomCtaStrap.vue"
-import CuratedBlogPosts from "../CuratedBlogPosts.vue"
-import MarkdownContent from "../MarkdownContent.vue"
-import MdExportExplicit from "../MdExportExplicit.vue"
-import { useMarkdownExport } from "../../lib/useMarkdownExport"
-import { getVitepressData } from "../../lib/vitepressData"
+import StreamsHero, { installCommand } from './StreamsHero.vue'
+import AgentLoopFillDemo from './AgentLoopFillDemo.vue'
+import ConnectionDropDemo from './ConnectionDropDemo.vue'
+import QuickstartPlaybackDemo from './QuickstartPlaybackDemo.vue'
+import ThreePropertiesGrid from './ThreePropertiesGrid.vue'
+import OffsetReplayDemo from './OffsetReplayDemo.vue'
+import PolyglotLineup from './PolyglotLineup.vue'
+import LayersGrid from './LayersGrid.vue'
+import CollabSessionDemo from './CollabSessionDemo.vue'
+import IntegrationsGrid from './IntegrationsGrid.vue'
+import InstallPill from '../InstallPill.vue'
+import MidPageStrap from '../MidPageStrap.vue'
+import BottomCtaStrap from '../BottomCtaStrap.vue'
+import CuratedBlogPosts from '../CuratedBlogPosts.vue'
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+import { getVitepressData } from '../../lib/vitepressData'
 import type {
   DemoListRow,
   DemosPayload,
   HomepageDemoCard,
-} from "../../types/data-loaders"
-import * as streamsDemoModule from "../../../data/streams-demos.data"
+} from '../../types/data-loaders'
+import * as streamsDemoModule from '../../../data/streams-demos.data'
 
 /* Curated list of Streams-relevant blog posts that fill the panel
    below the 30-second tour. Order matters — first item appears
    top-left and so on. Slugs are the trailing path segment of the
    blog post filename (date prefix stripped). */
 const streamsBlogPosts = [
-  "fork-branching-for-durable-streams",
-  "data-primitive-agent-loop",
-  "ai-agents-as-crdt-peers-with-yjs",
-  "stream-db",
+  'fork-branching-for-durable-streams',
+  'data-primitive-agent-loop',
+  'ai-agents-as-crdt-peers-with-yjs',
+  'stream-db',
 ]
 
 const isMarkdownExport = useMarkdownExport()
 
 function isLiveDemoCard(row: DemoListRow): row is HomepageDemoCard {
   return (
-    typeof row.title === "string" &&
-    typeof row.description === "string" &&
-    typeof row.link === "string"
+    typeof row.title === 'string' &&
+    typeof row.description === 'string' &&
+    typeof row.link === 'string'
   )
 }
 
-const liveDemos = getVitepressData<DemosPayload>(
-  streamsDemoModule
-).demos.filter(isLiveDemoCard)
+const liveDemos =
+  getVitepressData<DemosPayload>(streamsDemoModule).demos.filter(isLiveDemoCard)
 
 const liveDemosMarkdown = computed(() =>
   liveDemos
     .map((demo) => `- [${demo.title}](${demo.link}): ${demo.description}`)
-    .join("\n")
+    .join('\n')
 )
 
 const stackExamples = [
   {
-    id: "producer",
-    filename: "producer.ts",
-    language: "ts",
+    id: 'producer',
+    filename: 'producer.ts',
+    language: 'ts',
     code: `import { DurableStream, IdempotentProducer } from "@durable-streams/client"
 
 const handle = await DurableStream.create({
@@ -82,9 +81,9 @@ for await (const chunk of llm.stream(prompt))
 await producer.flush()`,
   },
   {
-    id: "consumer",
-    filename: "consumer.ts",
-    language: "ts",
+    id: 'consumer',
+    filename: 'consumer.ts',
+    language: 'ts',
     code: `import { stream } from "@durable-streams/client"
 
 const res = await stream<ChatMessage>({
@@ -99,9 +98,9 @@ res.subscribeJson(async (batch) => {
 })`,
   },
   {
-    id: "curl",
-    filename: "curl.sh",
-    language: "sh",
+    id: 'curl',
+    filename: 'curl.sh',
+    language: 'sh',
     code: `curl -X POST $URL \\
   -H 'Content-Type: application/json' \\
   -d '{"event":"click"}'
@@ -110,7 +109,7 @@ curl -N "$URL?offset=-1&live=sse"`,
   },
 ] as const
 
-const stackTab = ref<(typeof stackExamples)[number]["id"]>("producer")
+const stackTab = ref<(typeof stackExamples)[number]['id']>('producer')
 
 const stackExamplesMarkdown = computed(() =>
   stackExamples
@@ -121,9 +120,8 @@ const stackExamplesMarkdown = computed(() =>
 ${example.code}
 \`\`\``
     )
-    .join("\n\n")
+    .join('\n\n')
 )
-
 </script>
 
 <template>
@@ -140,10 +138,9 @@ ${example.code}
           </h2>
           <p class="ea-section-subtitle">
             Every prompt, tool call, and generation is appended at a known
-            <strong>offset</strong> on a persistent, real-time stream.
-            Replay from any offset, branch off, or fan out to humans,
-            agents, and <a href="/agents/">Electric&nbsp;Agents</a> —
-            over plain&nbsp;HTTP.
+            <strong>offset</strong> on a persistent, real-time stream. Replay
+            from any offset, branch off, or fan out to humans, agents, and
+            <a href="/agents/">Electric&nbsp;Agents</a> — over plain&nbsp;HTTP.
           </p>
         </div>
         <div class="ds-split-demo md-exclude">
@@ -166,14 +163,12 @@ ${example.code}
           <CollabSessionDemo />
         </div>
         <div class="ds-split-text">
-          <h2 class="ea-section-title">
-            Every stream is&nbsp;multiplayer
-          </h2>
+          <h2 class="ea-section-title">Every stream is&nbsp;multiplayer</h2>
           <p class="ea-section-subtitle">
-            Streams aren't single-consumer. Any number of agents — and
-            humans — can attach to the same stream, see each other's
-            events as they land, and pick up exactly where they left
-            off. The shared stream is the coordination&nbsp;layer.
+            Streams aren't single-consumer. Any number of agents — and humans —
+            can attach to the same stream, see each other's events as they land,
+            and pick up exactly where they left off. The shared stream is the
+            coordination&nbsp;layer.
           </p>
           <p class="ds-detail-link">
             <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
@@ -198,7 +193,9 @@ ${example.code}
       <QuickstartPlaybackDemo />
       <p class="ds-tour-footer">
         Run this yourself →
-        <a href="/docs/streams/quickstart"><code>/docs/streams/quickstart</code></a>
+        <a href="/docs/streams/quickstart"
+          ><code>/docs/streams/quickstart</code></a
+        >
       </p>
     </EaSection>
 
@@ -216,7 +213,9 @@ ${example.code}
       `tone="bg"` (deep) for the inverse effect.
     -->
     <MidPageStrap id="ship-streams" tone="surface">
-      <template #eyebrow><span class="md-exclude">Ready to&nbsp;build</span></template>
+      <template #eyebrow
+        ><span class="md-exclude">Ready to&nbsp;build</span></template
+      >
       <template #title>
         Ship your first durable stream in&nbsp;minutes
       </template>
@@ -308,7 +307,9 @@ ${example.code}
           <OffsetReplayDemo />
         </div>
         <div class="ds-split-text">
-          <h2 class="ea-section-title">Replay from any offset, exactly&nbsp;once</h2>
+          <h2 class="ea-section-title">
+            Replay from any offset, exactly&nbsp;once
+          </h2>
           <p class="ea-section-subtitle">
             Producers identify themselves with three headers. Servers de-dupe.
             Clients resume from the last offset they saw. No external
@@ -348,15 +349,21 @@ ${example.code}
       all live on durablestreams.com.
     -->
     <MidPageStrap id="open-protocol-strap">
-      <template #eyebrow><span class="md-exclude">Open protocol · Apache&nbsp;2.0</span></template>
+      <template #eyebrow
+        ><span class="md-exclude"
+          >Open protocol · Apache&nbsp;2.0</span
+        ></template
+      >
       <template #title>
         Built on the open Durable&nbsp;Streams protocol
       </template>
       <template #tagline>
-        Electric Streams is one implementation. The protocol spec,
-        conformance suite and reference clients live on
-        <a href="https://durablestreams.com/" target="_blank" rel="noopener">durablestreams.com</a> —
-        independent, fully&nbsp;open.
+        Electric Streams is one implementation. The protocol spec, conformance
+        suite and reference clients live on
+        <a href="https://durablestreams.com/" target="_blank" rel="noopener"
+          >durablestreams.com</a
+        >
+        — independent, fully&nbsp;open.
       </template>
       <template #actions>
         <VPButton
@@ -400,7 +407,9 @@ ${example.code}
         <div class="ds-stack-diagram md-exclude">
           <div class="stack-box producer-box">
             <div class="stack-label">Your producer</div>
-            <div class="stack-examples">Anthropic · Express · FastAPI · cron</div>
+            <div class="stack-examples">
+              Anthropic · Express · FastAPI · cron
+            </div>
           </div>
           <div class="stack-connector">
             <div class="stack-conn-line" />
@@ -412,11 +421,15 @@ ${example.code}
           </div>
           <div class="stack-connector">
             <div class="stack-conn-line" />
-            <span class="stack-conn-label">GET ?live=sse · ?offset=&hellip;</span>
+            <span class="stack-conn-label"
+              >GET ?live=sse · ?offset=&hellip;</span
+            >
           </div>
           <div class="stack-box consumer-box">
             <div class="stack-label">Your consumer</div>
-            <div class="stack-examples">browser · agent · worker · iOS · Python</div>
+            <div class="stack-examples">
+              browser · agent · worker · iOS · Python
+            </div>
           </div>
         </div>
 
@@ -432,9 +445,14 @@ ${example.code}
                 class="code-tab"
                 :class="{ active: stackTab === example.id }"
                 @click="stackTab = example.id"
-              >{{ example.filename }}</button>
+              >
+                {{ example.filename }}
+              </button>
             </div>
-            <pre v-show="stackTab === 'producer'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">DurableStream</span>, <span class="tk-v">IdempotentProducer</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
+            <pre
+              v-show="stackTab === 'producer'"
+              class="code-block tabbed"
+            ><code><span class="tk-kw">import</span> { <span class="tk-v">DurableStream</span>, <span class="tk-v">IdempotentProducer</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
 
 <span class="tk-kw">const</span> <span class="tk-v">handle</span> = <span class="tk-kw">await</span> <span class="tk-v">DurableStream</span>.<span class="tk-fn">create</span>({
   <span class="tk-prop">url</span>: <span class="tk-v">STREAM_URL</span>,
@@ -450,7 +468,10 @@ ${example.code}
 
 <span class="tk-kw">await</span> <span class="tk-v">producer</span>.<span class="tk-fn">flush</span>()</code></pre>
 
-            <pre v-show="stackTab === 'consumer'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">stream</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
+            <pre
+              v-show="stackTab === 'consumer'"
+              class="code-block tabbed"
+            ><code><span class="tk-kw">import</span> { <span class="tk-v">stream</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span>
 
 <span class="tk-kw">const</span> <span class="tk-v">res</span> = <span class="tk-kw">await</span> <span class="tk-fn">stream</span>&lt;<span class="tk-v">ChatMessage</span>&gt;({
   <span class="tk-prop">url</span>: <span class="tk-v">STREAM_URL</span>,
@@ -463,7 +484,10 @@ ${example.code}
   <span class="tk-v">lastSeen</span> = <span class="tk-v">batch</span>.<span class="tk-v">nextOffset</span>
 })</code></pre>
 
-            <pre v-show="stackTab === 'curl'" class="code-block tabbed"><code><span class="tk-prop">curl</span> -X POST <span class="tk-v">$URL</span> \
+            <pre
+              v-show="stackTab === 'curl'"
+              class="code-block tabbed"
+            ><code><span class="tk-prop">curl</span> -X POST <span class="tk-v">$URL</span> \
   -H <span class="tk-str">'Content-Type: application/json'</span> \
   -d <span class="tk-str">'{"event":"click"}'</span>
 
@@ -485,7 +509,9 @@ ${example.code}
           <div class="ea-left-col">
             <div class="ea-code-panel">
               <div class="code-file-header">stream.ts</div>
-              <pre class="code-block annotated"><code><span class="tk-kw">import</span> { <span class="tk-v">DurableStream</span>, <span class="tk-v">stream</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span><span class="ann-marker" data-n="1"></span>
+              <pre
+                class="code-block annotated"
+              ><code><span class="tk-kw">import</span> { <span class="tk-v">DurableStream</span>, <span class="tk-v">stream</span> } <span class="tk-kw">from</span> <span class="tk-str">"@durable-streams/client"</span><span class="ann-marker" data-n="1"></span>
 
 <span class="tk-kw">const</span> <span class="tk-v">url</span> = <span class="tk-str">"https://streams.example.com/v1/stream/chat"</span>
 
@@ -511,11 +537,15 @@ ${example.code}
             <div class="ea-cli-panel">
               <div class="cli-header">Terminal</div>
               <div class="cli-body">
-                <div class="cli-line"><span class="cli-prompt">$</span> npx tsx stream.ts</div>
+                <div class="cli-line">
+                  <span class="cli-prompt">$</span> npx tsx stream.ts
+                </div>
                 <div class="cli-output">✓ Created stream chat</div>
                 <div class="cli-output">✓ Appended message</div>
                 <div class="cli-output">→ { role: "user", text: "Hello" }</div>
-                <div class="cli-output">→ { role: "assistant", text: "Hi there!" }</div>
+                <div class="cli-output">
+                  → { role: "assistant", text: "Hi there!" }
+                </div>
                 <div class="cli-output">→ ▍</div>
               </div>
             </div>
@@ -526,55 +556,86 @@ ${example.code}
                 <span class="ea-ann-num">1</span>
                 <div>
                   <strong>One package, two entry points</strong>
-                  <p><code>DurableStream</code> for read/write handles. <code>stream()</code> for fetch-style consumption.</p>
+                  <p>
+                    <code>DurableStream</code> for read/write handles.
+                    <code>stream()</code> for fetch-style consumption.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
                 <span class="ea-ann-num">2</span>
                 <div>
-                  <strong><code>DurableStream.create</code> opens or creates</strong>
-                  <p>Idempotent: returns the existing handle if the stream already exists.</p>
+                  <strong
+                    ><code>DurableStream.create</code> opens or creates</strong
+                  >
+                  <p>
+                    Idempotent: returns the existing handle if the stream
+                    already exists.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
                 <span class="ea-ann-num">3</span>
                 <div>
                   <strong>Pick your content type</strong>
-                  <p><code>application/json</code> enables <a href="/docs/streams/json-mode">JSON mode</a> — message boundaries are preserved.</p>
+                  <p>
+                    <code>application/json</code> enables
+                    <a href="/docs/streams/json-mode">JSON mode</a> — message
+                    boundaries are preserved.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
                 <span class="ea-ann-num">4</span>
                 <div>
                   <strong>Append messages</strong>
-                  <p>Each <code>append</code> is a single <code>POST</code>. Wrap with <a href="/docs/streams/clients/typescript#exactly-once-writes"><code>IdempotentProducer</code></a> for exactly-once delivery and batching.</p>
+                  <p>
+                    Each <code>append</code> is a single <code>POST</code>. Wrap
+                    with
+                    <a
+                      href="/docs/streams/clients/typescript#exactly-once-writes"
+                      ><code>IdempotentProducer</code></a
+                    >
+                    for exactly-once delivery and batching.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
                 <span class="ea-ann-num">5</span>
                 <div>
                   <strong>Resume from any offset</strong>
-                  <p><code>"-1"</code> = beginning. Pass a saved offset to resume from exactly that point. <code>"now"</code> = skip the backlog.</p>
+                  <p>
+                    <code>"-1"</code> = beginning. Pass a saved offset to resume
+                    from exactly that point. <code>"now"</code> = skip the
+                    backlog.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
                 <span class="ea-ann-num">6</span>
                 <div>
                   <strong>Live, in real time</strong>
-                  <p><code>"sse"</code> opens a long-lived Server-Sent Events stream. <code>"long-poll"</code> works in environments that can't hold a connection open.</p>
+                  <p>
+                    <code>"sse"</code> opens a long-lived Server-Sent Events
+                    stream. <code>"long-poll"</code> works in environments that
+                    can't hold a connection open.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
                 <span class="ea-ann-num">7</span>
                 <div>
                   <strong>Subscribe with batches</strong>
-                  <p><code>subscribeJson</code> calls your handler with a <code>batch.items</code> array. The batch carries the next offset — save it to resume from later.</p>
+                  <p>
+                    <code>subscribeJson</code> calls your handler with a
+                    <code>batch.items</code> array. The batch carries the next
+                    offset — save it to resume from later.
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
       </div>
     </EaSection>
 
@@ -629,9 +690,7 @@ ${example.code}
       <template #eyebrow>
         <span class="md-exclude">Apache&nbsp;2.0 · open&nbsp;source</span>
       </template>
-      <template #title>
-        Start streaming&nbsp;today
-      </template>
+      <template #title> Start streaming&nbsp;today </template>
       <template #tagline>
         Create a stream, append events, subscribe&nbsp;live.
       </template>
@@ -900,7 +959,9 @@ ${example.code}
   border: none;
   border-right: 1px solid var(--ea-divider);
   cursor: pointer;
-  transition: color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
 }
 .ds-stack-code .code-tab:last-child {
   border-right: none;
@@ -1114,7 +1175,9 @@ ${example.code}
   overflow: hidden;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.2s, transform 0.2s;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
 .ds-demo-card:hover {
   border-color: var(--vp-c-brand-1);

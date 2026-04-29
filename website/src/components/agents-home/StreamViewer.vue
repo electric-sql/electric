@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue"
+import { ref, watch, nextTick } from 'vue'
 
 export interface StreamEvent {
   id: string
   timestamp: string
-  direction: "inbound" | "outbound"
-  type: "message" | "run" | "tool_call" | "tool_result" | "text" | "error"
+  direction: 'inbound' | 'outbound'
+  type: 'message' | 'run' | 'tool_call' | 'tool_result' | 'text' | 'error'
   label: string
   content?: string
 }
@@ -13,7 +13,7 @@ export interface StreamEvent {
 const props = defineProps<{
   events: StreamEvent[]
   title?: string
-  status?: "active" | "sleeping" | "crashed"
+  status?: 'active' | 'sleeping' | 'crashed'
 }>()
 
 const listRef = ref<HTMLElement>()
@@ -21,7 +21,10 @@ const listRef = ref<HTMLElement>()
 async function scrollToBottom() {
   await nextTick()
   if (listRef.value) {
-    listRef.value.scrollTo({ top: listRef.value.scrollHeight, behavior: "smooth" })
+    listRef.value.scrollTo({
+      top: listRef.value.scrollHeight,
+      behavior: 'smooth',
+    })
   }
 }
 
@@ -32,7 +35,7 @@ watch(() => props.status, scrollToBottom)
 <template>
   <div class="stream-viewer">
     <div class="stream-header">
-      <span class="stream-title">{{ title ?? "Stream" }}</span>
+      <span class="stream-title">{{ title ?? 'Stream' }}</span>
       <span
         class="stream-status"
         :class="status ?? 'active'"
@@ -49,7 +52,7 @@ watch(() => props.status, scrollToBottom)
         >
           <span class="event-time">{{ event.timestamp }}</span>
           <span class="event-arrow">{{
-            event.direction === "inbound" ? "←" : "→"
+            event.direction === 'inbound' ? '←' : '→'
           }}</span>
           <span class="event-badge">{{ event.label }}</span>
           <span v-if="event.content" class="event-content">{{
@@ -57,10 +60,7 @@ watch(() => props.status, scrollToBottom)
           }}</span>
         </div>
       </TransitionGroup>
-      <div
-        v-if="status === 'sleeping'"
-        class="stream-sleep-marker"
-      >
+      <div v-if="status === 'sleeping'" class="stream-sleep-marker">
         <span>sleeping — zero compute</span>
       </div>
     </div>
@@ -202,11 +202,7 @@ watch(() => props.status, scrollToBottom)
 }
 
 .stream-event.tool_result .event-badge {
-  background: color-mix(
-    in srgb,
-    var(--ea-event-tool-result) 15%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--ea-event-tool-result) 15%, transparent);
   color: var(--ea-event-tool-result);
 }
 .stream-event.tool_result .event-arrow {

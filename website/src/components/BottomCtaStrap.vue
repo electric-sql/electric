@@ -54,7 +54,7 @@ defineProps<{
   overflow: hidden;
 }
 .bottom-cta-strap::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background: radial-gradient(

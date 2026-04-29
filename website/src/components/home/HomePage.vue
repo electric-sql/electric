@@ -72,7 +72,7 @@ onMounted(() => {
     <WorksWithSection />
     <ManagedCloudStrap :dark="true" />
     <ScalesToSection />
-    
+
     <WhyEverythingSection :dark="true" />
 
     <LatestNewsSection />

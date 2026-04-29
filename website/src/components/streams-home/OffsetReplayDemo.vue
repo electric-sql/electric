@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 type Phase = 1 | 2 | 3
-type ConsumerStatus = "connected" | "dropped" | "resuming"
+type ConsumerStatus = 'connected' | 'dropped' | 'resuming'
 
 interface Chunk {
   id: number
-  from: "producer" | "server"
+  from: 'producer' | 'server'
   startTime: number
   duration: number
   duplicate?: boolean
@@ -30,7 +30,7 @@ const phase = ref<Phase>(1)
 const serverStack = ref<StackRow[]>([])
 const producerSeq = ref(15)
 const producerSeqBlinking = ref(false)
-const consumerStatus = ref<ConsumerStatus>("connected")
+const consumerStatus = ref<ConsumerStatus>('connected')
 const chunksInFlight = ref<Chunk[]>([])
 const flightTick = ref(0)
 let stackRowIdCounter = 0
@@ -54,8 +54,8 @@ function makeHex(seq: number): string {
   // Deterministic-ish hex bytes derived from seq, so each row reads as
   // distinct stream content rather than a generic placeholder block.
   const bytes = [seq * 23 + 17, seq * 71 + 5, seq * 113 + 41, seq * 191 + 3]
-    .map((n) => ((n % 254) + 1).toString(16).padStart(2, "0"))
-    .join(" ")
+    .map((n) => ((n % 254) + 1).toString(16).padStart(2, '0'))
+    .join(' ')
   return bytes
 }
 
@@ -75,14 +75,14 @@ function syncPendingRows() {
 
 const consumerStatusText = computed(() => {
   switch (consumerStatus.value) {
-    case "connected":
-      return "● connected"
-    case "dropped":
-      return "× dropped"
-    case "resuming":
-      return "↻ resuming"
+    case 'connected':
+      return '● connected'
+    case 'dropped':
+      return '× dropped'
+    case 'resuming':
+      return '↻ resuming'
   }
-  return ""
+  return ''
 })
 
 function later(ms: number): Promise<void> {
@@ -96,7 +96,7 @@ function clearTimers() {
   timers = []
 }
 
-function fireChunk(from: "producer" | "server", duplicate = false): number {
+function fireChunk(from: 'producer' | 'server', duplicate = false): number {
   const id = ++chunkIdCounter
   chunksInFlight.value = [
     ...chunksInFlight.value,
@@ -138,7 +138,7 @@ async function runLoop() {
     // ── reset for new cycle ─────────────────────────────────────────
     serverStack.value = []
     producerSeq.value = 14
-    consumerStatus.value = "connected"
+    consumerStatus.value = 'connected'
     chunksInFlight.value = []
     showServerCheck.value = false
     showServerCross.value = false
@@ -151,12 +151,12 @@ async function runLoop() {
     for (let i = 0; i < 3; i++) {
       if (!running) return
       producerSeq.value = 15 + i
-      fireChunk("producer")
+      fireChunk('producer')
       await later(TRAVEL_MS - 50)
       if (!running) return
       pushRow(false)
       showServerCheck.value = true
-      fireChunk("server")
+      fireChunk('server')
       await later(180)
       showServerCheck.value = false
       await later(TRAVEL_MS - 230)
@@ -177,7 +177,7 @@ async function runLoop() {
     producerSeqBlinking.value = false
 
     // retry of seq 17 — server should ✗ ignore
-    fireChunk("producer", true)
+    fireChunk('producer', true)
     await later(TRAVEL_MS - 40)
     if (!running) return
     showServerCross.value = true
@@ -189,12 +189,12 @@ async function runLoop() {
 
     // bump to seq 18 — server ✓ stores
     producerSeq.value = 18
-    fireChunk("producer")
+    fireChunk('producer')
     await later(TRAVEL_MS - 40)
     if (!running) return
     pushRow(false)
     showServerCheck.value = true
-    fireChunk("server")
+    fireChunk('server')
     await later(220)
     showServerCheck.value = false
     await later(TRAVEL_MS - 270)
@@ -207,14 +207,14 @@ async function runLoop() {
     // ── PHASE 3 — consumer drop & resume ────────────────────────────
     if (!running) return
     phase.value = 3
-    consumerStatus.value = "dropped"
+    consumerStatus.value = 'dropped'
     await later(500)
 
     // producer keeps producing 2 more while consumer is offline → pending rows
     for (let i = 0; i < 2; i++) {
       if (!running) return
       producerSeq.value += 1
-      fireChunk("producer")
+      fireChunk('producer')
       await later(TRAVEL_MS - 50)
       pushRow(true)
       showServerCheck.value = true
@@ -224,13 +224,13 @@ async function runLoop() {
     }
 
     if (!running) return
-    consumerStatus.value = "resuming"
+    consumerStatus.value = 'resuming'
     await later(700)
 
-    consumerStatus.value = "connected"
+    consumerStatus.value = 'connected'
     // Server replays only the new chunks (not the whole history)
     for (let i = 0; i < 2; i++) {
-      fireChunk("server")
+      fireChunk('server')
       await later(280)
     }
     await later(TRAVEL_MS - 250)
@@ -246,8 +246,8 @@ async function runLoop() {
 
 onMounted(() => {
   reducedMotion.value =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   if (reducedMotion.value) {
     // Static end-state for reduced motion
@@ -257,7 +257,7 @@ onMounted(() => {
       producerSeq.value = i
       pushRow(false)
     }
-    consumerStatus.value = "connected"
+    consumerStatus.value = 'connected'
     showServerCheck.value = true
     showConsumerCheck.value = true
     return
@@ -281,16 +281,19 @@ onUnmounted(() => {
 const producerDots = computed(() => {
   const now = flightTick.value || performance.now()
   return chunksInFlight.value
-    .filter((c) => c.from === "producer")
-    .map((c) => ({ id: c.id, p: chunkProgress(c, now), duplicate: c.duplicate }))
+    .filter((c) => c.from === 'producer')
+    .map((c) => ({
+      id: c.id,
+      p: chunkProgress(c, now),
+      duplicate: c.duplicate,
+    }))
 })
 const serverDots = computed(() => {
   const now = flightTick.value || performance.now()
   return chunksInFlight.value
-    .filter((c) => c.from === "server")
+    .filter((c) => c.from === 'server')
     .map((c) => ({ id: c.id, p: chunkProgress(c, now) }))
 })
-
 </script>
 
 <template>
@@ -324,7 +327,8 @@ const serverDots = computed(() => {
               <span
                 class="ord-hdr-val ord-hdr-val--seq"
                 :class="{ 'is-blink': producerSeqBlinking }"
-              >{{ producerSeq }}</span>
+                >{{ producerSeq }}</span
+              >
             </div>
           </div>
         </div>
@@ -379,11 +383,15 @@ const serverDots = computed(() => {
                 'is-new': row.pulse,
                 'is-pending': row.pending,
               }"
-            >{{ row.hex }}</div>
+            >
+              {{ row.hex }}
+            </div>
           </div>
 
           <Transition name="ord-mark">
-            <span v-if="showServerCheck" class="ord-mark ord-mark--good">✓</span>
+            <span v-if="showServerCheck" class="ord-mark ord-mark--good"
+              >✓</span
+            >
           </Transition>
           <Transition name="ord-mark">
             <span v-if="showServerCross" class="ord-mark ord-mark--bad">✗</span>
@@ -447,9 +455,15 @@ const serverDots = computed(() => {
               'is-dropped': consumerStatus === 'dropped',
               'is-resuming': consumerStatus === 'resuming',
             }"
-          >{{ consumerStatusText }}</div>
+          >
+            {{ consumerStatusText }}
+          </div>
           <Transition name="ord-mark">
-            <span v-if="showConsumerCheck" class="ord-mark ord-mark--good ord-mark--inline">✓</span>
+            <span
+              v-if="showConsumerCheck"
+              class="ord-mark ord-mark--good ord-mark--inline"
+              >✓</span
+            >
           </Transition>
         </div>
       </div>
@@ -524,7 +538,9 @@ const serverDots = computed(() => {
   background: var(--ea-bg);
   font-family: var(--vp-font-family-mono);
   color: var(--ea-text-1);
-  transition: opacity 0.3s, border-color 0.3s;
+  transition:
+    opacity 0.3s,
+    border-color 0.3s;
 }
 .dark .ord-box {
   background: var(--ea-surface);
@@ -556,7 +572,11 @@ const serverDots = computed(() => {
 
 .ord-box--combined.is-dimmed {
   opacity: 0.55;
-  border-color: color-mix(in srgb, var(--ea-event-error) 35%, var(--ea-divider));
+  border-color: color-mix(
+    in srgb,
+    var(--ea-event-error) 35%,
+    var(--ea-divider)
+  );
 }
 
 .ord-box--server {
@@ -587,7 +607,9 @@ const serverDots = computed(() => {
 }
 .ord-stack-row {
   opacity: 0.9;
-  transition: opacity 0.4s ease, color 0.4s ease;
+  transition:
+    opacity 0.4s ease,
+    color 0.4s ease;
 }
 .ord-stack-row.is-pending {
   /* Amber until the consumer catches up — visually marked as "not yet
@@ -599,7 +621,8 @@ const serverDots = computed(() => {
   animation: ord-row-pulse 0.55s ease-out;
 }
 .ord-stack-row.is-new.is-pending {
-  animation: ord-row-pulse-pending 0.55s ease-out,
+  animation:
+    ord-row-pulse-pending 0.55s ease-out,
     ord-row-pending 1.6s ease-in-out 0.55s infinite;
 }
 @keyframes ord-row-pulse {
@@ -635,8 +658,13 @@ const serverDots = computed(() => {
   }
 }
 @keyframes ord-row-pending {
-  0%, 100% { opacity: 0.95; }
-  50% { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* ── ✓ / ✗ markers ──────────────────────────────────────────────── */
@@ -668,10 +696,14 @@ const serverDots = computed(() => {
   transform: scale(0.4);
 }
 .ord-mark-enter-active {
-  transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.18s ease-out;
 }
 .ord-mark-leave-active {
-  transition: opacity 0.25s ease-in, transform 0.25s ease-in;
+  transition:
+    opacity 0.25s ease-in,
+    transform 0.25s ease-in;
 }
 
 /* ── Duplicate callout above server box ─────────────────────────── */
@@ -687,7 +719,8 @@ const serverDots = computed(() => {
   white-space: nowrap;
   color: var(--ea-event-error);
   background: var(--ea-bg);
-  border: 1px solid color-mix(in srgb, var(--ea-event-error) 50%, var(--ea-divider));
+  border: 1px solid
+    color-mix(in srgb, var(--ea-event-error) 50%, var(--ea-divider));
   border-radius: 4px;
   pointer-events: none;
   z-index: 2;
@@ -702,7 +735,9 @@ const serverDots = computed(() => {
 }
 .ord-callout-enter-active,
 .ord-callout-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 /* ── Arrows ─────────────────────────────────────────────────────── */
@@ -788,8 +823,13 @@ const serverDots = computed(() => {
   color: var(--ea-event-error);
 }
 @keyframes ord-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* ── Status inside consumer box ─────────────────────────────────── */

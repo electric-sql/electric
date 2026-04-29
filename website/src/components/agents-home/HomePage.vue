@@ -1,31 +1,31 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
-import { VPButton } from "vitepress/theme"
-import Section from "./Section.vue"
-import EntityStreamDemo from "./EntityStreamDemo.vue"
-import CrashRecoveryDemo from "./CrashRecoveryDemo.vue"
-import CoordinationDemo from "./CoordinationDemo.vue"
-import AgentGridDemo from "./AgentGridDemo.vue"
-import ContextCompositionDemo from "./ContextCompositionDemo.vue"
-import AgentsHero, { installCommand } from "./AgentsHero.vue"
-import SystemMonitorDemo from "./SystemMonitorDemo.vue"
-import InstallPill from "../InstallPill.vue"
-import MidPageStrap from "../MidPageStrap.vue"
-import BottomCtaStrap from "../BottomCtaStrap.vue"
-import CuratedBlogPosts from "../CuratedBlogPosts.vue"
+import { ref, computed } from 'vue'
+import { VPButton } from 'vitepress/theme'
+import Section from './Section.vue'
+import EntityStreamDemo from './EntityStreamDemo.vue'
+import CrashRecoveryDemo from './CrashRecoveryDemo.vue'
+import CoordinationDemo from './CoordinationDemo.vue'
+import AgentGridDemo from './AgentGridDemo.vue'
+import ContextCompositionDemo from './ContextCompositionDemo.vue'
+import AgentsHero, { installCommand } from './AgentsHero.vue'
+import SystemMonitorDemo from './SystemMonitorDemo.vue'
+import InstallPill from '../InstallPill.vue'
+import MidPageStrap from '../MidPageStrap.vue'
+import BottomCtaStrap from '../BottomCtaStrap.vue'
+import CuratedBlogPosts from '../CuratedBlogPosts.vue'
 // VitePress data loader: the file exports `default { load }` at compile
 // time and VitePress synthesises a named `data` export at runtime. The
 // TS plugin can't see that synthesis, so we import the module untyped
 // and pluck `data` off it. Same trick is used by other landing pages
 // that need raw access to the posts list (the `<CuratedBlogPosts>`
 // component does the same internally).
-import { getVitepressData } from "../../lib/vitepressData"
-import type { PostListRow } from "../../types/data-loaders"
-import * as postsModule from "../../../data/posts.data"
+import { getVitepressData } from '../../lib/vitepressData'
+import type { PostListRow } from '../../types/data-loaders'
+import * as postsModule from '../../../data/posts.data'
 
 const allPosts = getVitepressData<PostListRow[]>(postsModule)
 
-const stackTab = ref<"server" | "entities">("server")
+const stackTab = ref<'server' | 'entities'>('server')
 
 /* "From the blog" panel — sits just before the bottom CTA. Source list
    is the global `posts.data.ts` filtered by the `agents` tag, so any
@@ -38,7 +38,7 @@ const hasAgentBlogPosts = computed(() =>
   allPosts.some(
     (p) =>
       Array.isArray(p.tags) &&
-      p.tags.some((t) => String(t).toLowerCase() === "agents")
+      p.tags.some((t) => String(t).toLowerCase() === 'agents')
   )
 )
 </script>
@@ -59,11 +59,10 @@ const hasAgentBlogPosts = computed(() =>
             triggered by webhooks, running 24/7 without&nbsp;supervision.
           </p>
           <p class="ea-prose">
-            Electric Agents brings durable, composable, serverless agents
-            to the infrastructure you already run. Built on
-            <a href="/streams/">Electric&nbsp;Streams</a>,
-            every agent sleeps when idle, wakes on demand and
-            survives&nbsp;restarts.
+            Electric Agents brings durable, composable, serverless agents to the
+            infrastructure you already run. Built on
+            <a href="/streams/">Electric&nbsp;Streams</a>, every agent sleeps
+            when idle, wakes on demand and survives&nbsp;restarts.
           </p>
         </div>
         <div class="ea-come-online-visual md-exclude">
@@ -81,7 +80,9 @@ const hasAgentBlogPosts = computed(() =>
             <div class="stack-examples">Lives in your app process</div>
             <div class="rt-code-card">
               <div class="code-file-header">agent.ts</div>
-              <pre class="code-block"><code><span class="tk-kw">import</span> { <span class="tk-fn">defineEntity</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+              <pre
+                class="code-block"
+              ><code><span class="tk-kw">import</span> { <span class="tk-fn">defineEntity</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
 
 <span class="tk-fn">defineEntity</span>(<span class="tk-str">"assistant"</span>, {
   <span class="tk-prop">state</span>: { … },
@@ -96,9 +97,30 @@ const hasAgentBlogPosts = computed(() =>
           <div class="rt-conn">
             <div class="rt-conn-arrow" aria-hidden="true">
               <svg viewBox="0 0 56 12" xmlns="http://www.w3.org/2000/svg">
-                <line x1="8" y1="6" x2="48" y2="6" stroke="currentColor" stroke-width="1" />
-                <polyline points="12,2 8,6 12,10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
-                <polyline points="44,2 48,6 44,10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+                <line
+                  x1="8"
+                  y1="6"
+                  x2="48"
+                  y2="6"
+                  stroke="currentColor"
+                  stroke-width="1"
+                />
+                <polyline
+                  points="12,2 8,6 12,10"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="44,2 48,6 44,10"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </div>
             <ul class="rt-conn-labels mono">
@@ -114,10 +136,18 @@ const hasAgentBlogPosts = computed(() =>
             <div class="rt-subsection">
               <div class="rt-sublabel mono">Agents</div>
               <div class="rt-instances">
-                <div class="rt-instance"><span class="rt-dot live" />/assistant/r-1</div>
-                <div class="rt-instance"><span class="rt-dot idle" />/assistant/r-2</div>
-                <div class="rt-instance"><span class="rt-dot live" />/coder/refactor</div>
-                <div class="rt-instance"><span class="rt-dot idle" />/researcher/x</div>
+                <div class="rt-instance">
+                  <span class="rt-dot live" />/assistant/r-1
+                </div>
+                <div class="rt-instance">
+                  <span class="rt-dot idle" />/assistant/r-2
+                </div>
+                <div class="rt-instance">
+                  <span class="rt-dot live" />/coder/refactor
+                </div>
+                <div class="rt-instance">
+                  <span class="rt-dot idle" />/researcher/x
+                </div>
               </div>
             </div>
             <div class="rt-streams">
@@ -136,16 +166,15 @@ const hasAgentBlogPosts = computed(() =>
           <p class="ea-prose">The runtime has two parts:</p>
           <ul class="ea-runtime-list">
             <li>
-              An <strong>SDK</strong> in your app, where you define
-              entities and write handlers in plain TypeScript. Runs in
-              your process, so your tools, models, and secrets
-              stay&nbsp;yours.
+              An <strong>SDK</strong> in your app, where you define entities and
+              write handlers in plain TypeScript. Runs in your process, so your
+              tools, models, and secrets stay&nbsp;yours.
             </li>
             <li>
-              A <strong>control plane</strong> that runs, routes wakes,
-              and persists every agent to its own durable stream. Owns
-              the lifecycle, so your handlers don't need to stay alive
-              between invocations.
+              A <strong>control plane</strong> that runs, routes wakes, and
+              persists every agent to its own durable stream. Owns the
+              lifecycle, so your handlers don't need to stay alive between
+              invocations.
             </li>
           </ul>
         </div>
@@ -158,8 +187,16 @@ const hasAgentBlogPosts = computed(() =>
       title="Every agent is an entity with a&nbsp;stream"
     >
       <div class="ea-entity-intro">
-        <p>You define <strong>entity types</strong> — like <code>assistant</code> or <code>researcher</code> — then spawn instances on&nbsp;demand.</p>
-        <p>Each instance is backed by its own <strong>durable stream</strong>: an append-only log that serves as the agent's memory, its inbox, and a complete audit trail of everything it&nbsp;did.</p>
+        <p>
+          You define <strong>entity types</strong> — like
+          <code>assistant</code> or <code>researcher</code> — then spawn
+          instances on&nbsp;demand.
+        </p>
+        <p>
+          Each instance is backed by its own <strong>durable stream</strong>: an
+          append-only log that serves as the agent's memory, its inbox, and a
+          complete audit trail of everything it&nbsp;did.
+        </p>
       </div>
       <EntityStreamDemo class="md-exclude" />
     </Section>
@@ -171,15 +208,17 @@ const hasAgentBlogPosts = computed(() =>
           <CrashRecoveryDemo />
         </div>
         <div class="ea-durable-text">
-          <h2 class="ea-section-title">Durable state, not durable&nbsp;execution</h2>
+          <h2 class="ea-section-title">
+            Durable state, not durable&nbsp;execution
+          </h2>
           <p class="ea-section-subtitle">
-            Your agent doesn't need to stay alive. It needs its state to survive.
-            The stream is the source of truth.
+            Your agent doesn't need to stay alive. It needs its state to
+            survive. The stream is the source of truth.
           </p>
           <p class="ea-durable-detail">
-            When a handler crashes or the process restarts, nothing is lost.
-            The stream replays and the agent picks up exactly where it left off
-            — no checkpointing, no snapshots, no&nbsp;coordination.
+            When a handler crashes or the process restarts, nothing is lost. The
+            stream replays and the agent picks up exactly where it left off — no
+            checkpointing, no snapshots, no&nbsp;coordination.
           </p>
         </div>
       </div>
@@ -199,9 +238,7 @@ const hasAgentBlogPosts = computed(() =>
       <template #eyebrow>
         <span class="md-exclude">Ready to&nbsp;build</span>
       </template>
-      <template #title>
-        Ship your first&nbsp;agent
-      </template>
+      <template #title> Ship your first&nbsp;agent </template>
       <template #tagline>
         Install the SDK, define an entity, deploy it on your stack.
       </template>
@@ -239,13 +276,13 @@ const hasAgentBlogPosts = computed(() =>
         <div class="ea-scale-text">
           <h2 class="ea-section-title">Scale to zero. Wake on&nbsp;demand.</h2>
           <p class="ea-section-subtitle">
-            Every entity costs nothing when idle. A thousand agents?
-            You pay for the ones that are actually&nbsp;thinking.
+            Every entity costs nothing when idle. A thousand agents? You pay for
+            the ones that are actually&nbsp;thinking.
           </p>
           <p class="ea-scale-detail">
-            Entities sleep between invocations — no long-running processes,
-            no idle VMs. When a message arrives, the handler wakes, replays
-            from the stream, and&nbsp;continues.
+            Entities sleep between invocations — no long-running processes, no
+            idle VMs. When a message arrives, the handler wakes, replays from
+            the stream, and&nbsp;continues.
           </p>
         </div>
         <div class="ea-scale-grid md-exclude">
@@ -261,7 +298,9 @@ const hasAgentBlogPosts = computed(() =>
           <ContextCompositionDemo />
         </div>
         <div class="ea-context-text">
-          <h2 class="ea-section-title">Cache-friendly context, by&nbsp;construction</h2>
+          <h2 class="ea-section-title">
+            Cache-friendly context, by&nbsp;construction
+          </h2>
           <p class="ea-section-subtitle">
             Each context source declares how often it changes. The runtime
             orders sources from most stable to most volatile, so the LLM can
@@ -309,14 +348,21 @@ const hasAgentBlogPosts = computed(() =>
               class="code-tab"
               :class="{ active: stackTab === 'server' }"
               @click="stackTab = 'server'"
-            >server.ts</button>
+            >
+              server.ts
+            </button>
             <button
               class="code-tab"
               :class="{ active: stackTab === 'entities' }"
               @click="stackTab = 'entities'"
-            >entities.ts</button>
+            >
+              entities.ts
+            </button>
           </div>
-          <pre v-show="stackTab === 'server'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">createRuntimeHandler</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+          <pre
+            v-show="stackTab === 'server'"
+            class="code-block tabbed"
+          ><code><span class="tk-kw">import</span> { <span class="tk-v">createRuntimeHandler</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
 <span class="tk-kw">import</span> { <span class="tk-v">registry</span> } <span class="tk-kw">from</span> <span class="tk-str">"./entities"</span>
 
 <span class="tk-kw">const</span> <span class="tk-v">runtime</span> = <span class="tk-fn">createRuntimeHandler</span>({
@@ -330,7 +376,10 @@ const hasAgentBlogPosts = computed(() =>
 })
 
 <span class="tk-v">app</span>.<span class="tk-fn">listen</span>(<span class="tk-v">PORT</span>, () <span class="tk-kw">=></span> <span class="tk-v">runtime</span>.<span class="tk-fn">registerTypes</span>())</code></pre>
-          <pre v-show="stackTab === 'entities'" class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">createEntityRegistry</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+          <pre
+            v-show="stackTab === 'entities'"
+            class="code-block tabbed"
+          ><code><span class="tk-kw">import</span> { <span class="tk-v">createEntityRegistry</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
 
 <span class="tk-kw">export const</span> <span class="tk-v">registry</span> = <span class="tk-fn">createEntityRegistry</span>()
 
@@ -370,12 +419,23 @@ const hasAgentBlogPosts = computed(() =>
           <div class="ea-way-preview cli-preview">
             <div class="cli-header md-exclude">Terminal</div>
             <div class="cli-body">
-              <div class="cli-line"><span class="cli-prompt">$</span> electric-agents spawn /assistant/research-1</div>
+              <div class="cli-line">
+                <span class="cli-prompt">$</span> electric-agents spawn
+                /assistant/research-1
+              </div>
               <div class="cli-output">✓ Spawned /assistant/research-1</div>
-              <div class="cli-line"><span class="cli-prompt">$</span> electric-agents send /assistant/research-1 "summarise the docs"</div>
+              <div class="cli-line">
+                <span class="cli-prompt">$</span> electric-agents send
+                /assistant/research-1 "summarise the docs"
+              </div>
               <div class="cli-output">→ message delivered, entity woke</div>
-              <div class="cli-line"><span class="cli-prompt">$</span> electric-agents observe /assistant/research-1</div>
-              <div class="cli-output">← reasoning · tool_call(read_file) · text…</div>
+              <div class="cli-line">
+                <span class="cli-prompt">$</span> electric-agents observe
+                /assistant/research-1
+              </div>
+              <div class="cli-output">
+                ← reasoning · tool_call(read_file) · text…
+              </div>
             </div>
           </div>
         </div>
@@ -390,7 +450,11 @@ const hasAgentBlogPosts = computed(() =>
             inspect tool calls, and send follow-up messages — all from a
             cross-platform desktop&nbsp;app.
           </p>
-          <div class="ea-way-preview app-preview" role="img" aria-label="Desktop app preview">
+          <div
+            class="ea-way-preview app-preview"
+            role="img"
+            aria-label="Desktop app preview"
+          >
             <div class="app-chrome">
               <span class="app-dot" />
               <span class="app-dot" />
@@ -398,16 +462,28 @@ const hasAgentBlogPosts = computed(() =>
             </div>
             <div class="app-body">
               <div class="app-sidebar">
-                <div class="app-sidebar-row active"><span class="status-dot live" /> assistant/research-1</div>
-                <div class="app-sidebar-row"><span class="status-dot idle" /> assistant/support-bot</div>
-                <div class="app-sidebar-row"><span class="status-dot idle" /> researcher/r-2</div>
-                <div class="app-sidebar-row"><span class="status-dot live" /> coder/refactor</div>
+                <div class="app-sidebar-row active">
+                  <span class="status-dot live" /> assistant/research-1
+                </div>
+                <div class="app-sidebar-row">
+                  <span class="status-dot idle" /> assistant/support-bot
+                </div>
+                <div class="app-sidebar-row">
+                  <span class="status-dot idle" /> researcher/r-2
+                </div>
+                <div class="app-sidebar-row">
+                  <span class="status-dot live" /> coder/refactor
+                </div>
               </div>
               <div class="app-main">
                 <div class="app-msg user">summarise the docs</div>
                 <div class="app-msg agent">
-                  <div class="app-msg-tool mono">↳ read_file("docs/intro.md")</div>
-                  <div class="app-msg-text">The docs cover three primary surfaces…</div>
+                  <div class="app-msg-tool mono">
+                    ↳ read_file("docs/intro.md")
+                  </div>
+                  <div class="app-msg-text">
+                    The docs cover three primary surfaces…
+                  </div>
                 </div>
               </div>
             </div>
@@ -421,12 +497,14 @@ const hasAgentBlogPosts = computed(() =>
           </div>
           <p class="ea-way-prose">
             Embed agent control directly in your code: spawn and send from any
-            TypeScript service, and render an entity's live stream in React
-            with the <code>useChat</code>&nbsp;hook.
+            TypeScript service, and render an entity's live stream in React with
+            the <code>useChat</code>&nbsp;hook.
           </p>
           <div class="ea-way-preview ts-preview">
             <div class="code-file-header">app.tsx</div>
-            <pre class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">createClient</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+            <pre
+              class="code-block tabbed"
+            ><code><span class="tk-kw">import</span> { <span class="tk-v">createClient</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
 <span class="tk-kw">import</span> { <span class="tk-v">useChat</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents/react"</span>
 
 <span class="tk-kw">const</span> <span class="tk-v">client</span> = <span class="tk-fn">createClient</span>({ <span class="tk-prop">baseUrl</span>: <span class="tk-v">RUNTIME_URL</span> })
@@ -452,7 +530,9 @@ const hasAgentBlogPosts = computed(() =>
           <div class="ea-left-col">
             <div class="ea-code-panel">
               <div class="code-file-header">agent.ts</div>
-              <pre class="code-block annotated"><code><span class="tk-kw">import</span> { <span class="tk-v">createEntityRegistry</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+              <pre
+                class="code-block annotated"
+              ><code><span class="tk-kw">import</span> { <span class="tk-v">createEntityRegistry</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
 
 <span class="tk-kw">const</span> <span class="tk-v">registry</span> = <span class="tk-fn">createEntityRegistry</span>()<span class="ann-marker" data-n="1"></span>
 
@@ -473,71 +553,112 @@ const hasAgentBlogPosts = computed(() =>
             <div class="ea-cli-panel">
               <div class="cli-header md-exclude">Terminal</div>
               <div class="cli-body">
-                <div class="cli-line"><span class="cli-prompt">$</span> electric-agents spawn assistant my-agent<span class="ann-marker" data-n="6"></span></div>
+                <div class="cli-line">
+                  <span class="cli-prompt">$</span> electric-agents spawn
+                  assistant my-agent<span class="ann-marker" data-n="6"></span>
+                </div>
                 <div class="cli-output">✓ Spawned /assistant/my-agent</div>
-                <div class="cli-line"><span class="cli-prompt">$</span> electric-agents send /assistant/my-agent "..."<span class="ann-marker" data-n="7"></span></div>
-                <div class="cli-output">✓ Message sent — entity woke, handling...</div>
-                <div class="cli-line"><span class="cli-prompt">$</span> electric-agents observe /assistant/my-agent<span class="ann-marker" data-n="8"></span></div>
-                <div class="cli-output">← text: "The capital of France is Paris."</div>
+                <div class="cli-line">
+                  <span class="cli-prompt">$</span> electric-agents send
+                  /assistant/my-agent "..."<span
+                    class="ann-marker"
+                    data-n="7"
+                  ></span>
+                </div>
+                <div class="cli-output">
+                  ✓ Message sent — entity woke, handling...
+                </div>
+                <div class="cli-line">
+                  <span class="cli-prompt">$</span> electric-agents observe
+                  /assistant/my-agent<span class="ann-marker" data-n="8"></span>
+                </div>
+                <div class="cli-output">
+                  ← text: "The capital of France is Paris."
+                </div>
               </div>
             </div>
           </div>
           <div class="ea-right-col">
             <div class="ea-annotations">
               <div class="ea-ann-item">
-              <span class="ea-ann-num">1</span>
-              <div>
-                <strong>Create a registry</strong>
-                  <p>The registry holds your entity definitions and wires them to Electric Streams.</p>
+                <span class="ea-ann-num">1</span>
+                <div>
+                  <strong>Create a registry</strong>
+                  <p>
+                    The registry holds your entity definitions and wires them to
+                    Electric Streams.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
-              <span class="ea-ann-num">2</span>
-              <div>
-                <strong>Name your entity type</strong>
-                  <p>Instances are spawned as <code>/assistant/my-agent</code>, <code>/assistant/support-bot</code>, etc.</p>
+                <span class="ea-ann-num">2</span>
+                <div>
+                  <strong>Name your entity type</strong>
+                  <p>
+                    Instances are spawned as <code>/assistant/my-agent</code>,
+                    <code>/assistant/support-bot</code>, etc.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
-              <span class="ea-ann-num">3</span>
-              <div>
-                <strong>Write a handler</strong>
-                  <p><code>ctx</code> gives you the stream, tools, and coordination primitives.</p>
+                <span class="ea-ann-num">3</span>
+                <div>
+                  <strong>Write a handler</strong>
+                  <p>
+                    <code>ctx</code> gives you the stream, tools, and
+                    coordination primitives.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
-              <span class="ea-ann-num">4</span>
-              <div>
-                <strong>Bring your own tools</strong>
-                <p><code>agentTools</code> provides <code>spawn</code>, <code>send</code> and <code>observe</code>. Add your own MCP tools, APIs, or whatever your handler needs.</p>
+                <span class="ea-ann-num">4</span>
+                <div>
+                  <strong>Bring your own tools</strong>
+                  <p>
+                    <code>agentTools</code> provides <code>spawn</code>,
+                    <code>send</code> and <code>observe</code>. Add your own MCP
+                    tools, APIs, or whatever your handler needs.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
-              <span class="ea-ann-num">5</span>
-              <div>
-                <strong>Run the agent loop</strong>
-                  <p>Reads the stream, calls the LLM, appends events, then sleeps. Survives crashes by replaying from the stream.</p>
+                <span class="ea-ann-num">5</span>
+                <div>
+                  <strong>Run the agent loop</strong>
+                  <p>
+                    Reads the stream, calls the LLM, appends events, then
+                    sleeps. Survives crashes by replaying from the stream.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
-              <span class="ea-ann-num">6</span>
-              <div>
-                <strong>Spawn an instance</strong>
-                  <p>Creates a new entity of the given type with a unique ID. Its durable stream starts here.</p>
+                <span class="ea-ann-num">6</span>
+                <div>
+                  <strong>Spawn an instance</strong>
+                  <p>
+                    Creates a new entity of the given type with a unique ID. Its
+                    durable stream starts here.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
-              <span class="ea-ann-num">7</span>
-              <div>
-                <strong>Send a message</strong>
-                  <p>Delivers a message to the entity's stream, waking it to run its handler.</p>
+                <span class="ea-ann-num">7</span>
+                <div>
+                  <strong>Send a message</strong>
+                  <p>
+                    Delivers a message to the entity's stream, waking it to run
+                    its handler.
+                  </p>
                 </div>
               </div>
               <div class="ea-ann-item">
-              <span class="ea-ann-num">8</span>
-              <div>
-                <strong>Observe in real time</strong>
-                  <p>Stream events as they're appended — see the agent think, call tools, and respond.</p>
+                <span class="ea-ann-num">8</span>
+                <div>
+                  <strong>Observe in real time</strong>
+                  <p>
+                    Stream events as they're appended — see the agent think,
+                    call tools, and respond.
+                  </p>
                 </div>
               </div>
             </div>
@@ -613,9 +734,7 @@ const hasAgentBlogPosts = computed(() =>
           Open source · Apache&nbsp;2.0 · built on Electric&nbsp;Streams
         </span>
       </template>
-      <template #title>
-        Bring your agents&nbsp;online
-      </template>
+      <template #title> Bring your agents&nbsp;online </template>
       <template #tagline>
         Install the SDK, define an entity, and ship a durable agent on top of
         your existing&nbsp;stack.
@@ -647,7 +766,6 @@ const hasAgentBlogPosts = computed(() =>
         />
       </template>
     </BottomCtaStrap>
-
   </div>
 </template>
 
@@ -833,7 +951,7 @@ const hasAgentBlogPosts = computed(() =>
 }
 
 .ea-check-list li.yes::before {
-  content: "✓";
+  content: '✓';
   position: absolute;
   left: 0;
   color: var(--ea-event-tool-result);
@@ -841,7 +959,7 @@ const hasAgentBlogPosts = computed(() =>
 }
 
 .ea-check-list li.no::before {
-  content: "✗";
+  content: '✗';
   position: absolute;
   left: 0;
   color: var(--ea-event-error);
@@ -1088,7 +1206,9 @@ const hasAgentBlogPosts = computed(() =>
   border: none;
   border-right: 1px solid var(--ea-divider);
   cursor: pointer;
-  transition: color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
 }
 
 .code-tab:last-child {
@@ -1408,7 +1528,7 @@ const hasAgentBlogPosts = computed(() =>
   line-height: 1.6;
 }
 .ea-runtime-list li::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   top: 0.65em;
@@ -1572,8 +1692,14 @@ const hasAgentBlogPosts = computed(() =>
   background: var(--ea-divider);
   opacity: 0.7;
 }
-.rt-stream-line:nth-child(2) { width: 86%; opacity: 0.5; }
-.rt-stream-line:nth-child(3) { width: 92%; opacity: 0.4; }
+.rt-stream-line:nth-child(2) {
+  width: 86%;
+  opacity: 0.5;
+}
+.rt-stream-line:nth-child(3) {
+  width: 92%;
+  opacity: 0.4;
+}
 
 @media (max-width: 1024px) {
   .ea-runtime {

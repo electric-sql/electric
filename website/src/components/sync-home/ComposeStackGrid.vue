@@ -55,12 +55,8 @@ const isMarkdownExport = useMarkdownExport()
         <img :src="product.icon" :alt="product.title" />
       </div>
       <h3 class="compose-title">{{ product.title }}</h3>
-      <p class="compose-body">
-        <span v-html="product.body" />.
-      </p>
-      <p class="compose-detail">
-        <span v-html="product.detail" />.
-      </p>
+      <p class="compose-body"><span v-html="product.body" />.</p>
+      <p class="compose-detail"><span v-html="product.detail" />.</p>
     </a>
   </div>
 </template>

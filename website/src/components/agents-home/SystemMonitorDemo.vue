@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, nextTick, onBeforeUnmount, onMounted } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import {
+  ref,
+  reactive,
+  computed,
+  watch,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+} from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 const props = defineProps<{
   // When true, render a fixed snapshot of the support sub-agents
@@ -19,7 +27,7 @@ interface AgentRow {
   id: string
   path: string
   depth: number
-  status: "sleeping" | "active" | "done"
+  status: 'sleeping' | 'active' | 'done'
   events: number
   barWidth: number
   visible: boolean
@@ -33,13 +41,69 @@ interface LogEntry {
 }
 
 const agents = reactive<AgentRow[]>([
-  { id: "support",    path: "support/ticket-1190",                   depth: 0, status: "sleeping", events: 3,  barWidth: 0, visible: true },
-  { id: "classify",   path: "support/classify-1190",                 depth: 1, status: "sleeping", events: 0,  barWidth: 0, visible: false },
-  { id: "search-kb",  path: "support/search-kb-1190",                depth: 1, status: "sleeping", events: 0,  barWidth: 0, visible: false },
-  { id: "draft",      path: "support/draft-reply-1190",              depth: 1, status: "sleeping", events: 0,  barWidth: 0, visible: false },
-  { id: "product",    path: "product-desc/optimise-sku-8842",        depth: 0, status: "sleeping", events: 12, barWidth: 0, visible: true },
-  { id: "coding",     path: "coding-agent/pr-review-47",             depth: 0, status: "sleeping", events: 0,  barWidth: 0, visible: true },
-  { id: "deploy",     path: "deploy/pipeline-89",                    depth: 0, status: "sleeping", events: 5,  barWidth: 0, visible: true },
+  {
+    id: 'support',
+    path: 'support/ticket-1190',
+    depth: 0,
+    status: 'sleeping',
+    events: 3,
+    barWidth: 0,
+    visible: true,
+  },
+  {
+    id: 'classify',
+    path: 'support/classify-1190',
+    depth: 1,
+    status: 'sleeping',
+    events: 0,
+    barWidth: 0,
+    visible: false,
+  },
+  {
+    id: 'search-kb',
+    path: 'support/search-kb-1190',
+    depth: 1,
+    status: 'sleeping',
+    events: 0,
+    barWidth: 0,
+    visible: false,
+  },
+  {
+    id: 'draft',
+    path: 'support/draft-reply-1190',
+    depth: 1,
+    status: 'sleeping',
+    events: 0,
+    barWidth: 0,
+    visible: false,
+  },
+  {
+    id: 'product',
+    path: 'product-desc/optimise-sku-8842',
+    depth: 0,
+    status: 'sleeping',
+    events: 12,
+    barWidth: 0,
+    visible: true,
+  },
+  {
+    id: 'coding',
+    path: 'coding-agent/pr-review-47',
+    depth: 0,
+    status: 'sleeping',
+    events: 0,
+    barWidth: 0,
+    visible: true,
+  },
+  {
+    id: 'deploy',
+    path: 'deploy/pipeline-89',
+    depth: 0,
+    status: 'sleeping',
+    events: 5,
+    barWidth: 0,
+    visible: true,
+  },
 ])
 
 const log = reactive<LogEntry[]>([])
@@ -62,13 +126,16 @@ function addLog(icon: string, text: string) {
   log.push({ id: logId++, icon, text, fading: false })
   nextTick(() => {
     if (logRef.value) {
-      logRef.value.scrollTo({ top: logRef.value.scrollHeight, behavior: "smooth" })
+      logRef.value.scrollTo({
+        top: logRef.value.scrollHeight,
+        behavior: 'smooth',
+      })
     }
   })
 }
 
 function clearLog(): Promise<void> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     logFading.value = true
     schedule(() => {
       log.length = 0
@@ -81,30 +148,37 @@ function clearLog(): Promise<void> {
 }
 
 function find(id: string) {
-  return agents.find(a => a.id === id)!
+  return agents.find((a) => a.id === id)!
 }
 
 const defaultEvents: Record<string, number> = {
-  support: 3, product: 12, deploy: 5, coding: 0,
+  support: 3,
+  product: 12,
+  deploy: 5,
+  coding: 0,
 }
 
 function resetAgents() {
   for (const a of agents) {
-    a.status = "sleeping"
+    a.status = 'sleeping'
     a.events = defaultEvents[a.id] ?? 0
     a.barWidth = 0
     a.visible = a.depth === 0
   }
 }
 
-function startBarGrowth(agent: AgentRow, targetWidth: number, durationMs: number) {
+function startBarGrowth(
+  agent: AgentRow,
+  targetWidth: number,
+  durationMs: number
+) {
   const startWidth = agent.barWidth
   const startTime = Date.now()
   const step = () => {
     const elapsed = Date.now() - startTime
     const progress = Math.min(elapsed / durationMs, 1)
     agent.barWidth = startWidth + (targetWidth - startWidth) * progress
-    if (progress < 1 && agent.status === "active") {
+    if (progress < 1 && agent.status === 'active') {
       requestAnimationFrame(step)
     }
   }
@@ -114,169 +188,241 @@ function startBarGrowth(agent: AgentRow, targetWidth: number, durationMs: number
 function runSequence() {
   const steps: Array<[number, () => void]> = [
     // --- Act 1: Support ticket with sub-agents ---
-    [0, () => {
-      addLog("←", "webhook: new support ticket #1190")
-    }],
-    [500, () => {
-      const s = find("support")
-      s.status = "active"
-      s.events = 4
-      startBarGrowth(s, 15, 600)
-      addLog("⚡", "support/ticket-1190 woke")
-    }],
-    [1200, () => {
-      const s = find("support")
-      s.events = 5
-      startBarGrowth(s, 25, 400)
-      const c = find("classify")
-      c.visible = true
-      schedule(() => {
-        c.status = "active"
-        c.events = 1
-        startBarGrowth(c, 40, 1000)
-      }, 150)
-      addLog("→", "spawned classify-1190 (sentiment)")
-    }],
-    [1800, () => {
-      const s = find("support")
-      s.events = 6
-      startBarGrowth(s, 35, 400)
-      const kb = find("search-kb")
-      kb.visible = true
-      schedule(() => {
-        kb.status = "active"
-        kb.events = 1
-        startBarGrowth(kb, 30, 1200)
-      }, 150)
-      addLog("→", "spawned search-kb-1190 (RAG)")
-    }],
-    [2600, () => {
-      const c = find("classify")
-      c.events = 2
-      startBarGrowth(c, 70, 300)
-    }],
-    [3100, () => {
-      const c = find("classify")
-      c.status = "done"
-      c.barWidth = 100
-      addLog("✓", "classify-1190: urgent, billing issue")
-    }],
-    [3600, () => {
-      const kb = find("search-kb")
-      kb.events = 3
-      startBarGrowth(kb, 70, 400)
-    }],
-    [4200, () => {
-      const kb = find("search-kb")
-      kb.status = "done"
-      kb.barWidth = 100
-      addLog("✓", "search-kb-1190: 3 articles found")
-    }],
-    [4800, () => {
-      const s = find("support")
-      s.events = 7
-      startBarGrowth(s, 55, 400)
-      const d = find("draft")
-      d.visible = true
-      schedule(() => {
-        d.status = "active"
-        d.events = 1
-        startBarGrowth(d, 50, 1200)
-      }, 150)
-      addLog("→", "spawned draft-reply-1190 (LLM)")
-    }],
-    [6200, () => {
-      const d = find("draft")
-      d.events = 4
-      d.status = "done"
-      d.barWidth = 100
-      addLog("✓", "draft-reply-1190: response ready")
-    }],
-    [6800, () => {
-      const s = find("support")
-      s.status = "done"
-      s.barWidth = 100
-      addLog("✓", "support/ticket-1190 replied")
-    }],
-    [7800, () => {
-      find("classify").visible = false
-      find("search-kb").visible = false
-      find("draft").visible = false
-    }],
-    [8400, () => {
-      for (const id of ["classify", "search-kb", "draft", "support"]) {
-        const a = find(id)
-        a.status = "sleeping"
-        a.events = defaultEvents[a.id] ?? 0
-        a.barWidth = 0
-      }
-    }],
+    [
+      0,
+      () => {
+        addLog('←', 'webhook: new support ticket #1190')
+      },
+    ],
+    [
+      500,
+      () => {
+        const s = find('support')
+        s.status = 'active'
+        s.events = 4
+        startBarGrowth(s, 15, 600)
+        addLog('⚡', 'support/ticket-1190 woke')
+      },
+    ],
+    [
+      1200,
+      () => {
+        const s = find('support')
+        s.events = 5
+        startBarGrowth(s, 25, 400)
+        const c = find('classify')
+        c.visible = true
+        schedule(() => {
+          c.status = 'active'
+          c.events = 1
+          startBarGrowth(c, 40, 1000)
+        }, 150)
+        addLog('→', 'spawned classify-1190 (sentiment)')
+      },
+    ],
+    [
+      1800,
+      () => {
+        const s = find('support')
+        s.events = 6
+        startBarGrowth(s, 35, 400)
+        const kb = find('search-kb')
+        kb.visible = true
+        schedule(() => {
+          kb.status = 'active'
+          kb.events = 1
+          startBarGrowth(kb, 30, 1200)
+        }, 150)
+        addLog('→', 'spawned search-kb-1190 (RAG)')
+      },
+    ],
+    [
+      2600,
+      () => {
+        const c = find('classify')
+        c.events = 2
+        startBarGrowth(c, 70, 300)
+      },
+    ],
+    [
+      3100,
+      () => {
+        const c = find('classify')
+        c.status = 'done'
+        c.barWidth = 100
+        addLog('✓', 'classify-1190: urgent, billing issue')
+      },
+    ],
+    [
+      3600,
+      () => {
+        const kb = find('search-kb')
+        kb.events = 3
+        startBarGrowth(kb, 70, 400)
+      },
+    ],
+    [
+      4200,
+      () => {
+        const kb = find('search-kb')
+        kb.status = 'done'
+        kb.barWidth = 100
+        addLog('✓', 'search-kb-1190: 3 articles found')
+      },
+    ],
+    [
+      4800,
+      () => {
+        const s = find('support')
+        s.events = 7
+        startBarGrowth(s, 55, 400)
+        const d = find('draft')
+        d.visible = true
+        schedule(() => {
+          d.status = 'active'
+          d.events = 1
+          startBarGrowth(d, 50, 1200)
+        }, 150)
+        addLog('→', 'spawned draft-reply-1190 (LLM)')
+      },
+    ],
+    [
+      6200,
+      () => {
+        const d = find('draft')
+        d.events = 4
+        d.status = 'done'
+        d.barWidth = 100
+        addLog('✓', 'draft-reply-1190: response ready')
+      },
+    ],
+    [
+      6800,
+      () => {
+        const s = find('support')
+        s.status = 'done'
+        s.barWidth = 100
+        addLog('✓', 'support/ticket-1190 replied')
+      },
+    ],
+    [
+      7800,
+      () => {
+        find('classify').visible = false
+        find('search-kb').visible = false
+        find('draft').visible = false
+      },
+    ],
+    [
+      8400,
+      () => {
+        for (const id of ['classify', 'search-kb', 'draft', 'support']) {
+          const a = find(id)
+          a.status = 'sleeping'
+          a.events = defaultEvents[a.id] ?? 0
+          a.barWidth = 0
+        }
+      },
+    ],
 
     // --- Act 2: Product description optimisation wakes ---
-    [9200, () => {
-      addLog("←", "queue: optimise SKU-8842 listing")
-    }],
-    [9700, () => {
-      const p = find("product")
-      p.status = "active"
-      p.events = 13
-      startBarGrowth(p, 30, 1500)
-      addLog("⚡", "product-desc/optimise-sku-8842 woke")
-    }],
-    [11000, () => {
-      const p = find("product")
-      p.events = 15
-      startBarGrowth(p, 70, 800)
-    }],
-    [12000, () => {
-      const p = find("product")
-      p.status = "done"
-      p.barWidth = 100
-      addLog("✓", "optimise-sku-8842: copy updated")
-    }],
-    [13000, () => {
-      const p = find("product")
-      p.status = "sleeping"
-      p.events = defaultEvents.product ?? 0
-      p.barWidth = 0
-    }],
+    [
+      9200,
+      () => {
+        addLog('←', 'queue: optimise SKU-8842 listing')
+      },
+    ],
+    [
+      9700,
+      () => {
+        const p = find('product')
+        p.status = 'active'
+        p.events = 13
+        startBarGrowth(p, 30, 1500)
+        addLog('⚡', 'product-desc/optimise-sku-8842 woke')
+      },
+    ],
+    [
+      11000,
+      () => {
+        const p = find('product')
+        p.events = 15
+        startBarGrowth(p, 70, 800)
+      },
+    ],
+    [
+      12000,
+      () => {
+        const p = find('product')
+        p.status = 'done'
+        p.barWidth = 100
+        addLog('✓', 'optimise-sku-8842: copy updated')
+      },
+    ],
+    [
+      13000,
+      () => {
+        const p = find('product')
+        p.status = 'sleeping'
+        p.events = defaultEvents.product ?? 0
+        p.barWidth = 0
+      },
+    ],
 
     // --- Act 3: Coding agent wakes from GitHub ---
-    [13800, () => {
-      addLog("←", "github: PR #47 opened")
-    }],
-    [14300, () => {
-      const c = find("coding")
-      c.status = "active"
-      c.events = 1
-      startBarGrowth(c, 40, 2000)
-      addLog("⚡", "coding-agent/pr-review-47 woke")
-    }],
-    [16000, () => {
-      const c = find("coding")
-      c.events = 6
-      startBarGrowth(c, 80, 600)
-    }],
-    [16800, () => {
-      const c = find("coding")
-      c.status = "done"
-      c.barWidth = 100
-      addLog("✓", "pr-review-47: 3 comments posted")
-    }],
-    [17800, () => {
-      const c = find("coding")
-      c.status = "sleeping"
-      c.events = 0
-      c.barWidth = 0
-    }],
+    [
+      13800,
+      () => {
+        addLog('←', 'github: PR #47 opened')
+      },
+    ],
+    [
+      14300,
+      () => {
+        const c = find('coding')
+        c.status = 'active'
+        c.events = 1
+        startBarGrowth(c, 40, 2000)
+        addLog('⚡', 'coding-agent/pr-review-47 woke')
+      },
+    ],
+    [
+      16000,
+      () => {
+        const c = find('coding')
+        c.events = 6
+        startBarGrowth(c, 80, 600)
+      },
+    ],
+    [
+      16800,
+      () => {
+        const c = find('coding')
+        c.status = 'done'
+        c.barWidth = 100
+        addLog('✓', 'pr-review-47: 3 comments posted')
+      },
+    ],
+    [
+      17800,
+      () => {
+        const c = find('coding')
+        c.status = 'sleeping'
+        c.events = 0
+        c.barWidth = 0
+      },
+    ],
 
     // --- Loop ---
-    [19000, () => {
-      resetAgents()
-      clearLog().then(() => {
-        runSequence()
-      })
-    }],
+    [
+      19000,
+      () => {
+        resetAgents()
+        clearLog().then(() => {
+          runSequence()
+        })
+      },
+    ],
   ]
 
   // convert absolute times to relative delays
@@ -291,10 +437,13 @@ function runSequence() {
     if (idx >= relSteps.length) return
     const [delay, fn] = relSteps[idx]
     idx++
-    schedule(() => {
-      fn()
-      runNext()
-    }, Math.max(delay, 50))
+    schedule(
+      () => {
+        fn()
+        runNext()
+      },
+      Math.max(delay, 50)
+    )
   }
   runNext()
 }
@@ -310,13 +459,13 @@ function stopAnimation() {
 // watcher so the snapshot stays put.
 function applyPausedSnapshot() {
   const snapshot: Record<string, Partial<AgentRow>> = {
-    support:   { status: "active", events: 7, barWidth: 55, visible: true },
-    classify:  { status: "done",   events: 2, barWidth: 100, visible: true },
-    "search-kb": { status: "done", events: 3, barWidth: 100, visible: true },
-    draft:     { status: "active", events: 1, barWidth: 50, visible: true },
-    product:   { status: "sleeping", events: 12, barWidth: 0, visible: true },
-    coding:    { status: "sleeping", events: 0,  barWidth: 0, visible: true },
-    deploy:    { status: "sleeping", events: 5,  barWidth: 0, visible: true },
+    support: { status: 'active', events: 7, barWidth: 55, visible: true },
+    classify: { status: 'done', events: 2, barWidth: 100, visible: true },
+    'search-kb': { status: 'done', events: 3, barWidth: 100, visible: true },
+    draft: { status: 'active', events: 1, barWidth: 50, visible: true },
+    product: { status: 'sleeping', events: 12, barWidth: 0, visible: true },
+    coding: { status: 'sleeping', events: 0, barWidth: 0, visible: true },
+    deploy: { status: 'sleeping', events: 5, barWidth: 0, visible: true },
   }
   for (const a of agents) {
     const s = snapshot[a.id]
@@ -325,15 +474,16 @@ function applyPausedSnapshot() {
   log.length = 0
   logId = 0
   const lines: Array<[string, string]> = [
-    ["←", "webhook: new support ticket #1190"],
-    ["⚡", "support/ticket-1190 woke"],
-    ["→", "spawned classify-1190 (sentiment)"],
-    ["→", "spawned search-kb-1190 (RAG)"],
-    ["✓", "classify-1190: urgent, billing issue"],
-    ["✓", "search-kb-1190: 3 articles found"],
-    ["→", "spawned draft-reply-1190 (LLM)"],
+    ['←', 'webhook: new support ticket #1190'],
+    ['⚡', 'support/ticket-1190 woke'],
+    ['→', 'spawned classify-1190 (sentiment)'],
+    ['→', 'spawned search-kb-1190 (RAG)'],
+    ['✓', 'classify-1190: urgent, billing issue'],
+    ['✓', 'search-kb-1190: 3 articles found'],
+    ['→', 'spawned draft-reply-1190 (LLM)'],
   ]
-  for (const [icon, text] of lines) log.push({ id: logId++, icon, text, fading: false })
+  for (const [icon, text] of lines)
+    log.push({ id: logId++, icon, text, fading: false })
 }
 
 if (props.paused) {
@@ -374,12 +524,14 @@ onBeforeUnmount(() => {
 })
 
 function statusLabel(s: string) {
-  if (s === "active") return "active"
-  if (s === "done") return "done"
-  return "sleeping"
+  if (s === 'active') return 'active'
+  if (s === 'done') return 'done'
+  return 'sleeping'
 }
 
-const visibleAgents = computed(() => agents.filter(a => a.visible || a.depth === 0))
+const visibleAgents = computed(() =>
+  agents.filter((a) => a.visible || a.depth === 0)
+)
 
 function isLastChild(agent: AgentRow): boolean {
   if (agent.depth === 0) return false
@@ -406,24 +558,29 @@ function isLastChild(agent: AgentRow): boolean {
             class="agent-row"
             :class="[agent.status, { child: agent.depth > 0 }]"
           >
-            <span v-if="agent.depth > 0" class="tree-line" :class="{ last: isLastChild(agent) }"></span>
+            <span
+              v-if="agent.depth > 0"
+              class="tree-line"
+              :class="{ last: isLastChild(agent) }"
+            ></span>
             <span class="status-dot" :class="agent.status"></span>
             <span class="agent-path">{{ agent.path }}</span>
             <span class="agent-bar">
-              <span class="agent-bar-fill" :style="{ width: agent.barWidth + '%' }"></span>
+              <span
+                class="agent-bar-fill"
+                :style="{ width: agent.barWidth + '%' }"
+              ></span>
             </span>
             <span class="agent-events">{{ agent.events }}</span>
-            <span class="agent-status-label" :class="agent.status">{{ statusLabel(agent.status) }}</span>
+            <span class="agent-status-label" :class="agent.status">{{
+              statusLabel(agent.status)
+            }}</span>
           </div>
         </TransitionGroup>
       </div>
       <div ref="logRef" class="log-area" :class="{ fading: logFading }">
         <div class="log-entries">
-          <div
-            v-for="entry in log"
-            :key="entry.id"
-            class="log-line"
-          >
+          <div v-for="entry in log" :key="entry.id" class="log-line">
             <span class="log-icon">{{ entry.icon }}</span>
             <span class="log-text">{{ entry.text }}</span>
           </div>
@@ -491,7 +648,9 @@ function isLastChild(agent: AgentRow): boolean {
   align-items: center;
   gap: 8px;
   padding: 5px 14px;
-  transition: background 0.3s, opacity 0.3s;
+  transition:
+    background 0.3s,
+    opacity 0.3s;
 }
 .agent-row.active {
   background: color-mix(in srgb, var(--ea-brand) 6%, transparent);
@@ -510,7 +669,7 @@ function isLastChild(agent: AgentRow): boolean {
   position: relative;
 }
 .tree-line::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 6px;
   top: -5px;
@@ -520,7 +679,7 @@ function isLastChild(agent: AgentRow): boolean {
   opacity: 0.4;
 }
 .tree-line::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 6px;
   top: 50%;

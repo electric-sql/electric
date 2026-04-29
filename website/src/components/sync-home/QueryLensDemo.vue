@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, computed, watch, onUnmounted } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 // Grid that represents the whole shape (everything the user is allowed
 // to see). Each cell is a row in Postgres.
@@ -42,7 +42,7 @@ const queries: Query[] = [
   },
   // 3. Recent (a horizontal "page") — bottom band, simulates LIMIT/window.
   {
-    label: "ORDER BY updated_at DESC LIMIT 50",
+    label: 'ORDER BY updated_at DESC LIMIT 50',
     colStart: 1,
     rowStart: 5,
     cols: 12,
@@ -114,7 +114,8 @@ const litCount = computed(() => current.value.cols * current.value.rows)
       <div class="qld-shape-head">
         <span class="qld-tag mono qld-tag-shape">SHAPE</span>
         <span class="qld-shape-title mono">
-          workspace.issues <span class="qld-shape-where">where org_id = $user.org_id</span>
+          workspace.issues
+          <span class="qld-shape-where">where org_id = $user.org_id</span>
         </span>
         <span class="qld-shape-count mono">{{ TOTAL }}&nbsp;rows</span>
       </div>
@@ -260,8 +261,10 @@ const litCount = computed(() => current.value.cols * current.value.rows)
   border-radius: 50%;
   background: var(--dot-dim);
   opacity: 0.55;
-  transition: background 350ms ease, opacity 350ms ease,
-              transform 350ms ease;
+  transition:
+    background 350ms ease,
+    opacity 350ms ease,
+    transform 350ms ease;
 }
 .qld-dot.lit {
   background: var(--dot-lit);
@@ -278,10 +281,11 @@ const litCount = computed(() => current.value.cols * current.value.rows)
   /* Animate movement and resize between queries. The transition is
      applied unconditionally so the lens settles smoothly even from the
      initial state. */
-  transition: left 600ms cubic-bezier(0.4, 0, 0.2, 1),
-              top 600ms cubic-bezier(0.4, 0, 0.2, 1),
-              width 600ms cubic-bezier(0.4, 0, 0.2, 1),
-              height 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    left 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    top 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 600ms cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 
@@ -341,30 +345,57 @@ const litCount = computed(() => current.value.cols * current.value.rows)
   border: none;
   padding: 0;
   cursor: pointer;
-  transition: background 200ms ease, transform 200ms ease;
+  transition:
+    background 200ms ease,
+    transform 200ms ease;
 }
-.qld-nav-dot:hover { background: var(--ea-text-3); }
+.qld-nav-dot:hover {
+  background: var(--ea-text-3);
+}
 .qld-nav-dot.active {
   background: var(--brand);
   transform: scale(1.25);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .qld-lens, .qld-dot { transition: none !important; }
+  .qld-lens,
+  .qld-dot {
+    transition: none !important;
+  }
 }
 
 @media (max-width: 768px) {
-  .qld-shape { padding: 14px 14px 16px; }
-  .qld-shape-title { font-size: 11px; }
-  .qld-shape-where { display: none; }
-  .qld-foot { gap: 8px; }
-  .qld-code { font-size: 11px; }
+  .qld-shape {
+    padding: 14px 14px 16px;
+  }
+  .qld-shape-title {
+    font-size: 11px;
+  }
+  .qld-shape-where {
+    display: none;
+  }
+  .qld-foot {
+    gap: 8px;
+  }
+  .qld-code {
+    font-size: 11px;
+  }
 }
 
 @media (max-width: 480px) {
-  .qld-shape-head { gap: 6px; margin-bottom: 12px; }
-  .qld-shape-count { font-size: 10px; }
-  .qld-grid { padding: 4px; }
-  .qld-dot { width: 4px; height: 4px; }
+  .qld-shape-head {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .qld-shape-count {
+    font-size: 10px;
+  }
+  .qld-grid {
+    padding: 4px;
+  }
+  .qld-dot {
+    width: 4px;
+    height: 4px;
+  }
 }
 </style>

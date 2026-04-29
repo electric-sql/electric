@@ -31,11 +31,11 @@
     "prettier": "^3.6.2"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
+    "*.{js,mjs,cjs,jsx,ts,tsx}": [
       "eslint --fix",
       "node_modules/.bin/prettier --write"
     ],
-    "*.{json,css,md,yml,yaml}": "node_modules/.bin/prettier --write"
+    "*.{json,css,md,vue,yml,yaml}": "node_modules/.bin/prettier --write"
   },
   "pnpm": {
     "patchedDependencies": {

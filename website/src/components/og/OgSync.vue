@@ -12,9 +12,9 @@
  * bbox in as an extra exclusion rect so the fan-out canvas doesn't
  * paint table rows / shapes underneath the brand mark in the
  * frame's top-left corner. */
-import SyncHero from "../sync-home/SyncHero.vue"
-import OgFrame from "./OgFrame.vue"
-import { OG_LOGO_EXCLUDE_RECT } from "./ogLogoRect"
+import SyncHero from '../sync-home/SyncHero.vue'
+import OgFrame from './OgFrame.vue'
+import { OG_LOGO_EXCLUDE_RECT } from './ogLogoRect'
 </script>
 
 <template>

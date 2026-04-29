@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import {
   DURABLE_STREAMS_ACTIVATION_ORDER,
   DURABLE_STREAMS_FADE_TAIL,
   DURABLE_STREAMS_WHEEL_BLADES,
   DURABLE_STREAMS_WHEEL_VIEWBOX,
-} from "../streams-home/durableStreamsWheel"
+} from '../streams-home/durableStreamsWheel'
 import {
   createMeshScene,
   hashSeed,
@@ -14,7 +14,7 @@ import {
   sampleAlongTrack,
   type MeshScene,
   type MeshWheel,
-} from "./meshOfStreams"
+} from './meshOfStreams'
 
 /** rIC / cIC are not on `Window` in all TS `lib` builds. */
 type WindowWithIdle = Window & {
@@ -28,7 +28,7 @@ type WindowWithIdle = Window & {
 const props = withDefaults(
   defineProps<{
     seed?: string
-    layout?: "wide" | "square" | "dense" | "sparse"
+    layout?: 'wide' | 'square' | 'dense' | 'sparse'
     wheelCount?: number
     connectionDensity?: number
     gridSize?: number
@@ -77,11 +77,16 @@ const props = withDefaults(
     // capture wraps this hero inside a frame that overlays the
     // Electric wordmark in the top-left, and feeds the wordmark's
     // bbox in here so no canvas geometry paints under it.
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
   {
-    seed: "mesh-of-streams",
-    layout: "wide",
+    seed: 'mesh-of-streams',
+    layout: 'wide',
     wheelCount: 14,
     connectionDensity: 0.78,
     gridSize: 24,
@@ -156,7 +161,7 @@ function getTextRects(element: Element): DOMRect[] {
       rects.push(nodeRects[i])
     }
   }
-  element.querySelectorAll("a, button, svg, img, input").forEach((child) => {
+  element.querySelectorAll('a, button, svg, img, input').forEach((child) => {
     const r = child.getBoundingClientRect()
     if (r.width > 0 && r.height > 0) rects.push(r)
   })
@@ -290,11 +295,7 @@ watch(
 // single static frame and never advance.
 const animated = computed(() => {
   if (props.paused) return false
-  if (
-    props.animateMessages &&
-    props.showMessages &&
-    props.messageSpeed > 0
-  )
+  if (props.animateMessages && props.showMessages && props.messageSpeed > 0)
     return true
   if (props.animateSegments && props.segmentPulse > 0) return true
   if (props.rotateWheels && props.wheelRotationSpeed > 0) return true
@@ -356,15 +357,15 @@ watch(
 
 onMounted(() => {
   syncSize()
-  if (canvas.value) ctx = canvas.value.getContext("2d")
+  if (canvas.value) ctx = canvas.value.getContext('2d')
   ensureCanvasSize()
-  if (typeof ResizeObserver !== "undefined") {
+  if (typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => syncSize())
     if (root.value) resizeObserver.observe(root.value)
     excludeObserver = new ResizeObserver(() => measureExclusions())
     if (props.excludeEl) excludeObserver.observe(props.excludeEl)
   }
-  window.addEventListener("resize", syncSize)
+  window.addEventListener('resize', syncSize)
   // Two rAFs: first frame ensures the canvas is in the DOM with its real
   // size; second waits for the excludeEl's text to lay out (font load /
   // late hydration) before we measure. We then kick off the deferred
@@ -384,7 +385,7 @@ onBeforeUnmount(() => {
   cancelPendingScene()
   resizeObserver?.disconnect()
   excludeObserver?.disconnect()
-  window.removeEventListener("resize", syncSize)
+  window.removeEventListener('resize', syncSize)
 })
 
 // Re-attach the exclude observer if the consumer swaps the element.
@@ -409,7 +410,8 @@ const trackMap = computed(() => {
 
 const messageSeeds = computed<MessageSeed[]>(() => {
   const tracks = scene.value.tracks
-  if (!tracks.length || !props.showMessages || props.messageCount <= 0) return []
+  if (!tracks.length || !props.showMessages || props.messageCount <= 0)
+    return []
   const random = mulberry32(hashSeed(`${props.seed}:messages`))
   const out: MessageSeed[] = []
   const target = Math.max(0, Math.round(props.messageCount))
@@ -590,12 +592,7 @@ function traceLineArcPath(
   target.lineTo(last.x, last.y)
 }
 
-function drawGlowDot(
-  x: number,
-  y: number,
-  radius: number,
-  alpha: number
-) {
+function drawGlowDot(x: number, y: number, radius: number, alpha: number) {
   if (!ctx || alpha <= 0.01) return
   const fade = radialFade(x, y)
   const a = alpha * fade * props.intensity
@@ -625,7 +622,7 @@ function drawWheels(timeSec: number) {
   // alpha values per draw rather than per blade. With 14 wheels × 16
   // blades = 224 paths/frame the string allocations alone were measurable
   // in flame charts.
-  const teal = "117, 251, 253"
+  const teal = '117, 251, 253'
   for (const wheel of scene.value.wheels) {
     const fade = radialFade(wheel.x, wheel.y)
     if (fade < 0.02) continue
@@ -673,8 +670,8 @@ function drawCanvas(timeSec: number) {
     if (fade < 0.02) continue
 
     traceLineArcPath(ctx, track.points, track.corners, props.cornerRadius)
-    ctx.lineCap = "round"
-    ctx.lineJoin = "round"
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
     ctx.strokeStyle = `rgba(117, 251, 253, ${0.12 * fade * props.intensity})`
     ctx.lineWidth = props.trackWidth + 1.15
     ctx.stroke()
@@ -705,7 +702,9 @@ function drawCanvas(timeSec: number) {
       for (let i = tailOffsets.length - 1; i >= 0; i--) {
         const point = sampleAlongTrack(
           track,
-          seed.baseFraction + travel - (tailOffsets[i] / track.length) * direction
+          seed.baseFraction +
+            travel -
+            (tailOffsets[i] / track.length) * direction
         )
         drawGlowDot(
           point.x,
@@ -726,9 +725,9 @@ function drawCanvas(timeSec: number) {
     const margin = props.excludeMargin
     const feather = Math.max(0, props.excludeFeather)
     ctx.save()
-    ctx.globalCompositeOperation = "destination-out"
+    ctx.globalCompositeOperation = 'destination-out'
     if (feather > 0) ctx.filter = `blur(${feather}px)`
-    ctx.fillStyle = "rgba(0, 0, 0, 1)"
+    ctx.fillStyle = 'rgba(0, 0, 0, 1)'
     for (const z of exclusions.value) {
       const w = z.right - z.left + margin * 2
       const h = z.bottom - z.top + margin * 2
@@ -778,7 +777,7 @@ function debugCellPath() {
   for (let y = step; y < size.value.h; y += step) {
     lines.push(`M 0 ${y} L ${size.value.w} ${y}`)
   }
-  return lines.join(" ")
+  return lines.join(' ')
 }
 </script>
 
@@ -828,7 +827,8 @@ function debugCellPath() {
    per-edge feather used by the canvas-side `radialFade` so the two
    layers stay visually consistent. */
 .mesh-streams--edge-fade {
-  -webkit-mask-image: linear-gradient(
+  -webkit-mask-image:
+    linear-gradient(
       to right,
       transparent 0,
       #000 8%,
@@ -843,7 +843,8 @@ function debugCellPath() {
       transparent 100%
     );
   -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(
+  mask-image:
+    linear-gradient(
       to right,
       transparent 0,
       #000 8%,

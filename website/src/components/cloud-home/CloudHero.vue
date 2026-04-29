@@ -10,10 +10,10 @@
    `paused`, `hideActions`, and an `extraExcludeRects` array carrying
    the wordmark's bbox so the mesh canvas doesn't paint under the
    brand mark in the social card's top-left corner. */
-import { ref } from "vue"
-import { VPButton } from "vitepress/theme"
+import { ref } from 'vue'
+import { VPButton } from 'vitepress/theme'
 
-import MeshOfStreams from "../brand-toys/MeshOfStreams.vue"
+import MeshOfStreams from '../brand-toys/MeshOfStreams.vue'
 
 withDefaults(
   defineProps<{
@@ -32,7 +32,12 @@ withDefaults(
        OG capture to reserve the wordmark's bbox in the frame's
        top-left corner so the mesh canvas never paints under the
        brand mark. */
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
   { paused: false, hideActions: false, extraExcludeRects: () => [] }
 )
@@ -69,8 +74,8 @@ const heroInnerRef = ref<HTMLElement>()
         Electric&nbsp;<span class="cl-hero-accent">Cloud</span>
       </h1>
       <p class="cl-hero-tagline">
-        Scalable data infrastructure platform for building fast, modern apps
-        and <span class="no-wrap">multi-agent systems</span>.
+        Scalable data infrastructure platform for building fast, modern apps and
+        <span class="no-wrap">multi-agent systems</span>.
       </p>
 
       <div v-if="!hideActions" class="cl-hero-row">

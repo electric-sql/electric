@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import MarkdownContent from "../MarkdownContent.vue"
-import MdExportExplicit from "../MdExportExplicit.vue"
-import { useMarkdownExport } from "../../lib/useMarkdownExport"
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 
 interface Card {
   img?: string
@@ -21,18 +21,18 @@ const VERCEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox=
 
 const cards: Card[] = [
   {
-    img: "/img/icons/tanstack.svg",
-    name: "TanStack AI",
-    body: "Durable connection adapter. Resumable, shareable AI sessions across tabs and devices.",
-    docs: "/docs/streams/integrations/tanstack-ai",
-    blog: "/blog/2026/01/12/durable-sessions-for-collaborative-ai",
+    img: '/img/icons/tanstack.svg',
+    name: 'TanStack AI',
+    body: 'Durable connection adapter. Resumable, shareable AI sessions across tabs and devices.',
+    docs: '/docs/streams/integrations/tanstack-ai',
+    blog: '/blog/2026/01/12/durable-sessions-for-collaborative-ai',
   },
   {
     svg: VERCEL_SVG,
-    name: "Vercel AI SDK",
-    body: "Durable Transport for the AI SDK. Drop-in replacement for streamText transport.",
-    docs: "/docs/streams/integrations/vercel-ai-sdk",
-    blog: "/blog/2026/03/24/durable-transport-ai-sdks",
+    name: 'Vercel AI SDK',
+    body: 'Durable Transport for the AI SDK. Drop-in replacement for streamText transport.',
+    docs: '/docs/streams/integrations/vercel-ai-sdk',
+    blog: '/blog/2026/03/24/durable-transport-ai-sdks',
   },
 ]
 
@@ -45,9 +45,9 @@ const markdownCards = cards
 
 ${card.body}
 
-${links.join(" · ")}`
+${links.join(' · ')}`
   })
-  .join("\n\n")
+  .join('\n\n')
 
 const isMarkdownExport = useMarkdownExport()
 </script>
@@ -57,12 +57,7 @@ const isMarkdownExport = useMarkdownExport()
     <MarkdownContent>{{ markdownCards }}</MarkdownContent>
   </MdExportExplicit>
   <div v-else class="ig">
-    <a
-      v-for="card in cards"
-      :key="card.name"
-      :href="card.docs"
-      class="ig-card"
-    >
+    <a v-for="card in cards" :key="card.name" :href="card.docs" class="ig-card">
       <div class="ig-head">
         <span class="ig-glyph">
           <img v-if="card.img" :src="card.img" :alt="card.name" />
@@ -97,7 +92,9 @@ const isMarkdownExport = useMarkdownExport()
   border-radius: 10px;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.2s, transform 0.2s;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
 .ig-card:hover {
   border-color: var(--vp-c-brand-1);

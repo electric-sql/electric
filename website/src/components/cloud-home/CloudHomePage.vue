@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { VPButton } from "vitepress/theme"
+import { VPButton } from 'vitepress/theme'
 
-import EaSection from "../agents-home/Section.vue"
-import BottomCtaStrap from "../BottomCtaStrap.vue"
-import CloudHero from "./CloudHero.vue"
-import { useMarkdownExport } from "../../lib/useMarkdownExport"
+import EaSection from '../agents-home/Section.vue'
+import BottomCtaStrap from '../BottomCtaStrap.vue'
+import CloudHero from './CloudHero.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
 
 const isMarkdownExport = useMarkdownExport()
 </script>
@@ -38,16 +38,18 @@ const isMarkdownExport = useMarkdownExport()
             We host
             <a href="/streams/" @click.stop>Electric&nbsp;Streams</a>
             &mdash; a fully-managed implementation of the open
-            <a href="https://durablestreams.com/" @click.stop>Durable&nbsp;Streams</a>
+            <a href="https://durablestreams.com/" @click.stop
+              >Durable&nbsp;Streams</a
+            >
             protocol &mdash; with
-            <a href="#protocols" @click.stop>multiple transports</a>,
-            from raw binary streams, to JSON mode, to protocol-specific
-            adapters and user-defined sync protocols.
-            See the
+            <a href="#protocols" @click.stop>multiple transports</a>, from raw
+            binary streams, to JSON mode, to protocol-specific adapters and
+            user-defined sync protocols. See the
             <a
               href="/blog/2026/01/22/announcing-hosted-durable-streams"
               @click.stop
-            >announcement blog post here</a>.
+              >announcement blog post here</a
+            >.
           </p>
           <component
             :is="isMarkdownExport ? 'a' : 'span'"
@@ -64,14 +66,18 @@ const isMarkdownExport = useMarkdownExport()
           :href="isMarkdownExport ? undefined : '/sync'"
         >
           <div class="cl-product-card-head">
-            <img src="/img/icons/electric.svg" alt="" class="cl-product-icon md-exclude" />
+            <img
+              src="/img/icons/electric.svg"
+              alt=""
+              class="cl-product-icon md-exclude"
+            />
             <h3>Electric&nbsp;Sync</h3>
           </div>
           <p>
             We provision, run and operate the
             <a href="/sync/" @click.stop>Electric&nbsp;Sync</a>
-            engine for you. It connects to your Postgres, consumes changes
-            over logical replication and provides a service endpoint for
+            engine for you. It connects to your Postgres, consumes changes over
+            logical replication and provides a service endpoint for
             <a href="/docs/sync/guides/shapes" @click.stop>syncing shapes</a>
             into your client.
           </p>
@@ -95,8 +101,9 @@ const isMarkdownExport = useMarkdownExport()
     >
       <p class="cl-ddn-prose">
         This allows you to scale out real-time data to
-        <a href="/docs/sync/reference/benchmarks#cloud">millions of concurrent users</a>.
-        With fast load times, low latency, and consistently low resource use.
+        <a href="/docs/sync/reference/benchmarks#cloud"
+          >millions of concurrent users</a
+        >. With fast load times, low latency, and consistently low resource use.
       </p>
 
       <ul v-if="isMarkdownExport" class="cl-stat-list-md">
@@ -137,23 +144,32 @@ const isMarkdownExport = useMarkdownExport()
       <div class="cl-protocols-grid">
         <div class="cl-protocols-card">
           <h3>Clients</h3>
-          <p>Official clients for both Electric&nbsp;Streams and Electric&nbsp;Sync:</p>
+          <p>
+            Official clients for both Electric&nbsp;Streams and
+            Electric&nbsp;Sync:
+          </p>
           <ul class="cl-protocol-list">
             <li>
               <a href="/docs/streams/clients/typescript">
-                <span class="cl-protocol-name">Streams &mdash; TypeScript client</span>
+                <span class="cl-protocol-name"
+                  >Streams &mdash; TypeScript client</span
+                >
                 <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/streams/clients/python">
-                <span class="cl-protocol-name">Streams &mdash; Python client</span>
+                <span class="cl-protocol-name"
+                  >Streams &mdash; Python client</span
+                >
                 <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
             <li>
               <a href="/docs/sync/api/clients/typescript">
-                <span class="cl-protocol-name">Sync &mdash; TypeScript client</span>
+                <span class="cl-protocol-name"
+                  >Sync &mdash; TypeScript client</span
+                >
                 <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
@@ -168,13 +184,13 @@ const isMarkdownExport = useMarkdownExport()
 
         <div class="cl-protocols-card">
           <h3>Integrations</h3>
-          <p>
-            Framework and platform integrations across both products:
-          </p>
+          <p>Framework and platform integrations across both products:</p>
           <ul class="cl-protocol-list">
             <li>
               <a href="/docs/sync/integrations/react">
-                <span class="cl-protocol-name">React, Vue, Svelte, Solid&hellip;</span>
+                <span class="cl-protocol-name"
+                  >React, Vue, Svelte, Solid&hellip;</span
+                >
                 <span class="cl-protocol-arrow md-exclude">→</span>
               </a>
             </li>
@@ -211,11 +227,10 @@ const isMarkdownExport = useMarkdownExport()
           Hosted &middot; usage-based &middot; built on open&nbsp;protocols
         </span>
       </template>
-      <template #title>
-        Start building on&nbsp;Electric&nbsp;Cloud
-      </template>
+      <template #title> Start building on&nbsp;Electric&nbsp;Cloud </template>
       <template #tagline>
-        Hosted Electric&nbsp;Streams and Electric&nbsp;Sync, with&nbsp;a&nbsp;generous&nbsp;free&nbsp;tier.
+        Hosted Electric&nbsp;Streams and Electric&nbsp;Sync,
+        with&nbsp;a&nbsp;generous&nbsp;free&nbsp;tier.
       </template>
       <template #actions>
         <VPButton

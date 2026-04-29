@@ -70,9 +70,7 @@ const cards = [
 
 const markdown = `## ${head.title}
 
-${cards
-  .map((c) => `### ${c.title} (${c.eyebrow})\n\n${c.body}`)
-  .join('\n\n')}`
+${cards.map((c) => `### ${c.title} (${c.eyebrow})\n\n${c.body}`).join('\n\n')}`
 
 onMounted(() => {
   observer = new IntersectionObserver(

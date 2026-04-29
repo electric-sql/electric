@@ -11,9 +11,9 @@
  * at thumbnail size, plus the wordmark's bbox fed in as an extra
  * exclusion rect so the network mesh doesn't draw underneath the
  * brand mark in the frame's top-left corner. */
-import AgentsHero from "../agents-home/AgentsHero.vue"
-import OgFrame from "./OgFrame.vue"
-import { OG_LOGO_EXCLUDE_RECT } from "./ogLogoRect"
+import AgentsHero from '../agents-home/AgentsHero.vue'
+import OgFrame from './OgFrame.vue'
+import { OG_LOGO_EXCLUDE_RECT } from './ogLogoRect'
 </script>
 
 <template>

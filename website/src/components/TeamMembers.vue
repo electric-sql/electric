@@ -40,10 +40,7 @@ const { items } = defineProps(['items'])
       <p class="tm-bio">{{ item.short_bio }}</p>
 
       <div v-if="item.profile_display_uri" class="tm-social mono">
-        <span
-          class="tm-social-icon"
-          :class="`vpi-${item.profile_icon}`"
-        />
+        <span class="tm-social-icon" :class="`vpi-${item.profile_icon}`" />
         <span class="tm-social-handle">{{ item.profile_display_uri }}</span>
       </div>
     </a>

@@ -1,16 +1,9 @@
 <script setup lang="ts">
-import MarkdownContent from "../MarkdownContent.vue"
-import MdExportExplicit from "../MdExportExplicit.vue"
-import { useMarkdownExport } from "../../lib/useMarkdownExport"
-import {
-  ref,
-  computed,
-  watch,
-  onMounted,
-  onUnmounted,
-  nextTick,
-} from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import MarkdownContent from '../MarkdownContent.vue'
+import MdExportExplicit from '../MdExportExplicit.vue'
+import { useMarkdownExport } from '../../lib/useMarkdownExport'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Script — easy to edit. Each step is a command (typed character-by-character)
@@ -21,10 +14,10 @@ import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemo
 
 interface OutputSegment {
   text: string
-  kind?: "ok" | "data" | "key" | "muted" | "cursor"
+  kind?: 'ok' | 'data' | 'key' | 'muted' | 'cursor'
 }
 
-type AnnotationAnchor = "cmd" | "out"
+type AnnotationAnchor = 'cmd' | 'out'
 
 interface Step {
   id: string
@@ -38,85 +31,71 @@ interface Step {
 
 const script: Step[] = [
   {
-    id: "s1",
-    label: "Create the stream",
+    id: 's1',
+    label: 'Create the stream',
     command: `curl -X PUT http://localhost:4437/v1/stream/hello \\\n     -H 'Content-Type: application/json'`,
     thinkMs: 420,
-    output: [
-      [
-        { text: "✓ ", kind: "ok" },
-        { text: "201 Created" },
-      ],
-    ],
+    output: [[{ text: '✓ ', kind: 'ok' }, { text: '201 Created' }]],
     annotation:
-      "Creates a JSON-mode stream. Idempotent — re-running just no-ops.",
-    annotationAnchor: "cmd",
+      'Creates a JSON-mode stream. Idempotent — re-running just no-ops.',
+    annotationAnchor: 'cmd',
   },
   {
-    id: "s2",
-    label: "Append one JSON message",
+    id: 's2',
+    label: 'Append one JSON message',
     command: `curl -X POST http://localhost:4437/v1/stream/hello \\\n     -H 'Content-Type: application/json' \\\n     -d '{"hello":"world"}'`,
     thinkMs: 480,
     output: [
       [
-        { text: "✓ ", kind: "ok" },
-        { text: "200 OK   " },
-        { text: "Stream-Next-Offset:", kind: "key" },
-        { text: " 01JQXK5V00" },
+        { text: '✓ ', kind: 'ok' },
+        { text: '200 OK   ' },
+        { text: 'Stream-Next-Offset:', kind: 'key' },
+        { text: ' 01JQXK5V00' },
       ],
     ],
     annotation:
-      "Appends one JSON message. Save Stream-Next-Offset to resume from here.",
-    annotationAnchor: "out",
+      'Appends one JSON message. Save Stream-Next-Offset to resume from here.',
+    annotationAnchor: 'out',
   },
   {
-    id: "s3",
-    label: "Read from the start",
+    id: 's3',
+    label: 'Read from the start',
     command: `curl "http://localhost:4437/v1/stream/hello?offset=-1"`,
     thinkMs: 380,
-    output: [
-      [
-        { text: "[" },
-        { text: '{"hello":"world"}' },
-        { text: "]" },
-      ],
-    ],
+    output: [[{ text: '[' }, { text: '{"hello":"world"}' }, { text: ']' }]],
     annotation:
-      "Reads the stream from the start. JSON-mode reads return an array of messages.",
-    annotationAnchor: "cmd",
+      'Reads the stream from the start. JSON-mode reads return an array of messages.',
+    annotationAnchor: 'cmd',
   },
   {
-    id: "s4",
-    label: "Tail live with SSE",
+    id: 's4',
+    label: 'Tail live with SSE',
     command: `curl -N "http://localhost:4437/v1/stream/hello?offset=-1&live=sse"`,
     thinkMs: 360,
     output: [
-      [{ text: "event: ", kind: "data" }, { text: "data" }],
+      [{ text: 'event: ', kind: 'data' }, { text: 'data' }],
+      [{ text: 'data: ', kind: 'data' }, { text: '[{"hello":"world"}]' }],
+      [{ text: '\u00A0' }],
+      [{ text: 'event: ', kind: 'data' }, { text: 'control' }],
       [
-        { text: "data: ", kind: "data" },
-        { text: '[{"hello":"world"}]' },
-      ],
-      [{ text: "\u00A0" }],
-      [{ text: "event: ", kind: "data" }, { text: "control" }],
-      [
-        { text: "data: ", kind: "data" },
+        { text: 'data: ', kind: 'data' },
         {
           text: '{"streamNextOffset":"01JQXK5V00","upToDate":true}',
         },
       ],
-      [{ text: "▍", kind: "cursor" }],
+      [{ text: '▍', kind: 'cursor' }],
     ],
     annotation:
-      "Tails live. data events carry payloads; control events carry the next offset and state.",
-    annotationAnchor: "cmd",
+      'Tails live. data events carry payloads; control events carry the next offset and state.',
+    annotationAnchor: 'cmd',
   },
 ]
 
 const markdownQuickstart = computed(
   () => `\`\`\`sh
 ${script
-  .map((step) => `# ${step.label}\n${step.command.replace(/\n {5}/g, "\n  ")}`)
-  .join("\n\n")}
+  .map((step) => `# ${step.label}\n${step.command.replace(/\n {5}/g, '\n  ')}`)
+  .join('\n\n')}
 \`\`\``
 )
 
@@ -151,7 +130,7 @@ const timings: StepTiming[] = (() => {
     const charTimings: number[] = []
     let typed = 0
     for (let c = 0; c < cmd.length; c++) {
-      typed += cmd[c] === "\n" ? BREAK_MS : CHAR_MS
+      typed += cmd[c] === '\n' ? BREAK_MS : CHAR_MS
       charTimings.push(typed)
     }
     const cmdEnd = start + typed
@@ -239,8 +218,8 @@ function isOutputShown(i: number): boolean {
 }
 
 function isAnnotationVisible(step: Step, i: number): boolean {
-  const anchor = step.annotationAnchor ?? "cmd"
-  if (anchor === "cmd") return elapsedMs.value >= timings[i].cmdEnd
+  const anchor = step.annotationAnchor ?? 'cmd'
+  if (anchor === 'cmd') return elapsedMs.value >= timings[i].cmdEnd
   return isOutputShown(i)
 }
 
@@ -260,7 +239,7 @@ interface RenderedLine {
 function renderTypedLines(stepIdx: number): RenderedLine[] {
   const cmd = script[stepIdx].command
   const typed = cmd.slice(0, typedCharsAt(stepIdx))
-  const lines = typed.split("\n")
+  const lines = typed.split('\n')
   const isActive = stepIdx === activeStep.value && !isOutputShown(stepIdx)
   return lines.map((text, i) => ({
     text,
@@ -327,21 +306,19 @@ function restart() {
 
 function onTerminalClick(ev: MouseEvent) {
   const target = ev.target as HTMLElement
-  if (target.closest("a")) return
+  if (target.closest('a')) return
   togglePause()
 }
 
 const elapsedLabel = computed(() => formatMs(elapsedMs.value))
 const totalLabel = computed(() => formatMs(TOTAL_MS))
-const scrubFill = computed(
-  () => `${(elapsedMs.value / TOTAL_MS) * 100}%`
-)
+const scrubFill = computed(() => `${(elapsedMs.value / TOTAL_MS) * 100}%`)
 
 function formatMs(ms: number): string {
   const totalSec = Math.floor(ms / 1000)
   const m = Math.floor(totalSec / 60)
   const s = totalSec % 60
-  return `${m}:${String(s).padStart(2, "0")}`
+  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 // ── Scrubber drag ──────────────────────────────────────────────────────
@@ -374,19 +351,19 @@ function onScrubUp(ev: PointerEvent) {
 
 function onScrubKey(ev: KeyboardEvent) {
   const STEP = TOTAL_MS / 60
-  if (ev.key === "ArrowLeft") {
+  if (ev.key === 'ArrowLeft') {
     elapsedMs.value = Math.max(0, elapsedMs.value - STEP)
     ev.preventDefault()
-  } else if (ev.key === "ArrowRight") {
+  } else if (ev.key === 'ArrowRight') {
     elapsedMs.value = Math.min(TOTAL_MS, elapsedMs.value + STEP)
     ev.preventDefault()
-  } else if (ev.key === "Home") {
+  } else if (ev.key === 'Home') {
     elapsedMs.value = 0
     ev.preventDefault()
-  } else if (ev.key === "End") {
+  } else if (ev.key === 'End') {
     elapsedMs.value = TOTAL_MS
     ev.preventDefault()
-  } else if (ev.key === " " || ev.key === "Enter") {
+  } else if (ev.key === ' ' || ev.key === 'Enter') {
     togglePause()
     ev.preventDefault()
   }
@@ -398,8 +375,8 @@ function onScrubKey(ev: KeyboardEvent) {
 
 onMounted(() => {
   reduced.value =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   if (reduced.value) {
     elapsedMs.value = TOTAL_MS
@@ -420,8 +397,8 @@ onUnmounted(() => {
   <div v-else ref="rootRef" class="qs-root">
     <span class="sr-only">
       Animated terminal walkthrough: creates an Electric Stream, appends a
-      message, reads it back from offset -1, then tails it live with
-      server-sent events.
+      message, reads it back from offset -1, then tails it live with server-sent
+      events.
     </span>
 
     <div class="qs-stage">
@@ -431,7 +408,8 @@ onUnmounted(() => {
           <span class="qs-dot qs-dot--y"></span>
           <span class="qs-dot qs-dot--g"></span>
           <span class="qs-title">
-            <span class="qs-title-prefix">Terminal — </span>durable-streams quickstart
+            <span class="qs-title-prefix">Terminal — </span>durable-streams
+            quickstart
           </span>
         </div>
 
@@ -477,7 +455,8 @@ onUnmounted(() => {
                       'qs-out-muted': seg.kind === 'muted',
                       'qs-out-cursor': seg.kind === 'cursor',
                     }"
-                  >{{ seg.text }}</span>
+                    >{{ seg.text }}</span
+                  >
                 </div>
 
                 <!-- Annotation anchored to the output -->
@@ -561,10 +540,7 @@ onUnmounted(() => {
           @keydown="onScrubKey"
         >
           <div class="qs-scrub-track">
-            <div
-              class="qs-scrub-fill"
-              :style="{ width: scrubFill }"
-            ></div>
+            <div class="qs-scrub-fill" :style="{ width: scrubFill }"></div>
             <div
               class="qs-scrub-thumb"
               :class="{ scrubbing: isScrubbing }"
@@ -681,7 +657,7 @@ onUnmounted(() => {
     #000 calc(100% - 14px),
     transparent 100%
   );
-          mask-image: linear-gradient(
+  mask-image: linear-gradient(
     to bottom,
     transparent 0,
     #000 14px,
@@ -810,8 +786,7 @@ onUnmounted(() => {
   font-weight: 500;
   letter-spacing: 0.005em;
   color: var(--ea-text-1);
-  box-shadow: 0 1px 0 0
-    color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
 }
 
 .dark .qs-annot-text {
@@ -868,7 +843,10 @@ onUnmounted(() => {
   color: var(--ea-text-2);
   cursor: pointer;
   padding: 0;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .qs-ctrl-btn:hover {
@@ -928,20 +906,27 @@ onUnmounted(() => {
   border-radius: 50%;
   background: var(--vp-c-brand-1);
   transform: translate(-50%, -50%);
-  transition: left 0.08s linear, transform 0.12s ease-out, box-shadow 0.12s ease-out;
+  transition:
+    left 0.08s linear,
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out;
   box-shadow: 0 0 0 2px var(--ea-surface);
 }
 
 .qs-scrub:hover .qs-scrub-thumb {
   transform: translate(-50%, -50%) scale(1.2);
-  box-shadow: 0 0 0 2px var(--ea-surface),
+  box-shadow:
+    0 0 0 2px var(--ea-surface),
     0 0 0 6px color-mix(in srgb, var(--vp-c-brand-1) 22%, transparent);
 }
 
 .qs-scrub-thumb.scrubbing {
   transform: translate(-50%, -50%) scale(1.35);
-  transition: transform 0.05s ease-out, box-shadow 0.05s ease-out;
-  box-shadow: 0 0 0 2px var(--ea-surface),
+  transition:
+    transform 0.05s ease-out,
+    box-shadow 0.05s ease-out;
+  box-shadow:
+    0 0 0 2px var(--ea-surface),
     0 0 0 7px color-mix(in srgb, var(--vp-c-brand-1) 32%, transparent);
 }
 

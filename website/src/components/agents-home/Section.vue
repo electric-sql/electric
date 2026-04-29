@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted, onUnmounted } from 'vue'
 
 defineProps<{
   id?: string
@@ -55,10 +55,7 @@ onUnmounted(() => {
         <h2 class="ea-section-title">
           <slot name="title">{{ title }}</slot>
         </h2>
-        <p
-          v-if="subtitle || $slots.subtitle"
-          class="ea-section-subtitle"
-        >
+        <p v-if="subtitle || $slots.subtitle" class="ea-section-subtitle">
           <slot name="subtitle">{{ subtitle }}</slot>
         </p>
       </div>
@@ -85,7 +82,9 @@ onUnmounted(() => {
   margin: 0 auto;
   opacity: 0;
   transform: translateY(24px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
 }
 
 .ea-section.revealed .ea-section-inner {

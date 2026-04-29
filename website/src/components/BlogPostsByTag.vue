@@ -29,7 +29,9 @@ const filteredPosts = computed(() => {
 })
 
 const filteredMarkdown = computed(() =>
-  filteredPosts.value.map((post) => `- [${post.title}](${post.path})`).join('\n')
+  filteredPosts.value
+    .map((post) => `- [${post.title}](${post.path})`)
+    .join('\n')
 )
 
 const isMarkdownExport = useMarkdownExport()

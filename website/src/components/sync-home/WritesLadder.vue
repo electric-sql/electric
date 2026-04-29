@@ -18,25 +18,25 @@ interface Tile {
 
 const tiles: Tile[] = [
   {
-    id: "api",
-    label: "Plain API",
-    title: "Write through your API",
-    body: "POST or PUT to your existing endpoints. The Postgres txid flows back through the read path.",
-    href: "/docs/sync/guides/writes#through-the-db",
+    id: 'api',
+    label: 'Plain API',
+    title: 'Write through your API',
+    body: 'POST or PUT to your existing endpoints. The Postgres txid flows back through the read path.',
+    href: '/docs/sync/guides/writes#through-the-db',
   },
   {
-    id: "shared",
-    title: "Shared write path",
-    label: "API + clients",
-    body: "Many clients hit the same backend. Sync delivers the same change to every reader.",
-    href: "/docs/sync/guides/writes#shared-write-path",
+    id: 'shared',
+    title: 'Shared write path',
+    label: 'API + clients',
+    body: 'Many clients hit the same backend. Sync delivers the same change to every reader.',
+    href: '/docs/sync/guides/writes#shared-write-path',
   },
   {
-    id: "optimistic",
-    title: "Optimistic mutations",
-    label: "+ TanStack DB",
-    body: "UI updates instantly. The collection awaits the txid on the stream and reconciles.",
-    href: "/sync/tanstack-db",
+    id: 'optimistic',
+    title: 'Optimistic mutations',
+    label: '+ TanStack DB',
+    body: 'UI updates instantly. The collection awaits the txid on the stream and reconciles.',
+    href: '/sync/tanstack-db',
   },
 ]
 
@@ -57,16 +57,14 @@ const markdown = computed(() =>
     <MarkdownContent>{{ markdown }}</MarkdownContent>
   </MdExportExplicit>
   <div v-else class="writes-ladder">
-    <div
-      v-for="(tile, i) in tiles"
-      :key="tile.id"
-      class="wl-tile"
-    >
-      <div class="wl-tile-num mono">{{ String(i + 1).padStart(2, "0") }}</div>
+    <div v-for="(tile, i) in tiles" :key="tile.id" class="wl-tile">
+      <div class="wl-tile-num mono">{{ String(i + 1).padStart(2, '0') }}</div>
       <div class="wl-tile-label mono">{{ tile.label }}</div>
       <h4 class="wl-tile-title">{{ tile.title }}</h4>
       <p class="wl-tile-body">{{ tile.body }}</p>
-      <a v-if="tile.href" class="wl-tile-link" :href="tile.href">Learn more →</a>
+      <a v-if="tile.href" class="wl-tile-link" :href="tile.href"
+        >Learn more →</a
+      >
     </div>
   </div>
 </template>

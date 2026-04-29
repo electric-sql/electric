@@ -46,7 +46,8 @@ const userPositions = Array.from(
 )
 const agentPositions = Array.from(
   { length: agentCount },
-  (_, i) => ENTITY_INSET + ((100 - 2 * ENTITY_INSET) * (i + 0.5)) / (userCount - 1)
+  (_, i) =>
+    ENTITY_INSET + ((100 - 2 * ENTITY_INSET) * (i + 0.5)) / (userCount - 1)
 )
 
 /* ─── Canvas animation state ─────────────────────────────────── */
@@ -116,7 +117,10 @@ function entityCanvasPos(
   const r = el.getBoundingClientRect()
   return {
     x: r.left + r.width / 2 - canvasRect.left,
-    y: side === 'top' ? r.bottom - canvasRect.top + 1 : r.top - canvasRect.top - 1,
+    y:
+      side === 'top'
+        ? r.bottom - canvasRect.top + 1
+        : r.top - canvasRect.top - 1,
   }
 }
 
@@ -146,7 +150,11 @@ function spawnBranchFor(
   const arr = d.type === 'user' ? userRefs.value : agentRefs.value
   const el = arr[d.idx]
   if (!el) return
-  const pos = entityCanvasPos(el, canvasRect, d.type === 'user' ? 'top' : 'bottom')
+  const pos = entityCanvasPos(
+    el,
+    canvasRect,
+    d.type === 'user' ? 'top' : 'bottom'
+  )
   branches.push({
     x: d.x,
     endY: pos.y,

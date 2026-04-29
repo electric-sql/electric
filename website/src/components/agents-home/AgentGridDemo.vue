@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue"
-import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useDemoVisibility } from '../../../.vitepress/theme/composables/useDemoVisibility'
 
 const DESKTOP_COLS = 8
 const DESKTOP_ROWS = 5
@@ -25,21 +25,21 @@ let lineId = 0
 const activeCount = computed(() => activeDots.value.size)
 
 const prefixes = [
-  "/worker/task",
-  "/agent/planner",
-  "/bot/scraper",
-  "/agent/reviewer",
-  "/worker/indexer",
-  "/bot/monitor",
-  "/agent/coder",
-  "/worker/deploy",
-  "/agent/tester",
-  "/bot/scheduler",
-  "/worker/build",
-  "/agent/analyst",
-  "/bot/fetcher",
-  "/worker/sync",
-  "/agent/parser",
+  '/worker/task',
+  '/agent/planner',
+  '/bot/scraper',
+  '/agent/reviewer',
+  '/worker/indexer',
+  '/bot/monitor',
+  '/agent/coder',
+  '/worker/deploy',
+  '/agent/tester',
+  '/bot/scheduler',
+  '/worker/build',
+  '/agent/analyst',
+  '/bot/fetcher',
+  '/worker/sync',
+  '/agent/parser',
 ]
 
 function entityName(idx: number): string {
@@ -64,7 +64,7 @@ function showLine(from: number, to: number) {
   timers.push(
     window.setTimeout(() => {
       lines.value = lines.value.filter((l) => l.id !== id)
-    }, 600),
+    }, 600)
   )
 }
 
@@ -79,7 +79,7 @@ function dotCenter(idx: number): { x: number; y: number } {
 
 const gridWidth = computed(() => cols.value * DOT_SIZE + (cols.value - 1) * GAP)
 const gridHeight = computed(
-  () => rows.value * DOT_SIZE + (rows.value - 1) * GAP,
+  () => rows.value * DOT_SIZE + (rows.value - 1) * GAP
 )
 
 let timers: number[] = []
@@ -113,7 +113,11 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function distanceFromSeed(idx: number, seedIdx: number, colCount: number): number {
+function distanceFromSeed(
+  idx: number,
+  seedIdx: number,
+  colCount: number
+): number {
   const c1 = idx % colCount
   const r1 = Math.floor(idx / colCount)
   const c2 = seedIdx % colCount
@@ -138,7 +142,11 @@ function runCycle() {
   })
 
   const waveIndices = allIndices.slice(0, waveCount)
-  const maxDist = distanceFromSeed(waveIndices[waveIndices.length - 1], seedIdx, c)
+  const maxDist = distanceFromSeed(
+    waveIndices[waveIndices.length - 1],
+    seedIdx,
+    c
+  )
 
   const WAVE_SPREAD_MS = 1600
   const HOLD_MS = 1400
@@ -164,7 +172,8 @@ function runCycle() {
 
   const deactivateOrder = shuffle(waveIndices)
   deactivateOrder.forEach((idx, i) => {
-    const delay = peakTime + HOLD_MS + (i / deactivateOrder.length) * SCALE_DOWN_MS
+    const delay =
+      peakTime + HOLD_MS + (i / deactivateOrder.length) * SCALE_DOWN_MS
     const jitter = (Math.random() - 0.5) * 80
     schedule(delay + jitter, () => deactivate(idx))
   })
@@ -203,21 +212,25 @@ function checkMobile() {
 
 onMounted(() => {
   checkMobile()
-  window.addEventListener("resize", checkMobile)
+  window.addEventListener('resize', checkMobile)
 
-  watch(isActive, (v) => {
-    if (v) {
-      runCycle()
-    } else {
-      clearTimers()
-      reset()
-    }
-  }, { immediate: true })
+  watch(
+    isActive,
+    (v) => {
+      if (v) {
+        runCycle()
+      } else {
+        clearTimers()
+        reset()
+      }
+    },
+    { immediate: true }
+  )
 })
 
 onBeforeUnmount(() => {
   clearTimers()
-  window.removeEventListener("resize", checkMobile)
+  window.removeEventListener('resize', checkMobile)
 })
 
 const counterText = computed(() => {
@@ -228,7 +241,10 @@ const counterText = computed(() => {
 
 <template>
   <div ref="containerRef" class="agent-grid-demo">
-    <div class="grid-wrapper" :style="{ width: gridWidth + 'px', height: gridHeight + 'px' }">
+    <div
+      class="grid-wrapper"
+      :style="{ width: gridWidth + 'px', height: gridHeight + 'px' }"
+    >
       <!-- SVG lines layer -->
       <svg class="lines-layer" :viewBox="`0 0 ${gridWidth} ${gridHeight}`">
         <line
@@ -265,11 +281,7 @@ const counterText = computed(() => {
       </div>
 
       <!-- Tooltip -->
-      <div
-        v-if="hoveredDot !== null"
-        class="dot-tooltip"
-        :style="tooltipStyle"
-      >
+      <div v-if="hoveredDot !== null" class="dot-tooltip" :style="tooltipStyle">
         {{ entityName(hoveredDot) }}
       </div>
     </div>
@@ -308,7 +320,8 @@ const counterText = computed(() => {
 
 .dot.active {
   background: var(--ea-indicator-active);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--ea-indicator-active) 50%, transparent);
+  box-shadow: 0 0 8px
+    color-mix(in srgb, var(--ea-indicator-active) 50%, transparent);
 }
 
 .dot.pulsing {

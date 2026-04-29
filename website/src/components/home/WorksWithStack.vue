@@ -67,7 +67,9 @@ const stackMarkdown = computed(
   () => `### Your data
 
 ${dataSources
-  .map((source) => `- [${source.title}](${source.href}) - ${source.description}`)
+  .map(
+    (source) => `- [${source.title}](${source.href}) - ${source.description}`
+  )
   .join('\n')}
 
 \`\`\`json
@@ -143,11 +145,7 @@ const isMarkdownExport = useMarkdownExport()
           </div>
         </a>
         <a href="/sync/" class="ww-card ww-mini no-visual">
-          <img
-            src="/img/icons/electric.svg"
-            class="ww-card-icon"
-            alt=""
-          />
+          <img src="/img/icons/electric.svg" class="ww-card-icon" alt="" />
           <div class="ww-mini-text">
             <div class="ww-mini-title">Database sync</div>
             <div class="ww-mini-tagline mono">
@@ -264,7 +262,9 @@ const isMarkdownExport = useMarkdownExport()
   border: 1px solid var(--ea-divider);
   background: var(--ea-surface);
   overflow: hidden;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .ww-card:hover {
@@ -331,11 +331,21 @@ const isMarkdownExport = useMarkdownExport()
 }
 
 /* Match the landing-page demo palette (see EntityStreamDemo). */
-.ww-code :deep(.tk-kw)   { color: var(--vp-c-brand-1); }
-.ww-code :deep(.tk-fn)   { color: var(--ea-event-message); }
-.ww-code :deep(.tk-str)  { color: var(--ea-event-tool-result); }
-.ww-code :deep(.tk-prop) { color: var(--ea-event-tool-call); }
-.ww-code :deep(.tk-v)    { color: var(--ea-text-1); }
+.ww-code :deep(.tk-kw) {
+  color: var(--vp-c-brand-1);
+}
+.ww-code :deep(.tk-fn) {
+  color: var(--ea-event-message);
+}
+.ww-code :deep(.tk-str) {
+  color: var(--ea-event-tool-result);
+}
+.ww-code :deep(.tk-prop) {
+  color: var(--ea-event-tool-call);
+}
+.ww-code :deep(.tk-v) {
+  color: var(--ea-text-1);
+}
 
 /* ── Column 1 — data sources stack ────────────────────────────── */
 
@@ -401,7 +411,9 @@ const isMarkdownExport = useMarkdownExport()
   align-items: center;
   text-align: left;
   text-decoration: none;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .ww-layer:hover {

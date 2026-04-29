@@ -3,7 +3,7 @@
    bottom CTA strap on the sync landing page (and any other surface
    that wants to render the same evidence) can pull from a single
    source of truth alongside the hero. */
-export const installCommand = "npx @electric-sql/start my-electric-app"
+export const installCommand = 'npx @electric-sql/start my-electric-app'
 </script>
 
 <script setup lang="ts">
@@ -12,10 +12,10 @@ export const installCommand = "npx @electric-sql/start my-electric-app"
    social-image route without duplicating markup or styling. The two
    surfaces stay in lockstep: any text or layout tweak made here
    propagates to the live page and the OG capture together. */
-import { ref } from "vue"
-import { VPButton } from "vitepress/theme"
-import SyncFanOutBg from "./SyncFanOutBg.vue"
-import InstallPill from "../InstallPill.vue"
+import { ref } from 'vue'
+import { VPButton } from 'vitepress/theme'
+import SyncFanOutBg from './SyncFanOutBg.vue'
+import InstallPill from '../InstallPill.vue'
 
 withDefaults(
   defineProps<{
@@ -40,9 +40,19 @@ withDefaults(
        OG capture to reserve the wordmark's bbox in the frame's
        top-left corner so the canvas geometry never paints under
        the brand mark. */
-    extraExcludeRects?: { left: number; top: number; right: number; bottom: number }[]
+    extraExcludeRects?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }[]
   }>(),
-  { paused: false, hideActions: false, hideCopy: false, extraExcludeRects: () => [] }
+  {
+    paused: false,
+    hideActions: false,
+    hideCopy: false,
+    extraExcludeRects: () => [],
+  }
 )
 
 const heroInnerRef = ref<HTMLElement>()
@@ -168,16 +178,24 @@ const heroInnerRef = ref<HTMLElement>()
   .sh-hero {
     padding: 56px 24px 48px;
   }
-  .sh-hero-name { font-size: 36px; }
-  .sh-hero-text { font-size: 22px; }
+  .sh-hero-name {
+    font-size: 36px;
+  }
+  .sh-hero-text {
+    font-size: 22px;
+  }
 }
 
 @media (max-width: 480px) {
   .sh-hero {
     padding: 44px 20px 36px;
   }
-  .sh-hero-name { font-size: 28px; }
-  .sh-hero-text { font-size: 19px; }
+  .sh-hero-name {
+    font-size: 28px;
+  }
+  .sh-hero-text {
+    font-size: 19px;
+  }
 
   .sh-hero-row {
     flex-direction: column;
