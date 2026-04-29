@@ -160,6 +160,20 @@ describe(`ensureAnthropicApiKey`, () => {
     expect(existsSync(join(fake.cwd, `.env`))).toBe(false)
   })
 
+  it(`prompts without showing an error when no key is configured`, async () => {
+    delete process.env.ANTHROPIC_API_KEY
+    const fake = createFakeIO({ inputLines: [``] })
+    cleanups.push(fake.cleanup)
+
+    await expect(ensureAnthropicApiKey({}, fake.io)).rejects.toThrow(
+      `__exit__:0`
+    )
+
+    expect(fake.output()).toContain(`Provide an Anthropic Claude key`)
+    expect(fake.output()).not.toContain(`Could not use that Anthropic key`)
+    expect(fake.output()).not.toContain(`ANTHROPIC_API_KEY is required`)
+  })
+
   it(`writes a directly pasted key to a new .env`, async () => {
     delete process.env.ANTHROPIC_API_KEY
     const fake = createFakeIO({ inputLines: [`sk-ant-pasted`] })

@@ -117,16 +117,28 @@ export async function ensureAnthropicApiKey(
     return explicitKey
   }
 
+  let resolvedKey: string | undefined
   try {
-    const key = resolveAnthropicApiKey(options)
-    assertAnthropicApiKeyPrefix(key)
-    await validate(key)
-    return key
+    resolvedKey = resolveAnthropicApiKey(options)
   } catch (error) {
     if (!io.isTTY) {
       throw error
     }
-    initialError = error
+    // No key configured and we're interactive — fall through to the prompt
+    // without a redundant error message; FRIENDLY_INTRO covers this case.
+  }
+
+  if (resolvedKey !== undefined) {
+    try {
+      assertAnthropicApiKeyPrefix(resolvedKey)
+      await validate(resolvedKey)
+      return resolvedKey
+    } catch (error) {
+      if (!io.isTTY) {
+        throw error
+      }
+      initialError = error
+    }
   }
 
   io.output.write(FRIENDLY_INTRO)
