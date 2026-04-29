@@ -2616,6 +2616,74 @@ defmodule Electric.ClientTest do
       assert params["expired_handle"] == "old-expired-handle"
     end
 
+    test "post-409 request includes cache-buster parameter", ctx do
+      # When a 409 response arrives, the next request URL must include a fresh
+      # cache-buster query param so it cannot match any URL the CDN has cached.
+      # Without this, a CDN that strips the `expired_handle` parameter from its
+      # cache key can keep serving the same stale 409 forever.
+      parent = self()
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body409 = Jason.encode!([%{"headers" => %{"control" => "must-refetch"}}])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+        send(parent, {:request, count, conn.query_params})
+
+        case count do
+          1 ->
+            bypass_resp(conn, body1,
+              shape_handle: "my-shape",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          2 ->
+            bypass_resp(conn, body409, status: 409, shape_handle: "my-shape-2")
+
+          _ ->
+            bypass_resp(conn, body2,
+              shape_handle: "my-shape-2",
+              last_offset: "1_0",
+              schema: schema
+            )
+        end
+      end)
+
+      stream(ctx, 5)
+
+      assert_receive {:request, 1, _params1}
+      assert_receive {:request, 2, _params2}
+      assert_receive {:request, 3, params3}
+
+      assert Map.has_key?(params3, "cache-buster"),
+             "Expected cache-buster on first request after 409, got params: #{inspect(params3)}. " <>
+               "Without cache-buster, a CDN that strips expired_handle from its cache key " <>
+               "can keep serving the cached 409 indefinitely."
+    end
+
     test "stale response triggers retry with cache-buster parameter", ctx do
       alias Electric.Client.ShapeKey
       alias Electric.Client.ExpiredShapesCache

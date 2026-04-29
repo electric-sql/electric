@@ -196,6 +196,11 @@ defmodule Electric.Client.Poll do
     new_state = ShapeState.reset(state, handle)
     new_state = handle_schema(resp, client, new_state)
     new_state = ShapeState.clear_stale_retry(new_state)
+    # Add a cache-buster on every 409 so that the next request URL cannot match
+    # a URL the CDN has cached. Without this, a CDN that strips the
+    # `expired_handle` query param from its cache key keeps serving the same
+    # cached 409 indefinitely.
+    new_state = %{new_state | stale_cache_buster: ShapeState.generate_cache_buster()}
 
     %{value_mapper_fun: value_mapper_fun} = new_state
 
