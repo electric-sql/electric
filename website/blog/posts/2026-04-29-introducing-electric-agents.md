@@ -92,6 +92,8 @@ The world is moving to online multi-agent systems:
 
 It's why Anthropic have built [Managed Agents](https://www.anthropic.com/engineering/managed-agents). It's the [vision of the Context Graph](https://foundationcapital.com/ideas/context-graphs-ais-trillion-dollar-opportunity). It's the direction of [Cloudflare's Project Think](https://blog.cloudflare.com/project-think/):
 
+They wrote:
+
 > We see three waves of AI agents:
 >
 > - **The first wave was chatbots**.
