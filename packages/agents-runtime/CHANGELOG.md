@@ -1,5 +1,28 @@
 # @electric-ax/agents-runtime
 
+## 0.1.0
+
+### Minor Changes
+
+- 4987694: Move tool implementations (bash, read, write, edit, fetch_url, web_search, schedules) from `@electric-ax/agents` to `@electric-ax/agents-runtime` so they are available without importing the built-in agents package. **Breaking:** tool exports removed from `@electric-ax/agents` — import from `@electric-ax/agents-runtime` instead.
+
+### Patch Changes
+
+- 89debcf: Expose `ctx.recordRun()` returning a `RunHandle` so non-LLM entities can bracket external operations (CLI subprocess, HTTP call, etc.) with the same `runs` collection events that `useAgent` writes internally — satisfying the `runFinished` wake matcher and surfacing a response payload via `RunHandle.attachResponse(text)`.
+
+## 0.0.4
+
+### Patch Changes
+
+- 9024ec2: fix: allow for `onPayload` to support non-standard model APIs
+
+## 0.0.3
+
+### Patch Changes
+
+- 5ef535b: feat: allow arbitrary models instead of hardcoding anthropic
+- 6d8be8b: fix: ensure api keys are correctly passed through
+
 ## 0.0.2
 
 ### Patch Changes

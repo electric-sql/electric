@@ -209,9 +209,27 @@
   ?electric-offset: ([\w\d_]+)
   [global offset=$1]
 
+[shell otel_collector]
+  # Verify that the initial snapshot query span is exported from the Snapshotter path.
+  ?Span #[0-9]+
+  ?Name[ ]+: shape_snapshot\.execute_for_shape
+  ?->[ ]shape\.query_reason: Str\(initial_snapshot\)
+
 [shell psql]
   !insert into items values ('3');
   ??INSERT
+
+[shell client]
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=$offset&subset__where=val%20%3D%20%273%27"]
+
+  ??HTTP/1.1 200 OK
+  ??"metadata"
+
+[shell otel_collector]
+  # Verify that a direct subset snapshot query span is exported from the PartialModes path.
+  ?Span #[0-9]+
+  ?Name[ ]+: shape_snapshot\.execute_for_shape
+  ?->[ ]shape\.query_reason: Str\(subset_query\)
 
 [shell client]
   [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=$offset&live"]
@@ -219,11 +237,41 @@
   ??HTTP/1.1 200 OK
   ??"value":{"val":"3"}
 
+[shell psql]
+  !insert into items values ('4');
+  ??INSERT
+
 [shell otel_collector]
+  # Verify that new measurement exports from this branch are present
+  # Order matches actual OTEL export order (not alphabetical)
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.plug\.serve_shape\.count
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.plug\.serve_shape\.bytes
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.storage\.snapshot_stored\.operations
+  """
+
   """?
   Metric #[0-9]+
   Descriptor:
        -> Name: electric\.storage\.transaction_stored\.bytes
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.storage\.transaction_stored\.operations
   """
 
 ###

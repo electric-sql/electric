@@ -76,6 +76,7 @@ export interface ElectricCliHandlers {
   ) => Promise<StartedBuiltinAgentsEnvironment>
   stop: (options: StopCommandOptions) => Promise<StoppedDevEnvironment>
   quickstart: (options: StartBuiltinCommandOptions) => Promise<void>
+  init: (projectName?: string) => Promise<void>
 }
 
 class CliError extends Error {}
@@ -539,6 +540,10 @@ export function createElectricCliHandlers(
         agentServerUrl: started.uiUrl,
       })
     },
+    init: async (projectName) => {
+      const { initProject } = await import(`./init.js`)
+      await initProject(projectName)
+    },
   }
 }
 
@@ -707,6 +712,16 @@ export function createElectricProgram({
     .action(async (...actionArgs: Array<unknown>) => {
       const command = getCommandActionArg(actionArgs)
       await handlers.quickstart(command.opts<StartBuiltinCommandOptions>())
+    })
+
+  agentsCommand
+    .command(`init [project-name]`)
+    .description(
+      `Scaffold a new Electric Agents project from a starter template`
+    )
+    .action(async (...actionArgs: Array<unknown>) => {
+      const projectName = actionArgs[0] as string | undefined
+      await handlers.init(projectName)
     })
 
   const completionCommand = agentsCommand

@@ -95,7 +95,14 @@ defmodule Electric.Shapes.PartialModes do
       stack_id: opts[:stack_id]
     })
 
+    # Propagate OTel context so spans created inside the task are linked to the
+    # caller's trace. OTel context is per-process, so without this any
+    # `with_child_span` calls in the task would be silently dropped.
+    trace_context = OpenTelemetry.get_current_context()
+
     Task.Supervisor.start_child(supervisor, fn ->
+      OpenTelemetry.set_current_context(trace_context)
+
       try do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
           stack_id: opts[:stack_id],
@@ -127,7 +134,14 @@ defmodule Electric.Shapes.PartialModes do
     pool = Manager.pool_name(opts[:stack_id], :snapshot)
     results_fn = Access.fetch!(opts, :results_fn)
 
+    # Propagate OTel context so spans created inside the task are linked to the
+    # caller's trace. OTel context is per-process, so without this any
+    # `with_child_span` calls in the task would be silently dropped.
+    trace_context = OpenTelemetry.get_current_context()
+
     Task.Supervisor.start_child(supervisor, fn ->
+      OpenTelemetry.set_current_context(trace_context)
+
       try do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
           stack_id: opts[:stack_id],

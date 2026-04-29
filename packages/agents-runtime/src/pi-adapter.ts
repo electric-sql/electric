@@ -19,7 +19,11 @@ import type {
   AgentTool,
   StreamFn,
 } from '@mariozechner/pi-agent-core'
-import type { KnownProvider, Model } from '@mariozechner/pi-ai'
+import type {
+  KnownProvider,
+  Model,
+  SimpleStreamOptions,
+} from '@mariozechner/pi-ai'
 import type { LLMMessage } from './types'
 
 // ============================================================================
@@ -32,6 +36,10 @@ export interface PiAdapterOptions {
   provider?: KnownProvider
   tools: Array<AgentTool>
   streamFn?: StreamFn
+  getApiKey?: (
+    provider: string
+  ) => Promise<string | undefined> | string | undefined
+  onPayload?: SimpleStreamOptions[`onPayload`]
 }
 
 interface PiAgentAdapterConfig {
@@ -164,6 +172,8 @@ export function createPiAgentAdapter(
         model,
       },
       ...(opts.streamFn && { streamFn: opts.streamFn }),
+      ...(opts.getApiKey && { getApiKey: opts.getApiKey }),
+      ...(opts.onPayload && { onPayload: opts.onPayload }),
     })
 
     function processAgentEvents(

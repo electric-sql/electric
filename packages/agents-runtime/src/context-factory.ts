@@ -1,6 +1,7 @@
 import { queryOnce } from '@durable-streams/state'
 import { assembleContext } from './context-assembly'
 import { createContextEntriesApi } from './context-entries'
+import { entityStateSchema } from './entity-schema'
 import { createOutboundBridge, loadOutboundIdSeed } from './outbound-bridge'
 import { createPiAgentAdapter } from './pi-adapter'
 import {
@@ -12,6 +13,10 @@ import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
+import {
+  CODING_SESSION_ENTITY_TYPE,
+  codingSessionEntityUrl,
+} from './observation-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -19,16 +24,22 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
+  CodingSessionEventRow,
+  CodingSessionHandle,
+  CodingSessionMeta,
+  CodingSessionStatus,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
   LLMMessage,
   ObservationHandle,
   ObservationSource,
+  RunHandle,
   SharedStateHandle,
   SharedStateSchemaMap,
   StateProxy,
   TimelineProjectionOpts,
+  UseCodingAgentOptions,
   UseContextConfig,
   Wake,
   WakeEvent,
@@ -198,6 +209,25 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   let useContextConfig: UseContextConfig | null = null
   let useContextHash = ``
   let useContextRegistrations = 0
+  // Lazy-loaded run-id counter used by ctx.recordRun(). Initialized
+  // from the runs already present in the entity's StreamDB so keys
+  // remain monotonic across handler invocations.
+  let recordRunCounter: number | null = null
+  const nextRunKey = (): string => {
+    if (recordRunCounter == null) {
+      let max = 0
+      const rows = config.db.collections.runs.toArray as Array<{ key: string }>
+      for (const row of rows) {
+        const m = row.key.match(/^run-(\d+)/)
+        if (!m) continue
+        max = Math.max(max, parseInt(m[1]!, 10) + 1)
+      }
+      recordRunCounter = max
+    }
+    const key = `run-${recordRunCounter}`
+    recordRunCounter += 1
+    return key
+  }
 
   const contextApi = createContextEntriesApi({
     db: config.db,
@@ -307,13 +337,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
-          ...(activeAgentConfig.provider && {
-            provider: activeAgentConfig.provider,
-          }),
+
+          provider: activeAgentConfig.provider,
+
           tools: [...activeAgentConfig.tools, ...extraTools] as Array<never>,
-          ...(activeAgentConfig.streamFn && {
-            streamFn: activeAgentConfig.streamFn,
-          }),
+
+          streamFn: activeAgentConfig.streamFn,
+
+          getApiKey: activeAgentConfig.getApiKey,
+
+          onPayload: activeAgentConfig.onPayload,
         })
         const handle = adapterFactory({
           entityUrl: config.entityUrl,
@@ -525,6 +558,75 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     ): SharedStateHandle<TSchema> {
       return config.doMkdb(id, schema)
     },
+    async useCodingAgent(
+      sessionId: string,
+      opts: UseCodingAgentOptions
+    ): Promise<CodingSessionHandle> {
+      const spawnArgs: Record<string, unknown> = { agent: opts.agent }
+      if (opts.cwd !== undefined) spawnArgs.cwd = opts.cwd
+      if (opts.nativeSessionId !== undefined) {
+        spawnArgs.nativeSessionId = opts.nativeSessionId
+      }
+      if (opts.importFrom !== undefined) {
+        spawnArgs.importFrom = opts.importFrom
+      }
+
+      const spawnOpts: {
+        observe: true
+        wake: Wake
+        initialMessage?: unknown
+      } = {
+        observe: true,
+        wake: opts.wake ?? `runFinished`,
+      }
+
+      const entityHandle = await config.doSpawn(
+        CODING_SESSION_ENTITY_TYPE,
+        sessionId,
+        spawnArgs,
+        spawnOpts
+      )
+
+      const entityUrl = codingSessionEntityUrl(sessionId)
+      const readEvents = (): Array<CodingSessionEventRow> => {
+        const collection = entityHandle.db?.collections.events
+        if (!collection) return []
+        const rows = (collection as { toArray?: unknown }).toArray
+        return (Array.isArray(rows) ? rows : []) as Array<CodingSessionEventRow>
+      }
+      const readMeta = (): CodingSessionMeta | undefined => {
+        const collection = entityHandle.db?.collections.sessionMeta
+        if (!collection) return undefined
+        const row = (collection as { get?: (k: string) => unknown }).get?.(
+          `current`
+        )
+        return row as CodingSessionMeta | undefined
+      }
+      const MESSAGE_TYPES = new Set([`user_message`, `assistant_message`])
+
+      const handle: CodingSessionHandle = {
+        entityUrl,
+        sessionId,
+        agent: opts.agent,
+        run: entityHandle.run,
+        meta: readMeta,
+        status: (): CodingSessionStatus | undefined => readMeta()?.status,
+        send: (prompt: string): void => {
+          config.executeSend({
+            targetUrl: entityUrl,
+            payload: { text: prompt },
+            type: `prompt`,
+          })
+        },
+        get events(): ReadonlyArray<CodingSessionEventRow> {
+          return readEvents()
+        },
+        get messages(): ReadonlyArray<CodingSessionEventRow> {
+          return readEvents().filter((e) => MESSAGE_TYPES.has(e.type))
+        },
+      }
+      return handle
+    },
     send(
       entityUrl: string,
       payload: unknown,
@@ -536,6 +638,45 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         type: opts?.type,
         afterMs: opts?.afterMs,
       })
+    },
+    recordRun(): RunHandle {
+      const key = nextRunKey()
+      let deltaCounter = 0
+      config.writeEvent(
+        entityStateSchema.runs.insert({
+          key,
+          value: { status: `started` } as never,
+        }) as ChangeEvent
+      )
+      return {
+        key,
+        end({ status, finishReason }): void {
+          config.writeEvent(
+            entityStateSchema.runs.update({
+              key,
+              value: {
+                status,
+                finish_reason:
+                  finishReason ?? (status === `failed` ? `error` : `stop`),
+              } as never,
+            }) as ChangeEvent
+          )
+        },
+        attachResponse(text: string): void {
+          if (typeof text !== `string` || text.length === 0) return
+          config.writeEvent(
+            entityStateSchema.textDeltas.insert({
+              key: `${key}:delta-${deltaCounter}`,
+              value: {
+                text_id: key,
+                run_id: key,
+                delta: text,
+              } as never,
+            }) as ChangeEvent
+          )
+          deltaCounter += 1
+        },
+      }
     },
     sleep(): void {
       sleepRequested = true

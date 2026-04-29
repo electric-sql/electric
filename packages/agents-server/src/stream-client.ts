@@ -71,6 +71,31 @@ export class StreamClient {
     })
   }
 
+  async fork(path: string, sourcePath: string): Promise<void> {
+    return await withSpan(`stream.fork`, async (span) => {
+      span.setAttributes({
+        [ATTR.STREAM_PATH]: path,
+        [ATTR.STREAM_OP]: `fork`,
+      })
+      const headers: Record<string, string> = {
+        'content-type': `application/json`,
+        'Stream-Forked-From': sourcePath,
+      }
+      injectTraceHeaders(headers)
+
+      const response = await fetch(this.streamUrl(path), {
+        method: `PUT`,
+        headers,
+      })
+
+      if (response.ok) return
+
+      throw new Error(
+        `Stream fork failed: ${response.status} ${await response.text()}`
+      )
+    })
+  }
+
   async append(
     path: string,
     data: Uint8Array | string,
@@ -93,7 +118,7 @@ export class StreamClient {
 
       await handle.append(data)
       const head = await handle.head()
-      return { offset: head.offset ?? `` }
+      return { offset: (head.exists && head.offset) || `` }
     })
   }
 

@@ -21,6 +21,7 @@ const AGENTS_COMMANDS = [
   `start-builtin`,
   `stop`,
   `quickstart`,
+  `init`,
   `completion`,
 ]
 

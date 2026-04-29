@@ -229,3 +229,63 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
     )
   })
 })
+
+describe(`ElectricAgentsRoutes fork endpoint`, () => {
+  it(`routes fork requests to the manager and returns public entities`, async () => {
+    const forkedRoot = {
+      url: `/chat/root-copy`,
+      type: `chat`,
+      status: `idle`,
+      streams: {
+        main: `/chat/root-copy/main`,
+        error: `/chat/root-copy/error`,
+      },
+      subscription_id: `chat-handler`,
+      write_token: `secret-token`,
+      tags: {},
+      spawn_args: {},
+      created_at: 1,
+      updated_at: 1,
+    }
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/root` }),
+        getEntityType: vi.fn(),
+      },
+      forkSubtree: vi.fn().mockResolvedValue({
+        root: forkedRoot,
+        entities: [forkedRoot],
+      }),
+    } as any
+
+    const routes = new ElectricAgentsRoutes(manager)
+    const req = createRequest({ waitTimeoutMs: 5000 })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/chat/root/fork`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.forkSubtree).toHaveBeenCalledWith(`/chat/root`, {
+      rootInstanceId: undefined,
+      waitTimeoutMs: 5000,
+    })
+    expect(res.writeHead).toHaveBeenCalledWith(201, {
+      'content-type': `application/json`,
+    })
+    const payload = JSON.parse(res.end.mock.calls[0]![0]) as {
+      root: Record<string, unknown>
+    }
+    expect(payload.root).toMatchObject({
+      url: `/chat/root-copy`,
+      type: `chat`,
+      status: `idle`,
+    })
+    expect(payload.root).not.toHaveProperty(`write_token`)
+    expect(payload.root).not.toHaveProperty(`subscription_id`)
+  })
+})

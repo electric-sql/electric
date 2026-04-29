@@ -1,5 +1,26 @@
 # @core/sync-service
 
+## 1.6.1
+
+### Patch Changes
+
+- 4da5618: Propagate OpenTelemetry context into spawned snapshot and move-in tasks so that spans created via `with_child_span` (e.g. `shape_snapshot.execute_for_shape`, `shape_snapshot.query_fn`, `shape_snapshot.checkout_wait`) are linked to the originating trace instead of being silently dropped.
+
+## 1.6.0
+
+### Minor Changes
+
+- a04b259: Add Move-in/out support for subqueries combined using `AND`, `OR`, `NOT`, and other compound `WHERE` expressions. Previously these shapes would return `409` on a subquery move, forcing clients to discard the shape and resync it from scratch. The sync service now reconciles those changes in-stream.
+
+  This release also changes the wire protocol. Older `@core/elixir-client` versions are not compatible with the sync service from this release. TanStack DB clients need `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`.
+
+### Patch Changes
+
+- c48f0bc: Export `electric.admission_control.acquire.limit` and `electric.admission_control.reject.limit` metrics so dashboards can plot fill percentage (`acquire.current / acquire.limit`) and over-limit pressure by `kind`.
+- 79dcb96: Emit `shape_handle` as Logger metadata (instead of interpolating it into the message body) for the "No consumer process when waiting on initial snapshot creation" error. This keeps the message text static so Sentry can deduplicate these events properly during incidents.
+- 4176bd2: `Electric.Telemetry.Sentry.add_logger_handler/1` now accepts an optional second argument — a keyword list whose entries are merged into the `Sentry.LoggerHandler` config map — so downstream apps can tune handler settings like `:discard_threshold` and `:sync_threshold` without reaching into `:logger` after the fact. The existing single-arg `add_logger_handler(id)` form is preserved.
+- 70b8791: Optimise OR routing in sync-service filters by indexing OR branches when both sides are indexable, removing the dedicated IN special case, and falling back to `other_shapes` when an OR branch is not optimisable.
+
 ## 1.5.2
 
 ### Patch Changes

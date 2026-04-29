@@ -99,6 +99,9 @@ function createHandlers() {
     quickstart: vi
       .fn<(options: { anthropicApiKey?: string }) => Promise<void>>()
       .mockResolvedValue(undefined),
+    init: vi
+      .fn<(projectName?: string) => Promise<void>>()
+      .mockResolvedValue(undefined),
   } satisfies ElectricCliHandlers
 }
 

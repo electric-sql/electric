@@ -91,13 +91,12 @@ defmodule Electric.AdmissionControl do
       # Emit telemetry event
       :telemetry.execute(
         [:electric, :admission_control, :reject],
-        %{count: 1},
+        %{count: 1, limit: max_concurrent},
         %{
           stack_id: stack_id,
           reason: :overloaded,
           kind: kind,
-          current: current,
-          limit: max_concurrent
+          current: current
         }
       )
 
@@ -107,8 +106,8 @@ defmodule Electric.AdmissionControl do
       # Emit telemetry for current concurrency level
       :telemetry.execute(
         [:electric, :admission_control, :acquire],
-        %{count: 1, current: current},
-        %{stack_id: stack_id, kind: kind, limit: max_concurrent}
+        %{count: 1, current: current, limit: max_concurrent},
+        %{stack_id: stack_id, kind: kind}
       )
 
       :ok

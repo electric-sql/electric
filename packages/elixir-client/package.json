@@ -1,7 +1,7 @@
 {
   "name": "@core/elixir-client",
   "private": true,
-  "version": "0.9.5",
+  "version": "0.10.0",
   "scripts": {
     "publish:hex": "../../scripts/publish_hex.sh electric_client"
   }

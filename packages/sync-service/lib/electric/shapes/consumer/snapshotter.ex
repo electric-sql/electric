@@ -42,7 +42,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       storage: storage
     } = state
 
-    ctx_token = if not is_nil(state.otel_ctx), do: :otel_ctx.attach(state.otel_ctx)
+    if not is_nil(state.otel_ctx), do: OpenTelemetry.set_current_context(state.otel_ctx)
 
     result =
       case Shapes.Consumer.whereis(stack_id, shape_handle) do
@@ -104,8 +104,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           {:stop, {:error, "consumer not found"}, state}
       end
 
-    if not is_nil(ctx_token), do: :otel_ctx.detach(ctx_token)
-
     result
   end
 
@@ -126,6 +124,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     # not an ephemeral unnamed task process
     db_pool = Electric.Connection.Manager.snapshot_pool(ctx.stack_id)
 
+    # Capture OTel context so spans created inside the spawned task are linked to
+    # the originating trace. OTel context is per-process, so without this any
+    # `with_child_span` calls in the task would be silently dropped.
+    trace_context = OpenTelemetry.get_current_context()
+
     # We're looking to avoid saturating the DB connection pool with queries that are "bad" - those that don't start
     # returning any data (likely because they're not using an index). To acheive that, we're running the query in a task,
     # and waiting for the task to (a) send us a message that it's ready to stream and (b) send us a message when it sees any data
@@ -137,6 +140,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
     task =
       Task.Supervisor.async_nolink(supervisor, fn ->
+        OpenTelemetry.set_current_context(trace_context)
+
         snapshot_fun =
           Electric.StackConfig.lookup(stack_id, :create_snapshot_fn, &stream_snapshot_from_db/5)
 

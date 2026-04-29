@@ -113,6 +113,33 @@ export class ElectricAgentsRoutes {
 
     // Entity action routes: /{type}/{name}/send
     // Excludes _-prefixed paths and glob patterns (*)
+    const forkMatch = path.match(/^(\/(?!_)[^/*]+\/[^/*]+)\/fork$/)
+    if (forkMatch) {
+      const entityUrl = forkMatch[1]!
+
+      const entity = await this.manager.registry.getEntity(entityUrl)
+      if (!entity) {
+        const typeName = entityUrl.split(`/`)[1]!
+        const entityType = await this.manager.registry.getEntityType(typeName)
+        if (entityType) {
+          sendJsonError(
+            res,
+            404,
+            `NOT_FOUND`,
+            `Entity not found at ${entityUrl}`
+          )
+          return true
+        }
+        return false
+      }
+
+      if (method === `POST`) {
+        await this.handleFork(entityUrl, req, res)
+        return true
+      }
+      return false
+    }
+
     const actionMatch = path.match(/^(\/(?!_)[^/*]+\/[^/*]+)\/send$/)
     if (actionMatch) {
       const entityUrl = actionMatch[1]!
@@ -304,6 +331,40 @@ export class ElectricAgentsRoutes {
       }
       res.writeHead(204)
       res.end()
+    } catch (err) {
+      handleElectricAgentsError(err, res)
+    }
+  }
+
+  private async handleFork(
+    entityUrl: string,
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
+    let parsed: {
+      instance_id?: string
+      waitTimeoutMs?: number
+    } = {}
+    const bodyBytes = await readBody(req)
+    const bodyStr = new TextDecoder().decode(bodyBytes)
+    if (bodyStr.trim()) {
+      try {
+        parsed = JSON.parse(bodyStr)
+      } catch {
+        sendJsonError(res, 400, `INVALID_REQUEST`, `Invalid JSON body`)
+        return
+      }
+    }
+
+    try {
+      const result = await this.manager.forkSubtree(entityUrl, {
+        rootInstanceId: parsed.instance_id,
+        waitTimeoutMs: parsed.waitTimeoutMs,
+      })
+      sendJson(res, 201, {
+        root: toPublicEntity(result.root),
+        entities: result.entities.map((entity) => toPublicEntity(entity)),
+      })
     } catch (err) {
       handleElectricAgentsError(err, res)
     }

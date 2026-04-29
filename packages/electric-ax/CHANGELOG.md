@@ -1,5 +1,47 @@
 # electric-ax
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [89debcf]
+- Updated dependencies [491ba04]
+- Updated dependencies [4fc022b]
+- Updated dependencies [4987694]
+- Updated dependencies [89debcf]
+  - @electric-ax/agents@0.2.0
+  - @electric-ax/agents-runtime@0.1.0
+
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [4801e76]
+  - @electric-ax/agents@0.1.5
+
+## 0.1.9
+
+### Patch Changes
+
+- 1d6e728: fix: ensure docker-compose has a correct reference
+
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [9024ec2]
+  - @electric-ax/agents-runtime@0.0.4
+  - @electric-ax/agents@0.1.4
+
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [5ef535b]
+- Updated dependencies [6d8be8b]
+  - @electric-ax/agents-runtime@0.0.3
+  - @electric-ax/agents@0.1.3
+
 ## 0.1.6
 
 ### Patch Changes

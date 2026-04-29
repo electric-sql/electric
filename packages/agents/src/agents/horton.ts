@@ -2,25 +2,31 @@ import Anthropic from '@anthropic-ai/sdk'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSkillTools } from '../skills/tools'
-import { createBashTool } from '../tools/bash'
-import { createEditTool } from '../tools/edit'
-import { fetchUrlTool } from '../tools/fetch-url'
-import { createReadFileTool } from '../tools/read-file'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
-import { createWriteTool } from '../tools/write'
-import { braveSearchTool } from '../tools/brave-search'
+import {
+  createPromptCoderTool,
+  createSpawnCoderTool,
+} from '../tools/spawn-coder'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import type {
   EntityRegistry,
   HandlerContext,
   WakeEvent,
 } from '@electric-ax/agents-runtime'
+import {
+  createBashTool,
+  createEditTool,
+  createReadFileTool,
+  createWriteTool,
+  braveSearchTool,
+  fetchUrlTool,
+} from '@electric-ax/agents-runtime/tools'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { SkillsRegistry } from '../skills/types'
 
 const TITLE_MODEL = `claude-haiku-4-5-20251001`
 
-export const HORTON_MODEL = `claude-sonnet-4-5-20250929`
+export const HORTON_MODEL = `claude-sonnet-4-6`
 
 let anthropic: Anthropic | null = null
 function getClient(): Anthropic {
@@ -145,7 +151,7 @@ export async function generateTitle(
 
 export function buildHortonSystemPrompt(
   workingDirectory: string,
-  opts: { hasDocsSupport?: boolean; hasSkills?: boolean } = {}
+  opts: { hasDocsSupport?: boolean; hasSkills?: boolean; docsUrl?: string } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
     ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
@@ -159,7 +165,7 @@ export function buildHortonSystemPrompt(
   const skillsGuidance = opts.hasSkills
     ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
 
-Some skills are user-invocable — the user can trigger them with a slash command like \`/tutorial\`. When you see a message starting with \`/\` followed by a skill name, load that skill immediately with use_skill. Pass any text after the skill name as args.
+Some skills are user-invocable — the user can trigger them with a slash command like \`/quickstart\`. When you see a message starting with \`/\` followed by a skill name, load that skill immediately with use_skill. Pass any text after the skill name as args.
 
 ## IMPORTANT: How to use a loaded skill
 
@@ -172,7 +178,34 @@ When you load a skill, it becomes your primary directive for that interaction. F
 
 Do NOT load a skill and then ignore its instructions. The skill is there because it contains a tested, specific workflow. Your job is to execute it faithfully.`
     : ``
+  const onboardingGuidance = `\n# Onboarding
+When a user is new or asks how to get started with Electric Agents, **don't assume a single path**. Present the options and let them choose:
+
+- **Learn the concepts first** → Explain what Electric Agents is, answer questions, point to docs.
+  Use your docs tools or fetch_url. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
+
+- **Hands-on guided tutorial** → Load the quickstart skill (or tell them to type \`/quickstart\`).
+  This is a step-by-step build that takes them from zero to a running app.
+  Only load it when the user explicitly wants to build something hands-on.
+
+- **Scaffold a new project** → Load the init skill.
+  This sets up project structure and orients them in the codebase.
+
+- **Have a specific question?** → Answer it directly.
+  Use your docs tools, fetch_url, or general coding knowledge.
+
+Don't force onboarding. If someone just wants to chat or code, let them. When in doubt, ask what they'd like to do rather than picking a path for them.`
+  const docsUrlGuidance = opts.docsUrl
+    ? `\n# Electric Agents documentation
+- ${opts.hasDocsSupport ? `If search_durable_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
+- The Electric Agents docs site is at ${opts.docsUrl}
+- The docs site covers: Usage (entity definition, handlers, tools, state, spawning, coordination, waking, shared state, client integration, app setup), Reference (handler context, entity definitions, configurations, tools, state proxies, wake events, registries), Entities (Horton, Worker), and Patterns (Manager-Worker, Pipeline, Map-Reduce, Dispatcher, Blackboard, Reactive Observers).
+- For general coding questions unrelated to Electric Agents, use brave_search or your own knowledge.`
+    : ``
   return `You are Horton, a friendly and capable assistant. You can chat, research the web, read and edit code, run shell commands, and dispatch subagents (workers) for isolated subtasks. Be warm and engaging in conversation; be precise and concrete when working with code.
+
+# Greetings
+When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statement like "I want to learn about Electric Agents", respond warmly and introduce yourself. Briefly explain what you can help with and ask what they'd like to do — don't jump straight into a skill or workflow. Let the user tell you what they need before you start loading skills or running tools.
 
 # Tools
 - bash: run shell commands
@@ -182,13 +215,15 @@ Do NOT load a skill and then ignore its instructions. The skill is there because
 - brave_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
+- spawn_coder: spawn a long-lived coding agent (Claude Code or Codex CLI) for code changes, file edits, debugging
+- prompt_coder: send a follow-up prompt to a coder you previously spawned
 ${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
 - You must read a file before you can edit it.
 - Use absolute paths or paths relative to the current working directory.
-${docsGuidance}${skillsGuidance}
+${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
 # Risky actions
 Pause and confirm with the user before:
@@ -208,6 +243,13 @@ Dispatch a worker when:
 When you spawn a worker, write its system prompt the way you'd brief a colleague who just walked in: include file paths, line numbers, what specifically to do, and what form of answer you want back. The system prompt sets the worker's persona and constraints; the required initialMessage is the concrete task you're handing off — that's what kicks the worker off, so without it the worker sits idle.
 
 After spawning, end your turn (optionally with a brief "I've dispatched a worker for X; I'll respond when it finishes"). When the worker finishes, you'll receive a message describing which worker completed and what it returned. Multiple workers may finish at different times — check the message for the worker URL to know which one you're hearing about.
+
+# When to spawn a coder
+Spawn a coder when the user asks for code changes, file edits, debugging, or any task that benefits from a real coding agent with full tool access (bash, file edits, etc.). A coder runs Claude Code or Codex CLI under the hood.
+
+Unlike a worker, a coder is **long-lived**: its URL stays valid across many turns. Spawn once with spawn_coder, then keep prompting it via prompt_coder for follow-ups — don't spawn a new coder for each turn. Treat the coder URL like a chat handle.
+
+After calling spawn_coder or prompt_coder, end your turn. When the coder's reply lands, you'll be woken with the response in the wake message — relay it (or a summary) back to the user, and call prompt_coder again if there's a follow-up.
 
 # Reporting
 Report outcomes faithfully. If a command failed, say so with the relevant output. If you didn't run a verification step, say that rather than implying you did. Don't hedge confirmed results with unnecessary disclaimers.
@@ -230,6 +272,8 @@ export function createHortonTools(
     braveSearchTool,
     fetchUrlTool,
     createSpawnWorkerTool(ctx),
+    createSpawnCoderTool(ctx),
+    createPromptCoderTool(ctx),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }
@@ -258,6 +302,7 @@ function createAssistantHandler(options: {
   docsSupport: HortonDocsSupport | null
   docsSearchTool?: AgentTool
   skillsRegistry: SkillsRegistry | null
+  docsUrl?: string
 }) {
   const {
     workingDirectory,
@@ -265,6 +310,7 @@ function createAssistantHandler(options: {
     docsSupport,
     docsSearchTool,
     skillsRegistry,
+    docsUrl,
   } = options
   const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
 
@@ -336,6 +382,7 @@ function createAssistantHandler(options: {
       systemPrompt: buildHortonSystemPrompt(workingDirectory, {
         hasDocsSupport: Boolean(docsSupport),
         hasSkills,
+        docsUrl,
       }),
       model: HORTON_MODEL,
       tools,
@@ -375,9 +422,20 @@ export function registerHorton(
     workingDirectory: string
     streamFn?: StreamFn
     skillsRegistry?: SkillsRegistry | null
+    docsUrl?: string
   }
 ): Array<string> {
   const { workingDirectory, streamFn, skillsRegistry = null } = options
+  const docsUrl = options.docsUrl ?? process.env.HORTON_DOCS_URL
+
+  if (process.env.BRAVE_SEARCH_API_KEY) {
+    serverLog.info(`[horton] Web search: using Brave Search API`)
+  } else {
+    serverLog.warn(
+      `[horton] BRAVE_SEARCH_API_KEY not set — web search will fall back to Anthropic built-in search (uses your ANTHROPIC_API_KEY)`
+    )
+  }
+
   const docsSupport = createHortonDocsSupport(workingDirectory)
   const docsSearchTool = docsSupport?.createSearchTool()
 
@@ -393,6 +451,7 @@ export function registerHorton(
     docsSupport,
     docsSearchTool,
     skillsRegistry,
+    docsUrl,
   })
 
   registry.define(`horton`, {

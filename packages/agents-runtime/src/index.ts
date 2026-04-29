@@ -20,10 +20,17 @@ export type {
   SharedStateHandle,
   AgentConfig,
   AgentModel,
+  CodingAgentType,
+  CodingSessionEventRow,
+  CodingSessionHandle,
+  CodingSessionMeta,
+  CodingSessionMetaRow,
+  CodingSessionStatus,
   EntityDefinition,
   EntityTypeEntry,
   SharedStateHandleInfo,
   SpawnHandleInfo,
+  UseCodingAgentOptions,
   WakePhase,
   WakeSession,
   EntityHandle,
@@ -175,7 +182,19 @@ export {
   manifestSourceKey,
 } from './manifest-helpers'
 
-export { entity, cron, entities, tagged, db } from './observation-sources'
+export {
+  CODING_SESSION_ENTITY_TYPE,
+  CODING_SESSION_META_COLLECTION_TYPE,
+  CODING_SESSION_CURSOR_COLLECTION_TYPE,
+  CODING_SESSION_EVENT_COLLECTION_TYPE,
+  codingSession,
+  codingSessionEntityUrl,
+  entity,
+  cron,
+  entities,
+  tagged,
+  db,
+} from './observation-sources'
 export type {
   EntityObservationSource,
   CronObservationSource,

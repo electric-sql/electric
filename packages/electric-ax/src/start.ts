@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
 import { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
+import {
+  ELECTRIC_IMAGE_TAG,
+  ELECTRIC_AGENTS_SERVER_IMAGE_TAG,
+} from './version.js'
 import type {
   StartCommandOptions,
   StartBuiltinCommandOptions,
@@ -192,6 +196,9 @@ export async function startElectricAgentsDevEnvironment(
     ...env,
     COMPOSE_PROJECT_NAME: composeProjectName,
     ELECTRIC_AGENTS_PORT: String(port),
+    ELECTRIC_IMAGE_TAG: env.ELECTRIC_IMAGE_TAG ?? ELECTRIC_IMAGE_TAG,
+    ELECTRIC_AGENTS_SERVER_IMAGE_TAG:
+      env.ELECTRIC_AGENTS_SERVER_IMAGE_TAG ?? ELECTRIC_AGENTS_SERVER_IMAGE_TAG,
   })
 
   const uiUrl = `http://localhost:${port}`

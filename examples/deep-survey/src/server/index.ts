@@ -86,12 +86,17 @@ const server = http.createServer(async (req, res) => {
           ? `Explore this corpus: ${body.corpus}`
           : `Explore the React source code — map the reconciler, hooks, scheduler, and all major subsystems.`)
 
+      const tags: Record<string, string> = {
+        swarm_id: name,
+        title: message.trim().slice(0, 80),
+      }
+
       const putRes = await fetch(`${DARIX_URL}/orchestrator/${name}`, {
         method: `PUT`,
         headers: { 'Content-Type': `application/json` },
         body: JSON.stringify({
           args: {},
-          tags: { swarm_id: name },
+          tags,
           initialMessage: message,
         }),
       })

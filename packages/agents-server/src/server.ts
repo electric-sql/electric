@@ -51,6 +51,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { DurableStreamTestServer } from '@durable-streams/server'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type {
+  AgentModel,
   EntityRegistry,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
@@ -124,6 +125,19 @@ interface MockAgentBootstrap {
   registry: EntityRegistry
 }
 
+const MOCK_CHAT_MODEL: AgentModel = {
+  id: `mock-chat`,
+  name: `Mock Chat`,
+  api: `anthropic-messages`,
+  provider: `anthropic`,
+  baseUrl: `http://mock`,
+  reasoning: false,
+  input: [`text`],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 200_000,
+  maxTokens: 4_096,
+}
+
 function createMockAgentBootstrap(options: {
   agentServerUrl: string
   workingDirectory?: string
@@ -136,7 +150,7 @@ function createMockAgentBootstrap(options: {
     handler: async (ctx) => {
       ctx.useAgent({
         systemPrompt: `You are a concise test assistant.`,
-        model: `mock-chat`,
+        model: MOCK_CHAT_MODEL,
         tools: [],
         streamFn: options.streamFn,
       })
@@ -196,6 +210,13 @@ export class ElectricAgentsServer {
       throw new Error(`Server not started`)
     }
     return this._url
+  }
+
+  private get publicUrl(): string {
+    if (!this._url) {
+      throw new Error(`Server not started`)
+    }
+    return this.options.baseUrl?.replace(/\/+$/, ``) ?? this._url
   }
 
   async start(): Promise<string> {
@@ -404,7 +425,7 @@ export class ElectricAgentsServer {
 
           if (this.options.mockStreamFn) {
             this.mockAgentBootstrap = createMockAgentBootstrap({
-              agentServerUrl: this._url,
+              agentServerUrl: this.publicUrl,
               workingDirectory: this.options.workingDirectory,
               streamFn: this.options.mockStreamFn,
             })
@@ -617,7 +638,10 @@ export class ElectricAgentsServer {
       `access-control-allow-methods`,
       `GET, POST, PUT, PATCH, DELETE, OPTIONS`
     )
-    res.setHeader(`access-control-allow-headers`, `content-type, authorization`)
+    res.setHeader(
+      `access-control-allow-headers`,
+      `content-type, authorization, ngrok-skip-browser-warning`
+    )
     if (method === `OPTIONS`) {
       res.writeHead(204)
       res.end()
@@ -791,6 +815,15 @@ export class ElectricAgentsServer {
         sendJsonError(res, 401, `UNAUTHORIZED`, `Invalid write token`)
         return true
       }
+      if (this.electricAgentsManager.isForkWriteLockedEntity(entity.url)) {
+        sendJsonError(
+          res,
+          409,
+          `FORK_IN_PROGRESS`,
+          `Entity subtree is being forked`
+        )
+        return true
+      }
       if (entity.status === `stopped`) {
         sendJsonError(res, 409, `NOT_RUNNING`, `Entity is stopped`)
         return true
@@ -815,6 +848,17 @@ export class ElectricAgentsServer {
           }
         }
       }
+    } else if (
+      isSharedState &&
+      this.electricAgentsManager.isForkWriteLockedStream(path)
+    ) {
+      sendJsonError(
+        res,
+        409,
+        `FORK_IN_PROGRESS`,
+        `Entity subtree is being forked`
+      )
+      return true
     }
 
     const upstream = await this.forwardRequest(req, body)
@@ -1398,6 +1442,7 @@ export class ElectricAgentsServer {
     res: ServerResponse
   ): Promise<boolean> {
     if (!this._url) return false
+    const publicUrl = this.publicUrl
 
     const subscriptionId = url.searchParams.get(`subscription`)
     if (!subscriptionId) return false
@@ -1415,7 +1460,7 @@ export class ElectricAgentsServer {
           if (typeof payload.webhook === `string`) {
             targetWebhookUrl =
               rewriteLoopbackWebhookUrl(payload.webhook) ?? null
-            payload.webhook = `${this._url}/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
+            payload.webhook = `${publicUrl}/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
             requestBody = new TextEncoder().encode(JSON.stringify(payload))
           }
         } catch {
@@ -1527,9 +1572,10 @@ export class ElectricAgentsServer {
             : null
       const callbackUrl =
         typeof payload.callback === `string` ? payload.callback : null
+      const publicUrl = this.publicUrl
       const isInternalAgentHandlerTarget =
-        this._url != null &&
-        targetWebhookUrl.startsWith(`${this._url}/_electric/agent-handler`)
+        targetWebhookUrl.startsWith(`${this._url}/_electric/agent-handler`) ||
+        targetWebhookUrl.startsWith(`${publicUrl}/_electric/agent-handler`)
 
       if (primaryStream) {
         rootSpan?.setAttribute(ATTR.STREAM_PATH, primaryStream)
@@ -1588,6 +1634,19 @@ export class ElectricAgentsServer {
 
         if (upsertPromise) await upsertPromise
 
+        if (
+          entity &&
+          this.electricAgentsManager!.isForkWorkLockedEntity(entity.url)
+        ) {
+          sendJsonError(
+            res,
+            409,
+            `FORK_IN_PROGRESS`,
+            `Entity subtree is being forked`
+          )
+          return
+        }
+
         if (entity && entity.status !== `stopped`) {
           rootSpan?.setAttribute(ATTR.ENTITY_URL, entity.url)
           await tracer.startActiveSpan(
@@ -1606,8 +1665,8 @@ export class ElectricAgentsServer {
           runningEntityUrl = entity.url
         }
 
-        if (this._url && consumerId && callbackUrl) {
-          enriched.callback = `${this._url}/_electric/callback-forward/${encodeURIComponent(consumerId)}`
+        if (consumerId && callbackUrl) {
+          enriched.callback = `${publicUrl}/_electric/callback-forward/${encodeURIComponent(consumerId)}`
         }
         if (isInternalAgentHandlerTarget && entity) {
           enriched.writeToken = entity.write_token
@@ -1944,6 +2003,12 @@ export class ElectricAgentsServer {
       }
       headers[key] = value
     })
+    // Ensure CORS headers survive on proxied responses (e.g. shape stream
+    // reads that get forwarded to the durable-streams upstream). Cross-origin
+    // browser clients need these on every response, not just the top-level
+    // routes.
+    headers[`access-control-allow-origin`] = `*`
+    headers[`access-control-expose-headers`] = `*`
     return headers
   }
 }
