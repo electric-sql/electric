@@ -60,41 +60,64 @@
   ??HTTP/1.1 200 OK
   ??"value":{"val":"3"}
 
+[sleep 10]
+
+[shell otel_collector_startup]
+  # Verify that the Collector receives application metrics from Electric with expected resource attributes
+  """?
+  info	ResourceMetrics #0
+  Resource SchemaURL: 
+  Resource attributes:
+       -> custom.attr: Str\(electric.val\)
+       -> instance.id: Str\([-a-f0-9]+\)
+       -> name: Str\(metrics\)
+       -> service.name: Str\(electric\)
+       -> service.version: Str\([0-9.]+\)
+  ScopeMetrics #0
+  """
+
+  # Verify that the Collector receives stack metrics from Electric with expected resource attributes
+  """?
+  info	ResourceMetrics #0
+  Resource SchemaURL: 
+  Resource attributes:
+       -> custom.attr: Str\(electric.val\)
+       -> instance.id: Str\([-a-f0-9]+\)
+       -> name: Str\(metrics\)
+       -> service.name: Str\(electric\)
+       -> service.version: Str\([0-9.]+\)
+       -> stack_id: Str\(single_stack\)
+  ScopeMetrics #0
+  """
+
 [shell otel_collector]
-  [sleep 10]
+  # Verify the presence of process.bin_memory.* metrics
+  [invoke grep_otel_collector_output "Metric process\.bin_memory\.avg_bin_count .*process_type=A_memory_hog.*Value=[.0-9]+"]
+  [invoke grep_otel_collector_output "Metric process\.bin_memory\.avg_ref_count .*process_type=A_memory_hog.*Value=[.0-9]+"]
+  [invoke grep_otel_collector_output "Metric process\.bin_memory\.max_bin_count .*process_type=A_memory_hog.*Value=[0-9]+"]
+  [invoke grep_otel_collector_output "Metric process\.bin_memory\.max_ref_count .*process_type=A_memory_hog.*Value=[0-9]+"]
+  [invoke grep_otel_collector_output "Metric process\.bin_memory\.total .*process_type=A_memory_hog.*Value=[0-9]+"]
 
-  [invoke dump_sorted_otel_collector_output]
+  # Verify the presence of process.memory.total metric
+  [invoke grep_otel_collector_output "Metric process\.memory\.total .*process_type=A_memory_hog.*Value=[0-9]+"]
 
-  # Patterns below must be ordered alphabetically, so all metrics are matched first, followed by spans.
+  # Verify that LSN metrics are exported
+  [invoke grep_otel_collector_output "Metric electric\.postgres\.replication\.pg_wal_offset .*stack_id=single_stack"]
+  [invoke grep_otel_collector_output "Metric electric\.postgres\.replication\.slot_confirmed_flush_lsn_lag .*stack_id=single_stack"]
+  [invoke grep_otel_collector_output "Metric electric\.postgres\.replication\.slot_retained_wal_size .*stack_id=single_stack"]
 
-  # Verify export of resource attributes
-  ?Metric electric\.connection\.consumers_ready\.total custom\.attr=electric\.val instance\.id=[-a-f0-9]+ \
-     name=metrics service\.name=electric service\.version=[0-9.]+ stack_id=single_stack
+  # Regression check: These metrics haven't been exporting until recently
+  [invoke grep_otel_collector_output "Metric electric\.plug\.serve_shape\.bytes .*stack_id=single_stack"]
+  [invoke grep_otel_collector_output "Metric electric\.plug\.serve_shape\.count .*stack_id=single_stack"]
+  [invoke grep_otel_collector_output "Metric electric\.storage\.snapshot_stored\.operations .*stack_id=single_stack"]
+  [invoke grep_otel_collector_output "Metric electric\.storage\.transaction_stored\.bytes .*stack_id=single_stack"]
+  [invoke grep_otel_collector_output "Metric electric\.storage\.transaction_stored\.operations .*stack_id=single_stack"]
 
-  ?Metric electric\.plug\.serve_shape\.bytes .*stack_id=single_stack
-  ?Metric electric\.plug\.serve_shape\.count .*stack_id=single_stack
-
-  ?Metric electric\.postgres\.replication\.pg_wal_offset .*stack_id=single_stack
-  ?Metric electric\.postgres\.replication\.slot_confirmed_flush_lsn_lag .*stack_id=single_stack
-  ?Metric electric\.postgres\.replication\.slot_retained_wal_size .*stack_id=single_stack
-
-  ?Metric electric\.storage\.snapshot_stored\.operations .*stack_id=single_stack
-  ?Metric electric\.storage\.transaction_stored\.bytes .*stack_id=single_stack
-  ?Metric electric\.storage\.transaction_stored\.operations .*stack_id=single_stack
-
-  # Export of process memory metrics by application telemetry
-  ?Metric process\.bin_memory\.avg_bin_count .*process_type=A_memory_hog.*Value=[.0-9]+
-  ?Metric process\.bin_memory\.avg_ref_count .*process_type=A_memory_hog.*Value=[.0-9]+
-  ?Metric process\.bin_memory\.max_bin_count .*process_type=A_memory_hog.*Value=[0-9]+
-  ?Metric process\.bin_memory\.max_ref_count .*process_type=A_memory_hog.*Value=[0-9]+
-  ?Metric process\.bin_memory\.total .*process_type=A_memory_hog.*Value=[0-9]+
-  ?Metric process\.memory\.total .*process_type=A_memory_hog.*Value=[0-9]+
-
-  # The initial snapshot query span is exported from the Snapshotter path.
-  ?Span shape_snapshot\.execute_for_shape .*shape\.query_reason=initial_snapshot
+  # The initial snapshot query span is exported from the Snapshotter path."]
+  [invoke grep_otel_collector_output "Span shape_snapshot\.execute_for_shape .*shape\.query_reason=initial_snapshot"]
 
   # A direct subset snapshot query span is exported from the PartialModes path.
-  ?Span shape_snapshot\.execute_for_shape .*shape\.query_reason=subset_query
+  [invoke grep_otel_collector_output "Span shape_snapshot\.execute_for_shape .*shape\.query_reason=subset_query"]
 
 ###
 

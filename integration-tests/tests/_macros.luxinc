@@ -243,11 +243,12 @@
     ??Everything is ready. Begin running and processing data.
 
     -
+    [timeout 10]
 [endmacro]
 
-[macro dump_sorted_otel_collector_output]
-  # Sorted and compacted output for pattern matching
-  !docker logs $otel_collector_container_name 2>&1 | python3 $(realpath ../support_files/normalize-otel-output.py) | sort
+[macro grep_otel_collector_output pat]
+  !docker logs $otel_collector_container_name 2>&1 | python3 $(realpath ../support_files/normalize-otel-output.py) | grep "$pat" && FOUND
+  ??FOUND
 [endmacro]
 
 [macro teardown_container container_name]
