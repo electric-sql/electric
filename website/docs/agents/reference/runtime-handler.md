@@ -89,6 +89,7 @@ interface RuntimeRouterConfig {
   baseUrl: string
   serveEndpoint?: string
   webhookPath?: string
+  handlerUrl?: string
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
   idleTimeout?: number
@@ -126,7 +127,8 @@ interface RuntimeRouterConfig {
 | ------------------------- | ------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `baseUrl`                 | `string`                                                      | -                                            | Base URL of the Electric Agents runtime server (e.g. `"http://localhost:4437"`). Required.                                          |
 | `serveEndpoint`           | `string`                                                      | -                                            | Full webhook callback URL exposed by your app. Used for type registration.                                        |
-| `webhookPath`             | `string`                                                      | pathname from `serveEndpoint`, or `"/electric-agents"` | Path matched by `handleRequest()`.                                                                                |
+| `webhookPath`             | `string`                                                      | pathname from `serveEndpoint` / `handlerUrl`, or `"/electric-agents"` | Path matched by `handleRequest()`.                                                                                |
+| `handlerUrl`              | `string`                                                      | -                                            | Backward-compatible alias for `serveEndpoint`; prefer `serveEndpoint` in new code.                                |
 | `registry`                | `EntityRegistry`                                              | default registry                             | Entity registry for this handler. Falls back to the module-level default registry.                                |
 | `subscriptionPathForType` | `(typeName: string) => string`                                | -                                            | Override the webhook subscription path used per entity type registration.                                         |
 | `idleTimeout`             | `number`                                                      | `20000`                                      | Idle timeout in milliseconds before closing a wake.                                                               |

@@ -37,6 +37,7 @@ interface RuntimeRouterConfig {
   baseUrl: string // Electric Agents server URL
   serveEndpoint?: string // Webhook callback URL
   webhookPath?: string // Path to match (default: derived from serveEndpoint)
+  handlerUrl?: string // legacy alias for serveEndpoint
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
   idleTimeout?: number // ms before closing idle wake (default: 20000)

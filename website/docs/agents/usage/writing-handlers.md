@@ -57,11 +57,16 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     id: string,
     schema: T
   ) => SharedStateHandle<T>
+  useCodingAgent: (
+    sessionId: string,
+    opts: UseCodingAgentOptions
+  ) => Promise<CodingSessionHandle>
   send: (
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
   ) => void
+  recordRun: () => RunHandle
   setTag: (key: string, value: string) => Promise<void>
   removeTag: (key: string) => Promise<void>
   sleep: () => void
@@ -72,7 +77,7 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 
 | Property           | Description                                                                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `firstWake`        | `true` on the entity's first activation ever. Use for initialization.                                                                                   |
+| `firstWake`        | `true` during the initial setup pass while the entity has no persisted manifest entries. Use state checks for one-time plain state initialization.       |
 | `tags`             | Entity tags -- key/value metadata associated with this entity.                                                                                          |
 | `entityUrl`        | The entity's URL path, e.g. `"/assistant/my-chat"`.                                                                                                     |
 | `entityType`       | The registered type name, e.g. `"assistant"`.                                                                                                           |
@@ -93,7 +98,9 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `spawn`            | Creates a child entity. See [Spawning and coordinating](./spawning-and-coordinating).                                                                   |
 | `observe`          | Connects to another entity's stream or shared db. See [Reactive observers](../entities/patterns/reactive-observers) and [Shared state](./shared-state). |
 | `mkdb`             | Creates a new shared state stream. See [Shared state](./shared-state).                                                                                  |
+| `useCodingAgent`   | Spawns or attaches to a built-in `coder` entity backed by Claude Code or Codex.                                                                          |
 | `send`             | Sends a message to another entity's inbox. Supports delayed delivery via `afterMs`.                                                                     |
+| `recordRun`        | Records non-LLM work in the built-in `runs` collection so `runFinished` observers are woken.                                                            |
 | `setTag`           | Sets a tag on this entity.                                                                                                                              |
 | `removeTag`        | Removes a tag from this entity.                                                                                                                         |
 | `sleep`            | Returns the entity to idle without re-waking.                                                                                                           |
@@ -128,7 +135,7 @@ type WakeEvent = {
 
 ## Typical handler pattern
 
-Most handlers follow the same structure: initialize state on first wake, configure the agent, run the agent.
+Most LLM handlers follow the same structure: initialize missing state idempotently, configure the agent, run the agent.
 
 ```ts
 registry.define("assistant", {
@@ -138,7 +145,7 @@ registry.define("assistant", {
   },
 
   async handler(ctx) {
-    if (ctx.firstWake) {
+    if (!ctx.db.collections.status.get("current")) {
       ctx.db.actions.status_insert({ row: { key: "current", value: "idle" } })
     }
 
@@ -163,25 +170,31 @@ interface AgentConfig {
   provider?: KnownProvider
   tools: AgentTool[]
   streamFn?: StreamFn
+  getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined
+  onPayload?: SimpleStreamOptions["onPayload"]
   testResponses?: string[] | TestResponseFn
 }
 ```
 
-## firstWake
+## firstWake and initialization
 
-`ctx.firstWake` is `true` only on the entity's very first activation. Use it for one-time initialization:
+`ctx.firstWake` is `true` during the initial setup pass while the entity has no persisted manifest entries. It is useful for setup that creates manifest-backed resources such as `ctx.spawn()`, `ctx.observe()`, `ctx.mkdb()`, context entries, or schedules.
+
+For plain state rows, prefer checking the collection itself so initialization stays idempotent even for entities that do not create manifest entries:
 
 ```ts
 async handler(ctx) {
-  if (ctx.firstWake) {
+  if (!ctx.db.collections.status.get("current")) {
     ctx.db.actions.status_insert({ row: { key: 'current', value: 'idle' } })
+  }
+  if (!ctx.db.collections.counters.get("runs")) {
     ctx.db.actions.counters_insert({ row: { key: 'runs', value: 0 } })
   }
   // ...
 }
 ```
 
-On subsequent wakes (new messages, child completion, etc.), `firstWake` is `false`.
+After an entity persists manifest entries, subsequent wakes set `firstWake` to `false`.
 
 ## sleep
 
@@ -197,6 +210,24 @@ async handler(ctx, wake) {
   // Otherwise, run the agent
   ctx.useAgent({ ... })
   await ctx.agent.run()
+}
+```
+
+## recordRun
+
+Call `ctx.recordRun()` when a handler does work without `ctx.agent.run()` but still needs to publish run lifecycle events. This is how non-LLM entities can wake parents observing them with `wake: "runFinished"`.
+
+```ts
+async handler(ctx) {
+  const run = ctx.recordRun()
+  try {
+    const result = await runExternalJob()
+    run.attachResponse(result.summary)
+    run.end({ status: "completed" })
+  } catch (error) {
+    run.end({ status: "failed", finishReason: "error" })
+    throw error
+  }
 }
 ```
 

@@ -171,6 +171,15 @@ electric agents stop --remove-volumes
 | ------------------ | ------------------------------ |
 | `--remove-volumes` | Remove Docker volumes as well. |
 
+### <span class="cli-command"><code>init [project-name]</code></span> {#init-project-name}
+
+Scaffold a new Electric Agents project from the bundled starter template.
+
+```bash
+electric agents init
+electric agents init my-agents-app
+```
+
 ### <span class="cli-command"><code>completion [action]</code></span> {#completion-action}
 
 Set up shell completions. Without arguments, prints setup instructions.

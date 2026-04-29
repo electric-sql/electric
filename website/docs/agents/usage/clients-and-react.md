@@ -17,6 +17,7 @@ Use the client APIs when you need to observe agents from application code rather
 
 ```ts
 import {
+  codingSession,
   createAgentsClient,
   entity,
   entities,
@@ -33,6 +34,10 @@ const membersDb = await client.observe(
   entities({ tags: { project: "alpha" } })
 )
 console.log(membersDb.collections.members.toArray)
+
+// Observe a built-in coder session by id.
+const coderDb = await client.observe(codingSession("feature-work"))
+console.log(coderDb.collections.events.toArray)
 ```
 
 ### Types
@@ -63,6 +68,7 @@ The same source helpers used by `ctx.observe()` can be used with `AgentsClient`.
 | Helper              | Use case                                             |
 | ------------------- | ---------------------------------------------------- |
 | `entity(url)`       | Observe one entity by URL.                           |
+| `codingSession(id)` | Observe a built-in `coder` entity by session id.     |
 | `entities({ tags })` | Observe the entity membership stream matching tags. |
 | `db(id, schema)`    | Observe a shared-state stream.                       |
 | `cron(expression)`  | Build a cron source for wake subscriptions.          |

@@ -19,6 +19,10 @@ interface AgentConfig {
   provider?: KnownProvider
   tools: AgentTool[]
   streamFn?: StreamFn
+  getApiKey?: (
+    provider: string
+  ) => Promise<string | undefined> | string | undefined
+  onPayload?: SimpleStreamOptions["onPayload"]
   testResponses?: string[] | TestResponseFn
 }
 ```
@@ -32,6 +36,8 @@ interface AgentConfig {
 | `provider`      | `KnownProvider`              | No       | Provider to use when `model` is a string. Defaults to `"anthropic"`.                                |
 | `tools`         | `AgentTool[]`                | Yes      | Tools available to the LLM. Spread `ctx.electricTools` when your runtime host provides runtime-level tools. See [`AgentTool`](./agent-tool). |
 | `streamFn`      | `StreamFn`                   | No       | Optional streaming callback passed to the underlying agent.                                         |
+| `getApiKey`     | `(provider) => string \| Promise<string> \| undefined` | No | Optional API-key resolver passed through to the model layer. |
+| `onPayload`     | `SimpleStreamOptions["onPayload"]` | No | Optional callback for raw streaming payloads from the model layer. |
 | `testResponses` | `string[] \| TestResponseFn` | No       | Mock LLM responses for testing. When set, no real LLM calls are made.                               |
 
 ## TestResponseFn
@@ -69,6 +75,7 @@ interface AgentHandle {
 
 ```ts
 interface AgentRunResult {
+  result?: unknown
   writes: ChangeEvent[]
   toolCalls: Array<{ name: string; args: unknown; result: unknown }>
   usage: { tokens: number; duration: number }
@@ -77,6 +84,7 @@ interface AgentRunResult {
 
 | Field       | Type                                   | Description                                                                 |
 | ----------- | -------------------------------------- | --------------------------------------------------------------------------- |
+| `result`    | `unknown`                              | Optional final result from the underlying agent adapter.                    |
 | `writes`    | `ChangeEvent[]`                        | Currently returned as an empty array placeholder.                           |
 | `toolCalls` | `Array<{ name, args, result }>`        | Currently returned as an empty array placeholder.                           |
 | `usage`     | `{ tokens: number; duration: number }` | Currently returned as `{ tokens: 0, duration: 0 }` until usage aggregation is wired in. |

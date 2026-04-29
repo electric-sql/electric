@@ -19,6 +19,8 @@ interface AgentConfig {
   provider?: KnownProvider
   tools: AgentTool[]
   streamFn?: StreamFn
+  getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined
+  onPayload?: SimpleStreamOptions["onPayload"]
   testResponses?: string[] | TestResponseFn
 }
 ```
@@ -30,6 +32,8 @@ interface AgentConfig {
 | `provider`      | No       | Provider to use when `model` is a string. Defaults to `"anthropic"`.    |
 | `tools`         | Yes      | Array of tools available to the agent. Spread `ctx.electricTools` when your runtime host provides runtime-level tools. |
 | `streamFn`      | No       | Optional streaming callback passed to the underlying agent.             |
+| `getApiKey`     | No       | Optional API-key resolver passed through to the model layer.            |
+| `onPayload`     | No       | Optional callback for raw streaming payloads from the model layer.      |
 | `testResponses` | No       | Mock responses for testing without calling the LLM.                     |
 
 ## Basic usage
@@ -71,6 +75,7 @@ Returns an `AgentRunResult`:
 
 ```ts
 type AgentRunResult = {
+  result?: unknown
   writes: ChangeEvent[]
   toolCalls: Array<{ name: string; args: unknown; result: unknown }>
   usage: { tokens: number; duration: number }
@@ -79,6 +84,7 @@ type AgentRunResult = {
 
 | Field       | Description                                                                 |
 | ----------- | --------------------------------------------------------------------------- |
+| `result`    | Optional final result from the underlying agent adapter.                    |
 | `writes`    | Currently returned as an empty array placeholder.                           |
 | `toolCalls` | Currently returned as an empty array placeholder.                           |
 | `usage`     | Currently returned as `{ tokens: 0, duration: 0 }` until usage aggregation is wired in. |

@@ -23,7 +23,7 @@ external event  ─►  wake entry (persisted)  ─►  handler invocation  ─�
 3. **Handler is invoked.** The runtime picks up the wake, loads the entity's state, and calls your handler with a `WakeEvent` describing what triggered this invocation.
 4. **Handler runs.** You read `ctx.events`, inspect `wake`, configure the agent, emit new events. When the handler returns (or calls `ctx.sleep()`), the entity goes idle until the next wake.
 
-This means handlers are re-entrant: the same handler function is called fresh on every wake. Use `ctx.firstWake` for one-time initialization, and `ctx.db.actions` / `ctx.db.collections` to carry state across wakes.
+This means handlers are re-entrant: the same handler function is called fresh on every wake. Use `ctx.db.actions` / `ctx.db.collections` to carry state across wakes, and make one-time writes idempotent by checking existing state. `ctx.firstWake` is for the initial setup pass while no manifest entries exist.
 
 ## What produces a wake
 
@@ -123,7 +123,7 @@ Multiple external events that arrive while an entity is busy (or between acks) a
 
 - A wake covers a contiguous range of offsets in the source stream (`wake.fromOffset`..`wake.toOffset`).
 - `wake.eventCount` tells you how many new events this wake represents.
-- Handlers must be safe to re-run with the same input — at-least-once delivery. Use `ctx.firstWake` and idempotent writes to collections rather than side effects on each wake.
+- Handlers must be safe to re-run with the same input — at-least-once delivery. Prefer idempotent writes to collections over side effects on each wake.
 
 If you need to deduplicate explicitly, key your writes by something stable (the child's entity URL, the message's producer/epoch/seq headers, etc.) and let the collection's primary key do the dedup.
 

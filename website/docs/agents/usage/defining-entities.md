@@ -97,7 +97,7 @@ registry.define("coordinator", {
   },
 
   async handler(ctx) {
-    if (ctx.firstWake) {
+    if (!ctx.db.collections.status.get("current")) {
       ctx.db.actions.status_insert({ row: { key: "current", value: "idle" } })
     }
     // Convenience proxy:

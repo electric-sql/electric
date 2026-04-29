@@ -31,7 +31,7 @@ The context API passed into the handler:
 
 | Property/Method                     | Purpose                                                               |
 | ----------------------------------- | --------------------------------------------------------------------- |
-| `ctx.firstWake`                     | Boolean -- is this the entity's first activation?                     |
+| `ctx.firstWake`                     | Boolean -- initial setup pass while no manifest entries exist         |
 | `ctx.entityUrl`                     | Identity -- `/type/id`                                                |
 | `ctx.entityType`                    | Type name string                                                      |
 | `ctx.args`                          | Readonly spawn arguments                                              |
@@ -51,6 +51,8 @@ The context API passed into the handler:
 | `ctx.sleep()`                       | Return to idle                                                        |
 | `ctx.mkdb(id, schema)`              | Create cross-entity shared state                                      |
 | `ctx.observe(db(id, schema), opts)` | Join existing shared state                                            |
+| `ctx.useCodingAgent(sessionId, opts)` | Spawn or attach to a built-in `coder` session                       |
+| `ctx.recordRun()`                   | Record non-LLM work as a run for `runFinished` observers              |
 | `ctx.setTag(key, value)`            | Set a tag on this entity                                              |
 | `ctx.removeTag(key)`                | Remove a tag from this entity                                         |
 
@@ -65,7 +67,9 @@ ctx.useAgent({
   provider?: KnownProvider,   // defaults to 'anthropic' for string models
   tools: AgentTool[],      // [...ctx.electricTools, ...custom]
   streamFn?: StreamFn,     // optional streaming callback
-  testResponses?: string[] // for testing without LLM
+  getApiKey?: (provider: string) => string | Promise<string> | undefined,
+  onPayload?: SimpleStreamOptions["onPayload"],
+  testResponses?: string[] | TestResponseFn // for testing without LLM
 })
 await ctx.agent.run()      // blocks until agent finishes
 ```
@@ -172,6 +176,8 @@ See [Managing state](/docs/agents/usage/managing-state).
   - `opts.wake` -- `'runFinished'`, `{ on: 'runFinished', includeResponse? }`, or `{ on: 'change', collections?, debounceMs?, timeoutMs? }`
 - **`observe(source, opts)`** -> `EntityHandle | ObservationHandle` -- subscribe via `entity()`, `cron()`, `entities()`, `db()`
 - **`send(url, payload, opts)`** -- fire-and-forget message
+- **`useCodingAgent(sessionId, opts)`** -> `CodingSessionHandle` -- spawn or attach to a built-in Claude Code/Codex session
+- **`recordRun()`** -> `RunHandle` -- publish run lifecycle for external work
 - **`sleep()`** -- go idle
 
 **EntityHandle** returned from spawn/observe:
@@ -249,6 +255,7 @@ Interact with the system using the Electric Agents CLI:
 | `electric agents start-builtin`               | Start built-in Horton runtime |
 | `electric agents quickstart`                  | Start local server and built-ins |
 | `electric agents stop`                        | Stop local dev environment   |
+| `electric agents init [project-name]`          | Scaffold a starter app       |
 
 See [CLI reference](/docs/agents/reference/cli).
 
@@ -279,6 +286,6 @@ Use the client and embedding APIs when you need to work with agents outside an e
 | `createAgentsClient()`            | Observe entity, membership, or shared-state streams from app code |
 | `useChat()`                       | Render an observed `EntityStreamDB` in React  |
 | `createRuntimeServerClient()`     | Spawn, message, delete, tag, and schedule entities from services |
-| `BuiltinAgentsServer`             | Host Horton and worker in your own process    |
+| `BuiltinAgentsServer`             | Host Horton, worker, and coder in your own process |
 
 See [Clients & React](/docs/agents/usage/clients-and-react), [Programmatic runtime client](/docs/agents/usage/programmatic-runtime-client), and [Embedded built-ins](/docs/agents/usage/embedded-builtins).
