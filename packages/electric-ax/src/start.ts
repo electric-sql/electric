@@ -281,6 +281,7 @@ export async function startBuiltinAgentsServer(
     env?: NodeJS.ProcessEnv
     cwd?: string
     agentServerUrl?: string
+    printStartedMessage?: boolean
   } = {}
 ): Promise<StartedBuiltinAgentsEnvironment> {
   const env = params.env ?? process.env
@@ -311,7 +312,9 @@ export async function startBuiltinAgentsServer(
     agentServerUrl,
   }
 
-  console.log(getStartedBuiltinAgentsMessage(started))
+  if (params.printStartedMessage ?? true) {
+    console.log(getStartedBuiltinAgentsMessage(started))
+  }
   await waitForShutdown(() => server.stop())
   return started
 }

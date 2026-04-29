@@ -86,6 +86,13 @@ interface InvocationEnv {
   npm_config_user_agent?: string
 }
 
+interface QuickstartBackendStartedMessageOptions {
+  commandPrefix: string
+  uiUrl: string
+  color?: boolean
+  trueColor?: boolean
+}
+
 function getDefaultElectricAgentsIdentity(): string {
   return `${userInfo().username}@${hostname()}`
 }
@@ -160,6 +167,106 @@ function resolveCommandName(argv: Array<string>): string {
 
 function commandExample(commandName: string): string {
   return `${commandName} agents`
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*m/g, ``)
+}
+
+function visibleLength(value: string): number {
+  return stripAnsi(value).length
+}
+
+function supportsColor(
+  output: NodeJS.WriteStream = process.stdout,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  if (env.NO_COLOR !== undefined) return false
+  if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== `0`) return true
+  if (!output.isTTY) return false
+  return output.getColorDepth(env) >= 4
+}
+
+function supportsTrueColor(
+  output: NodeJS.WriteStream = process.stdout,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  if (!supportsColor(output, env)) return false
+  return output.getColorDepth(env) >= 24
+}
+
+function colorBorder(
+  value: string,
+  opts: { color: boolean; trueColor: boolean }
+): string {
+  if (!opts.color) return value
+  const color = opts.trueColor ? `\x1b[38;2;86;232;234m` : `\x1b[36m`
+  return `${color}${value}\x1b[0m`
+}
+
+function styleCommandPrefix(commandPrefix: string): string {
+  return commandPrefix
+}
+
+function styleElectricAgentsWithOptions(
+  value: string,
+  opts: { color: boolean; trueColor: boolean }
+): string {
+  if (!opts.color) return value
+  const color = opts.trueColor ? `\x1b[38;2;86;232;234m` : `\x1b[36m`
+  return `\x1b[1m${color}${value}\x1b[0m`
+}
+
+function underline(value: string, color: boolean): string {
+  if (!color) return value
+  return `\x1b[4m${value}\x1b[24m`
+}
+
+function grey(value: string, color: boolean): string {
+  if (!color) return value
+  return `\x1b[90m${value}\x1b[0m`
+}
+
+function boxLines(
+  lines: Array<string>,
+  opts: { color: boolean; trueColor: boolean }
+): string {
+  const width = Math.max(...lines.map(visibleLength))
+  const top = colorBorder(`╔${`═`.repeat(width + 2)}╗`, opts)
+  const body = lines.map((line) => {
+    const padding = ` `.repeat(width - visibleLength(line))
+    return (
+      `${colorBorder(`║`, opts)} ${line}${padding} ` + colorBorder(`║`, opts)
+    )
+  })
+  const bottom = colorBorder(`╚${`═`.repeat(width + 2)}╝`, opts)
+  return [top, ...body, bottom].join(`\n`)
+}
+
+export function formatQuickstartBackendStartedMessage({
+  commandPrefix,
+  uiUrl,
+  color = supportsColor(),
+  trueColor = supportsTrueColor(),
+}: QuickstartBackendStartedMessageOptions): string {
+  const styledCommandPrefix = styleCommandPrefix(commandPrefix)
+
+  return boxLines(
+    [
+      `${styleElectricAgentsWithOptions(`electric agents`, { color, trueColor })} server is up`,
+      ``,
+      `Open a separate terminal and run:`,
+      `  ${styledCommandPrefix} spawn /horton/onboarding`,
+      `  ${styledCommandPrefix} send /horton/onboarding "Onboard me to Electric Agents"`,
+      ``,
+      `You can see all agents in the UI or CLI:`,
+      `  UI: ${underline(uiUrl, color)}`,
+      `  CLI: ${styledCommandPrefix} observe /horton/onboarding`,
+      ``,
+      grey(`Keep this window open to run the built-in agents`, color),
+    ],
+    { color, trueColor }
+  )
 }
 
 export function resolveCommandPrefix(
@@ -504,7 +611,11 @@ export function createElectricCliHandlers(
       return started
     },
     startBuiltin: async (options) => {
-      options.anthropicApiKey = await ensureAnthropicApiKey(options)
+      try {
+        options.anthropicApiKey = await ensureAnthropicApiKey(options)
+      } catch (error) {
+        fail(getErrorMessage(error))
+      }
       const { startBuiltinAgentsServer } = await loadStartModule()
       return startBuiltinAgentsServer(options, {
         agentServerUrl: env.electricAgentsUrl,
@@ -517,28 +628,26 @@ export function createElectricCliHandlers(
       return stopped
     },
     quickstart: async (options) => {
-      options.anthropicApiKey = await ensureAnthropicApiKey(options)
+      try {
+        options.anthropicApiKey = await ensureAnthropicApiKey(options)
+      } catch (error) {
+        fail(getErrorMessage(error))
+      }
       const { startBuiltinAgentsServer, startElectricAgentsDevEnvironment } =
         await loadStartModule()
       const started = await startElectricAgentsDevEnvironment()
       printStartedEnvironment(started)
       console.log(``)
       console.log(
-        [
-          `electric agents server is up`,
-          ``,
-          `Open a separate terminal and run:`,
-          `  ${commandPrefix} spawn /horton/onboarding`,
-          `  ${commandPrefix} send /horton/onboarding "Please walk me through onboarding for the Electric agents"`,
-          `  ${commandPrefix} observe /horton/onboarding`,
-          ``,
-          `UI: ${started.uiUrl}`,
-          `This terminal will now run the built-in Horton server in the foreground.`,
-        ].join(`\n`)
+        formatQuickstartBackendStartedMessage({
+          commandPrefix,
+          uiUrl: started.uiUrl,
+        })
       )
       console.log(``)
       await startBuiltinAgentsServer(options, {
         agentServerUrl: started.uiUrl,
+        printStartedMessage: false,
       })
     },
     init: async (projectName) => {
@@ -560,8 +669,8 @@ Environment:
 Examples:
   $ ${agentsCommand} types
   $ ${agentsCommand} spawn /horton/onboarding
-  $ ${agentsCommand} send /horton/onboarding "Please walk me through onboarding for the Electric agents"
-  $ ${agentsCommand} observe /horton/onboarding --from 0
+  $ ${agentsCommand} send /horton/onboarding "Help me onboard to Electric Agents"
+  $ ${agentsCommand} observe /horton/onboarding
   $ ${agentsCommand} start
   $ ${agentsCommand} start-builtin --anthropic-api-key sk-ant-...
   $ ${agentsCommand} stop --remove-volumes

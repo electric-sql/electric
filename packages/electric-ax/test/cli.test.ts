@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   createElectricCliHandlers,
   createElectricProgram,
+  formatQuickstartBackendStartedMessage,
   resolveCommandPrefix,
   run,
 } from '../src/index'
@@ -119,6 +120,52 @@ async function parse(argv: Array<string>, handlers = createHandlers()) {
 }
 
 describe(`createElectricProgram`, () => {
+  it(`formats the quickstart backend message in an ASCII box`, () => {
+    const message = formatQuickstartBackendStartedMessage({
+      commandPrefix: `electric agents`,
+      uiUrl: `http://localhost:4437`,
+      color: false,
+    })
+
+    expect(message).toContain(`╔`)
+    expect(message).toContain(`╚`)
+    expect(message).toContain(`║ electric agents server is up`)
+    expect(message).toContain(`║   electric agents spawn /horton/onboarding`)
+    expect(message).toContain(
+      `║   electric agents send /horton/onboarding "Onboard me to Electric Agents"`
+    )
+    expect(message).toContain(`║   UI: http://localhost:4437`)
+    expect(message).toContain(
+      `║ Keep this window open to run the built-in agents`
+    )
+    expect(message).not.toContain(`\x1b[`)
+  })
+
+  it(`colors the quickstart box border and electric agents brand`, () => {
+    const message = formatQuickstartBackendStartedMessage({
+      commandPrefix: `electric agents`,
+      uiUrl: `http://localhost:4437`,
+      color: true,
+      trueColor: true,
+    })
+
+    expect(message).toContain(`\x1b[38;2;86;232;234m╔`)
+    expect(message).toContain(
+      `\x1b[1m\x1b[38;2;86;232;234melectric agents\x1b[0m`
+    )
+    expect(message).toContain(`\x1b[38;2;86;232;234m║\x1b[0m Open`)
+    expect(message).toContain(
+      `\x1b[38;2;86;232;234m║\x1b[0m   electric agents spawn`
+    )
+    expect(message).toContain(`UI: \x1b[4mhttp://localhost:4437\x1b[24m`)
+    expect(message).toContain(
+      `\x1b[90mKeep this window open to run the built-in agents\x1b[0m`
+    )
+    expect(message).not.toContain(
+      `\x1b[0m   \x1b[1m\x1b[38;2;86;232;234melectric agents\x1b[0m spawn`
+    )
+  })
+
   it(`dispatches the root types command`, async () => {
     const handlers = await parse([`agents`, `types`])
 

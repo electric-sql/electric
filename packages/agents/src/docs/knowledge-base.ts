@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { Type } from '@sinclair/typebox'
 import { load as loadSqliteVec } from 'sqlite-vec'
+import { serverLog } from '../log'
 import { EMBEDDING_DIMENSIONS, embedText, embeddingToSqlInput } from './embed'
 import type { AgentTool, WakeEvent } from '@electric-ax/agents-runtime'
 import type { ChangeEvent } from '@durable-streams/state'
@@ -397,7 +398,7 @@ class DocsKnowledgeBase {
       return db
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.warn(
+      serverLog.debug(
         `${this.logPrefix} falling back to in-memory docs index: ${message}`
       )
       return null
@@ -520,7 +521,7 @@ class DocsKnowledgeBase {
 
       this.fallbackFingerprint = fingerprint
       const stats = this.stats()
-      console.log(
+      serverLog.debug(
         `${this.logPrefix} indexed ${stats.docCount} docs into ${stats.chunkCount} chunks (${stats.fingerprint.slice(0, 12)}...)`
       )
       return stats
@@ -591,7 +592,7 @@ class DocsKnowledgeBase {
 
     reset()
     const stats = this.stats()
-    console.log(
+    serverLog.debug(
       `${this.logPrefix} indexed ${stats.docCount} docs into ${stats.chunkCount} chunks (${stats.fingerprint.slice(0, 12)}...)`
     )
     return stats
@@ -857,7 +858,7 @@ function logSearchResults(
   query: string,
   output: string
 ) {
-  console.log(`[horton-docs] ${kind} search for "${query}"\n${output}\n`)
+  serverLog.debug(`[horton-docs] ${kind} search for "${query}"\n${output}\n`)
 }
 
 export function createHortonDocsSupport(

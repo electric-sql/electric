@@ -117,6 +117,7 @@ async function saveCache(
     obj[name] = meta
   }
   fsSync.mkdirSync(cacheDir, { recursive: true })
+  await fs.writeFile(path.join(cacheDir, `.gitignore`), `*\n`, `utf-8`)
   await fs.writeFile(cachePath, JSON.stringify(obj, null, 2), `utf-8`)
 }
 

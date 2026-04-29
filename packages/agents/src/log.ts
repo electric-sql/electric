@@ -48,6 +48,11 @@ function formatArgs(args: Array<unknown>): { err?: Error; msg: string } {
 }
 
 export const serverLog = {
+  debug(...args: Array<unknown>): void {
+    const { msg } = formatArgs(args)
+    logger.debug(msg)
+  },
+
   info(...args: Array<unknown>): void {
     const { msg } = formatArgs(args)
     logger.info(msg)
