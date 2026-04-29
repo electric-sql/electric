@@ -35,6 +35,23 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.indexed_shape?(shape)
     end
 
+    test "returns true for the optimised where clause forms covered by performance tests" do
+      [
+        "id = 7",
+        "id = 7 AND id > 6",
+        "id > 6 AND id = 7",
+        "id = 7 AND number = 11",
+        "id = 7 AND number = 9",
+        "an_array @> '{5, 11, 29}'",
+        "7 = ANY(an_array)",
+        "id = 7 OR id = 8"
+      ]
+      |> Enum.each(fn where ->
+        shape = Shape.new!("t1", where: where, inspector: @inspector)
+        assert Filter.indexed_shape?(shape), "#{where} should be indexed"
+      end)
+    end
+
     test "returns false for OR shapes when one branch is not indexed" do
       shape = Shape.new!("t1", where: "id = 7 OR number > 5", inspector: @inspector)
 
@@ -664,6 +681,7 @@ defmodule Electric.Shapes.FilterTest do
     @shape_count 1000
     @max_reductions 1300
 
+    @tag :performance
     test "where clause in the form `field = const` is optimised" do
       filter = Filter.new()
 
@@ -688,6 +706,7 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
     test "where clause in the form `field = const AND another_condition` is optimised" do
       filter = Filter.new()
 
@@ -712,6 +731,7 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
     test "where clause in the form `a_condition AND field = const` is optimised" do
       filter = Filter.new()
 
@@ -736,6 +756,7 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const1 values" do
       filter = Filter.new()
 
@@ -758,6 +779,7 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const2 values" do
       filter = Filter.new()
 
@@ -780,6 +802,7 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
     test "where clause in the form `array_field @> const_array` is optimised" do
       # The optimisation for `@>` is less performant than the other optimisations,
       # however it performs well with lots of shapes. While it can't do
@@ -827,6 +850,7 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
     test "where clause in the form `const = ANY(array_field)` is optimised" do
       # Same shape count as @> but higher budget per shape because the ANY
       # AST is deeper to pattern-match through the planner
@@ -854,6 +878,7 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    @tag :performance
     test "where clause in the form `field = const1 OR field = const2` is optimised" do
       max_reductions = @max_reductions * 2
       filter = Filter.new()
