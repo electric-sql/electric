@@ -170,7 +170,7 @@ defmodule Electric.Plug.Utils do
         %{
           "http.body_param.subset.params" =>
             value
-            |> inspect(limit: :infinity, printable_limit: :infinity)
+            |> inspect()
             |> truncate_telemetry_string()
         }
 
