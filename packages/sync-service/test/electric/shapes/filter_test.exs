@@ -29,25 +29,36 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.indexed_shape?(shape)
     end
 
-    test "returns true for OR shapes when both branches are indexed" do
-      shape = Shape.new!("t1", where: "id = 7 OR id = 8", inspector: @inspector)
-
-      assert Filter.indexed_shape?(shape)
-    end
-
-    test "returns true for the optimised where clause forms covered by performance tests" do
+    test "returns true for the indexed where clause forms supported by WhereCondition" do
       [
         "id = 7",
+        "7 = id",
         "id = 7 AND id > 6",
         "id > 6 AND id = 7",
         "id = 7 AND number = 11",
-        "id = 7 AND number = 9",
         "an_array @> '{5, 11, 29}'",
+        "'{5, 11, 29}' <@ an_array",
         "7 = ANY(an_array)",
-        "id = 7 OR id = 8"
+        "1 = ANY(an_array) AND id = 7",
+        "id = 7 AND 1 = ANY(an_array)",
+        "id IN (1, 2, 3)",
+        "id = 1 OR id = 2",
+        "id = 1 AND (number = 2 OR number = 3)",
+        "(id = 1 OR id = 2) AND number = 3",
+        "(id = 1 AND number > 2) OR (id = 1 AND number < 1)",
+        "id IN (SELECT id FROM another_table)",
+        "NOT id IN (SELECT id FROM another_table)",
+        "id IN (SELECT id FROM another_table) OR id = 1",
+        "(id, number) IN (SELECT id, number FROM another_table)"
       ]
       |> Enum.each(fn where ->
-        shape = Shape.new!("t1", where: where, inspector: @inspector)
+        shape =
+          Shape.new!("table",
+            where: where,
+            inspector: @inspector,
+            feature_flags: ["allow_subqueries"]
+          )
+
         assert Filter.indexed_shape?(shape), "#{where} should be indexed"
       end)
     end
