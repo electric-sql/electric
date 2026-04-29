@@ -18,7 +18,7 @@
 | Action | Path                                                         |
 | ------ | ------------------------------------------------------------ |
 | Delete | `packages/agents-server-ui/src/components/ThemeSwitcher.tsx` |
-| Add    | `packages/agents-server-ui/src/hooks/useDarkMode.ts`         |
+| Add    | `packages/agents-server-ui/src/hooks/useDarkMode.tsx`        |
 | Modify | `packages/agents-server-ui/src/App.tsx`                      |
 | Modify | `packages/agents-server-ui/src/components/Sidebar.tsx`       |
 | Modify | `packages/agents-server-ui/src/styles.css`                   |
@@ -45,7 +45,7 @@ Rationale (option B from brainstorm):
 - `grayColor="slate"` is a cool gray that blends with the deep-night surface palette.
 - `panelBackground="solid"` ensures popovers/menus use a solid bg matching `--color-panel-solid`.
 
-## Dark-mode hook (`useDarkMode.ts`)
+## Dark-mode hook (`useDarkMode.tsx`)
 
 ```ts
 const STORAGE_KEY = 'electric-agents-ui.dark-mode'
