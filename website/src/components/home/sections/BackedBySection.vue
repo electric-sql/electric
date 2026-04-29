@@ -39,8 +39,8 @@ select('spencer')
     <template #title> Backed by industry&nbsp;insiders </template>
     <template #subtitle>
       Built by
-      <a href="/about/team">devtools and database experts</a>. Backed by
-      <a href="/about/team#investors">industry leading founders</a>.
+      <a href="/about/team">devtools and database&nbsp;experts</a>. Backed by
+      <a href="/about/team#investors">industry leading&nbsp;founders</a>.
     </template>
     <div class="backers md-exclude">
       <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />

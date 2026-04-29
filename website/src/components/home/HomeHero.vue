@@ -29,8 +29,8 @@ const hero = {
   titleAccent: 'sync',
   markdownTitle: 'Electric: The agent platform built on sync',
   paragraphs: [
-    'Agents are long-lived entities in the data layer. The substrate for them is a sync engine.',
-    'Electric is the first agent platform built on sync.',
+    'Agents are long-lived entities in the data layer. The substrate for them is a sync\u00A0engine.',
+    'Electric is the first agent platform built on\u00A0sync.',
   ],
   /* Three top-level entry points into the platform — one button
      per product landing page. `Agents` carries the brand theme as

@@ -28,7 +28,7 @@ const strap = {
   eyebrow: 'Open protocol · Apache 2.0 · just HTTP',
   title: 'No siloes. No black boxes.',
   bodyPrefix: 'Sync, solved, with',
-  bodyLink: { text: 'standard web tech', href: '/docs/sync/api/http' },
+  bodyLink: { text: 'standard web\u00A0tech', href: '/docs/sync/api/http' },
   actions: [
     { text: 'Get started', href: '/docs/sync/quickstart', theme: 'brand' },
     { text: 'Read the Docs', href: '/docs/sync/', theme: 'alt' },

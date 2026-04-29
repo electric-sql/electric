@@ -54,17 +54,17 @@ const cards = [
   {
     eyebrow: 'Data wiring',
     title: 'Long-lived logical agents',
-    body: 'Deploy long-running, durable agents that scale to zero.',
+    body: 'Deploy long-running, durable agents that scale to\u00A0zero.',
   },
   {
     eyebrow: 'Business systems',
     title: 'Integrate AI coworkers',
-    body: 'Bring agents into your existing teams, tools and systems.',
+    body: 'Bring agents into your existing teams, tools and\u00A0systems.',
   },
   {
     eyebrow: 'Collaboration',
     title: 'Multi-agent collaboration',
-    body: 'Scale out multi-user, multi-agent systems with humans in the loop.',
+    body: 'Scale out multi-user, multi-agent systems with humans in the\u00A0loop.',
   },
 ]
 

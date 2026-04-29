@@ -30,7 +30,7 @@ const strap = {
   bodyPrefix: 'Deploy on',
   bodyLink: { text: 'Electric Cloud', href: '/cloud' },
   bodySuffix:
-    'a globally distributed data delivery network with usage-based pricing.',
+    'a globally distributed data delivery network with usage-based\u00A0pricing.',
   actions: [
     { text: 'Electric Cloud', href: '/cloud', theme: 'brand' },
     { text: 'See pricing', href: '/pricing', theme: 'alt' },

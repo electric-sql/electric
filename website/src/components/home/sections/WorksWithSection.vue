@@ -16,7 +16,7 @@ defineProps({
     <template #subtitle>
       Drop in Electric next to your existing API and database. Any web
       framework, any client &mdash;
-      <span class="no-wrap">if it speaks HTTP and JSON</span>, it
+      <span class="no-wrap">if it speaks HTTP and&nbsp;JSON</span>, it
       <span class="no-wrap">speaks Electric</span>.
     </template>
     <WorksWithStack />

@@ -2,7 +2,7 @@
 layout: page
 title: Blog
 description: >-
-  The latest news and updates from ElectricSQL.
+  The latest news and updates from Electric.
 image: /static/img/blog/electric-elephant.jpg
 sidebar: false
 ---
@@ -67,7 +67,7 @@ onMounted(async () => {
     max-width: 720px;
     margin: 0 auto 36px;
   }
-  @media (max-width: 749px) {
+  @media (max-width: 959px) {
     .header {
       margin: 54px 24px 32px;
     }
@@ -110,7 +110,7 @@ onMounted(async () => {
           Electric Blog
         </h1>
         <p>
-          The latest news and updates from Electric.
+          The latest news and updates from&nbsp;Electric.
         </p>
         <div class="actions cta-actions">
           <div class="action hidden-sm">

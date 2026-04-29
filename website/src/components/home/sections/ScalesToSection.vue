@@ -8,7 +8,7 @@ import { useMarkdownExport } from '../../../lib/useMarkdownExport'
 const isMarkdownExport = useMarkdownExport()
 const section = {
   title: 'Scales to millions of users.',
-  body: 'Electric streams over plain HTTP, so standard CDNs fan out high-throughput data delivery without ever touching your database.',
+  body: 'Electric streams over plain HTTP, so standard CDNs fan out high-throughput data delivery without ever touching your\u00A0database.',
   bodyLink: { text: 'standard CDNs', href: '/docs/sync/api/http#caching' },
   stats: [
     { value: '1M+', label: 'concurrent readers' },
@@ -22,7 +22,7 @@ const section = {
 }
 const markdown = `## ${section.title}
 
-Electric streams over plain HTTP, so [${section.bodyLink.text}](${section.bodyLink.href}) fan out high-throughput data delivery without ever touching your database.
+Electric streams over plain HTTP, so [${section.bodyLink.text}](${section.bodyLink.href}) fan out high-throughput data delivery without ever touching your\u00A0database.
 
 ${section.stats.map((stat) => `- \`${stat.value}\` ${stat.label}`).join('\n')}
 
@@ -42,8 +42,8 @@ ${section.stats.map((stat) => `- \`${stat.value}\` ${stat.label}`).join('\n')}
         <p class="st-prose">
           Electric streams over plain HTTP, so
           <a :href="section.bodyLink.href">{{ section.bodyLink.text }}</a>
-          fan out high-throughput data delivery without ever touching your
-          database.
+          fan out high-throughput data delivery without ever touching
+          your&nbsp;database.
         </p>
         <ul class="st-stats">
           <li v-for="stat in section.stats" :key="stat.label">
