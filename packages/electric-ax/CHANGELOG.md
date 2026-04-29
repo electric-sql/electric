@@ -1,5 +1,11 @@
 # electric-ax
 
+## 0.1.17
+
+### Patch Changes
+
+- 4d50347: Bind the local built-in agents server to all interfaces by default so Docker-backed quickstart coordinators can reach Horton webhooks via host.docker.internal.
+
 ## 0.1.16
 
 ### Patch Changes
