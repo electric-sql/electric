@@ -98,9 +98,10 @@ Behaviour:
      --color-panel-solid: var(--vp-c-bg-elv);
    }
    ```
-5. Split the existing shadcn-style streamdown vars (`--background`, `--foreground`, `--muted`, `--muted-foreground`, `--border`, `--input`, `--card`, `--card-foreground`, `--primary`, `--primary-foreground`) into `:root` and `.dark` blocks mapped to brand tokens, so code blocks/tables look right in both modes:
-   - Light: `--background: var(--vp-c-bg-elv)`, `--foreground: var(--vp-c-text-1)`, `--muted: var(--ec-surface-2)`, `--muted-foreground: var(--vp-c-text-2)`, `--border: var(--ec-border-2)`, `--card: var(--vp-c-bg-elv)`, `--primary: var(--vp-c-brand-1)`, `--primary-foreground: var(--vp-button-brand-text)`.
-   - Dark: same mapping — the brand tokens themselves swap under `.dark`, so the shadcn vars inherit correctly via `var()` indirection. (Concretely: declare them once with `var(--…)` references; the right values resolve based on whether `.dark` is active.)
+5. Split the existing shadcn-style streamdown vars (`--background`, `--foreground`, `--muted`, `--muted-foreground`, `--border`, `--input`, `--card`, `--card-foreground`, `--primary`, `--primary-foreground`) into explicit per-mode blocks mapped to brand tokens. Same set of keys in both, different values. Light goes in `:root`, dark goes in `.dark`. Mapping:
+   - Light: `--background: #f0efed` (`--vp-c-bg-soft`), `--foreground: #1a1a2e` (`--vp-c-text-1`), `--muted: #e8e7e3` (`--ec-surface-2`), `--muted-foreground: #5c5c6e` (`--vp-c-text-2`), `--border: #d6d4ce` (`--ec-border-2`), `--input: #d6d4ce`, `--card: #ffffff` (`--vp-c-bg-elv`), `--card-foreground: #1a1a2e`, `--primary: #1a1a2e` (`--vp-c-brand-1`), `--primary-foreground: #ffffff` (`--vp-button-brand-text`).
+   - Dark: `--background: #16181f` (`--vp-c-bg-soft`), `--foreground: rgba(255, 255, 245, 0.92)` (`--vp-c-text-1`), `--muted: #22252f` (`--ec-surface-2`), `--muted-foreground: rgba(235, 235, 245, 0.8)` (`--vp-c-text-2`), `--border: #2a2d38` (`--ec-border-2`), `--input: #2a2d38`, `--card: #22252f` (`--vp-c-bg-elv`), `--card-foreground: rgba(255, 255, 245, 0.92)`, `--primary: #75fbfd` (`--vp-c-brand-1`), `--primary-foreground: #1a1a1a` (`--vp-button-brand-text`).
+   - Use `var(--brand-token)` references in the actual CSS rather than the literal hexes (the literals here document intent only). Each block stands on its own — no inheritance trickery, easy to grep.
 6. Keep the `:root` font tokens (Inter) and all markdown/capsize rules as-is.
 
 ## `Sidebar.tsx`
