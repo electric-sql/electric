@@ -796,7 +796,7 @@ export default defineConfig({
     }
 
     const pageTitle = fm.title || siteData.title
-    const titleTemplate = fm.titleTemplate || ':title | ElectricSQL'
+    const titleTemplate = fm.titleTemplate || ':title | Electric'
     const title = titleTemplate.replace(':title', pageTitle)
     const description = fm.description || siteData.description
 

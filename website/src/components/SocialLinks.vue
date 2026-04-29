@@ -9,8 +9,8 @@
 const links = [
   {
     icon: 'bluesky',
-    label: '@electric-sql.com',
-    href: 'https://bsky.app/profile/electric-sql.com',
+    label: '@electric.ax',
+    href: 'https://bsky.app/profile/electric.ax',
   },
   {
     icon: 'bluesky',
