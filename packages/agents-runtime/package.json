@@ -2,6 +2,9 @@
   "name": "@electric-ax/agents-runtime",
   "version": "0.1.1",
   "description": "Electric agent runtime — behavioral stack for agent entities over durable streams",
+  "keywords": [
+    "tanstack-intent"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric.git",
@@ -95,7 +98,8 @@
     "vitest": "^3.2.4"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "sideEffects": false,
   "license": "Apache-2.0"
