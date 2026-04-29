@@ -17,6 +17,10 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "docs:sync": "node scripts/sync-docs.mjs",
+    "docs:clean": "node scripts/sync-docs.mjs --clean",
+    "prepack": "node scripts/sync-docs.mjs",
+    "postpack": "node scripts/sync-docs.mjs --clean",
     "test": "vitest run",
     "coverage": "pnpm exec vitest --coverage",
     "typecheck": "tsc --noEmit",
@@ -61,6 +65,7 @@
   "files": [
     "dist",
     "docs",
+    "scripts",
     "skills"
   ],
   "sideEffects": false,

@@ -8,6 +8,7 @@
 /website/.vitepress/dist
 /website/.vitepress/dist-markdown
 /website/public/openapi.html
+/packages/agents/docs
 build
 caching/nginx_cache
 file.jsonl

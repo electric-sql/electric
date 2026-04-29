@@ -1,10 +1,15 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
-import { createHortonDocsSupport } from '../src/docs/knowledge-base'
+import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  createHortonDocsSupport,
+  resolveDocsRoot,
+} from '../src/docs/knowledge-base'
 
 const tempDirs = new Set<string>()
+const TEST_DIR = path.dirname(fileURLToPath(import.meta.url))
 
 async function makeTempDocsFixture(): Promise<{
   workdir: string
@@ -52,6 +57,7 @@ WakeEvent includes source, type, payload, fromOffset, toOffset, and eventCount.
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(
     [...tempDirs].map(async (dir) => {
       await fs.rm(dir, { recursive: true, force: true })
@@ -61,6 +67,30 @@ afterEach(async () => {
 })
 
 describe(`horton docs support`, () => {
+  it(`resolves packaged or website docs when running from the monorepo`, () => {
+    vi.stubEnv(`HORTON_DOCS_ROOT`, undefined)
+    const resolved = resolveDocsRoot(path.join(TEST_DIR, `no-local-docs`))
+    const expectedRoots = [
+      path.resolve(TEST_DIR, `../docs`),
+      path.resolve(TEST_DIR, `../../../website/docs/agents`),
+    ]
+
+    expect(resolved).not.toBeNull()
+    expect(expectedRoots).toContain(resolved)
+  })
+
+  it(`allows custom docs roots without an index page`, async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), `horton-docs-root-`))
+    tempDirs.add(root)
+    const docsRoot = path.join(root, `docs`)
+    await fs.mkdir(path.join(docsRoot, `nested`), { recursive: true })
+    await fs.writeFile(path.join(docsRoot, `nested`, `topic.md`), `# Topic\n`)
+
+    vi.stubEnv(`HORTON_DOCS_ROOT`, docsRoot)
+
+    expect(resolveDocsRoot(path.join(TEST_DIR, `no-local-docs`))).toBe(docsRoot)
+  })
+
   it(`renders a compressed TOC and returns hybrid search results`, async () => {
     const fixture = await makeTempDocsFixture()
     const support = createHortonDocsSupport(fixture.workdir, {
