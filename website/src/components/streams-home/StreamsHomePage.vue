@@ -378,7 +378,7 @@ ${example.code}
           size="medium"
           theme="alt"
           text="Read the spec"
-          href="https://durablestreams.com/spec"
+          href="https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md"
         />
       </template>
     </MidPageStrap>
