@@ -10,7 +10,7 @@ import { chatroomSchema } from './schema.js'
 
 export type ChatroomState = SharedStateHandle<typeof chatroomSchema>
 
-export const DEFAULT_MODEL = `claude-sonnet-4-5-20250929`
+export const DEFAULT_MODEL = `claude-sonnet-4-6`
 
 const chatAgentArgs = z.object({ chatroomId: z.string().min(1) })
 
@@ -38,26 +38,36 @@ export function registerChatAgent(
 
       if (ctx.firstWake) return
 
-      // Only respond if there's a user message we haven't replied to yet
+      // Decide whether to respond: new user message OR mentioned by name
       const allMessages = (chatroom.messages as any).toArray as Array<{
         role: string
         sender: string
+        text: string
         timestamp: number
       }>
       const sorted = [...allMessages].sort((a, b) => a.timestamp - b.timestamp)
-      let lastUserIdx = -1
+
+      // Find this agent's last reply
+      let lastReplyIdx = -1
       for (let i = sorted.length - 1; i >= 0; i--) {
-        if (sorted[i]!.role === `user`) {
-          lastUserIdx = i
+        if (sorted[i]!.sender === ctx.entityUrl) {
+          lastReplyIdx = i
           break
         }
       }
-      if (lastUserIdx === -1) return // no user messages
-      // Check if this agent already responded after the last user message
-      const alreadyReplied = sorted
-        .slice(lastUserIdx + 1)
-        .some((m) => m.sender === ctx.entityUrl)
-      if (alreadyReplied) return
+
+      // Messages since this agent last replied
+      const newMessages = sorted.slice(lastReplyIdx + 1)
+      if (newMessages.length === 0) return
+
+      // Respond if: a human sent a message, OR someone mentioned this agent by name
+      const hasNewUserMessage = newMessages.some((m) => m.role === `user`)
+      const mentionedByName = newMessages.some(
+        (m) =>
+          m.sender !== ctx.entityUrl &&
+          m.text.toLowerCase().includes(name.toLowerCase())
+      )
+      if (!hasNewUserMessage && !mentionedByName) return
 
       ctx.useContext({
         sourceBudget: 50_000,
@@ -72,10 +82,7 @@ export function registerChatAgent(
       ctx.useAgent({
         systemPrompt,
         model: DEFAULT_MODEL,
-        tools: [
-          createSendMessageTool(chatroom.messages, ctx.entityUrl, name),
-          createWebSearchTool(),
-        ],
+        tools: [createSendMessageTool(chatroom.messages, ctx.entityUrl, name)],
       })
       await ctx.agent.run()
     },
@@ -85,14 +92,23 @@ export function registerChatAgent(
 /** Read all messages from the shared state and format as conversation context */
 function getConversationHistory(chatroom: ChatroomState): string {
   const messages = (chatroom.messages as any).toArray as Array<{
+    role: string
     senderName: string
     text: string
+    timestamp: number
   }>
   if (messages.length === 0) return ``
+  const sorted = [...messages].sort((a, b) => a.timestamp - b.timestamp)
   return (
     `\nConversation so far:\n` +
-    messages.map((m) => `[${m.senderName}]: ${m.text}`).join(`\n`) +
-    `\n`
+    sorted
+      .map((m) => {
+        const label =
+          m.role === `user` ? `🧑 ${m.senderName} (human)` : m.senderName
+        return `[${label}]: ${m.text}`
+      })
+      .join(`\n`) +
+    `\n\nNote: Messages from humans are marked with 🧑. Pay attention to what the human says — their perspective matters. When you see a new human message, engage with it.\n`
   )
 }
 
@@ -104,66 +120,6 @@ async function awaitPersisted(transaction: unknown): Promise<void> {
     transaction as { isPersisted?: { promise?: Promise<unknown> } } | null
   )?.isPersisted?.promise
   if (promise) await promise
-}
-
-const BRAVE_API_URL = `https://api.search.brave.com/res/v1/web/search`
-
-function createWebSearchTool(): AgentTool {
-  return {
-    name: `web_search`,
-    label: `Web Search`,
-    description: `Search the web for current information to support your analysis.`,
-    parameters: Type.Object({
-      query: Type.String({ description: `The search query` }),
-    }),
-    execute: async (_toolCallId, params) => {
-      const apiKey = process.env.BRAVE_SEARCH_API_KEY
-      if (!apiKey) {
-        return {
-          content: [
-            {
-              type: `text` as const,
-              text: `Web search unavailable: BRAVE_SEARCH_API_KEY not set.`,
-            },
-          ],
-          details: {},
-        }
-      }
-
-      const { query } = params as { query: string }
-      const url = `${BRAVE_API_URL}?q=${encodeURIComponent(query)}&count=5`
-      const res = await fetch(url, {
-        headers: { 'X-Subscription-Token': apiKey },
-      })
-      if (!res.ok) {
-        return {
-          content: [
-            { type: `text` as const, text: `Search failed: ${res.status}` },
-          ],
-          details: {},
-        }
-      }
-
-      const data = (await res.json()) as {
-        web?: {
-          results?: Array<{ title: string; url: string; description: string }>
-        }
-      }
-      const results = data.web?.results ?? []
-      const formatted = results
-        .map(
-          (r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description}`
-        )
-        .join(`\n\n`)
-
-      return {
-        content: [
-          { type: `text` as const, text: formatted || `No results found.` },
-        ],
-        details: { resultCount: results.length },
-      }
-    },
-  }
 }
 
 function createSendMessageTool(

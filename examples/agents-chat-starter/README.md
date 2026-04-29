@@ -1,6 +1,6 @@
 # Electric Agents Chat Starter
 
-A multi-agent chatroom built on [Electric Agents](https://electric-sql.com/docs/agents/) — the durable runtime for long-lived agents. Two agents (an Optimist and a Critic) join every room and debate from opposing viewpoints.
+A multi-agent chatroom built on [Electric Agents](https://electric-sql.com/docs/agents/) — the durable runtime for long-lived agents. Three philosopher agents (Socrates, Albert Camus, and Simone de Beauvoir) join every room and engage in debates, casual conversation, and philosophical inquiry.
 
 ## Quick Start
 

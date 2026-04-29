@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Flex, Popover, ScrollArea, Text } from '@radix-ui/themes'
-import { ChevronDown } from 'lucide-react'
+import { Flex, IconButton, Popover, ScrollArea, Text } from '@radix-ui/themes'
+import { ChevronDown, Monitor, Moon, Sun } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { nanoid } from 'nanoid'
@@ -10,6 +10,7 @@ import { ServerPicker } from './ServerPicker'
 import { EntityListItem, getEntityDisplayTitle } from './EntityListItem'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
 import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
+import { useDarkModeContext, type ThemePreference } from '../hooks/useDarkMode'
 
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -52,6 +53,7 @@ export function Sidebar({
 }): React.ReactElement {
   const { entitiesCollection, entityTypesCollection, spawnEntity } =
     useElectricAgents()
+  const { preference, cyclePreference } = useDarkModeContext()
   const [filter, setFilter] = useState(``)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [spawnDialogType, setSpawnDialogType] =
@@ -357,6 +359,26 @@ export function Sidebar({
         </Flex>
       </ScrollArea>
 
+      <Flex
+        align="center"
+        justify="end"
+        px="3"
+        py="2"
+        style={{
+          borderTop: `1px solid var(--gray-a5)`,
+          flexShrink: 0,
+        }}
+      >
+        <IconButton
+          variant="ghost"
+          size="2"
+          onClick={cyclePreference}
+          aria-label={themeButtonAriaLabel(preference)}
+        >
+          {themeButtonIcon(preference)}
+        </IconButton>
+      </Flex>
+
       {spawnDialogType && (
         <SpawnArgsDialog
           entityType={spawnDialogType}
@@ -490,4 +512,16 @@ function SectionLabel({
       {children}
     </Text>
   )
+}
+
+function themeButtonIcon(preference: ThemePreference): React.ReactElement {
+  if (preference === `light`) return <Sun size={14} />
+  if (preference === `dark`) return <Moon size={14} />
+  return <Monitor size={14} />
+}
+
+function themeButtonAriaLabel(preference: ThemePreference): string {
+  if (preference === `light`) return `Theme: light. Click to switch to dark.`
+  if (preference === `dark`) return `Theme: dark. Click to follow system.`
+  return `Theme: system. Click to switch to light.`
 }

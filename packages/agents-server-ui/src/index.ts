@@ -22,8 +22,6 @@ export { EntityHeader } from './components/EntityHeader'
 export { MessageInput } from './components/MessageInput'
 export { ServerPicker } from './components/ServerPicker'
 export { StatusDot } from './components/StatusDot'
-export { ThemeSwitcher, useTheme } from './components/ThemeSwitcher'
-export type { ThemeId, ThemeConfig } from './components/ThemeSwitcher'
 
 export { getEntityInstanceName } from './lib/types'
 export type { ServerConfig, PublicEntity, EntityType } from './lib/types'

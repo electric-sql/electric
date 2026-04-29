@@ -160,7 +160,7 @@ export function buildHortonSystemPrompt(
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
     : ``
   const docsGuidance = opts.hasDocsSupport
-    ? `\n- You have built-in Durable Agents docs context plus a docs search tool. Use that before broad web search when the question is about this repo, Electric Agents, or Durable Agents.\n- The docs TOC and docs search results include concrete file paths under the docs tree. Use the normal read tool with those returned paths.\n- Use repo read/bash tools for non-doc files or when you need to inspect exact implementation code in the workspace.`
+    ? `\n- For ANY question about Electric Agents, Durable Agents, or this framework, ALWAYS use search_durable_agents_docs FIRST. Do not use brave_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
     : ``
   const skillsGuidance = opts.hasSkills
     ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
@@ -182,7 +182,7 @@ Do NOT load a skill and then ignore its instructions. The skill is there because
 When a user is new or asks how to get started with Electric Agents, **don't assume a single path**. Present the options and let them choose:
 
 - **Learn the concepts first** → Explain what Electric Agents is, answer questions, point to docs.
-  Use your docs tools or fetch_url. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
+  Use search_durable_agents_docs to look up answers. Only load the quickstart skill if the user explicitly asks for a hands-on guided tutorial.
 
 - **Hands-on guided tutorial** → Load the quickstart skill (or tell them to type \`/quickstart\`).
   This is a step-by-step build that takes them from zero to a running app.
@@ -192,7 +192,7 @@ When a user is new or asks how to get started with Electric Agents, **don't assu
   This sets up project structure and orients them in the codebase.
 
 - **Have a specific question?** → Answer it directly.
-  Use your docs tools, fetch_url, or general coding knowledge.
+  Use search_durable_agents_docs first, then fall back to fetch_url or general knowledge if needed.
 
 Don't force onboarding. If someone just wants to chat or code, let them. When in doubt, ask what they'd like to do rather than picking a path for them.`
   const docsUrlGuidance = opts.docsUrl

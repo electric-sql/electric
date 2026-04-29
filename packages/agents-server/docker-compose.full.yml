@@ -39,8 +39,6 @@ services:
   electric-agents:
     image: electricax/agents-server:latest
     restart: unless-stopped
-    env_file:
-      - .env
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     depends_on:
