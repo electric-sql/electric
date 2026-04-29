@@ -4,6 +4,11 @@ defmodule Electric.Plug.Utils do
   path and query parameters.
   """
 
+  @redacted_query_value "[REDACTED]"
+  @sensitive_query_param_names MapSet.new(
+                                 ~w(secret api_secret token access_token api_key password)
+                               )
+
   @doc """
   Parse columns parameter from a string consisting of a comma separated list
   of potentially quoted column names into a sorted list of strings.
@@ -79,18 +84,32 @@ defmodule Electric.Plug.Utils do
 
   alias OpenTelemetry.SemConv, as: SC
 
+  @doc false
+  def redact_query_string(nil), do: nil
+  def redact_query_string(""), do: ""
+
+  def redact_query_string(query_string) when is_binary(query_string) do
+    query_string
+    |> String.split("&", trim: false)
+    |> Enum.map_join("&", &redact_query_segment/1)
+  end
+
   def common_open_telemetry_attrs(%Plug.Conn{assigns: assigns} = conn) do
+    sanitized_query_string = redact_query_string(conn.query_string)
+
     query_params_map =
       if is_struct(conn.query_params, Plug.Conn.Unfetched) do
         %{}
       else
-        Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end)
+        Map.new(conn.query_params, fn {k, v} ->
+          {"http.query_param.#{k}", redact_query_param_value(k, v)}
+        end)
       end
 
     %{
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
-      "http.query_string" => conn.query_string,
+      "http.query_string" => sanitized_query_string,
       SC.ClientAttributes.client_address() => conn.remote_ip,
       SC.ServerAttributes.server_address() => conn.host,
       SC.ServerAttributes.server_port() => conn.port,
@@ -108,7 +127,7 @@ defmodule Electric.Plug.Utils do
           host: conn.host,
           port: conn.port,
           path: conn.request_path,
-          query: conn.query_string
+          query: sanitized_query_string
         }
         |> to_string()
     }
@@ -124,6 +143,34 @@ defmodule Electric.Plug.Utils do
       [] -> ""
       [head | _] -> head
     end
+  end
+
+  defp redact_query_segment(segment) do
+    case String.split(segment, "=", parts: 2) do
+      [key, _value] ->
+        if sensitive_query_param?(decode_query_key(key)) do
+          key <> "=" <> @redacted_query_value
+        else
+          segment
+        end
+
+      [_key] ->
+        segment
+    end
+  end
+
+  defp redact_query_param_value(key, value) do
+    if sensitive_query_param?(key), do: @redacted_query_value, else: value
+  end
+
+  defp sensitive_query_param?(key) when is_binary(key) do
+    MapSet.member?(@sensitive_query_param_names, String.downcase(key))
+  end
+
+  defp decode_query_key(key) do
+    URI.decode_www_form(key)
+  rescue
+    ArgumentError -> key
   end
 
   defmodule CORSHeaderPlug do
