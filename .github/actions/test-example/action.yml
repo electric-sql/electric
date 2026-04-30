@@ -24,7 +24,12 @@ runs:
         cache: pnpm
     - shell: bash
       if: inputs.example_url != ''
-      run: pnpm install --frozen-lockfile
+      run: |
+        if [ -f "examples/${{ inputs.test_folder }}/package.json" ]; then
+          pnpm --filter "$(jq -r .name "examples/${{ inputs.test_folder }}/package.json")..." --filter @electric-examples/shared install --frozen-lockfile
+        else
+          pnpm install --frozen-lockfile
+        fi
     - name: Run browser tests
       if: inputs.example_url != ''
       working-directory: examples/${{ inputs.test_folder }}

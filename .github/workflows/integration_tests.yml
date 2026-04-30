@@ -3,13 +3,19 @@ name: Lux Integration Tests
 on:
   push:
     branches: ['main']
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
+    paths:
+      - '.github/workflows/integration_tests.yml'
+      - '.tool-versions'
+      - 'integration-tests/**'
+      - 'packages/electric-telemetry/**'
+      - 'packages/sync-service/**'
   pull_request:
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
+    paths:
+      - '.github/workflows/integration_tests.yml'
+      - '.tool-versions'
+      - 'integration-tests/**'
+      - 'packages/electric-telemetry/**'
+      - 'packages/sync-service/**'
 
 permissions:
   contents: read

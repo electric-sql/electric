@@ -67,6 +67,29 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Derive push-by-digest image repositories
+        id: image_repos
+        env:
+          IMAGE_REPO: ${{ inputs.image_repo }}
+          IMAGE_TAGS: ${{ inputs.tags }}
+        run: |
+          set -euo pipefail
+
+          repos_file="$(mktemp)"
+          printf '%s\n' "$IMAGE_REPO" >> "$repos_file"
+
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              printf '%s\n' "${tag%:*}" >> "$repos_file"
+            fi
+          done <<< "$IMAGE_TAGS"
+
+          {
+            echo "repos<<EOF"
+            sort -u "$repos_file"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push by digest
         id: build
         uses: useblacksmith/build-push-action@v2
@@ -78,7 +101,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ inputs.image_repo }}
+          tags: ${{ steps.image_repos.outputs.repos }}
 
       - name: Export digest
         run: |
@@ -110,22 +133,21 @@ jobs:
 
       - name: Create multi-arch manifest list
         env:
-          IMAGE_REPO: ${{ inputs.image_repo }}
           IMAGE_TAGS: ${{ inputs.tags }}
         run: |
           set -euo pipefail
 
-          TAG_ARGS=""
           while IFS= read -r tag; do
-            if [ -n "$tag" ]; then
-              TAG_ARGS="$TAG_ARGS -t $tag"
+            if [ -z "$tag" ]; then
+              continue
             fi
+
+            image_repo="${tag%:*}"
+            image_sources=$(
+              for f in /tmp/digests/*.digest; do
+                echo "$image_repo@$(cat "$f")"
+              done
+            )
+
+            docker buildx imagetools create -t "$tag" $image_sources
           done <<< "$IMAGE_TAGS"
-
-          IMAGE_SOURCES=$(
-            for f in /tmp/digests/*.digest; do
-              echo $IMAGE_REPO@$(cat "$f")
-            done
-          )
-
-          docker buildx imagetools create $TAG_ARGS $IMAGE_SOURCES

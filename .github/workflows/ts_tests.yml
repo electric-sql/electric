@@ -18,29 +18,45 @@ permissions:
   packages: write
 
 jobs:
-  list_ts_packages_and_examples:
-    name: List TS packages and examples
+  detect_affected_workspaces:
+    name: Detect affected TS workspaces
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
-      package_directories: ${{ steps.list_ts_packages.outputs.directories }}
-      example_names: ${{ steps.list_examples.outputs.example_names }}
+      package_directories: ${{ steps.detect.outputs.package_directories }}
+      packages_with_shared_sync_service: ${{ steps.detect.outputs.packages_with_shared_sync_service }}
+      packages_without_shared_sync_service: ${{ steps.detect.outputs.packages_without_shared_sync_service }}
+      example_directories: ${{ steps.detect.outputs.example_directories }}
+      has_packages: ${{ steps.detect.outputs.has_packages }}
+      has_shared_sync_service_packages: ${{ steps.detect.outputs.has_shared_sync_service_packages }}
+      has_non_shared_sync_service_packages: ${{ steps.detect.outputs.has_non_shared_sync_service_packages }}
+      has_examples: ${{ steps.detect.outputs.has_examples }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - run: echo "directories=`find packages/ -mindepth 1 -maxdepth 1 -type d -exec test -e '{}'/tsconfig.json \; -print | jq -R -s -c 'split("\n")[:-1]'`" >> $GITHUB_OUTPUT
-        id: list_ts_packages
+      - uses: pnpm/action-setup@v4
 
-      - run: echo "example_names=$(find examples/ -mindepth 1 -maxdepth 2 -type f -name package.json | xargs dirname | jq -R -s -c 'split("\n")[:-1]')" >> $GITHUB_OUTPUT
-        id: list_examples
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+
+      - name: Detect affected workspaces
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/ci/affected-workspaces.mjs
 
   typecheck_packages:
     name: Build and typecheck ${{ matrix.package_dir }}
-    needs: [list_ts_packages_and_examples]
+    needs: [detect_affected_workspaces]
+    if: ${{ needs.detect_affected_workspaces.outputs.has_packages == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
-        package_dir: ${{ fromJson(needs.list_ts_packages_and_examples.outputs.package_directories) }}
+        package_dir: ${{ fromJson(needs.detect_affected_workspaces.outputs.package_directories) }}
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
@@ -51,7 +67,7 @@ jobs:
         with:
           node-version-file: '.tool-versions'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter "$(jq -r .name package.json)..." install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm run typecheck
       - name: Run shape stream static analysis
@@ -59,17 +75,20 @@ jobs:
         run: pnpm run analyze:shape-stream -- --fail-on-findings
 
   ensure_sync_service_image:
+    needs: [detect_affected_workspaces]
+    if: ${{ needs.detect_affected_workspaces.outputs.has_shared_sync_service_packages == 'true' }}
     uses: ./.github/workflows/ensure_sync_service_image.yml
 
-  build_and_test_packages:
+  build_and_test_packages_with_shared_sync_service:
     name: 'Test ${{ matrix.package_dir }} w/ sync-service'
-    needs: [list_ts_packages_and_examples, ensure_sync_service_image]
+    needs: [detect_affected_workspaces, ensure_sync_service_image]
+    if: ${{ needs.detect_affected_workspaces.outputs.has_shared_sync_service_packages == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        package_dir: ${{ fromJson(needs.list_ts_packages_and_examples.outputs.package_directories) }}
+        package_dir: ${{ fromJson(needs.detect_affected_workspaces.outputs.packages_with_shared_sync_service) }}
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
@@ -86,7 +105,7 @@ jobs:
           cache: pnpm
 
       - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --filter "$(jq -r .name package.json)..." install --frozen-lockfile
 
       - name: Build Node dependencies, if any
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
@@ -116,14 +135,75 @@ jobs:
           flags: typescript,unit-tests,${{ matrix.package_dir }}
           files: ./junit/test-report.junit.xml
 
+  build_and_test_packages_without_shared_sync_service:
+    name: 'Test ${{ matrix.package_dir }}'
+    needs: [detect_affected_workspaces]
+    if: ${{ needs.detect_affected_workspaces.outputs.has_non_shared_sync_service_packages == 'true' }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        package_dir: ${{ fromJson(needs.detect_affected_workspaces.outputs.packages_without_shared_sync_service) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.package_dir }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: |
+          package_name="$(jq -r .name package.json)"
+          if [ "$package_name" = "@electric-ax/agents-runtime" ]; then
+            pnpm --filter "$package_name..." --filter "@electric-ax/agents-server..." install --frozen-lockfile
+          else
+            pnpm --filter "$package_name..." install --frozen-lockfile
+          fi
+
+      - name: Build Node dependencies, if any
+        run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
+
+      - name: Run tests with coverage
+        run: pnpm run coverage --run
+
+      - name: Upload coverage reports to CodeCov
+        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: typescript,unit-tests,${{ matrix.package_dir }}
+
+      - name: Upload test results to CodeCov
+        uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
+        if: ${{ !cancelled() }}
+        env:
+          DUMMY_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}-dummy
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          flags: typescript,unit-tests,${{ matrix.package_dir }}
+          files: ./junit/test-report.junit.xml
+
   check_and_build_examples:
     name: Check and build ${{ matrix.example_folder }}
-    needs: [list_ts_packages_and_examples, build_and_test_packages]
+    needs:
+      [
+        detect_affected_workspaces,
+        build_and_test_packages_with_shared_sync_service,
+        build_and_test_packages_without_shared_sync_service,
+      ]
+    if: ${{ always() && needs.detect_affected_workspaces.outputs.has_examples == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
-        example_folder: ${{ fromJson(needs.list_ts_packages_and_examples.outputs.example_names) }}
+        example_folder: ${{ fromJson(needs.detect_affected_workspaces.outputs.example_directories) }}
     defaults:
       run:
         working-directory: ${{ matrix.example_folder }}
@@ -134,7 +214,7 @@ jobs:
         with:
           node-version-file: '.tool-versions'
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter "$(jq -r .name package.json)..." --filter @electric-examples/shared install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm --if-present run prepare
       - run: pnpm --if-present run typecheck

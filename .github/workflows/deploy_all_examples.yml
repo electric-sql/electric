@@ -8,35 +8,26 @@ concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
 
 jobs:
+  example-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-example-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create example matrix
+        id: create-example-matrix
+        run: node scripts/ci/example-matrix.mjs deployAll
+
   deploy:
     name: Deploy ${{ matrix.example.name }} example
+    needs: example-matrix
     environment: 'Production'
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
       fail-fast: false
-      matrix:
-        example:
-          - name: yjs
-            path: examples/yjs
-          - name: linearlite-read-only
-            path: examples/linearlite-read-only
-          - name: write-patterns
-            path: examples/write-patterns
-          - name: nextjs
-            path: examples/nextjs
-          - name: todo-app
-            path: examples/todo-app
-          - name: proxy-auth
-            path: examples/proxy-auth
-          - name: remix
-            path: examples/remix
-          - name: react
-            path: examples/react
-          - name: burn
-            path: examples/burn
-          - name: tanstack-db-web-starter
-            path: examples/tanstack-db-web-starter
+      matrix: ${{ fromJson(needs.example-matrix.outputs.matrix) }}
 
     env:
       DEPLOY_ENV: 'production'
@@ -73,7 +64,12 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          if [ -f "${{ matrix.example.path }}/package.json" ]; then
+            pnpm --filter "$(jq -r .name "${{ matrix.example.path }}/package.json")..." --filter @electric-examples/shared install --frozen-lockfile
+          else
+            pnpm install --frozen-lockfile
+          fi
 
       - name: Cache SST state
         uses: actions/cache@v4
