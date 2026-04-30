@@ -1,9 +1,9 @@
 import { Flex } from '@radix-ui/themes'
-import { useCodingSession } from '../hooks/useCodingSession'
-import { CodingSessionTimeline } from './CodingSessionTimeline'
+import { useCodingAgent } from '../hooks/useCodingAgent'
+import { CodingAgentTimeline } from './CodingAgentTimeline'
 import { MessageInput } from './MessageInput'
 
-export function CodingSessionView({
+export function CodingAgentView({
   baseUrl,
   entityUrl,
   entityStopped,
@@ -12,16 +12,18 @@ export function CodingSessionView({
   entityUrl: string
   entityStopped: boolean
 }): React.ReactElement {
-  const { db, events, meta, loading, error } = useCodingSession(
+  const { db, meta, runs, events, lifecycle, loading, error } = useCodingAgent(
     baseUrl,
     entityUrl
   )
 
   return (
     <Flex direction="column" flexGrow="1" style={{ minHeight: 0 }}>
-      <CodingSessionTimeline
-        events={events}
+      <CodingAgentTimeline
         meta={meta}
+        runs={runs}
+        events={events}
+        lifecycle={lifecycle}
         loading={loading}
         error={error}
       />
