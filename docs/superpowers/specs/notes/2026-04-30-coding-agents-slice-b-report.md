@@ -78,7 +78,19 @@ The Slice B spec was updated post-implementation to reflect this design (`docs/s
 
 **Fix:** Documented as expected. Used `--no-verify` on Task 4.4's commit (the new components landed but Sidebar/router still referenced deleted symbols). Task 5.1 closed the gap; UI typecheck clean post-5.1.
 
-### 6. UI router avoiding double SSE connect
+### 6. Pin/Release/Stop buttons silently no-op (caught by final review)
+
+**Symptom:** EntityHeader buttons called `db.actions.inbox_insert?.(...)`. The `inbox_insert` action is not auto-generated — `createEntityStreamDB` only generates actions for collections registered in `streamCustomState`, and `inbox` is built-in. The optional chaining swallowed the failure; clicks did nothing.
+
+**Fix:** Dropped the `db` prop in favour of `baseUrl`. Buttons now POST to `${baseUrl}${entity.url}/send` with `{ type: 'pin'|'release'|'stop', payload: {} }` — same REST pattern as `MessageInput.tsx`. Commit `14062bc01`.
+
+### 7. Spawn dialog initialPrompt silently dropped (caught by final review)
+
+**Symptom:** `CodingAgentSpawnDialog` set `args._initialPrompt`, but the entity handler never reads `_initialPrompt` from creation args. Initial prompts in this runtime flow through `SpawnInput.initialMessage` (separate from `args`).
+
+**Fix:** Dialog's `onSpawn` callback now takes an optional `initialMessage: { text: string }` second argument. `Sidebar.doSpawn` forwards it to `spawnEntity({ type, name, args, initialMessage })`. Commit `14062bc01`.
+
+### 8. UI router avoiding double SSE connect
 
 **Symptom:** Naively wiring Pin/Release/Stop buttons in EntityHeader required `db`. Both `EntityHeader` and `CodingAgentView` would have called `useCodingAgent` (twice), opening two SSE streams to the same entity.
 
