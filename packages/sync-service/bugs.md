@@ -317,7 +317,7 @@ subquery shapes diverge after restart with long persisted log"` —
 deterministic two-shape reproduction. Fails today with the listed
 mutation pattern; passes for the single-shape variants.
 
-## Bug 6: Mid-restart shape cleanup leaves shape removed from on-disk metadata
+## Bug 6: Mid-restart shape cleanup leaves shape removed from on-disk metadata — FIXED
 
 **Symptom**
 
@@ -367,49 +367,82 @@ consumer's `handle_materializer_down/2` falls through the `case` to
 reason, which schedules `remove_shape_async`. The async task then races
 the rest of the stack shutdown.
 
-**Where to look**
+**Fix**
 
-- `lib/electric/shape_cache/shape_status.ex:207` — make the SQLite
-  removal the *last* step, after SLC unsubscribe + storage cleanup,
-  so a partial failure leaves the shape recoverable on next start.
-- `lib/electric/shapes/consumer.ex#handle_materializer_down/2` — add
-  a path for `:killed` (and possibly other `:DOWN` reasons that
-  correlate with supervisor brutal-shutdown) that stops the consumer
-  cleanly without scheduling shape removal.
-- `lib/electric/shape_cache/shape_cleaner/cleanup_task_supervisor.ex`
-  — consider blocking new `remove_shape_async` tasks once the stack
-  has begun shutdown.
+The materializer was the upstream trigger for the cleanup cascade — a
+crash there sets off `handle_materializer_down/2` → `stop_and_clean/1`
+on the dependent consumer → `@shutdown_cleanup` →
+`remove_shape_async/2`. The cleanup task then races stack shutdown and
+leaves the shape half-deleted.
 
-**Reproduce**
+Two changes block the cascade:
 
-```sh
-CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
-  BATCH_COUNT=10 RESTART_SERVER_EVERY=7 SKIP_REPATCH_PREWARM=true \
-  mix test --seed 8 --only oracle test/integration/oracle_property_test.exs
-```
+1. **Resilient `apply_changes/2` in
+   `lib/electric/shapes/consumer/materializer.ex`.** Every "this looks
+   impossible" branch now logs a warning and continues rather than
+   raising, so an inconsistent inner-shape log can't kill the
+   materializer:
+   - `DeletedRecord` for a key not in the index → log + skip
+   - `NewRecord` for a key already in the index → log + skip
+   - `UpdatedRecord` only enters the rewrite path when
+     `is_map_key(index, old_key)` holds
+   - move-out / move-in iterations switch from `Map.fetch!` to
+     `Map.fetch` with a skip branch
+   - `decrement_value/3` treats a missing value-count as a no-op
 
-After batch_7's `Restarting server / Recreating clients` log, the new
-checkers' poll for batch_8 returns 409 for one of the subquery shapes.
-The error log shows
-`Task #PID<…> started from #PID<…> terminating ** (stop) exited in:
-GenServer.call(...{:remove_shape, "<handle>"})` with `** (EXIT) no
-process` — the cleanup task was mid-flight when the SLC went away.
+2. **Catch `:noproc` on consumer→materializer call in
+   `lib/electric/shapes/consumer.ex#notify_materializer_of_new_changes/3`.**
+   When the materializer dies, the `:DOWN` is in our mailbox but the
+   inline `GenServer.call` exits the consumer process before
+   `handle_materializer_down/2` runs. Catching the exit lets the
+   pending `:DOWN` drive a clean stop instead of cascading into
+   `@shutdown_cleanup`.
+
+Plus two ergonomic guardrails for the inflight-request window:
+
+- `ShapeStatus.validate_shape_handle/3` rescues `ArgumentError →
+  :error` so a held long-poll waking up between old/new
+  `ShapeStatusOwner` doesn't 500.
+- `Api.check_for_disk_updates/1` rescues `ArgumentError → :no_change`
+  for the same window.
+
+**Regression**
+
+The original repro
+(`CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10
+BATCH_COUNT=10 RESTART_SERVER_EVERY=7 SKIP_REPATCH_PREWARM=true
+mix test --seed 8 --only oracle test/integration/oracle_property_test.exs`)
+no longer hits a 409 must-refetch. The next blocker exposed by these
+fixes is Bug 2 — duplicate inserts in the post-restart move-in
+snapshot, which was previously masked by the cascade-409 path
+swallowing the failing shape entirely.
 
 ## Note for triage
 
-Bugs 1, 4, and 5 are fixed.
+Bugs 1, 4, 5, and 6 are fixed.
 
-Bug 6 is the next blocker for the property test under
-`RESTART_SERVER_EVERY` — the must-refetch it produces is not
-specifically a subquery issue but is exposed reliably by the same
-restart pattern. Fixing it likely requires reordering
-`ShapeStatus.remove_shape/2` so the SQLite delete is the *last*
-step of cleanup, plus tightening which exit reasons cause a
-materializer-down path to schedule shape removal vs. just stopping
-the consumer.
+Bug 2 is now the next blocker. With the materializer hardening and
+ETS-rescue from Bug 6 in place, the cascading 409 is gone — and
+underneath it is a real duplicate-insert problem. Repro:
 
-Bugs 2 and 3 only manifest under restart and are likely to be related
-to slot/timeline transitions. Bug 2 may resolve once the snapshot/log
-boundary is checked carefully (see `last_persisted_txn_offset`
-handling); Bug 3 is
-likely a small fix in the active-readiness signal.
+```sh
+CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
+  BATCH_COUNT=10 RESTART_SERVER_EVERY=7 LONG_POLL_TIMEOUT=2000 \
+  SKIP_REPATCH_PREWARM=true \
+  mix test --seed 8 --only oracle test/integration/oracle_property_test.exs
+```
+
+Failure: `shape=shape_6: insert for row that already exists: {"l4-16"}`.
+The shape is a subquery shape (`level_3_id IN (SELECT id FROM
+level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id =
+'l1-4'))`). Pre-restart, `l4-16` is already in the shape's view.
+Post-restart, the move-in query attached to a SplicePlan re-emits
+`l4-16` as an INSERT even though the snapshot already covered it,
+because the move-in's `views_after_move` minus `views_before_move`
+includes a value the row was already keyed on through a *different*
+path. The fix likely needs `move_in_where_clause` to exclude rows
+already present in the outer shape's storage, or for SplicePlan to
+dedupe its emitted ops against pre-existing on-disk state.
+
+Bug 3 only manifests under restart and is likely related to the
+active-readiness signal — small fix once Bug 2 is closed.
