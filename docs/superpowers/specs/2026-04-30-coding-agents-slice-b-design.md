@@ -34,6 +34,7 @@ After Slice B, the new `coding-agent` is the **only** coding-agent type in the c
 - **Codex support.** Bridge still rejects `kind: 'codex'`. Slice C.
 - **Cross-kind resume.** Same-kind only. The architecture supports it (events collection is canonical) but no UI affordance and no integration test in Slice B.
 - **`provider.recover()` cleanup of orphaned containers.** Containers labeled with `electric-ax.agent-id` whose corresponding entity was never created (or was destroyed) accumulate; manual cleanup. Slice C.
+- **Eager `WorkspaceRegistry` rebuild at server boot.** Slice A's lazy populate (per agent on first handler entry) is kept. The eager-rebuild via `boot()` was originally in this slice to support accurate `state().workspace.sharedRefs` after server restart, but the UI indicator that consumes that field — sandbox provenance / "shared with N" header — is also Slice C. Defer eager rebuild to land alongside its consumer.
 - **Sandbox provenance and "shared with N" indicators in the header.** Add status enum + Pin/Release/Stop + lifecycle rows. Sandbox provenance display itself defers.
 - **Conformance suite parameterized by `SandboxProvider`.** Slice C.
 - **Per-event approve/deny for `permission_request`.** CLIs continue to run with `--dangerously-skip-permissions`.
@@ -62,7 +63,8 @@ After Slice B, the new `coding-agent` is the **only** coding-agent type in the c
                                   ▼
    ┌─────────────────────────┐   ┌─────────────────────────────────┐
    │  StdioBridge (Slice A)  │   │  LifecycleManager (Slice A)     │
-   │  + onNativeLine wired   │   │  + boot() for eager WR rebuild  │
+   │  + onNativeLine wired   │   │  Unchanged                      │
+   │  + --resume <id>        │   │                                 │
    └─────────────────────────┘   └─────────────────────────────────┘
                                   │
                                   ▼
@@ -77,7 +79,7 @@ After Slice B, the new `coding-agent` is the **only** coding-agent type in the c
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `LocalDockerProvider`             | Unchanged.                                                                                                                                                                                           |
 | `StdioBridge`                     | Wire `onNativeLine` callback to emit per stdout line (Slice A type already exists). Pass `--resume <id>` when caller provides `nativeSessionId`.                                                     |
-| `LifecycleManager`                | Add `boot()` callback for eager `WorkspaceRegistry` rebuild from durable entity state.                                                                                                               |
+| `LifecycleManager`                | Unchanged.                                                                                                                                                                                           |
 | `WorkspaceRegistry`               | Unchanged.                                                                                                                                                                                           |
 | `coding-agent` entity             | +`nativeJsonl` collection; capture `nativeSessionId` from `session_init`; tee raw lines; cold-boot resume materialization; lifecycle row for `resume.restored`.                                      |
 | `agents-runtime`                  | Drop `CodingSessionHandle` + `useCodingAgent`; keep `CodingAgentHandle` + `spawnCodingAgent` / `observeCodingAgent`.                                                                                 |
@@ -372,8 +374,9 @@ The new tools' parameter shapes intentionally mirror `spawn_coder` / `prompt_cod
 //   })
 //   typeNames.push('coding-agent')
 //
-// NEW (Slice B): eager workspace-registry rebuild before serving traffic
-//   await codingAgent.boot()
+// NOTE: Eager WR rebuild via `boot()` was originally proposed for Slice B,
+// but is deferred to Slice C alongside its UI consumer. Slice A's lazy
+// per-agent rebuild on first handler entry is kept.
 ```
 
 ### Existing `coder` durable streams
@@ -472,65 +475,9 @@ Lifecycle rows are interleaved with `events` rows by timestamp in the timeline. 
 - `setCodingDialogOpen(true)` → `setCodingAgentDialogOpen(true)` for the new entity type.
 - Tool-call rendering (`ToolCallView.tsx`): label `spawn_coder` → `spawn_coding_agent`, `prompt_coder` → `prompt_coding_agent`.
 
-## `WorkspaceRegistry` eager rebuild
+## `WorkspaceRegistry` rebuild — deferred
 
-```ts
-// packages/coding-agents/src/entity/register.ts (after Slice B)
-
-interface CodingAgentRegistration {
-  /** Eager WR + recover sync. Call after registry.registerTypes(). */
-  boot: () => Promise<void>
-}
-
-export function registerCodingAgent(
-  registry: EntityRegistry,
-  deps: RegisterCodingAgentDeps
-): CodingAgentRegistration {
-  // ... Slice A registry.define logic ...
-
-  return {
-    async boot() {
-      // 1. Scan all coding-agent entities' sessionMeta from durable state
-      //    via the agents-server's entity-bridge API. Populate WR with
-      //    workspaceIdentity → agentId mapping.
-      const allEntities = await deps.scanEntities('coding-agent')
-      wr.rebuild(
-        allEntities.map((e) => ({
-          identity: e.sessionMeta.workspaceIdentity,
-          agentId: e.url,
-        }))
-      )
-
-      // 2. Provider recovery: list containers labeled with our agentIds.
-      //    Just informational in Slice B; no automatic cleanup.
-      const recovered = await lm.adoptRunningContainers()
-      log.info({ count: recovered.length }, 'recovered sandboxes')
-    },
-  }
-}
-```
-
-`deps.scanEntities` is a new dependency injected by the bootstrap. The bootstrap supplies a function that calls into the agents-server's entity store API. The dependency seam keeps `coding-agents` independent of the agents-server (no direct import).
-
-```ts
-// packages/agents/src/bootstrap.ts
-
-const codingAgentRegistration = registerCodingAgent(registry, {
-  provider: new LocalDockerProvider(),
-  bridge: new StdioBridge(),
-  scanEntities: async (type) => {
-    return runtimeServerClient.listEntities({ type }).then((rows) =>
-      rows.map((r) => ({
-        url: r.url,
-        sessionMeta: r.collections.sessionMeta?.get('current'),
-      }))
-    )
-  },
-})
-typeNames.push('coding-agent')
-// ... after registry sync:
-await codingAgentRegistration.boot()
-```
+Slice A's lazy populate (per-agent on first handler entry) is kept. Eager rebuild via a new `boot()` callback was scoped here originally but is deferred to Slice C alongside the UI's "shared with N agents" header indicator that consumes `state().workspace.sharedRefs`. Without that consumer, eager rebuild adds runtime contract surface (`scanEntities` dependency) for no user-visible benefit.
 
 ## State machine — unchanged from Slice A
 
@@ -602,7 +549,7 @@ This is a **destructive migration**. The legacy `coder` entity, its tools, its U
 ## Open questions
 
 - **Path-sanitization for the JSONL file location.** Claude transforms the `cwd` into a directory name under `~/.claude/projects/` via a specific algorithm. We must replicate it (or call into a claude-code helper if one exists). Resolve during writing-plans by reading the claude-code source.
-- **`scanEntities` API on the runtime.** The boot() integration depends on a server-side function that lists entities by type. Confirm the agents-server exposes this (or add a thin wrapper around the existing entity-bridge). Resolve during writing-plans.
+- **`scanEntities` API on the runtime.** No longer needed — eager rebuild is deferred to Slice C alongside the UI consumer. (Resolved by deferral.)
 - **Lifecycle row collation with events.** The timeline needs to merge two collections by timestamp. Existing `EntityTimeline` reads `events` only; we need to extend it (or have `useCodingAgent` produce a merged feed). Pick during implementation.
 
 ## Scope cuts referenced from Slice B
