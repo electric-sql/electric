@@ -423,26 +423,63 @@ Bugs 1, 4, 5, and 6 are fixed.
 
 Bug 2 is now the next blocker. With the materializer hardening and
 ETS-rescue from Bug 6 in place, the cascading 409 is gone — and
-underneath it is a real duplicate-insert problem. Repro:
+underneath it is a real snapshot/log boundary problem that surfaces
+in two complementary forms:
+
+- **`insert for row that already exists`** — the move-in query
+  attached to a SplicePlan re-emits a row as an INSERT even though
+  the on-disk snapshot already covers it.
+- **`delete for row that does not exist`** — the same family with the
+  opposite polarity: a synthetic delete (driven by a move-out's tag
+  patterns) targets a key the client never received an INSERT for.
+
+Repros:
 
 ```sh
+# duplicate insert variant
 CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
   BATCH_COUNT=10 RESTART_SERVER_EVERY=7 LONG_POLL_TIMEOUT=2000 \
   SKIP_REPATCH_PREWARM=true \
   mix test --seed 8 --only oracle test/integration/oracle_property_test.exs
+
+# orphan-delete variant
+CHECK_TIMEOUT=60000 SHAPE_COUNT=5 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
+  BATCH_COUNT=20 RESTART_SERVER_EVERY=7 LONG_POLL_TIMEOUT=2000 \
+  SKIP_REPATCH_PREWARM=true \
+  mix test --seed 8 --only oracle test/integration/oracle_property_test.exs
 ```
 
-Failure: `shape=shape_6: insert for row that already exists: {"l4-16"}`.
-The shape is a subquery shape (`level_3_id IN (SELECT id FROM
-level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id =
-'l1-4'))`). Pre-restart, `l4-16` is already in the shape's view.
-Post-restart, the move-in query attached to a SplicePlan re-emits
-`l4-16` as an INSERT even though the snapshot already covered it,
-because the move-in's `views_after_move` minus `views_before_move`
-includes a value the row was already keyed on through a *different*
-path. The fix likely needs `move_in_where_clause` to exclude rows
-already present in the outer shape's storage, or for SplicePlan to
-dedupe its emitted ops against pre-existing on-disk state.
+Failure shapes are subquery shapes (e.g. `level_3_id IN (SELECT id
+FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE
+level_1_id = 'l1-4'))`). The bug is exposed when:
+
+1. A row is in the outer shape's stored view at restart time.
+2. After restart, a materializer event triggers a move-in or move-out
+   pass through `Buffering.start` / `SplicePlan`.
+3. The move-in query (`move_in_where_clause` in
+   `lib/electric/shapes/querying.ex#352`) uses the row's *current* PG
+   state for the `impacted_before` exclusion. If the row's
+   foreign-key column was changed in a transaction whose materializer
+   event triggered this move-in, current PG state may put the row
+   under a value present only in `views_after_move`, so the exclusion
+   doesn't fire and the row is re-emitted.
+4. The move-out side has the mirror problem — synthetic deletes the
+   client generates from tag patterns target rows that the snapshot's
+   tag set doesn't agree on.
+
+Likely fix directions:
+- Filter the move-in snapshot in
+  `lib/electric/shape_cache/pure_file_storage.ex#append_move_in_snapshot_to_log!`
+  with a `skip_row?` callback that excludes keys already present in
+  the outer shape's on-disk view, instead of the current
+  `fn _, _ -> false end`. Needs an efficient "is this key present"
+  index on the writer side.
+- Or, have `SplicePlan.build/2` dedupe its emitted INSERT/DELETE
+  effects against the outer shape's last-persisted view tags.
+- Either way, the fix has to be careful that the deduped state
+  remains consistent with the move-in/out control messages the
+  client receives, since the client's `TagTracker` uses those to
+  generate synthetic deletes.
 
 Bug 3 only manifests under restart and is likely related to the
 active-readiness signal — small fix once Bug 2 is closed.
