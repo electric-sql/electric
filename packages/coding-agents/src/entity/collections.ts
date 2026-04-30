@@ -37,6 +37,7 @@ export const sessionMetaRowSchema = z.object({
   instanceId: z.string().optional(),
   lastError: z.string().optional(),
   currentPromptInboxKey: z.string().optional(),
+  lastInboxKey: z.string().optional(),
 })
 export type SessionMetaRow = z.infer<typeof sessionMetaRowSchema>
 
