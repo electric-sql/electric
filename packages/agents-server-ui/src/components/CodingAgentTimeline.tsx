@@ -243,7 +243,7 @@ const AssistantMessageRow = memo(function AssistantMessageRow({
         Assistant
       </Text>
       <div style={{ fontSize: `var(--font-size-2)` }}>
-        <Streamdown content={text} plugins={streamdownPlugins} />
+        <Streamdown plugins={streamdownPlugins}>{text}</Streamdown>
       </div>
     </Flex>
   )
@@ -333,7 +333,11 @@ function ToolCallRow({
   )
 }
 
-function OrphanResultRow({ event }: { event: EventRow }): React.ReactElement {
+function OrphanResultRow({
+  event: _event,
+}: {
+  event: EventRow
+}): React.ReactElement {
   return (
     <Flex gap="2" align="center" style={{ opacity: 0.5 }}>
       <Text size="1" color="gray">

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { getEntityInstanceName } from '../lib/types'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
 
 const STATUS_COLOR: Record<
   string,
@@ -47,6 +48,7 @@ export function EntityHeader({
   forking,
   stateExplorerOpen,
   onToggleStateExplorer,
+  db,
 }: {
   entity: ElectricEntity
   pinned: boolean
@@ -58,6 +60,7 @@ export function EntityHeader({
   forking?: boolean
   stateExplorerOpen?: boolean
   onToggleStateExplorer?: () => void
+  db?: EntityStreamDBWithActions | null
 }): React.ReactElement {
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
@@ -132,6 +135,51 @@ export function EntityHeader({
         <Button variant="ghost" size="1" onClick={onTogglePin}>
           {pinned ? <PinOff size={14} /> : <Pin size={14} />}
         </Button>
+
+        {entity.type === `coding-agent` && db && (
+          <>
+            <Button
+              variant="soft"
+              size="1"
+              onClick={() => {
+                const key = `pin:${Date.now()}`
+                db.actions.inbox_insert?.({
+                  row: { key, message_type: `pin`, payload: {} },
+                })
+              }}
+              title="Pin — keep sandbox alive past idle timeout"
+            >
+              Pin
+            </Button>
+            <Button
+              variant="soft"
+              size="1"
+              onClick={() => {
+                const key = `release:${Date.now()}`
+                db.actions.inbox_insert?.({
+                  row: { key, message_type: `release`, payload: {} },
+                })
+              }}
+              title="Release — allow idle hibernation"
+            >
+              Release
+            </Button>
+            <Button
+              variant="soft"
+              size="1"
+              color="orange"
+              onClick={() => {
+                const key = `stop:${Date.now()}`
+                db.actions.inbox_insert?.({
+                  row: { key, message_type: `stop`, payload: {} },
+                })
+              }}
+              title="Stop — hibernate the sandbox now"
+            >
+              Stop
+            </Button>
+          </>
+        )}
 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>

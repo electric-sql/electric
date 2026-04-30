@@ -1,5 +1,5 @@
 import { Flex } from '@radix-ui/themes'
-import { useCodingAgent } from '../hooks/useCodingAgent'
+import type { UseCodingAgentResult } from '../hooks/useCodingAgent'
 import { CodingAgentTimeline } from './CodingAgentTimeline'
 import { MessageInput } from './MessageInput'
 
@@ -7,15 +7,14 @@ export function CodingAgentView({
   baseUrl,
   entityUrl,
   entityStopped,
+  agent,
 }: {
   baseUrl: string
   entityUrl: string
   entityStopped: boolean
+  agent: UseCodingAgentResult
 }): React.ReactElement {
-  const { db, meta, runs, events, lifecycle, loading, error } = useCodingAgent(
-    baseUrl,
-    entityUrl
-  )
+  const { db, meta, runs, events, lifecycle, loading, error } = agent
 
   return (
     <Flex direction="column" flexGrow="1" style={{ minHeight: 0 }}>
