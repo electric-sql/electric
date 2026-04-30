@@ -641,9 +641,12 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       }
       if (opts.lifecycle !== undefined) spawnArgs.lifecycle = opts.lifecycle
 
+      // initialMessage is stored verbatim as the inbox row's payload (no message_type
+      // extraction in the spawn path). Match the entity's promptMessageSchema shape:
+      // flat { text } object, NOT { type: 'prompt', payload: { text } }.
       const initialMessage =
         opts.initialPrompt !== undefined
-          ? { type: `prompt` as const, payload: { text: opts.initialPrompt } }
+          ? { text: opts.initialPrompt }
           : undefined
 
       // Slice A: only `runFinished` wake (eventAppended is Slice C).
