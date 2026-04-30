@@ -90,6 +90,60 @@ defmodule Electric.Integration.OracleRestoreTest do
     OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)
   end
 
+  @tag :oracle_restore_bug_5
+  @tag chunk_size: 200
+  test "bug 5: multiple subquery shapes diverge after restart with long persisted log",
+       ctx do
+    # Multiple shapes whose source-shape main logs span more than one chunk
+    # (forced via `chunk_size: 200`). After a server restart the
+    # materialized view of at least one shape no longer matches the oracle
+    # — rows that should be in the view are missing. The single-shape
+    # variants of this scenario (Bug 1 and Bug 4 regression tests) pass
+    # cleanly, so this looks like an interaction between concurrent
+    # materializer recoveries — possibly a shared per-stack ETS structure
+    # (link-values cache, SubqueryIndex) being read by one shape's
+    # consumer before another shape's materializer has finished
+    # repopulating it on startup.
+    shapes = [
+      %{
+        name: "shape_active_true",
+        table: "level_4",
+        where: "level_3_id IN (SELECT id FROM level_3 WHERE active = true)",
+        columns: ["id", "level_3_id", "value"],
+        pk: ["id"],
+        optimized: true
+      },
+      %{
+        name: "shape_active_false",
+        table: "level_4",
+        where: "level_3_id IN (SELECT id FROM level_3 WHERE active = false)",
+        columns: ["id", "level_3_id", "value"],
+        pk: ["id"],
+        optimized: true
+      }
+    ]
+
+    many_l3_mutations =
+      for i <- 1..200 do
+        active = if rem(i, 2) == 0, do: "true", else: "false"
+        id = "l3-#{rem(i, 5) + 1}"
+
+        %{
+          name: "toggle_#{id}_#{i}",
+          sql: "UPDATE level_3 SET active = #{active} WHERE id = '#{id}'"
+        }
+      end
+
+    batches = [
+      Enum.map(many_l3_mutations, &[&1]),
+      [
+        [%{name: "deactivate_l3-2", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-2'"}]
+      ]
+    ]
+
+    OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)
+  end
+
   @tag :oracle_restore_bug_1
   test "bug 1: subquery shape diverges from oracle after server restart", ctx do
     # Shape on level_4 with a subquery predicate over level_3.active. After
