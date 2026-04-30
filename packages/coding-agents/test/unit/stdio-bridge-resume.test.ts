@@ -84,3 +84,55 @@ describe(`StdioBridge — onNativeLine`, () => {
     expect(received.every((l) => l.length > 0)).toBe(true)
   })
 })
+
+describe(`StdioBridge — --resume`, () => {
+  it(`passes --resume <id> to exec cmd when nativeSessionId is provided`, async () => {
+    const lines = [
+      JSON.stringify({
+        type: `result`,
+        subtype: `success`,
+        result: `ok`,
+        session_id: `s`,
+        is_error: false,
+      }),
+    ]
+    const sandbox = makeFakeSandbox(lines)
+    const bridge = new StdioBridge()
+
+    await bridge.runTurn({
+      sandbox,
+      kind: `claude`,
+      prompt: `hi`,
+      onEvent: () => undefined,
+      nativeSessionId: `native-sess-abc`,
+    } as RunTurnArgs)
+
+    const execCall = (sandbox.exec as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(execCall.cmd).toContain(`--resume`)
+    expect(execCall.cmd).toContain(`native-sess-abc`)
+  })
+
+  it(`does not pass --resume when nativeSessionId is absent`, async () => {
+    const lines = [
+      JSON.stringify({
+        type: `result`,
+        subtype: `success`,
+        result: `ok`,
+        session_id: `s`,
+        is_error: false,
+      }),
+    ]
+    const sandbox = makeFakeSandbox(lines)
+    const bridge = new StdioBridge()
+
+    await bridge.runTurn({
+      sandbox,
+      kind: `claude`,
+      prompt: `hi`,
+      onEvent: () => undefined,
+    } as RunTurnArgs)
+
+    const execCall = (sandbox.exec as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(execCall.cmd).not.toContain(`--resume`)
+  })
+})

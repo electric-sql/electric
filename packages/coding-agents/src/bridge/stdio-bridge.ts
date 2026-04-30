@@ -10,13 +10,6 @@ export class StdioBridge implements Bridge {
         `StdioBridge MVP supports only 'claude', got '${args.kind}'`
       )
     }
-    if (args.nativeSessionId) {
-      log.warn(
-        { nativeSessionId: args.nativeSessionId },
-        `StdioBridge MVP does not implement resume — running fresh turn`
-      )
-    }
-
     const cliArgs: Array<string> = [
       `--print`,
       `--output-format=stream-json`,
@@ -24,6 +17,7 @@ export class StdioBridge implements Bridge {
       `--dangerously-skip-permissions`,
     ]
     if (args.model) cliArgs.push(`--model`, args.model)
+    if (args.nativeSessionId) cliArgs.push(`--resume`, args.nativeSessionId)
 
     const handle = await args.sandbox.exec({
       cmd: [`claude`, ...cliArgs],
