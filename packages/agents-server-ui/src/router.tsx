@@ -152,7 +152,7 @@ function EntityPage(): React.ReactElement {
         forking={forking}
         stateExplorerOpen={stateExplorerOpen}
         onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
-        db={isCodingAgent ? codingAgentHook.db : undefined}
+        baseUrl={isCodingAgent ? baseUrl : undefined}
       />
       <Flex
         ref={containerRef}

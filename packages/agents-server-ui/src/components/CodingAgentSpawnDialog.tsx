@@ -7,7 +7,10 @@ type WorkspaceMode = `volume` | `bindMount`
 interface CodingAgentSpawnDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSpawn: (args: Record<string, unknown>) => void
+  onSpawn: (
+    args: Record<string, unknown>,
+    initialMessage?: { text: string }
+  ) => void
 }
 
 export function CodingAgentSpawnDialog({
@@ -39,10 +42,10 @@ export function CodingAgentSpawnDialog({
       if (workspaceMode === `bindMount`) {
         args.workspaceHostPath = hostPath.trim()
       }
-      if (initialPrompt.trim()) {
-        args._initialPrompt = initialPrompt.trim()
-      }
-      onSpawn(args)
+      onSpawn(
+        args,
+        initialPrompt.trim() ? { text: initialPrompt.trim() } : undefined
+      )
     },
     [canSubmit, workspaceMode, workspaceName, hostPath, initialPrompt, onSpawn]
   )

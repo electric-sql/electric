@@ -122,11 +122,15 @@ export function Sidebar({
   )
 
   const doSpawn = useCallback(
-    (typeName: string, args?: Record<string, unknown>) => {
+    (
+      typeName: string,
+      args?: Record<string, unknown>,
+      initialMessage?: { text: string }
+    ) => {
       if (!spawnEntity) return
       setSpawnError(null)
       const name = nanoid(10)
-      const tx = spawnEntity({ type: typeName, name, args })
+      const tx = spawnEntity({ type: typeName, name, args, initialMessage })
       onSelectEntity(`/${typeName}/${name}`)
       tx.isPersisted.promise.catch((err: Error) => {
         setSpawnError(
@@ -384,8 +388,8 @@ export function Sidebar({
       <CodingAgentSpawnDialog
         open={codingAgentDialogOpen}
         onOpenChange={setCodingAgentDialogOpen}
-        onSpawn={(args) => {
-          doSpawn(`coding-agent`, args)
+        onSpawn={(args, initialMessage) => {
+          doSpawn(`coding-agent`, args, initialMessage)
           setCodingAgentDialogOpen(false)
         }}
       />

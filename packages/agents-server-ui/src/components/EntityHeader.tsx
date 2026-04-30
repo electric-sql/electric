@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import { getEntityInstanceName } from '../lib/types'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
 
 const STATUS_COLOR: Record<
   string,
@@ -48,7 +47,7 @@ export function EntityHeader({
   forking,
   stateExplorerOpen,
   onToggleStateExplorer,
-  db,
+  baseUrl,
 }: {
   entity: ElectricEntity
   pinned: boolean
@@ -60,7 +59,7 @@ export function EntityHeader({
   forking?: boolean
   stateExplorerOpen?: boolean
   onToggleStateExplorer?: () => void
-  db?: EntityStreamDBWithActions | null
+  baseUrl?: string
 }): React.ReactElement {
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
@@ -136,15 +135,16 @@ export function EntityHeader({
           {pinned ? <PinOff size={14} /> : <Pin size={14} />}
         </Button>
 
-        {entity.type === `coding-agent` && db && (
+        {entity.type === `coding-agent` && baseUrl && (
           <>
             <Button
               variant="soft"
               size="1"
               onClick={() => {
-                const key = `pin:${Date.now()}`
-                db.actions.inbox_insert?.({
-                  row: { key, message_type: `pin`, payload: {} },
+                void fetch(`${baseUrl}${entity.url}/send`, {
+                  method: `POST`,
+                  headers: { 'content-type': `application/json` },
+                  body: JSON.stringify({ type: `pin`, payload: {} }),
                 })
               }}
               title="Pin — keep sandbox alive past idle timeout"
@@ -155,9 +155,10 @@ export function EntityHeader({
               variant="soft"
               size="1"
               onClick={() => {
-                const key = `release:${Date.now()}`
-                db.actions.inbox_insert?.({
-                  row: { key, message_type: `release`, payload: {} },
+                void fetch(`${baseUrl}${entity.url}/send`, {
+                  method: `POST`,
+                  headers: { 'content-type': `application/json` },
+                  body: JSON.stringify({ type: `release`, payload: {} }),
                 })
               }}
               title="Release — allow idle hibernation"
@@ -169,9 +170,10 @@ export function EntityHeader({
               size="1"
               color="orange"
               onClick={() => {
-                const key = `stop:${Date.now()}`
-                db.actions.inbox_insert?.({
-                  row: { key, message_type: `stop`, payload: {} },
+                void fetch(`${baseUrl}${entity.url}/send`, {
+                  method: `POST`,
+                  headers: { 'content-type': `application/json` },
+                  body: JSON.stringify({ type: `stop`, payload: {} }),
                 })
               }}
               title="Stop — hibernate the sandbox now"
