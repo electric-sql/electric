@@ -475,6 +475,12 @@ defmodule Support.ComponentSetup do
         ctx.publication_name
       )
 
+    # The :stack_status :ready event fires before the connection pools and
+    # shape metadata are fully online. Polling clients hitting the server in
+    # that window can see spurious 409s. Wait for the StatusMonitor's
+    # :active level which requires all readiness conditions to be met.
+    :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 5000)
+
     %{stack_supervisor: stack_supervisor}
   end
 

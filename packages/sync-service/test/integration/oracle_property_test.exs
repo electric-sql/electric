@@ -43,6 +43,7 @@ defmodule Electric.Integration.OraclePropertyTest do
   @default_mutations_per_txn 5
 
   setup [:with_unique_db]
+  setup :use_persistent_slot
   setup :with_complete_stack
 
   # Use a short long_poll_timeout to speed up tests - shapes with no changes
@@ -61,6 +62,15 @@ defmodule Electric.Integration.OraclePropertyTest do
 
     StandardSchema.setup_standard_schema(ctx)
     ctx
+  end
+
+  # The replication slot must survive the StackSupervisor restart used by
+  # RESTART_SERVER_EVERY, otherwise Electric correctly treats the new slot
+  # as a slot-loss event and purges all on-disk shape data — defeating the
+  # restore-from-file scenario. Always run with a persistent slot; the slot
+  # is dropped automatically with the per-test database in `after_suite`.
+  defp use_persistent_slot(_ctx) do
+    %{replication_opts_overrides: [slot_temporary?: false]}
   end
 
   test "shapes with generated where clauses and mutations", ctx do
