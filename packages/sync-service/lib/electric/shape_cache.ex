@@ -290,6 +290,8 @@ defmodule Electric.ShapeCache do
     # we're subscribed to the producer before it starts forwarding its demand.
     ShapeLogCollector.mark_as_ready(state.stack_id)
 
+    eagerly_start_subquery_shape_consumers(state)
+
     duration = System.monotonic_time() - start_time
 
     Logger.notice(
@@ -303,6 +305,29 @@ defmodule Electric.ShapeCache do
     )
 
     {:noreply, state}
+  end
+
+  # Shapes whose where clause contains a subquery (`shape_dependencies != []`)
+  # rely on their materializer subscription to be notified of dependency-side
+  # changes. The router only delivers events for a shape when its own
+  # `root_table` changes, so a subquery dependent stays dormant after a
+  # restart until something writes to its own table — meaning movements
+  # driven by the dependency (e.g. parent rows becoming active) never reach
+  # its on-disk view. Eagerly starting the consumer here re-establishes the
+  # materializer subscription so dependency updates are streamed in.
+  defp eagerly_start_subquery_shape_consumers(state) do
+    opts = %{
+      stack_id: state.stack_id,
+      action: :restore,
+      otel_ctx: nil,
+      feature_flags: state.feature_flags
+    }
+
+    for {handle, %Shape{shape_dependencies: [_ | _]} = shape} <-
+          ShapeStatus.list_shapes(state.stack_id),
+        is_nil(Electric.Shapes.ConsumerRegistry.whereis(state.stack_id, handle)) do
+      restore_shape_and_dependencies(handle, shape, opts)
+    end
   end
 
   @impl GenServer

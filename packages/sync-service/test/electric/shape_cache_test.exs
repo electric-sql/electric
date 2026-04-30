@@ -1407,6 +1407,93 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
+  describe "wait_for_restore eager subquery consumer start" do
+    setup [
+      :with_noop_publication_manager,
+      :with_log_chunking,
+      :with_registry,
+      :with_shape_log_collector
+    ]
+
+    test "shapes with subquery dependencies have their consumer eagerly started", ctx do
+      %{stack_id: stack_id} = ctx
+      test_pid = self()
+
+      # Pre-add a subquery shape to ShapeStatus, simulating a shape that
+      # was created in a prior incarnation of the stack and is now being
+      # restored. The shape's consumer is NOT yet running.
+      {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, @shape_with_subquery)
+
+      # We don't have a fully wired-up consumer chain in this test, so
+      # short-circuit `start_shape_consumer` and `start_materializer` while
+      # recording the calls. This proves wait_for_restore reaches the start
+      # path for the subquery shape; full consumer lifecycle is covered by
+      # the integration tests in `oracle_restore_test.exs`.
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_materializer,
+        [mode: :shared],
+        fn _stack_id, _config -> {:ok, self()} end
+      )
+
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_shape_consumer,
+        [mode: :shared],
+        fn _stack_id, %{shape_handle: handle} ->
+          send(test_pid, {:start_shape_consumer_called, handle})
+          # Returning :error short-circuits restore_shape_and_dependencies'
+          # follow-up calls (initialize_shape, update_last_read_time) which
+          # would fail without a real consumer pid.
+          {:error, :test_short_circuit}
+        end
+      )
+
+      # clean_shape is called on start_shape_consumer error; stub it so the
+      # follow-up cleanup doesn't interfere with the test assertion.
+      Repatch.patch(
+        Electric.ShapeCache.ShapeCleaner,
+        :remove_shape,
+        [mode: :shared],
+        fn _stack_id, _handle -> :ok end
+      )
+
+      activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      with_shape_cache(ctx)
+
+      # The eager-start path runs in handle_continue(:wait_for_restore); the
+      # patched start_shape_consumer captures the call.
+      assert_receive {:start_shape_consumer_called, ^shape_handle}, 5_000
+    end
+
+    test "non-subquery shapes are NOT eagerly started", ctx do
+      %{stack_id: stack_id} = ctx
+      test_pid = self()
+
+      # Add a shape with no dependencies — eager-start should skip it.
+      {:ok, _shape_handle} = ShapeStatus.add_shape(stack_id, @shape)
+
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_shape_consumer,
+        [mode: :shared],
+        fn _stack_id, %{shape_handle: handle} ->
+          send(test_pid, {:start_shape_consumer_called, handle})
+          {:error, :test_short_circuit}
+        end
+      )
+
+      activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      with_shape_cache(ctx)
+
+      # Give wait_for_restore time to complete; eager-start should NOT
+      # have called start_shape_consumer for the simple shape.
+      refute_receive {:start_shape_consumer_called, _}, 200
+    end
+  end
+
   describe "start_consumer_for_handle/2" do
     setup [
       :with_noop_publication_manager,

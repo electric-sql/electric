@@ -171,33 +171,53 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_continue({:read_stream, storage}, state) do
-    {:ok, offset, stream} =
-      get_stream_up_to_offset(state.offset, state.subscribed_offset, storage)
-
-    {state, _} =
-      stream
-      |> decode_json_stream()
-      |> apply_changes(state)
-
+    state = read_history_up_to_subscribed(state, storage)
     write_link_values(state)
-
-    {:noreply, %{state | offset: offset}}
+    {:noreply, state}
   end
 
   @doc """
-  Get a stream of log entries from storage, bounded by the subscribed offset.
+  Replay all of the source shape's persisted history (snapshot + log) up to
+  `state.subscribed_offset` so the materializer's value_counts reflect the
+  on-disk state on startup.
 
-  The subscribed_offset is the Consumer's latest_offset at the time of subscription.
-  We only read up to this offset to avoid duplicates - any changes after this offset
-  will be delivered via new_changes messages from the Consumer.
+  `Storage.get_log_stream/3` returns at most one chunk per call (snapshot
+  chunk N, or one main-log chunk), so we iterate, advancing through chunks
+  via `Storage.get_chunk_end_log_offset/2` until the subscribed offset is
+  reached. Without this loop, restarts replay only the first snapshot chunk
+  and silently drop every later snapshot chunk and every persisted log
+  entry — corrupting subquery materializer state on restore-from-disk.
   """
-  def get_stream_up_to_offset(min_offset, subscribed_offset, storage) do
-    # If subscribed_offset is nil or at/before min_offset, nothing to read
-    if is_nil(subscribed_offset) or is_log_offset_lte(subscribed_offset, min_offset) do
-      {:ok, min_offset, []}
-    else
-      stream = Storage.get_log_stream(min_offset, subscribed_offset, storage)
-      {:ok, subscribed_offset, stream}
+  def read_history_up_to_subscribed(state, storage) do
+    cond do
+      is_nil(state.subscribed_offset) ->
+        state
+
+      is_log_offset_lte(state.subscribed_offset, state.offset) ->
+        state
+
+      true ->
+        stream = Storage.get_log_stream(state.offset, state.subscribed_offset, storage)
+        {state, _} = stream |> decode_json_stream() |> apply_changes(state)
+
+        next_offset = Storage.get_chunk_end_log_offset(state.offset, storage)
+
+        cond do
+          is_nil(next_offset) ->
+            # No further chunks past this offset — we've reached the end.
+            %{state | offset: state.subscribed_offset}
+
+          is_log_offset_lte(next_offset, state.offset) ->
+            # Defensive: chunk_end did not advance. Stop to avoid an
+            # infinite loop. This shouldn't happen in normal operation.
+            %{state | offset: state.subscribed_offset}
+
+          is_log_offset_lte(state.subscribed_offset, next_offset) ->
+            %{state | offset: state.subscribed_offset}
+
+          true ->
+            read_history_up_to_subscribed(%{state | offset: next_offset}, storage)
+        end
     end
   end
 
