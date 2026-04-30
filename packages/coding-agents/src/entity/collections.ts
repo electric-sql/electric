@@ -4,6 +4,7 @@ export const CODING_AGENT_SESSION_META_COLLECTION_TYPE = `coding-agent.sessionMe
 export const CODING_AGENT_RUNS_COLLECTION_TYPE = `coding-agent.runs`
 export const CODING_AGENT_EVENTS_COLLECTION_TYPE = `coding-agent.events`
 export const CODING_AGENT_LIFECYCLE_COLLECTION_TYPE = `coding-agent.lifecycle`
+export const CODING_AGENT_NATIVE_JSONL_COLLECTION_TYPE = `coding-agent.nativeJsonl`
 
 export const codingAgentStatusSchema = z.enum([
   `cold`,
@@ -38,6 +39,7 @@ export const sessionMetaRowSchema = z.object({
   lastError: z.string().optional(),
   currentPromptInboxKey: z.string().optional(),
   lastInboxKey: z.string().optional(),
+  nativeSessionId: z.string().optional(),
 })
 export type SessionMetaRow = z.infer<typeof sessionMetaRowSchema>
 
@@ -73,7 +75,18 @@ export const lifecycleRowSchema = z.object({
     `pin`,
     `release`,
     `orphan.detected`,
+    `resume.restored`,
   ]),
   detail: z.string().optional(),
 })
 export type LifecycleRow = z.infer<typeof lifecycleRowSchema>
+
+// ─── nativeJsonl — NEW in Slice B ────────────────────────────────────────────
+
+export const nativeJsonlRowSchema = z.object({
+  key: z.string(), // `${runId}:${seq}` — sortable
+  runId: z.string(),
+  seq: z.number(),
+  line: z.string(), // raw JSONL line from claude CLI stdout
+})
+export type NativeJsonlRow = z.infer<typeof nativeJsonlRowSchema>
