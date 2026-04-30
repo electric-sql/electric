@@ -1,0 +1,54 @@
+{
+  "name": "@electric-ax/coding-agents",
+  "version": "0.0.1",
+  "description": "Sandbox + bridge layer for spawning coding agents (Claude Code, Codex) under Electric Agents.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/coding-agents"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "DOCKER=1 vitest run test/integration",
+    "typecheck": "tsc --noEmit",
+    "stylecheck": "eslint . --quiet"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "agent-session-protocol": "^0.0.2",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "tsdown": "^0.9.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
+  },
+  "files": [
+    "dist",
+    "docker"
+  ],
+  "sideEffects": false,
+  "license": "Apache-2.0"
+}

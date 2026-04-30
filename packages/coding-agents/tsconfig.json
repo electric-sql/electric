@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "isolatedDeclarations": false,
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    "lib": ["ESNext", "DOM"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["dist", "node_modules"]
+}
