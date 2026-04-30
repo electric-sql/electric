@@ -56,9 +56,7 @@ defmodule Support.OracleHarness do
   # ----------------------------------------------------------------------------
 
   def default_opts_from_env do
-    %{
-      oracle_pool_size: env_int("ORACLE_POOL_SIZE") || @default_oracle_pool_size
-    }
+    [oracle_pool_size: env_int("ORACLE_POOL_SIZE") || @default_oracle_pool_size]
   end
 
   @doc """
@@ -73,13 +71,17 @@ defmodule Support.OracleHarness do
 
     - :oracle_pool_size - number of parallel oracle connections (default: 50, env: ORACLE_POOL_SIZE)
     - :timeout_ms - timeout for waiting on shapes (default: 10_000)
+    - :restart_server_every - restart the StackSupervisor every N batches to
+      exercise restore-from-disk (default: 0, disabled)
+    - :restart_client_every - throw away and recreate the shape clients every
+      M batches to exercise fresh-poll consistency (default: 0, disabled)
   """
-  @spec test_against_oracle(map(), [shape()], [batch()], map()) :: :ok
-  def test_against_oracle(ctx, shapes, batches, opts \\ %{}) do
-    opts = Map.merge(default_opts_from_env(), opts)
+  @spec test_against_oracle(map(), [shape()], [batch()], keyword()) :: :ok
+  def test_against_oracle(ctx, shapes, batches, opts \\ []) do
+    opts = Keyword.merge(default_opts_from_env(), opts)
     timeout_ms = opts[:timeout_ms] || env_int("CHECK_TIMEOUT") || @default_timeout_ms
-    restart_server_every = env_int("RESTART_SERVER_EVERY") || 0
-    restart_client_every = env_int("RESTART_CLIENT_EVERY") || 0
+    restart_server_every = opts[:restart_server_every] || 0
+    restart_client_every = opts[:restart_client_every] || 0
 
     log_test_config(shapes, batches)
 

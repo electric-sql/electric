@@ -79,6 +79,8 @@ defmodule Electric.Integration.OraclePropertyTest do
     batch_count = env_int("BATCH_COUNT") || @default_batch_count
     txns_per_batch = env_int("TXNS_PER_BATCH") || @default_txns_per_batch
     mutations_per_txn = env_int("MUTATIONS_PER_TXN") || @default_mutations_per_txn
+    restart_server_every = env_int("RESTART_SERVER_EVERY") || 0
+    restart_client_every = env_int("RESTART_CLIENT_EVERY") || 0
 
     total_mutations = batch_count * txns_per_batch * mutations_per_txn
 
@@ -87,7 +89,11 @@ defmodule Electric.Integration.OraclePropertyTest do
               max_runs: run_count do
       transactions = Enum.chunk_every(mutations, mutations_per_txn)
       batches = Enum.chunk_every(transactions, txns_per_batch)
-      test_against_oracle(ctx, shapes, batches)
+
+      test_against_oracle(ctx, shapes, batches,
+        restart_server_every: restart_server_every,
+        restart_client_every: restart_client_every
+      )
     end
   end
 end
