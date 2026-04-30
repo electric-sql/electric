@@ -185,7 +185,7 @@ CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
 - Possibly Electric.LsnTracker — the new replication client may be
   reporting a stale `last_processed_lsn` until the first batch streams.
 
-## Bug 5: Post-restart move-in events lost when source-shape main log spans multiple chunks
+## Bug 5: Post-restart move-in events lost when source-shape main log spans multiple chunks — FIXED
 
 **Symptom**
 
@@ -272,31 +272,31 @@ restores shapes sequentially and `initialize_shape/3` is async, so
 by the time outer-shape #2's consumer init runs `EventHandlerBuilder.build`,
 its dependency materializer has already absorbed batch_2's update.
 
-**Fix shape (not yet implemented)**
+**Fix**
 
-The seeded `state.views` for a *restored* outer consumer must reflect
-its **own storage's state at restart time**, not the live materializer
-view. Three approaches:
+Eager-start the outer subquery shape consumers *before*
+`ShapeLogCollector.mark_as_ready/1` opens the event-dispatch gate.
+Concretely, `ShapeCache.handle_continue(:wait_for_restore)` now:
 
-1. **Persist the dep view alongside the shape.** Have the consumer
-   write the current `state.views` to its on-disk metadata after every
-   commit; load it back on restart. Storage gains one new metadata
-   slot.
-2. **Derive the view from storage.** For each subquery dep, scan the
-   shape's stored rows and collect distinct values of the dep's
-   foreign-key column. Cheap when the storage exposes a key index;
-   linear scan otherwise.
-3. **Replay materializer events from the outer's persisted offset.**
-   Track the outer shape's `last_persisted_dep_lsn` per dep and have
-   the materializer replay events `> last_persisted_dep_lsn` to the
-   outer consumer on subscribe. Needs offset tracking on the
-   subscription channel.
+1. Calls `eagerly_start_subquery_shape_consumers/1`, which iterates
+   shapes with `shape_dependencies != []` and runs
+   `restore_shape_and_dependencies/3` for each, then blocks on
+   `Consumer.await_snapshot_start/2` so each outer consumer's
+   `EventHandlerBuilder.build/2` has run and `state.views` is seeded
+   from the materializer.
+2. Only after all subquery consumers are fully initialized does it call
+   `ShapeLogCollector.mark_as_ready/1`.
 
-(1) is simplest to implement and matches how the rest of the recovery
-machinery works. (2) avoids a new persistence path but is heavier on
-restart. (3) is closest to the steady-state event flow but requires
-threading offsets through the materializer↔consumer subscription
-protocol.
+This guarantees the materializer view and the outer consumer's seeded
+view are both derived from on-disk state alone — no events have flowed
+yet. So the materializer view = outer-storage view = pre-restart state,
+and any subsequent move-in is correctly enqueued (not dropped as
+redundant against a view that has already advanced past it).
+
+The chosen approach is essentially option (3) reduced to its simplest
+form: instead of threading per-dep offsets through the subscription
+protocol, we hold the dispatch gate closed until every subquery
+consumer has caught up to a known consistent point on disk.
 
 **Regression test**
 

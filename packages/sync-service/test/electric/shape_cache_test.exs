@@ -1532,19 +1532,21 @@ defmodule Electric.ShapeCacheTest do
                GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
              )
 
-      # Register this test as the connection manager to get "consumers ready" notification
       restart_shape_cache(ctx)
 
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
 
-      refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)
-      refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle)
+      # After restart, ShapeCache eagerly starts subquery shape consumers
+      # in `handle_continue(:wait_for_restore)` so the outer consumer and
+      # its dependency materializer come back up automatically — no
+      # explicit `start_consumer_for_handle/2` call is required. The
+      # continue runs asynchronously after `start_supervised!` returns,
+      # so we wait for the registry to populate.
+      assert wait_until(1000, fn ->
+               not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)) and
+                 not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle))
+             end)
 
-      refute GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
-
-      assert {:ok, _pid1} = ShapeCache.start_consumer_for_handle(shape_handle, stack_id)
-
-      # Materializer should be started
       assert Process.alive?(
                GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
              )
