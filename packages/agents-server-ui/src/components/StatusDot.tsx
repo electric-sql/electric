@@ -6,6 +6,12 @@ const STATUS_COLORS: Record<string, string> = {
   idle: `#22c55e`,
   spawning: `#eab308`,
   stopped: `#cbd5e1`,
+  // coding-agent statuses (Slice B)
+  cold: `#9ca3af`,
+  starting: `#eab308`,
+  stopping: `#eab308`,
+  error: `#ef4444`,
+  destroyed: `#6b7280`,
 }
 
 export function StatusDot({

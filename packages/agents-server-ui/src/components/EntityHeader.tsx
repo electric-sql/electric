@@ -20,12 +20,20 @@ import {
 import { getEntityInstanceName } from '../lib/types'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
-const STATUS_COLOR: Record<string, `blue` | `green` | `amber` | `gray`> = {
+const STATUS_COLOR: Record<
+  string,
+  `blue` | `green` | `amber` | `gray` | `red`
+> = {
   active: `blue`,
   running: `blue`,
   idle: `green`,
   spawning: `amber`,
   stopped: `gray`,
+  cold: `gray`,
+  starting: `amber`,
+  stopping: `amber`,
+  error: `red`,
+  destroyed: `gray`,
 }
 
 export function EntityHeader({
