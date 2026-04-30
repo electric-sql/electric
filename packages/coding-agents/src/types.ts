@@ -1,4 +1,5 @@
 import type { NormalizedEvent } from 'agent-session-protocol'
+import type { CodingAgentStatus } from './entity/collections'
 
 export type CodingAgentKind = `claude` | `codex`
 
@@ -84,3 +85,46 @@ export interface RunTurnResult {
 export interface Bridge {
   runTurn(args: RunTurnArgs): Promise<RunTurnResult>
 }
+
+// ─── Slice A: SpawnCodingAgentOptions / RunSummary ──────────────────────────
+
+export interface SpawnCodingAgentOptions {
+  /** Stable id, scoped to the spawning entity. */
+  id: string
+  /** Slice A: 'claude' only. */
+  kind: `claude`
+  /**
+   * Workspace mount. Identity is the lease key.
+   *   { type: 'volume', name: 'foo' }    → 'volume:foo'
+   *   { type: 'volume' }                 → 'volume:<agentId>'
+   *   { type: 'bindMount', hostPath: P } → 'bindMount:<realpath(P)>'
+   */
+  workspace:
+    | { type: `volume`; name?: string }
+    | { type: `bindMount`; hostPath: string }
+  /** Initial prompt; queued before the first wake. */
+  initialPrompt?: string
+  /** Slice A: 'runFinished' only. */
+  wake?: { on: `runFinished`; includeResponse?: boolean }
+  /** Lifecycle overrides. */
+  lifecycle?: { idleTimeoutMs?: number; keepWarm?: boolean }
+}
+
+export interface RunSummary {
+  runId: string
+  startedAt: number
+  endedAt?: number
+  status: `running` | `completed` | `failed`
+  promptInboxKey: string
+  responseText?: string
+}
+
+export type { CodingAgentStatus }
+
+/** Defaults applied when a SpawnCodingAgentOptions field is omitted. */
+export const SLICE_A_DEFAULTS = {
+  idleTimeoutMs: 5 * 60_000,
+  coldBootBudgetMs: 30_000,
+  runTimeoutMs: 30 * 60_000,
+  keepWarm: false,
+} as const
