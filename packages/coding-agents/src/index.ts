@@ -10,5 +10,5 @@ export type {
   RunTurnResult,
   Bridge,
 } from './types'
-// export { LocalDockerProvider } from './providers/local-docker'
-// export { StdioBridge } from './bridge/stdio-bridge'
+export { LocalDockerProvider } from './providers/local-docker'
+export { StdioBridge } from './bridge/stdio-bridge'
