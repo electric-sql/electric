@@ -34,6 +34,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "@electric-ax/agents-runtime": "workspace:*",
     "agent-session-protocol": "^0.0.2",
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
