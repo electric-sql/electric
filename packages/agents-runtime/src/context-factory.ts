@@ -635,11 +635,26 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     async spawnCodingAgent(
       opts: SpawnCodingAgentOptions
     ): Promise<CodingAgentHandle> {
-      const spawnArgs: Record<string, unknown> = {
-        kind: opts.kind,
-        workspace: opts.workspace,
+      // The coding-agent entity's creationSchema is FLAT (the agents-server-ui
+      // SpawnArgsDialog only renders simple types). Translate the nested
+      // SpawnCodingAgentOptions.workspace into the flat workspaceType/Name/HostPath
+      // fields that the handler reconstructs on first-wake init.
+      const spawnArgs: Record<string, unknown> = { kind: opts.kind }
+      if (opts.workspace.type === `volume`) {
+        spawnArgs.workspaceType = `volume`
+        if (opts.workspace.name !== undefined) {
+          spawnArgs.workspaceName = opts.workspace.name
+        }
+      } else {
+        spawnArgs.workspaceType = `bindMount`
+        spawnArgs.workspaceHostPath = opts.workspace.hostPath
       }
-      if (opts.lifecycle !== undefined) spawnArgs.lifecycle = opts.lifecycle
+      if (opts.lifecycle?.idleTimeoutMs !== undefined) {
+        spawnArgs.idleTimeoutMs = opts.lifecycle.idleTimeoutMs
+      }
+      if (opts.lifecycle?.keepWarm !== undefined) {
+        spawnArgs.keepWarm = opts.lifecycle.keepWarm
+      }
 
       // initialMessage is stored verbatim as the inbox row's payload (no message_type
       // extraction in the spawn path). Match the entity's promptMessageSchema shape:

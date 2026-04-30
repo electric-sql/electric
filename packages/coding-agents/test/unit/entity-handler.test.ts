@@ -172,7 +172,8 @@ describe(`entity handler — first-wake init`, () => {
       entityUrl: `/test/coding-agent/x`,
       args: {
         kind: `claude`,
-        workspace: { type: `volume`, name: `w` },
+        workspaceType: `volume`,
+        workspaceName: `w`,
       },
     })
 

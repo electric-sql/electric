@@ -36,26 +36,20 @@ export interface RegisterCodingAgentDeps {
   env?: () => Record<string, string>
 }
 
+// NOTE: Flat shape (no nested objects, no unions). The agents-server-ui's
+// SpawnArgsDialog only renders simple JSON-Schema property types
+// (string/number/boolean/enum) — nested objects and unions don't render
+// at all and the dialog rejects the request. The handler reconstructs
+// the nested workspace shape from these flat fields on first-wake init.
 const creationArgsSchema = z.object({
   kind: z.enum([`claude`]).optional(),
-  workspace: z
-    .union([
-      z.object({
-        type: z.literal(`volume`),
-        name: z.string().optional(),
-      }),
-      z.object({
-        type: z.literal(`bindMount`),
-        hostPath: z.string(),
-      }),
-    ])
-    .optional(),
-  lifecycle: z
-    .object({
-      idleTimeoutMs: z.number().optional(),
-      keepWarm: z.boolean().optional(),
-    })
-    .optional(),
+  workspaceType: z.enum([`volume`, `bindMount`]).optional(),
+  /** For workspaceType='volume'. Defaults to slug(agentId) when omitted. */
+  workspaceName: z.string().optional(),
+  /** For workspaceType='bindMount'. Required when workspaceType='bindMount'. */
+  workspaceHostPath: z.string().optional(),
+  idleTimeoutMs: z.number().optional(),
+  keepWarm: z.boolean().optional(),
 })
 
 export function registerCodingAgent(

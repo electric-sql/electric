@@ -129,8 +129,9 @@ describeMaybe(`Slice A — full integration`, () => {
     const sharedName = `slice-a-shared-${Date.now().toString(36)}`
     const args = {
       kind: `claude`,
-      workspace: { type: `volume`, name: sharedName },
-      lifecycle: { idleTimeoutMs: 2000 },
+      workspaceType: `volume`,
+      workspaceName: sharedName,
+      idleTimeoutMs: 2000,
     }
     const { ctx: ctxA, state: stateA } = makeFakeCtx(agentA, args)
 

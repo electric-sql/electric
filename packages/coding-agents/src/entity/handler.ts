@@ -79,14 +79,22 @@ export function makeCodingAgentHandler(
     if (!initialMeta) {
       const args = ctx.args as {
         kind?: `claude`
-        workspace?: any
-        lifecycle?: { idleTimeoutMs?: number; keepWarm?: boolean }
+        workspaceType?: `volume` | `bindMount`
+        workspaceName?: string
+        workspaceHostPath?: string
+        idleTimeoutMs?: number
+        keepWarm?: boolean
       }
-      const ws = args.workspace ?? { type: `volume` }
+      const ws =
+        args.workspaceType === `bindMount`
+          ? {
+              type: `bindMount` as const,
+              hostPath: args.workspaceHostPath ?? process.cwd(),
+            }
+          : { type: `volume` as const, name: args.workspaceName }
       const resolved = await WorkspaceRegistry.resolveIdentity(agentId, ws)
-      const idleTimeoutMs =
-        args.lifecycle?.idleTimeoutMs ?? options.defaults.idleTimeoutMs
-      const keepWarm = args.lifecycle?.keepWarm ?? false
+      const idleTimeoutMs = args.idleTimeoutMs ?? options.defaults.idleTimeoutMs
+      const keepWarm = args.keepWarm ?? false
       const initial: SessionMetaRow = {
         key: `current`,
         status: `cold`,
