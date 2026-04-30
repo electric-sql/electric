@@ -12,6 +12,14 @@ defmodule Electric.Integration.OraclePropertyTest do
     - MUTATIONS_PER_TXN: Number of mutations per transaction (default: 5)
     - RUN_COUNT: Number of property test iterations (default: 1)
     - LONG_POLL_TIMEOUT: Server long-poll timeout in ms (default: 100)
+    - RESTART_SERVER_EVERY: Stop and restart the sync stack every N batches to
+      test server-side restore-from-file (default: 0, disabled). After each
+      restart, fresh clients reconnect and check_initial_state asserts the
+      restored state matches the oracle.
+    - RESTART_CLIENT_EVERY: Throw away clients (poll cursors, materialized
+      rows) and reconnect every M batches to test that fresh polls correctly
+      assemble snapshot + log (default: 0, disabled). Independent of
+      RESTART_SERVER_EVERY.
   """
 
   use ExUnit.Case, async: false

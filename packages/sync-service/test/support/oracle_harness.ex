@@ -78,6 +78,8 @@ defmodule Support.OracleHarness do
   def test_against_oracle(ctx, shapes, batches, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
     timeout_ms = opts[:timeout_ms] || env_int("CHECK_TIMEOUT") || @default_timeout_ms
+    restart_server_every = env_int("RESTART_SERVER_EVERY") || 0
+    restart_client_every = env_int("RESTART_CLIENT_EVERY") || 0
 
     log_test_config(shapes, batches)
 
@@ -90,21 +92,46 @@ defmodule Support.OracleHarness do
     # Check initial state (all in parallel)
     log("Checking initial snapshot for #{length(pids)} shapes")
 
-    pids
-    |> Task.async_stream(&ShapeChecker.check_initial_state/1, timeout: :infinity)
-    |> Stream.run()
+    check_initial_states(pids)
 
     # Run each batch
     log("Running #{length(batches)} batches")
 
-    batches
-    |> Enum.with_index(1)
-    |> Enum.each(fn {transactions, batch_idx} ->
-      run_batch(ctx, pids, transactions, batch_idx)
-    end)
+    total_batches = length(batches)
+
+    {final_pids, _ctx} =
+      batches
+      |> Enum.with_index(1)
+      |> Enum.reduce({pids, ctx}, fn {transactions, batch_idx}, {pids, ctx} ->
+        run_batch(ctx, pids, transactions, batch_idx)
+
+        restart_server? =
+          restart_server_every > 0 and rem(batch_idx, restart_server_every) == 0 and
+            batch_idx < total_batches
+
+        restart_client? =
+          restart_client_every > 0 and rem(batch_idx, restart_client_every) == 0 and
+            batch_idx < total_batches
+
+        cond do
+          restart_server? ->
+            # restart_server tears down the old checkers (they're polling the
+            # server about to go down) and recreates them after the stack is
+            # back up. If a client restart is also due this batch, it's
+            # subsumed by the recreate that follows the server restart.
+            restart_server(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx)
+
+          restart_client? ->
+            new_pids = recreate_checkers(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx)
+            {new_pids, ctx}
+
+          true ->
+            {pids, ctx}
+        end
+      end)
 
     # Cleanup
-    Enum.each(pids, &GenServer.stop/1)
+    Enum.each(final_pids, &GenServer.stop/1)
     GenServer.stop(oracle_pool)
     :ok
   end
@@ -132,6 +159,40 @@ defmodule Support.OracleHarness do
       {:ok, pid} = ShapeChecker.start_link(ctx, shape, oracle_pool, timeout_ms: timeout_ms)
       pid
     end)
+  end
+
+  defp check_initial_states(pids) do
+    pids
+    |> Task.async_stream(&ShapeChecker.check_initial_state/1, timeout: :infinity)
+    |> Stream.run()
+  end
+
+  # Restarts the Electric stack (server-side restore-from-file test) and
+  # reconnects the clients. Old checkers are stopped because their polls are
+  # against the server that is about to go down.
+  defp restart_server(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx) do
+    log("Restarting server after batch_#{batch_idx}")
+
+    Enum.each(pids, &GenServer.stop/1)
+
+    new_ctx = Map.merge(ctx, Support.ComponentSetup.restart_complete_stack(ctx))
+
+    new_pids = recreate_checkers(new_ctx, [], shapes, oracle_pool, timeout_ms, batch_idx)
+
+    {new_pids, new_ctx}
+  end
+
+  # Throws away the existing checkers and creates fresh ones (client-side
+  # resync test). The new checkers do an initial snapshot poll and assert
+  # consistency against the oracle.
+  defp recreate_checkers(ctx, old_pids, shapes, oracle_pool, timeout_ms, batch_idx) do
+    log("Recreating clients after batch_#{batch_idx}")
+
+    Enum.each(old_pids, &GenServer.stop/1)
+
+    new_pids = start_checkers(ctx, shapes, oracle_pool, timeout_ms)
+    check_initial_states(new_pids)
+    new_pids
   end
 
   defp run_batch(ctx, pids, transactions, batch_idx) do
