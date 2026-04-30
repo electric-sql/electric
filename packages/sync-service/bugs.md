@@ -222,22 +222,43 @@ level_4 rows whose level_3 parent just transitioned to `active=false`.
 
 **Where to look**
 
-- `lib/electric/shapes/consumer/materializer.ex` — the `new_changes`
-  path. After the read-history fix this is the same path the running
-  materializer uses for steady-state events; verify the last-persisted
-  offset on disk after my recovery loop matches what the consumer
-  expects on its first new-changes message.
-- `lib/electric/shapes/consumer.ex` — the consumer's
-  `all_materializers_alive?/1` and `Materializer.subscribe/1` handshake.
-  If the dependent consumer subscribes too late (or the materializer
-  flushed an event before the subscription arrived), the move-in is
-  lost.
-- The eager-start path I added in
-  `lib/electric/shape_cache.ex#eagerly_start_subquery_shape_consumers/1`.
-  It calls `restore_shape_and_dependencies/3` sequentially per outer
-  shape; with multiple subquery shapes, the second outer-shape
-  consumer's subscribe-to-materializer call could race the first
-  shape's first new-changes flush.
+The flow up to and including the materializer is healthy after restart
+(verified by trace logging):
+
+1. Source consumer's `materializer_subscribed?` is set back to `true`
+   when the materializer subscribes — `notify_materializer_of_new_changes`
+   does call into the materializer for batch_2.
+2. The materializer's `handle_call({:new_changes, {range_start,
+   range_end}, ...})` runs and applies `value_counts` updates correctly.
+3. `maybe_flush_pending_events/2` emits the right `move_in` / `move_out`
+   events (e.g. `move_in: [{"l3-2", "l3-2"}]` for the active=false
+   source) to each materializer's single subscriber (the dependent
+   shape's consumer).
+4. The dependent consumer's `handle_info({:materializer_changes, ...})`
+   fires with the right move counts.
+
+The break is **after** the consumer receives the `:materializer_changes`
+message — its move-in handling fails to add the moved-in level_4 rows
+to the shape's on-disk view. Suspect chain:
+
+- `lib/electric/shapes/consumer/event_handler/subqueries/steady.ex`
+  `handle_event/2` dispatches into `Buffering.start/6` for `:move_in`,
+  which schedules a `query_move_in` effect.
+- `lib/electric/shapes/consumer/event_handler/subqueries/buffering.ex`
+  and the `ActiveMove` / `SplicePlan` machinery — verify the move-in
+  query actually executes and its results are appended to the shape's
+  log.
+- `lib/electric/shapes/consumer/event_handler/subqueries/active_move.ex`
+  — `state.views` is seeded by `EventHandlerBuilder` from
+  `Materializer.get_link_values`. After restart the seeded view has the
+  pre-batch_2 state (correctly). Confirm the `dep_view` passed to
+  `MoveQueue.enqueue` reflects the post-batch_2 state by the time the
+  move-in query runs.
+
+The likely root cause is a stale view / timing race in the
+move-in-query lifecycle when a materializer is replayed concurrently
+with its first post-restart event. Single-shape variants don't expose
+it, so the trigger is concurrent materializer recoveries.
 
 **Regression test**
 
