@@ -72,8 +72,11 @@ export function makeCodingAgentHandler(
 
     // ─── 1) FIRST-WAKE INIT ────────────────────────────────────────────────
 
-    let meta = sessionMetaCol.get(`current`) as SessionMetaRow | undefined
-    if (!meta) {
+    const initialMeta = sessionMetaCol.get(`current`) as
+      | SessionMetaRow
+      | undefined
+    let meta: SessionMetaRow
+    if (!initialMeta) {
       const args = ctx.args as {
         kind?: `claude`
         workspace?: any
@@ -97,6 +100,8 @@ export function makeCodingAgentHandler(
       ctx.db.actions.sessionMeta_insert({ row: initial })
       wr.register(resolved.identity, agentId)
       meta = initial
+    } else {
+      meta = initialMeta
     }
 
     if (meta.status === `destroyed`) {
@@ -137,7 +142,7 @@ export function makeCodingAgentHandler(
           d.instanceId = undefined
         },
       })
-      meta = sessionMetaCol.get(`current`)!
+      meta = sessionMetaCol.get(`current`) as SessionMetaRow
     } else if (
       meta.status === `running` &&
       providerStatus === `running` &&
@@ -164,7 +169,7 @@ export function makeCodingAgentHandler(
           d.status = `idle`
         },
       })
-      meta = sessionMetaCol.get(`current`)!
+      meta = sessionMetaCol.get(`current`) as SessionMetaRow
     } else if (meta.status === `idle` && providerStatus === `stopped`) {
       ctx.db.actions.sessionMeta_update({
         key: `current`,
@@ -173,7 +178,7 @@ export function makeCodingAgentHandler(
           d.instanceId = undefined
         },
       })
-      meta = sessionMetaCol.get(`current`)!
+      meta = sessionMetaCol.get(`current`) as SessionMetaRow
     } else if (
       (meta.status === `starting` || meta.status === `stopping`) &&
       providerStatus !== `running`
@@ -184,7 +189,7 @@ export function makeCodingAgentHandler(
           d.status = `cold`
         },
       })
-      meta = sessionMetaCol.get(`current`)!
+      meta = sessionMetaCol.get(`current`) as SessionMetaRow
     } else if (
       (meta.status === `starting` || meta.status === `stopping`) &&
       providerStatus === `running`
@@ -195,7 +200,7 @@ export function makeCodingAgentHandler(
           d.status = `idle`
         },
       })
-      meta = sessionMetaCol.get(`current`)!
+      meta = sessionMetaCol.get(`current`) as SessionMetaRow
     }
 
     // ─── 3) PROCESS PENDING INBOX ──────────────────────────────────────────
@@ -225,7 +230,7 @@ export function makeCodingAgentHandler(
           d.lastInboxKey = inboxMsg.key
         },
       })
-      meta = sessionMetaCol.get(`current`)!
+      meta = sessionMetaCol.get(`current`) as SessionMetaRow
       if (meta.status === `destroyed`) return
     }
   }
@@ -279,7 +284,7 @@ async function processPrompt(
   })
   ctx.db.actions.lifecycle_insert({
     row: {
-      key: `boot:${Date.now()}`,
+      key: lifecycleKey(`boot`),
       ts: Date.now(),
       event: `sandbox.starting`,
     } satisfies LifecycleRow,
@@ -306,7 +311,7 @@ async function processPrompt(
     })
     ctx.db.actions.lifecycle_insert({
       row: {
-        key: `boot:${Date.now()}`,
+        key: lifecycleKey(`boot`),
         ts: Date.now(),
         event: `sandbox.failed`,
         detail: err instanceof Error ? err.message : String(err),
@@ -324,13 +329,13 @@ async function processPrompt(
   })
   ctx.db.actions.lifecycle_insert({
     row: {
-      key: `boot:${Date.now()}`,
+      key: lifecycleKey(`boot`),
       ts: Date.now(),
       event: `sandbox.started`,
     } satisfies LifecycleRow,
   })
 
-  meta = sessionMetaCol.get(`current`)!
+  meta = sessionMetaCol.get(`current`) as SessionMetaRow
   const releaseLease = await wr.acquire(meta.workspaceIdentity)
   try {
     ctx.db.actions.sessionMeta_update({
@@ -419,8 +424,9 @@ async function processPrompt(
       },
     })
 
-    if (!meta.keepWarm && lm.pinCount(agentId) === 0) {
-      lm.armIdleTimer(agentId, meta.idleTimeoutMs, () => {
+    const finalMeta = sessionMetaCol.get(`current`) as SessionMetaRow
+    if (!finalMeta.keepWarm && lm.pinCount(agentId) === 0) {
+      lm.armIdleTimer(agentId, finalMeta.idleTimeoutMs, () => {
         // Fire-and-forget: provider.destroy is keyed by agentId.
         void lm.provider.destroy(agentId).catch((err) => {
           log.warn({ err, agentId }, `idle stop failed`)
@@ -443,7 +449,7 @@ function processPin(ctx: any, lm: LifecycleManager): void {
   })
   ctx.db.actions.lifecycle_insert({
     row: {
-      key: `pin:${Date.now()}`,
+      key: lifecycleKey(`pin`),
       ts: Date.now(),
       event: `pin`,
       detail: `count=${count}`,
@@ -462,7 +468,7 @@ function processRelease(ctx: any, lm: LifecycleManager): void {
   })
   ctx.db.actions.lifecycle_insert({
     row: {
-      key: `release:${Date.now()}`,
+      key: lifecycleKey(`release`),
       ts: Date.now(),
       event: `release`,
       detail: `count=${count}`,
@@ -496,7 +502,7 @@ async function processStop(ctx: any, lm: LifecycleManager): Promise<void> {
   })
   ctx.db.actions.lifecycle_insert({
     row: {
-      key: `stop:${Date.now()}`,
+      key: lifecycleKey(`stop`),
       ts: Date.now(),
       event: `sandbox.stopped`,
     } satisfies LifecycleRow,
@@ -521,7 +527,7 @@ async function processDestroy(
   })
   ctx.db.actions.lifecycle_insert({
     row: {
-      key: `destroy:${Date.now()}`,
+      key: lifecycleKey(`destroy`),
       ts: Date.now(),
       event: `sandbox.stopped`,
       detail: `destroyed`,
