@@ -363,6 +363,19 @@ defmodule Support.ComponentSetup do
     %{shape_log_collector: name}
   end
 
+  def with_wal_buffer(ctx) do
+    name = :"wal_buffer_#{ctx.stack_id}"
+
+    start_supervised!(
+      {Electric.Replication.WalBuffer,
+       stack_id: ctx.stack_id, data_dir: ctx.tmp_dir, wal_buffer_capacity: 64 * 1024},
+      id: name,
+      restart: :temporary
+    )
+
+    %{wal_buffer: name}
+  end
+
   def with_slot_name(ctx) do
     # Derive a deterministic (per test) replication slot name from the full test name.
     # We hash the test name to (a) stay within Postgres identifier length limits (<= 63 bytes)

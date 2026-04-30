@@ -29,7 +29,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     :with_shape_status,
     :with_lsn_tracker,
     :with_noop_publication_manager,
-    :with_persistent_kv
+    :with_persistent_kv,
+    :with_wal_buffer
   ]
 
   @inspector Support.StubInspector.new(
