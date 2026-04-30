@@ -317,11 +317,99 @@ subquery shapes diverge after restart with long persisted log"` —
 deterministic two-shape reproduction. Fails today with the listed
 mutation pattern; passes for the single-shape variants.
 
+## Bug 6: Mid-restart shape cleanup leaves shape removed from on-disk metadata
+
+**Symptom**
+
+After a `RESTART_SERVER_EVERY` restart, the new clients sometimes get a
+`409 (must-refetch)` from a shape that was healthy before the restart.
+With `optimized: true` shapes the test flunks immediately. Reliably
+reproduces at `SHAPE_COUNT >= 10`, `RESTART_SERVER_EVERY=7` with the
+default `seed`. The failing shape varies between runs (shape_5,
+shape_8, shape_9, …) but is always one with a subquery dependency.
+
+**Root cause**
+
+`ShapeStatus.remove_shape/2` at
+`lib/electric/shape_cache/shape_status.ex:207` removes a shape from
+the persistent SQLite store *and* the in-memory ETS cache as its
+*first* step:
+
+```elixir
+def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
+  with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
+    :ets.delete(shape_meta_table(stack_id), shape_handle)
+    decrement_shape_counts(stack_id, shape_cached_as_indexed?(stack_id, shape_handle))
+    :ok
+  end
+end
+```
+
+`ShapeCleaner.remove_shape_immediate/3` then proceeds through:
+
+1. `Consumer.stop(stack_id, shape_handle, reason)`
+2. `Storage.cleanup!(stack_storage, shape_handle)`
+3. `ShapeLogCollector.remove_shape(stack_id, shape_handle)` ← can fail
+
+If the call at step 3 fails (because the SLC's `RequestBatcher` is
+already gone — exactly what happens during stack shutdown), the shape
+has already been deleted from SQLite. After the new stack restores
+shape state from disk, the handle is missing → `validate_shape_handle`
+returns `:no_shape` → API returns 409 must-refetch.
+
+The trigger for the cleanup task: a consumer crashes with a non-shutdown
+reason during the stop sequence (e.g., a materializer dies with `:killed`
+because the supervisor's graceful shutdown timed out, and the dependent
+consumer's `handle_materializer_down/2` falls through the `case` to
+`stop_and_clean/1`). `stop_and_clean` exits with
+`@stop_and_clean_reason = {:shutdown, :cleanup}`, and the consumer's
+`terminate/2` calls `ShapeCleaner.handle_writer_termination/3` with that
+reason, which schedules `remove_shape_async`. The async task then races
+the rest of the stack shutdown.
+
+**Where to look**
+
+- `lib/electric/shape_cache/shape_status.ex:207` — make the SQLite
+  removal the *last* step, after SLC unsubscribe + storage cleanup,
+  so a partial failure leaves the shape recoverable on next start.
+- `lib/electric/shapes/consumer.ex#handle_materializer_down/2` — add
+  a path for `:killed` (and possibly other `:DOWN` reasons that
+  correlate with supervisor brutal-shutdown) that stops the consumer
+  cleanly without scheduling shape removal.
+- `lib/electric/shape_cache/shape_cleaner/cleanup_task_supervisor.ex`
+  — consider blocking new `remove_shape_async` tasks once the stack
+  has begun shutdown.
+
+**Reproduce**
+
+```sh
+CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
+  BATCH_COUNT=10 RESTART_SERVER_EVERY=7 SKIP_REPATCH_PREWARM=true \
+  mix test --seed 8 --only oracle test/integration/oracle_property_test.exs
+```
+
+After batch_7's `Restarting server / Recreating clients` log, the new
+checkers' poll for batch_8 returns 409 for one of the subquery shapes.
+The error log shows
+`Task #PID<…> started from #PID<…> terminating ** (stop) exited in:
+GenServer.call(...{:remove_shape, "<handle>"})` with `** (EXIT) no
+process` — the cleanup task was mid-flight when the SLC went away.
+
 ## Note for triage
 
-Bug 1 is the most material; restore-from-file with subquery shapes is a
-documented production scenario. Bugs 2 and 3 only manifest under restart and
-are likely to be related to slot/timeline transitions. Bug 1 should be
-investigated independently; Bug 2 may resolve once the snapshot/log boundary
-is checked carefully (see `last_persisted_txn_offset` handling); Bug 3 is
+Bugs 1, 4, and 5 are fixed.
+
+Bug 6 is the next blocker for the property test under
+`RESTART_SERVER_EVERY` — the must-refetch it produces is not
+specifically a subquery issue but is exposed reliably by the same
+restart pattern. Fixing it likely requires reordering
+`ShapeStatus.remove_shape/2` so the SQLite delete is the *last*
+step of cleanup, plus tightening which exit reasons cause a
+materializer-down path to schedule shape removal vs. just stopping
+the consumer.
+
+Bugs 2 and 3 only manifest under restart and are likely to be related
+to slot/timeline transitions. Bug 2 may resolve once the snapshot/log
+boundary is checked carefully (see `last_persisted_txn_offset`
+handling); Bug 3 is
 likely a small fix in the active-readiness signal.
