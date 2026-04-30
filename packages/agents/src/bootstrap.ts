@@ -9,7 +9,6 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import { serverLog } from './log'
-import { registerCodingSession } from './agents/coding-session'
 import {
   LocalDockerProvider,
   StdioBridge,
@@ -120,9 +119,6 @@ export async function createBuiltinAgentHandler(
 
   registerWorker(registry, { workingDirectory: cwd, streamFn })
   typeNames.push(`worker`)
-
-  registerCodingSession(registry, { defaultWorkingDirectory: cwd })
-  typeNames.push(`coder`)
 
   // NEW for Slice A: built-in coding-agent entity (Docker sandbox + lifecycle).
   registerCodingAgent(registry, {
