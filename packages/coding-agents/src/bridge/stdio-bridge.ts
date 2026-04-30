@@ -1,0 +1,96 @@
+import { normalize } from 'agent-session-protocol'
+import type { NormalizedEvent } from 'agent-session-protocol'
+import { log } from '../log'
+import type { Bridge, RunTurnArgs, RunTurnResult } from '../types'
+
+export class StdioBridge implements Bridge {
+  async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
+    if (args.kind !== `claude`) {
+      throw new Error(
+        `StdioBridge MVP supports only 'claude', got '${args.kind}'`
+      )
+    }
+    if (args.nativeSessionId) {
+      log.warn(
+        { nativeSessionId: args.nativeSessionId },
+        `StdioBridge MVP does not implement resume — running fresh turn`
+      )
+    }
+
+    const cliArgs: Array<string> = [
+      `--print`,
+      `--output-format=stream-json`,
+      `--verbose`,
+      `--dangerously-skip-permissions`,
+    ]
+    if (args.model) cliArgs.push(`--model`, args.model)
+
+    const handle = await args.sandbox.exec({
+      cmd: [`claude`, ...cliArgs],
+      cwd: args.sandbox.workspaceMount,
+      stdin: `pipe`,
+    })
+
+    // Pipe prompt on stdin, then close.
+    if (!handle.writeStdin || !handle.closeStdin) {
+      throw new Error(
+        `StdioBridge requires stdin pipe but ExecHandle lacks one`
+      )
+    }
+    await handle.writeStdin(args.prompt)
+    await handle.closeStdin()
+
+    const rawLines: Array<string> = []
+    const stderrLines: Array<string> = []
+
+    const drainStderr = async () => {
+      for await (const line of handle.stderr) {
+        stderrLines.push(line)
+      }
+    }
+    const drainStdout = async () => {
+      for await (const line of handle.stdout) {
+        if (!line) continue
+        rawLines.push(line)
+        if (args.onNativeLine) args.onNativeLine(line)
+      }
+    }
+
+    await Promise.all([drainStdout(), drainStderr()])
+    const exitInfo = await handle.wait()
+
+    if (exitInfo.exitCode !== 0) {
+      const stderrPreview = stderrLines.join(`\n`).slice(0, 800) || `<empty>`
+      throw new Error(
+        `claude CLI exited ${exitInfo.exitCode}. stderr=${stderrPreview}`
+      )
+    }
+
+    let events: Array<NormalizedEvent> = []
+    try {
+      events = normalize(rawLines, `claude`)
+    } catch (err) {
+      log.error({ err, sample: rawLines.slice(0, 3) }, `normalize failed`)
+      throw err
+    }
+
+    for (const e of events) args.onEvent(e)
+
+    const sessionInit = events.find((e) => e.type === `session_init`)
+    const lastAssistant = [...events]
+      .reverse()
+      .find((e) => e.type === `assistant_message`)
+
+    return {
+      nativeSessionId:
+        sessionInit && `sessionId` in sessionInit
+          ? (sessionInit as { sessionId?: string }).sessionId
+          : undefined,
+      exitCode: exitInfo.exitCode,
+      finalText:
+        lastAssistant && `text` in lastAssistant
+          ? (lastAssistant as { text?: string }).text
+          : undefined,
+    }
+  }
+}
