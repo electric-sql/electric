@@ -51,7 +51,7 @@ Use it to build scalable, long-lived multi-agent systems, enable <span class="no
 > See the [Overview](/agents/), [Docs](/docs/agents/) and [Quickstart](/docs/agents/quickstart) guide.
 
 <div class="embed-container">
-  <YoutubeEmbed video-id="x84uGuLWJNA" title="Electric - Agents on sync" />
+  <YoutubeEmbed video-id="OiTqcScOFgE" title="Electric - Agents on sync" />
 </div>
 
 ## Guarding the log
