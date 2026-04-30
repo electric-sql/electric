@@ -185,6 +185,67 @@ CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
 - Possibly Electric.LsnTracker — the new replication client may be
   reporting a stale `last_processed_lsn` until the first batch streams.
 
+## Bug 5: Post-restart move-in events lost when source-shape main log spans multiple chunks
+
+**Symptom**
+
+After a server restart, the next replication-driven mutation that would
+move rows in or out of a subquery shape's view is silently dropped:
+the materialized view stays at its post-restart-restored state, while
+the oracle (PG) correctly reflects the post-batch state. Manifests as a
+"View mismatch" in the oracle harness, with the materialized view
+missing rows the oracle has.
+
+Reproduces only with **multiple subquery shapes** AND a source-shape
+main log that spans **more than one chunk** (forced via
+`@tag chunk_size: 200`). Single-shape variants of the same scenario
+(`bug 1` and `bug 4` regression tests) pass, so the bug is in an
+interaction between concurrent materializer recoveries and post-restart
+event delivery — possibly a stale `last_persisted_offset` that causes
+the source consumer to ignore the incoming mutation, or a missed
+materializer-subscription handshake that means the dependent consumer
+isn't on the materializer's subscriber list when the move-in event
+fires.
+
+**Reproduce**
+
+```sh
+CHECK_TIMEOUT=10000 SKIP_REPATCH_PREWARM=true \
+  mix test --seed 1 --only oracle_restore_bug_5 \
+  test/integration/oracle_restore_test.exs
+```
+
+Two shapes (`level_3 WHERE active=true` and `level_3 WHERE active=false`),
+200 toggles in batch_1, server restart, single deactivate in batch_2.
+After batch_2 the dependent `shape_active_false` view is missing the
+level_4 rows whose level_3 parent just transitioned to `active=false`.
+
+**Where to look**
+
+- `lib/electric/shapes/consumer/materializer.ex` — the `new_changes`
+  path. After the read-history fix this is the same path the running
+  materializer uses for steady-state events; verify the last-persisted
+  offset on disk after my recovery loop matches what the consumer
+  expects on its first new-changes message.
+- `lib/electric/shapes/consumer.ex` — the consumer's
+  `all_materializers_alive?/1` and `Materializer.subscribe/1` handshake.
+  If the dependent consumer subscribes too late (or the materializer
+  flushed an event before the subscription arrived), the move-in is
+  lost.
+- The eager-start path I added in
+  `lib/electric/shape_cache.ex#eagerly_start_subquery_shape_consumers/1`.
+  It calls `restore_shape_and_dependencies/3` sequentially per outer
+  shape; with multiple subquery shapes, the second outer-shape
+  consumer's subscribe-to-materializer call could race the first
+  shape's first new-changes flush.
+
+**Regression test**
+
+`test/integration/oracle_restore_test.exs#test "bug 5: multiple
+subquery shapes diverge after restart with long persisted log"` —
+deterministic two-shape reproduction. Fails today with the listed
+mutation pattern; passes for the single-shape variants.
+
 ## Note for triage
 
 Bug 1 is the most material; restore-from-file with subquery shapes is a
