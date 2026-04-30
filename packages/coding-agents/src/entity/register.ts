@@ -6,10 +6,12 @@ import type { Bridge, SandboxProvider } from '../types'
 import {
   CODING_AGENT_EVENTS_COLLECTION_TYPE,
   CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,
+  CODING_AGENT_NATIVE_JSONL_COLLECTION_TYPE,
   CODING_AGENT_RUNS_COLLECTION_TYPE,
   CODING_AGENT_SESSION_META_COLLECTION_TYPE,
   eventRowSchema,
   lifecycleRowSchema,
+  nativeJsonlRowSchema,
   runRowSchema,
   sessionMetaRowSchema,
 } from './collections'
@@ -103,6 +105,11 @@ export function registerCodingAgent(
       lifecycle: {
         schema: lifecycleRowSchema,
         type: CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,
+        primaryKey: `key`,
+      },
+      nativeJsonl: {
+        schema: nativeJsonlRowSchema,
+        type: CODING_AGENT_NATIVE_JSONL_COLLECTION_TYPE,
         primaryKey: `key`,
       },
     },
