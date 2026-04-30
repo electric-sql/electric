@@ -2,6 +2,7 @@ import type { NormalizedEvent } from 'agent-session-protocol'
 import { log } from '../log'
 import { WorkspaceRegistry } from '../workspace-registry'
 import type { LifecycleManager } from '../lifecycle-manager'
+import type { SandboxInstance } from '../types'
 import type {
   RunRow,
   SessionMetaRow,
@@ -35,6 +36,38 @@ function eventKey(runId: string, seq: number): string {
 
 function lifecycleKey(label: string): string {
   return `${label}:${Date.now()}-${Math.floor(Math.random() * 1000)}`
+}
+
+/**
+ * Sanitise an absolute path for use as the claude project directory name
+ * under ~/.claude/projects/. The CLI replaces every `/` with `-`, producing
+ * e.g. `/workspace` → `-workspace`.
+ */
+function sanitiseCwd(cwd: string): string {
+  return cwd.replace(/\//g, `-`)
+}
+
+/**
+ * Materialise nativeJsonl rows into the container's ~/.claude/projects/ so
+ * that `claude --resume <sessionId>` finds its session file.
+ */
+async function materialiseResume(
+  sandbox: SandboxInstance,
+  nativeSessionId: string,
+  lines: string[]
+): Promise<void> {
+  if (lines.length === 0) return
+  const projectDir = sanitiseCwd(sandbox.workspaceMount)
+  const jsonlContent = lines.join(`\n`) + `\n`
+  const b64 = Buffer.from(jsonlContent).toString(`base64`)
+  await sandbox.exec({
+    cmd: [
+      `sh`,
+      `-c`,
+      `mkdir -p ~/.claude/projects/${projectDir} && printf '%s' '${b64}' | base64 -d > ~/.claude/projects/${projectDir}/${nativeSessionId}.jsonl`,
+    ],
+    cwd: sandbox.workspaceMount,
+  })
 }
 
 function raceTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -345,6 +378,27 @@ async function processPrompt(
   })
 
   meta = sessionMetaCol.get(`current`) as SessionMetaRow
+
+  if (meta.nativeSessionId) {
+    const nativeJsonlCol = ctx.db.collections.nativeJsonl
+    const allLines: string[] = (nativeJsonlCol.toArray as Array<NativeJsonlRow>)
+      .slice()
+      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+      .map((r) => r.line)
+
+    if (allLines.length > 0) {
+      await materialiseResume(sandbox, meta.nativeSessionId, allLines)
+      ctx.db.actions.lifecycle_insert({
+        row: {
+          key: lifecycleKey(`resume`),
+          ts: Date.now(),
+          event: `resume.restored`,
+          detail: `lines=${allLines.length}`,
+        } satisfies LifecycleRow,
+      })
+    }
+  }
+
   const releaseLease = await wr.acquire(meta.workspaceIdentity)
   try {
     ctx.db.actions.sessionMeta_update({
