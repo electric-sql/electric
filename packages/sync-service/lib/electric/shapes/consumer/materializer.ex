@@ -181,12 +181,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
   `state.subscribed_offset` so the materializer's value_counts reflect the
   on-disk state on startup.
 
-  `Storage.get_log_stream/3` returns at most one chunk per call (snapshot
-  chunk N, or one main-log chunk), so we iterate, advancing through chunks
-  via `Storage.get_chunk_end_log_offset/2` until the subscribed offset is
-  reached. Without this loop, restarts replay only the first snapshot chunk
-  and silently drop every later snapshot chunk and every persisted log
-  entry — corrupting subquery materializer state on restore-from-disk.
+  `Storage.get_log_stream/3` returns at most one chunk per call **for
+  snapshot chunks** — but for the main log it returns the entire requested
+  range `[min_offset, subscribed_offset]` in one call. So we iterate
+  through snapshot chunks using `Storage.get_chunk_end_log_offset/2`,
+  and as soon as the iteration would step into the main log we stop:
+  the previous call already streamed everything up to the subscribed
+  offset. Iterating into the main log would re-read entries already
+  applied, producing duplicate inserts that crash the materializer.
   """
   def read_history_up_to_subscribed(state, storage) do
     cond do
@@ -200,23 +202,40 @@ defmodule Electric.Shapes.Consumer.Materializer do
         stream = Storage.get_log_stream(state.offset, state.subscribed_offset, storage)
         {state, _} = stream |> decode_json_stream() |> apply_changes(state)
 
-        next_offset = Storage.get_chunk_end_log_offset(state.offset, storage)
+        # If the read just covered the main log (because either the
+        # current offset is already past the snapshot or the next chunk
+        # boundary jumps into real-offset territory), `stream_main_log`
+        # returned the whole range up to `subscribed_offset` in a single
+        # call and we're done.
+        if is_real_offset(state.offset) or is_last_virtual_offset(state.offset) do
+          %{state | offset: state.subscribed_offset}
+        else
+          next_offset = Storage.get_chunk_end_log_offset(state.offset, storage)
 
-        cond do
-          is_nil(next_offset) ->
-            # No further chunks past this offset — we've reached the end.
-            %{state | offset: state.subscribed_offset}
+          cond do
+            is_nil(next_offset) ->
+              # No further chunks past this offset — we've reached the end.
+              %{state | offset: state.subscribed_offset}
 
-          is_log_offset_lte(next_offset, state.offset) ->
-            # Defensive: chunk_end did not advance. Stop to avoid an
-            # infinite loop. This shouldn't happen in normal operation.
-            %{state | offset: state.subscribed_offset}
+            is_log_offset_lte(next_offset, state.offset) ->
+              # Defensive: chunk_end did not advance. Stop to avoid an
+              # infinite loop. This shouldn't happen in normal operation.
+              %{state | offset: state.subscribed_offset}
 
-          is_log_offset_lte(state.subscribed_offset, next_offset) ->
-            %{state | offset: state.subscribed_offset}
+            is_log_offset_lte(state.subscribed_offset, next_offset) ->
+              %{state | offset: state.subscribed_offset}
 
-          true ->
-            read_history_up_to_subscribed(%{state | offset: next_offset}, storage)
+            is_real_offset(next_offset) ->
+              # The next chunk is in the main log, which means the call
+              # we just made (with `state.offset` past the last snapshot
+              # chunk) already streamed the entire main log up to
+              # `subscribed_offset`. Stop — iterating further would
+              # re-read entries we've already applied.
+              %{state | offset: state.subscribed_offset}
+
+            true ->
+              read_history_up_to_subscribed(%{state | offset: next_offset}, storage)
+          end
         end
     end
   end

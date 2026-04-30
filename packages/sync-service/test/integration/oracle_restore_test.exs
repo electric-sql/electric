@@ -42,6 +42,54 @@ defmodule Electric.Integration.OracleRestoreTest do
     %{replication_opts_overrides: [slot_temporary?: false]}
   end
 
+  @tag :oracle_restore_bug_4
+  @tag chunk_size: 200
+  test "bug 4: subquery shape returns 409 after restart with many persisted log entries",
+       ctx do
+    # Same shape as Bug 1 but with enough mutations between snapshot and
+    # restart that the persisted main log spans more than one read range.
+    # The materializer's startup replay re-reads main-log entries on
+    # subsequent iterations because `stream_main_log` returns the whole
+    # range in a single call but the iteration loop keeps advancing.
+    # Re-replaying the same INSERTs raises "Key already exists" inside the
+    # materializer, which crashes the dependent shape's consumer and
+    # causes the server to return 409 must-refetch on the next poll.
+    shapes = [
+      %{
+        name: "active_l3",
+        table: "level_4",
+        where: "level_3_id IN (SELECT id FROM level_3 WHERE active = true)",
+        columns: ["id", "level_3_id", "value"],
+        pk: ["id"],
+        optimized: true
+      }
+    ]
+
+    # Build a batch with many UPDATE entries on the source table (level_3)
+    # so that the dependency materializer's source shape persists a long
+    # log on disk before the restart. The bug surfaces when the
+    # materializer's startup replay re-reads main-log entries.
+    many_l3_mutations =
+      for i <- 1..30 do
+        active = if rem(i, 2) == 0, do: "true", else: "false"
+        id = "l3-#{rem(i, 5) + 1}"
+
+        %{
+          name: "toggle_#{id}_#{i}",
+          sql: "UPDATE level_3 SET active = #{active} WHERE id = '#{id}'"
+        }
+      end
+
+    batches = [
+      Enum.map(many_l3_mutations, &[&1]),
+      [
+        [%{name: "deactivate_l3-1", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-1'"}]
+      ]
+    ]
+
+    OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)
+  end
+
   @tag :oracle_restore_bug_1
   test "bug 1: subquery shape diverges from oracle after server restart", ctx do
     # Shape on level_4 with a subquery predicate over level_3.active. After
