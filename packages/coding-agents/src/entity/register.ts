@@ -115,9 +115,3 @@ export function registerCodingAgent(
     handler: makeCodingAgentHandler(lm, wr, { defaults, env }),
   })
 }
-
-/** Test-only accessor for asserting workspace registry state from outside. */
-export interface CodingAgentInternals {
-  lifecycleManager: LifecycleManager
-  workspaceRegistry: WorkspaceRegistry
-}
