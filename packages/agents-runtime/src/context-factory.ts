@@ -16,6 +16,7 @@ import { CACHE_TIERS } from './types'
 import {
   CODING_SESSION_ENTITY_TYPE,
   codingSessionEntityUrl,
+  entity as entityObservationSource,
 } from './observation-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
@@ -24,6 +25,9 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
+  CodingAgentHandle,
+  CodingAgentRunSummary,
+  CodingAgentState,
   CodingSessionEventRow,
   CodingSessionHandle,
   CodingSessionMeta,
@@ -37,6 +41,7 @@ import type {
   RunHandle,
   SharedStateHandle,
   SharedStateSchemaMap,
+  SpawnCodingAgentOptions,
   StateProxy,
   TimelineProjectionOpts,
   UseCodingAgentOptions,
@@ -627,6 +632,45 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       }
       return handle
     },
+    async spawnCodingAgent(
+      opts: SpawnCodingAgentOptions
+    ): Promise<CodingAgentHandle> {
+      const spawnArgs: Record<string, unknown> = {
+        kind: opts.kind,
+        workspace: opts.workspace,
+      }
+      if (opts.lifecycle !== undefined) spawnArgs.lifecycle = opts.lifecycle
+
+      const initialMessage =
+        opts.initialPrompt !== undefined
+          ? { type: `prompt` as const, payload: { text: opts.initialPrompt } }
+          : undefined
+
+      // Slice A: only `runFinished` wake (eventAppended is Slice C).
+      const wake: Wake = `runFinished`
+
+      const entityHandle = await config.doSpawn(
+        `coding-agent`,
+        opts.id,
+        spawnArgs,
+        {
+          observe: true,
+          wake,
+          ...(initialMessage ? { initialMessage } : {}),
+        }
+      )
+
+      const agentUrl = `/coding-agent/${opts.id}`
+      return makeCodingAgentHandle(config, agentUrl, entityHandle)
+    },
+    async observeCodingAgent(id: string): Promise<CodingAgentHandle> {
+      const url = `/coding-agent/${id}`
+      const entityHandle = await config.doObserve(
+        entityObservationSource(url),
+        `runFinished`
+      )
+      return makeCodingAgentHandle(config, url, entityHandle)
+    },
     send(
       entityUrl: string,
       payload: unknown,
@@ -690,4 +734,81 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   }
 
   return { ctx, getSleepRequested: () => sleepRequested }
+}
+
+function makeCodingAgentHandle(
+  config: HandlerContextConfig,
+  url: string,
+  entityHandle: { db?: { collections?: any } }
+): CodingAgentHandle {
+  const readMeta = (): any => {
+    const c = entityHandle.db?.collections?.sessionMeta
+    return c?.get?.(`current`)
+  }
+  const readRuns = (): Array<CodingAgentRunSummary> => {
+    const c = entityHandle.db?.collections?.runs
+    if (!c) return []
+    const rows = (c as { toArray?: unknown }).toArray
+    if (!Array.isArray(rows)) return []
+    return rows.map((r: any) => ({
+      runId: r.key,
+      startedAt: r.startedAt,
+      endedAt: r.endedAt,
+      status: r.status,
+      promptInboxKey: r.promptInboxKey,
+      responseText: r.responseText,
+    }))
+  }
+
+  return {
+    url,
+    kind: `claude`,
+    send: (text: string) => {
+      config.executeSend({
+        targetUrl: url,
+        payload: { text },
+        type: `prompt`,
+      })
+      return Promise.resolve({ runId: `run-pending-${Date.now()}` })
+    },
+    pin: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `pin` })
+      return Promise.resolve()
+    },
+    release: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `release` })
+      return Promise.resolve()
+    },
+    stop: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `stop` })
+      return Promise.resolve()
+    },
+    destroy: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `destroy` })
+      return Promise.resolve()
+    },
+    state(): CodingAgentState {
+      const meta = readMeta()
+      return {
+        status: meta?.status ?? `cold`,
+        pinned: meta?.pinned ?? false,
+        workspace: {
+          identity: meta?.workspaceIdentity ?? ``,
+          sharedRefs: 1, // Server-only state; Slice A clients see 1.
+        },
+        lastError: meta?.lastError,
+        runs: readRuns(),
+      }
+    },
+    events(opts?: { since?: `start` | `now` }) {
+      const since = opts?.since ?? `now`
+      const c = entityHandle.db?.collections?.events
+      const rows: Array<{ payload: unknown }> =
+        c && Array.isArray((c as any).toArray) ? (c as any).toArray : []
+      const initial = since === `start` ? rows.slice() : []
+      return (async function* () {
+        for (const r of initial) yield r.payload
+      })()
+    },
+  }
 }

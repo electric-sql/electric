@@ -817,6 +817,57 @@ export interface CodingSessionHandle {
   readonly messages: ReadonlyArray<CodingSessionEventRow>
 }
 
+// ─── Coding Agent (Slice A) ───────────────────────────────────────────────
+
+export type CodingAgentSliceAStatus =
+  | `cold`
+  | `starting`
+  | `idle`
+  | `running`
+  | `stopping`
+  | `error`
+  | `destroyed`
+
+export interface SpawnCodingAgentOptions {
+  id: string
+  kind: `claude`
+  workspace:
+    | { type: `volume`; name?: string }
+    | { type: `bindMount`; hostPath: string }
+  initialPrompt?: string
+  wake?: { on: `runFinished`; includeResponse?: boolean }
+  lifecycle?: { idleTimeoutMs?: number; keepWarm?: boolean }
+}
+
+export interface CodingAgentRunSummary {
+  runId: string
+  startedAt: number
+  endedAt?: number
+  status: `running` | `completed` | `failed`
+  promptInboxKey: string
+  responseText?: string
+}
+
+export interface CodingAgentState {
+  status: CodingAgentSliceAStatus
+  pinned: boolean
+  workspace: { identity: string; sharedRefs: number }
+  lastError?: string
+  runs: ReadonlyArray<CodingAgentRunSummary>
+}
+
+export interface CodingAgentHandle {
+  readonly url: string
+  readonly kind: `claude`
+  send(prompt: string): Promise<{ runId: string }>
+  events(opts?: { since?: `start` | `now` }): AsyncIterable<unknown>
+  state(): CodingAgentState
+  pin(): Promise<void>
+  release(): Promise<void>
+  stop(): Promise<void>
+  destroy(): Promise<void>
+}
+
 export interface AgentConfig {
   systemPrompt: string
   model: AgentModel
@@ -952,6 +1003,16 @@ export interface HandlerContext<
     sessionId: string,
     opts: UseCodingAgentOptions
   ) => Promise<CodingSessionHandle>
+  /**
+   * Spawn (or attach to) a `coding-agent` entity that runs a CLI inside a
+   * Docker sandbox with managed lifecycle (cold/idle/running, idle hibernation,
+   * pin/release, workspace lease). Requires `registerCodingAgent` to have been
+   * called on the runtime's registry.
+   */
+  spawnCodingAgent: (
+    opts: SpawnCodingAgentOptions
+  ) => Promise<CodingAgentHandle>
+  observeCodingAgent: (id: string) => Promise<CodingAgentHandle>
   send: (
     entityUrl: string,
     payload: unknown,
