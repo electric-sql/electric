@@ -48,6 +48,7 @@ function makeFakeCtx(opts: {
   const runs = makeCollection()
   const events = makeCollection()
   const lifecycle = makeCollection()
+  const nativeJsonl = makeCollection()
   const inbox = makeCollection()
 
   if (opts.meta) sessionMeta.rows.set(`current`, opts.meta)
@@ -68,7 +69,7 @@ function makeFakeCtx(opts: {
     tags: {},
     firstWake: false,
     db: {
-      collections: { sessionMeta, runs, events, lifecycle, inbox },
+      collections: { sessionMeta, runs, events, lifecycle, nativeJsonl, inbox },
       actions: {
         sessionMeta_insert: ({ row }: { row: any }) =>
           sessionMeta.rows.set(row.key, row),
@@ -94,6 +95,8 @@ function makeFakeCtx(opts: {
           if (cur) updater(cur)
         },
         events_insert: ({ row }: { row: any }) => events.rows.set(row.key, row),
+        nativeJsonl_insert: ({ row }: { row: any }) =>
+          nativeJsonl.rows.set(row.key, row),
         lifecycle_insert: ({ row }: { row: any }) =>
           lifecycle.rows.set(row.key, row),
       },

@@ -7,6 +7,7 @@ import type {
   SessionMetaRow,
   EventRow,
   LifecycleRow,
+  NativeJsonlRow,
 } from './collections'
 import { promptMessageSchema } from './messages'
 
@@ -366,6 +367,7 @@ async function processPrompt(
     })
 
     let seq = 0
+    let nativeLineSeq = 0
     let finalText: string | undefined
     try {
       const result = await raceTimeout(
@@ -373,6 +375,18 @@ async function processPrompt(
           sandbox,
           kind: meta.kind,
           prompt: promptText,
+          nativeSessionId: meta.nativeSessionId,
+          onNativeLine: (line: string) => {
+            ctx.db.actions.nativeJsonl_insert({
+              row: {
+                key: eventKey(runId, nativeLineSeq),
+                runId,
+                seq: nativeLineSeq,
+                line,
+              } satisfies NativeJsonlRow,
+            })
+            nativeLineSeq++
+          },
           onEvent: (e: NormalizedEvent) => {
             ctx.db.actions.events_insert({
               row: {
@@ -390,6 +404,16 @@ async function processPrompt(
         options.defaults.runTimeoutMs
       )
       finalText = result.finalText
+
+      if (result.nativeSessionId && !meta.nativeSessionId) {
+        ctx.db.actions.sessionMeta_update({
+          key: `current`,
+          updater: (d: SessionMetaRow) => {
+            d.nativeSessionId = result.nativeSessionId
+          },
+        })
+      }
+
       ctx.db.actions.runs_update({
         key: runId,
         updater: (d: RunRow) => {

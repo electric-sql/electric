@@ -36,6 +36,7 @@ interface FakeCtxState {
   runs: CollectionStub
   events: CollectionStub
   lifecycle: CollectionStub
+  nativeJsonl: CollectionStub
   inbox: CollectionStub
 }
 
@@ -45,6 +46,7 @@ function makeFakeCtx(entityUrl: string, args: Record<string, unknown>) {
     runs: makeCollection(),
     events: makeCollection(),
     lifecycle: makeCollection(),
+    nativeJsonl: makeCollection(),
     inbox: makeCollection(),
   }
   let runCounter = 0
@@ -69,6 +71,8 @@ function makeFakeCtx(entityUrl: string, args: Record<string, unknown>) {
           if (r) updater(r)
         },
         events_insert: ({ row }: any) => state.events.rows.set(row.key, row),
+        nativeJsonl_insert: ({ row }: any) =>
+          state.nativeJsonl.rows.set(row.key, row),
         lifecycle_insert: ({ row }: any) =>
           state.lifecycle.rows.set(row.key, row),
       },
