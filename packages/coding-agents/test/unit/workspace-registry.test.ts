@@ -11,12 +11,20 @@ describe(`WorkspaceRegistry.resolveIdentity`, () => {
     expect(r.resolved).toEqual({ type: `volume`, name: `foo` })
   })
 
-  it(`resolves volume:<agentId> when name is omitted`, async () => {
+  it(`resolves volume:<slug(agentId)> when name is omitted`, async () => {
     const r = await WorkspaceRegistry.resolveIdentity(`/p/coding-agent/x`, {
       type: `volume`,
     })
-    expect(r.identity).toBe(`volume:/p/coding-agent/x`)
-    expect(r.resolved).toEqual({ type: `volume`, name: `/p/coding-agent/x` })
+    // agentId slugified: '/' → '-', leading separators stripped.
+    expect(r.identity).toBe(`volume:p-coding-agent-x`)
+    expect(r.resolved).toEqual({ type: `volume`, name: `p-coding-agent-x` })
+  })
+
+  it(`slugifies invalid Docker volume name characters in agentId`, async () => {
+    const r = await WorkspaceRegistry.resolveIdentity(`/a/b@c/d!`, {
+      type: `volume`,
+    })
+    expect(r.identity).toMatch(/^volume:[a-zA-Z0-9][a-zA-Z0-9_.-]*$/)
   })
 
   it(`resolves bindMount:<realpath> for bind mounts`, async () => {

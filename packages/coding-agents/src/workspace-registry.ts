@@ -4,6 +4,19 @@ export type ResolvedWorkspaceSpec =
   | { type: `volume`; name: string }
   | { type: `bindMount`; hostPath: string }
 
+/**
+ * Docker volume names must match `[a-zA-Z0-9][a-zA-Z0-9_.-]*`. Entity URLs
+ * (the agentId) include `/` and other invalid characters, so we slugify
+ * before using them as a default volume name.
+ */
+function slugifyForVolumeName(s: string): string {
+  return s
+    .replace(/[^a-zA-Z0-9_.-]/g, `-`)
+    .replace(/-+/g, `-`)
+    .replace(/^[-_.]+/, ``)
+    .replace(/[-_.]+$/, ``)
+}
+
 export class WorkspaceRegistry {
   private readonly refsByIdentity = new Map<string, Set<string>>()
   private readonly chainByIdentity = new Map<string, Promise<void>>()
@@ -15,7 +28,7 @@ export class WorkspaceRegistry {
       | { type: `bindMount`; hostPath: string }
   ): Promise<{ identity: string; resolved: ResolvedWorkspaceSpec }> {
     if (spec.type === `volume`) {
-      const name = spec.name ?? agentId
+      const name = spec.name ?? slugifyForVolumeName(agentId)
       return {
         identity: `volume:${name}`,
         resolved: { type: `volume`, name },
