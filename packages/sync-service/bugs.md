@@ -220,45 +220,95 @@ Two shapes (`level_3 WHERE active=true` and `level_3 WHERE active=false`),
 After batch_2 the dependent `shape_active_false` view is missing the
 level_4 rows whose level_3 parent just transitioned to `active=false`.
 
-**Where to look**
+**Root cause (narrowed by trace logging)**
 
-The flow up to and including the materializer is healthy after restart
-(verified by trace logging):
+The outer shape's consumer, when re-initialized after a stack restart,
+seeds `state.views` from the **current materializer view** via
+`EventHandlerBuilder.build/2`:
 
-1. Source consumer's `materializer_subscribed?` is set back to `true`
-   when the materializer subscribes — `notify_materializer_of_new_changes`
-   does call into the materializer for batch_2.
-2. The materializer's `handle_call({:new_changes, {range_start,
-   range_end}, ...})` runs and applies `value_counts` updates correctly.
-3. `maybe_flush_pending_events/2` emits the right `move_in` / `move_out`
-   events (e.g. `move_in: [{"l3-2", "l3-2"}]` for the active=false
-   source) to each materializer's single subscriber (the dependent
-   shape's consumer).
-4. The dependent consumer's `handle_info({:materializer_changes, ...})`
-   fires with the right move counts.
+```elixir
+view = Materializer.get_link_values(materializer_opts)
+```
 
-The break is **after** the consumer receives the `:materializer_changes`
-message — its move-in handling fails to add the moved-in level_4 rows
-to the shape's on-disk view. Suspect chain:
+But the outer shape's **on-disk storage** reflects the state at the
+*pre-restart* shutdown LSN, while the materializer is rebuilt from disk
+and then advanced by any events the source consumer processes during
+the eager-restart window — including events from the replication
+slot's catch-up replay and from the next test mutation (`batch_2`'s
+deactivate). The two views diverge.
 
-- `lib/electric/shapes/consumer/event_handler/subqueries/steady.ex`
-  `handle_event/2` dispatches into `Buffering.start/6` for `:move_in`,
-  which schedules a `query_move_in` effect.
-- `lib/electric/shapes/consumer/event_handler/subqueries/buffering.ex`
-  and the `ActiveMove` / `SplicePlan` machinery — verify the move-in
-  query actually executes and its results are appended to the shape's
-  log.
-- `lib/electric/shapes/consumer/event_handler/subqueries/active_move.ex`
-  — `state.views` is seeded by `EventHandlerBuilder` from
-  `Materializer.get_link_values`. After restart the seeded view has the
-  pre-batch_2 state (correctly). Confirm the `dep_view` passed to
-  `MoveQueue.enqueue` reflects the post-batch_2 state by the time the
-  move-in query runs.
+Concretely, in the failing test:
 
-The likely root cause is a stale view / timing race in the
-move-in-query lifecycle when a materializer is replayed concurrently
-with its first post-restart event. Single-shape variants don't expose
-it, so the trigger is concurrent materializer recoveries.
+| Stage | Outer storage view (level_3_id values) | Materializer view |
+|---|---|---|
+| End of batch_1 | `{l3-3, l3-5}` (correct) | `{l3-3, l3-5}` (correct) |
+| Server restarts; outer consumer re-initialized | `{l3-3, l3-5}` (still on disk) | replays history, momentarily `{l3-3, l3-5}` |
+| `batch_2` deactivate(l3-2) lands at the materializer **before** outer consumer's `EventHandlerBuilder.build` runs | `{l3-3, l3-5}` | now `{l3-2, l3-3, l3-5}` |
+| Outer's `state.views` is seeded **from the materializer** | `{l3-3, l3-5}` | view = `{l3-2, l3-3, l3-5}` |
+
+Then the materializer's `move_in: [{"l3-2", _}]` event arrives at the
+outer consumer. `MoveQueue.enqueue/4` runs `redundant?/2`, which checks:
+
+```elixir
+defp redundant?(%{kind: :move_in, move_value: {value, _}}, base_view) do
+  MapSet.member?(base_view, value)
+end
+```
+
+`l3-2` is in the seeded view, so the move-in is treated as redundant
+and **dropped**. The outer storage never gets the `level_4` rows for
+`level_3_id = l3-2` — those are the rows missing from the materialized
+view in the test failure.
+
+**Why single-shape doesn't expose it**
+
+With one shape there's only one materializer, only one outer consumer,
+and the timing rarely interleaves the outer consumer's
+`EventHandlerBuilder.build` between the materializer's
+`new_changes(...)` for batch_2 and the materializer's flush of the
+move event back to the outer consumer. The race is exposed by
+multi-shape eager-start: my `eagerly_start_subquery_shape_consumers/1`
+restores shapes sequentially and `initialize_shape/3` is async, so
+by the time outer-shape #2's consumer init runs `EventHandlerBuilder.build`,
+its dependency materializer has already absorbed batch_2's update.
+
+**Fix shape (not yet implemented)**
+
+The seeded `state.views` for a *restored* outer consumer must reflect
+its **own storage's state at restart time**, not the live materializer
+view. Three approaches:
+
+1. **Persist the dep view alongside the shape.** Have the consumer
+   write the current `state.views` to its on-disk metadata after every
+   commit; load it back on restart. Storage gains one new metadata
+   slot.
+2. **Derive the view from storage.** For each subquery dep, scan the
+   shape's stored rows and collect distinct values of the dep's
+   foreign-key column. Cheap when the storage exposes a key index;
+   linear scan otherwise.
+3. **Replay materializer events from the outer's persisted offset.**
+   Track the outer shape's `last_persisted_dep_lsn` per dep and have
+   the materializer replay events `> last_persisted_dep_lsn` to the
+   outer consumer on subscribe. Needs offset tracking on the
+   subscription channel.
+
+(1) is simplest to implement and matches how the rest of the recovery
+machinery works. (2) avoids a new persistence path but is heavier on
+restart. (3) is closest to the steady-state event flow but requires
+threading offsets through the materializer↔consumer subscription
+protocol.
+
+**Regression test**
+
+`test/integration/oracle_restore_test.exs#test "bug 5: multiple
+subquery shapes diverge after restart with long persisted log"`
+reproduces this deterministically with two shapes
+(`level_3 WHERE active=true` and `level_3 WHERE active=false`),
+200 toggles in batch_1, server restart, and a single
+`UPDATE level_3 SET active = false WHERE id = 'l3-2'` in batch_2.
+The `@tag chunk_size: 200` is required to make the source shape's
+main log span more than one chunk so the timing race exposes itself
+reliably.
 
 **Regression test**
 
