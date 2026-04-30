@@ -130,8 +130,12 @@ Commits on `coding-agents-slice-a` branch (in order):
 10. `3781c9cc9` — fix: drop misleading runId placeholder from send()
 11. `e5da51dca` — wire registerCodingAgent into bootstrap
 12. `e1fb7eaa6` — Slice A integration smoke test
+13. `030494a9c` — Slice A run report (this document)
+14. `c65276ea0` — fix: spawnCodingAgent initialMessage shape (drop prompt/payload wrapping)
 
 Branch: `coding-agents-slice-a` (forked from `main` at `a31e8a8a0` to keep main clean).
+
+**Final-review caveat.** The post-Slice-A code review caught a Critical bug not exercised by any test: `spawnCodingAgent`'s `initialPrompt` path wrapped the message as `{ type: 'prompt', payload: { text } }`, but the runtime stores the entire `initialMessage` verbatim as the inbox row's payload, causing `promptMessageSchema.safeParse` to reject and silently drop the prompt. Fix in commit `c65276ea0` flattens to `{ text }` (matching the legacy `spawn_coder` pattern). The integration test does not cover this path because it drives the handler directly. **Slice B should add a runtime-level integration test that exercises `ctx.spawnCodingAgent({ initialPrompt })` end-to-end.**
 
 ## How to re-run
 
