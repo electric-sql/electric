@@ -105,7 +105,10 @@ describeMaybe(`Slice B — resume integration`, () => {
         coldBootBudgetMs: 60_000,
         runTimeoutMs: 120_000,
       },
-      env: () => ({ ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY }),
+      env: () => ({
+        ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+        ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
+      }),
     })
 
     const agentId = `/test/coding-agent/resume-${Date.now().toString(36)}`
@@ -124,7 +127,7 @@ describeMaybe(`Slice B — resume integration`, () => {
       key: `i1`,
       message_type: `prompt`,
       payload: {
-        text: `Remember the secret code word: BANANA. Reply with "Acknowledged: BANANA" and nothing else.`,
+        text: `My favorite fruit is BANANA. Acknowledge by replying with exactly: "Got it: BANANA"`,
       },
     })
     await handler(ctx, { type: `message_received` })
@@ -147,7 +150,7 @@ describeMaybe(`Slice B — resume integration`, () => {
       key: `i2`,
       message_type: `prompt`,
       payload: {
-        text: `What was the secret code word I asked you to remember? Reply with just the word.`,
+        text: `What did I tell you my favorite fruit was? Reply with just the fruit name in all caps.`,
       },
     })
     await handler(ctx, { type: `message_received` })
@@ -155,6 +158,18 @@ describeMaybe(`Slice B — resume integration`, () => {
     const runs2 = Array.from(state.runs.rows.values()) as any[]
     expect(runs2.length).toBeGreaterThanOrEqual(2)
     const lastRun = runs2[runs2.length - 1]
+    if (lastRun.status !== `completed`) {
+      console.log(
+        `lastRun.finishReason:`,
+        lastRun.finishReason,
+        `\nlastError:`,
+        state.sessionMeta.get(`current`)?.lastError,
+        `\nlifecycle rows:`,
+        Array.from(state.lifecycle.rows.values()).map(
+          (r: any) => `${r.event}${r.detail ? `: ${r.detail}` : ``}`
+        )
+      )
+    }
     expect(lastRun.status).toBe(`completed`)
 
     expect(lastRun.responseText?.toUpperCase()).toContain(`BANANA`)

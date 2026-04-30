@@ -48,18 +48,17 @@ function sanitiseCwd(cwd: string): string {
 }
 
 /**
- * Materialise nativeJsonl rows into the container's ~/.claude/projects/ so
- * that `claude --resume <sessionId>` finds its session file.
+ * Materialise the captured transcript blob into the sandbox so
+ * `claude --resume <sessionId>` finds its session file.
  */
 async function materialiseResume(
   sandbox: SandboxInstance,
   nativeSessionId: string,
-  lines: string[]
+  content: string
 ): Promise<void> {
-  if (lines.length === 0) return
+  if (!content) return
   const projectDir = sanitiseCwd(sandbox.workspaceMount)
-  const jsonlContent = lines.join(`\n`) + `\n`
-  const b64 = Buffer.from(jsonlContent).toString(`base64`)
+  const b64 = Buffer.from(content).toString(`base64`)
   await sandbox.exec({
     cmd: [
       `sh`,
@@ -68,6 +67,43 @@ async function materialiseResume(
     ],
     cwd: sandbox.workspaceMount,
   })
+}
+
+/**
+ * Read claude's on-disk transcript out of the sandbox so we can
+ * persist it for resume. claude writes the canonical conversation
+ * history to ~/.claude/projects/<dir>/<sessionId>.jsonl during the
+ * turn; we capture it after the turn exits.
+ *
+ * Uses base64 to round-trip the file as a single bash variable so we
+ * never block on stream draining (which has hung in practice on the
+ * Slice A docker exec stdio path).
+ */
+async function captureTranscript(
+  sandbox: SandboxInstance,
+  nativeSessionId: string
+): Promise<string> {
+  const projectDir = sanitiseCwd(sandbox.workspaceMount)
+  const path = `~/.claude/projects/${projectDir}/${nativeSessionId}.jsonl`
+  const handle = await sandbox.exec({
+    cmd: [`sh`, `-c`, `if [ -f ${path} ]; then base64 -w 0 ${path}; fi`],
+    cwd: sandbox.workspaceMount,
+  })
+  let b64 = ``
+  const drain = async () => {
+    for await (const line of handle.stdout) {
+      b64 += line
+    }
+  }
+  const drainErr = async () => {
+    for await (const _ of handle.stderr) {
+      // discard
+    }
+  }
+  const exit = handle.wait()
+  await Promise.all([drain(), drainErr(), exit])
+  if (!b64) return ``
+  return Buffer.from(b64, `base64`).toString(`utf8`)
 }
 
 function raceTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -380,20 +416,21 @@ async function processPrompt(
   meta = sessionMetaCol.get(`current`) as SessionMetaRow
 
   if (meta.nativeSessionId) {
-    const nativeJsonlCol = ctx.db.collections.nativeJsonl
-    const allLines: string[] = (nativeJsonlCol.toArray as Array<NativeJsonlRow>)
-      .slice()
-      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-      .map((r) => r.line)
-
-    if (allLines.length > 0) {
-      await materialiseResume(sandbox, meta.nativeSessionId, allLines)
+    const transcript = ctx.db.collections.nativeJsonl.get(`current`) as
+      | NativeJsonlRow
+      | undefined
+    if (
+      transcript &&
+      transcript.nativeSessionId === meta.nativeSessionId &&
+      transcript.content
+    ) {
+      await materialiseResume(sandbox, meta.nativeSessionId, transcript.content)
       ctx.db.actions.lifecycle_insert({
         row: {
           key: lifecycleKey(`resume`),
           ts: Date.now(),
           event: `resume.restored`,
-          detail: `lines=${allLines.length}`,
+          detail: `bytes=${transcript.content.length}`,
         } satisfies LifecycleRow,
       })
     }
@@ -421,7 +458,6 @@ async function processPrompt(
     })
 
     let seq = 0
-    let nativeLineSeq = 0
     let finalText: string | undefined
     try {
       const result = await raceTimeout(
@@ -430,17 +466,6 @@ async function processPrompt(
           kind: meta.kind,
           prompt: promptText,
           nativeSessionId: meta.nativeSessionId,
-          onNativeLine: (line: string) => {
-            ctx.db.actions.nativeJsonl_insert({
-              row: {
-                key: eventKey(runId, nativeLineSeq),
-                runId,
-                seq: nativeLineSeq,
-                line,
-              } satisfies NativeJsonlRow,
-            })
-            nativeLineSeq++
-          },
           onEvent: (e: NormalizedEvent) => {
             ctx.db.actions.events_insert({
               row: {
@@ -459,6 +484,8 @@ async function processPrompt(
       )
       finalText = result.finalText
 
+      const finalNativeSessionId =
+        result.nativeSessionId ?? meta.nativeSessionId
       if (result.nativeSessionId && !meta.nativeSessionId) {
         ctx.db.actions.sessionMeta_update({
           key: `current`,
@@ -466,6 +493,27 @@ async function processPrompt(
             d.nativeSessionId = result.nativeSessionId
           },
         })
+      }
+
+      // Capture the on-disk transcript so a future cold-boot can resume.
+      if (finalNativeSessionId) {
+        try {
+          const content = await captureTranscript(sandbox, finalNativeSessionId)
+          if (content) {
+            ctx.db.actions.nativeJsonl_insert({
+              row: {
+                key: `current`,
+                nativeSessionId: finalNativeSessionId,
+                content,
+              } satisfies NativeJsonlRow,
+            })
+          }
+        } catch (err) {
+          log.warn(
+            { err, agentId, finalNativeSessionId },
+            `transcript capture failed`
+          )
+        }
       }
 
       ctx.db.actions.runs_update({

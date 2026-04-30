@@ -126,7 +126,10 @@ describeMaybe(`Slice A — full integration`, () => {
         coldBootBudgetMs: 60_000,
         runTimeoutMs: 120_000,
       },
-      env: () => ({ ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY }),
+      env: () => ({
+        ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+        ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
+      }),
     })
 
     const agentA = `/test/coding-agent/a-${Date.now().toString(36)}`

@@ -70,16 +70,38 @@ export class StdioBridge implements Bridge {
 
     for (const e of events) args.onEvent(e)
 
-    const sessionInit = events.find((e) => e.type === `session_init`)
     const lastAssistant = [...events]
       .reverse()
       .find((e) => e.type === `assistant_message`)
 
+    // Extract session_id directly from claude's stream-json output.
+    // agent-session-protocol@0.0.2's normalize() reads `entry.sessionId`
+    // but claude emits `session_id` (snake_case), so the protocol's
+    // SessionInitEvent.sessionId is empty. Read the raw entry instead.
+    let nativeSessionId: string | undefined
+    for (const line of rawLines) {
+      try {
+        const entry = JSON.parse(line) as {
+          type?: string
+          subtype?: string
+          session_id?: unknown
+        }
+        if (
+          entry.type === `system` &&
+          entry.subtype === `init` &&
+          typeof entry.session_id === `string` &&
+          entry.session_id.length > 0
+        ) {
+          nativeSessionId = entry.session_id
+          break
+        }
+      } catch {
+        // skip non-JSON lines
+      }
+    }
+
     return {
-      nativeSessionId:
-        sessionInit && `sessionId` in sessionInit
-          ? (sessionInit as { sessionId?: string }).sessionId
-          : undefined,
+      nativeSessionId,
       exitCode: exitInfo.exitCode,
       finalText:
         lastAssistant && `text` in lastAssistant

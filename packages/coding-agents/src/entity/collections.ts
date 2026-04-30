@@ -82,11 +82,17 @@ export const lifecycleRowSchema = z.object({
 export type LifecycleRow = z.infer<typeof lifecycleRowSchema>
 
 // ─── nativeJsonl — NEW in Slice B ────────────────────────────────────────────
-
+// Single-row transcript blob. Holds the contents of claude's on-disk
+// transcript at ~/.claude/projects/<sanitized-cwd>/<sessionId>.jsonl,
+// captured after each successful turn. Used to materialise the file
+// back into a fresh sandbox so `claude --resume <id>` can find it.
+//
+// claude's stream-json STDOUT format is different from this on-disk
+// transcript — we cannot reconstruct the transcript from stdout, so we
+// read the file directly post-turn via `docker exec cat`.
 export const nativeJsonlRowSchema = z.object({
-  key: z.string(), // `${runId}:${seq}` — sortable
-  runId: z.string(),
-  seq: z.number(),
-  line: z.string(), // raw JSONL line from claude CLI stdout
+  key: z.literal(`current`),
+  nativeSessionId: z.string(),
+  content: z.string(),
 })
 export type NativeJsonlRow = z.infer<typeof nativeJsonlRowSchema>

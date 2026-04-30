@@ -163,18 +163,10 @@ describe(`handler resume materialisation`, () => {
       ...(state.sessionMeta.get(`current`) as SessionMetaRow),
       nativeSessionId: `native-sess-xyz`,
     })
-    const fakeJsonlLine = JSON.stringify({
-      type: `result`,
-      subtype: `success`,
-      result: `prior`,
-      session_id: `native-sess-xyz`,
-      is_error: false,
-    })
-    state.nativeJsonl.rows.set(`run-1:000000000000000`, {
-      key: `run-1:000000000000000`,
-      runId: `run-1`,
-      seq: 0,
-      line: fakeJsonlLine,
+    state.nativeJsonl.rows.set(`current`, {
+      key: `current`,
+      nativeSessionId: `native-sess-xyz`,
+      content: `{"type":"user","message":{"role":"user","content":"prior"}}\n`,
     } satisfies NativeJsonlRow)
 
     state.inbox.rows.set(`i1`, {
@@ -219,11 +211,10 @@ describe(`handler resume materialisation`, () => {
       ...(state.sessionMeta.get(`current`) as SessionMetaRow),
       nativeSessionId: `native-sess-abc`,
     })
-    state.nativeJsonl.rows.set(`run-1:0`, {
-      key: `run-1:0`,
-      runId: `run-1`,
-      seq: 0,
-      line: `{"type":"result","subtype":"success","result":"x","session_id":"native-sess-abc","is_error":false}`,
+    state.nativeJsonl.rows.set(`current`, {
+      key: `current`,
+      nativeSessionId: `native-sess-abc`,
+      content: `{"type":"user","message":{"role":"user","content":"prior"}}\n`,
     } satisfies NativeJsonlRow)
 
     state.inbox.rows.set(`i1`, {
@@ -236,6 +227,6 @@ describe(`handler resume materialisation`, () => {
     const lifecycleRows = Array.from(state.lifecycle.rows.values()) as any[]
     const resumeRow = lifecycleRows.find((r) => r.event === `resume.restored`)
     expect(resumeRow).toBeDefined()
-    expect(resumeRow.detail).toMatch(/lines=1/)
+    expect(resumeRow.detail).toMatch(/^bytes=\d+$/)
   })
 })
