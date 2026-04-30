@@ -859,7 +859,7 @@ export interface CodingAgentState {
 export interface CodingAgentHandle {
   readonly url: string
   readonly kind: `claude`
-  send(prompt: string): Promise<{ runId: string }>
+  send(prompt: string): Promise<void>
   events(opts?: { since?: `start` | `now` }): AsyncIterable<unknown>
   state(): CodingAgentState
   pin(): Promise<void>

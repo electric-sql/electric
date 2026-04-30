@@ -14,7 +14,7 @@ describe(`ctx.spawnCodingAgent contract`, () => {
     const noopHandle: CodingAgentHandle = {
       url: `/x`,
       kind: `claude`,
-      send: async () => ({ runId: `r` }),
+      send: async () => undefined,
       events: async function* () {},
       state: () => ({
         status: `cold`,

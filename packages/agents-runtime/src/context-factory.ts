@@ -769,7 +769,7 @@ function makeCodingAgentHandle(
         payload: { text },
         type: `prompt`,
       })
-      return Promise.resolve({ runId: `run-pending-${Date.now()}` })
+      return Promise.resolve()
     },
     pin: () => {
       config.executeSend({ targetUrl: url, payload: {}, type: `pin` })
