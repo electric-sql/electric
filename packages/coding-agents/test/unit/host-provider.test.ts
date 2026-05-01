@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import {
+  mkdtemp,
+  realpath,
+  rm,
+  readFile,
+  stat as statFs,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { HostProvider } from '../../src/providers/host'
@@ -72,5 +78,90 @@ describe(`HostProvider lifecycle`, () => {
   it(`recover always returns an empty array`, async () => {
     const p = new HostProvider()
     expect(await p.recover()).toEqual([])
+  })
+})
+
+describe(`HostProvider exec`, () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await realpath(await mkdtemp(join(tmpdir(), `host-prov-exec-`)))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it(`runs a child and drains stdout`, async () => {
+    const p = new HostProvider()
+    const agentId = `/t/coding-agent/exec-${Date.now()}`
+    const inst = await p.start({
+      agentId,
+      kind: `claude`,
+      target: `host`,
+      workspace: { type: `bindMount`, hostPath: dir },
+      env: {},
+    })
+    const handle = await inst.exec({
+      cmd: [`node`, `-e`, `process.stdout.write("hi\\n")`],
+    })
+    let out = ``
+    for await (const line of handle.stdout) out += line
+    const exit = await handle.wait()
+    expect(exit.exitCode).toBe(0)
+    expect(out).toBe(`hi`)
+  })
+
+  it(`exposes only spec.env (+ inherited PATH) to the child`, async () => {
+    const p = new HostProvider()
+    process.env.HOST_PROVIDER_LEAK = `secret`
+    const agentId = `/t/coding-agent/env-${Date.now()}`
+    const inst = await p.start({
+      agentId,
+      kind: `claude`,
+      target: `host`,
+      workspace: { type: `bindMount`, hostPath: dir },
+      env: { ALLOWED: `yes` },
+    })
+    const handle = await inst.exec({
+      cmd: [
+        `node`,
+        `-e`,
+        `process.stdout.write(JSON.stringify({allowed:process.env.ALLOWED ?? "", leak:process.env.HOST_PROVIDER_LEAK ?? ""}))`,
+      ],
+    })
+    let out = ``
+    for await (const line of handle.stdout) out += line
+    await handle.wait()
+    delete process.env.HOST_PROVIDER_LEAK
+    const parsed = JSON.parse(out)
+    expect(parsed.allowed).toBe(`yes`)
+    expect(parsed.leak).toBe(``)
+  })
+})
+
+describe(`HostProvider copyTo`, () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await realpath(await mkdtemp(join(tmpdir(), `host-prov-copy-`)))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it(`writes the content with the requested mode`, async () => {
+    const p = new HostProvider()
+    const agentId = `/t/coding-agent/copy-${Date.now()}`
+    const inst = await p.start({
+      agentId,
+      kind: `claude`,
+      target: `host`,
+      workspace: { type: `bindMount`, hostPath: dir },
+      env: {},
+    })
+    const dest = join(dir, `nested`, `file.txt`)
+    await inst.copyTo({ destPath: dest, content: `payload`, mode: 0o600 })
+    const contents = await readFile(dest, `utf8`)
+    expect(contents).toBe(`payload`)
+    const s = await statFs(dest)
+    expect(s.mode & 0o777).toBe(0o600)
   })
 })
