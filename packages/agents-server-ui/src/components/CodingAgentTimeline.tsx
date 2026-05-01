@@ -3,6 +3,8 @@ import { memo, useMemo, useState } from 'react'
 import { Badge, Flex, ScrollArea, Text } from '@radix-ui/themes'
 import { Streamdown } from 'streamdown'
 import { createCodePlugin } from '../lib/codeHighlighter'
+import { ToolCallView } from './ToolCallView'
+import type { GenericToolCall } from './ToolCallView'
 import type {
   SessionMetaRow,
   RunRow,
@@ -302,6 +304,12 @@ function UserMessageRow({ event }: { event: EventRow }): React.ReactElement {
   )
 }
 
+function normaliseResultOutput(output: unknown): string | undefined {
+  if (output === undefined || output === null) return undefined
+  if (typeof output === `string`) return output
+  return JSON.stringify(output)
+}
+
 function ToolCallRow({
   call,
   result,
@@ -309,52 +317,28 @@ function ToolCallRow({
   call: EventRow
   result: EventRow | undefined
 }): React.ReactElement {
-  const [open, setOpen] = useState(false)
   // agent-session-protocol's ToolCallEvent uses `tool` (string) and `input`
-  // (Record). The legacy `coder` UI's reader used `toolName`/`args` — those
-  // were a mistranslation that surfaced as generic "tool" badges.
+  // (Record). Adapt to the GenericToolCall shape used by ToolCallView so the
+  // visual style matches native tool calls rendered by EntityTimeline.
   const toolName = (call.payload.tool as string | undefined) ?? `tool`
-  const args = call.payload.input as Record<string, unknown> | undefined
-  return (
-    <Flex
-      direction="column"
-      gap="1"
-      style={{
-        background: `var(--gray-a2)`,
-        border: `1px solid var(--gray-a4)`,
-        borderRadius: `var(--radius-2)`,
-        padding: 8,
-        cursor: `pointer`,
-      }}
-      onClick={() => setOpen((o) => !o)}
-    >
-      <Flex align="center" gap="2">
-        <Badge color="gray" variant="soft" size="1">
-          {toolName}
-        </Badge>
-        {result && (
-          <Badge color="green" variant="soft" size="1">
-            done
-          </Badge>
-        )}
-      </Flex>
-      {open && (
-        <pre
-          style={{
-            margin: 0,
-            fontSize: `var(--font-size-1)`,
-            fontFamily: `var(--font-mono)`,
-            whiteSpace: `pre-wrap`,
-            wordBreak: `break-word`,
-            maxHeight: 240,
-            overflow: `auto`,
-          }}
-        >
-          {JSON.stringify(args, null, 2)}
-        </pre>
-      )}
-    </Flex>
-  )
+  const args = (call.payload.input as Record<string, unknown> | undefined) ?? {}
+  const resultOutput = result
+    ? normaliseResultOutput(result.payload.output)
+    : undefined
+  const isError = result
+    ? ((result.payload.isError as boolean | undefined) ?? false)
+    : false
+
+  const tc: GenericToolCall = {
+    callId: call.payload.callId as string | undefined,
+    toolName,
+    args,
+    status: result ? (isError ? `failed` : `completed`) : `started`,
+    result: resultOutput,
+    isError,
+  }
+
+  return <ToolCallView item={tc} />
 }
 
 function OrphanResultRow({
