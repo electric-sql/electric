@@ -148,6 +148,8 @@ The following items were deferred from Slice A or Slice B and are targeted at Sl
 
 9. **Live `events()` tailing** from a `CodingAgentHandle`. Currently returns a snapshot async-iterable.
 
+10. **Tool-call event-shape divergence (Slice C+ cleanup).** Native tool calls (via outbound-bridge → pi-agent-core) emit `tool_call_start`/`tool_call_end` events with `name`/`args`/`result` fields persisted to the `toolCalls` built-in collection. Coding-agent tool calls (via agent-session-protocol's `normalizeClaude()`) emit `tool_call`/`tool_result` events with `tool`/`input`/`output` fields stored in the coding-agent's custom `events` collection. Slice B Task 1 consolidated rendering at the renderer layer (option 1 from the analysis): `ToolCallView` now exports a `GenericToolCall` interface; `CodingAgentTimeline.ToolCallRow` adapts event-row pairs to that shape and renders via `ToolCallView`, matching the visual style of native agent tool calls in `EntityTimeline`. However, the underlying schema divergence remains — `events.toArray` on a coding-agent entity and a native (Horton/Worker) entity returns rows of fundamentally different shapes. Future cleanup: define a canonical `ToolCallEvent` shape in `agents-runtime`; have both producers (`outbound-bridge` and the coding-agent handler) emit that shape; migrate consumers (UI renderer, `ctx.observe`-based code reading events). This is a multi-package change touching `agents-runtime` + `coding-agents` + `agents-server-ui` and should be coordinated with any work on `ctx.observe` or cross-entity event queries.
+
 ### Beyond Slice C (roadmap / out of roadmap)
 
 - `ShimBridge` and remote providers (Modal, Fly, E2B, Cloudflare).
