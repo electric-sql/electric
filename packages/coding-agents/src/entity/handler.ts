@@ -353,20 +353,28 @@ async function processPrompt(
 
   let meta = sessionMetaCol.get(`current`) as SessionMetaRow
 
-  // Cold-boot: ensure sandbox up
-  ctx.db.actions.sessionMeta_update({
-    key: `current`,
-    updater: (d: SessionMetaRow) => {
-      d.status = `starting`
-    },
-  })
-  ctx.db.actions.lifecycle_insert({
-    row: {
-      key: lifecycleKey(`boot`),
-      ts: Date.now(),
-      event: `sandbox.starting`,
-    } satisfies LifecycleRow,
-  })
+  // Only emit sandbox.starting/sandbox.started lifecycle rows when we
+  // actually cold-boot. lm.ensureRunning is idempotent (returns the
+  // existing instance if already running); without this guard, every
+  // warm prompt produces misleading "Sandbox starting" entries in the
+  // UI timeline.
+  const wasCold = meta.status === `cold`
+
+  if (wasCold) {
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.status = `starting`
+      },
+    })
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`boot`),
+        ts: Date.now(),
+        event: `sandbox.starting`,
+      } satisfies LifecycleRow,
+    })
+  }
 
   let sandbox
   try {
@@ -398,24 +406,34 @@ async function processPrompt(
     return
   }
 
-  ctx.db.actions.sessionMeta_update({
-    key: `current`,
-    updater: (d: SessionMetaRow) => {
-      d.status = `idle`
-      d.instanceId = sandbox.instanceId
-    },
-  })
-  ctx.db.actions.lifecycle_insert({
-    row: {
-      key: lifecycleKey(`boot`),
-      ts: Date.now(),
-      event: `sandbox.started`,
-    } satisfies LifecycleRow,
-  })
+  if (wasCold) {
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.status = `idle`
+        d.instanceId = sandbox.instanceId
+      },
+    })
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`boot`),
+        ts: Date.now(),
+        event: `sandbox.started`,
+      } satisfies LifecycleRow,
+    })
+  } else if (!meta.instanceId) {
+    // Warm path but instanceId wasn't recorded (defensive backfill).
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.instanceId = sandbox.instanceId
+      },
+    })
+  }
 
   meta = sessionMetaCol.get(`current`) as SessionMetaRow
 
-  if (meta.nativeSessionId) {
+  if (wasCold && meta.nativeSessionId) {
     const transcript = ctx.db.collections.nativeJsonl.get(`current`) as
       | NativeJsonlRow
       | undefined
