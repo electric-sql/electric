@@ -41,7 +41,7 @@ Each `coding-agent` can run in one of two targets: **sandbox** (default) or **ho
 **Workspace constraints:**
 - `target: 'host'` requires `workspaceType: 'bindMount'`. A local Claude session lives at `~/.claude/projects/<sanitised-cwd>/<sessionId>.jsonl` on disk; the host target reads from and writes back to this location after each turn.
 - `target: 'sandbox'` supports both `volume` and `bindMount`. Volume workspaces are sandbox-only and do not correspond to a host path.
-- **Aligned path for bind-mounts:** When using a bind-mount workspace, both targets mount the host path at the same location inside the container (`/workspace` in sandbox, original path in host). This means `~/.claude/projects/<sanitised-cwd>/...` matches across targets, allowing seamless session migration.
+- **Aligned path for bind-mounts:** When using a bind-mount workspace, the container's cwd matches the host cwd because the bind-mount is mounted at `realpath(hostPath)` inside the container (not at a fixed `/workspace`). This means `~/.claude/projects/<sanitised-cwd>/...` lines up across both targets without rewriting transcripts, allowing seamless session migration. Volume workspaces still mount at `/workspace` (sandbox-only).
 
 ## Importing a host session
 
@@ -151,7 +151,7 @@ workspace: { type: 'bindMount', hostPath: '/Users/me/projects/my-repo' }
 // identity: 'bindMount:/Users/me/projects/my-repo'
 ```
 
-The host directory is mounted at `/workspace` inside the container. The runtime never deletes a bind-mount path; `destroy()` only drops the registry entry.
+The host directory is mounted at `realpath(hostPath)` inside the container (path-aligned with the host). Volume workspaces mount at `/workspace`. The runtime never deletes a bind-mount path; `destroy()` only drops the registry entry.
 
 ### Sharing workspaces
 
@@ -200,9 +200,9 @@ interface SpawnCodingAgentOptions {
 
   /**
    * Workspace mount.
-   *   { type: 'volume', name: 'foo' }    → named Docker volume 'coding-agent-workspace-foo'
+   *   { type: 'volume', name: 'foo' }    → named Docker volume 'coding-agent-workspace-foo', mounted at /workspace
    *   { type: 'volume' }                 → volume named from the agent id (per-agent default)
-   *   { type: 'bindMount', hostPath: P } → host directory mounted at /workspace
+   *   { type: 'bindMount', hostPath: P } → host directory mounted at realpath(P) inside the container
    */
   workspace:
     | { type: 'volume'; name?: string }

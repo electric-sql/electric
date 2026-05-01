@@ -234,6 +234,9 @@ function LifecycleEventRow({ row }: { row: LifecycleRow }): React.ReactElement {
     release: `Released`,
     'orphan.detected': `Orphan detected`,
     'resume.restored': `Session resumed`,
+    'import.restored': `Imported session`,
+    'import.failed': `Import failed`,
+    'target.changed': `Target changed`,
   }
   return (
     <Flex gap="2" align="center" style={{ opacity: 0.55 }}>
