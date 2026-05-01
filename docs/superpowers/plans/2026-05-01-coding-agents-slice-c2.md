@@ -2371,3 +2371,33 @@ Confirm the commit list matches Tasks 1-9.
 - Task 9 uses `process.env.HOME` overrides in the cli-import test for codex's `findSessionPath` lookup. This is a targeted shim; safer than monkey-patching asp.
 
 If the engineer hits ambiguity in any step, prefer the spec (`docs/superpowers/specs/2026-05-01-coding-agents-slice-c2-design.md`) as the source of truth and update this plan inline.
+
+---
+
+## Known runtime gap (deferred to follow-up slice)
+
+**Symptom:** When an entity is created via PUT alone (no `initialMessage` in the request body), the agents-runtime fires a wake but its orchestrator skips invoking the handler with the log line:
+
+```
+[/coding-agent/<name>] skipping initial handler pass: no fresh wake input in catch-up; entering idle (5s timeout)
+```
+
+The wake-skip heuristic decides there's "nothing for the handler to do" because no `message_received` event accompanied the wake. But for the coding-agent (and any entity type whose first-wake init seeds `sessionMeta` from `ctx.args`), this means **spawn args never reach the handler**, so the entity silently runs with defaults on the first prompt that arrives later — `firstWake=false` is hard-set by then, the init block is gated on `!sessionMeta`, and the args window has closed.
+
+**Workaround in this slice:** the import CLI POSTs a no-op `lifecycle/init` inbox message immediately after the PUT (see `packages/coding-agents/src/cli/import.ts`). The nudge gives the runtime "fresh wake input"; the handler runs first-wake init normally. This is a localised CLI-side mitigation; the underlying invariant — "first-wake of a fresh entity must invoke the handler regardless of input" — is still violated.
+
+**The same gap affects the spawn dialog** when the user spawns without an initial prompt. The dialog already passes an optional `initialMessage` only if the user fills the prompt field; a blank-prompt spawn produces an entity that sits in limbo with un-applied args until the first user prompt — at which point the handler treats it as a non-first wake. The user's `sDINGv6fIv` agent appeared to work because a follow-up "ping" prompt happened to fire wake #1 with input; if the user had clicked Spawn and idled, args would have been dropped exactly like the CLI case.
+
+**Recommended fix (follow-up slice):** narrow the runtime's wake-skip heuristic so the **very first wake** of a freshly-created entity always invokes the handler (e.g. gate on `epoch === 1 && firstWake === true` regardless of input event count). After first-wake, current input-gated semantics apply. Cost is one extra handler call per entity ever (negligible), no rehydrate-on-restart amplification (rehydrates have `epoch > 1`).
+
+**Alternatives considered, rejected:**
+
+- Always invoke the handler on every wake regardless of input. Performance hit at startup (every persisted entity runs its full reconcile block on rehydrate), idempotency contract widens for every entity-type author, larger blast radius for a corner case.
+- Sentinel flag passed through the runtime API. Requires both runtime change and handler change; redundant with the narrower "first-wake always invokes" rule.
+
+**Follow-up tracking:** open issue / next slice should:
+
+1. Tighten the runtime wake-skip rule.
+2. Remove the `lifecycle/init` no-op message type from `coding-agents` (it becomes redundant once the runtime guarantees first-wake invocation).
+3. Update the import CLI to drop the post-PUT nudge call.
+4. Update the spawn dialog so blank-prompt spawns no longer rely on luck.
