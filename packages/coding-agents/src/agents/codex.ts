@@ -14,6 +14,10 @@ import { registerAdapter } from './registry'
  *     to exist on disk — it doesn't have to match the original.
  */
 
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
 interface RolloutMeta {
   yyyy: string
   mm: string
@@ -80,7 +84,10 @@ export const CodexAdapter: CodingAgentAdapter = {
   buildCliInvocation({ prompt, nativeSessionId, model: _model }) {
     const codexArgs: Array<string> = [`exec`, `--skip-git-repo-check`, `--json`]
     if (nativeSessionId) codexArgs.push(`resume`, nativeSessionId)
-    codexArgs.push(prompt)
+    // The trailing `--` tells codex's clap parser "everything after this
+    // is positional", so prompts starting with `-` (e.g. "--explain why")
+    // aren't misparsed as flags.
+    codexArgs.push(`--`, prompt)
     // sh -c '<script>' -- <codex argv ...> — positional args become "$@".
     const args: Array<string> = [
       `-c`,
@@ -92,10 +99,12 @@ export const CodexAdapter: CodingAgentAdapter = {
   },
 
   probeCommand({ homeDir, sessionId }) {
+    const dir = shellQuote(`${homeDir}/.codex/sessions`)
+    const pattern = shellQuote(`*-${sessionId}.jsonl`)
     return [
       `sh`,
       `-c`,
-      `[ -n "$(find ${homeDir}/.codex/sessions -name "*-${sessionId}.jsonl" 2>/dev/null | head -1)" ]`,
+      `[ -n "$(find ${dir} -name ${pattern} 2>/dev/null | head -1)" ]`,
     ]
   },
 
@@ -105,10 +114,12 @@ export const CodexAdapter: CodingAgentAdapter = {
   },
 
   captureCommand({ homeDir, sessionId }) {
+    const dir = shellQuote(`${homeDir}/.codex/sessions`)
+    const pattern = shellQuote(`*-${sessionId}.jsonl`)
     return [
       `sh`,
       `-c`,
-      `f="$(find ${homeDir}/.codex/sessions -name "*-${sessionId}.jsonl" 2>/dev/null | head -1)"; if [ -n "$f" ]; then base64 -w 0 "$f"; fi`,
+      `f="$(find ${dir} -name ${pattern} 2>/dev/null | head -1)"; if [ -n "$f" ]; then base64 -w 0 "$f"; fi`,
     ]
   },
 }

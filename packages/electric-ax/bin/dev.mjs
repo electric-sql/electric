@@ -420,9 +420,10 @@ async function up() {
   )
 
   // ── 4. Built-in agents handler: electric-dev.mjs agents start-builtin ────
-  //    ANTHROPIC_API_KEY is already verified above and forwarded via env.
-  //    The handler registers Horton, worker, and coding-agent entity types
-  //    with the agents-server, then listens for wake webhooks on port 4448.
+  //    Pre-flight verified at least one of ANTHROPIC_API_KEY / OPENAI_API_KEY
+  //    is set; both flow through `env`. The handler registers Horton, worker,
+  //    and coding-agent entity types with the agents-server, then listens for
+  //    wake webhooks on port 4448.
   const electricDevBin = resolve(__dirname, `electric-dev.mjs`)
   log(
     `dev`,

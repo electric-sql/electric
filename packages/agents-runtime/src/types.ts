@@ -742,9 +742,11 @@ export type CodingAgentSliceAStatus =
   | `error`
   | `destroyed`
 
+export type CodingAgentKind = `claude` | `codex`
+
 export interface SpawnCodingAgentOptions {
   id: string
-  kind: `claude`
+  kind: CodingAgentKind
   workspace:
     | { type: `volume`; name?: string }
     | { type: `bindMount`; hostPath: string }
@@ -772,7 +774,7 @@ export interface CodingAgentState {
 
 export interface CodingAgentHandle {
   readonly url: string
-  readonly kind: `claude`
+  readonly kind: CodingAgentKind
   send(prompt: string): Promise<void>
   events(opts?: { since?: `start` | `now` }): AsyncIterable<unknown>
   state(): CodingAgentState

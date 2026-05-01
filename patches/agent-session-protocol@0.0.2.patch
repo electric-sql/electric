@@ -1,5 +1,5 @@
 diff --git a/dist/src-8t6qdcZ0.js b/dist/src-8t6qdcZ0.js
-index a8ea793056f33405df8f85049c3a8879f809e7e7..93cd8409bea50aa9a42f4f0fa327281eecbdd81f 100644
+index a8ea793056f33405df8f85049c3a8879f809e7e7..f2083adf0cd9103114a29cb71318b99994f3a662 100644
 --- a/dist/src-8t6qdcZ0.js
 +++ b/dist/src-8t6qdcZ0.js
 @@ -154,7 +154,7 @@ function normalizeClaude(lines, options = {}) {
@@ -20,7 +20,7 @@ index a8ea793056f33405df8f85049c3a8879f809e7e7..93cd8409bea50aa9a42f4f0fa327281e
  			cwd: first.cwd ?? ``,
  			agent: `claude`,
  			agentVersion: first.version,
-@@ -520,6 +520,110 @@ function normalizeCodex(lines, options = {}) {
+@@ -520,6 +520,118 @@ function normalizeCodex(lines, options = {}) {
  			}
  			continue;
  		}
@@ -82,13 +82,21 @@ index a8ea793056f33405df8f85049c3a8879f809e7e7..93cd8409bea50aa9a42f4f0fa327281e
 +				continue;
 +			}
 +			if (itemType === `function_call_output`) {
++				let outStr = String(item.output ?? ``);
++				let isError = false;
++				try {
++					const parsed = JSON.parse(outStr);
++					if (typeof parsed.output === `string`) outStr = parsed.output;
++					const meta = parsed.metadata;
++					if (meta && typeof meta.exit_code === `number` && meta.exit_code !== 0) isError = true;
++				} catch {}
 +				events.push({
 +					v: 1,
 +					ts,
 +					type: `tool_result`,
 +					callId: String(item.call_id ?? item.id ?? ``),
-+					output: String(item.output ?? ``),
-+					isError: false
++					output: outStr,
++					isError
 +				});
 +				continue;
 +			}
@@ -132,7 +140,7 @@ index a8ea793056f33405df8f85049c3a8879f809e7e7..93cd8409bea50aa9a42f4f0fa327281e
  	return events;
  }
 diff --git a/dist/src-Det_CZei.cjs b/dist/src-Det_CZei.cjs
-index 1028f41e4111efade618530b7b6d3bebdc949c9c..7e928347b875c2e37b47bac49f6b96ca1e5213ee 100644
+index 1028f41e4111efade618530b7b6d3bebdc949c9c..410a43baa4d37fac8760f0d9fc022360d598fbbe 100644
 --- a/dist/src-Det_CZei.cjs
 +++ b/dist/src-Det_CZei.cjs
 @@ -156,7 +156,7 @@ function normalizeClaude(lines, options = {}) {
@@ -153,7 +161,7 @@ index 1028f41e4111efade618530b7b6d3bebdc949c9c..7e928347b875c2e37b47bac49f6b96ca
  			cwd: first.cwd ?? ``,
  			agent: `claude`,
  			agentVersion: first.version,
-@@ -522,6 +522,110 @@ function normalizeCodex(lines, options = {}) {
+@@ -522,6 +522,118 @@ function normalizeCodex(lines, options = {}) {
  			}
  			continue;
  		}
@@ -215,13 +223,21 @@ index 1028f41e4111efade618530b7b6d3bebdc949c9c..7e928347b875c2e37b47bac49f6b96ca
 +				continue;
 +			}
 +			if (itemType === `function_call_output`) {
++				let outStr = String(item.output ?? ``);
++				let isError = false;
++				try {
++					const parsed = JSON.parse(outStr);
++					if (typeof parsed.output === `string`) outStr = parsed.output;
++					const meta = parsed.metadata;
++					if (meta && typeof meta.exit_code === `number` && meta.exit_code !== 0) isError = true;
++				} catch {}
 +				events.push({
 +					v: 1,
 +					ts,
 +					type: `tool_result`,
 +					callId: String(item.call_id ?? item.id ?? ``),
-+					output: String(item.output ?? ``),
-+					isError: false
++					output: outStr,
++					isError
 +				});
 +				continue;
 +			}

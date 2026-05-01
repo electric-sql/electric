@@ -52,8 +52,11 @@ function eventKey(runId: string, seq: number): string {
   return `${runId}:${String(seq).padStart(NS_MAX, `0`)}`
 }
 
+// Monotonic counter so back-to-back lifecycleKey calls within a single
+// handler invocation don't collide on Date.now() + 3-digit random.
+let lifecycleSeq = 0
 function lifecycleKey(label: string): string {
-  return `${label}:${Date.now()}-${Math.floor(Math.random() * 1000)}`
+  return `${label}:${Date.now()}-${(++lifecycleSeq).toString(36)}`
 }
 
 /**

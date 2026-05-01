@@ -22,16 +22,27 @@ export type CodingAgentSliceAStatus =
   | `error`
   | `destroyed`
 
+export type CodingAgentKind = `claude` | `codex`
+export type CodingAgentTarget = `sandbox` | `host`
+
+export type CodingAgentWorkspaceSpec =
+  | { type: `volume`; name: string }
+  | { type: `bindMount`; hostPath: string }
+
 export interface SessionMetaRow {
   key: string
   status: CodingAgentSliceAStatus
-  kind: `claude`
+  kind: CodingAgentKind
+  target: CodingAgentTarget
   pinned: boolean
   workspaceIdentity: string
+  workspaceSpec: CodingAgentWorkspaceSpec
   idleTimeoutMs: number
   keepWarm: boolean
   instanceId?: string
   lastError?: string
+  currentPromptInboxKey?: string
+  lastInboxKey?: string
   nativeSessionId?: string
 }
 

@@ -9,7 +9,7 @@ patchedDependencies:
     hash: 46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188
     path: patches/@microsoft__fetch-event-source.patch
   agent-session-protocol@0.0.2:
-    hash: 0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6
+    hash: 099cf29922d73ceb72607a401eb97abd465829ff5662acdeb711671338f46c87
     path: patches/agent-session-protocol@0.0.2.patch
 
 importers:
@@ -1528,7 +1528,7 @@ importers:
         version: 0.34.49
       agent-session-protocol:
         specifier: ^0.0.2
-        version: 0.0.2(patch_hash=0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6)
+        version: 0.0.2(patch_hash=099cf29922d73ceb72607a401eb97abd465829ff5662acdeb711671338f46c87)
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0
@@ -1854,7 +1854,7 @@ importers:
         version: link:../agents-runtime
       agent-session-protocol:
         specifier: ^0.0.2
-        version: 0.0.2(patch_hash=0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6)
+        version: 0.0.2(patch_hash=099cf29922d73ceb72607a401eb97abd465829ff5662acdeb711671338f46c87)
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -29634,7 +29634,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agent-session-protocol@0.0.2(patch_hash=0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6):
+  agent-session-protocol@0.0.2(patch_hash=099cf29922d73ceb72607a401eb97abd465829ff5662acdeb711671338f46c87):
     dependencies:
       '@durable-streams/client': 0.2.3
       '@modelcontextprotocol/sdk': 1.29.0(zod@3.25.76)

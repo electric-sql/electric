@@ -22,6 +22,7 @@ import type {
   AgentRunResult,
   AgentTool,
   CodingAgentHandle,
+  CodingAgentKind,
   CodingAgentRunSummary,
   CodingAgentState,
   EntityHandle,
@@ -601,7 +602,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       )
 
       const agentUrl = `/coding-agent/${opts.id}`
-      return makeCodingAgentHandle(config, agentUrl, entityHandle)
+      return makeCodingAgentHandle(config, agentUrl, entityHandle, opts.kind)
     },
     async observeCodingAgent(id: string): Promise<CodingAgentHandle> {
       const url = `/coding-agent/${id}`
@@ -679,7 +680,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
 function makeCodingAgentHandle(
   config: HandlerContextConfig,
   url: string,
-  entityHandle: { db?: { collections?: any } }
+  entityHandle: { db?: { collections?: any } },
+  defaultKind: CodingAgentKind = `claude`
 ): CodingAgentHandle {
   const readMeta = (): any => {
     const c = entityHandle.db?.collections?.sessionMeta
@@ -702,7 +704,14 @@ function makeCodingAgentHandle(
 
   return {
     url,
-    kind: `claude`,
+    // Live getter so the handle reflects the entity's actual kind once
+    // sessionMeta is loaded (covers observeCodingAgent which doesn't
+    // know the kind upfront). Falls back to defaultKind if meta hasn't
+    // arrived yet (e.g. immediately after spawn).
+    get kind(): CodingAgentKind {
+      const meta = readMeta()
+      return (meta?.kind as CodingAgentKind | undefined) ?? defaultKind
+    },
     send: (text: string) => {
       config.executeSend({
         targetUrl: url,
