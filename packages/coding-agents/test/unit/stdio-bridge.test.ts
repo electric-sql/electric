@@ -9,6 +9,7 @@ function fakeSandbox(opts: {
   exitCode?: number
   onCmd?: (cmd: ReadonlyArray<string>) => void
   onStdin?: (chunk: string) => void
+  onExecReq?: (req: ExecRequest) => void
 }): SandboxInstance {
   return {
     instanceId: `fake`,
@@ -16,6 +17,7 @@ function fakeSandbox(opts: {
     workspaceMount: `/workspace`,
     async exec(req: ExecRequest): Promise<ExecHandle> {
       opts.onCmd?.(req.cmd)
+      opts.onExecReq?.(req)
       const stdoutLines = opts.stdoutLines.slice()
       const stderrLines = (opts.stderrLines ?? []).slice()
       return {
@@ -48,7 +50,7 @@ describe.each(listAdapters().map((a) => [a.kind, a] as const))(
       const initLine =
         kind === `claude`
           ? `{"type":"system","subtype":"init","session_id":"abc"}`
-          : `{"type":"session_meta","timestamp":"2026-05-01T12:00:00Z","session_id":"abc"}`
+          : `{"type":"session_meta","timestamp":"2026-05-01T12:00:00Z","payload":{"id":"abc","cwd":"/workspace"}}`
       await b.runTurn({
         sandbox: fakeSandbox({
           stdoutLines: [initLine],
@@ -83,12 +85,14 @@ describe(`StdioBridge — claude-specific argv`, () => {
   it(`passes the prompt through stdin and adds claude flags`, async () => {
     let cmd: ReadonlyArray<string> = []
     let stdin = ``
+    let execReq: ExecRequest | null = null
     const b = new StdioBridge()
     await b.runTurn({
       sandbox: fakeSandbox({
         stdoutLines: [`{"type":"system","subtype":"init","session_id":"abc"}`],
         onCmd: (c) => (cmd = c),
         onStdin: (s) => (stdin = s),
+        onExecReq: (r) => (execReq = r),
       }),
       kind: `claude`,
       prompt: `hello world`,
@@ -102,6 +106,8 @@ describe(`StdioBridge — claude-specific argv`, () => {
     expect(cmd).toContain(`--model`)
     expect(cmd).toContain(`claude-haiku-4-5-20251001`)
     expect(stdin).toBe(`hello world`)
+    expect(execReq).not.toBeNull()
+    expect(execReq!.stdin).toBe(`pipe`)
   })
 })
 
@@ -109,14 +115,16 @@ describe(`StdioBridge — codex-specific argv`, () => {
   it(`puts the prompt on argv and passes codex exec flags`, async () => {
     let cmd: ReadonlyArray<string> = []
     let stdin = ``
+    let execReq: ExecRequest | null = null
     const b = new StdioBridge()
     await b.runTurn({
       sandbox: fakeSandbox({
         stdoutLines: [
-          `{"type":"session_meta","timestamp":"2026-05-01T12:00:00Z","session_id":"abc"}`,
+          `{"type":"session_meta","timestamp":"2026-05-01T12:00:00Z","payload":{"id":"abc","cwd":"/workspace"}}`,
         ],
         onCmd: (c) => (cmd = c),
         onStdin: (s) => (stdin = s),
+        onExecReq: (r) => (execReq = r),
       }),
       kind: `codex`,
       prompt: `hello codex`,
@@ -128,6 +136,8 @@ describe(`StdioBridge — codex-specific argv`, () => {
     expect(cmd).toContain(`--json`)
     expect(cmd[cmd.length - 1]).toBe(`hello codex`)
     expect(stdin).toBe(``)
+    expect(execReq).not.toBeNull()
+    expect(execReq!.stdin).toBe(`ignore`)
   })
 
   it(`passes 'resume <id>' before the prompt when nativeSessionId set`, async () => {
@@ -136,7 +146,7 @@ describe(`StdioBridge — codex-specific argv`, () => {
     await b.runTurn({
       sandbox: fakeSandbox({
         stdoutLines: [
-          `{"type":"session_meta","timestamp":"2026-05-01T12:00:00Z","session_id":"abc"}`,
+          `{"type":"session_meta","timestamp":"2026-05-01T12:00:00Z","payload":{"id":"abc","cwd":"/workspace"}}`,
         ],
         onCmd: (c) => (cmd = c),
       }),

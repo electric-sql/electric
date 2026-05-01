@@ -34,7 +34,7 @@ const initLineFor = (kind: string) =>
     : JSON.stringify({
         type: `session_meta`,
         timestamp: `2026-05-01T12:00:00Z`,
-        session_id: `sess-1`,
+        payload: { id: `sess-1`, cwd: `/workspace` },
       })
 
 describe.each(listAdapters().map((a) => [a.kind] as const))(
