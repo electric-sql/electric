@@ -466,3 +466,75 @@ describe(`entity handler — idle timer wakes entity`, () => {
     expect(Array.from(ctx.db.collections.runs.rows.values())).toHaveLength(0)
   })
 })
+
+describe(`entity handler — target validation`, () => {
+  it(`target='host' with workspaceType='volume' fails into error state`, async () => {
+    const lm = new LifecycleManager({
+      providers: {
+        sandbox: makeFakeProvider(),
+        host: makeFakeProvider(),
+      },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: () => ({}),
+    })
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      args: {
+        kind: `claude`,
+        target: `host`,
+        workspaceType: `volume`,
+        workspaceName: `w`,
+      },
+    })
+    await handler(ctx, { type: `message_received` } as any)
+    const meta = ctx.db.collections.sessionMeta.get(`current`)
+    expect(meta.status).toBe(`error`)
+    expect(meta.lastError).toMatch(/host.*bindMount/)
+  })
+
+  it(`target='sandbox' with importNativeSessionId fails into error state`, async () => {
+    const lm = new LifecycleManager({
+      providers: { sandbox: makeFakeProvider(), host: makeFakeProvider() },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: () => ({}),
+    })
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      args: {
+        kind: `claude`,
+        target: `sandbox`,
+        workspaceType: `bindMount`,
+        workspaceHostPath: `/tmp`,
+        importNativeSessionId: `abc-123`,
+      },
+    })
+    await handler(ctx, { type: `message_received` } as any)
+    const meta = ctx.db.collections.sessionMeta.get(`current`)
+    expect(meta.status).toBe(`error`)
+    expect(meta.lastError).toMatch(/importNativeSessionId.*host/)
+  })
+})

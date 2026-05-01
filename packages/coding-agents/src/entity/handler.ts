@@ -213,6 +213,23 @@ export function makeCodingAgentHandler(
             }
           : { type: `volume` as const, name: args.workspaceName }
 
+      if (args.importNativeSessionId && target !== `host`) {
+        const initial: SessionMetaRow = {
+          key: `current`,
+          status: `error`,
+          kind: args.kind ?? `claude`,
+          target,
+          pinned: false,
+          workspaceIdentity: `error:import-requires-host`,
+          workspaceSpec: { type: `volume`, name: `none` },
+          idleTimeoutMs: options.defaults.idleTimeoutMs,
+          keepWarm: false,
+          lastError: `importNativeSessionId requires target='host'`,
+        }
+        ctx.db.actions.sessionMeta_insert({ row: initial })
+        return
+      }
+
       if (target === `host` && ws.type !== `bindMount`) {
         const initial: SessionMetaRow = {
           key: `current`,
