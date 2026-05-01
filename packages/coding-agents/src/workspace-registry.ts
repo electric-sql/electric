@@ -20,6 +20,7 @@ function slugifyForVolumeName(s: string): string {
 export class WorkspaceRegistry {
   private readonly refsByIdentity = new Map<string, Set<string>>()
   private readonly chainByIdentity = new Map<string, Promise<void>>()
+  private readonly acquirersByIdentity = new Map<string, number>()
 
   static async resolveIdentity(
     agentId: string,
@@ -64,23 +65,40 @@ export class WorkspaceRegistry {
   /**
    * Acquire the per-identity mutex. Returns a release fn.
    * The mutex chains promises: each acquire waits for the prior chain to settle.
+   * When the last acquirer releases, the chain entry is dropped to avoid
+   * unbounded promise chains for long-lived workspaces.
    */
   acquire(identity: string): Promise<() => void> {
+    this.acquirersByIdentity.set(
+      identity,
+      (this.acquirersByIdentity.get(identity) ?? 0) + 1
+    )
     const prior = this.chainByIdentity.get(identity) ?? Promise.resolve()
-    let releaseFn: () => void
+    let releaseFn!: () => void
     const next = new Promise<void>((res) => {
       releaseFn = res
     })
-    this.chainByIdentity.set(
-      identity,
-      prior.then(() => next)
-    )
-    return prior.then(() => releaseFn!)
+    const link = prior.then(() => next)
+    this.chainByIdentity.set(identity, link)
+    return prior.then(() => () => {
+      const remaining = (this.acquirersByIdentity.get(identity) ?? 1) - 1
+      if (remaining === 0) {
+        this.acquirersByIdentity.delete(identity)
+        // Only delete if no concurrent acquirer chained onto our link.
+        if (this.chainByIdentity.get(identity) === link) {
+          this.chainByIdentity.delete(identity)
+        }
+      } else {
+        this.acquirersByIdentity.set(identity, remaining)
+      }
+      releaseFn()
+    })
   }
 
   rebuild(snapshots: Array<{ identity: string; agentId: string }>): void {
     this.refsByIdentity.clear()
     this.chainByIdentity.clear()
+    this.acquirersByIdentity.clear()
     for (const { identity, agentId } of snapshots) {
       this.register(identity, agentId)
     }

@@ -111,3 +111,44 @@ describe(`WorkspaceRegistry.rebuild`, () => {
     expect(wr.refs(`volume:bar`)).toBe(1)
   })
 })
+
+describe(`WorkspaceRegistry mutex chain trimming`, () => {
+  it(`removes the chain entry when the last acquirer releases (serial)`, async () => {
+    const wr = new WorkspaceRegistry()
+    const internal = wr as unknown as {
+      chainByIdentity: Map<string, Promise<void>>
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const release = await wr.acquire(`volume:foo`)
+      release()
+    }
+    // Allow microtasks to drain.
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(internal.chainByIdentity.size).toBe(0)
+  })
+
+  it(`keeps the chain entry while concurrent acquirers are queued`, async () => {
+    const wr = new WorkspaceRegistry()
+    const internal = wr as unknown as {
+      chainByIdentity: Map<string, Promise<void>>
+    }
+
+    const release1 = await wr.acquire(`volume:foo`)
+    // Queue a second acquirer waiting on release1.
+    const pending2 = wr.acquire(`volume:foo`)
+    expect(internal.chainByIdentity.size).toBe(1)
+
+    release1()
+    const release2 = await pending2
+    // Still one entry while release2 is held.
+    expect(internal.chainByIdentity.size).toBe(1)
+
+    release2()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(internal.chainByIdentity.size).toBe(0)
+  })
+})
