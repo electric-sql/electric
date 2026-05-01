@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import '../../src' // ensures built-in adapters are registered
 import { makeCodingAgentHandler } from '../../src/entity/handler'
 import type { LifecycleManager } from '../../src/lifecycle-manager'
 import type { SandboxInstance } from '../../src/types'

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import '../../src' // ensures built-in adapters are registered
 import { makeCodingAgentHandler } from '../../src/entity/handler'
 import { LifecycleManager } from '../../src/lifecycle-manager'
 import { WorkspaceRegistry } from '../../src/workspace-registry'

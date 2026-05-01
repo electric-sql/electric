@@ -8,10 +8,6 @@ import { WorkspaceRegistry } from '../workspace-registry'
 import type { LifecycleManager } from '../lifecycle-manager'
 import type { CodingAgentKind, SandboxInstance } from '../types'
 import { getAdapter } from '../agents/registry'
-// Side-effect imports to ensure built-in adapters are registered when the
-// handler is imported directly (e.g. unit tests that bypass src/index.ts).
-import '../agents/claude'
-import '../agents/codex'
 import type {
   RunRow,
   SessionMetaRow,
