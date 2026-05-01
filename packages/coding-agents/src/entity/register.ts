@@ -27,7 +27,7 @@ import { makeCodingAgentHandler } from './handler'
 import { z } from 'zod'
 
 export interface RegisterCodingAgentDeps {
-  provider: SandboxProvider
+  providers: { sandbox: SandboxProvider; host: SandboxProvider }
   bridge: Bridge
   /** Override defaults; used by tests. */
   defaults?: Partial<{
@@ -53,11 +53,13 @@ export interface RegisterCodingAgentDeps {
 // the nested workspace shape from these flat fields on first-wake init.
 const creationArgsSchema = z.object({
   kind: z.enum([`claude`]).optional(),
+  target: z.enum([`sandbox`, `host`]).optional(),
   workspaceType: z.enum([`volume`, `bindMount`]).optional(),
   /** For workspaceType='volume'. Defaults to slug(agentId) when omitted. */
   workspaceName: z.string().optional(),
   /** For workspaceType='bindMount'. Required when workspaceType='bindMount'. */
   workspaceHostPath: z.string().optional(),
+  importNativeSessionId: z.string().optional(),
   idleTimeoutMs: z.number().optional(),
   keepWarm: z.boolean().optional(),
 })
@@ -66,7 +68,10 @@ export function registerCodingAgent(
   registry: EntityRegistry,
   deps: RegisterCodingAgentDeps
 ): void {
-  const lm = new LifecycleManager(deps)
+  const lm = new LifecycleManager({
+    providers: deps.providers,
+    bridge: deps.bridge,
+  })
   const wr = new WorkspaceRegistry()
   const defaults = {
     idleTimeoutMs:
@@ -85,7 +90,7 @@ export function registerCodingAgent(
     })
 
   registry.define(`coding-agent`, {
-    description: `Runs a Claude Code CLI session inside a Docker sandbox. Manages lifecycle (cold/idle/running) and workspace lease.`,
+    description: `Runs a Claude Code CLI session via Docker (target='sandbox') or directly on the host (target='host'). Manages lifecycle (cold/idle/running) and workspace lease.`,
     creationSchema: creationArgsSchema,
     inboxSchemas: {
       prompt: promptMessageSchema,
