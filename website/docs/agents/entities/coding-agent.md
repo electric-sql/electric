@@ -320,9 +320,13 @@ When a `coding-agent` is selected, three lifecycle buttons appear in the header:
 
 | Button | Action | Enabled when |
 | --- | --- | --- |
-| **Pin** | `POST /send { type: 'pin' }` — prevents idle hibernation. | `sessionMeta.pinned === false` |
-| **Release** | `POST /send { type: 'release' }` — re-arms idle timer. | `sessionMeta.pinned === true` |
-| **Stop** | `POST /send { type: 'stop' }` — tears down the sandbox. | Any state |
+| **Pin** | `POST /send { from: 'user', type: 'pin' }` — prevents idle hibernation. | `sessionMeta.pinned === false` |
+| **Release** | `POST /send { from: 'user', type: 'release' }` — re-arms idle timer. | `sessionMeta.pinned === true` |
+| **Stop** | `POST /send { from: 'user', type: 'stop' }` — tears down the sandbox. | Any state |
+
+The `from` field is required by the `/send` endpoint (HTTP 400 if absent). Pass `'user'` for
+UI-initiated sends. See the [programmatic client docs](../usage/programmatic-runtime-client#messages)
+for the full list of accepted values.
 
 The global **Kill** button (header, far right) sends `{ type: 'destroy' }` — drops the workspace ref and tombstones the entity.
 
