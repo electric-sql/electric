@@ -15,9 +15,10 @@ The platform spec (`2026-04-30-coding-agents-platform-primitive-design.md §Test
 
 ## Goals
 
-1. **Document the `SandboxProvider` contract executably.** A new provider author runs the contract suite against their implementation and gets a concrete pass/fail per invariant — no need to read 1k lines of integration-test source to understand what's required.
-2. **Capture the bridge+handler+provider integration contract.** The current integration tests verify behaviour for two specific providers; extracting the scenarios into a parameterized helper means a new provider gets the same coverage by writing one call-site.
-3. **Stay small.** v1 is one happy-path test per scenario. No edge-case fuzzing, no large-file `copyTo`, no concurrency stress. Edge cases land incrementally as remote-provider authors surface them.
+1. **Document the `SandboxProvider` contract executably** (Layer 1). A new provider author runs the contract suite against their implementation and gets a concrete pass/fail per invariant.
+2. **Capture the bridge+handler+provider integration contract** (Layer 2). The current integration tests verify behaviour for two specific providers; extracting them into a parameterized helper means a new provider gets the same coverage by writing one call-site.
+3. **Cover the highest-value end-to-end paths with real CLIs** (Layer 4 / §9). Native session import, codex resume materialise, and tool execution side-effects — the surprising failure modes that integration tests with mocked CLIs miss.
+4. **Stay small.** v1 is one happy-path test per scenario. No edge-case fuzzing, no large-file `copyTo`, no concurrency stress. Edge cases land incrementally as remote-provider authors surface them.
 
 ## Non-goals
 
@@ -287,6 +288,92 @@ This is enforced at writing time (review during implementation) rather than sche
 - `slice-a.test.ts` and `host-provider.test.ts` reduced to call-site stubs (or removed if entirely subsumed).
 - `slice-b.test.ts`, `slice-c1.test.ts`, `smoke.test.ts` unchanged.
 - Manual sanity: a hypothetical third provider in 50 LOC of stub returning canned ExecHandle objects compiles and reports each Layer 1 scenario as fail with diagnostic messages.
+- F1, E1, E2, E3 from §9 land in the same slice. F1 verified by codex test runs visibly using `gpt-5-codex-mini`. E1/E2/E3 pass `@slow` runs against real CLIs.
+
+---
+
+## §9. Layer 4 — End-to-end smoke (real CLIs, side effects)
+
+The conformance suite (Layers 1+2) verifies provider correctness and integration semantics. Layer 4 verifies the most surprising failure modes in production: native session import, codex resume materialise, and tool execution actually mutating the workspace. These are kind-specific (paths, tool argv, file-write semantics differ between claude and codex), so they aren't parameterized — each is its own dedicated test file.
+
+All Layer 4 tests are `@slow`-tagged, gated on the relevant API key, and intended for nightly + post-merge CI rather than every push.
+
+### F1 — Cheap-model fix in CodexAdapter
+
+Pre-requisite, not a test. `CodexAdapter.buildCliInvocation` currently ignores the `model` parameter (`model: _model`). Codex 0.128.0 doesn't read `OPENAI_MODEL` from env; it picks model from `~/.codex/config.toml` (default `gpt-5-codex` — expensive) or from `-c model="<id>"` flag. Fix:
+
+```ts
+buildCliInvocation({ prompt, nativeSessionId, model }) {
+  const codexArgs: Array<string> = [`exec`, `--skip-git-repo-check`, `--json`]
+  if (model) codexArgs.unshift(`-c`, `model="${model}"`)
+  if (nativeSessionId) codexArgs.push(`resume`, nativeSessionId)
+  codexArgs.push(`--`, prompt)
+  // ... rest unchanged
+}
+```
+
+The bridge already passes `args.model` through; integration tests already supply `OPENAI_MODEL` via `probeForKind`. After F1, codex test turns visibly run on the cheap model in `codex --version`-style logs (or, when not, codex-cli prints a config-source line that surfaces the override). Quick to verify by checking the cost dashboard before/after.
+
+This fix is real-production behaviour, not a test concern — codex agents spawned by Horton today silently use the default model. F1 should land before or with the Layer 4 tests so the e2e runs are themselves cheap.
+
+### E1 — Native session import end-to-end
+
+Two test files: `test/integration/import-claude.e2e.test.ts`, `test/integration/import-codex.e2e.test.ts`. Each:
+
+1. Pre-stage a JSONL transcript on the host's filesystem at the kind's expected location (claude: `~/.claude/projects/<sanitised>/<id>.jsonl`; codex: `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl`). Content: a 3-message conversation ending with assistant saying `"the secret word is ELEPHANT"`.
+2. Invoke the CLI: `node packages/coding-agents/dist/cli/import.js --agent <kind> --workspace <ws> --session-id <id> --server <url>`.
+3. Wait for entity status (poll `/coding-agent/<name>` until `status` reflects the imported state).
+4. Assert: (a) `sessionMeta.nativeSessionId === <id>`, (b) `events` collection contains the backfilled `assistant_message` events including the ELEPHANT message.
+5. Send a follow-up prompt: `"what was the secret word? answer in one word."`.
+6. Wait for `runs` to show `status='completed'`.
+7. Assert: response text contains `ELEPHANT` (case-insensitive). Confirms `--resume` actually picked up the imported context.
+8. Cleanup: destroy the agent, remove the staged JSONL.
+
+Gated on `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` respectively. ~80 LOC per kind including helper extraction.
+
+### E2 — Codex resume materialise (deferred from code review I-4)
+
+`test/integration/codex-resume.e2e.test.ts`. Two-turn codex flow:
+
+1. Spawn a codex agent with bind-mount workspace, send turn 1 prompt: `"remember the word PINEAPPLE — reply with just OK"`.
+2. Wait for run completion.
+3. Force the sandbox down (`provider.destroy(agentId)`) to drop the in-memory state.
+4. Assert: `sessionMeta.nativeSessionId` is set; `nativeJsonl.content` is non-empty.
+5. Send turn 2: `"what word should you remember?"`.
+6. Wait for run completion.
+7. Assert: response text contains `PINEAPPLE` (case-insensitive). Verifies the codex resume materialise path: `find ~/.codex/sessions -name "*-<id>.jsonl"` probe → not found → write captured blob → `codex exec resume <id>` finds it.
+
+Gated on `OPENAI_API_KEY`. ~50 LOC.
+
+### E3 — Tool execution + workspace side-effect
+
+Two test files: `test/integration/tool-execution-claude.e2e.test.ts`, `test/integration/tool-execution-codex.e2e.test.ts`. Each:
+
+1. Spawn agent with a fresh empty workspace.
+2. Send prompt: `"create a file called hello.txt with the single word 'world'. then reply with: done."`.
+3. Wait for run completion.
+4. Assert: (a) at least one `tool_call` event with the file-write tool name (claude: `Write`/`Edit`; codex: `apply_patch` or `function_call` with name `write_file` — exact strings depend on CLI version, so use a regex `/write|edit|apply_patch/i`), (b) at least one `tool_result` event with `isError === false`.
+5. Read the workspace from the host: `provider.exec(['cat', '/workspace/hello.txt'])` (sandbox) or `fs.readFile(<bindMount>/hello.txt)` (host).
+6. Assert: file contents match `/world/i`.
+7. Cleanup workspace.
+
+This is the Layer 4 test from the platform spec verbatim. Catches: (a) CLI-version argv drift for tool names, (b) sandbox FS write permission regressions, (c) bridge `tool_call`/`tool_result` event normalisation gaps, (d) the codex `function_call_output.isError` parsing fix from slice C₂ post-review.
+
+Gated on the relevant key. ~70 LOC per kind.
+
+### Layer 4 packaging
+
+These tests live in `packages/coding-agents/test/integration/` alongside the existing files but have a `.e2e.test.ts` suffix to make CI scheduling explicit:
+
+- `pnpm test` → unit only, fast (no API keys, no docker).
+- `DOCKER=1 pnpm test test/integration/{smoke,slice-*,host-provider}.test.ts` → existing integration. Cheap models.
+- `DOCKER=1 SLOW=1 pnpm test test/integration/*.e2e.test.ts` → Layer 4 only. Requires keys, costs real money. Nightly CI gate.
+
+Vitest gating: a `describe.skip(SLOW !== '1' ? "skip-slow" : "run-slow")` wrapper at file scope.
+
+### Layer 4 cost estimate
+
+Per nightly run: 2 imports × 3 turns + 1 codex resume × 2 turns + 2 tool-exec × 2 turns ≈ 12 turns of which ~10 are claude (~$0.05) and ~4 are codex (~$0.30 with F1's mini model). Total ~$0.35/night, ~$10/month.
 
 ---
 
