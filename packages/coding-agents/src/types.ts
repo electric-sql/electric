@@ -9,6 +9,8 @@ export interface SandboxSpec {
   /** Stable agent identity (e.g. /<parent>/coding-agent/<id>). */
   agentId: string
   kind: CodingAgentKind
+  /** Execution target. 'sandbox' = Docker; 'host' = direct on-host (no isolation). */
+  target: `sandbox` | `host`
   workspace:
     | { type: `volume`; name: string }
     | { type: `bindMount`; hostPath: string }
@@ -55,6 +57,7 @@ export interface RecoveredSandbox {
   agentId: string
   instanceId: string
   status: `running` | `stopped`
+  target: `sandbox` | `host`
 }
 
 export interface SandboxProvider {

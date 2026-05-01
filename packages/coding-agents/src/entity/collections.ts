@@ -21,6 +21,7 @@ export const sessionMetaRowSchema = z.object({
   key: z.literal(`current`),
   status: codingAgentStatusSchema,
   kind: z.enum([`claude`]),
+  target: z.enum([`sandbox`, `host`]),
   pinned: z.boolean(),
   workspaceIdentity: z.string(),
   workspaceSpec: z.discriminatedUnion(`type`, [
@@ -76,6 +77,8 @@ export const lifecycleRowSchema = z.object({
     `release`,
     `orphan.detected`,
     `resume.restored`,
+    `import.restored`,
+    `import.failed`,
   ]),
   detail: z.string().optional(),
 })
