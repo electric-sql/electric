@@ -191,6 +191,12 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`
 }
 
+/**
+ * Safe specifically because the inner `sh -c` produces no stdout/stderr
+ * until EOF on stdin. If the sub-shell errors before draining (e.g.
+ * destination directory missing), the host-side write may EPIPE; we
+ * swallow that and let wait()'s exit code surface the real error.
+ */
 async function copyToContainer(
   containerId: string,
   destPath: string,
@@ -224,9 +230,17 @@ async function copyToContainer(
     }
   }
   const stdoutPromise = drainOut()
-  await handle.writeStdin(content)
-  await handle.closeStdin()
+  try {
+    await handle.writeStdin(content)
+    await handle.closeStdin()
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== `EPIPE`) throw err
+    // Sub-shell exited before consuming stdin; fall through to surface
+    // the real failure via wait() + stderr.
+  }
   const exit = await handle.wait()
+  // Order matters: await drains AFTER wait() resolves so stderr captures
+  // the full error text before we slice it into the thrown message.
   await Promise.all([stdoutPromise, stderrPromise])
   if (exit.exitCode !== 0) {
     throw new Error(

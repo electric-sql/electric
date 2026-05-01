@@ -40,6 +40,43 @@ describeMaybe(`LocalDockerProvider.copyTo`, () => {
       await handle.wait()
       expect(read.length).toBe(big.length)
       expect(read).toBe(big)
+
+      // Verify the requested mode was actually applied.
+      const stat = await sandbox.exec({
+        cmd: [`stat`, `-c`, `%a`, `/tmp/big.txt`],
+      })
+      let modeOut = ``
+      for await (const line of stat.stdout) modeOut += line
+      await stat.wait()
+      expect(modeOut.trim()).toBe(`600`)
+    } finally {
+      await provider.destroy(agentId).catch(() => undefined)
+    }
+  }, 240_000)
+
+  it(`round-trips multi-byte UTF-8 content unchanged`, async () => {
+    const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
+    const agentId = `/test/coding-agent/copyto-utf8-${Date.now().toString(36)}`
+    const sandbox = await provider.start({
+      agentId,
+      kind: `claude`,
+      workspace: {
+        type: `volume`,
+        name: `copyto-utf8-${Date.now().toString(36)}`,
+      },
+      env: {},
+    })
+    try {
+      const content = `樹\n🌲 forest\nüñîçødé\n` + `日本語`.repeat(1000)
+      await sandbox.copyTo({ destPath: `/tmp/utf8.txt`, content })
+
+      const handle = await sandbox.exec({ cmd: [`cat`, `/tmp/utf8.txt`] })
+      let read = ``
+      for await (const line of handle.stdout) read += line + `\n`
+      await handle.wait()
+      // The line reader appends '\n' per line; the input already ends
+      // without a trailing newline, so trim one off before comparing.
+      expect(read.replace(/\n$/, ``)).toBe(content)
     } finally {
       await provider.destroy(agentId).catch(() => undefined)
     }
