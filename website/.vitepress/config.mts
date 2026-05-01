@@ -345,6 +345,10 @@ const agentsDocsSidebar = [
             text: 'Coder',
             link: '/docs/agents/entities/agents/coder',
           },
+          {
+            text: 'Coding Agent',
+            link: '/docs/agents/entities/coding-agent',
+          },
         ],
         collapsed: false,
       },
