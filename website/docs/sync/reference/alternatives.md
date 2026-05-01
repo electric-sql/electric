@@ -140,7 +140,7 @@ Other interesting projects include:
 - [Macrometa](https://www.macrometa.com)
 - [MotherDuck](https://motherduck.com)
 - [RainbowFS](https://rainbowfs.lip6.fr)
-- [rqlite](https://github.com/rqlite/rqlite)
+- [rqlite](https://rqlite.io)
 - [SOLID](https://solidproject.org)
 - [Source](https://source.network)
 - [Spanner](https://cloud.google.com/spanner/)
