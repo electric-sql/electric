@@ -289,8 +289,11 @@ function ToolCallRow({
   result: EventRow | undefined
 }): React.ReactElement {
   const [open, setOpen] = useState(false)
-  const toolName = (call.payload.toolName as string | undefined) ?? `tool`
-  const args = call.payload.args as Record<string, unknown> | undefined
+  // agent-session-protocol's ToolCallEvent uses `tool` (string) and `input`
+  // (Record). The legacy `coder` UI's reader used `toolName`/`args` — those
+  // were a mistranslation that surfaced as generic "tool" badges.
+  const toolName = (call.payload.tool as string | undefined) ?? `tool`
+  const args = call.payload.input as Record<string, unknown> | undefined
   return (
     <Flex
       direction="column"

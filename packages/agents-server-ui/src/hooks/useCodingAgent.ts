@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
-import {
-  CODING_AGENT_SESSION_META_COLLECTION_TYPE,
-  CODING_AGENT_RUNS_COLLECTION_TYPE,
-  CODING_AGENT_EVENTS_COLLECTION_TYPE,
-  CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,
-} from '@electric-ax/coding-agents'
 import { connectEntityStream } from '../lib/entity-connection'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+
+// Wire constants are duplicated here rather than imported from
+// @electric-ax/coding-agents because that package transitively pulls in
+// node-only deps (LocalDockerProvider, StdioBridge, agent-session-protocol)
+// that break the browser bundle. Keep in sync with the entity package's
+// packages/coding-agents/src/entity/collections.ts.
+const CODING_AGENT_SESSION_META_COLLECTION_TYPE = `coding-agent.sessionMeta`
+const CODING_AGENT_RUNS_COLLECTION_TYPE = `coding-agent.runs`
+const CODING_AGENT_EVENTS_COLLECTION_TYPE = `coding-agent.events`
+const CODING_AGENT_LIFECYCLE_COLLECTION_TYPE = `coding-agent.lifecycle`
 
 export type CodingAgentSliceAStatus =
   | `cold`
@@ -58,10 +62,16 @@ export interface LifecycleRow {
 }
 
 const CODING_AGENT_STATE = {
-  sessionMeta: { type: CODING_AGENT_SESSION_META_COLLECTION_TYPE, primaryKey: `key` },
+  sessionMeta: {
+    type: CODING_AGENT_SESSION_META_COLLECTION_TYPE,
+    primaryKey: `key`,
+  },
   runs: { type: CODING_AGENT_RUNS_COLLECTION_TYPE, primaryKey: `key` },
   events: { type: CODING_AGENT_EVENTS_COLLECTION_TYPE, primaryKey: `key` },
-  lifecycle: { type: CODING_AGENT_LIFECYCLE_COLLECTION_TYPE, primaryKey: `key` },
+  lifecycle: {
+    type: CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,
+    primaryKey: `key`,
+  },
 } as const
 
 export interface UseCodingAgentResult {
@@ -107,7 +117,11 @@ export function useCodingAgent(
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error(`Failed to connect coding-agent stream`, { baseUrl, entityUrl, error: err })
+          console.error(`Failed to connect coding-agent stream`, {
+            baseUrl,
+            entityUrl,
+            error: err,
+          })
           setError(err instanceof Error ? err.message : String(err))
           setLoading(false)
         }
@@ -130,22 +144,40 @@ export function useCodingAgent(
     [metaCollection]
   )
   const { data: runRows = [] } = useLiveQuery(
-    (q) => runsCollection ? q.from({ r: runsCollection }).orderBy(({ r }) => r.$key, `asc`) : undefined,
+    (q) =>
+      runsCollection
+        ? q.from({ r: runsCollection }).orderBy(({ r }) => r.$key, `asc`)
+        : undefined,
     [runsCollection]
   )
   const { data: eventRows = [] } = useLiveQuery(
-    (q) => eventsCollection ? q.from({ e: eventsCollection }).orderBy(({ e }) => e.$key, `asc`) : undefined,
+    (q) =>
+      eventsCollection
+        ? q.from({ e: eventsCollection }).orderBy(({ e }) => e.$key, `asc`)
+        : undefined,
     [eventsCollection]
   )
   const { data: lifecycleRows = [] } = useLiveQuery(
-    (q) => lifecycleCollection ? q.from({ l: lifecycleCollection }).orderBy(({ l }) => l.$key, `asc`) : undefined,
+    (q) =>
+      lifecycleCollection
+        ? q.from({ l: lifecycleCollection }).orderBy(({ l }) => l.$key, `asc`)
+        : undefined,
     [lifecycleCollection]
   )
 
-  const meta = useMemo(() => (metaRows as unknown as Array<SessionMetaRow>)[0], [metaRows])
+  const meta = useMemo(
+    () => (metaRows as unknown as Array<SessionMetaRow>)[0],
+    [metaRows]
+  )
   const runs = useMemo(() => runRows as unknown as Array<RunRow>, [runRows])
-  const events = useMemo(() => eventRows as unknown as Array<EventRow>, [eventRows])
-  const lifecycle = useMemo(() => lifecycleRows as unknown as Array<LifecycleRow>, [lifecycleRows])
+  const events = useMemo(
+    () => eventRows as unknown as Array<EventRow>,
+    [eventRows]
+  )
+  const lifecycle = useMemo(
+    () => lifecycleRows as unknown as Array<LifecycleRow>,
+    [lifecycleRows]
+  )
 
   return { db, meta, runs, events, lifecycle, loading, error }
 }

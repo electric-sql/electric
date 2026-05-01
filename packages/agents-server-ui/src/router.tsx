@@ -119,6 +119,16 @@ function EntityPage(): React.ReactElement {
       })
   }, [entityUrl, forkEntity, forking, navigate])
 
+  // Hooks must run unconditionally on every render — call useCodingAgent
+  // BEFORE any early-return so its position in the hooks order is stable.
+  const baseUrl = activeServer?.url ?? ``
+  const connectUrl = isSpawning ? null : entityUrl
+  const isCodingAgent = selectedEntity?.type === `coding-agent`
+  const codingAgentHook = useCodingAgent(
+    isCodingAgent ? baseUrl : null,
+    isCodingAgent ? connectUrl : null
+  )
+
   if (!selectedEntity) {
     return (
       <Flex align="center" justify="center" flexGrow="1">
@@ -128,16 +138,6 @@ function EntityPage(): React.ReactElement {
       </Flex>
     )
   }
-
-  const baseUrl = activeServer?.url ?? ``
-  // Hide the body while spawning — server streams don't exist yet.
-  const connectUrl = isSpawning ? null : entityUrl
-
-  const isCodingAgent = selectedEntity.type === `coding-agent`
-  const codingAgentHook = useCodingAgent(
-    isCodingAgent ? baseUrl : null,
-    isCodingAgent ? connectUrl : null
-  )
 
   return (
     <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
