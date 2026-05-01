@@ -502,6 +502,12 @@ async function dispatchInboxMessage(
       // 'idle && !running' and flipped status to 'cold'. This message
       // exists only to re-enter the handler after the timer fired.
       return
+    case `lifecycle/init`:
+      // No-op nudge from the import CLI to give the runtime a "fresh
+      // wake input" so first-wake init runs and applies spawn args.
+      // First-wake init is keyed on `!sessionMeta`, so this dispatch
+      // just returns; subsequent invocations also no-op.
+      return
     case `convert-target`:
       return processConvertTarget(ctx, lm, options, inboxMsg)
     default:

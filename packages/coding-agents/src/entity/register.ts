@@ -20,6 +20,7 @@ import {
   convertTargetMessageSchema,
   destroyMessageSchema,
   idleEvictionFiredMessageSchema,
+  initNudgeMessageSchema,
   pinMessageSchema,
   promptMessageSchema,
   releaseMessageSchema,
@@ -111,6 +112,7 @@ export function registerCodingAgent(
       stop: stopMessageSchema,
       destroy: destroyMessageSchema,
       'lifecycle/idle-eviction-fired': idleEvictionFiredMessageSchema,
+      'lifecycle/init': initNudgeMessageSchema,
       'convert-target': convertTargetMessageSchema,
     },
     state: {

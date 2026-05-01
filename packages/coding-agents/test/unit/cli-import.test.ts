@@ -57,16 +57,25 @@ describe.each(listAdapters().map((a) => [a.kind] as const))(
           fetchFn: fetchMock as any,
         })
         expect(result.exitCode).toBe(0)
-        expect(fetchMock).toHaveBeenCalledTimes(1)
-        const [url, init] = fetchMock.mock.calls[0]!
-        expect(url).toMatch(/\/coding-agent\/imp-1$/)
-        expect(init.method).toBe(`PUT`)
-        const body = JSON.parse(init.body)
-        expect(body.kind).toBe(kind)
-        expect(body.target).toBe(`host`)
-        expect(body.workspaceType).toBe(`bindMount`)
-        expect(body.workspaceHostPath).toBe(ws)
-        expect(body.importNativeSessionId).toBe(`s1`)
+        // PUT entity, then POST init nudge — 2 fetch calls.
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+        const [putUrl, putInit] = fetchMock.mock.calls[0]!
+        expect(putUrl).toMatch(/\/coding-agent\/imp-1$/)
+        expect(putInit.method).toBe(`PUT`)
+        const body = JSON.parse(putInit.body)
+        expect(body.args.kind).toBe(kind)
+        expect(body.args.target).toBe(`host`)
+        expect(body.args.workspaceType).toBe(`bindMount`)
+        expect(body.args.workspaceHostPath).toBe(ws)
+        expect(body.args.importNativeSessionId).toBe(`s1`)
+        // Second call: POST /<entity>/send with lifecycle/init nudge.
+        const [nudgeUrl, nudgeInit] = fetchMock.mock.calls[1]!
+        expect(nudgeUrl).toMatch(/\/coding-agent\/imp-1\/send$/)
+        expect(nudgeInit.method).toBe(`POST`)
+        const nudgeBody = JSON.parse(nudgeInit.body)
+        expect(nudgeBody.type).toBe(`lifecycle/init`)
+        expect(nudgeBody.payload).toEqual({})
+        expect(nudgeBody.from).toBe(`electric-ax-import`)
       } finally {
         await rm(home, { recursive: true, force: true })
         await rm(ws, { recursive: true, force: true })
@@ -143,7 +152,7 @@ describe(`runImportCli — defaults and validation`, () => {
       })
       expect(result.exitCode).toBe(0)
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body)
-      expect(body.kind).toBe(`claude`)
+      expect(body.args.kind).toBe(`claude`)
     } finally {
       await rm(home, { recursive: true, force: true })
       await rm(ws, { recursive: true, force: true })

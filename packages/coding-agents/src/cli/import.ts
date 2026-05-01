@@ -142,11 +142,13 @@ export async function runImportCli(
   const url = `${server.replace(/\/$/, ``)}/coding-agent/${agentName}`
 
   const body = {
-    kind: agent,
-    target: `host`,
-    workspaceType: `bindMount`,
-    workspaceHostPath: workspace,
-    importNativeSessionId: sessionId,
+    args: {
+      kind: agent,
+      target: `host`,
+      workspaceType: `bindMount`,
+      workspaceHostPath: workspace,
+      importNativeSessionId: sessionId,
+    },
   }
 
   const res = await fetchFn(url, {
@@ -161,6 +163,29 @@ export async function runImportCli(
       exitCode: 1,
       stdout: ``,
       stderr: `spawn request failed: ${res.status} ${text}\n`,
+    }
+  }
+
+  // POST a no-op `lifecycle/init` nudge so the runtime sees "fresh wake
+  // input" and actually invokes the handler — without it, first-wake
+  // skips ("no fresh wake input in catch-up; entering idle"), spawn args
+  // never reach sessionMeta, and the agent silently runs with defaults.
+  // See plan §"Known runtime gap" for the underlying root cause.
+  const nudgeRes = await fetchFn(`${url}/send`, {
+    method: `POST`,
+    headers: { 'content-type': `application/json` },
+    body: JSON.stringify({
+      from: `electric-ax-import`,
+      type: `lifecycle/init`,
+      payload: {},
+    }),
+  })
+  if (!nudgeRes.ok) {
+    const text = await nudgeRes.text().catch(() => ``)
+    return {
+      exitCode: 1,
+      stdout: ``,
+      stderr: `init nudge failed: ${nudgeRes.status} ${text}\n`,
     }
   }
 
