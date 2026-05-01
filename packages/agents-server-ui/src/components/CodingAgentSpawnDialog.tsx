@@ -22,6 +22,8 @@ export function CodingAgentSpawnDialog({
   const [workspaceName, setWorkspaceName] = useState(``)
   const [hostPath, setHostPath] = useState(``)
   const [initialPrompt, setInitialPrompt] = useState(``)
+  const [idleTimeoutSec, setIdleTimeoutSec] = useState(``)
+  const [keepWarm, setKeepWarm] = useState(false)
 
   const canSubmit = useMemo(() => {
     if (workspaceMode === `bindMount`) return hostPath.trim().length > 0
@@ -42,12 +44,28 @@ export function CodingAgentSpawnDialog({
       if (workspaceMode === `bindMount`) {
         args.workspaceHostPath = hostPath.trim()
       }
+      const parsedTimeoutSec = Number.parseInt(idleTimeoutSec.trim(), 10)
+      if (Number.isFinite(parsedTimeoutSec) && parsedTimeoutSec > 0) {
+        args.idleTimeoutMs = parsedTimeoutSec * 1000
+      }
+      if (keepWarm) {
+        args.keepWarm = true
+      }
       onSpawn(
         args,
         initialPrompt.trim() ? { text: initialPrompt.trim() } : undefined
       )
     },
-    [canSubmit, workspaceMode, workspaceName, hostPath, initialPrompt, onSpawn]
+    [
+      canSubmit,
+      workspaceMode,
+      workspaceName,
+      hostPath,
+      initialPrompt,
+      idleTimeoutSec,
+      keepWarm,
+      onSpawn,
+    ]
   )
 
   const inputStyle: React.CSSProperties = {
@@ -153,6 +171,46 @@ export function CodingAgentSpawnDialog({
                 onChange={(e) => setInitialPrompt(e.target.value)}
                 placeholder="What should the agent work on first?"
               />
+            </Flex>
+
+            <Flex direction="column" gap="1">
+              <Text size="2" weight="medium">
+                Idle timeout (seconds){` `}
+                <Text size="1" color="gray">
+                  (optional — default 300)
+                </Text>
+              </Text>
+              <input
+                style={inputStyle}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={idleTimeoutSec}
+                onChange={(e) => setIdleTimeoutSec(e.target.value)}
+                placeholder="300"
+              />
+            </Flex>
+
+            <Flex align="center" gap="2">
+              <input
+                id="coding-agent-keepwarm"
+                type="checkbox"
+                checked={keepWarm}
+                onChange={(e) => setKeepWarm(e.target.checked)}
+              />
+              <label
+                htmlFor="coding-agent-keepwarm"
+                style={{
+                  fontSize: `var(--font-size-2)`,
+                  fontWeight: 500,
+                  cursor: `pointer`,
+                }}
+              >
+                Keep warm{` `}
+                <Text size="1" color="gray">
+                  (disable idle timer)
+                </Text>
+              </label>
             </Flex>
 
             <Flex justify="end" gap="2" mt="2">
