@@ -12,6 +12,7 @@ import {
 import { serverLog } from './log'
 import {
   LocalDockerProvider,
+  HostProvider,
   StdioBridge,
   registerCodingAgent,
 } from '@electric-ax/coding-agents'
@@ -130,7 +131,10 @@ export async function createBuiltinAgentHandler(
     baseUrl: agentServerUrl,
   })
   registerCodingAgent(registry, {
-    provider: new LocalDockerProvider(),
+    providers: {
+      sandbox: new LocalDockerProvider(),
+      host: new HostProvider(),
+    },
     bridge: new StdioBridge(),
     wakeEntity: (agentId: string) => {
       void codingAgentClient

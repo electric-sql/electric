@@ -14,6 +14,7 @@ export type {
   CodingAgentStatus,
 } from './types'
 export { LocalDockerProvider } from './providers/local-docker'
+export { HostProvider } from './providers/host'
 export { StdioBridge } from './bridge/stdio-bridge'
 export { LifecycleManager } from './lifecycle-manager'
 export { WorkspaceRegistry } from './workspace-registry'
