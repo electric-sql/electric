@@ -56,6 +56,34 @@ export async function spawnEntity(
   }
 }
 
+/**
+ * Send a pin message to wake the handler so first-wake init runs (sessionMeta
+ * populated, import flow executed). Avoids invoking claude — pin is a no-op
+ * inbox message that just triggers the handler.
+ */
+export async function wakeHandlerWithPin(
+  request: APIRequestContext,
+  name: string
+): Promise<void> {
+  const res = await request.post(`${SERVER_BASE}/coding-agent/${name}/send`, {
+    data: { from: `e2e-test`, type: `pin`, payload: {} },
+  })
+  if (!res.ok()) {
+    throw new Error(
+      `pin failed: ${res.status()} ${await res.text().catch(() => ``)}`
+    )
+  }
+}
+
+export async function spawnAndWake(
+  request: APIRequestContext,
+  name: string,
+  args: Record<string, unknown>
+): Promise<void> {
+  await spawnEntity(request, name, { args })
+  await wakeHandlerWithPin(request, name)
+}
+
 export async function deleteEntity(
   request: APIRequestContext,
   name: string
