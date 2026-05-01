@@ -153,6 +153,19 @@ function EntityPage(): React.ReactElement {
         stateExplorerOpen={stateExplorerOpen}
         onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
         baseUrl={isCodingAgent ? baseUrl : undefined}
+        codingAgentTarget={
+          isCodingAgent ? codingAgentHook.meta?.target : undefined
+        }
+        codingAgentWorkspaceSpec={
+          isCodingAgent
+            ? (codingAgentHook.meta?.workspaceSpec as
+                | { type: `volume` | `bindMount` }
+                | undefined)
+            : undefined
+        }
+        codingAgentStatus={
+          isCodingAgent ? codingAgentHook.meta?.status : undefined
+        }
       />
       <Flex
         ref={containerRef}

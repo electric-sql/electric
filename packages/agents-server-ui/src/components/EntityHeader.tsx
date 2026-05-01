@@ -48,6 +48,9 @@ export function EntityHeader({
   stateExplorerOpen,
   onToggleStateExplorer,
   baseUrl,
+  codingAgentTarget,
+  codingAgentWorkspaceSpec,
+  codingAgentStatus,
 }: {
   entity: ElectricEntity
   pinned: boolean
@@ -60,6 +63,9 @@ export function EntityHeader({
   stateExplorerOpen?: boolean
   onToggleStateExplorer?: () => void
   baseUrl?: string
+  codingAgentTarget?: `sandbox` | `host`
+  codingAgentWorkspaceSpec?: { type: `volume` | `bindMount` }
+  codingAgentStatus?: string
 }): React.ReactElement {
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
@@ -192,6 +198,46 @@ export function EntityHeader({
             >
               Stop
             </Button>
+            {codingAgentTarget &&
+              (() => {
+                const convertTo =
+                  codingAgentTarget === `sandbox` ? `host` : `sandbox`
+                const inFlight =
+                  codingAgentStatus === `running` ||
+                  codingAgentStatus === `starting` ||
+                  codingAgentStatus === `stopping`
+                const requiresBindMount =
+                  convertTo === `host` &&
+                  codingAgentWorkspaceSpec?.type === `volume`
+                const disabled = inFlight || requiresBindMount
+                const title = inFlight
+                  ? `Cannot convert while ${codingAgentStatus}`
+                  : requiresBindMount
+                    ? `Convert to host requires a bindMount workspace`
+                    : `Convert this agent to run on ${convertTo}`
+                return (
+                  <Button
+                    variant="soft"
+                    size="1"
+                    color="amber"
+                    disabled={disabled}
+                    title={title}
+                    onClick={() => {
+                      void fetch(`${baseUrl}${entity.url}/send`, {
+                        method: `POST`,
+                        headers: { 'content-type': `application/json` },
+                        body: JSON.stringify({
+                          from: `user`,
+                          type: `convert-target`,
+                          payload: { to: convertTo },
+                        }),
+                      })
+                    }}
+                  >
+                    Convert → {convertTo === `host` ? `Host` : `Sandbox`}
+                  </Button>
+                )
+              })()}
           </>
         )}
 
