@@ -7,6 +7,11 @@ import { log } from '../log'
 import { WorkspaceRegistry } from '../workspace-registry'
 import type { LifecycleManager } from '../lifecycle-manager'
 import type { CodingAgentKind, SandboxInstance } from '../types'
+import { getAdapter } from '../agents/registry'
+// Side-effect imports to ensure built-in adapters are registered when the
+// handler is imported directly (e.g. unit tests that bypass src/index.ts).
+import '../agents/claude'
+import '../agents/codex'
 import type {
   RunRow,
   SessionMetaRow,
@@ -55,15 +60,6 @@ function lifecycleKey(label: string): string {
 }
 
 /**
- * Sanitise an absolute path for use as the claude project directory name
- * under ~/.claude/projects/. The CLI replaces every `/` with `-`, producing
- * e.g. `/workspace` → `-workspace`.
- */
-function sanitiseCwd(cwd: string): string {
-  return cwd.replace(/\//g, `-`)
-}
-
-/**
  * Idempotently materialise the captured transcript blob into the sandbox
  * so `claude --resume <sessionId>` finds its session file. Probes for the
  * file first; only writes if missing. Self-heals across idle-timer races,
@@ -71,17 +67,20 @@ function sanitiseCwd(cwd: string): string {
  */
 async function ensureTranscriptMaterialised(
   sandbox: SandboxInstance,
+  kind: CodingAgentKind,
   nativeSessionId: string,
   content: string
 ): Promise<{ written: boolean }> {
   if (!content) return { written: false }
-  const projectDir = sanitiseCwd(sandbox.workspaceMount)
-  const homeProjectDir = `/home/agent/.claude/projects/${projectDir}`
-  const fullPath = `${homeProjectDir}/${nativeSessionId}.jsonl`
+  const adapter = getAdapter(kind)
+  const homeDir = `/home/agent`
+  const cwd = sandbox.workspaceMount
 
-  // Probe: does the file already exist? If so, we're done.
+  // Probe: does the transcript already exist?
   const probe = await sandbox.exec({
-    cmd: [`test`, `-f`, fullPath],
+    cmd: [
+      ...adapter.probeCommand({ homeDir, cwd, sessionId: nativeSessionId }),
+    ],
   })
   void (async () => {
     for await (const _ of probe.stdout) {
@@ -96,9 +95,17 @@ async function ensureTranscriptMaterialised(
   const probeExit = await probe.wait()
   if (probeExit.exitCode === 0) return { written: false }
 
-  // Ensure parent directory exists, then pipe transcript via stdin.
+  const fullPath = adapter.materialiseTargetPath({
+    homeDir,
+    cwd,
+    sessionId: nativeSessionId,
+    content,
+  })
+
+  // Ensure parent directory exists, then write content via copyTo.
+  const parent = fullPath.slice(0, fullPath.lastIndexOf(`/`))
   const mkdir = await sandbox.exec({
-    cmd: [`mkdir`, `-p`, homeProjectDir],
+    cmd: [`mkdir`, `-p`, parent],
   })
   void (async () => {
     for await (const _ of mkdir.stdout) {
@@ -138,19 +145,23 @@ async function ensureTranscriptMaterialised(
  */
 async function captureTranscript(
   sandbox: SandboxInstance,
+  kind: CodingAgentKind,
   nativeSessionId: string
 ): Promise<string> {
-  const projectDir = sanitiseCwd(sandbox.workspaceMount)
-  const path = `~/.claude/projects/${projectDir}/${nativeSessionId}.jsonl`
+  const adapter = getAdapter(kind)
   const handle = await sandbox.exec({
-    cmd: [`sh`, `-c`, `if [ -f ${path} ]; then base64 -w 0 ${path}; fi`],
+    cmd: [
+      ...adapter.captureCommand({
+        homeDir: `/home/agent`,
+        cwd: sandbox.workspaceMount,
+        sessionId: nativeSessionId,
+      }),
+    ],
     cwd: sandbox.workspaceMount,
   })
   let b64 = ``
   const drain = async () => {
-    for await (const line of handle.stdout) {
-      b64 += line
-    }
+    for await (const line of handle.stdout) b64 += line
   }
   const drainErr = async () => {
     for await (const _ of handle.stderr) {
@@ -280,7 +291,7 @@ export function makeCodingAgentHandler(
         const realWorkspace = await realpath(
           args.workspaceHostPath ?? process.cwd()
         )
-        const projectDir = sanitiseCwd(realWorkspace)
+        const projectDir = realWorkspace.replace(/\//g, `-`)
         const sessionPath = path.join(
           home,
           `.claude`,
@@ -609,6 +620,7 @@ async function processPrompt(
     ) {
       const { written } = await ensureTranscriptMaterialised(
         sandbox,
+        meta.kind,
         meta.nativeSessionId,
         transcript.content
       )
@@ -687,7 +699,11 @@ async function processPrompt(
       // Capture the on-disk transcript so a future cold-boot can resume.
       if (finalNativeSessionId) {
         try {
-          const content = await captureTranscript(sandbox, finalNativeSessionId)
+          const content = await captureTranscript(
+            sandbox,
+            meta.kind,
+            finalNativeSessionId
+          )
           if (content) {
             ctx.db.actions.nativeJsonl_insert({
               row: {
