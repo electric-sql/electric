@@ -18,7 +18,9 @@
  *   agents handler   → http://localhost:4448  (Horton, worker, coding-agent)
  *
  * Required env vars (set in shell, ~/.env, or .env at repo root / package root):
- *   ANTHROPIC_API_KEY — required for the built-in agent handler
+ *   ANTHROPIC_API_KEY — required for claude coding-agents
+ *   OPENAI_API_KEY    — required for codex coding-agents
+ *   (at least one of the two must be set; both is fine)
  *
  * Optional overrides:
  *   DATABASE_URL                       Postgres connection string
@@ -325,19 +327,43 @@ async function waitForHealth(url, timeoutMs = 90_000, intervalMs = 1_000) {
 async function up() {
   const env = buildEnv()
 
-  // Pre-flight: check ANTHROPIC_API_KEY is set (handler won't start without it)
-  const apiKey =
+  // Pre-flight: at least one of ANTHROPIC_API_KEY / OPENAI_API_KEY must be
+  // set so the handler can spawn at least one kind of coding-agent.
+  const fileEnvRepo = loadDotEnv(resolve(REPO_ROOT, `.env`))
+  const fileEnvPkg = loadDotEnv(resolve(PACKAGE_ROOT, `.env`))
+  const anthropicKey =
     env.ANTHROPIC_API_KEY?.trim() ||
-    loadDotEnv(resolve(REPO_ROOT, `.env`)).ANTHROPIC_API_KEY?.trim() ||
-    loadDotEnv(resolve(PACKAGE_ROOT, `.env`)).ANTHROPIC_API_KEY?.trim()
+    fileEnvRepo.ANTHROPIC_API_KEY?.trim() ||
+    fileEnvPkg.ANTHROPIC_API_KEY?.trim()
+  const openaiKey =
+    env.OPENAI_API_KEY?.trim() ||
+    fileEnvRepo.OPENAI_API_KEY?.trim() ||
+    fileEnvPkg.OPENAI_API_KEY?.trim()
 
-  if (!apiKey) {
+  if (!anthropicKey && !openaiKey) {
     process.stderr.write(
-      `${colours.err}${BOLD}ANTHROPIC_API_KEY is not set.${RESET}\n` +
-        `${colours.err}Set it in your shell, or add it to .env at the repo root:${RESET}\n` +
-        `${colours.err}  echo 'ANTHROPIC_API_KEY=sk-ant-...' >> .env${RESET}\n\n`
+      `${colours.err}${BOLD}No coding-agent API key set.${RESET}\n` +
+        `${colours.err}Set at least one of ANTHROPIC_API_KEY (claude) or OPENAI_API_KEY (codex)${RESET}\n` +
+        `${colours.err}in your shell or .env at the repo root:${RESET}\n` +
+        `${colours.err}  echo 'ANTHROPIC_API_KEY=sk-ant-...' >> .env${RESET}\n` +
+        `${colours.err}  echo 'OPENAI_API_KEY=sk-proj-...' >> .env${RESET}\n\n`
     )
     process.exit(1)
+  }
+
+  if (!anthropicKey) {
+    log(
+      `dev`,
+      colours.info,
+      `ANTHROPIC_API_KEY not set — claude coding-agents will fail at run-time.`
+    )
+  }
+  if (!openaiKey) {
+    log(
+      `dev`,
+      colours.info,
+      `OPENAI_API_KEY not set — codex coding-agents will fail at run-time.`
+    )
   }
 
   log(`dev`, colours.info, `Checking required ports...`)
@@ -515,8 +541,9 @@ Commands:
   down     Stop Docker services and kill host processes started by this script.
   restart  down + up.
 
-Required env:
-  ANTHROPIC_API_KEY   Required by the built-in agent handler (Horton, coding-agent).
+Required env (at least one):
+  ANTHROPIC_API_KEY   Required for claude coding-agents (and Horton/worker).
+  OPENAI_API_KEY      Required for codex coding-agents.
                       Set in your shell or add to .env at the repo root.
 
 Optional overrides (shell env or .env):
