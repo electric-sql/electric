@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { parseArgs } from 'node:util'
 import { stat, access, realpath } from 'node:fs/promises'
 import os from 'node:os'
@@ -48,6 +49,14 @@ export async function runImportCli(
       exitCode: 2,
       stdout: ``,
       stderr: `usage: electric-ax import-claude --workspace <path> --session-id <id> [--agent-id <name>] [--server <url>]\n`,
+    }
+  }
+
+  if (!/^[A-Za-z0-9_-]+$/.test(sessionId)) {
+    return {
+      exitCode: 1,
+      stdout: ``,
+      stderr: `--session-id must be alphanumeric (with - or _); got ${JSON.stringify(sessionId)}\n`,
     }
   }
 

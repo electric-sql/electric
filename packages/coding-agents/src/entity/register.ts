@@ -60,7 +60,10 @@ const creationArgsSchema = z.object({
   workspaceName: z.string().optional(),
   /** For workspaceType='bindMount'. Required when workspaceType='bindMount'. */
   workspaceHostPath: z.string().optional(),
-  importNativeSessionId: z.string().optional(),
+  importNativeSessionId: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+$/, `session id must be alphanumeric (with - or _)`)
+    .optional(),
   idleTimeoutMs: z.number().optional(),
   keepWarm: z.boolean().optional(),
 })

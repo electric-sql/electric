@@ -51,6 +51,17 @@ describe(`runImportCli`, () => {
     }
   })
 
+  it(`rejects --session-id with path traversal characters`, async () => {
+    const fetchMock = vi.fn()
+    const result = await runImportCli({
+      argv: [`--workspace`, `/tmp`, `--session-id`, `../etc/passwd`],
+      fetchFn: fetchMock as any,
+    })
+    expect(result.exitCode).not.toBe(0)
+    expect(result.stderr).toMatch(/alphanumeric/i)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it(`fails fast when the JSONL file is missing on disk`, async () => {
     const home = await mkdtemp(join(tmpdir(), `cli-home-`))
     const ws = await mkdtemp(join(tmpdir(), `cli-ws-`))
