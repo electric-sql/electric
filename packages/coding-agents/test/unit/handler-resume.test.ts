@@ -48,10 +48,7 @@ function makeSandbox(
 function makeMinimalLm(sandbox: SandboxInstance) {
   const lm = {
     startedAtMs: Date.now(),
-    provider: {
-      status: vi.fn().mockResolvedValue(`stopped`),
-      destroy: vi.fn().mockResolvedValue(undefined),
-    },
+    statusFor: vi.fn().mockResolvedValue(`stopped`),
     bridge: {
       runTurn: vi.fn().mockResolvedValue({
         nativeSessionId: `native-1`,
@@ -60,8 +57,9 @@ function makeMinimalLm(sandbox: SandboxInstance) {
       }),
     },
     ensureRunning: vi.fn().mockResolvedValue(sandbox),
-    stop: vi.fn().mockResolvedValue(undefined),
-    destroy: vi.fn().mockResolvedValue(undefined),
+    stopFor: vi.fn().mockResolvedValue(undefined),
+    destroyFor: vi.fn().mockResolvedValue(undefined),
+    destroyAndForget: vi.fn().mockResolvedValue(undefined),
     pin: vi.fn().mockReturnValue({ count: 1 }),
     release: vi.fn().mockReturnValue({ count: 0 }),
     pinCount: vi.fn().mockReturnValue(0),

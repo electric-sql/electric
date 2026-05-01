@@ -196,12 +196,15 @@ export function makeCodingAgentHandler(
     if (!initialMeta) {
       const args = ctx.args as {
         kind?: `claude`
+        target?: `sandbox` | `host`
         workspaceType?: `volume` | `bindMount`
         workspaceName?: string
         workspaceHostPath?: string
+        importNativeSessionId?: string
         idleTimeoutMs?: number
         keepWarm?: boolean
       }
+      const target = args.target ?? `sandbox`
       const ws =
         args.workspaceType === `bindMount`
           ? {
@@ -209,6 +212,24 @@ export function makeCodingAgentHandler(
               hostPath: args.workspaceHostPath ?? process.cwd(),
             }
           : { type: `volume` as const, name: args.workspaceName }
+
+      if (target === `host` && ws.type !== `bindMount`) {
+        const initial: SessionMetaRow = {
+          key: `current`,
+          status: `error`,
+          kind: args.kind ?? `claude`,
+          target,
+          pinned: false,
+          workspaceIdentity: `error:host-requires-bindMount`,
+          workspaceSpec: { type: `volume`, name: `none` },
+          idleTimeoutMs: options.defaults.idleTimeoutMs,
+          keepWarm: false,
+          lastError: `target='host' requires workspaceType='bindMount'`,
+        }
+        ctx.db.actions.sessionMeta_insert({ row: initial })
+        return
+      }
+
       const resolved = await WorkspaceRegistry.resolveIdentity(agentId, ws)
       const idleTimeoutMs = args.idleTimeoutMs ?? options.defaults.idleTimeoutMs
       const keepWarm = args.keepWarm ?? false
@@ -216,6 +237,7 @@ export function makeCodingAgentHandler(
         key: `current`,
         status: `cold`,
         kind: args.kind ?? `claude`,
+        target,
         pinned: false,
         workspaceIdentity: resolved.identity,
         workspaceSpec: resolved.resolved,
@@ -236,7 +258,7 @@ export function makeCodingAgentHandler(
 
     // ─── 2) RECONCILE ──────────────────────────────────────────────────────
 
-    const providerStatus = await lm.provider.status(agentId)
+    const providerStatus = await lm.statusFor(agentId, meta.target)
     const openRun = (runsCol.toArray as Array<RunRow>).find(
       (r) => r.status === `running`
     )
@@ -434,6 +456,7 @@ async function processPrompt(
       lm.ensureRunning({
         agentId,
         kind: meta.kind,
+        target: meta.target,
         workspace: meta.workspaceSpec,
         env: options.env(),
       }),
@@ -636,13 +659,16 @@ async function processPrompt(
 
     const finalMeta = sessionMetaCol.get(`current`) as SessionMetaRow
     if (!finalMeta.keepWarm && lm.pinCount(agentId) === 0) {
+      const target = finalMeta.target
       lm.armIdleTimer(agentId, finalMeta.idleTimeoutMs, () => {
-        // Fire-and-forget: provider.destroy is keyed by agentId.
+        // Fire-and-forget: destroyFor is keyed by agentId + target.
         // After destroy, wake the entity so reconcile flips status idle→cold
         // and any parent observing via wake:'runFinished' is notified.
-        void lm.provider
-          .destroy(agentId)
-          .catch((err) => log.warn({ err, agentId }, `idle stop failed`))
+        void lm
+          .destroyFor(agentId, target)
+          .catch((err) =>
+            log.warn({ err, agentId, target }, `idle stop failed`)
+          )
           .finally(() => options.wakeEntity?.(agentId))
       })
     }
@@ -694,9 +720,10 @@ function processRelease(
   if (count === 0) {
     const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
     if (!meta.keepWarm && meta.status === `idle`) {
+      const target = meta.target
       lm.armIdleTimer(agentId, meta.idleTimeoutMs, () => {
-        void lm.provider
-          .destroy(agentId)
+        void lm
+          .destroyFor(agentId, target)
           .catch(() => undefined)
           .finally(() => options.wakeEntity?.(agentId))
       })
@@ -706,13 +733,14 @@ function processRelease(
 
 async function processStop(ctx: any, lm: LifecycleManager): Promise<void> {
   const agentId = ctx.entityUrl as string
+  const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
   ctx.db.actions.sessionMeta_update({
     key: `current`,
     updater: (d: SessionMetaRow) => {
       d.status = `stopping`
     },
   })
-  await lm.stop(agentId)
+  await lm.stopFor(agentId, meta.target)
   ctx.db.actions.sessionMeta_update({
     key: `current`,
     updater: (d: SessionMetaRow) => {
@@ -736,7 +764,7 @@ async function processDestroy(
 ): Promise<void> {
   const agentId = ctx.entityUrl as string
   const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
-  await lm.destroy(agentId)
+  await lm.destroyAndForget(agentId, meta.target)
   if (meta) wr.release(meta.workspaceIdentity, agentId)
   ctx.db.actions.sessionMeta_update({
     key: `current`,

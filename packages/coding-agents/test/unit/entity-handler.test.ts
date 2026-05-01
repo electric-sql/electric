@@ -158,7 +158,7 @@ function makeFakeProvider(
 describe(`entity handler — first-wake init`, () => {
   it(`seeds sessionMeta when none exists, using args`, async () => {
     const lm = new LifecycleManager({
-      provider: makeFakeProvider(),
+      providers: { sandbox: makeFakeProvider(), host: makeFakeProvider() },
       bridge: {
         async runTurn() {
           return { exitCode: 0 }
@@ -198,7 +198,10 @@ describe(`entity handler — first-wake init`, () => {
 describe(`entity handler — pin/release`, () => {
   it(`pin sets pinned=true and cancels timer`, async () => {
     const lm = new LifecycleManager({
-      provider: makeFakeProvider(`running`),
+      providers: {
+        sandbox: makeFakeProvider(`running`),
+        host: makeFakeProvider(`running`),
+      },
       bridge: {
         async runTurn() {
           return { exitCode: 0 }
@@ -218,6 +221,7 @@ describe(`entity handler — pin/release`, () => {
       key: `current`,
       status: `idle`,
       kind: `claude`,
+      target: `sandbox` as const,
       pinned: false,
       workspaceIdentity: `volume:w`,
       workspaceSpec: { type: `volume`, name: `w` },
@@ -238,7 +242,10 @@ describe(`entity handler — pin/release`, () => {
 describe(`entity handler — reconcile orphan run`, () => {
   it(`marks orphan run failed when meta=running and run.startedAt < lm.startedAtMs`, async () => {
     const lm = new LifecycleManager({
-      provider: makeFakeProvider(`stopped`),
+      providers: {
+        sandbox: makeFakeProvider(`stopped`),
+        host: makeFakeProvider(`stopped`),
+      },
       bridge: {
         async runTurn() {
           return { exitCode: 0 }
@@ -259,6 +266,7 @@ describe(`entity handler — reconcile orphan run`, () => {
       key: `current`,
       status: `running`,
       kind: `claude`,
+      target: `sandbox` as const,
       pinned: false,
       workspaceIdentity: `volume:w`,
       workspaceSpec: { type: `volume`, name: `w` },
@@ -298,7 +306,10 @@ describe(`entity handler — processPrompt happy path`, () => {
       },
     }
     const lm = new LifecycleManager({
-      provider: makeFakeProvider(`stopped`),
+      providers: {
+        sandbox: makeFakeProvider(`stopped`),
+        host: makeFakeProvider(`stopped`),
+      },
       bridge,
     })
     const wr = new WorkspaceRegistry()
@@ -314,6 +325,7 @@ describe(`entity handler — processPrompt happy path`, () => {
       key: `current`,
       status: `cold`,
       kind: `claude`,
+      target: `sandbox` as const,
       pinned: false,
       workspaceIdentity: `volume:w`,
       workspaceSpec: { type: `volume`, name: `w` },
@@ -363,7 +375,10 @@ describe(`entity handler — idle timer wakes entity`, () => {
       provider.destroy = async (agentId: string) => {
         destroyCalls.push(agentId)
       }
-      const lm = new LifecycleManager({ provider, bridge })
+      const lm = new LifecycleManager({
+        providers: { sandbox: provider, host: provider },
+        bridge,
+      })
       const wr = new WorkspaceRegistry()
       const handler = makeCodingAgentHandler(lm, wr, {
         defaults: {
@@ -380,6 +395,7 @@ describe(`entity handler — idle timer wakes entity`, () => {
         key: `current`,
         status: `cold`,
         kind: `claude`,
+        target: `sandbox` as const,
         pinned: false,
         workspaceIdentity: `volume:w`,
         workspaceSpec: { type: `volume`, name: `w` },
@@ -409,7 +425,7 @@ describe(`entity handler — idle timer wakes entity`, () => {
     // Provider returns 'unknown' simulating the post-destroy state.
     const provider = makeFakeProvider(`unknown`)
     const lm = new LifecycleManager({
-      provider,
+      providers: { sandbox: provider, host: provider },
       bridge: {
         async runTurn() {
           return { exitCode: 0 }
@@ -429,6 +445,7 @@ describe(`entity handler — idle timer wakes entity`, () => {
       key: `current`,
       status: `idle`,
       kind: `claude`,
+      target: `sandbox` as const,
       pinned: false,
       workspaceIdentity: `volume:w`,
       workspaceSpec: { type: `volume`, name: `w` },
