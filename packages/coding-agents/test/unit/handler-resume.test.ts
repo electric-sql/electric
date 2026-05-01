@@ -245,4 +245,62 @@ describe(`handler resume materialisation`, () => {
     expect(resumeRow).toBeDefined()
     expect(resumeRow.detail).toMatch(/^bytes=\d+$/)
   })
+
+  it(`skips copyTo and lifecycle row when transcript file already exists`, async () => {
+    // Sandbox where the probe (`test -f`) returns exit 0 (file exists).
+    const execCalls: any[] = []
+    const copyToCalls: any[] = []
+    const sandbox = {
+      instanceId: `inst-1`,
+      workspaceMount: `/workspace`,
+      exec: vi.fn(async (req: any) => {
+        execCalls.push(req)
+        return makeExecHandle([], 0) // probe returns 0 = file exists
+      }),
+      copyTo: vi.fn(async (args: any) => {
+        copyToCalls.push(args)
+      }),
+    } as any
+    const lm = makeMinimalLm(sandbox)
+    const { ctx, state } = makeFakeCtx(`/test/ca/resume-3`, {
+      kind: `claude`,
+      workspaceType: `volume`,
+      workspaceName: `vol-3`,
+    })
+    const { WorkspaceRegistry } = await import(`../../src/workspace-registry`)
+    const wr = new WorkspaceRegistry()
+
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 500,
+        coldBootBudgetMs: 30_000,
+        runTimeoutMs: 60_000,
+      },
+      env: () => ({}),
+    })
+
+    await handler(ctx, { type: `message_received` })
+    state.sessionMeta.rows.set(`current`, {
+      ...(state.sessionMeta.get(`current`) as SessionMetaRow),
+      nativeSessionId: `native-sess-warm`,
+    })
+    state.nativeJsonl.rows.set(`current`, {
+      key: `current`,
+      nativeSessionId: `native-sess-warm`,
+      content: `{"type":"user","message":{"role":"user","content":"prior"}}\n`,
+    } satisfies NativeJsonlRow)
+
+    state.inbox.rows.set(`i1`, {
+      key: `i1`,
+      message_type: `prompt`,
+      payload: { text: `another` },
+    })
+    await handler(ctx, { type: `message_received` })
+
+    expect(copyToCalls.length).toBe(0)
+    const lifecycleRows = Array.from(state.lifecycle.rows.values()) as any[]
+    expect(
+      lifecycleRows.find((r) => r.event === `resume.restored`)
+    ).toBeUndefined()
+  })
 })
