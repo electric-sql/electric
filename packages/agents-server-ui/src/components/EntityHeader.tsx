@@ -144,7 +144,11 @@ export function EntityHeader({
                 void fetch(`${baseUrl}${entity.url}/send`, {
                   method: `POST`,
                   headers: { 'content-type': `application/json` },
-                  body: JSON.stringify({ type: `pin`, payload: {} }),
+                  body: JSON.stringify({
+                    from: `user`,
+                    type: `pin`,
+                    payload: {},
+                  }),
                 })
               }}
               title="Pin — keep sandbox alive past idle timeout"
@@ -158,7 +162,11 @@ export function EntityHeader({
                 void fetch(`${baseUrl}${entity.url}/send`, {
                   method: `POST`,
                   headers: { 'content-type': `application/json` },
-                  body: JSON.stringify({ type: `release`, payload: {} }),
+                  body: JSON.stringify({
+                    from: `user`,
+                    type: `release`,
+                    payload: {},
+                  }),
                 })
               }}
               title="Release — allow idle hibernation"
@@ -173,7 +181,11 @@ export function EntityHeader({
                 void fetch(`${baseUrl}${entity.url}/send`, {
                   method: `POST`,
                   headers: { 'content-type': `application/json` },
-                  body: JSON.stringify({ type: `stop`, payload: {} }),
+                  body: JSON.stringify({
+                    from: `user`,
+                    type: `stop`,
+                    payload: {},
+                  }),
                 })
               }}
               title="Stop — hibernate the sandbox now"
