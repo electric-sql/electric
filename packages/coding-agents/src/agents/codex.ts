@@ -23,9 +23,9 @@ interface RolloutMeta {
 
 function todayMeta(): RolloutMeta {
   const now = new Date()
-  const yyyy = String(now.getFullYear())
-  const mm = String(now.getMonth() + 1).padStart(2, `0`)
-  const dd = String(now.getDate()).padStart(2, `0`)
+  const yyyy = String(now.getUTCFullYear())
+  const mm = String(now.getUTCMonth() + 1).padStart(2, `0`)
+  const dd = String(now.getUTCDate()).padStart(2, `0`)
   const ts = now.toISOString().replace(/[:.]/g, `-`).slice(0, 19)
   return { yyyy, mm, dd, ts }
 }
@@ -38,7 +38,8 @@ function todayMeta(): RolloutMeta {
 function metaFromContent(content?: string): RolloutMeta {
   if (!content) return todayMeta()
   const firstNl = content.indexOf(`\n`)
-  const firstLine = firstNl >= 0 ? content.slice(0, firstNl) : content
+  const firstLine = (firstNl >= 0 ? content.slice(0, firstNl) : content).trim()
+  if (!firstLine) return todayMeta()
   try {
     const parsed = JSON.parse(firstLine) as Record<string, unknown>
     const candidate =
@@ -50,9 +51,9 @@ function metaFromContent(content?: string): RolloutMeta {
     const d = new Date(candidate)
     if (Number.isNaN(d.getTime())) return todayMeta()
     return {
-      yyyy: String(d.getFullYear()),
-      mm: String(d.getMonth() + 1).padStart(2, `0`),
-      dd: String(d.getDate()).padStart(2, `0`),
+      yyyy: String(d.getUTCFullYear()),
+      mm: String(d.getUTCMonth() + 1).padStart(2, `0`),
+      dd: String(d.getUTCDate()).padStart(2, `0`),
       ts: d.toISOString().replace(/[:.]/g, `-`).slice(0, 19),
     }
   } catch {
