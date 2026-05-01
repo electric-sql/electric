@@ -128,14 +128,14 @@ which is exactly where `claude --resume` will read from. For an imported
 session this overwrites the source file with identical bytes, which is
 harmless.
 
-### D6. CLI: `electric-ax import-claude`
+### D6. CLI: `electric-ax-import-claude`
 
 A small TypeScript script at `packages/coding-agents/src/cli/import-claude.ts`,
 built by the existing tsdown setup into `dist/cli/import-claude.js`,
 with a `bin` entry in `package.json`:
 
 ```
-electric-ax import-claude \
+electric-ax-import-claude \
   --workspace <hostPath> \
   --session-id <id> \
   [--agent-id <id>] \
@@ -305,7 +305,7 @@ processPrompt (wasCold=true):
 ### Import flow
 
 ```
-CLI: electric-ax import-claude --workspace P --session-id S
+CLI: electric-ax-import-claude --workspace P --session-id S
   → PUT /coding-agent/<name>
        { target: 'host', workspaceType: 'bindMount',
          workspaceHostPath: P, importNativeSessionId: S }
