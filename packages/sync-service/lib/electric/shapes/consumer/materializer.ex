@@ -528,38 +528,26 @@ defmodule Electric.Shapes.Consumer.Materializer do
             active_conditions: ac
           },
           {{index, tag_indices}, counts_and_events} ->
-            if is_map_key(index, key) do
-              # Duplicate insert — the materializer has already seen this key.
-              # Surfaces upstream bugs (history replay re-reading entries, or
-              # the source shape's filter writing two inserts without an
-              # intervening delete). Log and skip rather than crashing the
-              # materializer (which would invalidate every dependent shape).
-              Logger.warning(fn ->
-                "Materializer for #{state.shape_handle} got duplicate INSERT for key #{inspect(key)}; ignoring"
-              end)
+            {value, original_string} = cast!(record, state)
+            if is_map_key(index, key), do: raise("Key #{key} already exists")
+            included? = evaluate_inclusion(move_tags, ac)
 
-              {{index, tag_indices}, counts_and_events}
-            else
-              {value, original_string} = cast!(record, state)
-              included? = evaluate_inclusion(move_tags, ac)
+            index =
+              Map.put(index, key, %{
+                value: value,
+                tags: move_tags,
+                active_conditions: ac,
+                included?: included?
+              })
 
-              index =
-                Map.put(index, key, %{
-                  value: value,
-                  tags: move_tags,
-                  active_conditions: ac,
-                  included?: included?
-                })
+            tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
 
-              tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
+            counts_and_events =
+              if included?,
+                do: increment_value(counts_and_events, value, original_string),
+                else: counts_and_events
 
-              counts_and_events =
-                if included?,
-                  do: increment_value(counts_and_events, value, original_string),
-                  else: counts_and_events
-
-              {{index, tag_indices}, counts_and_events}
-            end
+            {{index, tag_indices}, counts_and_events}
 
           %Changes.UpdatedRecord{
             key: key,
@@ -579,8 +567,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
             pk_changed = old_key != key
             has_ac_update = ac != [] and is_map_key(index, old_key)
 
-            if (columns_present or has_tag_updates or has_ac_update or pk_changed) and
-                 is_map_key(index, old_key) do
+            if columns_present or has_tag_updates or has_ac_update or pk_changed do
               old_entry = Map.fetch!(index, old_key)
 
               # When the primary key changes, re-index every existing tag for the new key.
@@ -677,32 +664,18 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
           %Changes.DeletedRecord{key: key, move_tags: move_tags},
           {{index, tag_indices}, counts_and_events} ->
-            case Map.pop(index, key) do
-              {nil, _index} ->
-                # The materializer's index doesn't contain this key — usually
-                # because the source shape's filter wrote a DELETE event for
-                # a row whose most recent state didn't match the inner shape's
-                # WHERE clause. Log and skip rather than crashing the
-                # materializer, which would invalidate every dependent shape.
-                Logger.warning(fn ->
-                  "Materializer for #{state.shape_handle} got DELETE for unknown key #{inspect(key)}; ignoring"
-                end)
+            {entry, index} = Map.pop!(index, key)
+            tag_indices = remove_row_from_tag_indices(tag_indices, key, move_tags)
 
-                {{index, tag_indices}, counts_and_events}
-
-              {entry, index} ->
-                tag_indices = remove_row_from_tag_indices(tag_indices, key, move_tags)
-
-                if entry.included? do
-                  {{index, tag_indices},
-                   decrement_value(
-                     counts_and_events,
-                     entry.value,
-                     value_to_string(entry.value, state)
-                   )}
-                else
-                  {{index, tag_indices}, counts_and_events}
-                end
+            if entry.included? do
+              {{index, tag_indices},
+               decrement_value(
+                 counts_and_events,
+                 entry.value,
+                 value_to_string(entry.value, state)
+               )}
+            else
+              {{index, tag_indices}, counts_and_events}
             end
 
           %{headers: %{event: event, patterns: patterns}},
@@ -716,27 +689,16 @@ defmodule Electric.Shapes.Consumer.Materializer do
                 affected,
                 {{index, tag_indices}, counts_and_events},
                 fn {key, matched_positions}, acc ->
-                  case Map.fetch(index, key) do
-                    {:ok, entry} ->
-                      process_move_event(
-                        entry,
-                        key,
-                        matched_positions,
-                        new_condition,
-                        acc,
-                        state
-                      )
+                  entry = Map.fetch!(index, key)
 
-                    :error ->
-                      # Tag index pointed at a key not in the materializer
-                      # index — log and skip rather than crash the
-                      # materializer.
-                      Logger.warning(fn ->
-                        "Materializer for #{state.shape_handle} got #{event} for unknown key #{inspect(key)}; ignoring"
-                      end)
-
-                      acc
-                  end
+                  process_move_event(
+                    entry,
+                    key,
+                    matched_positions,
+                    new_condition,
+                    acc,
+                    state
+                  )
                 end
               )
 
@@ -759,15 +721,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  defp decrement_value({value_counts, events}, value, _original_string)
-       when not is_map_key(value_counts, value) do
-    # The value was supposed to have been added before; missing here implies
-    # an upstream inconsistency. Logging would spam — the materializer's
-    # other handlers already log when they observe inconsistent state.
-    {value_counts, events}
-  end
-
   defp decrement_value({value_counts, events}, value, original_string) do
+    # If we're decrementing, it must have been added before
     case Map.fetch!(value_counts, value) do
       1 ->
         {Map.delete(value_counts, value), [{:move_out, {value, original_string}} | events]}
