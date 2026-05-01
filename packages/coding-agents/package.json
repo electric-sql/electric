@@ -11,6 +11,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "electric-ax-import-claude": "./dist/cli/import-claude.js"
+  },
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
