@@ -35,7 +35,25 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./conformance": {
+      "import": {
+        "types": "./dist/conformance/index.d.ts",
+        "default": "./dist/conformance/index.js"
+      },
+      "require": {
+        "types": "./dist/conformance/index.d.cts",
+        "default": "./dist/conformance/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "vitest": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@electric-ax/agents-runtime": "workspace:*",
