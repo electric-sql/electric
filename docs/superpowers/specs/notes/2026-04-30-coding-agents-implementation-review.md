@@ -73,13 +73,13 @@ If both `EntityHeader` and `CodingAgentView` called `useCodingAgent`, two SSE st
 
 ## 2. Spec amendments needed
 
-The following spec documents describe designs that were superseded during implementation but have not been updated:
+The following spec documents describe designs that were superseded during implementation. Items 1 and 2 were corrected in the follow-up commit on `coding-agents-slice-a`; items 3–5 remain open.
 
-1. **`2026-04-30-coding-agents-slice-b-design.md` §Resume data flow / §Why per-line tee.**
-   These sections still describe the per-line tee approach (rows with `{key, runId, seq, line, nativeSessionId, kind}`). The shipped implementation uses a single-row transcript blob captured post-turn via `base64`. The `nativeJsonlRowSchema` in the codebase already reflects the correct shape — the spec doc is the stale artefact.
+1. **`2026-04-30-coding-agents-slice-b-design.md` §Resume data flow / §Why per-line tee.** ✅ RESOLVED
+   Rewritten to describe the shipped blob-after-turn capture mechanism (`captureTranscript` / `materialiseResume`). `nativeJsonlRowSchema` in the spec now matches the codebase (single-row blob with `{key: 'current', nativeSessionId, content}`). "Why per-line tee" section replaced with "Why blob-after-turn". Architecture note and component table updated.
 
-2. **`2026-04-30-coding-agents-platform-primitive-design.md` §Entity URL convention.**
-   States `/<parent-entity>/coding-agent/<id>`. Actual runtime uses flat `/<type>/<id>`.
+2. **`2026-04-30-coding-agents-platform-primitive-design.md` and `2026-04-30-coding-agents-slice-a-design.md` §Entity URL convention.** ✅ RESOLVED
+   Both specs corrected from `/<parent-entity>/coding-agent/<id>` to `/coding-agent/<id>` (the actual flat convention used by the runtime).
 
 3. **`2026-04-30-coding-agents-slice-a-design.md` §Runtime helper.**
    States `send()` returns `Promise<{ runId: string }>`. Shipped as `Promise<void>`.
@@ -98,9 +98,13 @@ The following spec documents describe designs that were superseded during implem
 
 `packages/coding-agents/src/entity/handler.ts:134` — the handler is typed as `(ctx: any, _wake: any)`. All collection access (`ctx.db.collections.X`, `ctx.db.actions.X_insert`) is untyped. A typo in a collection name fails silently at runtime. Slice A report noted this under "Recommended next steps / Tighten `ctx: any`". Slice B did not address it.
 
-### `agent-session-protocol@0.0.2` `sessionId` bug
+### ~~`agent-session-protocol@0.0.2` `sessionId` bug~~ ✅ RESOLVED
 
-`normalizeClaude()` reads `entry.sessionId` but claude emits `session_id`. The bridge works around it by scanning raw JSONL directly. If the library is updated to a version that fixes this, the workaround in `packages/coding-agents/src/bridge/stdio-bridge.ts` should be removed — currently both code paths coexist. Conversely, if the library is bumped and the workaround is left in place, `nativeSessionId` will be set twice (once from the library, once from the raw scan) and the second assignment will be a no-op due to the `!meta.nativeSessionId` guard. Low risk but confusing.
+`normalizeClaude()` now reads `entry.session_id ?? entry.sessionId` in both the ESM
+(`dist/src-8t6qdcZ0.js`) and CJS (`dist/src-Det_CZei.cjs`) bundles — patched via
+`patches/agent-session-protocol@0.0.2.patch` using `pnpm patch`. The raw-JSONL workaround
+in `packages/coding-agents/src/bridge/stdio-bridge.ts` has been removed; `nativeSessionId`
+is now read from the `session_init` event produced by `normalize()` directly.
 
 ### Transcript path sanitization
 
@@ -155,4 +159,4 @@ The following items were deferred from Slice A or Slice B and are targeted at Sl
 - Pre-warmed sandbox pools.
 - Pin survival across server restart (persist refcount to stream or session meta).
 - `ctx.deleteEntityStream` runtime primitive (for true `destroy()` tombstone cleanup).
-- Patch `agent-session-protocol@0.0.2` upstream to read `session_id` (snake_case).
+- ~~Patch `agent-session-protocol@0.0.2` upstream to read `session_id` (snake_case).~~ ✅ DONE (local pnpm patch)
