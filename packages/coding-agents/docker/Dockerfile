@@ -15,10 +15,10 @@ RUN apt-get update \
 RUN userdel -r node 2>/dev/null || true \
     && useradd -m -s /bin/bash -u 1000 agent
 
-# Install the Claude CLI globally. Pin a recent version to avoid drift; can bump later.
-# (Use the floating tag for now; pin in v1.)
-RUN npm install -g @anthropic-ai/claude-code@latest \
-    && claude --version
+# Install the Claude + Codex CLIs globally. Pin recent versions; bump later.
+RUN npm install -g @anthropic-ai/claude-code@latest @openai/codex@^0.128.0 \
+    && claude --version \
+    && codex --version
 
 # Workspace mount point. The provider attaches a volume here.
 RUN mkdir -p /workspace \
