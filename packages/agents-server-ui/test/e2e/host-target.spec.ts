@@ -277,3 +277,101 @@ test.describe(`Aligned bind-mount cwd (Flow 10)`, () => {
     }
   })
 })
+
+test.describe(`Convert-target operation (Flows 11–13)`, () => {
+  test(`Convert button on a sandbox+bindMount agent flips it to host`, async ({
+    page,
+    request,
+  }) => {
+    const { path: tmp } = await makeTmpWorkspace()
+    const name = uniqueAgentName(`pw-conv-sb2host-`)
+    try {
+      await spawnAndWake(request, name, {
+        kind: `claude`,
+        target: `sandbox`,
+        workspaceType: `bindMount`,
+        workspaceHostPath: tmp,
+      })
+      await page.goto(`/#/entity/coding-agent/${name}`)
+      const convertBtn = page.getByRole(`button`, {
+        name: /Convert → Host/i,
+      })
+      await expect(convertBtn).toBeVisible({ timeout: 10_000 })
+      await expect(convertBtn).toBeEnabled()
+      await convertBtn.click()
+
+      // Lifecycle row appears
+      await expect(page.getByText(/Target changed/i)).toBeVisible({
+        timeout: 10_000,
+      })
+      // Host badge appears
+      await expect(page.getByText(`host`, { exact: true }).first()).toBeVisible(
+        { timeout: 5_000 }
+      )
+      // Button now offers the reverse direction
+      await expect(
+        page.getByRole(`button`, { name: /Convert → Sandbox/i })
+      ).toBeVisible()
+    } finally {
+      await deleteEntity(request, name)
+      await rm(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test(`Convert button on a host agent flips it back to sandbox`, async ({
+    page,
+    request,
+  }) => {
+    const { path: tmp } = await makeTmpWorkspace()
+    const name = uniqueAgentName(`pw-conv-host2sb-`)
+    try {
+      await spawnAndWake(request, name, {
+        kind: `claude`,
+        target: `host`,
+        workspaceType: `bindMount`,
+        workspaceHostPath: tmp,
+      })
+      await page.goto(`/#/entity/coding-agent/${name}`)
+      const convertBtn = page.getByRole(`button`, {
+        name: /Convert → Sandbox/i,
+      })
+      await expect(convertBtn).toBeVisible({ timeout: 10_000 })
+      await expect(convertBtn).toBeEnabled()
+      await convertBtn.click()
+
+      await expect(page.getByText(/Target changed/i)).toBeVisible({
+        timeout: 10_000,
+      })
+      // Host badge should disappear after the flip
+      await expect(
+        page.getByRole(`button`, { name: /Convert → Host/i })
+      ).toBeVisible()
+    } finally {
+      await deleteEntity(request, name)
+      await rm(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test(`Convert→Host is disabled for a sandbox+volume agent`, async ({
+    page,
+    request,
+  }) => {
+    const name = uniqueAgentName(`pw-conv-disabled-`)
+    try {
+      await spawnAndWake(request, name, {
+        kind: `claude`,
+        target: `sandbox`,
+        workspaceType: `volume`,
+        workspaceName: `pw-conv-vol-${Date.now()}`,
+      })
+      await page.goto(`/#/entity/coding-agent/${name}`)
+      const convertBtn = page.getByRole(`button`, {
+        name: /Convert → Host/i,
+      })
+      await expect(convertBtn).toBeVisible({ timeout: 10_000 })
+      await expect(convertBtn).toBeDisabled()
+    } finally {
+      await deleteEntity(request, name)
+    }
+  })
+})
