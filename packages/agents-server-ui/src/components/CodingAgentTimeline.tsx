@@ -82,6 +82,11 @@ function AgentMetaRow({
       <Badge color="gray" variant="outline">
         {meta.kind}
       </Badge>
+      {meta.target === `host` && (
+        <Badge color="orange" variant="soft">
+          host
+        </Badge>
+      )}
       <Badge color="gray" variant="outline">
         {meta.workspaceIdentity}
       </Badge>
