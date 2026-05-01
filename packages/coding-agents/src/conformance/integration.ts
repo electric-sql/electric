@@ -186,6 +186,146 @@ export function runCodingAgentsIntegrationConformance(
 
           await provider.destroy(agentId).catch(() => undefined)
         }, 180_000)
+
+        it(`L2.4 reconcile transitions stale running run to failed:orphaned`, async () => {
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+          const agentId = `/test/coding-agent/${kind}-l2-4-${Date.now().toString(36)}`
+          const { ctx, state } = makeFakeCtx(agentId, buildArgs(kind, ws))
+          await handler(ctx, { type: `message_received` })
+
+          // Inject a stale run row predating lm.startedAtMs.
+          const staleStartedAt = lm.startedAtMs - 10_000
+          state.runs.rows.set(`stale`, {
+            key: `stale`,
+            startedAt: staleStartedAt,
+            status: `running`,
+            promptInboxKey: `fake`,
+          } as RunRow)
+          state.sessionMeta.rows.set(`current`, {
+            ...(state.sessionMeta.get(`current`) as SessionMetaRow),
+            status: `running`,
+          })
+
+          // Send a real prompt; reconcile-on-entry should orphan the stale run.
+          pushInbox(state, `i1`, `prompt`, { text: probe.prompt })
+          await handler(ctx, { type: `message_received` })
+
+          const stale = state.runs.get(`stale`) as RunRow
+          expect(stale.status).toBe(`failed`)
+          expect(stale.finishReason).toBe(`orphaned`)
+          // Plus a real run completed.
+          const completed = (
+            Array.from(state.runs.rows.values()) as Array<RunRow>
+          ).filter((r) => r.status === `completed`)
+          expect(completed.length).toBeGreaterThan(0)
+
+          await provider.destroy(agentId).catch(() => undefined)
+        }, 180_000)
+
+        it(`L2.5 workspace persists across teardown`, async () => {
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+
+          // Spawn first agent on workspace; run a turn so the sandbox is up.
+          const agentIdA = `/test/coding-agent/${kind}-l2-5a-${Date.now().toString(36)}`
+          const argsBoth = buildArgs(kind, ws)
+          const { ctx: ctxA, state: stateA } = makeFakeCtx(agentIdA, argsBoth)
+          await handler(ctxA, { type: `message_received` })
+          pushInbox(stateA, `i1`, `prompt`, { text: probe.prompt })
+          await handler(ctxA, { type: `message_received` })
+
+          // Use provider.start (idempotent — returns the running instance) to
+          // get an instance handle so we can copyTo a sentinel file. The
+          // workspace path of this provider may differ from previous agents
+          // for the same workspaceIdentity; copyTo writes into the workspace
+          // mount.
+          const instA = await provider.start({
+            agentId: agentIdA,
+            kind,
+            target: config.target,
+            workspace: ws,
+            env: kindEnv!,
+          })
+          const sentinelPath = `${instA.workspaceMount}/sentinel.txt`
+          await instA.copyTo({
+            destPath: sentinelPath,
+            content: `persisted`,
+            mode: 0o644,
+          })
+
+          // Destroy first agent.
+          pushInbox(stateA, `i2`, `destroy`)
+          await handler(ctxA, { type: `message_received` })
+
+          // Spawn second agent on SAME workspace.
+          const agentIdB = `/test/coding-agent/${kind}-l2-5b-${Date.now().toString(36)}`
+          const { ctx: ctxB } = makeFakeCtx(agentIdB, argsBoth)
+          await handler(ctxB, { type: `message_received` })
+          const instB = await provider.start({
+            agentId: agentIdB,
+            kind,
+            target: config.target,
+            workspace: ws,
+            env: kindEnv!,
+          })
+
+          const h = await instB.exec({
+            cmd: [`cat`, `${instB.workspaceMount}/sentinel.txt`],
+          })
+          let out = ``
+          for await (const line of h.stdout) out += line
+          for await (const _ of h.stderr) {
+            /* discard */
+          }
+          const exit = await h.wait()
+          expect(exit.exitCode).toBe(0)
+          expect(out.trim()).toBe(`persisted`)
+
+          await provider.destroy(agentIdB).catch(() => undefined)
+        }, 240_000)
+
+        it(`L2.6 shared-workspace lease serialises concurrent runs`, async () => {
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+
+          const agentIdA = `/test/coding-agent/${kind}-l2-6a-${Date.now().toString(36)}`
+          const agentIdB = `/test/coding-agent/${kind}-l2-6b-${Date.now().toString(36)}`
+          const args = buildArgs(kind, ws)
+          const { ctx: ctxA, state: stateA } = makeFakeCtx(agentIdA, args)
+          const { ctx: ctxB, state: stateB } = makeFakeCtx(agentIdB, args)
+
+          // First-wake init for both.
+          await handler(ctxA, { type: `message_received` })
+          await handler(ctxB, { type: `message_received` })
+
+          pushInbox(stateA, `i1`, `prompt`, { text: probe.prompt })
+          pushInbox(stateB, `j1`, `prompt`, { text: probe.prompt })
+
+          // Concurrently process both. The lease serialises through the
+          // workspace registry — only one runs at a time.
+          await Promise.all([
+            handler(ctxA, { type: `message_received` }),
+            handler(ctxB, { type: `message_received` }),
+          ])
+
+          const runA = (
+            Array.from(stateA.runs.rows.values()) as Array<RunRow>
+          )[0]!
+          const runB = (
+            Array.from(stateB.runs.rows.values()) as Array<RunRow>
+          )[0]!
+          expect(runA.status).toBe(`completed`)
+          expect(runB.status).toBe(`completed`)
+          // Non-overlap: A.endedAt <= B.startedAt OR B.endedAt <= A.startedAt
+          const noOverlap =
+            (runA.endedAt ?? 0) <= runB.startedAt ||
+            (runB.endedAt ?? 0) <= runA.startedAt
+          expect(noOverlap).toBe(true)
+
+          await provider.destroy(agentIdA).catch(() => undefined)
+          await provider.destroy(agentIdB).catch(() => undefined)
+        }, 360_000)
       })
     }
   })
