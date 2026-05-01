@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
-import { realpath } from 'node:fs/promises'
+import { realpath, writeFile, unlink } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import { log } from '../log'
@@ -20,9 +22,20 @@ export interface LocalDockerProviderOptions {
   image?: string
 }
 
+/**
+ * Per-instance env files persisted on the host filesystem. `docker exec
+ * --env-file <path>` reads from the host, so we materialise spec.env to
+ * a 0600 file in the host tmpdir and reference it instead of inlining
+ * secrets in argv (visible via `ps`). The file is removed on destroy.
+ */
+function envFilePathForInstance(instanceId: string): string {
+  return join(tmpdir(), `electric-agents-env-${instanceId}`)
+}
+
 export class LocalDockerProvider implements SandboxProvider {
   readonly name = `local-docker`
   private readonly image: string
+  private readonly envFileByInstance = new Map<string, string>()
 
   constructor(opts: LocalDockerProviderOptions = {}) {
     this.image = opts.image ?? IMAGE
@@ -35,6 +48,11 @@ export class LocalDockerProvider implements SandboxProvider {
         { agentId: spec.agentId, instanceId: existing.id },
         `attaching to existing sandbox`
       )
+      // Re-materialise the env file for the adopted instance so subsequent
+      // execs find secrets via --env-file rather than -e argv.
+      if (Object.keys(spec.env).length > 0) {
+        await this.writeEnvFile(existing.id, spec.env)
+      }
       return this.makeInstance(existing.id, spec)
     }
     if (existing && !existing.running) {
@@ -64,7 +82,32 @@ export class LocalDockerProvider implements SandboxProvider {
     const { stdout } = await runDocker(args)
     const instanceId = stdout.trim()
     log.info({ agentId: spec.agentId, instanceId }, `started sandbox`)
+
+    if (Object.keys(spec.env).length > 0) {
+      await this.writeEnvFile(instanceId, spec.env)
+    }
+
     return this.makeInstance(instanceId, spec)
+  }
+
+  private async writeEnvFile(
+    instanceId: string,
+    env: Record<string, string>
+  ): Promise<void> {
+    const path = envFilePathForInstance(instanceId)
+    const content =
+      Object.entries(env)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(`\n`) + `\n`
+    await writeFile(path, content, { mode: 0o600 })
+    this.envFileByInstance.set(instanceId, path)
+  }
+
+  private async removeEnvFile(instanceId: string): Promise<void> {
+    const path = this.envFileByInstance.get(instanceId)
+    if (!path) return
+    this.envFileByInstance.delete(instanceId)
+    await unlink(path).catch(() => undefined)
   }
 
   async stop(instanceId: string): Promise<void> {
@@ -75,6 +118,7 @@ export class LocalDockerProvider implements SandboxProvider {
       )
     })
     await runDocker([`rm`, `-f`, instanceId]).catch(() => undefined)
+    await this.removeEnvFile(instanceId)
   }
 
   async destroy(agentId: string): Promise<void> {
@@ -146,13 +190,24 @@ export class LocalDockerProvider implements SandboxProvider {
   }
 
   private makeInstance(instanceId: string, spec: SandboxSpec): SandboxInstance {
+    const envFilePathFor = (): string | undefined =>
+      this.envFileByInstance.get(instanceId)
+
     return {
       instanceId,
       agentId: spec.agentId,
       workspaceMount: `/workspace`,
-      exec: (args) => execInContainer(instanceId, args, spec.env),
+      exec: (args) =>
+        execInContainer(instanceId, args, spec.env, envFilePathFor()),
       copyTo: ({ destPath, content, mode = 0o600 }) =>
-        copyToContainer(instanceId, destPath, content, mode, spec.env),
+        copyToContainer(
+          instanceId,
+          destPath,
+          content,
+          mode,
+          spec.env,
+          envFilePathFor()
+        ),
     }
   }
 }
@@ -202,7 +257,8 @@ async function copyToContainer(
   destPath: string,
   content: string,
   mode: number,
-  baseEnv: Record<string, string>
+  baseEnv: Record<string, string>,
+  envFilePath?: string
 ): Promise<void> {
   const handle = await execInContainer(
     containerId,
@@ -214,7 +270,8 @@ async function copyToContainer(
       ],
       stdin: `pipe`,
     },
-    baseEnv
+    baseEnv,
+    envFilePath
   )
   if (!handle.writeStdin || !handle.closeStdin) {
     throw new Error(`copyTo requires stdin pipe`)
@@ -252,12 +309,24 @@ async function copyToContainer(
 async function execInContainer(
   containerId: string,
   req: ExecRequest,
-  baseEnv: Record<string, string>
+  baseEnv: Record<string, string>,
+  envFilePath?: string
 ): Promise<ExecHandle> {
-  const env = { ...baseEnv, ...(req.env ?? {}) }
   const args: Array<string> = [`exec`, `-i`]
   if (req.cwd) args.push(`-w`, req.cwd)
-  for (const [k, v] of Object.entries(env)) args.push(`-e`, `${k}=${v}`)
+
+  // Per-call req.env passes via -e (typically non-secret overrides).
+  // Secrets in baseEnv route through --env-file when available so they
+  // never appear in `ps`. Bootstrap call (env-file not yet written)
+  // falls back to -e on baseEnv for that single call.
+  if (envFilePath) {
+    args.push(`--env-file`, envFilePath)
+  } else {
+    for (const [k, v] of Object.entries(baseEnv)) args.push(`-e`, `${k}=${v}`)
+  }
+  for (const [k, v] of Object.entries(req.env ?? {})) {
+    args.push(`-e`, `${k}=${v}`)
+  }
   args.push(containerId, ...req.cmd)
 
   const child = spawn(`docker`, args, {

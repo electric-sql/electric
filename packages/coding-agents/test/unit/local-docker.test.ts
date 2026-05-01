@@ -54,6 +54,44 @@ describeMaybe(`LocalDockerProvider.copyTo`, () => {
     }
   }, 240_000)
 
+  it(`does not expose env values via host argv during exec`, async () => {
+    const sentinel = `SLICE_C1_SENTINEL_${Date.now().toString(36)}`
+    const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
+    const agentId = `/test/coding-agent/envleak-${Date.now().toString(36)}`
+    const sandbox = await provider.start({
+      agentId,
+      kind: `claude`,
+      workspace: {
+        type: `volume`,
+        name: `envleak-${Date.now().toString(36)}`,
+      },
+      env: { CANARY: sentinel },
+    })
+    try {
+      // Hold a docker exec process open while we inspect host argv.
+      const handle = await sandbox.exec({ cmd: [`sleep`, `2`] })
+
+      const { execSync } = await import(`node:child_process`)
+      const ps = execSync(`ps -ef`, { encoding: `utf8` })
+      // Sentinel must not appear anywhere in the host process list.
+      expect(ps).not.toContain(sentinel)
+
+      await handle.wait()
+
+      // Confirm the env IS visible inside the container — i.e. the env
+      // file is being applied, not just absent everywhere.
+      const verify = await sandbox.exec({
+        cmd: [`sh`, `-c`, `echo $CANARY`],
+      })
+      let inside = ``
+      for await (const line of verify.stdout) inside += line
+      await verify.wait()
+      expect(inside.trim()).toBe(sentinel)
+    } finally {
+      await provider.destroy(agentId).catch(() => undefined)
+    }
+  }, 240_000)
+
   it(`round-trips multi-byte UTF-8 content unchanged`, async () => {
     const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
     const agentId = `/test/coding-agent/copyto-utf8-${Date.now().toString(36)}`
