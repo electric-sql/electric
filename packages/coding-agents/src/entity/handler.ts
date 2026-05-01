@@ -6,7 +6,7 @@ import type { NormalizedEvent } from 'agent-session-protocol'
 import { log } from '../log'
 import { WorkspaceRegistry } from '../workspace-registry'
 import type { LifecycleManager } from '../lifecycle-manager'
-import type { SandboxInstance } from '../types'
+import type { CodingAgentKind, SandboxInstance } from '../types'
 import type {
   RunRow,
   SessionMetaRow,
@@ -23,7 +23,7 @@ export interface CodingAgentHandlerOptions {
     runTimeoutMs: number
   }
   /** Called per-turn (with the agent kind) to source CLI env. */
-  env: (kind: import(`../types`).CodingAgentKind) => Record<string, string>
+  env: (kind: CodingAgentKind) => Record<string, string>
   /**
    * Optional. Called by the idle timer after destroying the container,
    * to re-enter the handler so reconcile can flip status to 'cold'.
@@ -205,7 +205,7 @@ export function makeCodingAgentHandler(
     let meta: SessionMetaRow
     if (!initialMeta) {
       const args = ctx.args as {
-        kind?: `claude`
+        kind?: CodingAgentKind
         target?: `sandbox` | `host`
         workspaceType?: `volume` | `bindMount`
         workspaceName?: string

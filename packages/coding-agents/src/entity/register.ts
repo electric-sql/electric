@@ -3,7 +3,7 @@ import { getAdapter } from '../agents/registry'
 import { LifecycleManager } from '../lifecycle-manager'
 import { WorkspaceRegistry } from '../workspace-registry'
 import { SLICE_A_DEFAULTS } from '../types'
-import type { Bridge, SandboxProvider } from '../types'
+import type { Bridge, CodingAgentKind, SandboxProvider } from '../types'
 import {
   CODING_AGENT_EVENTS_COLLECTION_TYPE,
   CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,
@@ -42,7 +42,7 @@ export interface RegisterCodingAgentDeps {
    * kind. Default forwards each adapter's `defaultEnvVars` from
    * process.env.
    */
-  env?: (kind: import(`../types`).CodingAgentKind) => Record<string, string>
+  env?: (kind: CodingAgentKind) => Record<string, string>
   /**
    * Posts a self-message to the entity. Used by the idle timer to
    * re-enter the handler after destroying the container, so reconcile
@@ -91,7 +91,7 @@ export function registerCodingAgent(
   }
   const env =
     deps.env ??
-    ((kind: import(`../types`).CodingAgentKind) => {
+    ((kind: CodingAgentKind) => {
       const adapter = getAdapter(kind)
       const out: Record<string, string> = {}
       for (const k of adapter.defaultEnvVars) {
