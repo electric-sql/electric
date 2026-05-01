@@ -54,6 +54,10 @@
     "dist",
     "docker"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/agents/claude.ts",
+    "./src/agents/codex.ts",
+    "./src/index.ts"
+  ],
   "license": "Apache-2.0"
 }
