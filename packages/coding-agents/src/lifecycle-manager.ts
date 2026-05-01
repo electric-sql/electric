@@ -49,13 +49,6 @@ export class LifecycleManager {
     })
   }
 
-  async stopFor(agentId: string, target: Target): Promise<void> {
-    this.cancelIdleTimer(agentId)
-    await this.providers[target].destroy(agentId).catch((err) => {
-      log.warn({ err, agentId, target }, `lifecycleManager.stopFor failed`)
-    })
-  }
-
   async destroyAndForget(agentId: string, target: Target): Promise<void> {
     await this.destroyFor(agentId, target)
     this.pinCounts.delete(agentId)

@@ -830,7 +830,7 @@ async function processStop(ctx: any, lm: LifecycleManager): Promise<void> {
       d.status = `stopping`
     },
   })
-  await lm.stopFor(agentId, meta.target)
+  await lm.destroyFor(agentId, meta.target)
   ctx.db.actions.sessionMeta_update({
     key: `current`,
     updater: (d: SessionMetaRow) => {
