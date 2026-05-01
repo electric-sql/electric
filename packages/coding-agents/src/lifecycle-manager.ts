@@ -8,12 +8,14 @@ import type {
 } from './types'
 
 export interface LifecycleManagerDeps {
-  provider: SandboxProvider
+  providers: { sandbox: SandboxProvider; host: SandboxProvider }
   bridge: Bridge
 }
 
+export type Target = `sandbox` | `host`
+
 export class LifecycleManager {
-  readonly provider: SandboxProvider
+  readonly providers: { sandbox: SandboxProvider; host: SandboxProvider }
   readonly bridge: Bridge
   /** Wall-clock ms captured at construction. Used to detect orphan runs. */
   readonly startedAtMs: number
@@ -22,7 +24,7 @@ export class LifecycleManager {
   private readonly pinCounts = new Map<string, number>()
 
   constructor(deps: LifecycleManagerDeps) {
-    this.provider = deps.provider
+    this.providers = deps.providers
     this.bridge = deps.bridge
     this.startedAtMs = Date.now()
   }
@@ -30,28 +32,41 @@ export class LifecycleManager {
   // ── sandbox lifecycle ──
 
   async ensureRunning(spec: SandboxSpec): Promise<SandboxInstance> {
-    return this.provider.start(spec)
+    return this.providers[spec.target].start(spec)
   }
 
-  async stop(agentId: string): Promise<void> {
+  async statusFor(
+    agentId: string,
+    target: Target
+  ): Promise<`running` | `stopped` | `unknown`> {
+    return this.providers[target].status(agentId)
+  }
+
+  async destroyFor(agentId: string, target: Target): Promise<void> {
     this.cancelIdleTimer(agentId)
-    // The provider.destroy/stop interface is keyed by instanceId, not agentId.
-    // We rely on provider.destroy(agentId) which finds + removes by label.
-    await this.provider.destroy(agentId).catch((err) => {
-      log.warn(
-        { err, agentId },
-        `lifecycleManager.stop: provider.destroy failed`
-      )
+    await this.providers[target].destroy(agentId).catch((err) => {
+      log.warn({ err, agentId, target }, `lifecycleManager.destroyFor failed`)
     })
   }
 
-  async destroy(agentId: string): Promise<void> {
-    await this.stop(agentId)
+  async stopFor(agentId: string, target: Target): Promise<void> {
+    this.cancelIdleTimer(agentId)
+    await this.providers[target].destroy(agentId).catch((err) => {
+      log.warn({ err, agentId, target }, `lifecycleManager.stopFor failed`)
+    })
+  }
+
+  async destroyAndForget(agentId: string, target: Target): Promise<void> {
+    await this.destroyFor(agentId, target)
     this.pinCounts.delete(agentId)
   }
 
   async adoptRunningContainers(): Promise<Array<RecoveredSandbox>> {
-    return this.provider.recover()
+    const [a, b] = await Promise.all([
+      this.providers.sandbox.recover(),
+      this.providers.host.recover(),
+    ])
+    return [...a, ...b]
   }
 
   // ── idle timer ──

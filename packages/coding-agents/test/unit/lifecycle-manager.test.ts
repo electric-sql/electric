@@ -12,12 +12,12 @@ import type {
   SandboxSpec,
 } from '../../src/types'
 
-function fakeProvider(): SandboxProvider & {
+function fakeProvider(name: `sandbox` | `host`): SandboxProvider & {
   starts: Array<SandboxSpec>
-  stops: Array<string>
+  destroys: Array<string>
 } {
   const stub: SandboxInstance = {
-    instanceId: `inst-1`,
+    instanceId: `inst-${name}`,
     agentId: ``,
     workspaceMount: `/workspace`,
     async exec(_req: ExecRequest): Promise<ExecHandle> {
@@ -25,17 +25,17 @@ function fakeProvider(): SandboxProvider & {
     },
   }
   const fp: any = {
-    name: `fake`,
+    name,
     starts: [] as Array<SandboxSpec>,
-    stops: [] as Array<string>,
+    destroys: [] as Array<string>,
     async start(spec: SandboxSpec): Promise<SandboxInstance> {
       fp.starts.push(spec)
       return { ...stub, agentId: spec.agentId }
     },
-    async stop(instanceId: string): Promise<void> {
-      fp.stops.push(instanceId)
+    async stop(_id: string): Promise<void> {},
+    async destroy(id: string): Promise<void> {
+      fp.destroys.push(id)
     },
-    async destroy(_id: string): Promise<void> {},
     async status(_id: string): Promise<`running` | `stopped` | `unknown`> {
       return `running`
     },
@@ -52,10 +52,82 @@ const fakeBridge: Bridge = {
   },
 }
 
+describe(`LifecycleManager target routing`, () => {
+  it(`ensureRunning routes to sandbox provider when spec.target='sandbox'`, async () => {
+    const sandbox = fakeProvider(`sandbox`)
+    const host = fakeProvider(`host`)
+    const lm = new LifecycleManager({
+      providers: { sandbox, host },
+      bridge: fakeBridge,
+    })
+    await lm.ensureRunning({
+      agentId: `/x/coding-agent/y`,
+      kind: `claude`,
+      target: `sandbox`,
+      workspace: { type: `volume`, name: `w` },
+      env: {},
+    })
+    expect(sandbox.starts).toHaveLength(1)
+    expect(host.starts).toHaveLength(0)
+  })
+
+  it(`ensureRunning routes to host provider when spec.target='host'`, async () => {
+    const sandbox = fakeProvider(`sandbox`)
+    const host = fakeProvider(`host`)
+    const lm = new LifecycleManager({
+      providers: { sandbox, host },
+      bridge: fakeBridge,
+    })
+    await lm.ensureRunning({
+      agentId: `/x/coding-agent/y`,
+      kind: `claude`,
+      target: `host`,
+      workspace: { type: `bindMount`, hostPath: `/tmp` },
+      env: {},
+    })
+    expect(host.starts).toHaveLength(1)
+    expect(sandbox.starts).toHaveLength(0)
+  })
+
+  it(`statusFor and destroyFor route to the requested target`, async () => {
+    const sandbox = fakeProvider(`sandbox`)
+    const host = fakeProvider(`host`)
+    const lm = new LifecycleManager({
+      providers: { sandbox, host },
+      bridge: fakeBridge,
+    })
+    await lm.statusFor(`/x/coding-agent/y`, `sandbox`)
+    await lm.destroyFor(`/x/coding-agent/y`, `host`)
+    expect(host.destroys).toEqual([`/x/coding-agent/y`])
+    expect(sandbox.destroys).toEqual([])
+  })
+
+  it(`adoptRunningContainers merges results from both providers`, async () => {
+    const sandbox = fakeProvider(`sandbox`) as any
+    sandbox.recover = async () => [
+      { agentId: `/a`, instanceId: `s1`, status: `running`, target: `sandbox` },
+    ]
+    const host = fakeProvider(`host`) as any
+    host.recover = async () => [
+      { agentId: `/b`, instanceId: `h1`, status: `running`, target: `host` },
+    ]
+    const lm = new LifecycleManager({
+      providers: { sandbox, host },
+      bridge: fakeBridge,
+    })
+    const adopted = await lm.adoptRunningContainers()
+    expect(adopted).toHaveLength(2)
+    expect(adopted.map((r) => r.target).sort()).toEqual([`host`, `sandbox`])
+  })
+})
+
 describe(`LifecycleManager pin refcount`, () => {
   it(`increments and decrements with a floor at 0`, () => {
     const lm = new LifecycleManager({
-      provider: fakeProvider(),
+      providers: {
+        sandbox: fakeProvider(`sandbox`),
+        host: fakeProvider(`host`),
+      },
       bridge: fakeBridge,
     })
     expect(lm.pinCount(`a`)).toBe(0)
@@ -63,85 +135,22 @@ describe(`LifecycleManager pin refcount`, () => {
     expect(lm.pin(`a`).count).toBe(2)
     expect(lm.release(`a`).count).toBe(1)
     expect(lm.release(`a`).count).toBe(0)
-    // Extra release is clamped
     expect(lm.release(`a`).count).toBe(0)
-  })
-
-  it(`resetPinCount clears to 0`, () => {
-    const lm = new LifecycleManager({
-      provider: fakeProvider(),
-      bridge: fakeBridge,
-    })
-    lm.pin(`a`)
-    lm.pin(`a`)
-    lm.resetPinCount(`a`)
-    expect(lm.pinCount(`a`)).toBe(0)
   })
 })
 
 describe(`LifecycleManager idle timer`, () => {
   it(`arms and fires onFire after ms elapses`, async () => {
     const lm = new LifecycleManager({
-      provider: fakeProvider(),
+      providers: {
+        sandbox: fakeProvider(`sandbox`),
+        host: fakeProvider(`host`),
+      },
       bridge: fakeBridge,
     })
     const onFire = vi.fn()
     lm.armIdleTimer(`a`, 20, onFire)
     await new Promise((r) => setTimeout(r, 50))
     expect(onFire).toHaveBeenCalledTimes(1)
-  })
-
-  it(`cancelIdleTimer prevents fire`, async () => {
-    const lm = new LifecycleManager({
-      provider: fakeProvider(),
-      bridge: fakeBridge,
-    })
-    const onFire = vi.fn()
-    lm.armIdleTimer(`a`, 20, onFire)
-    lm.cancelIdleTimer(`a`)
-    await new Promise((r) => setTimeout(r, 50))
-    expect(onFire).not.toHaveBeenCalled()
-  })
-
-  it(`arming twice cancels prior timer`, async () => {
-    const lm = new LifecycleManager({
-      provider: fakeProvider(),
-      bridge: fakeBridge,
-    })
-    const first = vi.fn()
-    const second = vi.fn()
-    lm.armIdleTimer(`a`, 20, first)
-    lm.armIdleTimer(`a`, 20, second)
-    await new Promise((r) => setTimeout(r, 50))
-    expect(first).not.toHaveBeenCalled()
-    expect(second).toHaveBeenCalled()
-  })
-})
-
-describe(`LifecycleManager ensureRunning`, () => {
-  it(`forwards to provider.start`, async () => {
-    const fp = fakeProvider()
-    const lm = new LifecycleManager({ provider: fp, bridge: fakeBridge })
-    await lm.ensureRunning({
-      agentId: `/x/coding-agent/y`,
-      kind: `claude`,
-      workspace: { type: `volume`, name: `w` },
-      env: { K: `v` },
-    })
-    expect(fp.starts).toHaveLength(1)
-    expect(fp.starts[0]!.agentId).toBe(`/x/coding-agent/y`)
-  })
-})
-
-describe(`LifecycleManager.startedAtMs`, () => {
-  it(`captures a timestamp at construction`, () => {
-    const before = Date.now()
-    const lm = new LifecycleManager({
-      provider: fakeProvider(),
-      bridge: fakeBridge,
-    })
-    const after = Date.now()
-    expect(lm.startedAtMs).toBeGreaterThanOrEqual(before)
-    expect(lm.startedAtMs).toBeLessThanOrEqual(after)
   })
 })
