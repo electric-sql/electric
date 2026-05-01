@@ -248,7 +248,7 @@ export function makeCodingAgentHandler(
         },
       })
       meta = sessionMetaCol.get(`current`) as SessionMetaRow
-    } else if (meta.status === `idle` && providerStatus === `stopped`) {
+    } else if (meta.status === `idle` && providerStatus !== `running`) {
       ctx.db.actions.sessionMeta_update({
         key: `current`,
         updater: (d: SessionMetaRow) => {
