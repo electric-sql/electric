@@ -29,3 +29,9 @@ export {
   CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,
   CODING_AGENT_NATIVE_JSONL_COLLECTION_TYPE,
 } from './entity/collections'
+
+// Register built-in adapters by importing for side effects.
+import './agents/claude'
+
+export { getAdapter, listAdapters, registerAdapter } from './agents/registry'
+export type { CodingAgentAdapter } from './agents/registry'

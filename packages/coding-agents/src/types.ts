@@ -1,7 +1,7 @@
-import type { NormalizedEvent } from 'agent-session-protocol'
+import type { AgentType, NormalizedEvent } from 'agent-session-protocol'
 import type { CodingAgentStatus } from './entity/collections'
 
-export type CodingAgentKind = `claude` | `codex`
+export type CodingAgentKind = AgentType
 
 // ─── Sandbox provider ──────────────────────────────────────────────────────
 
@@ -103,8 +103,7 @@ export interface Bridge {
 export interface SpawnCodingAgentOptions {
   /** Stable id, scoped to the spawning entity. */
   id: string
-  /** Slice A: 'claude' only. */
-  kind: `claude`
+  kind: CodingAgentKind
   /**
    * Workspace mount. Identity is the lease key.
    *   { type: 'volume', name: 'foo' }    → 'volume:foo'
