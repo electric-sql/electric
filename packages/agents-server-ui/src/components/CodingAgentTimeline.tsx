@@ -188,7 +188,28 @@ function renderItems(
         items.push(<SystemEventRow key={key} event={e} />)
         rendered.add(key)
         break
+      case `thinking`:
+        items.push(<ThinkingRow key={key} event={e} />)
+        rendered.add(key)
+        break
+      case `turn_aborted`:
+        items.push(<TurnAbortedRow key={key} event={e} />)
+        rendered.add(key)
+        break
+      case `permission_request`:
+        items.push(<PermissionRequestRow key={key} event={e} />)
+        rendered.add(key)
+        break
+      case `permission_response`:
+        items.push(<PermissionResponseRow key={key} event={e} />)
+        rendered.add(key)
+        break
+      case `error`:
+        items.push(<ErrorRow key={key} event={e} />)
+        rendered.add(key)
+        break
       default:
+        items.push(<UnknownRow key={key} event={e} />)
         rendered.add(key)
     }
   }
@@ -362,5 +383,115 @@ function SystemEventRow({ event }: { event: EventRow }): React.ReactElement {
         {label[event.type] ?? event.type}
       </Text>
     </Flex>
+  )
+}
+
+function ThinkingRow({ event }: { event: EventRow }): React.ReactElement {
+  const [open, setOpen] = useState(false)
+  const summary =
+    (event.payload.summary as string | undefined) ||
+    (event.payload.thinking as string | undefined) ||
+    `thinking…`
+  return (
+    <Text
+      size="1"
+      color="gray"
+      style={{
+        fontStyle: `italic`,
+        opacity: open ? 1 : 0.7,
+        borderLeft: `2px solid var(--gray-a5)`,
+        paddingLeft: 12,
+        cursor: `pointer`,
+        userSelect: `none`,
+      }}
+      onClick={() => setOpen((o) => !o)}
+    >
+      {summary}
+    </Text>
+  )
+}
+
+function TurnAbortedRow({ event }: { event: EventRow }): React.ReactElement {
+  const reason = event.payload.reason as string | undefined
+  return (
+    <Text size="1" color="gray" style={{ opacity: 0.6 }}>
+      Turn aborted{reason ? ` — ${reason}` : ``}
+    </Text>
+  )
+}
+
+function PermissionRequestRow({
+  event,
+}: {
+  event: EventRow
+}): React.ReactElement {
+  const tool = (event.payload.tool as string | undefined) ?? `tool`
+  const input = event.payload.input as Record<string, unknown> | undefined
+  return (
+    <Flex
+      p="2"
+      style={{
+        background: `var(--amber-a3)`,
+        border: `1px solid var(--amber-a5)`,
+        borderRadius: `var(--radius-2)`,
+      }}
+    >
+      <Text size="2">
+        <strong>Approval requested</strong> for{` `}
+        <code>{tool}</code>:{` `}
+        <code>{JSON.stringify(input ?? {}).slice(0, 80)}</code>
+      </Text>
+    </Flex>
+  )
+}
+
+function PermissionResponseRow({
+  event,
+}: {
+  event: EventRow
+}): React.ReactElement {
+  const decision =
+    (event.payload.decision as string | undefined) ??
+    (event.payload.behavior as string | undefined) ??
+    `responded`
+  const user = event.payload.user as { name?: string } | undefined
+  return (
+    <Text size="2" color="gray" style={{ opacity: 0.7 }}>
+      <strong>{user?.name ?? `user`}</strong> {decision}
+    </Text>
+  )
+}
+
+function ErrorRow({ event }: { event: EventRow }): React.ReactElement {
+  const code =
+    (event.payload.code as string | undefined) ??
+    (event.payload.type as string | undefined) ??
+    `error`
+  const message =
+    (event.payload.message as string | undefined) ??
+    (event.payload.text as string | undefined) ??
+    ``
+  return (
+    <Flex
+      p="2"
+      direction="column"
+      style={{
+        background: `var(--red-a3)`,
+        border: `1px solid var(--red-a5)`,
+        borderRadius: `var(--radius-2)`,
+      }}
+    >
+      <Text size="2" color="red">
+        <strong>{code}:</strong> {message}
+      </Text>
+    </Flex>
+  )
+}
+
+function UnknownRow({ event }: { event: EventRow }): React.ReactElement {
+  return (
+    <Text size="1" color="gray" style={{ fontFamily: `var(--font-mono)` }}>
+      [{event.type}]
+    </Text>
   )
 }
