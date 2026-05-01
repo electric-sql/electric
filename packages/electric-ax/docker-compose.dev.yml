@@ -1,0 +1,47 @@
+# Dev-mode compose: postgres + electric only (no agents-server container).
+# agents-server, agents-server-ui, and the built-in agent handler all run on
+# the host for fast iteration. Use bin/dev.mjs to orchestrate.
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=256MB
+    environment:
+      POSTGRES_DB: ${ELECTRIC_AGENTS_POSTGRES_DB:-electric_agents}
+      POSTGRES_USER: ${ELECTRIC_AGENTS_POSTGRES_USER:-electric_agents}
+      POSTGRES_PASSWORD: ${ELECTRIC_AGENTS_POSTGRES_PASSWORD:-electric_agents}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${ELECTRIC_AGENTS_POSTGRES_USER:-electric_agents} -d ${ELECTRIC_AGENTS_POSTGRES_DB:-electric_agents}',
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    ports:
+      - '${ELECTRIC_AGENTS_POSTGRES_HOST_PORT:-54321}:5432'
+    volumes:
+      - electric-agents-dev-postgres-data:/var/lib/postgresql
+
+  electric:
+    image: electricsql/electric:${ELECTRIC_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${ELECTRIC_AGENTS_POSTGRES_USER:-electric_agents}:${ELECTRIC_AGENTS_POSTGRES_PASSWORD:-electric_agents}@postgres:5432/${ELECTRIC_AGENTS_POSTGRES_DB:-electric_agents}
+      ELECTRIC_INSECURE: 'true'
+    ports:
+      - '${ELECTRIC_AGENTS_ELECTRIC_HOST_PORT:-3000}:3000'
+
+volumes:
+  electric-agents-dev-postgres-data:
