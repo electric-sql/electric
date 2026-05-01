@@ -130,7 +130,13 @@ describe(`StdioBridge — codex-specific argv`, () => {
       prompt: `hello codex`,
       onEvent: () => undefined,
     })
-    expect(cmd[0]).toBe(`codex`)
+    // Codex is invoked via `sh -c '<bootstrap script>' -- <codex argv>` so
+    // that codex login --with-api-key runs first inside the sandbox.
+    expect(cmd[0]).toBe(`sh`)
+    expect(cmd[1]).toBe(`-c`)
+    expect(cmd[2]).toContain(`codex login --with-api-key`)
+    expect(cmd[2]).toContain(`exec codex "$@"`)
+    expect(cmd[3]).toBe(`--`) // $0 placeholder
     expect(cmd).toContain(`exec`)
     expect(cmd).toContain(`--skip-git-repo-check`)
     expect(cmd).toContain(`--json`)

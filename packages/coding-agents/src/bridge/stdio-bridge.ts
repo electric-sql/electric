@@ -49,7 +49,7 @@ export class StdioBridge implements Bridge {
     if (exitInfo.exitCode !== 0) {
       const stderrPreview = stderrLines.join(`\n`).slice(0, 800) || `<empty>`
       throw new Error(
-        `${adapter.cliBinary} CLI exited ${exitInfo.exitCode}. stderr=${stderrPreview}`
+        `${args.kind} CLI exited ${exitInfo.exitCode}. stderr=${stderrPreview}`
       )
     }
 

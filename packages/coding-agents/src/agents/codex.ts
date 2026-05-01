@@ -61,15 +61,33 @@ function metaFromContent(content?: string): RolloutMeta {
   }
 }
 
+// Codex 0.128.0 doesn't read OPENAI_API_KEY for HTTP auth; it requires
+// `codex login --with-api-key` (reading from stdin) which persists creds
+// to ~/.codex/auth.json. Wrap the invocation in a shell that runs login
+// first, then exec'd codex. Login is idempotent — re-storing the same
+// key on every turn is cheap (~150ms) and safe.
+//
+// We use `sh -c '<script>' -- <argv>` so positional args pass through as
+// `"$@"` without any shell escaping of the prompt.
+const CODEX_BOOTSTRAP_SCRIPT = `if [ -n "\${OPENAI_API_KEY:-}" ]; then printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 || true; fi; exec codex "$@"`
+
 export const CodexAdapter: CodingAgentAdapter = {
   kind: `codex`,
-  cliBinary: `codex`,
+  // Wrapper shell; the codex binary still runs at exec time via the script.
+  cliBinary: `sh`,
   defaultEnvVars: [`OPENAI_API_KEY`],
 
   buildCliInvocation({ prompt, nativeSessionId, model: _model }) {
-    const args: Array<string> = [`exec`, `--skip-git-repo-check`, `--json`]
-    if (nativeSessionId) args.push(`resume`, nativeSessionId)
-    args.push(prompt)
+    const codexArgs: Array<string> = [`exec`, `--skip-git-repo-check`, `--json`]
+    if (nativeSessionId) codexArgs.push(`resume`, nativeSessionId)
+    codexArgs.push(prompt)
+    // sh -c '<script>' -- <codex argv ...> — positional args become "$@".
+    const args: Array<string> = [
+      `-c`,
+      CODEX_BOOTSTRAP_SCRIPT,
+      `--`,
+      ...codexArgs,
+    ]
     return { args, promptDelivery: `argv` }
   },
 
