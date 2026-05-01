@@ -9,106 +9,10 @@ import { makeCodingAgentHandler } from '../../src/entity/handler'
 import { buildTestImage, TEST_IMAGE_TAG } from '../support/build-image'
 import { listAdapters } from '../../src'
 import { envForKind, loadTestEnv, probeForKind } from '../support/env'
+import { makeFakeCtx, pushInbox } from '../../src/conformance/fake-ctx'
 
 const SHOULD_RUN = process.env.DOCKER === `1`
 const describeMaybe = SHOULD_RUN ? describe : describe.skip
-
-interface CollectionStub {
-  rows: Map<string, any>
-  get(k: string): any
-  toArray: Array<any>
-}
-
-function makeCollection(): CollectionStub {
-  const rows = new Map<string, any>()
-  return {
-    rows,
-    get(k: string) {
-      return rows.get(k)
-    },
-    get toArray(): Array<any> {
-      return Array.from(rows.values())
-    },
-  }
-}
-
-interface FakeCtxState {
-  sessionMeta: CollectionStub
-  runs: CollectionStub
-  events: CollectionStub
-  lifecycle: CollectionStub
-  nativeJsonl: CollectionStub
-  inbox: CollectionStub
-}
-
-function makeFakeCtx(entityUrl: string, args: Record<string, unknown>) {
-  const state: FakeCtxState = {
-    sessionMeta: makeCollection(),
-    runs: makeCollection(),
-    events: makeCollection(),
-    lifecycle: makeCollection(),
-    nativeJsonl: makeCollection(),
-    inbox: makeCollection(),
-  }
-  let runCounter = 0
-  const ctx: any = {
-    entityUrl,
-    entityType: `coding-agent`,
-    args,
-    tags: {},
-    firstWake: false,
-    db: {
-      collections: state,
-      actions: {
-        sessionMeta_insert: ({ row }: any) =>
-          state.sessionMeta.rows.set(row.key, row),
-        sessionMeta_update: ({ key, updater }: any) => {
-          const r = state.sessionMeta.rows.get(key)
-          if (r) updater(r)
-        },
-        runs_insert: ({ row }: any) => state.runs.rows.set(row.key, row),
-        runs_update: ({ key, updater }: any) => {
-          const r = state.runs.rows.get(key)
-          if (r) updater(r)
-        },
-        events_insert: ({ row }: any) => state.events.rows.set(row.key, row),
-        nativeJsonl_insert: ({ row }: any) =>
-          state.nativeJsonl.rows.set(row.key, row),
-        lifecycle_insert: ({ row }: any) =>
-          state.lifecycle.rows.set(row.key, row),
-      },
-    },
-    recordRun() {
-      const key = `run-${++runCounter}`
-      const ent: { key: string; status?: string; response: string } = {
-        key,
-        status: undefined,
-        response: ``,
-      }
-      return {
-        key,
-        end({ status }: { status: string }) {
-          ent.status = status
-        },
-        attachResponse(text: string) {
-          ent.response += text
-        },
-      }
-    },
-    setTag: () => Promise.resolve(),
-    send: () => undefined,
-  }
-  return { ctx, state }
-}
-
-function pushInbox(
-  state: FakeCtxState,
-  key: string,
-  message_type: string,
-  payload: any = {}
-) {
-  state.inbox.rows.set(key, { key, message_type, payload })
-}
 
 describeMaybe(`Slice A — full integration`, () => {
   beforeAll(async () => {
