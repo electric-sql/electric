@@ -1,4 +1,5 @@
 import type { EntityRegistry } from '@electric-ax/agents-runtime'
+import { getAdapter } from '../agents/registry'
 import { LifecycleManager } from '../lifecycle-manager'
 import { WorkspaceRegistry } from '../workspace-registry'
 import { SLICE_A_DEFAULTS } from '../types'
@@ -36,8 +37,12 @@ export interface RegisterCodingAgentDeps {
     coldBootBudgetMs: number
     runTimeoutMs: number
   }>
-  /** Per-turn env supplier. Defaults to forwarding ANTHROPIC_API_KEY from process.env. */
-  env?: () => Record<string, string>
+  /**
+   * Per-turn env supplier, called once the handler knows the agent's
+   * kind. Default forwards each adapter's `defaultEnvVars` from
+   * process.env.
+   */
+  env?: (kind: import(`../types`).CodingAgentKind) => Record<string, string>
   /**
    * Posts a self-message to the entity. Used by the idle timer to
    * re-enter the handler after destroying the container, so reconcile
@@ -53,7 +58,7 @@ export interface RegisterCodingAgentDeps {
 // at all and the dialog rejects the request. The handler reconstructs
 // the nested workspace shape from these flat fields on first-wake init.
 const creationArgsSchema = z.object({
-  kind: z.enum([`claude`]).optional(),
+  kind: z.enum([`claude`, `codex`]).optional(),
   target: z.enum([`sandbox`, `host`]).optional(),
   workspaceType: z.enum([`volume`, `bindMount`]).optional(),
   /** For workspaceType='volume'. Defaults to slug(agentId) when omitted. */
@@ -86,10 +91,13 @@ export function registerCodingAgent(
   }
   const env =
     deps.env ??
-    (() => {
+    ((kind: import(`../types`).CodingAgentKind) => {
+      const adapter = getAdapter(kind)
       const out: Record<string, string> = {}
-      const k = process.env.ANTHROPIC_API_KEY
-      if (k) out.ANTHROPIC_API_KEY = k
+      for (const k of adapter.defaultEnvVars) {
+        const v = process.env[k]
+        if (v) out[k] = v
+      }
       return out
     })
 

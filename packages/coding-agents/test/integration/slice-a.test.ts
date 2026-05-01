@@ -129,7 +129,7 @@ describeMaybe(`Slice A — full integration`, () => {
         coldBootBudgetMs: 60_000,
         runTimeoutMs: 120_000,
       },
-      env: () => ({
+      env: (_kind) => ({
         ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
         ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
       }),
@@ -241,7 +241,7 @@ describeMaybe(`Slice A — full integration`, () => {
         coldBootBudgetMs: 60_000,
         runTimeoutMs: 120_000,
       },
-      env: () => ({ ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY }),
+      env: (_kind) => ({ ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY }),
     })
 
     pushInbox(stateA, `i6`, `prompt`, { text: `after crash` })

@@ -175,7 +175,7 @@ describe(`entity handler — first-wake init`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
 
     const { ctx } = makeFakeCtx({
@@ -218,7 +218,7 @@ describe(`entity handler — pin/release`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const meta = {
       key: `current`,
@@ -262,7 +262,7 @@ describe(`entity handler — reconcile orphan run`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const oldStart = lm.startedAtMs - 10_000
     const meta = {
@@ -322,7 +322,7 @@ describe(`entity handler — processPrompt happy path`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({ ANTHROPIC_API_KEY: `sk-test` }),
+      env: (_kind) => ({ ANTHROPIC_API_KEY: `sk-test` }),
     })
     const meta = {
       key: `current`,
@@ -389,7 +389,7 @@ describe(`entity handler — idle timer wakes entity`, () => {
           coldBootBudgetMs: 5_000,
           runTimeoutMs: 5_000,
         },
-        env: () => ({}),
+        env: (_kind) => ({}),
         wakeEntity: (agentId: string) => {
           wakeCalls.push(agentId)
         },
@@ -442,7 +442,7 @@ describe(`entity handler — idle timer wakes entity`, () => {
         coldBootBudgetMs: 5_000,
         runTimeoutMs: 5_000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const meta = {
       key: `current`,
@@ -490,7 +490,7 @@ describe(`entity handler — target validation`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const { ctx } = makeFakeCtx({
       entityUrl: `/t/coding-agent/x`,
@@ -523,7 +523,7 @@ describe(`entity handler — target validation`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const { ctx } = makeFakeCtx({
       entityUrl: `/t/coding-agent/x`,
@@ -570,7 +570,7 @@ describe(`entity handler — importNativeSessionId flow`, () => {
           coldBootBudgetMs: 5000,
           runTimeoutMs: 5000,
         },
-        env: () => ({}),
+        env: (_kind) => ({}),
         homeDir: fakeHome,
       })
       const { ctx } = makeFakeCtx({
@@ -619,7 +619,7 @@ describe(`entity handler — importNativeSessionId flow`, () => {
           coldBootBudgetMs: 5000,
           runTimeoutMs: 5000,
         },
-        env: () => ({}),
+        env: (_kind) => ({}),
         homeDir: fakeHome,
       })
       const { ctx } = makeFakeCtx({
@@ -664,7 +664,7 @@ describe(`entity handler — convert-target`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const meta = {
       key: `current`,
@@ -711,7 +711,7 @@ describe(`entity handler — convert-target`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const meta = {
       key: `current`,
@@ -761,7 +761,7 @@ describe(`entity handler — convert-target`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const meta = {
       key: `current`,
@@ -842,7 +842,7 @@ describe(`entity handler — convert-target`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const meta = {
       key: `current`,
@@ -886,7 +886,7 @@ describe(`entity handler — convert-target`, () => {
         coldBootBudgetMs: 5000,
         runTimeoutMs: 5000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
     const meta = {
       key: `current`,

@@ -162,7 +162,7 @@ describe(`handler resume materialisation`, () => {
         coldBootBudgetMs: 30_000,
         runTimeoutMs: 60_000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
 
     await handler(ctx, { type: `message_received` })
@@ -216,7 +216,7 @@ describe(`handler resume materialisation`, () => {
         coldBootBudgetMs: 30_000,
         runTimeoutMs: 60_000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
 
     await handler(ctx, { type: `message_received` })
@@ -274,7 +274,7 @@ describe(`handler resume materialisation`, () => {
         coldBootBudgetMs: 30_000,
         runTimeoutMs: 60_000,
       },
-      env: () => ({}),
+      env: (_kind) => ({}),
     })
 
     await handler(ctx, { type: `message_received` })

@@ -108,7 +108,7 @@ describeMaybe(`Slice B — resume integration`, () => {
         coldBootBudgetMs: 60_000,
         runTimeoutMs: 120_000,
       },
-      env: () => ({
+      env: (_kind) => ({
         ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
         ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
       }),

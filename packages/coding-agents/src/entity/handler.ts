@@ -22,8 +22,8 @@ export interface CodingAgentHandlerOptions {
     coldBootBudgetMs: number
     runTimeoutMs: number
   }
-  /** Called per-turn to source CLI env (e.g. ANTHROPIC_API_KEY). */
-  env: () => Record<string, string>
+  /** Called per-turn (with the agent kind) to source CLI env. */
+  env: (kind: import(`../types`).CodingAgentKind) => Record<string, string>
   /**
    * Optional. Called by the idle timer after destroying the container,
    * to re-enter the handler so reconcile can flip status to 'cold'.
@@ -548,7 +548,7 @@ async function processPrompt(
         kind: meta.kind,
         target: meta.target,
         workspace: meta.workspaceSpec,
-        env: options.env(),
+        env: options.env(meta.kind),
       }),
       options.defaults.coldBootBudgetMs
     )

@@ -109,7 +109,7 @@ describeMaybe(`Slice C₁ — idle eviction roundtrip`, () => {
         coldBootBudgetMs: 60_000,
         runTimeoutMs: 120_000,
       },
-      env: () => ({
+      env: (_kind) => ({
         ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
         ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
       }),
