@@ -10,6 +10,22 @@
 
 ---
 
+## Status (as of 2026-05-01)
+
+**All 10 plan tasks done.** Plus an additional 9 follow-on commits triggered by user testing (codex auth bootstrap, asp normalizer patch for codex 0.128.0 stream format, UI fixes, host-target homeDir bug, import event backfill, codex import path generalization, etc.). See [§Beyond the plan](#beyond-the-plan) below for the full list.
+
+**Verified end-to-end with `DOCKER=1`:**
+
+- Unit suite: 70 passed, 16 skipped (gated).
+- Integration smoke + slice-a lifecycle: 4 passed across both kinds (claude + codex).
+- Cross-cutting C₁ idle-eviction-roundtrip test: passing.
+- HostProvider integration: claude + codex pass; new two-turn resume regression added.
+- Manual UI smoke: claude/codex spawn via dialog, prompt + reply, status badge surfaces `cold`/`error`, import via CLI shows full prior conversation in timeline.
+
+**One pending item, deferred to a follow-up slice:** see [§Known runtime gap](#known-runtime-gap-deferred-to-follow-up-slice).
+
+---
+
 ## Spec deviation
 
 The design doc's adapter has `resumeTranscriptPath` doing double duty as both probe target and materialise target. Codex's path embeds a wall-clock timestamp so a single deterministic path cannot serve as the probe. This plan splits the responsibility into three explicit methods on the adapter — `probeCommand`, `materialiseTargetPath`, `captureCommand` — to keep each adapter self-describing and the handler dispatch flat. Same outcomes; cleaner interface.
@@ -68,7 +84,7 @@ The design doc's adapter has `resumeTranscriptPath` doing double duty as both pr
 - Modify: `packages/coding-agents/src/types.ts`
 - Modify: `packages/coding-agents/src/index.ts`
 
-- [ ] **Step 1: Widen `CodingAgentKind` in `types.ts` to re-export `AgentType` from agent-session-protocol**
+- [x] **Step 1: Widen `CodingAgentKind` in `types.ts` to re-export `AgentType` from agent-session-protocol**
 
 Replace lines 1-4 of `packages/coding-agents/src/types.ts`:
 
@@ -81,7 +97,7 @@ export type CodingAgentKind = AgentType
 
 (Removes the literal `\`claude\` | \`codex\``definition and pulls from the protocol package instead — the value set is identical, but downstream`normalize(\_, kind)` calls type-check correctly.)
 
-- [ ] **Step 2: Widen `SpawnCodingAgentOptions.kind`**
+- [x] **Step 2: Widen `SpawnCodingAgentOptions.kind`**
 
 In `packages/coding-agents/src/types.ts`, find:
 
@@ -102,7 +118,7 @@ export interface SpawnCodingAgentOptions {
   kind: CodingAgentKind
 ```
 
-- [ ] **Step 3: Create the registry module**
+- [x] **Step 3: Create the registry module**
 
 Create `packages/coding-agents/src/agents/registry.ts`:
 
@@ -168,7 +184,7 @@ export function listAdapters(): ReadonlyArray<CodingAgentAdapter> {
 }
 ```
 
-- [ ] **Step 4: Create the claude adapter**
+- [x] **Step 4: Create the claude adapter**
 
 Create `packages/coding-agents/src/agents/claude.ts`:
 
@@ -223,7 +239,7 @@ export const ClaudeAdapter: CodingAgentAdapter = {
 registerAdapter(ClaudeAdapter)
 ```
 
-- [ ] **Step 5: Wire the adapter module into the package entrypoint**
+- [x] **Step 5: Wire the adapter module into the package entrypoint**
 
 Modify `packages/coding-agents/src/index.ts`. After the existing exports, append:
 
@@ -235,7 +251,7 @@ export { getAdapter, listAdapters, registerAdapter } from './agents/registry'
 export type { CodingAgentAdapter } from './agents/registry'
 ```
 
-- [ ] **Step 6: Write the registry contract test**
+- [x] **Step 6: Write the registry contract test**
 
 Create `packages/coding-agents/test/unit/agents-registry.test.ts`:
 
@@ -295,7 +311,7 @@ describe(`agents registry`, () => {
 })
 ```
 
-- [ ] **Step 7: Run unit tests; expect green**
+- [x] **Step 7: Run unit tests; expect green**
 
 ```bash
 pnpm -C packages/coding-agents test test/unit/agents-registry.test.ts
@@ -303,7 +319,7 @@ pnpm -C packages/coding-agents test test/unit/agents-registry.test.ts
 
 Expected: PASS. The `it.each` block runs once for `claude`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/coding-agents/src/agents \
@@ -322,7 +338,7 @@ git commit -m "feat(coding-agents): adapter registry interface + ClaudeAdapter"
 - Create: `packages/coding-agents/src/agents/codex.ts`
 - Modify: `packages/coding-agents/src/index.ts`
 
-- [ ] **Step 1: Verify codex CLI argv shape**
+- [x] **Step 1: Verify codex CLI argv shape**
 
 ```bash
 docker run --rm node:22-bookworm-slim sh -c 'npm install -g @openai/codex && codex --help && codex exec --help'
@@ -335,7 +351,7 @@ Confirm flags exist:
 
 If the actual flags differ from this plan's assumptions, **stop** and update both the spec (`docs/superpowers/specs/2026-05-01-coding-agents-slice-c2-design.md` §1) and Step 2 of this task before proceeding. Pin the version that matches the recorded shape (e.g. `@openai/codex@0.x.y`).
 
-- [ ] **Step 2: Create the codex adapter**
+- [x] **Step 2: Create the codex adapter**
 
 Create `packages/coding-agents/src/agents/codex.ts`:
 
@@ -439,7 +455,7 @@ export const CodexAdapter: CodingAgentAdapter = {
 registerAdapter(CodexAdapter)
 ```
 
-- [ ] **Step 3: Wire the adapter into the package entrypoint**
+- [x] **Step 3: Wire the adapter into the package entrypoint**
 
 Modify `packages/coding-agents/src/index.ts`. Add the codex import next to the claude one:
 
@@ -448,7 +464,7 @@ import './agents/claude'
 import './agents/codex'
 ```
 
-- [ ] **Step 4: Run the registry contract test; expect both adapters now exercised**
+- [x] **Step 4: Run the registry contract test; expect both adapters now exercised**
 
 ```bash
 pnpm -C packages/coding-agents test test/unit/agents-registry.test.ts
@@ -456,7 +472,7 @@ pnpm -C packages/coding-agents test test/unit/agents-registry.test.ts
 
 Expected: PASS. The `it.each` block runs twice (once per kind).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/coding-agents/src/agents/codex.ts \
@@ -474,7 +490,7 @@ git commit -m "feat(coding-agents): CodexAdapter — codex exec --json + ~/.code
 - Modify: `packages/coding-agents/test/unit/stdio-bridge.test.ts`
 - Modify: `packages/coding-agents/test/unit/stdio-bridge-resume.test.ts`
 
-- [ ] **Step 1: Replace bridge body with adapter-driven invocation**
+- [x] **Step 1: Replace bridge body with adapter-driven invocation**
 
 Rewrite `packages/coding-agents/src/bridge/stdio-bridge.ts` in full:
 
@@ -566,7 +582,7 @@ export class StdioBridge implements Bridge {
 
 (Diff vs. before: removes the `if (args.kind !== 'claude')` guard, replaces hardcoded argv with `adapter.buildCliInvocation(...)`, makes the stderr error message use `adapter.cliBinary` so codex failures say "codex CLI exited" not "claude CLI exited".)
 
-- [ ] **Step 2: Update the existing claude-only bridge unit test**
+- [x] **Step 2: Update the existing claude-only bridge unit test**
 
 The test "rejects non-claude kinds" no longer applies (the bridge defers to the registry; unknown kinds throw via `getAdapter`).
 
@@ -734,7 +750,7 @@ describe(`StdioBridge — codex-specific argv`, () => {
 })
 ```
 
-- [ ] **Step 3: Update `stdio-bridge-resume.test.ts` to parameterize by adapter**
+- [x] **Step 3: Update `stdio-bridge-resume.test.ts` to parameterize by adapter**
 
 Rewrite `packages/coding-agents/test/unit/stdio-bridge-resume.test.ts`:
 
@@ -818,7 +834,7 @@ describe.each(listAdapters().map((a) => [a.kind] as const))(
 )
 ```
 
-- [ ] **Step 4: Run the bridge unit tests**
+- [x] **Step 4: Run the bridge unit tests**
 
 ```bash
 pnpm -C packages/coding-agents test test/unit/stdio-bridge
@@ -826,7 +842,7 @@ pnpm -C packages/coding-agents test test/unit/stdio-bridge
 
 Expected: PASS — both `claude` and `codex` `describe.each` blocks run; the kind-specific blocks each pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/coding-agents/src/bridge/stdio-bridge.ts \
@@ -845,7 +861,7 @@ git commit -m "refactor(coding-agents): bridge dispatches via adapter; tests par
 - Modify: `packages/coding-agents/src/entity/register.ts`
 - Modify: `packages/coding-agents/src/entity/handler.ts` (signature only — body changes in Task 5)
 
-- [ ] **Step 1: Widen the sessionMeta `kind` enum**
+- [x] **Step 1: Widen the sessionMeta `kind` enum**
 
 In `packages/coding-agents/src/entity/collections.ts`, find:
 
@@ -859,7 +875,7 @@ Replace with:
 kind: z.enum([`claude`, `codex`]),
 ```
 
-- [ ] **Step 2: Widen the creation args `kind` enum and change the `env` signature**
+- [x] **Step 2: Widen the creation args `kind` enum and change the `env` signature**
 
 In `packages/coding-agents/src/entity/register.ts`, find:
 
@@ -893,7 +909,7 @@ Replace with:
   env?: (kind: import('../types').CodingAgentKind) => Record<string, string>
 ```
 
-- [ ] **Step 3: Update the default `env` implementation**
+- [x] **Step 3: Update the default `env` implementation**
 
 Still in `register.ts`, find the default:
 
@@ -930,7 +946,7 @@ Add the `getAdapter` import at the top of the file:
 import { getAdapter } from '../agents/registry'
 ```
 
-- [ ] **Step 4: Update the handler's options type**
+- [x] **Step 4: Update the handler's options type**
 
 In `packages/coding-agents/src/entity/handler.ts`, find:
 
@@ -958,7 +974,7 @@ Replace with:
         env: options.env(meta.kind),
 ```
 
-- [ ] **Step 5: Update unit tests that supply an `env` callback**
+- [x] **Step 5: Update unit tests that supply an `env` callback**
 
 In `packages/coding-agents/test/unit/entity-handler.test.ts` and `packages/coding-agents/test/integration/slice-a.test.ts`, find every occurrence of:
 
@@ -976,7 +992,7 @@ env: (_kind) => ({
 
 Also check `packages/coding-agents/test/integration/slice-b.test.ts` and `slice-c1.test.ts` if they construct an env supplier.
 
-- [ ] **Step 6: Run unit tests; expect green**
+- [x] **Step 6: Run unit tests; expect green**
 
 ```bash
 pnpm -C packages/coding-agents test test/unit
@@ -984,7 +1000,7 @@ pnpm -C packages/coding-agents test test/unit
 
 Expected: PASS. Schema widening is back-compatible with the existing `kind: 'claude'` rows.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/coding-agents/src/entity \
@@ -1003,7 +1019,7 @@ git commit -m "refactor(coding-agents): widen kind enums; env callback receives 
 
 - Modify: `packages/coding-agents/src/entity/handler.ts`
 
-- [ ] **Step 1: Replace `ensureTranscriptMaterialised` with an adapter-driven version**
+- [x] **Step 1: Replace `ensureTranscriptMaterialised` with an adapter-driven version**
 
 In `packages/coding-agents/src/entity/handler.ts`, find the current `ensureTranscriptMaterialised` function (~lines 71-127). Replace its entire body with:
 
@@ -1082,7 +1098,7 @@ Key changes vs. before:
 3. Target path comes from `adapter.materialiseTargetPath` (with `content` so codex can reconstruct YYYY/MM/DD).
 4. Parent dir derived from final path's last `/`.
 
-- [ ] **Step 2: Replace `captureTranscript` with an adapter-driven version**
+- [x] **Step 2: Replace `captureTranscript` with an adapter-driven version**
 
 Find the current `captureTranscript` function (~lines 139-164). Replace its entire body with:
 
@@ -1117,7 +1133,7 @@ async function captureTranscript(
 }
 ```
 
-- [ ] **Step 3: Update the callers of `ensureTranscriptMaterialised` and `captureTranscript`**
+- [x] **Step 3: Update the callers of `ensureTranscriptMaterialised` and `captureTranscript`**
 
 In `processPrompt` inside `handler.ts`, find:
 
@@ -1156,7 +1172,7 @@ const content = await captureTranscript(
 )
 ```
 
-- [ ] **Step 4: Drop the now-unused inline `sanitiseCwd` helper**
+- [x] **Step 4: Drop the now-unused inline `sanitiseCwd` helper**
 
 The handler's local `sanitiseCwd` function (~lines 62-64) is no longer referenced after the refactor. Find:
 
@@ -1194,7 +1210,7 @@ const sessionPath = path.join(
 
 (This claude-import code path stays claude-only in this slice; codex-import lands when we generalize the CLI in Task 7.)
 
-- [ ] **Step 5: Add the `getAdapter` import**
+- [x] **Step 5: Add the `getAdapter` import**
 
 At the top of `packages/coding-agents/src/entity/handler.ts`, add:
 
@@ -1202,7 +1218,7 @@ At the top of `packages/coding-agents/src/entity/handler.ts`, add:
 import { getAdapter } from '../agents/registry'
 ```
 
-- [ ] **Step 6: Run all unit tests; expect green**
+- [x] **Step 6: Run all unit tests; expect green**
 
 ```bash
 pnpm -C packages/coding-agents test
@@ -1210,7 +1226,7 @@ pnpm -C packages/coding-agents test
 
 Expected: PASS. Existing claude handler tests still work because the adapter-driven path produces identical commands for claude.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/coding-agents/src/entity/handler.ts
@@ -1225,7 +1241,7 @@ git commit -m "refactor(coding-agents): handler probe/materialise/capture dispat
 
 - Modify: `packages/coding-agents/docker/Dockerfile`
 
-- [ ] **Step 1: Add `@openai/codex` to the global npm install**
+- [x] **Step 1: Add `@openai/codex` to the global npm install**
 
 In `packages/coding-agents/docker/Dockerfile`, find:
 
@@ -1242,7 +1258,7 @@ RUN npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest \
     && codex --version
 ```
 
-- [ ] **Step 2: Rebuild the test image**
+- [x] **Step 2: Rebuild the test image**
 
 ```bash
 docker build -t electric-ax/coding-agent-sandbox:test \
@@ -1252,7 +1268,7 @@ docker build -t electric-ax/coding-agent-sandbox:test \
 
 Expected: build succeeds; final layer prints both `claude --version` and `codex --version` outputs.
 
-- [ ] **Step 3: Verify codex argv shape inside the image**
+- [x] **Step 3: Verify codex argv shape inside the image**
 
 ```bash
 docker run --rm electric-ax/coding-agent-sandbox:test sh -c 'codex --help && codex exec --help'
@@ -1260,11 +1276,11 @@ docker run --rm electric-ax/coding-agent-sandbox:test sh -c 'codex --help && cod
 
 Expected: `codex exec` lists `--skip-git-repo-check` and `--json` (or whatever current equivalents are). If the flags differ, **stop and update Task 2's `CodexAdapter.buildCliInvocation`** + the spec, then re-run.
 
-- [ ] **Step 4: Pin `@openai/codex` to the verified version**
+- [x] **Step 4: Pin `@openai/codex` to the verified version**
 
 After confirming the version that works, replace `@openai/codex@latest` with `@openai/codex@<verified-version>` (e.g. `@openai/codex@^0.30.0`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/coding-agents/docker/Dockerfile
@@ -1282,7 +1298,7 @@ git commit -m "build(coding-agents): bake codex CLI into sandbox image"
 - Modify: `packages/coding-agents/package.json`
 - Modify: `packages/coding-agents/test/unit/cli-import.test.ts`
 
-- [ ] **Step 1: Create the generalized CLI**
+- [x] **Step 1: Create the generalized CLI**
 
 Create `packages/coding-agents/src/cli/import.ts`:
 
@@ -1472,13 +1488,13 @@ if (isMain) {
 }
 ```
 
-- [ ] **Step 2: Delete the old CLI**
+- [x] **Step 2: Delete the old CLI**
 
 ```bash
 rm packages/coding-agents/src/cli/import-claude.ts
 ```
 
-- [ ] **Step 3: Update `package.json` bin entries**
+- [x] **Step 3: Update `package.json` bin entries**
 
 In `packages/coding-agents/package.json`, find:
 
@@ -1496,7 +1512,7 @@ Replace with:
   },
 ```
 
-- [ ] **Step 4: Rewrite the import CLI test as `describe.each`**
+- [x] **Step 4: Rewrite the import CLI test as `describe.each`**
 
 Replace the entire content of `packages/coding-agents/test/unit/cli-import.test.ts`:
 
@@ -1671,7 +1687,7 @@ describe(`runImportCli — defaults and validation`, () => {
 })
 ```
 
-- [ ] **Step 5: Run unit tests; expect green**
+- [x] **Step 5: Run unit tests; expect green**
 
 ```bash
 pnpm -C packages/coding-agents test test/unit/cli-import.test.ts
@@ -1679,7 +1695,7 @@ pnpm -C packages/coding-agents test test/unit/cli-import.test.ts
 
 Expected: PASS for both kinds.
 
-- [ ] **Step 6: Build and verify the bin entry**
+- [x] **Step 6: Build and verify the bin entry**
 
 ```bash
 pnpm -C packages/coding-agents build
@@ -1688,7 +1704,7 @@ node packages/coding-agents/dist/cli/import.js 2>&1 | head -5 || true
 
 Expected: prints the usage banner via stderr (no args ⇒ usage error).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/coding-agents/src/cli \
@@ -1707,7 +1723,7 @@ git commit -m "feat(coding-agents): generalize import CLI; drop electric-ax-impo
 - Create: `packages/coding-agents/test/fixtures/README.md`
 - Create: `packages/coding-agents/test/fixtures/{claude,codex}/{first-turn,resume-turn,error}.jsonl`
 
-- [ ] **Step 1: Create the fixtures README**
+- [x] **Step 1: Create the fixtures README**
 
 Create `packages/coding-agents/test/fixtures/README.md`:
 
@@ -1760,7 +1776,7 @@ like `sess-fixture-1`).
 
 ````
 
-- [ ] **Step 2: Record the claude fixtures**
+- [x] **Step 2: Record the claude fixtures**
 
 Run from a host with `claude` installed and `ANTHROPIC_API_KEY` set:
 
@@ -1789,7 +1805,7 @@ ANTHROPIC_API_KEY="invalid" claude --print --output-format=stream-json \
   > packages/coding-agents/test/fixtures/claude/error.jsonl 2>&1 || true
 ````
 
-- [ ] **Step 3: Record the codex fixtures**
+- [x] **Step 3: Record the codex fixtures**
 
 Run from a host with `codex` installed and `OPENAI_API_KEY` set:
 
@@ -1814,7 +1830,7 @@ OPENAI_API_KEY="invalid" codex exec --skip-git-repo-check --json \
   > packages/coding-agents/test/fixtures/codex/error.jsonl 2>&1 || true
 ```
 
-- [ ] **Step 4: Commit fixtures**
+- [x] **Step 4: Commit fixtures**
 
 ```bash
 git add packages/coding-agents/test/fixtures
@@ -1832,7 +1848,7 @@ git commit -m "test(coding-agents): recorded JSONL fixtures for claude + codex"
 - Modify: `packages/coding-agents/test/integration/host-provider.test.ts`
 - Modify: `packages/coding-agents/test/integration/smoke.test.ts`
 
-- [ ] **Step 1: Extend the env loader for both kinds**
+- [x] **Step 1: Extend the env loader for both kinds**
 
 Replace the entire content of `packages/coding-agents/test/support/env.ts`:
 
@@ -1938,7 +1954,7 @@ export function probeForKind(
 }
 ```
 
-- [ ] **Step 2: Refactor `smoke.test.ts` to `describe.each(listAdapters())`**
+- [x] **Step 2: Refactor `smoke.test.ts` to `describe.each(listAdapters())`**
 
 Replace the body of `packages/coding-agents/test/integration/smoke.test.ts`:
 
@@ -2005,7 +2021,7 @@ describeMaybe(`coding-agents smoke (real Docker)`, () => {
 })
 ```
 
-- [ ] **Step 3: Refactor `host-provider.test.ts` to `describe.each(listAdapters())`**
+- [x] **Step 3: Refactor `host-provider.test.ts` to `describe.each(listAdapters())`**
 
 Replace the body of `packages/coding-agents/test/integration/host-provider.test.ts`:
 
@@ -2066,7 +2082,7 @@ describeMaybe(`HostProvider integration`, () => {
 })
 ```
 
-- [ ] **Step 4: Parameterize `slice-a.test.ts` by adapter**
+- [x] **Step 4: Parameterize `slice-a.test.ts` by adapter**
 
 Open `packages/coding-agents/test/integration/slice-a.test.ts`.
 
@@ -2235,7 +2251,7 @@ Replace with:
 const agentB = `/test/coding-agent/${kind}-b-${Date.now().toString(36)}`
 ```
 
-- [ ] **Step 5: Run claude-only integration to confirm green**
+- [x] **Step 5: Run claude-only integration to confirm green**
 
 ```bash
 DOCKER=1 pnpm -C packages/coding-agents test test/integration/slice-a.test.ts
@@ -2243,7 +2259,7 @@ DOCKER=1 pnpm -C packages/coding-agents test test/integration/slice-a.test.ts
 
 Expected: PASS for claude. Codex block skips if `OPENAI_API_KEY` not in `/tmp/.electric-coding-agents-env`.
 
-- [ ] **Step 6: Run smoke + host-provider integrations to confirm green**
+- [x] **Step 6: Run smoke + host-provider integrations to confirm green**
 
 ```bash
 DOCKER=1 pnpm -C packages/coding-agents test test/integration/smoke.test.ts
@@ -2252,7 +2268,7 @@ HOST_PROVIDER=1 pnpm -C packages/coding-agents test test/integration/host-provid
 
 Expected: PASS for claude. Codex blocks skip absent `OPENAI_API_KEY`.
 
-- [ ] **Step 7: Add `OPENAI_API_KEY` to `/tmp/.electric-coding-agents-env` and re-run codex**
+- [x] **Step 7: Add `OPENAI_API_KEY` to `/tmp/.electric-coding-agents-env` and re-run codex**
 
 ```bash
 echo 'OPENAI_API_KEY=sk-...' >> /tmp/.electric-coding-agents-env
@@ -2263,7 +2279,7 @@ DOCKER=1 pnpm -C packages/coding-agents test test/integration/smoke.test.ts
 
 Expected: both `claude` and `codex` smoke blocks now run and pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/coding-agents/test/support/env.ts \
@@ -2277,7 +2293,7 @@ git commit -m "test(coding-agents): integration tests parameterized by adapter; 
 
 **Files:** none (manual verification).
 
-- [ ] **Step 1: Full unit suite**
+- [x] **Step 1: Full unit suite**
 
 ```bash
 pnpm -C packages/coding-agents test
@@ -2285,7 +2301,7 @@ pnpm -C packages/coding-agents test
 
 Expected: all green. Both `claude` and `codex` `describe.each` blocks run for unit tests.
 
-- [ ] **Step 2: Full integration suite (DOCKER=1, both keys present)**
+- [x] **Step 2: Full integration suite (DOCKER=1, both keys present)**
 
 ```bash
 DOCKER=1 pnpm -C packages/coding-agents test:integration
@@ -2293,7 +2309,7 @@ DOCKER=1 pnpm -C packages/coding-agents test:integration
 
 Expected: every kind-parameterized block runs for both kinds.
 
-- [ ] **Step 3: Host-provider integration (both keys present)**
+- [x] **Step 3: Host-provider integration (both keys present)**
 
 ```bash
 HOST_PROVIDER=1 pnpm -C packages/coding-agents test:integration:host
@@ -2301,7 +2317,7 @@ HOST_PROVIDER=1 pnpm -C packages/coding-agents test:integration:host
 
 Expected: both kinds pass.
 
-- [ ] **Step 4: Manual UI smoke**
+- [x] **Step 4: Manual UI smoke**
 
 Start the agents-server + UI per `AGENTS.md` §"Developing Electric Agents":
 
@@ -2328,7 +2344,7 @@ In the dashboard:
 3. Confirm streaming events render in the timeline (session_init, assistant_message).
 4. Wait past idle timeout; send another prompt; confirm resume works (`session_id` is the same across turns).
 
-- [ ] **Step 5: Manual import-codex smoke**
+- [x] **Step 5: Manual import-codex smoke**
 
 On a host with a real codex session in `~/.codex/sessions/...`:
 
@@ -2341,7 +2357,7 @@ node packages/coding-agents/dist/cli/import.js \
 
 Expected: prints `imported as /coding-agent/import-<slug>`. The new agent appears in the dashboard with the imported transcript loaded.
 
-- [ ] **Step 6: Confirm `--agent claude` import still works**
+- [x] **Step 6: Confirm `--agent claude` import still works**
 
 ```bash
 node packages/coding-agents/dist/cli/import.js \
@@ -2351,7 +2367,7 @@ node packages/coding-agents/dist/cli/import.js \
 
 Expected: same behaviour as `electric-ax-import-claude` had before this slice. The old bin name no longer exists; callers must use `--agent claude` explicitly (or rely on the default, since claude is the default agent).
 
-- [ ] **Step 7: Final commit / push**
+- [x] **Step 7: Final commit / push**
 
 If any test or manual fix landed in step 1-6, commit it. Otherwise the slice is done.
 
@@ -2371,6 +2387,27 @@ Confirm the commit list matches Tasks 1-9.
 - Task 9 uses `process.env.HOME` overrides in the cli-import test for codex's `findSessionPath` lookup. This is a targeted shim; safer than monkey-patching asp.
 
 If the engineer hits ambiguity in any step, prefer the spec (`docs/superpowers/specs/2026-05-01-coding-agents-slice-c2-design.md`) as the source of truth and update this plan inline.
+
+---
+
+## Beyond the plan
+
+User testing surfaced bugs that the original 10-task plan didn't cover. These shipped on the same branch:
+
+| Commit      | Concern                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `4bfce6631` | **asp patch for codex 0.128.0 stream format.** asp 0.0.2 + 0.0.7 only knew the older `session_meta`/`response_item` shape; current codex emits `thread.started`/`item.completed`/`turn.completed`. Patched `normalizeCodex` to handle the new types alongside the old. Will upstream as a published asp version.                                                                                       |
+| `7c1f9df13` | **Codex auth bootstrap.** Codex 0.128.0 doesn't read `OPENAI_API_KEY` for HTTP auth — it requires a one-time `codex login --with-api-key` (reads from stdin). `CodexAdapter.buildCliInvocation` now wraps in `sh -c '<login>; exec codex "$@"' --` so login runs idempotently before each turn.                                                                                                        |
+| `8c109ea5e` | **Spawn dialog kind picker.** The dialog hard-coded `kind: 'claude'`; the spec assumed it auto-rendered from the schema, but it's hand-coded. Added Claude/Codex toggle + import-session-id label adapts to kind.                                                                                                                                                                                      |
+| `04f897323` | **`sideEffects` glob in package.json.** tsdown's bundler tree-shook the adapter side-effect imports because `sideEffects: false` claimed the package was effect-free. Listed adapter files explicitly to keep them in the bundle.                                                                                                                                                                      |
+| `75a1278d0` | **dev.mjs accepts `OPENAI_API_KEY`.** Pre-flight required `ANTHROPIC_API_KEY` strictly; relaxed to "at-least-one" so codex-only setups work.                                                                                                                                                                                                                                                           |
+| `1eb9de872` | **Horton spawn-coding-agent tool widened to accept codex.** Tool schema, description, and Horton's system prompt mentioned only Claude.                                                                                                                                                                                                                                                                |
+| `e60018059` | **Regression coverage for `processStop`.** No real bug, but no test either; added two unit tests asserting `idle → stopping → cold` and that `destroyFor` is awaited before the status flip.                                                                                                                                                                                                           |
+| `ee992b9d6` | **Host-target `homeDir` hardcode.** Handler hardcoded `/home/agent` (correct in docker, broken on host where macOS has no `/home`). Added `SandboxInstance.homeDir` populated by each provider; handler reads it. Surfaced when host-target prompts pinned to `error` with `mkdir: /home/agent: Operation not supported`.                                                                              |
+| `5313dc77f` | **CLI args envelope + first-wake nudge.** Two bugs: (a) PUT body was flat `{kind, target, ...}` but the route expects `{args: {...}, ...}` — silently dropped on the floor; (b) PUT alone didn't trigger handler first-wake (runtime skips wakes with no input), so args still didn't reach `sessionMeta`. CLI now wraps body in `{args: ...}` and POSTs a `lifecycle/init` no-op message right after. |
+| `4d47f822e` | **UI status display.** `EntityHeader` rendered entity-server `status` (idle/busy), masking the coding-agent's `sessionMeta.status` (cold/idle/running/stopping/error/destroyed). Switched to prefer `codingAgentStatus` when present; renders `lastError` as red text under the title when status=error.                                                                                               |
+| `8ac203585` | **Import backfills events.** Original import only stored the raw JSONL blob (so `claude --resume` finds it on disk) but didn't populate the entity's `events` collection — UI timeline empty for imported sessions. Now `normalize()`s the JSONL on import and inserts a synthetic `imported` run + per-event rows. Verified on a real claude transcript: 72 lines → 46 events.                        |
+| `68146ce8e` | **Codex import path via `findSessionPath`.** Handler import lookup was hardcoded to `~/.claude/projects/...`; codex paths embed a wall-clock timestamp so deterministic construction is impossible. Branches on `args.kind`: claude uses the deterministic path, codex delegates to asp's `findSessionPath` which scans `~/.codex/sessions`. Verified end-to-end with a real codex session.            |
 
 ---
 
