@@ -32,6 +32,7 @@ export {
 
 // Register built-in adapters by importing for side effects.
 import './agents/claude'
+import './agents/codex'
 
 export { getAdapter, listAdapters, registerAdapter } from './agents/registry'
 export type { CodingAgentAdapter } from './agents/registry'
