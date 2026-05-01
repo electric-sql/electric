@@ -273,12 +273,26 @@ export function runCodingAgentsIntegrationConformance(
           const h = await instB.exec({
             cmd: [`cat`, `${instB.workspaceMount}/sentinel.txt`],
           })
-          let out = ``
-          for await (const line of h.stdout) out += line
-          for await (const _ of h.stderr) {
-            /* discard */
+          // Drain stdout/stderr in parallel with wait(): some providers
+          // (e.g. docker exec) don't reliably end the host-side stderr
+          // readline iterator until both pipes have been drained, so a
+          // sequential `for await stderr` after the inner process exits
+          // can hang indefinitely.
+          const drain = async (s: AsyncIterable<string>): Promise<string> => {
+            let acc = ``
+            for await (const line of s) acc += line + `\n`
+            return acc
           }
-          const exit = await h.wait()
+          const discard = async (s: AsyncIterable<string>): Promise<void> => {
+            for await (const _ of s) {
+              /* discard */
+            }
+          }
+          const [out, , exit] = await Promise.all([
+            drain(h.stdout),
+            discard(h.stderr),
+            h.wait(),
+          ])
           expect(exit.exitCode).toBe(0)
           expect(out.trim()).toBe(`persisted`)
 

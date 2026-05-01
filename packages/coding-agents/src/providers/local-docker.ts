@@ -140,6 +140,7 @@ export class LocalDockerProvider implements SandboxProvider {
     const { stdout } = await runDocker([
       `ps`,
       `-a`,
+      `--no-trunc`,
       `--format`,
       `{{.ID}}\t{{.Label "electric-ax.agent-id"}}\t{{.State}}`,
       `--filter`,
@@ -168,6 +169,7 @@ export class LocalDockerProvider implements SandboxProvider {
     const { stdout } = await runDocker([
       `ps`,
       `-a`,
+      `--no-trunc`,
       `--format`,
       `{{.ID}}\t{{.State}}`,
       `--filter`,
