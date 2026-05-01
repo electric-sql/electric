@@ -215,12 +215,11 @@ Renamed; gains `--agent claude|codex` (default `claude`). Path validation delega
 
 ```json
 "bin": {
-  "electric-ax-import": "./dist/cli/import.js",
-  "electric-ax-import-claude": "./dist/cli/import-claude-shim.js"
+  "electric-ax-import": "./dist/cli/import.js"
 }
 ```
 
-The shim is a 5-line wrapper that calls `import.js` with `--agent claude` prepended, so existing scripts continue working. Drop after one release cycle.
+Clean break: `electric-ax-import-claude` is removed. The CLI was added recently (commit `f539a8d51` on this branch, pre-1.0) and has no documented external consumers, so a one-release back-compat shim isn't justified. Anyone calling the old name updates to `electric-ax-import --agent claude`.
 
 ---
 
@@ -337,7 +336,7 @@ Every existing test layer picks up the new kind automatically. No edits to bridg
 3. **Handler refactor.** Switch `ensureTranscriptMaterialised` and `captureTranscript` to adapter-driven paths. Existing claude integration tests stay green.
 4. **Schema widening.** `kind` enum to `['claude', 'codex']` in `collections.ts`, `register.ts`, `types.ts`. `env` callback signature change with defaults derived from adapter.
 5. **Image bump.** Update `docker/Dockerfile` to install codex. Test image rebuild covered by existing `buildTestImage()` idempotency.
-6. **CLI refactor.** Rename `cli/import-claude.ts` → `cli/import.ts` with `--agent` flag. Add `import-claude-shim.ts`. Update `package.json` bin map.
+6. **CLI refactor.** Rename `cli/import-claude.ts` → `cli/import.ts` with `--agent` flag. Drop the old `electric-ax-import-claude` bin entry. Update `package.json` bin map.
 7. **Unit-test parameterization.** Convert `stdio-bridge.test.ts`, `cli-import.test.ts`, `entity-handler.test.ts` to `describe.each(listAdapters())`. Record codex fixtures under `test/fixtures/codex/`.
 8. **Integration-test parameterization.** Convert `slice-a.test.ts`, `host-provider.test.ts`, `smoke.test.ts` similarly. Wire `OPENAI_API_KEY`/`OPENAI_MODEL` into env loader.
 9. **Verify.** `pnpm test` (unit). `DOCKER=1 pnpm test:integration` with both keys present. `HOST_PROVIDER=1` with both keys present. Manual UI smoke: spawn a codex agent via the dashboard, send a prompt, observe streaming timeline.
@@ -357,7 +356,7 @@ Every existing test layer picks up the new kind automatically. No edits to bridg
 ## Migration
 
 - **No data migration.** Existing `kind: 'claude'` rows remain valid. Codex agents are net-new spawns.
-- **`electric-ax-import-claude` bin** kept as a shim for one release cycle. Drop after.
+- **`electric-ax-import-claude` bin** removed. Callers migrate to `electric-ax-import --agent claude`. No backwards-compat shim — pre-1.0, no documented external consumers.
 - **Image tag** unchanged (`electric-ax/coding-agent-sandbox:test`); operators rebuild on next pull.
 - **`RegisterCodingAgentDeps.env` signature change** is breaking for any external bootstrap. Internal-only API today; in-tree call sites updated in step 4. No external consumers.
 
@@ -370,5 +369,5 @@ Every existing test layer picks up the new kind automatically. No edits to bridg
 - `HOST_PROVIDER=1 pnpm -C packages/coding-agents test:integration:host` green for both kinds.
 - Manual: spawn a codex agent via the agents-server-ui, send "reply with ok", observe streaming timeline. Restart the server; resume works (turn 2 references turn 1).
 - Manual: `electric-ax-import --agent codex --workspace <path> --session-id <id>` imports a host codex session.
-- `electric-ax-import-claude` shim still works for one release.
+- `electric-ax-import` (`--agent claude`) handles the previous claude-import use cases; old `electric-ax-import-claude` bin no longer exists.
 - Adding a hypothetical third agent requires touching only `src/agents/`, `test/fixtures/`, and `test/support/env.ts` — confirmed by the build sequence's locality.

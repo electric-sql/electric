@@ -24,7 +24,6 @@ The design doc's adapter has `resumeTranscriptPath` doing double duty as both pr
 - `packages/coding-agents/src/agents/claude.ts` — `ClaudeAdapter` implementation. Extracts argv currently in `stdio-bridge.ts` and path math currently in `handler.ts`.
 - `packages/coding-agents/src/agents/codex.ts` — `CodexAdapter` implementation. `codex exec --skip-git-repo-check --json [resume <id>] <prompt>`; `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<sessionId>.jsonl` path math.
 - `packages/coding-agents/src/cli/import.ts` — generalized CLI accepting `--agent claude|codex`. Replaces the old `import-claude.ts`.
-- `packages/coding-agents/src/cli/import-claude-shim.ts` — back-compat shim that calls `import.ts` with `--agent claude` prepended.
 - `packages/coding-agents/test/unit/agents-registry.test.ts` — adapter-contract sanity test.
 - `packages/coding-agents/test/fixtures/README.md` — instructions for recording new fixtures.
 - `packages/coding-agents/test/fixtures/claude/first-turn.jsonl`
@@ -43,7 +42,7 @@ The design doc's adapter has `resumeTranscriptPath` doing double duty as both pr
 - `packages/coding-agents/src/entity/collections.ts` — widen `kind` enum to `['claude', 'codex']` in `sessionMetaRowSchema`.
 - `packages/coding-agents/src/entity/register.ts` — widen `creationArgsSchema.kind`; change `RegisterCodingAgentDeps.env` signature.
 - `packages/coding-agents/docker/Dockerfile` — add `@openai/codex` install.
-- `packages/coding-agents/package.json` — bin map gains `electric-ax-import`; old `electric-ax-import-claude` entry repointed to the shim.
+- `packages/coding-agents/package.json` — bin map: drop `electric-ax-import-claude`, add `electric-ax-import`.
 - `packages/coding-agents/test/support/env.ts` — load `OPENAI_API_KEY` / `OPENAI_MODEL`; export `requireKeyForKind` helper.
 - `packages/coding-agents/test/unit/stdio-bridge.test.ts` — `describe.each` parameterization.
 - `packages/coding-agents/test/unit/stdio-bridge-resume.test.ts` — `describe.each` parameterization.
@@ -1279,7 +1278,6 @@ git commit -m "build(coding-agents): bake codex CLI into sandbox image"
 **Files:**
 
 - Create: `packages/coding-agents/src/cli/import.ts`
-- Create: `packages/coding-agents/src/cli/import-claude-shim.ts`
 - Delete: `packages/coding-agents/src/cli/import-claude.ts`
 - Modify: `packages/coding-agents/package.json`
 - Modify: `packages/coding-agents/test/unit/cli-import.test.ts`
@@ -1474,39 +1472,13 @@ if (isMain) {
 }
 ```
 
-- [ ] **Step 2: Create the back-compat shim**
-
-Create `packages/coding-agents/src/cli/import-claude-shim.ts`:
-
-```ts
-#!/usr/bin/env node
-import { runImportCli } from './import'
-
-const argv = process.argv.slice(2)
-// If the user already passed --agent (unlikely but defensive), keep it; otherwise prepend claude.
-const hasAgent = argv.some((a) => a === `--agent` || a.startsWith(`--agent=`))
-const finalArgv = hasAgent ? argv : [`--agent`, `claude`, ...argv]
-
-runImportCli({ argv: finalArgv }).then(
-  (r) => {
-    if (r.stdout) process.stdout.write(r.stdout)
-    if (r.stderr) process.stderr.write(r.stderr)
-    process.exit(r.exitCode)
-  },
-  (err) => {
-    process.stderr.write(`unexpected error: ${err}\n`)
-    process.exit(1)
-  }
-)
-```
-
-- [ ] **Step 3: Delete the old CLI**
+- [ ] **Step 2: Delete the old CLI**
 
 ```bash
 rm packages/coding-agents/src/cli/import-claude.ts
 ```
 
-- [ ] **Step 4: Update `package.json` bin entries**
+- [ ] **Step 3: Update `package.json` bin entries**
 
 In `packages/coding-agents/package.json`, find:
 
@@ -1520,12 +1492,11 @@ Replace with:
 
 ```json
   "bin": {
-    "electric-ax-import": "./dist/cli/import.js",
-    "electric-ax-import-claude": "./dist/cli/import-claude-shim.js"
+    "electric-ax-import": "./dist/cli/import.js"
   },
 ```
 
-- [ ] **Step 5: Rewrite the import CLI test as `describe.each`**
+- [ ] **Step 4: Rewrite the import CLI test as `describe.each`**
 
 Replace the entire content of `packages/coding-agents/test/unit/cli-import.test.ts`:
 
@@ -1653,7 +1624,7 @@ describe.each(listAdapters().map((a) => [a.kind] as const))(
   }
 )
 
-describe(`runImportCli — back-compat`, () => {
+describe(`runImportCli — defaults and validation`, () => {
   it(`defaults to --agent claude when omitted`, async () => {
     const home = await mkdtemp(join(tmpdir(), `cli-home-`))
     const ws = await mkdtemp(join(tmpdir(), `cli-ws-`))
@@ -1700,7 +1671,7 @@ describe(`runImportCli — back-compat`, () => {
 })
 ```
 
-- [ ] **Step 6: Run unit tests; expect green**
+- [ ] **Step 5: Run unit tests; expect green**
 
 ```bash
 pnpm -C packages/coding-agents test test/unit/cli-import.test.ts
@@ -1708,24 +1679,23 @@ pnpm -C packages/coding-agents test test/unit/cli-import.test.ts
 
 Expected: PASS for both kinds.
 
-- [ ] **Step 7: Build and verify the bin entries**
+- [ ] **Step 6: Build and verify the bin entry**
 
 ```bash
 pnpm -C packages/coding-agents build
-node packages/coding-agents/dist/cli/import.js --help 2>&1 | head -5 || true
-node packages/coding-agents/dist/cli/import-claude-shim.js 2>&1 | head -5 || true
+node packages/coding-agents/dist/cli/import.js 2>&1 | head -5 || true
 ```
 
-Expected: each prints the usage banner via stderr (since no args ⇒ usage error).
+Expected: prints the usage banner via stderr (no args ⇒ usage error).
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/coding-agents/src/cli \
         packages/coding-agents/package.json \
         packages/coding-agents/test/unit/cli-import.test.ts
 git rm packages/coding-agents/src/cli/import-claude.ts 2>/dev/null || true
-git commit -m "feat(coding-agents): generalize import CLI with --agent flag; keep claude shim"
+git commit -m "feat(coding-agents): generalize import CLI; drop electric-ax-import-claude bin"
 ```
 
 ---
@@ -2371,14 +2341,15 @@ node packages/coding-agents/dist/cli/import.js \
 
 Expected: prints `imported as /coding-agent/import-<slug>`. The new agent appears in the dashboard with the imported transcript loaded.
 
-- [ ] **Step 6: Confirm shim still works**
+- [ ] **Step 6: Confirm `--agent claude` import still works**
 
 ```bash
-node packages/coding-agents/dist/cli/import-claude-shim.js \
-  --workspace "$PWD" --session-id "<a real claude session id>"
+node packages/coding-agents/dist/cli/import.js \
+  --agent claude --workspace "$PWD" --session-id "<a real claude session id>" \
+  --server http://localhost:4437
 ```
 
-Expected: same behaviour as before this slice. Importing without `--agent` defaults to claude.
+Expected: same behaviour as `electric-ax-import-claude` had before this slice. The old bin name no longer exists; callers must use `--agent claude` explicitly (or rely on the default, since claude is the default agent).
 
 - [ ] **Step 7: Final commit / push**
 
