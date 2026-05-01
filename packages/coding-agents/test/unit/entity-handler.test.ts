@@ -297,6 +297,124 @@ describe(`entity handler — reconcile orphan run`, () => {
   })
 })
 
+describe(`entity handler — processStop`, () => {
+  it(`from running, transitions to cold, clears instanceId, emits sandbox.stopped`, async () => {
+    const destroyCalls: Array<string> = []
+    const provider = makeFakeProvider(`running`)
+    provider.destroy = async (agentId: string) => {
+      destroyCalls.push(agentId)
+    }
+    const lm = new LifecycleManager({
+      providers: { sandbox: provider, host: provider },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: (_kind) => ({}),
+    })
+    // After a prompt finishes processPrompt sets status to 'idle' before
+    // any subsequent Stop is processed. Simulate that pre-stop state here:
+    // the inbox now contains a 'stop' from the user clicking Stop.
+    const meta = {
+      key: `current`,
+      status: `idle`,
+      kind: `claude`,
+      target: `sandbox` as const,
+      pinned: false,
+      workspaceIdentity: `volume:w`,
+      workspaceSpec: { type: `volume`, name: `w` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+      instanceId: `inst-1`,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      meta,
+      inbox: [{ key: `i1`, message_type: `stop`, payload: {} }],
+    })
+    await handler(ctx, { type: `message_received` } as any)
+
+    const finalMeta = ctx.db.collections.sessionMeta.get(`current`)
+    expect(finalMeta.status).toBe(`cold`)
+    expect(finalMeta.instanceId).toBeUndefined()
+    expect(destroyCalls).toEqual([`/t/coding-agent/x`])
+
+    const lifecycleEvents = (
+      Array.from(ctx.db.collections.lifecycle.rows.values()) as Array<any>
+    ).map((r) => r.event)
+    expect(lifecycleEvents).toContain(`sandbox.stopped`)
+  })
+
+  it(`awaits destroy completion before flipping to cold`, async () => {
+    let destroyResolve!: () => void
+    const destroyGate = new Promise<void>((r) => {
+      destroyResolve = r
+    })
+    const observedStatuses: Array<string> = []
+    const provider = makeFakeProvider(`running`)
+    provider.destroy = async () => {
+      observedStatuses.push(
+        (ctx.db.collections.sessionMeta.get(`current`) as any).status
+      )
+      await destroyGate
+    }
+    const lm = new LifecycleManager({
+      providers: { sandbox: provider, host: provider },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: (_kind) => ({}),
+    })
+    const meta = {
+      key: `current`,
+      status: `idle`,
+      kind: `claude`,
+      target: `sandbox` as const,
+      pinned: false,
+      workspaceIdentity: `volume:w`,
+      workspaceSpec: { type: `volume`, name: `w` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+      instanceId: `inst-1`,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      meta,
+      inbox: [{ key: `i1`, message_type: `stop`, payload: {} }],
+    })
+    const handlerPromise = handler(ctx, { type: `message_received` } as any)
+    // Yield once so processStop reaches `await lm.destroyFor(...)`.
+    await new Promise((r) => setImmediate(r))
+    expect(ctx.db.collections.sessionMeta.get(`current`).status).toBe(
+      `stopping`
+    )
+    destroyResolve()
+    await handlerPromise
+    expect(ctx.db.collections.sessionMeta.get(`current`).status).toBe(`cold`)
+    // destroy() ran while status was 'stopping', proving the await is in place.
+    expect(observedStatuses).toEqual([`stopping`])
+  })
+})
+
 describe(`entity handler — processPrompt happy path`, () => {
   it(`runs a turn, records events, ends run completed`, async () => {
     const events: Array<any> = [
