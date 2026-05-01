@@ -646,3 +646,189 @@ describe(`entity handler — importNativeSessionId flow`, () => {
     }
   })
 })
+
+describe(`entity handler — convert-target`, () => {
+  it(`flips meta.target sandbox→host when workspace is bindMount`, async () => {
+    const lm = new LifecycleManager({
+      providers: { sandbox: makeFakeProvider(), host: makeFakeProvider() },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: () => ({}),
+    })
+    const meta = {
+      key: `current`,
+      status: `idle`,
+      kind: `claude`,
+      target: `sandbox`,
+      pinned: false,
+      workspaceIdentity: `bindMount:/tmp/x`,
+      workspaceSpec: { type: `bindMount`, hostPath: `/tmp/x` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      meta,
+      inbox: [
+        { key: `i1`, message_type: `convert-target`, payload: { to: `host` } },
+      ],
+    })
+    await handler(ctx, { type: `message_received` } as any)
+    const after = ctx.db.collections.sessionMeta.get(`current`)
+    expect(after.target).toBe(`host`)
+    expect(after.status).toBe(`cold`)
+    const evt = ctx.db.collections.lifecycle.toArray.find(
+      (r: any) => r.event === `target.changed`
+    )
+    expect(evt).toBeDefined()
+    expect(evt.detail).toMatch(/from=sandbox;to=host/)
+  })
+
+  it(`rejects sandbox→host when workspace is volume`, async () => {
+    const lm = new LifecycleManager({
+      providers: { sandbox: makeFakeProvider(), host: makeFakeProvider() },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: () => ({}),
+    })
+    const meta = {
+      key: `current`,
+      status: `idle`,
+      kind: `claude`,
+      target: `sandbox`,
+      pinned: false,
+      workspaceIdentity: `volume:w`,
+      workspaceSpec: { type: `volume`, name: `w` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      meta,
+      inbox: [
+        { key: `i1`, message_type: `convert-target`, payload: { to: `host` } },
+      ],
+    })
+    await handler(ctx, { type: `message_received` } as any)
+    const after = ctx.db.collections.sessionMeta.get(`current`)
+    expect(after.target).toBe(`sandbox`) // unchanged
+    expect(after.lastError).toMatch(/host requires.*bindMount/)
+    const evt = ctx.db.collections.lifecycle.toArray.find(
+      (r: any) =>
+        r.event === `target.changed` && r.detail?.startsWith(`failed:`)
+    )
+    expect(evt).toBeDefined()
+  })
+
+  it(`rejects convert when status=running`, async () => {
+    const lm = new LifecycleManager({
+      providers: {
+        sandbox: makeFakeProvider(`running`),
+        host: makeFakeProvider(`running`),
+      },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: () => ({}),
+    })
+    const meta = {
+      key: `current`,
+      status: `running`,
+      kind: `claude`,
+      target: `sandbox`,
+      pinned: false,
+      workspaceIdentity: `bindMount:/tmp/x`,
+      workspaceSpec: { type: `bindMount`, hostPath: `/tmp/x` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      meta,
+      inbox: [
+        { key: `i1`, message_type: `convert-target`, payload: { to: `host` } },
+      ],
+    })
+    await handler(ctx, { type: `message_received` } as any)
+    const after = ctx.db.collections.sessionMeta.get(`current`)
+    expect(after.target).toBe(`sandbox`)
+    expect(after.lastError).toMatch(/cannot convert.*running/)
+  })
+
+  it(`is a no-op when meta.target already matches the requested target`, async () => {
+    const lm = new LifecycleManager({
+      providers: { sandbox: makeFakeProvider(), host: makeFakeProvider() },
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: () => ({}),
+    })
+    const meta = {
+      key: `current`,
+      status: `idle`,
+      kind: `claude`,
+      target: `host`,
+      pinned: false,
+      workspaceIdentity: `bindMount:/tmp/x`,
+      workspaceSpec: { type: `bindMount`, hostPath: `/tmp/x` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      meta,
+      inbox: [
+        { key: `i1`, message_type: `convert-target`, payload: { to: `host` } },
+      ],
+    })
+    await handler(ctx, { type: `message_received` } as any)
+    const after = ctx.db.collections.sessionMeta.get(`current`)
+    expect(after.target).toBe(`host`)
+    const evt = ctx.db.collections.lifecycle.toArray.find(
+      (r: any) => r.event === `target.changed`
+    )
+    expect(evt).toBeUndefined() // no lifecycle row for no-op
+  })
+})

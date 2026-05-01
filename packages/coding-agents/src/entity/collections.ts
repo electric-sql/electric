@@ -79,6 +79,7 @@ export const lifecycleRowSchema = z.object({
     `resume.restored`,
     `import.restored`,
     `import.failed`,
+    `target.changed`,
   ]),
   detail: z.string().optional(),
 })

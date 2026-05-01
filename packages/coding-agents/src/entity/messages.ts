@@ -10,3 +10,8 @@ export const destroyMessageSchema = z.object({}).strict()
 export const idleEvictionFiredMessageSchema = z.object({}).passthrough()
 
 export type PromptMessage = z.infer<typeof promptMessageSchema>
+
+export const convertTargetMessageSchema = z.object({
+  to: z.enum([`sandbox`, `host`]),
+})
+export type ConvertTargetMessage = z.infer<typeof convertTargetMessageSchema>

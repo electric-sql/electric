@@ -14,7 +14,7 @@ import type {
   LifecycleRow,
   NativeJsonlRow,
 } from './collections'
-import { promptMessageSchema } from './messages'
+import { convertTargetMessageSchema, promptMessageSchema } from './messages'
 
 export interface CodingAgentHandlerOptions {
   defaults: {
@@ -495,6 +495,8 @@ async function dispatchInboxMessage(
       // 'idle && !running' and flipped status to 'cold'. This message
       // exists only to re-enter the handler after the timer fired.
       return
+    case `convert-target`:
+      return processConvertTarget(ctx, lm, options, inboxMsg)
     default:
       log.warn({ type }, `coding-agent: unknown inbox message type`)
   }
@@ -867,6 +869,87 @@ async function processDestroy(
       ts: Date.now(),
       event: `sandbox.stopped`,
       detail: `destroyed`,
+    } satisfies LifecycleRow,
+  })
+}
+
+async function processConvertTarget(
+  ctx: any,
+  lm: LifecycleManager,
+  _options: CodingAgentHandlerOptions,
+  inboxMsg: InboxRow
+): Promise<void> {
+  const parsed = convertTargetMessageSchema.safeParse(inboxMsg.payload)
+  if (!parsed.success) return
+  const to = parsed.data.to
+  const agentId = ctx.entityUrl as string
+  const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
+
+  // No-op if already on the requested target
+  if (meta.target === to) return
+
+  // Validation: host requires bindMount
+  if (to === `host` && meta.workspaceSpec.type !== `bindMount`) {
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.lastError = `convert to host requires a bindMount workspace`
+      },
+    })
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`target`),
+        ts: Date.now(),
+        event: `target.changed`,
+        detail: `failed: host requires bindMount`,
+      } satisfies LifecycleRow,
+    })
+    return
+  }
+
+  // Reject in-flight transitions
+  if (
+    meta.status === `running` ||
+    meta.status === `starting` ||
+    meta.status === `stopping`
+  ) {
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.lastError = `cannot convert target while status=${meta.status}`
+      },
+    })
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`target`),
+        ts: Date.now(),
+        event: `target.changed`,
+        detail: `failed: in-flight (status=${meta.status})`,
+      } satisfies LifecycleRow,
+    })
+    return
+  }
+
+  const from = meta.target
+
+  // Tear down old provider's record (best-effort).
+  await lm.destroyFor(agentId, from).catch(() => undefined)
+
+  ctx.db.actions.sessionMeta_update({
+    key: `current`,
+    updater: (d: SessionMetaRow) => {
+      d.target = to
+      d.status = `cold`
+      d.instanceId = undefined
+      d.lastError = undefined
+    },
+  })
+  ctx.db.actions.lifecycle_insert({
+    row: {
+      key: lifecycleKey(`target`),
+      ts: Date.now(),
+      event: `target.changed`,
+      detail: `from=${from};to=${to}`,
     } satisfies LifecycleRow,
   })
 }
