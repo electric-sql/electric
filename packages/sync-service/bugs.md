@@ -367,44 +367,44 @@ consumer's `handle_materializer_down/2` falls through the `case` to
 reason, which schedules `remove_shape_async`. The async task then races
 the rest of the stack shutdown.
 
-**Fix**
+**Fix (partial)**
 
-The materializer was the upstream trigger for the cleanup cascade — a
+The materializer is the upstream trigger for the cleanup cascade — a
 crash there sets off `handle_materializer_down/2` → `stop_and_clean/1`
 on the dependent consumer → `@shutdown_cleanup` →
-`remove_shape_async/2`. The cleanup task then races stack shutdown and
-leaves the shape half-deleted.
+`remove_shape_async/2`. The cleanup task then races stack shutdown
+and leaves the shape half-deleted.
 
-Two changes block the cascade:
+What's committed:
 
-1. **Resilient `apply_changes/2` in
-   `lib/electric/shapes/consumer/materializer.ex`.** Every "this looks
-   impossible" branch now logs a warning and continues rather than
-   raising, so an inconsistent inner-shape log can't kill the
-   materializer:
-   - `DeletedRecord` for a key not in the index → log + skip
-   - `NewRecord` for a key already in the index → log + skip
-   - `UpdatedRecord` only enters the rewrite path when
-     `is_map_key(index, old_key)` holds
-   - move-out / move-in iterations switch from `Map.fetch!` to
-     `Map.fetch` with a skip branch
-   - `decrement_value/3` treats a missing value-count as a no-op
-
-2. **Catch `:noproc` on consumer→materializer call in
+1. **Catch `:noproc` on consumer→materializer call in
    `lib/electric/shapes/consumer.ex#notify_materializer_of_new_changes/3`.**
    When the materializer dies, the `:DOWN` is in our mailbox but the
    inline `GenServer.call` exits the consumer process before
    `handle_materializer_down/2` runs. Catching the exit lets the
    pending `:DOWN` drive a clean stop instead of cascading into
-   `@shutdown_cleanup`.
+   `@shutdown_cleanup`. This is a process-lifecycle issue (the
+   materializer legitimately died), not an invariant violation, so a
+   targeted `catch :exit` is the right call.
 
-Plus two ergonomic guardrails for the inflight-request window:
+2. **ETS rescue for the stack-restart inflight-request window.**
+   `ShapeStatus.validate_shape_handle/3` rescues `ArgumentError →
+   :error` and `Api.check_for_disk_updates/1` rescues
+   `ArgumentError → :no_change`. Same justification — a held
+   long-poll on Bandit can wake up between the old `ShapeStatusOwner`
+   freeing its tables and the new one recreating them. Resource
+   lifecycle, not state corruption.
 
-- `ShapeStatus.validate_shape_handle/3` rescues `ArgumentError →
-  :error` so a held long-poll waking up between old/new
-  `ShapeStatusOwner` doesn't 500.
-- `Api.check_for_disk_updates/1` rescues `ArgumentError → :no_change`
-  for the same window.
+What was reverted:
+
+- The "log and skip" branches in
+  `lib/electric/shapes/consumer/materializer.ex#apply_changes/2`
+  (DELETE for unknown key, duplicate `NewRecord`, move-out/in for
+  unknown key, missing `value_count`, guarded `UpdatedRecord`).
+  Those branches mask real upstream bugs — duplicates and missing
+  values are invariant violations, not noise. The materializer is
+  meant to crash hard so the bug surfaces. Restoring `Map.pop!`,
+  `Map.fetch!`, and `raise/1` on duplicate insert.
 
 **Regression**
 
@@ -412,10 +412,11 @@ The original repro
 (`CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10
 BATCH_COUNT=10 RESTART_SERVER_EVERY=7 SKIP_REPATCH_PREWARM=true
 mix test --seed 8 --only oracle test/integration/oracle_property_test.exs`)
-no longer hits a 409 must-refetch. The next blocker exposed by these
-fixes is Bug 2 — duplicate inserts in the post-restart move-in
-snapshot, which was previously masked by the cascade-409 path
-swallowing the failing shape entirely.
+no longer hits a cleanup-cascade 409. With strict materializer back
+in place, the actual remaining blocker is Bug 2 — duplicate INSERTs
+in the post-restart shape log when the same transaction both moves a
+row across the shape's filter boundary AND triggers a materializer
+move-in.
 
 ## Note for triage
 
@@ -451,35 +452,62 @@ CHECK_TIMEOUT=60000 SHAPE_COUNT=5 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
 
 Failure shapes are subquery shapes (e.g. `level_3_id IN (SELECT id
 FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE
-level_1_id = 'l1-4'))`). The bug is exposed when:
+level_1_id = 'l1-4'))`).
 
-1. A row is in the outer shape's stored view at restart time.
-2. After restart, a materializer event triggers a move-in or move-out
-   pass through `Buffering.start` / `SplicePlan`.
-3. The move-in query (`move_in_where_clause` in
-   `lib/electric/shapes/querying.ex#352`) uses the row's *current* PG
-   state for the `impacted_before` exclusion. If the row's
-   foreign-key column was changed in a transaction whose materializer
-   event triggered this move-in, current PG state may put the row
-   under a value present only in `views_after_move`, so the exclusion
-   doesn't fire and the row is re-emitted.
-4. The move-out side has the mirror problem — synthetic deletes the
-   client generates from tag patterns target rows that the snapshot's
-   tag set doesn't agree on.
+**The race (refined analysis)**
 
-Likely fix directions:
-- Filter the move-in snapshot in
-  `lib/electric/shape_cache/pure_file_storage.ex#append_move_in_snapshot_to_log!`
-  with a `skip_row?` callback that excludes keys already present in
-  the outer shape's on-disk view, instead of the current
-  `fn _, _ -> false end`. Needs an efficient "is this key present"
-  index on the writer side.
-- Or, have `SplicePlan.build/2` dedupe its emitted INSERT/DELETE
-  effects against the outer shape's last-persisted view tags.
-- Either way, the fix has to be careful that the deduped state
-  remains consistent with the move-in/out control messages the
-  client receives, since the client's `TagTracker` uses those to
-  generate synthetic deletes.
+A single transaction can produce events on two independent paths in
+the outer consumer:
+
+1. **Direct filter path.** The transaction contains a level_4
+   `UPDATE` for `l4-16` that crosses the shape's filter boundary —
+   e.g. its `level_3_id` changes from a value in the dep view to
+   another value also in the dep view. The shape's `Filter` writes a
+   regular `UPDATE` (or `INSERT`/`DELETE`) op to the log directly.
+
+2. **Materializer move-in path.** The same transaction also
+   toggles/moves a level_3 row in a way that adds a new value to the
+   inner dep view. The materializer fires a `move-in` event for the
+   new dep value. The outer consumer enters `Buffering`, runs the
+   move-in query against PG (using a snapshot taken *after* the
+   triggering txn), and writes the matching rows to the log via
+   `AppendMoveInSnapshot`.
+
+Because the move-in query reads PG's *current* row state, `l4-16`'s
+new `level_3_id` matches the freshly-added dep value and the row is
+emitted. But the direct filter path already produced an op for the
+same row earlier in the log. Net result: two INSERTs (or
+INSERT+UPDATE, or two DELETEs) for the same key in the log a fresh
+client polls.
+
+This isn't strictly a *post-restart* bug — the same race exists in
+steady state. It only surfaces in the test after a server restart
+because pre-restart the test doesn't observe it: the inflight client
+state and the server's filter view are both initialised from the
+same place, so the duplicate `UPDATE`/`INSERT` happens to look
+consistent to that client. After a restart, a fresh client polls
+from offset=-1 and sees the entire log including both ops; that's
+when it flunks.
+
+**Fix directions**
+
+- `move_in_where_clause` in
+  `lib/electric/shapes/querying.ex#352` uses CURRENT PG state for
+  `impacted_before` exclusion. It needs to exclude rows whose
+  *pre-update* state already matched, not whose current state
+  matches `views_before_move`. That probably means tracking
+  per-row pre-update FK values from the transaction log when
+  building the WHERE clause.
+- Or, coordinate `Filter` and `Buffering` so the same triggering
+  transaction's row-level UPDATEs are *not* applied via the direct
+  filter path while a buffering window is open — they'd be implied
+  by the move-in snapshot.
+- Or, have `SplicePlan.build/2` dedupe its emitted ops against the
+  filter-emitted ops in the same transaction window.
+
+Whichever path, the fix has to keep the move-in/out *control*
+messages consistent so the client's `TagTracker` generates the
+right synthetic deletes.
 
 Bug 3 only manifests under restart and is likely related to the
 active-readiness signal — small fix once Bug 2 is closed.
