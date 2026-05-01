@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { normalize } from 'agent-session-protocol'
 import type { NormalizedEvent } from 'agent-session-protocol'
 import { log } from '../log'
 import { WorkspaceRegistry } from '../workspace-registry'
@@ -318,6 +319,74 @@ export function makeCodingAgentHandler(
               detail: `bytes=${content.length}`,
             } satisfies LifecycleRow,
           })
+
+          // Backfill events from the imported transcript so the UI
+          // timeline renders the prior conversation history. Without
+          // this, the entity's events collection only contains turns
+          // that happen after import, and the imported transcript is
+          // invisible to the UI (it only feeds claude --resume on
+          // disk). All events go under a single synthetic 'imported'
+          // run; the timeline renders user/assistant/tool rows in seq
+          // order regardless of run grouping.
+          try {
+            const lines = content
+              .split(`\n`)
+              .filter((l: string) => l.trim().length > 0)
+            const importedKind: CodingAgentKind = args.kind ?? `claude`
+            const importedEvents = normalize(lines, importedKind)
+            if (importedEvents.length > 0) {
+              const importedRunId = `imported`
+              const earliestTs = importedEvents[0]!.ts
+              const latestTs = importedEvents[importedEvents.length - 1]!.ts
+              const lastAssistantText = (() => {
+                for (let i = importedEvents.length - 1; i >= 0; i--) {
+                  const e = importedEvents[i]!
+                  if (e.type === `assistant_message` && `text` in e) {
+                    return (e as { text?: string }).text
+                  }
+                }
+                return undefined
+              })()
+              ctx.db.actions.runs_insert({
+                row: {
+                  key: importedRunId,
+                  startedAt: earliestTs,
+                  endedAt: latestTs,
+                  status: `completed`,
+                  promptInboxKey: `imported`,
+                  responseText: lastAssistantText,
+                  finishReason: `imported`,
+                } satisfies RunRow,
+              })
+              importedEvents.forEach((e: NormalizedEvent, idx: number) => {
+                ctx.db.actions.events_insert({
+                  row: {
+                    key: eventKey(importedRunId, idx),
+                    runId: importedRunId,
+                    seq: idx,
+                    ts: e.ts,
+                    type: e.type,
+                    payload: e as unknown as Record<string, unknown>,
+                  } satisfies EventRow,
+                })
+              })
+              ctx.db.actions.lifecycle_insert({
+                row: {
+                  key: lifecycleKey(`import`),
+                  ts: Date.now(),
+                  event: `import.restored`,
+                  detail: `events=${importedEvents.length}`,
+                } satisfies LifecycleRow,
+              })
+            }
+          } catch (err) {
+            // Non-fatal: the resume path still works via nativeJsonl;
+            // the timeline just won't show prior history.
+            log.warn(
+              { err, agentId, sessionId: args.importNativeSessionId },
+              `import events backfill failed (resume still works)`
+            )
+          }
           meta = sessionMetaCol.get(`current`) as SessionMetaRow
         } catch (err) {
           const msg =
