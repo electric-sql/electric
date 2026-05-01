@@ -15,6 +15,7 @@ function fakeSandbox(opts: {
     instanceId: `fake`,
     agentId: `/x/coding-agent/y`,
     workspaceMount: `/workspace`,
+    homeDir: `/home/agent`,
     async exec(req: ExecRequest): Promise<ExecHandle> {
       opts.onCmd?.(req.cmd)
       opts.onExecReq?.(req)

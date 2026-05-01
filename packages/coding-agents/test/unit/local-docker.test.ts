@@ -174,4 +174,27 @@ describeMaybe(`LocalDockerProvider mount alignment`, () => {
       await provider.destroy(agentId).catch(() => undefined)
     }
   }, 240_000)
+
+  it(`exposes homeDir = '/home/agent' on the started instance`, async () => {
+    // Counterpart to the HostProvider regression: docker user is `agent`
+    // with a fixed home of /home/agent. Handler resume materialise/capture
+    // now reads sandbox.homeDir instead of hardcoding the path.
+    const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
+    const agentId = `/test/coding-agent/homedir-${Date.now().toString(36)}`
+    try {
+      const inst = await provider.start({
+        agentId,
+        kind: `claude`,
+        target: `sandbox`,
+        workspace: {
+          type: `volume`,
+          name: `homedir-${Date.now().toString(36)}`,
+        },
+        env: {},
+      })
+      expect(inst.homeDir).toBe(`/home/agent`)
+    } finally {
+      await provider.destroy(agentId).catch(() => undefined)
+    }
+  }, 240_000)
 })

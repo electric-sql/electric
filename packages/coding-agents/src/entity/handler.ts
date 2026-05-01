@@ -69,7 +69,7 @@ async function ensureTranscriptMaterialised(
 ): Promise<{ written: boolean }> {
   if (!content) return { written: false }
   const adapter = getAdapter(kind)
-  const homeDir = `/home/agent`
+  const homeDir = sandbox.homeDir
   const cwd = sandbox.workspaceMount
 
   // Probe: does the transcript already exist?
@@ -148,7 +148,7 @@ async function captureTranscript(
   const handle = await sandbox.exec({
     cmd: [
       ...adapter.captureCommand({
-        homeDir: `/home/agent`,
+        homeDir: sandbox.homeDir,
         cwd: sandbox.workspaceMount,
         sessionId: nativeSessionId,
       }),

@@ -133,6 +133,7 @@ function makeFakeProvider(
     instanceId: `inst-1`,
     agentId: ``,
     workspaceMount: `/workspace`,
+    homeDir: `/home/agent`,
     async exec() {
       throw new Error(`not used`)
     },
@@ -919,6 +920,7 @@ describe(`entity handler — convert-target`, () => {
               instanceId: `sb`,
               agentId: spec.agentId,
               workspaceMount: `/workspace`,
+              homeDir: `/home/agent`,
               exec: async () => ({
                 stdout: (async function* () {})(),
                 stderr: (async function* () {})(),
@@ -937,6 +939,7 @@ describe(`entity handler — convert-target`, () => {
               instanceId: `host:x`,
               agentId: spec.agentId,
               workspaceMount: spec.workspace.hostPath,
+              homeDir: `/home/agent`,
               exec: async () => ({
                 stdout: (async function* () {})(),
                 stderr: (async function* () {})(),

@@ -221,6 +221,7 @@ export class LocalDockerProvider implements SandboxProvider {
       instanceId,
       agentId: spec.agentId,
       workspaceMount: mountPath,
+      homeDir: `/home/agent`,
       exec: (args) =>
         execInContainer(instanceId, args, spec.env, envFilePathFor()),
       copyTo: ({ destPath, content, mode = 0o600 }) =>

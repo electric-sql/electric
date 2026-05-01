@@ -17,6 +17,7 @@ function makeFakeSandbox(stdoutLines: string[]): SandboxInstance {
     instanceId: `fake-instance`,
     agentId: `/x/coding-agent/y`,
     workspaceMount: `/workspace`,
+    homeDir: `/home/agent`,
     exec: vi.fn().mockResolvedValue(handle),
     destroy: vi.fn(),
   } as unknown as SandboxInstance

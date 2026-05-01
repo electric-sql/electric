@@ -41,6 +41,14 @@ export interface SandboxInstance {
   agentId: string
   /** Path inside sandbox where the workspace volume / bind-mount is mounted. */
   workspaceMount: string
+  /**
+   * Home directory of the user the CLI runs as inside this sandbox.
+   * Used to locate ~/.claude/projects/<dir>/<sessionId>.jsonl (and the
+   * codex equivalent) for resume materialise/capture.
+   *   - LocalDockerProvider: '/home/agent' (the container user).
+   *   - HostProvider: os.homedir() of the host process.
+   */
+  readonly homeDir: string
   exec(args: ExecRequest): Promise<ExecHandle>
   /**
    * Write `content` to `destPath` inside the sandbox via stdin pipe.

@@ -20,6 +20,7 @@ function fakeProvider(name: `sandbox` | `host`): SandboxProvider & {
     instanceId: `inst-${name}`,
     agentId: ``,
     workspaceMount: `/workspace`,
+    homeDir: `/home/agent`,
     async exec(_req: ExecRequest): Promise<ExecHandle> {
       throw new Error(`not used`)
     },

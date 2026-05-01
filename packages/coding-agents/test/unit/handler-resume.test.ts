@@ -28,6 +28,7 @@ function makeSandbox(
   return {
     instanceId: `inst-1`,
     workspaceMount: `/workspace`,
+    homeDir: `/home/agent`,
     exec: vi.fn(async (req) => {
       execCalls.push(req)
       // Probe-and-materialise: 'test -f <path>' returns non-zero when
@@ -252,6 +253,7 @@ describe(`handler resume materialisation`, () => {
     const sandbox = {
       instanceId: `inst-1`,
       workspaceMount: `/workspace`,
+      homeDir: `/home/agent`,
       exec: vi.fn(async (req: any) => {
         execCalls.push(req)
         return makeExecHandle([], 0) // probe returns 0 = file exists

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdir, realpath, stat, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import { dirname } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
@@ -67,6 +68,7 @@ export class HostProvider implements SandboxProvider {
       instanceId: `host:${agentId}`,
       agentId,
       workspaceMount: rec.workspaceMount,
+      homeDir: os.homedir(),
       exec: (req) => execOnHost(req, rec),
       copyTo: ({ destPath, content, mode = 0o600 }) =>
         copyToHost(destPath, content, mode),

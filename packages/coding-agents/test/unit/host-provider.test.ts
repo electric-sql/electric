@@ -6,7 +6,7 @@ import {
   readFile,
   stat as statFs,
 } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import os, { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { HostProvider } from '../../src/providers/host'
 
@@ -73,6 +73,28 @@ describe(`HostProvider lifecycle`, () => {
     const b = await p.start(spec)
     expect(b.instanceId).toBe(a.instanceId)
     expect(b.workspaceMount).toBe(a.workspaceMount)
+  })
+
+  it(`exposes homeDir = os.homedir() on the started instance`, async () => {
+    // Regression: handler.ts used to hardcode '/home/agent' when
+    // materialising/capturing the resume transcript. On the host that
+    // path doesn't exist (e.g. /home is read-only on macOS) and pinned
+    // the agent to status=error on the second turn. The fix routes the
+    // home directory through SandboxInstance.homeDir.
+    const p = new HostProvider()
+    const agentId = `/t/coding-agent/homedir-${Date.now().toString(36)}`
+    const inst = await p.start({
+      agentId,
+      kind: `claude`,
+      target: `host`,
+      workspace: { type: `bindMount`, hostPath: dir },
+      env: {},
+    })
+    try {
+      expect(inst.homeDir).toBe(os.homedir())
+    } finally {
+      await p.destroy(agentId)
+    }
   })
 
   it(`recover always returns an empty array`, async () => {
