@@ -167,4 +167,49 @@ describe(`StdioBridge — codex-specific argv`, () => {
     expect(cmd[resumeIdx + 1]).toBe(`prior-session-id`)
     expect(cmd.indexOf(`keep going`)).toBeGreaterThan(resumeIdx)
   })
+
+  it(`passes -c model="..." when model is supplied`, async () => {
+    let cmd: ReadonlyArray<string> = []
+    const b = new StdioBridge()
+    await b.runTurn({
+      sandbox: fakeSandbox({
+        stdoutLines: [
+          `{"type":"session_meta","timestamp":"2026-05-02T12:00:00Z","payload":{"id":"abc","cwd":"/workspace"}}`,
+        ],
+        onCmd: (c) => (cmd = c),
+      }),
+      kind: `codex`,
+      prompt: `hi`,
+      model: `gpt-5-codex-mini`,
+      onEvent: () => undefined,
+    })
+    // -c model="gpt-5-codex-mini" must appear before the `exec` subcommand
+    // so codex's clap picks it up as a global config override. Slice past
+    // the `sh -c '<bootstrap>' --` wrapper so we only inspect codex argv.
+    const codexArgv = cmd.slice(cmd.indexOf(`--`) + 1)
+    const cIdx = codexArgv.indexOf(`-c`)
+    expect(cIdx).toBeGreaterThanOrEqual(0)
+    expect(codexArgv[cIdx + 1]).toBe(`model="gpt-5-codex-mini"`)
+    expect(codexArgv.indexOf(`exec`)).toBeGreaterThan(cIdx)
+  })
+
+  it(`omits -c model when model is undefined`, async () => {
+    let cmd: ReadonlyArray<string> = []
+    const b = new StdioBridge()
+    await b.runTurn({
+      sandbox: fakeSandbox({
+        stdoutLines: [
+          `{"type":"session_meta","timestamp":"2026-05-02T12:00:00Z","payload":{"id":"abc","cwd":"/workspace"}}`,
+        ],
+        onCmd: (c) => (cmd = c),
+      }),
+      kind: `codex`,
+      prompt: `hi`,
+      onEvent: () => undefined,
+    })
+    // Slice past the `sh -c '<bootstrap>' --` wrapper; codex argv must
+    // not carry a `-c` flag when no model is requested.
+    const codexArgv = cmd.slice(cmd.indexOf(`--`) + 1)
+    expect(codexArgv).not.toContain(`-c`)
+  })
 })

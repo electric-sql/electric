@@ -81,8 +81,19 @@ export const CodexAdapter: CodingAgentAdapter = {
   cliBinary: `sh`,
   defaultEnvVars: [`OPENAI_API_KEY`],
 
-  buildCliInvocation({ prompt, nativeSessionId, model: _model }) {
-    const codexArgs: Array<string> = [`exec`, `--skip-git-repo-check`, `--json`]
+  buildCliInvocation({ prompt, nativeSessionId, model }) {
+    // Global `-c model="..."` override goes BEFORE the `exec` subcommand
+    // because codex's clap parser scopes `-c` flags at the top-level.
+    // Codex 0.128.0 does NOT read OPENAI_MODEL — the only ways to pin a
+    // model are config.toml or this `-c` flag.
+    const globalArgs: Array<string> = []
+    if (model) globalArgs.push(`-c`, `model="${model}"`)
+    const codexArgs: Array<string> = [
+      ...globalArgs,
+      `exec`,
+      `--skip-git-repo-check`,
+      `--json`,
+    ]
     if (nativeSessionId) codexArgs.push(`resume`, nativeSessionId)
     // The trailing `--` tells codex's clap parser "everything after this
     // is positional", so prompts starting with `-` (e.g. "--explain why")
