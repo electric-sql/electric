@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
 
 type WorkspaceMode = `volume` | `bindMount`
+type Target = `sandbox` | `host`
 
 interface CodingAgentSpawnDialogProps {
   open: boolean
@@ -18,9 +19,11 @@ export function CodingAgentSpawnDialog({
   onOpenChange,
   onSpawn,
 }: CodingAgentSpawnDialogProps): React.ReactElement {
+  const [target, setTarget] = useState<Target>(`sandbox`)
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(`volume`)
   const [workspaceName, setWorkspaceName] = useState(``)
   const [hostPath, setHostPath] = useState(``)
+  const [importSessionId, setImportSessionId] = useState(``)
   const [initialPrompt, setInitialPrompt] = useState(``)
   const [idleTimeoutSec, setIdleTimeoutSec] = useState(``)
   const [keepWarm, setKeepWarm] = useState(false)
@@ -37,12 +40,16 @@ export function CodingAgentSpawnDialog({
       const args: Record<string, unknown> = {
         kind: `claude`,
         workspaceType: workspaceMode,
+        target,
       }
       if (workspaceMode === `volume` && workspaceName.trim()) {
         args.workspaceName = workspaceName.trim()
       }
       if (workspaceMode === `bindMount`) {
         args.workspaceHostPath = hostPath.trim()
+      }
+      if (target === `host` && importSessionId.trim()) {
+        args.importNativeSessionId = importSessionId.trim()
       }
       const parsedTimeoutSec = Number.parseInt(idleTimeoutSec.trim(), 10)
       if (Number.isFinite(parsedTimeoutSec) && parsedTimeoutSec > 0) {
@@ -58,9 +65,11 @@ export function CodingAgentSpawnDialog({
     },
     [
       canSubmit,
+      target,
       workspaceMode,
       workspaceName,
       hostPath,
+      importSessionId,
       initialPrompt,
       idleTimeoutSec,
       keepWarm,
@@ -93,6 +102,40 @@ export function CodingAgentSpawnDialog({
           <Flex direction="column" gap="3">
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">
+                Target
+              </Text>
+              <Flex gap="2">
+                <Button
+                  type="button"
+                  variant={target === `sandbox` ? `solid` : `soft`}
+                  color="gray"
+                  size="2"
+                  onClick={() => {
+                    setTarget(`sandbox`)
+                    setImportSessionId(``)
+                  }}
+                >
+                  Sandbox
+                </Button>
+                <Button
+                  type="button"
+                  variant={target === `host` ? `solid` : `soft`}
+                  color="gray"
+                  size="2"
+                  onClick={() => {
+                    setTarget(`host`)
+                    if (workspaceMode === `volume`) {
+                      setWorkspaceMode(`bindMount`)
+                    }
+                  }}
+                >
+                  Host
+                </Button>
+              </Flex>
+            </Flex>
+
+            <Flex direction="column" gap="1">
+              <Text size="2" weight="medium">
                 Workspace type
               </Text>
               <Flex gap="2">
@@ -101,6 +144,7 @@ export function CodingAgentSpawnDialog({
                   variant={workspaceMode === `volume` ? `solid` : `soft`}
                   color="gray"
                   size="2"
+                  disabled={target === `host`}
                   onClick={() => setWorkspaceMode(`volume`)}
                 >
                   Volume
@@ -150,6 +194,24 @@ export function CodingAgentSpawnDialog({
                   value={hostPath}
                   onChange={(e) => setHostPath(e.target.value)}
                   placeholder="/Users/me/my-project"
+                />
+              </Flex>
+            )}
+
+            {target === `host` && (
+              <Flex direction="column" gap="1">
+                <Text size="2" weight="medium">
+                  Import session ID{` `}
+                  <Text size="1" color="gray">
+                    (optional — resume an existing local Claude session)
+                  </Text>
+                </Text>
+                <input
+                  style={inputStyle}
+                  type="text"
+                  value={importSessionId}
+                  onChange={(e) => setImportSessionId(e.target.value)}
+                  placeholder=""
                 />
               </Flex>
             )}
