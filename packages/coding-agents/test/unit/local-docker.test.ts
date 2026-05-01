@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { realpath } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { LocalDockerProvider } from '../../src/providers/local-docker'
 import { buildTestImage, TEST_IMAGE_TAG } from '../support/build-image'
 
@@ -115,6 +119,54 @@ describeMaybe(`LocalDockerProvider.copyTo`, () => {
       // The line reader appends '\n' per line; the input already ends
       // without a trailing newline, so trim one off before comparing.
       expect(read.replace(/\n$/, ``)).toBe(content)
+    } finally {
+      await provider.destroy(agentId).catch(() => undefined)
+    }
+  }, 240_000)
+})
+
+describeMaybe(`LocalDockerProvider mount alignment`, () => {
+  beforeAll(async () => {
+    await buildTestImage()
+  }, 600_000)
+
+  it(`bindMount workspace is mounted at realpath(hostPath) and instance.workspaceMount matches`, async () => {
+    const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
+    const tmp = await mkdtemp(join(tmpdir(), `mount-align-`))
+    const real = await realpath(tmp)
+    const agentId = `/test/coding-agent/align-${Date.now().toString(36)}`
+    try {
+      const inst = await provider.start({
+        agentId,
+        kind: `claude`,
+        target: `sandbox`,
+        workspace: { type: `bindMount`, hostPath: tmp },
+        env: {},
+      })
+      expect(inst.workspaceMount).toBe(real)
+      const handle = await inst.exec({ cmd: [`pwd`] })
+      let cwd = ``
+      for await (const line of handle.stdout) cwd += line
+      await handle.wait()
+      expect(cwd.trim()).toBe(real)
+    } finally {
+      await provider.destroy(agentId).catch(() => undefined)
+      await rm(tmp, { recursive: true, force: true })
+    }
+  }, 240_000)
+
+  it(`volume workspace still mounts at /workspace`, async () => {
+    const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
+    const agentId = `/test/coding-agent/vol-${Date.now().toString(36)}`
+    try {
+      const inst = await provider.start({
+        agentId,
+        kind: `claude`,
+        target: `sandbox`,
+        workspace: { type: `volume`, name: `vol-${Date.now().toString(36)}` },
+        env: {},
+      })
+      expect(inst.workspaceMount).toBe(`/workspace`)
     } finally {
       await provider.destroy(agentId).catch(() => undefined)
     }

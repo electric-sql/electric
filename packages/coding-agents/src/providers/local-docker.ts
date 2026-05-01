@@ -53,7 +53,8 @@ export class LocalDockerProvider implements SandboxProvider {
       if (Object.keys(spec.env).length > 0) {
         await this.writeEnvFile(existing.id, spec.env)
       }
-      return this.makeInstance(existing.id, spec)
+      const mountPath = await this.inspectMountPath(existing.id, spec)
+      return this.makeInstance(existing.id, spec, mountPath)
     }
     if (existing && !existing.running) {
       // Stale stopped container with same agentId. Remove it first.
@@ -68,7 +69,7 @@ export class LocalDockerProvider implements SandboxProvider {
       }`,
     ]
 
-    const mount = await this.mountFlag(spec)
+    const { flag: mount, mountPath } = await this.mountFlag(spec)
 
     const args = [
       `run`,
@@ -76,6 +77,8 @@ export class LocalDockerProvider implements SandboxProvider {
       `--rm=false`,
       ...labels.flatMap((l) => [`--label`, l]),
       mount,
+      `-w`,
+      mountPath,
       this.image,
     ]
 
@@ -87,7 +90,7 @@ export class LocalDockerProvider implements SandboxProvider {
       await this.writeEnvFile(instanceId, spec.env)
     }
 
-    return this.makeInstance(instanceId, spec)
+    return this.makeInstance(instanceId, spec, mountPath)
   }
 
   private async writeEnvFile(
@@ -152,6 +155,7 @@ export class LocalDockerProvider implements SandboxProvider {
           instanceId: id ?? ``,
           agentId: agentId ?? ``,
           status: state === `running` ? `running` : `stopped`,
+          target: `sandbox` as const,
         }
       })
   }
@@ -178,25 +182,45 @@ export class LocalDockerProvider implements SandboxProvider {
     return { id: id ?? ``, running: state === `running` }
   }
 
-  private async mountFlag(spec: SandboxSpec): Promise<string> {
+  private async mountFlag(
+    spec: SandboxSpec
+  ): Promise<{ flag: string; mountPath: string }> {
     if (spec.workspace.type === `volume`) {
       const volName = `coding-agent-workspace-${spec.workspace.name}`
       // ensure the volume exists (docker auto-creates on first use, but explicit is friendlier)
       await runDocker([`volume`, `create`, volName]).catch(() => undefined)
-      return `--mount=type=volume,source=${volName},target=/workspace`
+      return {
+        flag: `--mount=type=volume,source=${volName},target=/workspace`,
+        mountPath: `/workspace`,
+      }
     }
     const real = await realpath(spec.workspace.hostPath)
-    return `--mount=type=bind,source=${real},target=/workspace`
+    return {
+      flag: `--mount=type=bind,source=${real},target=${real}`,
+      mountPath: real,
+    }
   }
 
-  private makeInstance(instanceId: string, spec: SandboxSpec): SandboxInstance {
+  private async inspectMountPath(
+    _instanceId: string,
+    spec: SandboxSpec
+  ): Promise<string> {
+    if (spec.workspace.type === `volume`) return `/workspace`
+    return await realpath(spec.workspace.hostPath)
+  }
+
+  private makeInstance(
+    instanceId: string,
+    spec: SandboxSpec,
+    mountPath: string
+  ): SandboxInstance {
     const envFilePathFor = (): string | undefined =>
       this.envFileByInstance.get(instanceId)
 
     return {
       instanceId,
       agentId: spec.agentId,
-      workspaceMount: `/workspace`,
+      workspaceMount: mountPath,
       exec: (args) =>
         execInContainer(instanceId, args, spec.env, envFilePathFor()),
       copyTo: ({ destPath, content, mode = 0o600 }) =>
