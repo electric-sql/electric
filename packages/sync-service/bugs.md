@@ -491,12 +491,27 @@ and writes to outer storage are interleaved with these updates.
 Pre-restart there's no way for the two to diverge because they share
 the running consumer's state.
 
-**Across a restart they can land at different LSNs.** The inner
-shape's storage and the outer shape's storage are written by
-different writers, with their own flush schedules. When the stack is
-killed, the inner shape's `last_persisted_offset` and the outer
-shape's `last_persisted_offset` are usually NOT equal — typically
-they differ by one or two committed transactions.
+**Across a restart they can land at different LSNs.**
+
+Each shape has its own writer (one per shape) with its own buffer.
+A buffer is flushed when it fills up or when its periodic
+`flush_period` timer fires. Different shapes reach those triggers
+at different times, so different shapes' on-disk
+`last_persisted_txn_offset` can differ.
+
+The replication-slot side does coordinate: `ShapeLogCollector.FlushTracker`
+computes the **min** `last_flushed` across all shapes and advances
+PG's slot to that minimum (`encode_standby_status_update` in
+`lib/electric/postgres/replication_client.ex`). So PG won't ack
+beyond the slowest shape. But that's only the lower bound for slot
+durability — individual shapes' on-disk state can be ahead.
+
+When the stack is killed mid-flight there's no coordinated flush.
+The supervisor sends `:shutdown`; each writer stops where it is.
+For a subquery shape, the inner and outer shapes go through
+**different writers** that flush independently, so `L_inner` and
+`L_outer` are typically not equal at kill time — either may be
+ahead.
 
 Then on recovery (Bug 5 fix path):
 
