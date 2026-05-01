@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "DOCKER=1 vitest run test/integration",
+    "test:integration:host": "HOST_PROVIDER=1 vitest run test/integration/host-provider.test.ts",
     "typecheck": "tsc --noEmit",
     "stylecheck": "eslint . --quiet"
   },
