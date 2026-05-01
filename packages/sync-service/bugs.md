@@ -105,7 +105,7 @@ deterministic single-shape reproduction with `chunk_size: 200` to force
 the source shape's main log to span multiple chunks. Fails on the broken
 iteration; passes with the fix.
 
-## Bug 2: Snapshot+log replay can produce duplicate / orphan operations after restart
+## Bug 2: Snapshot+log replay can produce duplicate / orphan operations after restart — FIXED
 
 **Symptom**
 
@@ -185,7 +185,7 @@ CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
 - Possibly Electric.LsnTracker — the new replication client may be
   reporting a stale `last_processed_lsn` until the first batch streams.
 
-## Bug 5: Post-restart move-in events lost when source-shape main log spans multiple chunks — PARTIALLY FIXED
+## Bug 5: Post-restart move-in events lost when source-shape main log spans multiple chunks — FIXED
 
 **Symptom**
 
@@ -428,15 +428,24 @@ move-in.
 
 ## Note for triage
 
-Bugs 1 and 4 are fully fixed.
+All known bugs are addressed. Final fix structure:
 
-Bug 5 is partially fixed (eager-start before mark_as_ready). The
-remaining gap (inner vs outer `last_persisted_offset` mismatch) is
-the root cause of Bug 2.
+- Bugs 1 and 4 fixed by the materializer history-replay fix.
+- Bugs 2 and 5 fixed by `Electric.StackSupervisor.ShutdownCoordinator`
+  + `ShapeStatusOwner` dirty-startup detection: a coordinated drain
+  before clean shutdown writes a marker; on startup, missing marker
+  drops all shape state. This eliminates the L_inner ≠ L_outer
+  inconsistency that was the root cause of both bugs.
+- Bug 6 fixed by the consumer `:noproc` catch + ETS rescue.
+  Materializer keeps strict invariants (no impossible-state
+  swallowing) — the dirty-startup path makes that safe by ensuring
+  the materializer's view and outer storage always start at the same
+  LSN.
 
-Bug 6 is partially fixed (consumer `:noproc` catch + ETS rescue).
-The materializer "log and skip" branches were reverted because they
-hide invariant violations.
+Bug 3 (out-of-bounds long-poll after restart) hasn't been seen since
+the safe-shutdown changes landed; if it shows up again it's likely a
+small fix in the active-readiness signal but no longer the test's
+blocker.
 
 Bug 2 is now the next blocker. With the materializer hardening and
 ETS-rescue from Bug 6 in place, the cascading 409 is gone — and
