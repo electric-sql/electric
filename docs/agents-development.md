@@ -147,6 +147,10 @@ All agent packages use `tsdown` for building. The `pnpm dev` command in each sta
 - **Agent logic changes** (`agents`): Same — restart the entrypoint after rebuild.
 - **UI changes** (`agents-server-ui`): Vite HMR — changes appear instantly.
 
+## Developing with coding-agents
+
+For dev iteration without rebuilding the Docker image, spawn coding-agents with `target: 'host'` and a bind-mount workspace. The agent runs `claude` directly on the host with no isolation; the lifecycle, persistence, and resume behavior are otherwise identical to the sandbox target.
+
 ## Working with examples
 
 The `examples/deep-survey` example demonstrates a custom agent with its own entity types:

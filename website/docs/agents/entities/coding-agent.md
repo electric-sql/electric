@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # Coding Agent
 
-`coding-agent` is the built-in entity type for long-lived, sandboxed Claude Code sessions. Each agent runs the `claude` CLI inside a Docker container with a persistent workspace volume. The full conversation history is durable — the sandbox is cattle, recreatable on demand — and the agent can be prompted across many turns, hibernated between turns, pinned to keep the container warm, and shared with other agents through a named workspace.
+`coding-agent` is the built-in entity type for long-lived Claude Code sessions. By default each agent runs the `claude` CLI inside a Docker container with a persistent workspace (`target: 'sandbox'`); you can also opt into running directly on the host machine with no isolation (`target: 'host'`), which is useful for importing existing local Claude sessions or for environments where Docker is unavailable.
 
 **Source:**
 - Entity, lifecycle, and sandbox: [`packages/coding-agents/src/`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/)
@@ -27,6 +27,51 @@ outline: [2, 3]
 | Running a known shell command in isolation | `worker` |
 
 Use `coding-agent` when the task benefits from session continuity across turns — the agent can read its own prior work, iterate on a file, run tests, and resume exactly where it left off across idle hibernations.
+
+## Target
+
+Each `coding-agent` can run in one of two targets: **sandbox** (default) or **host**.
+
+**Sandbox** (`target: 'sandbox'`) runs the CLI inside a Docker container with full process and filesystem isolation. The container uses a persistent workspace volume or bind-mount, ensuring the filesystem layout is fresh on each cold-boot. This is the secure default for multi-tenant or untrusted workloads.
+
+**Host** (`target: 'host'`) runs the CLI directly on the host machine as the user running agents-server, with full filesystem and network access. Pick host mode when you want to import a local Claude session (restore an existing workflow), or when sandbox isolation isn't required or isn't possible in your environment (e.g., Docker is unavailable).
+
+**Trust and access:** Host mode runs with the permissions of the agents-server process — typically the user running the server. Sandbox mode isolates the CLI's filesystem and process namespace inside the container.
+
+**Workspace constraints:**
+- `target: 'host'` requires `workspaceType: 'bindMount'`. A local Claude session lives at `~/.claude/projects/<sanitised-cwd>/<sessionId>.jsonl` on disk; the host target reads from and writes back to this location after each turn.
+- `target: 'sandbox'` supports both `volume` and `bindMount`. Volume workspaces are sandbox-only and do not correspond to a host path.
+- **Aligned path for bind-mounts:** When using a bind-mount workspace, both targets mount the host path at the same location inside the container (`/workspace` in sandbox, original path in host). This means `~/.claude/projects/<sanitised-cwd>/...` matches across targets, allowing seamless session migration.
+
+## Importing a host session
+
+To resume a Claude session that was already in progress on the local machine, spawn a coding-agent with `target: 'host'` and a bind-mount workspace pointing to the project directory:
+
+```ts
+const agent = await ctx.spawnCodingAgent({
+  id: 'imported-session',
+  kind: 'claude',
+  target: 'host',  // Run directly on the host
+  workspace: { type: 'bindMount', hostPath: '/path/to/project' },
+  importNativeSessionId: '<session-id>',  // e.g., 'abc123def456'
+})
+```
+
+On first wake, the handler reads `~/.claude/projects/<sanitised-realpath>/<session-id>.jsonl` and the agent resumes that session. The agent reads and writes to the same location that `claude --resume` uses locally, keeping the history in sync.
+
+**CLI shortcut:** After building the agents package, use the import command to spawn an agent that resumes a local session:
+
+```sh
+pnpm -C packages/coding-agents build
+
+electric-ax-import-claude \
+  --workspace /path/to/proj \
+  --session-id <claude-session-id>
+```
+
+This is equivalent to calling `ctx.spawnCodingAgent` with the settings above, then sending an initial prompt.
+
+**Note:** Host-target agents capture the transcript after each turn and write it back to `~/.claude/projects/<sanitised-realpath>/<session-id>.jsonl`. Imported sessions stay in sync with the local `claude` CLI — `claude --resume <session-id>` on the machine will see the same conversation history that the agent is working with.
 
 ## Lifecycle
 
@@ -80,6 +125,8 @@ A `coding-agent` moves through seven states:
 | `any → DESTROYED` | `destroy()` completes. The workspace ref is dropped. |
 
 **Idle hibernation.** After a run completes, if the agent is not pinned and `keepWarm` is false, an idle timer arms (default 5 minutes). When it fires, the sandbox container is stopped and status transitions to `COLD`. The workspace volume and the entity's durable stream survive — only the in-memory process and the container's tmpfs (`~/.claude`) are discarded.
+
+**Host target lifecycle note.** For `target: 'host'`, the `STARTING` step is essentially a no-op (there is no container to start), but the state machine still cycles through it for consistency with the sandbox target. The agent transitions from `COLD → STARTING → IDLE` the same way, then runs `claude` directly on the host when prompted.
 
 **Crash recovery.** On `agents-server` restart, `LocalDockerProvider.recover()` scans Docker containers labeled `electric-ax.agent-id`. On the next handler entry per agent, the reconcile step compares durable state against the live container state and marks any orphaned in-flight runs as `failed: orphaned`.
 
@@ -160,6 +207,12 @@ interface SpawnCodingAgentOptions {
   workspace:
     | { type: 'volume'; name?: string }
     | { type: 'bindMount'; hostPath: string }
+
+  /** Runtime target: 'sandbox' (Docker, default) or 'host' (no isolation). */
+  target?: 'sandbox' | 'host'
+
+  /** Native session ID to import and resume. Used with target: 'host'. */
+  importNativeSessionId?: string
 
   /** First prompt, queued before the entity's first wake. Optional. */
   initialPrompt?: string
