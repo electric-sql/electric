@@ -47,6 +47,8 @@ defmodule Electric.Plug.Router do
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 
+  get "/v1/metadata-snapshot", to: Electric.Plug.MetadataSnapshotPlug
+
   match _, do: send_resp(conn, 404, "Not found")
 
   def server_header(conn, version),
@@ -55,7 +57,8 @@ defmodule Electric.Plug.Router do
   # OPTIONS requests should not be authenticated
   def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
 
-  def authenticate(%Plug.Conn{request_path: "/v1/shape"} = conn, _opts) do
+  def authenticate(%Plug.Conn{request_path: path} = conn, _opts)
+      when path in ["/v1/shape", "/v1/metadata-snapshot"] do
     api_secret = conn.assigns.config[:secret]
 
     if is_nil(api_secret) do
