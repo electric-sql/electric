@@ -1,5 +1,5 @@
 diff --git a/dist/src-8t6qdcZ0.js b/dist/src-8t6qdcZ0.js
-index a8ea793056f33405df8f85049c3a8879f809e7e7..6d3d672a2d9b066455f5a789bb8a7a6a18a46e6e 100644
+index a8ea793056f33405df8f85049c3a8879f809e7e7..93cd8409bea50aa9a42f4f0fa327281eecbdd81f 100644
 --- a/dist/src-8t6qdcZ0.js
 +++ b/dist/src-8t6qdcZ0.js
 @@ -154,7 +154,7 @@ function normalizeClaude(lines, options = {}) {
@@ -20,8 +20,119 @@ index a8ea793056f33405df8f85049c3a8879f809e7e7..6d3d672a2d9b066455f5a789bb8a7a6a
  			cwd: first.cwd ?? ``,
  			agent: `claude`,
  			agentVersion: first.version,
+@@ -520,6 +520,110 @@ function normalizeCodex(lines, options = {}) {
+ 			}
+ 			continue;
+ 		}
++		if (entry.type === `thread.started`) {
++			events.push({
++				v: 1,
++				ts,
++				type: `session_init`,
++				sessionId: String(entry.thread_id ?? ``),
++				cwd: ``,
++				model: void 0,
++				agent: `codex`,
++				agentVersion: void 0,
++				git: void 0
++			});
++			continue;
++		}
++		if (entry.type === `turn.started`) {
++			continue;
++		}
++		if (entry.type === `item.completed`) {
++			const item = entry.item ?? {};
++			const itemType = item.type;
++			if (itemType === `agent_message`) {
++				const text = String(item.text ?? ``);
++				if (text) events.push({
++					v: 1,
++					ts,
++					type: `assistant_message`,
++					text,
++					phase: `final`
++				});
++				continue;
++			}
++			if (itemType === `reasoning`) {
++				const summary = String(item.text ?? `(thinking)`) || `(thinking)`;
++				events.push({
++					v: 1,
++					ts,
++					type: `thinking`,
++					summary,
++					text: null
++				});
++				continue;
++			}
++			if (itemType === `function_call`) {
++				const args = parseArguments(item.arguments);
++				const mapping = normalizeToolName(String(item.name ?? ``), `codex`, args);
++				events.push({
++					v: 1,
++					ts,
++					type: `tool_call`,
++					callId: String(item.call_id ?? item.id ?? ``),
++					tool: mapping.normalized,
++					originalTool: mapping.originalTool,
++					originalAgent: `codex`,
++					input: args
++				});
++				continue;
++			}
++			if (itemType === `function_call_output`) {
++				events.push({
++					v: 1,
++					ts,
++					type: `tool_result`,
++					callId: String(item.call_id ?? item.id ?? ``),
++					output: String(item.output ?? ``),
++					isError: false
++				});
++				continue;
++			}
++			continue;
++		}
++		if (entry.type === `turn.completed`) {
++			const usage = entry.usage ?? {};
++			events.push({
++				v: 1,
++				ts,
++				type: `turn_complete`,
++				success: true,
++				usage: {
++					inputTokens: typeof usage.input_tokens === `number` ? usage.input_tokens : void 0,
++					outputTokens: typeof usage.output_tokens === `number` ? usage.output_tokens : void 0,
++					cachedInputTokens: typeof usage.cached_input_tokens === `number` ? usage.cached_input_tokens : void 0,
++					reasoningOutputTokens: typeof usage.reasoning_output_tokens === `number` ? usage.reasoning_output_tokens : void 0
++				}
++			});
++			continue;
++		}
++		if (entry.type === `turn.failed`) {
++			events.push({
++				v: 1,
++				ts,
++				type: `turn_aborted`,
++				reason: String(entry.error?.message ?? `turn failed`)
++			});
++			continue;
++		}
++		if (entry.type === `error`) {
++			events.push({
++				v: 1,
++				ts,
++				type: `error`,
++				message: String(entry.message ?? ``)
++			});
++			continue;
++		}
+ 	}
+ 	return events;
+ }
 diff --git a/dist/src-Det_CZei.cjs b/dist/src-Det_CZei.cjs
-index 1028f41e4111efade618530b7b6d3bebdc949c9c..d2dfcbbd3bfa050d46eecc390f6b8708441a0ced 100644
+index 1028f41e4111efade618530b7b6d3bebdc949c9c..7e928347b875c2e37b47bac49f6b96ca1e5213ee 100644
 --- a/dist/src-Det_CZei.cjs
 +++ b/dist/src-Det_CZei.cjs
 @@ -156,7 +156,7 @@ function normalizeClaude(lines, options = {}) {
@@ -42,3 +153,114 @@ index 1028f41e4111efade618530b7b6d3bebdc949c9c..d2dfcbbd3bfa050d46eecc390f6b8708
  			cwd: first.cwd ?? ``,
  			agent: `claude`,
  			agentVersion: first.version,
+@@ -522,6 +522,110 @@ function normalizeCodex(lines, options = {}) {
+ 			}
+ 			continue;
+ 		}
++		if (entry.type === `thread.started`) {
++			events.push({
++				v: 1,
++				ts,
++				type: `session_init`,
++				sessionId: String(entry.thread_id ?? ``),
++				cwd: ``,
++				model: void 0,
++				agent: `codex`,
++				agentVersion: void 0,
++				git: void 0
++			});
++			continue;
++		}
++		if (entry.type === `turn.started`) {
++			continue;
++		}
++		if (entry.type === `item.completed`) {
++			const item = entry.item ?? {};
++			const itemType = item.type;
++			if (itemType === `agent_message`) {
++				const text = String(item.text ?? ``);
++				if (text) events.push({
++					v: 1,
++					ts,
++					type: `assistant_message`,
++					text,
++					phase: `final`
++				});
++				continue;
++			}
++			if (itemType === `reasoning`) {
++				const summary = String(item.text ?? `(thinking)`) || `(thinking)`;
++				events.push({
++					v: 1,
++					ts,
++					type: `thinking`,
++					summary,
++					text: null
++				});
++				continue;
++			}
++			if (itemType === `function_call`) {
++				const args = parseArguments(item.arguments);
++				const mapping = normalizeToolName(String(item.name ?? ``), `codex`, args);
++				events.push({
++					v: 1,
++					ts,
++					type: `tool_call`,
++					callId: String(item.call_id ?? item.id ?? ``),
++					tool: mapping.normalized,
++					originalTool: mapping.originalTool,
++					originalAgent: `codex`,
++					input: args
++				});
++				continue;
++			}
++			if (itemType === `function_call_output`) {
++				events.push({
++					v: 1,
++					ts,
++					type: `tool_result`,
++					callId: String(item.call_id ?? item.id ?? ``),
++					output: String(item.output ?? ``),
++					isError: false
++				});
++				continue;
++			}
++			continue;
++		}
++		if (entry.type === `turn.completed`) {
++			const usage = entry.usage ?? {};
++			events.push({
++				v: 1,
++				ts,
++				type: `turn_complete`,
++				success: true,
++				usage: {
++					inputTokens: typeof usage.input_tokens === `number` ? usage.input_tokens : void 0,
++					outputTokens: typeof usage.output_tokens === `number` ? usage.output_tokens : void 0,
++					cachedInputTokens: typeof usage.cached_input_tokens === `number` ? usage.cached_input_tokens : void 0,
++					reasoningOutputTokens: typeof usage.reasoning_output_tokens === `number` ? usage.reasoning_output_tokens : void 0
++				}
++			});
++			continue;
++		}
++		if (entry.type === `turn.failed`) {
++			events.push({
++				v: 1,
++				ts,
++				type: `turn_aborted`,
++				reason: String(entry.error?.message ?? `turn failed`)
++			});
++			continue;
++		}
++		if (entry.type === `error`) {
++			events.push({
++				v: 1,
++				ts,
++				type: `error`,
++				message: String(entry.message ?? ``)
++			});
++			continue;
++		}
+ 	}
+ 	return events;
+ }

@@ -9,7 +9,7 @@ patchedDependencies:
     hash: 46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188
     path: patches/@microsoft__fetch-event-source.patch
   agent-session-protocol@0.0.2:
-    hash: 1b4c1509a1b7076f42f05a9e15786d56f78b61a487b32b64ad7160fe9188b93c
+    hash: 0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6
     path: patches/agent-session-protocol@0.0.2.patch
 
 importers:
@@ -1528,7 +1528,7 @@ importers:
         version: 0.34.49
       agent-session-protocol:
         specifier: ^0.0.2
-        version: 0.0.2(patch_hash=1b4c1509a1b7076f42f05a9e15786d56f78b61a487b32b64ad7160fe9188b93c)
+        version: 0.0.2(patch_hash=0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6)
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0
@@ -1854,7 +1854,7 @@ importers:
         version: link:../agents-runtime
       agent-session-protocol:
         specifier: ^0.0.2
-        version: 0.0.2(patch_hash=1b4c1509a1b7076f42f05a9e15786d56f78b61a487b32b64ad7160fe9188b93c)
+        version: 0.0.2(patch_hash=0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6)
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -29299,7 +29299,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.8.1))
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.8.1))
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -29634,7 +29634,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agent-session-protocol@0.0.2(patch_hash=1b4c1509a1b7076f42f05a9e15786d56f78b61a487b32b64ad7160fe9188b93c):
+  agent-session-protocol@0.0.2(patch_hash=0d586c5ddf1e6a6a4c13f79ea6609b200bb2a9b9381608bbd83911a36e96f3b6):
     dependencies:
       '@durable-streams/client': 0.2.3
       '@modelcontextprotocol/sdk': 1.29.0(zod@3.25.76)
