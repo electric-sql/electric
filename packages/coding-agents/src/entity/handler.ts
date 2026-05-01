@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { normalize } from 'agent-session-protocol'
+import { findSessionPath, normalize } from 'agent-session-protocol'
 import type { NormalizedEvent } from 'agent-session-protocol'
 import { log } from '../log'
 import { WorkspaceRegistry } from '../workspace-registry'
@@ -284,19 +284,40 @@ export function makeCodingAgentHandler(
       meta = initial
 
       if (args.importNativeSessionId && target === `host`) {
+        const importedKind: CodingAgentKind = args.kind ?? `claude`
         const home = options.homeDir ?? os.homedir()
-        const realWorkspace = await realpath(
-          args.workspaceHostPath ?? process.cwd()
-        )
-        const projectDir = realWorkspace.replace(/\//g, `-`)
-        const sessionPath = path.join(
-          home,
-          `.claude`,
-          `projects`,
-          projectDir,
-          `${args.importNativeSessionId}.jsonl`
-        )
+        // Resolve the on-host source JSONL path. Claude uses a
+        // deterministic <home>/.claude/projects/<sanitised-cwd>/<id>.jsonl
+        // layout; codex's path embeds a wall-clock timestamp so we
+        // delegate to agent-session-protocol's findSessionPath which
+        // scans ~/.codex/sessions for *-<id>.jsonl. asp uses os.homedir()
+        // internally; if a test overrides options.homeDir, claude path
+        // honors it but codex falls through to asp's view of HOME.
+        let sessionPath: string | null
+        if (importedKind === `codex`) {
+          sessionPath = await findSessionPath(
+            `codex`,
+            args.importNativeSessionId
+          )
+        } else {
+          const realWorkspace = await realpath(
+            args.workspaceHostPath ?? process.cwd()
+          )
+          const projectDir = realWorkspace.replace(/\//g, `-`)
+          sessionPath = path.join(
+            home,
+            `.claude`,
+            `projects`,
+            projectDir,
+            `${args.importNativeSessionId}.jsonl`
+          )
+        }
         try {
+          if (!sessionPath) {
+            throw Object.assign(new Error(`codex session not found by id`), {
+              code: `ENOENT`,
+            })
+          }
           const content = await fs.readFile(sessionPath, `utf8`)
           ctx.db.actions.nativeJsonl_insert({
             row: {
@@ -332,7 +353,6 @@ export function makeCodingAgentHandler(
             const lines = content
               .split(`\n`)
               .filter((l: string) => l.trim().length > 0)
-            const importedKind: CodingAgentKind = args.kind ?? `claude`
             const importedEvents = normalize(lines, importedKind)
             if (importedEvents.length > 0) {
               const importedRunId = `imported`
