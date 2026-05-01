@@ -17,6 +17,7 @@ import {
 } from './collections'
 import {
   destroyMessageSchema,
+  idleEvictionFiredMessageSchema,
   pinMessageSchema,
   promptMessageSchema,
   releaseMessageSchema,
@@ -36,6 +37,13 @@ export interface RegisterCodingAgentDeps {
   }>
   /** Per-turn env supplier. Defaults to forwarding ANTHROPIC_API_KEY from process.env. */
   env?: () => Record<string, string>
+  /**
+   * Posts a self-message to the entity. Used by the idle timer to
+   * re-enter the handler after destroying the container, so reconcile
+   * flips status idle→cold. Bootstrap supplies this once the runtime
+   * is constructed.
+   */
+  wakeEntity?: (agentId: string) => void
 }
 
 // NOTE: Flat shape (no nested objects, no unions). The agents-server-ui's
@@ -85,6 +93,7 @@ export function registerCodingAgent(
       release: releaseMessageSchema,
       stop: stopMessageSchema,
       destroy: destroyMessageSchema,
+      'lifecycle/idle-eviction-fired': idleEvictionFiredMessageSchema,
     },
     state: {
       sessionMeta: {
@@ -113,6 +122,10 @@ export function registerCodingAgent(
         primaryKey: `key`,
       },
     },
-    handler: makeCodingAgentHandler(lm, wr, { defaults, env }),
+    handler: makeCodingAgentHandler(lm, wr, {
+      defaults,
+      env,
+      wakeEntity: deps.wakeEntity,
+    }),
   })
 }

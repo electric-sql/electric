@@ -132,6 +132,10 @@ function makeFakeProvider(
     async exec() {
       throw new Error(`not used`)
     },
+    async copyTo() {
+      // not used in unit tests; processPrompt only calls copyTo when
+      // a nativeSessionId is set
+    },
   }
   const fp: any = {
     name: `fake`,
@@ -336,5 +340,112 @@ describe(`entity handler — processPrompt happy path`, () => {
 
     const eventRows = Array.from(ctx.db.collections.events.rows.values())
     expect(eventRows).toHaveLength(2)
+  })
+})
+
+describe(`entity handler — idle timer wakes entity`, () => {
+  it(`calls wakeEntity after destroy when timer fires`, async () => {
+    vi.useFakeTimers()
+    try {
+      const events: Array<any> = [
+        { type: `session_init`, sessionId: `abc`, ts: 1 },
+        { type: `assistant_message`, text: `ok`, ts: 2 },
+      ]
+      const bridge: Bridge = {
+        async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
+          for (const e of events) args.onEvent(e as any)
+          return { exitCode: 0, finalText: `ok` }
+        },
+      }
+      const destroyCalls: Array<string> = []
+      const wakeCalls: Array<string> = []
+      const provider = makeFakeProvider(`stopped`)
+      provider.destroy = async (agentId: string) => {
+        destroyCalls.push(agentId)
+      }
+      const lm = new LifecycleManager({ provider, bridge })
+      const wr = new WorkspaceRegistry()
+      const handler = makeCodingAgentHandler(lm, wr, {
+        defaults: {
+          idleTimeoutMs: 50,
+          coldBootBudgetMs: 5_000,
+          runTimeoutMs: 5_000,
+        },
+        env: () => ({}),
+        wakeEntity: (agentId: string) => {
+          wakeCalls.push(agentId)
+        },
+      })
+      const meta = {
+        key: `current`,
+        status: `cold`,
+        kind: `claude`,
+        pinned: false,
+        workspaceIdentity: `volume:w`,
+        workspaceSpec: { type: `volume`, name: `w` },
+        idleTimeoutMs: 50,
+        keepWarm: false,
+      }
+      const { ctx } = makeFakeCtx({
+        entityUrl: `/t/coding-agent/x`,
+        meta,
+        inbox: [{ key: `i1`, message_type: `prompt`, payload: { text: `hi` } }],
+      })
+      await handler(ctx, { type: `message_received` } as any)
+
+      // Timer was armed at idleTimeoutMs=50. Fast-forward and let the
+      // microtask queue drain so the destroy()/wakeEntity finally chain runs.
+      await vi.advanceTimersByTimeAsync(100)
+      await vi.runAllTimersAsync()
+
+      expect(destroyCalls).toEqual([`/t/coding-agent/x`])
+      expect(wakeCalls).toEqual([`/t/coding-agent/x`])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it(`dispatches lifecycle/idle-eviction-fired as a no-op (reconcile flips status)`, async () => {
+    // Provider returns 'unknown' simulating the post-destroy state.
+    const provider = makeFakeProvider(`unknown`)
+    const lm = new LifecycleManager({
+      provider,
+      bridge: {
+        async runTurn() {
+          return { exitCode: 0 }
+        },
+      },
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1_000,
+        coldBootBudgetMs: 5_000,
+        runTimeoutMs: 5_000,
+      },
+      env: () => ({}),
+    })
+    const meta = {
+      key: `current`,
+      status: `idle`,
+      kind: `claude`,
+      pinned: false,
+      workspaceIdentity: `volume:w`,
+      workspaceSpec: { type: `volume`, name: `w` },
+      idleTimeoutMs: 1_000,
+      keepWarm: false,
+      instanceId: `inst-1`,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/x`,
+      meta,
+      inbox: [{ key: `i1`, message_type: `lifecycle/idle-eviction-fired` }],
+    })
+    await handler(ctx, { type: `message_received` } as any)
+
+    // Reconcile saw 'idle' && providerStatus === 'unknown' → flips to 'cold'.
+    expect(ctx.db.collections.sessionMeta.get(`current`).status).toBe(`cold`)
+    // No new run was started.
+    expect(Array.from(ctx.db.collections.runs.rows.values())).toHaveLength(0)
   })
 })

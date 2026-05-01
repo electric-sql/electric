@@ -20,6 +20,12 @@ export interface CodingAgentHandlerOptions {
   }
   /** Called per-turn to source CLI env (e.g. ANTHROPIC_API_KEY). */
   env: () => Record<string, string>
+  /**
+   * Optional. Called by the idle timer after destroying the container,
+   * to re-enter the handler so reconcile can flip status to 'cold'.
+   * Bootstrap supplies this once the runtime is constructed.
+   */
+  wakeEntity?: (agentId: string) => void
 }
 
 interface InboxRow {
@@ -369,11 +375,16 @@ async function dispatchInboxMessage(
     case `pin`:
       return processPin(ctx, lm)
     case `release`:
-      return processRelease(ctx, lm)
+      return processRelease(ctx, lm, options)
     case `stop`:
       return processStop(ctx, lm)
     case `destroy`:
       return processDestroy(ctx, lm, wr)
+    case `lifecycle/idle-eviction-fired`:
+      // No-op: reconcile at the top of the handler already saw
+      // 'idle && !running' and flipped status to 'cold'. This message
+      // exists only to re-enter the handler after the timer fired.
+      return
     default:
       log.warn({ type }, `coding-agent: unknown inbox message type`)
   }
@@ -627,9 +638,12 @@ async function processPrompt(
     if (!finalMeta.keepWarm && lm.pinCount(agentId) === 0) {
       lm.armIdleTimer(agentId, finalMeta.idleTimeoutMs, () => {
         // Fire-and-forget: provider.destroy is keyed by agentId.
-        void lm.provider.destroy(agentId).catch((err) => {
-          log.warn({ err, agentId }, `idle stop failed`)
-        })
+        // After destroy, wake the entity so reconcile flips status idle→cold
+        // and any parent observing via wake:'runFinished' is notified.
+        void lm.provider
+          .destroy(agentId)
+          .catch((err) => log.warn({ err, agentId }, `idle stop failed`))
+          .finally(() => options.wakeEntity?.(agentId))
       })
     }
   } finally {
@@ -656,7 +670,11 @@ function processPin(ctx: any, lm: LifecycleManager): void {
   })
 }
 
-function processRelease(ctx: any, lm: LifecycleManager): void {
+function processRelease(
+  ctx: any,
+  lm: LifecycleManager,
+  options: CodingAgentHandlerOptions
+): void {
   const agentId = ctx.entityUrl as string
   const { count } = lm.release(agentId)
   ctx.db.actions.sessionMeta_update({
@@ -677,7 +695,10 @@ function processRelease(ctx: any, lm: LifecycleManager): void {
     const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
     if (!meta.keepWarm && meta.status === `idle`) {
       lm.armIdleTimer(agentId, meta.idleTimeoutMs, () => {
-        void lm.provider.destroy(agentId).catch(() => undefined)
+        void lm.provider
+          .destroy(agentId)
+          .catch(() => undefined)
+          .finally(() => options.wakeEntity?.(agentId))
       })
     }
   }

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import {
   createEntityRegistry,
   createRuntimeHandler,
+  createRuntimeServerClient,
 } from '@electric-ax/agents-runtime'
 import { serverLog } from './log'
 import {
@@ -121,9 +122,30 @@ export async function createBuiltinAgentHandler(
   typeNames.push(`worker`)
 
   // NEW for Slice A: built-in coding-agent entity (Docker sandbox + lifecycle).
+  // The wakeEntity callback (Slice C₁) re-enters the handler after the idle
+  // timer destroys the container, so reconcile flips status idle→cold.
+  // We use the same RuntimeServerClient HTTP path that user-initiated
+  // Pin/Release/Stop traverse — no temporal coupling with createRuntimeHandler.
+  const codingAgentClient = createRuntimeServerClient({
+    baseUrl: agentServerUrl,
+  })
   registerCodingAgent(registry, {
     provider: new LocalDockerProvider(),
     bridge: new StdioBridge(),
+    wakeEntity: (agentId: string) => {
+      void codingAgentClient
+        .sendEntityMessage({
+          targetUrl: agentId,
+          from: `system`,
+          type: `lifecycle/idle-eviction-fired`,
+          payload: {},
+        })
+        .catch((err) =>
+          serverLog.warn(
+            `[coding-agent] wakeEntity(${agentId}) failed: ${err instanceof Error ? err.message : String(err)}`
+          )
+        )
+    },
   })
   typeNames.push(`coding-agent`)
 
