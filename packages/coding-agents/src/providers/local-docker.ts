@@ -151,6 +151,8 @@ export class LocalDockerProvider implements SandboxProvider {
       agentId: spec.agentId,
       workspaceMount: `/workspace`,
       exec: (args) => execInContainer(instanceId, args, spec.env),
+      copyTo: ({ destPath, content, mode = 0o600 }) =>
+        copyToContainer(instanceId, destPath, content, mode, spec.env),
     }
   }
 }
@@ -182,6 +184,55 @@ async function runDocker(
 function lineIterator(stream: Readable): AsyncIterable<string> {
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
   return rl as unknown as AsyncIterable<string>
+}
+
+function shellQuote(s: string): string {
+  // Single-quote and escape any single quotes inside.
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
+async function copyToContainer(
+  containerId: string,
+  destPath: string,
+  content: string,
+  mode: number,
+  baseEnv: Record<string, string>
+): Promise<void> {
+  const handle = await execInContainer(
+    containerId,
+    {
+      cmd: [
+        `sh`,
+        `-c`,
+        `umask 077 && cat > ${shellQuote(destPath)} && chmod ${mode.toString(8)} ${shellQuote(destPath)}`,
+      ],
+      stdin: `pipe`,
+    },
+    baseEnv
+  )
+  if (!handle.writeStdin || !handle.closeStdin) {
+    throw new Error(`copyTo requires stdin pipe`)
+  }
+  let stderr = ``
+  const drainErr = async () => {
+    for await (const line of handle.stderr) stderr += line + `\n`
+  }
+  const stderrPromise = drainErr()
+  const drainOut = async () => {
+    for await (const _ of handle.stdout) {
+      // discard; cat with no input prints nothing on success
+    }
+  }
+  const stdoutPromise = drainOut()
+  await handle.writeStdin(content)
+  await handle.closeStdin()
+  const exit = await handle.wait()
+  await Promise.all([stdoutPromise, stderrPromise])
+  if (exit.exitCode !== 0) {
+    throw new Error(
+      `copyTo failed: exit ${exit.exitCode}, stderr=${stderr.slice(0, 400)}`
+    )
+  }
 }
 
 async function execInContainer(

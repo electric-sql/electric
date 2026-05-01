@@ -40,6 +40,15 @@ export interface SandboxInstance {
   /** Path inside sandbox where the workspace volume / bind-mount is mounted. */
   workspaceMount: string
   exec(args: ExecRequest): Promise<ExecHandle>
+  /**
+   * Write `content` to `destPath` inside the sandbox via stdin pipe.
+   * Avoids argv-size limits (~ARG_MAX). Default mode 0o600.
+   */
+  copyTo(args: {
+    destPath: string
+    content: string
+    mode?: number
+  }): Promise<void>
 }
 
 export interface RecoveredSandbox {
