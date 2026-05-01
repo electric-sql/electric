@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util'
 import { stat, access, realpath } from 'node:fs/promises'
+import { findSessionPath } from 'agent-session-protocol'
+import type { AgentType } from 'agent-session-protocol'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -28,12 +30,44 @@ function slugifyForName(s: string): string {
     .replace(/[-_.]+$/, ``)
 }
 
+async function locateSessionFile(
+  agent: AgentType,
+  workspace: string,
+  sessionId: string,
+  homeDir: string
+): Promise<{ path: string } | { error: string }> {
+  if (agent === `claude`) {
+    const real = await realpath(workspace)
+    const p = path.join(
+      homeDir,
+      `.claude`,
+      `projects`,
+      sanitiseCwd(real),
+      `${sessionId}.jsonl`
+    )
+    try {
+      await access(p)
+      return { path: p }
+    } catch {
+      return { error: `session JSONL not found at ${p}` }
+    }
+  }
+  // codex: use asp's scanner since the path embeds a wall-clock timestamp.
+  const found = await findSessionPath(`codex`, sessionId)
+  if (!found)
+    return {
+      error: `codex session ${sessionId} not found under ${homeDir}/.codex/sessions`,
+    }
+  return { path: found }
+}
+
 export async function runImportCli(
   opts: RunImportCliOptions
 ): Promise<RunImportCliResult> {
   const { values } = parseArgs({
     args: opts.argv,
     options: {
+      agent: { type: `string` },
       workspace: { type: `string` },
       'session-id': { type: `string` },
       'agent-id': { type: `string` },
@@ -42,13 +76,23 @@ export async function runImportCli(
     allowPositionals: false,
   })
 
+  const agentRaw = values.agent ?? `claude`
+  if (agentRaw !== `claude` && agentRaw !== `codex`) {
+    return {
+      exitCode: 2,
+      stdout: ``,
+      stderr: `--agent must be 'claude' or 'codex'; got ${JSON.stringify(agentRaw)}\n`,
+    }
+  }
+  const agent: AgentType = agentRaw
+
   const workspace = values.workspace
   const sessionId = values[`session-id`]
   if (!workspace || !sessionId) {
     return {
       exitCode: 2,
       stdout: ``,
-      stderr: `usage: electric-ax import-claude --workspace <path> --session-id <id> [--agent-id <name>] [--server <url>]\n`,
+      stderr: `usage: electric-ax-import [--agent claude|codex] --workspace <path> --session-id <id> [--agent-id <name>] [--server <url>]\n`,
     }
   }
 
@@ -63,7 +107,7 @@ export async function runImportCli(
   const home = opts.homeDir ?? os.homedir()
   const fetchFn = opts.fetchFn ?? fetch
 
-  // Validate workspace exists
+  // Validate workspace exists.
   try {
     const s = await stat(workspace)
     if (!s.isDirectory()) {
@@ -81,23 +125,9 @@ export async function runImportCli(
     }
   }
 
-  // Validate JSONL exists
-  const real = await realpath(workspace)
-  const sessionFile = path.join(
-    home,
-    `.claude`,
-    `projects`,
-    sanitiseCwd(real),
-    `${sessionId}.jsonl`
-  )
-  try {
-    await access(sessionFile)
-  } catch {
-    return {
-      exitCode: 1,
-      stdout: ``,
-      stderr: `session JSONL not found at ${sessionFile}\n`,
-    }
+  const located = await locateSessionFile(agent, workspace, sessionId, home)
+  if (`error` in located) {
+    return { exitCode: 1, stdout: ``, stderr: `${located.error}\n` }
   }
 
   const agentName = values[`agent-id`] ?? `import-${slugifyForName(sessionId)}`
@@ -105,7 +135,7 @@ export async function runImportCli(
   const url = `${server.replace(/\/$/, ``)}/coding-agent/${agentName}`
 
   const body = {
-    kind: `claude`,
+    kind: agent,
     target: `host`,
     workspaceType: `bindMount`,
     workspaceHostPath: workspace,
@@ -134,10 +164,9 @@ export async function runImportCli(
   }
 }
 
-// Direct invocation entrypoint
 const isMain =
   import.meta.url === `file://${process.argv[1]}` ||
-  process.argv[1]?.endsWith(`import-claude.js`)
+  process.argv[1]?.endsWith(`import.js`)
 if (isMain) {
   runImportCli({ argv: process.argv.slice(2) }).then(
     (r) => {

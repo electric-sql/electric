@@ -12,7 +12,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "electric-ax-import-claude": "./dist/cli/import-claude.js"
+    "electric-ax-import": "./dist/cli/import.js"
   },
   "scripts": {
     "build": "tsdown",

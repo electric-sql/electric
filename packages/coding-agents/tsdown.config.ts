@@ -10,7 +10,7 @@ export default defineConfig([
     sourcemap: true,
   },
   {
-    entry: [`./src/cli/import-claude.ts`],
+    entry: [`./src/cli/import.ts`],
     outDir: `dist/cli`,
     format: [`esm`],
     dts: false,
