@@ -32,6 +32,9 @@ function fakeSandbox(opts: {
         kill: () => undefined,
       }
     },
+    async copyTo() {
+      /* not used */
+    },
   }
 }
 

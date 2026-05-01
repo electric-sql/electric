@@ -119,7 +119,10 @@ describeMaybe(`Slice A — full integration`, () => {
     const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
     const bridge = new StdioBridge()
     const wr = new WorkspaceRegistry()
-    const lm = new LifecycleManager({ provider, bridge })
+    const lm = new LifecycleManager({
+      providers: { sandbox: provider, host: provider },
+      bridge,
+    })
     const handler = makeCodingAgentHandler(lm, wr, {
       defaults: {
         idleTimeoutMs: 2000,
@@ -228,7 +231,10 @@ describeMaybe(`Slice A — full integration`, () => {
     // Small delay to ensure lm2.startedAtMs > oldRunStart
     await new Promise((r) => setTimeout(r, 50))
 
-    const lm2 = new LifecycleManager({ provider, bridge })
+    const lm2 = new LifecycleManager({
+      providers: { sandbox: provider, host: provider },
+      bridge,
+    })
     const handler2 = makeCodingAgentHandler(lm2, wr, {
       defaults: {
         idleTimeoutMs: 2000,

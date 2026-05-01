@@ -98,7 +98,10 @@ describeMaybe(`Slice B — resume integration`, () => {
     const provider = new LocalDockerProvider({ image: TEST_IMAGE_TAG })
     const bridge = new StdioBridge()
     const wr = new WorkspaceRegistry()
-    const lm = new LifecycleManager({ provider, bridge })
+    const lm = new LifecycleManager({
+      providers: { sandbox: provider, host: provider },
+      bridge,
+    })
     const handler = makeCodingAgentHandler(lm, wr, {
       defaults: {
         idleTimeoutMs: 1500,

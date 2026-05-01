@@ -23,6 +23,9 @@ function fakeProvider(name: `sandbox` | `host`): SandboxProvider & {
     async exec(_req: ExecRequest): Promise<ExecHandle> {
       throw new Error(`not used`)
     },
+    async copyTo() {
+      /* not used */
+    },
   }
   const fp: any = {
     name,

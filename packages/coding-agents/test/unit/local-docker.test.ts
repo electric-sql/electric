@@ -27,6 +27,7 @@ describeMaybe(`LocalDockerProvider.copyTo`, () => {
     const sandbox = await provider.start({
       agentId,
       kind: `claude`,
+      target: `sandbox`,
       workspace: { type: `volume`, name: `copyto-${Date.now().toString(36)}` },
       env: {},
     })
@@ -65,6 +66,7 @@ describeMaybe(`LocalDockerProvider.copyTo`, () => {
     const sandbox = await provider.start({
       agentId,
       kind: `claude`,
+      target: `sandbox`,
       workspace: {
         type: `volume`,
         name: `envleak-${Date.now().toString(36)}`,
@@ -102,6 +104,7 @@ describeMaybe(`LocalDockerProvider.copyTo`, () => {
     const sandbox = await provider.start({
       agentId,
       kind: `claude`,
+      target: `sandbox`,
       workspace: {
         type: `volume`,
         name: `copyto-utf8-${Date.now().toString(36)}`,

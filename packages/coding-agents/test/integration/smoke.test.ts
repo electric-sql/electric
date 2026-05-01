@@ -27,6 +27,7 @@ describeMaybe(`coding-agents smoke (real Docker + real Claude)`, () => {
     const sandbox = await provider.start({
       agentId,
       kind: `claude`,
+      target: `sandbox`,
       workspace: { type: `volume`, name: agentId.replace(/[^a-z0-9-]/gi, `-`) },
       env: { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY },
     })
