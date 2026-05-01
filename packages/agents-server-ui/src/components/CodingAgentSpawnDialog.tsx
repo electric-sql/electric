@@ -4,6 +4,7 @@ import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
 
 type WorkspaceMode = `volume` | `bindMount`
 type Target = `sandbox` | `host`
+type Kind = `claude` | `codex`
 
 interface CodingAgentSpawnDialogProps {
   open: boolean
@@ -19,6 +20,7 @@ export function CodingAgentSpawnDialog({
   onOpenChange,
   onSpawn,
 }: CodingAgentSpawnDialogProps): React.ReactElement {
+  const [kind, setKind] = useState<Kind>(`claude`)
   const [target, setTarget] = useState<Target>(`sandbox`)
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(`volume`)
   const [workspaceName, setWorkspaceName] = useState(``)
@@ -38,7 +40,7 @@ export function CodingAgentSpawnDialog({
       e.preventDefault()
       if (!canSubmit) return
       const args: Record<string, unknown> = {
-        kind: `claude`,
+        kind,
         workspaceType: workspaceMode,
         target,
       }
@@ -65,6 +67,7 @@ export function CodingAgentSpawnDialog({
     },
     [
       canSubmit,
+      kind,
       target,
       workspaceMode,
       workspaceName,
@@ -94,12 +97,38 @@ export function CodingAgentSpawnDialog({
       <Dialog.Content maxWidth="480px">
         <Dialog.Title>New coding agent</Dialog.Title>
         <Dialog.Description size="2" color="gray" mb="4">
-          Spawn a Claude Code CLI session inside a Docker sandbox with a
-          persistent workspace.
+          Spawn a Claude Code or Codex CLI session inside a Docker sandbox or
+          directly on the host with a persistent workspace.
         </Dialog.Description>
 
         <form onSubmit={handleSubmit}>
           <Flex direction="column" gap="3">
+            <Flex direction="column" gap="1">
+              <Text size="2" weight="medium">
+                Agent
+              </Text>
+              <Flex gap="2">
+                <Button
+                  type="button"
+                  variant={kind === `claude` ? `solid` : `soft`}
+                  color="gray"
+                  size="2"
+                  onClick={() => setKind(`claude`)}
+                >
+                  Claude
+                </Button>
+                <Button
+                  type="button"
+                  variant={kind === `codex` ? `solid` : `soft`}
+                  color="gray"
+                  size="2"
+                  onClick={() => setKind(`codex`)}
+                >
+                  Codex
+                </Button>
+              </Flex>
+            </Flex>
+
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">
                 Target
@@ -203,7 +232,8 @@ export function CodingAgentSpawnDialog({
                 <Text size="2" weight="medium">
                   Import session ID{` `}
                   <Text size="1" color="gray">
-                    (optional — resume an existing local Claude session)
+                    (optional — resume an existing local{` `}
+                    {kind === `codex` ? `Codex` : `Claude`} session)
                   </Text>
                 </Text>
                 <input
