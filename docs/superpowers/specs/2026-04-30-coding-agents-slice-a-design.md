@@ -163,7 +163,7 @@ interface SpawnCodingAgentOptions {
 }
 
 interface CodingAgentHandle {
-  /** Stable URL: /<parent-entity>/coding-agent/<id> */
+  /** Stable URL: /coding-agent/<id> */
   readonly url: string
   readonly kind: 'claude'
 

@@ -146,7 +146,7 @@ interface SpawnCodingAgentOptions {
 }
 
 interface CodingAgentHandle {
-  /** Stable URL: /<parent-entity>/coding-agent/<id> */
+  /** Stable URL: /coding-agent/<id> */
   readonly url: string
   readonly kind: 'claude' | 'codex'
 
@@ -257,7 +257,7 @@ interface SandboxProvider {
 }
 
 interface SandboxSpec {
-  agentId: string // /<parent>/coding-agent/<id>
+  agentId: string // /coding-agent/<id>
   kind: 'claude' | 'codex'
   workspace:
     | { type: 'volume'; name: string } // resolved name (not the optional from the API)

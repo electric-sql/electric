@@ -55,9 +55,11 @@ After Slice B, the new `coding-agent` is the **only** coding-agent type in the c
    │                lifecycle, nativeJsonl  ← NEW in Slice B      │
    │   handler now does:                                          │
    │     - capture nativeSessionId from session_init events       │
-   │     - tee bridge runTurn lines into nativeJsonl              │
-   │     - on cold-boot, materialize prior nativeJsonl as JSONL   │
-   │       file inside sandbox tmpfs and pass --resume <id>       │
+   │     - after each successful turn, read claude's on-disk      │
+   │       transcript via docker exec base64 and store as a       │
+   │       single-row blob in nativeJsonl (key='current')         │
+   │     - on cold-boot, materialise the blob back into the new   │
+   │       sandbox and pass --resume <nativeSessionId>            │
    └──────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
@@ -75,18 +77,18 @@ After Slice B, the new `coding-agent` is the **only** coding-agent type in the c
 
 **Component-level changes from Slice A:**
 
-| Component                         | Change                                                                                                                                                                                               |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LocalDockerProvider`             | Unchanged.                                                                                                                                                                                           |
-| `StdioBridge`                     | Wire `onNativeLine` callback to emit per stdout line (Slice A type already exists). Pass `--resume <id>` when caller provides `nativeSessionId`.                                                     |
-| `LifecycleManager`                | Unchanged.                                                                                                                                                                                           |
-| `WorkspaceRegistry`               | Unchanged.                                                                                                                                                                                           |
-| `coding-agent` entity             | +`nativeJsonl` collection; capture `nativeSessionId` from `session_init`; tee raw lines; cold-boot resume materialization; lifecycle row for `resume.restored`.                                      |
-| `agents-runtime`                  | Drop `CodingSessionHandle` + `useCodingAgent`; keep `CodingAgentHandle` + `spawnCodingAgent` / `observeCodingAgent`.                                                                                 |
-| `agents` package                  | Drop `coding-session.ts`, `spawn-coder.ts`, `prompt-coder.ts`. Add `spawn-coding-agent.ts`, `prompt-coding-agent.ts`. Update Horton tool list.                                                       |
-| `agents-server-ui`                | Drop `CodingSession*` components and hook. Add `CodingAgent*` replacements. Extend status dot. Add lifecycle row renderer. Pin/Release/Stop buttons in `EntityHeader`. New `CodingAgentSpawnDialog`. |
-| `agents-server`                   | Bootstrap calls `registerCodingAgent(...).boot()` after type registration.                                                                                                                           |
-| `agents-server-conformance-tests` | Unchanged in Slice B (parameterized suite is Slice C).                                                                                                                                               |
+| Component                         | Change                                                                                                                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LocalDockerProvider`             | Unchanged.                                                                                                                                                                                                            |
+| `StdioBridge`                     | Pass `--resume <id>` when caller provides `nativeSessionId`. (`onNativeLine` is invoked per stdout line but the handler no longer uses it for persistence — see Resume data flow note.)                               |
+| `LifecycleManager`                | Unchanged.                                                                                                                                                                                                            |
+| `WorkspaceRegistry`               | Unchanged.                                                                                                                                                                                                            |
+| `coding-agent` entity             | +`nativeJsonl` collection (single-row blob); capture `nativeSessionId` from `session_init`; post-turn transcript capture via `docker exec base64`; cold-boot resume materialization; `resume.restored` lifecycle row. |
+| `agents-runtime`                  | Drop `CodingSessionHandle` + `useCodingAgent`; keep `CodingAgentHandle` + `spawnCodingAgent` / `observeCodingAgent`.                                                                                                  |
+| `agents` package                  | Drop `coding-session.ts`, `spawn-coder.ts`, `prompt-coder.ts`. Add `spawn-coding-agent.ts`, `prompt-coding-agent.ts`. Update Horton tool list.                                                                        |
+| `agents-server-ui`                | Drop `CodingSession*` components and hook. Add `CodingAgent*` replacements. Extend status dot. Add lifecycle row renderer. Pin/Release/Stop buttons in `EntityHeader`. New `CodingAgentSpawnDialog`.                  |
+| `agents-server`                   | Bootstrap calls `registerCodingAgent(...).boot()` after type registration.                                                                                                                                            |
+| `agents-server-conformance-tests` | Unchanged in Slice B (parameterized suite is Slice C).                                                                                                                                                                |
 
 ## Public types
 
@@ -144,18 +146,19 @@ The runtime keeps `entityUrl`, `spawn`, `observe`, `spawnCodingAgent`, `observeC
 export const CODING_AGENT_NATIVE_JSONL_COLLECTION_TYPE =
   'coding-agent.nativeJsonl'
 
+// Single-row blob. Always key='current'. Each successful turn overwrites
+// the previous row. Holds the full contents of claude's on-disk transcript
+// (~/.claude/projects/<sanitized-cwd>/<sessionId>.jsonl), captured after
+// the turn exits, used to materialise the file back on cold-boot resume.
+//
+// Note: the original plan described per-line rows ({key, runId, seq, line,
+// nativeSessionId, kind}). That approach was abandoned because claude's stdout
+// wire format cannot reconstruct the on-disk transcript format.
 export const nativeJsonlRowSchema = z.object({
-  /** `<runId>:<seq>` — chronological within a turn. */
-  key: z.string(),
-  runId: z.string(),
-  seq: z.number(),
-  ts: z.number(),
-  /** The raw stdout line from the CLI, UTF-8, newline-stripped. */
-  line: z.string(),
-  /** The native session id this line belongs to (claude --resume target). */
+  key: z.literal('current'),
   nativeSessionId: z.string(),
-  /** The CLI kind (always 'claude' in Slice B; future-proofing). */
-  kind: z.enum(['claude']),
+  /** Full UTF-8 contents of the claude transcript file. */
+  content: z.string(),
 })
 export type NativeJsonlRow = z.infer<typeof nativeJsonlRowSchema>
 ```
@@ -185,58 +188,74 @@ export const sessionMetaRowSchema = z.object({
 
 ## Resume data flow
 
-### Tee path (during a turn)
+> **Note (implementation pivot):** The original plan described a per-line tee approach where
+> `StdioBridge` would invoke `onNativeLine` per stdout line and the handler would accumulate
+> those lines as individual rows in `nativeJsonl`. This approach does not work — claude's
+> `--output-format=stream-json` wire format (stdout) is entirely different from claude's
+> on-disk transcript format (`~/.claude/projects/…/<sessionId>.jsonl`); one cannot be
+> reconstructed from the other. The shipped implementation pivoted to a blob-after-turn
+> capture. See the Slice B run report §"What had to be fixed mid-flight" §2 for details:
+> `docs/superpowers/specs/notes/2026-04-30-coding-agents-slice-b-report.md`.
+
+### Transcript capture (after each successful turn)
+
+After `bridge.runTurn()` returns successfully, the handler reads claude's on-disk transcript
+out of the sandbox and stores it as a single-row blob in the `nativeJsonl` collection:
 
 ```
-processPrompt
-  ├── ensure sandbox started
-  ├── on first turn: no --resume flag (claude creates a fresh session)
-  ├── on subsequent turn: read sessionMeta.nativeSessionId; if set,
-  │   materialize nativeJsonl into sandbox tmpfs (see Materialize path below)
-  │   and pass --resume <nativeSessionId>
-  ├── bridge.runTurn({
-  │     sandbox, kind, prompt,
-  │     nativeSessionId: meta.nativeSessionId,    ← NEW: tells bridge to add --resume
-  │     onEvent:      append to events collection (Slice A)
-  │     onNativeLine: append to nativeJsonl collection (Slice B)
-  │   })
-  ├── If session_init event had a sessionId, write it to sessionMeta.nativeSessionId
-  ├── done.
-```
+captureTranscript(sandbox, nativeSessionId):
+  projectDir = sanitiseCwd(sandbox.workspaceMount)   // e.g. /workspace → -workspace
+  path = ~/.claude/projects/${projectDir}/${nativeSessionId}.jsonl
+  // Read file as base64 to avoid stream-drain hangs on docker exec stdio
+  handle = sandbox.exec({ cmd: ['sh', '-c', `if [ -f ${path} ]; then base64 -w 0 ${path}; fi`] })
+  b64 = drain(handle.stdout)
+  return base64Decode(b64)   // returns '' if file not found
 
-The `StdioBridge` already exposes `onNativeLine?: (line: string) => void` in `RunTurnArgs` (Slice A type). Slice A's bridge implementation accumulates `rawLines` for batch normalization at end-of-turn but never invokes `onNativeLine` per-line. Slice B wires the per-line invocation.
-
-### Materialize path (cold-boot of agent with prior turns)
-
-```
-processPrompt entry, before bridge.runTurn:
-  if (meta.nativeSessionId) {
-    rows = nativeJsonlCol.toArray
-       .filter(r => r.nativeSessionId === meta.nativeSessionId)
-       .sort((a, b) => a.runId.localeCompare(b.runId) || a.seq - b.seq)
-    if (rows.length > 0) {
-      // Path inside the container — claude's expected location.
-      sanitized = sanitizePath(/workspace)              // claude expects this transform
-      jsonlPath = `~/.claude/projects/${sanitized}/${meta.nativeSessionId}.jsonl`
-      contents = rows.map(r => r.line).join('\n') + '\n'
-      // Pipe via stdin to avoid quoting hell. The sandbox-side helper:
-      //   bash -c 'mkdir -p $(dirname "$1") && cat > "$1"' _ "$path"
-      handle = sandbox.exec({
-        cmd: ['bash', '-c', 'mkdir -p "$(dirname "$1")" && cat > "$1"', '_', jsonlPath],
-        stdin: 'pipe',
-      })
-      await handle.writeStdin(contents); await handle.closeStdin()
-      await handle.wait()
-      lifecycle.insert({ event: 'resume.restored', detail: `${rows.length} lines` })
-    }
+handler, after runTurn succeeds:
+  content = await captureTranscript(sandbox, nativeSessionId)
+  if (content) {
+    ctx.db.actions.nativeJsonl_insert({
+      key: 'current',
+      nativeSessionId,
+      content,
+    })  // upserts by primary key — subsequent turns overwrite the single row
   }
 ```
 
-The path-sanitization (`/workspace` → e.g. `-workspace`) follows claude's existing convention; verified during implementation against `claude-code` source.
+The `nativeJsonl` collection always holds at most one row with `key='current'`. Each
+successful turn replaces the previous blob. The `onNativeLine` callback in `RunTurnArgs`
+still exists and is still invoked per stdout line by the bridge, but the handler does not
+use it for persistence (the per-line approach was the original plan; see note above).
+
+### Materialize path (cold-boot of agent with prior turns)
+
+When the prior `sessionMeta.status` was `cold` and `nativeSessionId` is set, the handler
+reads the `nativeJsonl` blob and writes it back into the new container before the run:
+
+```
+materialiseResume(sandbox, nativeSessionId, content):
+  projectDir = sanitiseCwd(sandbox.workspaceMount)
+  b64 = base64Encode(content)
+  // Write via printf to avoid shell quoting issues with binary content
+  sandbox.exec({
+    cmd: ['sh', '-c',
+      `mkdir -p ~/.claude/projects/${projectDir} && \
+       printf '%s' '${b64}' | base64 -d > ~/.claude/projects/${projectDir}/${nativeSessionId}.jsonl`
+    ],
+  })
+
+handler, on cold-boot (prior status was cold, nativeSessionId set):
+  row = nativeJsonlCol.get('current')
+  if (row && row.content) {
+    await materialiseResume(sandbox, nativeSessionId, row.content)
+    lifecycle.insert({ event: 'resume.restored', detail: `bytes=${row.content.length}` })
+  }
+```
 
 ### Capture `nativeSessionId`
 
-The first `session_init` event of any turn carries the CLI's session id. The handler captures it the first time it sees one and writes to `sessionMeta.nativeSessionId`:
+The first `session_init` event of any turn carries the CLI's session id. The handler
+captures it the first time it sees one and writes to `sessionMeta.nativeSessionId`:
 
 ```ts
 onEvent: (e: NormalizedEvent) => {
@@ -251,18 +270,29 @@ onEvent: (e: NormalizedEvent) => {
 }
 ```
 
-### Why per-line tee (vs blob-after-turn)
+### Why blob-after-turn (not per-line tee)
 
-- **Partial-turn durability.** A crashed turn (server crash mid-`runTurn`) leaves the partial `nativeJsonl` in the durable stream. Reconcile on next entry sees an open run; nativeJsonl rows show how far we got. Replay starts with the same session id and the CLI sees its own partial transcript on disk.
-- **No second `docker exec` per turn.** Blob-extract requires a second exec at end-of-turn to read the file out. Per-line tee uses the bridge's existing stdout stream.
-- **Type already present.** `RunTurnArgs.onNativeLine` is in Slice A's API surface; we just wire it.
+The original design proposed a per-line tee because it would give partial-turn durability
+(a crash mid-turn leaves partial rows). This was abandoned because:
+
+- **Format mismatch.** Claude's stdout wire format (`--output-format=stream-json`) is a
+  sequence of normalized JSON events. Claude's on-disk transcript uses an entirely different
+  internal format (`parentUuid`, `attachment`, `ai-title`, multi-variant assistant entries,
+  etc.). These cannot be round-tripped through each other.
+- **Simplicity.** A single-row blob (one `docker exec` per turn) is simpler and more robust
+  than per-line accumulation and sort-based reassembly.
+- **Partial-turn failure is already handled.** If a turn crashes mid-flight the `nativeJsonl`
+  blob from the prior turn is still present. `--resume` replays up to that point; the
+  failed turn is re-driven from the inbox on next entry.
 
 ### Resume semantics
 
 - **Same agent + same kind.** Lossless. Materialize → `--resume` → CLI sees prior turns.
-- **Empty `nativeJsonl`.** First turn ever, or all prior turns failed mid-flight before producing any output. No materialization, no `--resume` flag. CLI creates a fresh session.
-- **Cross-kind.** Out of scope. The handler verifies `meta.kind === args.kind` matches; mismatch is an error.
-- **Mid-resume failure.** If materialization fails (e.g., `docker exec` reports non-zero), the handler logs `sandbox.failed`, sets `status='error'`, and returns. Next prompt retries.
+- **Empty `nativeJsonl`.** First turn ever, or all prior turns failed before producing output.
+  No materialization, no `--resume` flag. CLI creates a fresh session.
+- **Cross-kind.** Out of scope. The handler verifies `meta.kind === args.kind`; mismatch is an error.
+- **Mid-resume failure.** If materialization fails (e.g., `docker exec` reports non-zero),
+  the handler logs `sandbox.failed`, sets `status='error'`, and returns. Next prompt retries.
 
 ## Horton tool migration
 
