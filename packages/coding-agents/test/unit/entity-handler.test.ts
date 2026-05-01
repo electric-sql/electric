@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
+import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { makeCodingAgentHandler } from '../../src/entity/handler'
 import { LifecycleManager } from '../../src/lifecycle-manager'
 import { WorkspaceRegistry } from '../../src/workspace-registry'
@@ -536,5 +539,110 @@ describe(`entity handler — target validation`, () => {
     const meta = ctx.db.collections.sessionMeta.get(`current`)
     expect(meta.status).toBe(`error`)
     expect(meta.lastError).toMatch(/importNativeSessionId.*host/)
+  })
+})
+
+describe(`entity handler — importNativeSessionId flow`, () => {
+  it(`reads the JSONL from ~/.claude/projects and seeds nativeJsonl`, async () => {
+    const fakeHome = await mkdtemp(join(tmpdir(), `home-`))
+    const workspace = await mkdtemp(join(tmpdir(), `ws-`))
+    const realWorkspace = await realpath(workspace)
+    const sanitised = realWorkspace.replace(/\//g, `-`)
+    const projectDir = join(fakeHome, `.claude`, `projects`, sanitised)
+    await mkdir(projectDir, { recursive: true })
+    const sessionId = `imported-abc`
+    const transcript = `{"type":"system","subtype":"init"}\n`
+    await writeFile(join(projectDir, `${sessionId}.jsonl`), transcript)
+
+    try {
+      const lm = new LifecycleManager({
+        providers: { sandbox: makeFakeProvider(), host: makeFakeProvider() },
+        bridge: {
+          async runTurn() {
+            return { exitCode: 0 }
+          },
+        },
+      })
+      const wr = new WorkspaceRegistry()
+      const handler = makeCodingAgentHandler(lm, wr, {
+        defaults: {
+          idleTimeoutMs: 1000,
+          coldBootBudgetMs: 5000,
+          runTimeoutMs: 5000,
+        },
+        env: () => ({}),
+        homeDir: fakeHome,
+      })
+      const { ctx } = makeFakeCtx({
+        entityUrl: `/t/coding-agent/imp-${Date.now()}`,
+        args: {
+          kind: `claude`,
+          target: `host`,
+          workspaceType: `bindMount`,
+          workspaceHostPath: workspace,
+          importNativeSessionId: sessionId,
+        },
+      })
+      await handler(ctx, { type: `message_received` } as any)
+      const meta = ctx.db.collections.sessionMeta.get(`current`)
+      expect(meta.status).toBe(`cold`)
+      expect(meta.nativeSessionId).toBe(sessionId)
+      const row = ctx.db.collections.nativeJsonl.get(`current`)
+      expect(row).toBeDefined()
+      expect(row.nativeSessionId).toBe(sessionId)
+      expect(row.content).toBe(transcript)
+      const rows = ctx.db.collections.lifecycle.toArray
+      const restored = rows.find((r: any) => r.event === `import.restored`)
+      expect(restored).toBeDefined()
+    } finally {
+      await rm(fakeHome, { recursive: true, force: true })
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it(`missing JSONL → status=error and lifecycle import.failed row`, async () => {
+    const fakeHome = await mkdtemp(join(tmpdir(), `home-`))
+    const workspace = await mkdtemp(join(tmpdir(), `ws-`))
+    try {
+      const lm = new LifecycleManager({
+        providers: { sandbox: makeFakeProvider(), host: makeFakeProvider() },
+        bridge: {
+          async runTurn() {
+            return { exitCode: 0 }
+          },
+        },
+      })
+      const wr = new WorkspaceRegistry()
+      const handler = makeCodingAgentHandler(lm, wr, {
+        defaults: {
+          idleTimeoutMs: 1000,
+          coldBootBudgetMs: 5000,
+          runTimeoutMs: 5000,
+        },
+        env: () => ({}),
+        homeDir: fakeHome,
+      })
+      const { ctx } = makeFakeCtx({
+        entityUrl: `/t/coding-agent/missing-${Date.now()}`,
+        args: {
+          kind: `claude`,
+          target: `host`,
+          workspaceType: `bindMount`,
+          workspaceHostPath: workspace,
+          importNativeSessionId: `does-not-exist`,
+        },
+      })
+      await handler(ctx, { type: `message_received` } as any)
+      const meta = ctx.db.collections.sessionMeta.get(`current`)
+      expect(meta.status).toBe(`error`)
+      expect(meta.lastError).toMatch(/imported session file not found/)
+      const failed = ctx.db.collections.lifecycle.toArray.find(
+        (r: any) => r.event === `import.failed`
+      )
+      expect(failed).toBeDefined()
+    } finally {
+      await rm(fakeHome, { recursive: true, force: true })
+      await rm(workspace, { recursive: true, force: true })
+    }
   })
 })

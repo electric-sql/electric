@@ -1,3 +1,7 @@
+import { promises as fs } from 'node:fs'
+import { realpath } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import type { NormalizedEvent } from 'agent-session-protocol'
 import { log } from '../log'
 import { WorkspaceRegistry } from '../workspace-registry'
@@ -26,6 +30,12 @@ export interface CodingAgentHandlerOptions {
    * Bootstrap supplies this once the runtime is constructed.
    */
   wakeEntity?: (agentId: string) => void
+  /**
+   * Optional override for the home directory used to locate
+   * ~/.claude/projects/<dir>/<sessionId>.jsonl on import.
+   * Defaults to os.homedir() at use-site.
+   */
+  homeDir?: string
 }
 
 interface InboxRow {
@@ -264,6 +274,67 @@ export function makeCodingAgentHandler(
       ctx.db.actions.sessionMeta_insert({ row: initial })
       wr.register(resolved.identity, agentId)
       meta = initial
+
+      if (args.importNativeSessionId && target === `host`) {
+        const home = options.homeDir ?? os.homedir()
+        const realWorkspace = await realpath(
+          args.workspaceHostPath ?? process.cwd()
+        )
+        const projectDir = sanitiseCwd(realWorkspace)
+        const sessionPath = path.join(
+          home,
+          `.claude`,
+          `projects`,
+          projectDir,
+          `${args.importNativeSessionId}.jsonl`
+        )
+        try {
+          const content = await fs.readFile(sessionPath, `utf8`)
+          ctx.db.actions.nativeJsonl_insert({
+            row: {
+              key: `current`,
+              nativeSessionId: args.importNativeSessionId,
+              content,
+            } satisfies NativeJsonlRow,
+          })
+          ctx.db.actions.sessionMeta_update({
+            key: `current`,
+            updater: (d: SessionMetaRow) => {
+              d.nativeSessionId = args.importNativeSessionId
+            },
+          })
+          ctx.db.actions.lifecycle_insert({
+            row: {
+              key: lifecycleKey(`import`),
+              ts: Date.now(),
+              event: `import.restored`,
+              detail: `bytes=${content.length}`,
+            } satisfies LifecycleRow,
+          })
+          meta = sessionMetaCol.get(`current`) as SessionMetaRow
+        } catch (err) {
+          const msg =
+            err instanceof Error && (err as any).code === `ENOENT`
+              ? `imported session file not found at ${sessionPath}`
+              : `imported session read failed: ${err instanceof Error ? err.message : String(err)}`
+          ctx.db.actions.sessionMeta_update({
+            key: `current`,
+            updater: (d: SessionMetaRow) => {
+              d.status = `error`
+              d.lastError = msg
+            },
+          })
+          ctx.db.actions.lifecycle_insert({
+            row: {
+              key: lifecycleKey(`import`),
+              ts: Date.now(),
+              event: `import.failed`,
+              detail: msg,
+            } satisfies LifecycleRow,
+          })
+          return
+        }
+      }
     } else {
       meta = initialMeta
     }
