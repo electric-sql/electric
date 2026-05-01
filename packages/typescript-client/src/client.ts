@@ -480,6 +480,9 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   ): () => void
   unsubscribeAll(): void
 
+  pause(): void
+  resume(): void
+
   isLoading(): boolean
   lastSyncedAt(): number | undefined
   lastSynced(): number
@@ -586,6 +589,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ]
   >()
 
+  #startLoopRunning = false
   #started = false
   #syncState: ShapeStreamState
   #connected: boolean = false
@@ -732,6 +736,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #start(): Promise<void> {
+    // Prevent concurrent loops
+    if (this.#startLoopRunning) {
+      return
+    }
+
+    this.#startLoopRunning = true
     this.#started = true
     this.#subscribeToWakeDetection()
 
@@ -813,6 +823,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
       this.#teardown()
       throw err
+    } finally {
+      this.#startLoopRunning = false
     }
 
     this.#teardown()
@@ -1635,6 +1647,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#subscribers.clear()
     this.#unsubscribeFromVisibilityChanges?.()
     this.#unsubscribeFromWakeDetection?.()
+  }
+
+  pause(): void {
+    if (!this.#started) return
+
+    if (!this.#pauseLock.isHeldBy(`manual`)) {
+      // pause() could fail to stop the #requestShape loop
+      // if #requestAbortController is not yet initialized by #requestShape
+      this.#pauseLock.acquire(`manual`)
+    }
+  }
+
+  resume(): void {
+    if (!this.#started) return
+
+    if (this.#pauseLock.isHeldBy(`manual`)) {
+      this.#pauseLock.release(`manual`)
+    }
   }
 
   /** Unix time at which we last synced. Undefined until first successful up-to-date. */
