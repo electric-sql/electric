@@ -7,7 +7,7 @@ import type {
   SessionMetaRow,
 } from '../../src/entity/collections'
 
-function makeExecHandle(stdoutLines: string[]) {
+function makeExecHandle(stdoutLines: string[], exitCode = 0) {
   return {
     stdout: (async function* () {
       for (const l of stdoutLines) yield l
@@ -15,23 +15,33 @@ function makeExecHandle(stdoutLines: string[]) {
     stderr: (async function* () {})(),
     writeStdin: vi.fn().mockResolvedValue(undefined),
     closeStdin: vi.fn().mockResolvedValue(undefined),
-    wait: vi.fn().mockResolvedValue({ exitCode: 0 }),
+    wait: vi.fn().mockResolvedValue({ exitCode }),
   }
 }
 
 function makeSandbox(
   stdoutLines: string[]
-): SandboxInstance & { execCalls: any[] } {
+): SandboxInstance & { execCalls: any[]; copyToCalls: any[] } {
   const execCalls: any[] = []
+  const copyToCalls: any[] = []
   return {
     instanceId: `inst-1`,
     workspaceMount: `/workspace`,
     exec: vi.fn(async (req) => {
       execCalls.push(req)
-      return makeExecHandle(stdoutLines)
+      // Probe-and-materialise: 'test -f <path>' returns non-zero when
+      // the transcript file is missing (the case we want to exercise).
+      if (req.cmd?.[0] === `test` && req.cmd?.[1] === `-f`) {
+        return makeExecHandle(stdoutLines, 1)
+      }
+      return makeExecHandle(stdoutLines, 0)
+    }),
+    copyTo: vi.fn(async (args) => {
+      copyToCalls.push(args)
     }),
     destroy: vi.fn(),
     execCalls,
+    copyToCalls,
   } as any
 }
 
@@ -176,13 +186,19 @@ describe(`handler resume materialisation`, () => {
     })
     await handler(ctx, { type: `message_received` })
 
-    const shellCalls = (
+    // Probe-and-materialise: handler must probe `test -f <transcript>`,
+    // see it missing, then call copyTo with the absolute path.
+    const probeCalls = (
       sandbox.exec as ReturnType<typeof vi.fn>
-    ).mock.calls.filter((c: any[]) => c[0]?.cmd?.[0] === `sh`)
-    expect(shellCalls.length).toBeGreaterThan(0)
-    const cmd = shellCalls[0][0].cmd.join(` `)
-    expect(cmd).toContain(`native-sess-xyz.jsonl`)
-    expect(cmd).toContain(`base64`)
+    ).mock.calls.filter(
+      (c: any[]) => c[0]?.cmd?.[0] === `test` && c[0]?.cmd?.[1] === `-f`
+    )
+    expect(probeCalls.length).toBeGreaterThan(0)
+    expect(probeCalls[0][0].cmd[2]).toContain(`native-sess-xyz.jsonl`)
+
+    expect(sandbox.copyToCalls.length).toBe(1)
+    expect(sandbox.copyToCalls[0].destPath).toContain(`native-sess-xyz.jsonl`)
+    expect(sandbox.copyToCalls[0].content).toContain(`prior`)
   })
 
   it(`adds a resume.restored lifecycle row after materialisation`, async () => {

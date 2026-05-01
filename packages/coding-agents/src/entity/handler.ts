@@ -48,25 +48,66 @@ function sanitiseCwd(cwd: string): string {
 }
 
 /**
- * Materialise the captured transcript blob into the sandbox so
- * `claude --resume <sessionId>` finds its session file.
+ * Idempotently materialise the captured transcript blob into the sandbox
+ * so `claude --resume <sessionId>` finds its session file. Probes for the
+ * file first; only writes if missing. Self-heals across idle-timer races,
+ * external container death, and future recover() rehydration.
  */
-async function materialiseResume(
+async function ensureTranscriptMaterialised(
   sandbox: SandboxInstance,
   nativeSessionId: string,
   content: string
-): Promise<void> {
-  if (!content) return
+): Promise<{ written: boolean }> {
+  if (!content) return { written: false }
   const projectDir = sanitiseCwd(sandbox.workspaceMount)
-  const b64 = Buffer.from(content).toString(`base64`)
-  await sandbox.exec({
-    cmd: [
-      `sh`,
-      `-c`,
-      `mkdir -p ~/.claude/projects/${projectDir} && printf '%s' '${b64}' | base64 -d > ~/.claude/projects/${projectDir}/${nativeSessionId}.jsonl`,
-    ],
-    cwd: sandbox.workspaceMount,
+  const homeProjectDir = `/home/agent/.claude/projects/${projectDir}`
+  const fullPath = `${homeProjectDir}/${nativeSessionId}.jsonl`
+
+  // Probe: does the file already exist? If so, we're done.
+  const probe = await sandbox.exec({
+    cmd: [`test`, `-f`, fullPath],
   })
+  void (async () => {
+    for await (const _ of probe.stdout) {
+      // discard
+    }
+  })()
+  void (async () => {
+    for await (const _ of probe.stderr) {
+      // discard
+    }
+  })()
+  const probeExit = await probe.wait()
+  if (probeExit.exitCode === 0) return { written: false }
+
+  // Ensure parent directory exists, then pipe transcript via stdin.
+  const mkdir = await sandbox.exec({
+    cmd: [`mkdir`, `-p`, homeProjectDir],
+  })
+  void (async () => {
+    for await (const _ of mkdir.stdout) {
+      // discard
+    }
+  })()
+  let mkdirErr = ``
+  const drainMkdirErr = async () => {
+    for await (const line of mkdir.stderr) mkdirErr += line + `\n`
+  }
+  const mkdirErrPromise = drainMkdirErr()
+  const mkdirExit = await mkdir.wait()
+  await mkdirErrPromise
+  if (mkdirExit.exitCode !== 0) {
+    throw new Error(
+      `mkdir for transcript failed: exit ${mkdirExit.exitCode}, stderr=${mkdirErr.slice(0, 200)}`
+    )
+  }
+
+  await sandbox.copyTo({
+    destPath: fullPath,
+    content,
+    mode: 0o600,
+  })
+  return { written: true }
 }
 
 /**
@@ -433,7 +474,7 @@ async function processPrompt(
 
   meta = sessionMetaCol.get(`current`) as SessionMetaRow
 
-  if (wasCold && meta.nativeSessionId) {
+  if (meta.nativeSessionId) {
     const transcript = ctx.db.collections.nativeJsonl.get(`current`) as
       | NativeJsonlRow
       | undefined
@@ -442,15 +483,21 @@ async function processPrompt(
       transcript.nativeSessionId === meta.nativeSessionId &&
       transcript.content
     ) {
-      await materialiseResume(sandbox, meta.nativeSessionId, transcript.content)
-      ctx.db.actions.lifecycle_insert({
-        row: {
-          key: lifecycleKey(`resume`),
-          ts: Date.now(),
-          event: `resume.restored`,
-          detail: `bytes=${transcript.content.length}`,
-        } satisfies LifecycleRow,
-      })
+      const { written } = await ensureTranscriptMaterialised(
+        sandbox,
+        meta.nativeSessionId,
+        transcript.content
+      )
+      if (written) {
+        ctx.db.actions.lifecycle_insert({
+          row: {
+            key: lifecycleKey(`resume`),
+            ts: Date.now(),
+            event: `resume.restored`,
+            detail: `bytes=${transcript.content.length}`,
+          } satisfies LifecycleRow,
+        })
+      }
     }
   }
 
