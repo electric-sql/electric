@@ -51,6 +51,7 @@ export function EntityHeader({
   codingAgentTarget,
   codingAgentWorkspaceSpec,
   codingAgentStatus,
+  codingAgentLastError,
 }: {
   entity: ElectricEntity
   pinned: boolean
@@ -66,7 +67,13 @@ export function EntityHeader({
   codingAgentTarget?: `sandbox` | `host`
   codingAgentWorkspaceSpec?: { type: `volume` | `bindMount` }
   codingAgentStatus?: string
+  codingAgentLastError?: string
 }): React.ReactElement {
+  // For coding-agents, prefer the coding-agent-specific status (cold /
+  // starting / idle / running / stopping / error / destroyed) over the
+  // entity-server's coarse status (idle / busy / ...). The coding-agent
+  // status carries error states the entity-server status hides.
+  const displayStatus = codingAgentStatus ?? entity.status
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
   const instanceName = getEntityInstanceName(entity.url)
@@ -99,11 +106,22 @@ export function EntityHeader({
             {forkError}
           </Text>
         )}
+        {codingAgentStatus === `error` && codingAgentLastError && (
+          <Text size="1" color="red">
+            {codingAgentLastError}
+          </Text>
+        )}
       </Flex>
 
       <Flex ml="auto" align="center" gap="2">
-        <Badge color={STATUS_COLOR[entity.status] ?? `gray`} variant="soft">
-          {entity.status}
+        <Badge
+          color={STATUS_COLOR[displayStatus] ?? `gray`}
+          variant="soft"
+          title={
+            codingAgentLastError ? `Error: ${codingAgentLastError}` : undefined
+          }
+        >
+          {displayStatus}
         </Badge>
 
         {onFork && (

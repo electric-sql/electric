@@ -166,6 +166,9 @@ function EntityPage(): React.ReactElement {
         codingAgentStatus={
           isCodingAgent ? codingAgentHook.meta?.status : undefined
         }
+        codingAgentLastError={
+          isCodingAgent ? codingAgentHook.meta?.lastError : undefined
+        }
       />
       <Flex
         ref={containerRef}
