@@ -185,7 +185,7 @@ CHECK_TIMEOUT=60000 SHAPE_COUNT=10 MUTATIONS_PER_TXN=10 TXNS_PER_BATCH=10 \
 - Possibly Electric.LsnTracker — the new replication client may be
   reporting a stale `last_processed_lsn` until the first batch streams.
 
-## Bug 5: Post-restart move-in events lost when source-shape main log spans multiple chunks — FIXED
+## Bug 5: Post-restart move-in events lost when source-shape main log spans multiple chunks — PARTIALLY FIXED
 
 **Symptom**
 
@@ -272,7 +272,8 @@ restores shapes sequentially and `initialize_shape/3` is async, so
 by the time outer-shape #2's consumer init runs `EventHandlerBuilder.build`,
 its dependency materializer has already absorbed batch_2's update.
 
-**Fix**
+**Partial fix (closes one race; doesn't close the underlying offset
+mismatch)**
 
 Eager-start the outer subquery shape consumers *before*
 `ShapeLogCollector.mark_as_ready/1` opens the event-dispatch gate.
@@ -287,16 +288,23 @@ Concretely, `ShapeCache.handle_continue(:wait_for_restore)` now:
 2. Only after all subquery consumers are fully initialized does it call
    `ShapeLogCollector.mark_as_ready/1`.
 
-This guarantees the materializer view and the outer consumer's seeded
-view are both derived from on-disk state alone — no events have flowed
-yet. So the materializer view = outer-storage view = pre-restart state,
-and any subsequent move-in is correctly enqueued (not dropped as
-redundant against a view that has already advanced past it).
+This stops the materializer view from drifting *forward* of the
+outer consumer's view between consumer init and the first live
+event. The original symptom — a move-in for a value already in the
+seeded view being dropped as redundant — no longer happens for THAT
+race.
 
-The chosen approach is essentially option (3) reduced to its simplest
-form: instead of threading per-dep offsets through the subscription
-protocol, we hold the dispatch gate closed until every subquery
-consumer has caught up to a known consistent point on disk.
+What this doesn't close: the materializer's view is at the inner
+shape's `last_persisted_offset`, and the outer shape's storage is at
+its own `last_persisted_offset`. Those two writers flush
+independently and aren't equal across restart. So `state.views` (set
+from materializer) and outer storage can still be at different
+LSNs. The visible consequence is now Bug 2 — duplicate INSERTs in
+the post-restart log for rows the materializer's "ahead" view says
+have already been moved in. Properly closing Bug 5 requires one of
+the three approaches listed in Bug 2's analysis: persist the dep
+view per outer shape, derive it from outer storage, or replay
+materializer events from the outer's persisted offset.
 
 **Regression test**
 
@@ -420,7 +428,15 @@ move-in.
 
 ## Note for triage
 
-Bugs 1, 4, 5, and 6 are fixed.
+Bugs 1 and 4 are fully fixed.
+
+Bug 5 is partially fixed (eager-start before mark_as_ready). The
+remaining gap (inner vs outer `last_persisted_offset` mismatch) is
+the root cause of Bug 2.
+
+Bug 6 is partially fixed (consumer `:noproc` catch + ETS rescue).
+The materializer "log and skip" branches were reverted because they
+hide invariant violations.
 
 Bug 2 is now the next blocker. With the materializer hardening and
 ETS-rescue from Bug 6 in place, the cascading 409 is gone — and
@@ -454,60 +470,103 @@ Failure shapes are subquery shapes (e.g. `level_3_id IN (SELECT id
 FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE
 level_1_id = 'l1-4'))`).
 
-**The race (refined analysis)**
+**Why this only happens after restart**
 
-A single transaction can produce events on two independent paths in
-the outer consumer:
+The oracle test passes cleanly with `RESTART_SERVER_EVERY` unset.
+The bug manifests only after a stack restart. So whatever's wrong is
+specific to recovery, not steady-state replication.
 
-1. **Direct filter path.** The transaction contains a level_4
-   `UPDATE` for `l4-16` that crosses the shape's filter boundary —
-   e.g. its `level_3_id` changes from a value in the dep view to
-   another value also in the dep view. The shape's `Filter` writes a
-   regular `UPDATE` (or `INSERT`/`DELETE`) op to the log directly.
+The state of an outer subquery shape consists of two pieces that are
+written/updated independently:
 
-2. **Materializer move-in path.** The same transaction also
-   toggles/moves a level_3 row in a way that adds a new value to the
-   inner dep view. The materializer fires a `move-in` event for the
-   new dep value. The outer consumer enters `Buffering`, runs the
-   move-in query against PG (using a snapshot taken *after* the
-   triggering txn), and writes the matching rows to the log via
-   `AppendMoveInSnapshot`.
+- **Outer shape's storage** (snapshot file + log file on disk). Each
+  commit appends to the log via the shape's writer.
+- **Materializer view** (in-memory `value_counts`/`tag_indices` for
+  the inner dep shape). Updated as inner-shape events flow.
 
-Because the move-in query reads PG's *current* row state, `l4-16`'s
-new `level_3_id` matches the freshly-added dep value and the row is
-emitted. But the direct filter path already produced an op for the
-same row earlier in the log. Net result: two INSERTs (or
-INSERT+UPDATE, or two DELETEs) for the same key in the log a fresh
-client polls.
+In steady state these are *both* updated from the same in-memory
+state machine and progress in lockstep — the outer consumer holds
+`state.views` in memory and updates it on each materializer event,
+and writes to outer storage are interleaved with these updates.
+Pre-restart there's no way for the two to diverge because they share
+the running consumer's state.
 
-This isn't strictly a *post-restart* bug — the same race exists in
-steady state. It only surfaces in the test after a server restart
-because pre-restart the test doesn't observe it: the inflight client
-state and the server's filter view are both initialised from the
-same place, so the duplicate `UPDATE`/`INSERT` happens to look
-consistent to that client. After a restart, a fresh client polls
-from offset=-1 and sees the entire log including both ops; that's
-when it flunks.
+**Across a restart they can land at different LSNs.** The inner
+shape's storage and the outer shape's storage are written by
+different writers, with their own flush schedules. When the stack is
+killed, the inner shape's `last_persisted_offset` and the outer
+shape's `last_persisted_offset` are usually NOT equal — typically
+they differ by one or two committed transactions.
 
-**Fix directions**
+Then on recovery (Bug 5 fix path):
 
-- `move_in_where_clause` in
-  `lib/electric/shapes/querying.ex#352` uses CURRENT PG state for
-  `impacted_before` exclusion. It needs to exclude rows whose
-  *pre-update* state already matched, not whose current state
-  matches `views_before_move`. That probably means tracking
-  per-row pre-update FK values from the transaction log when
-  building the WHERE clause.
-- Or, coordinate `Filter` and `Buffering` so the same triggering
-  transaction's row-level UPDATEs are *not* applied via the direct
-  filter path while a buffering window is open — they'd be implied
-  by the move-in snapshot.
-- Or, have `SplicePlan.build/2` dedupe its emitted ops against the
-  filter-emitted ops in the same transaction window.
+1. Inner shape consumer comes up. Its writer's `last_persisted_offset`
+   = `L_inner`.
+2. Materializer is started, replays inner shape's history up to
+   `L_inner`. Its view = state at `L_inner`.
+3. Outer consumer comes up. Its writer's `last_persisted_offset`
+   = `L_outer ≤ L_inner` (they were flushed independently).
+4. `EventHandlerBuilder.build/2` calls
+   `Materializer.get_link_values/1` → seeds `state.views` with the
+   materializer's view at `L_inner`.
 
-Whichever path, the fix has to keep the move-in/out *control*
-messages consistent so the client's `TagTracker` generates the
-right synthetic deletes.
+So `state.views` and the outer shape's storage are **at different
+LSNs**: views is at `L_inner`, storage is at `L_outer`. There are
+materializer events between `L_outer` and `L_inner` whose
+corresponding ops were never written to the outer storage. From the
+outer consumer's perspective those events have already been applied
+(because `state.views` reflects them) — but the storage doesn't
+have them.
+
+When live events resume after restart, the materializer eventually
+re-emits a move-in for one of those values (because PG actually
+re-arrives at that state via replication catch-up, or because the
+test's batch mutates the same dep value). The outer consumer
+processes it: `state.views` already has the value, but **the move-in
+query still runs and writes the matching rows to outer storage**.
+Those rows were already in the snapshot file from before the
+restart — so we get a duplicate INSERT in the on-disk log, and a
+fresh client polling from `offset=-1` sees both copies.
+
+The orphan-delete variant is the mirror: the materializer re-emits a
+move-out for a value, the outer consumer writes a `move-out`
+control message, the client's `TagTracker` generates a synthetic
+delete for a row that was never INSERTed because the corresponding
+INSERT was lost in the same gap.
+
+**The Bug 5 fix is incomplete.** Eager-starting subquery consumers
+before `mark_as_ready` ensures `state.views` is seeded before live
+events flow — but it seeds from the materializer's view, which can
+be at a different LSN than the outer storage. The previous fix
+prevented the materializer view from drifting *forward* of the
+outer storage during replay, but it can't compensate for the
+storage already being *behind*.
+
+**Fix directions** (any one would close the gap)
+
+1. **Persist the dep view per outer shape.** Write
+   `state.views` to the outer shape's metadata at every commit;
+   restore it on init alongside the shape's storage. The view and
+   the storage move atomically per commit. (Approach 1 from the
+   original Bug 5 triage.)
+2. **Derive `state.views` from outer storage.** On init, scan the
+   outer shape's stored rows and reconstruct `state.views` by
+   collecting distinct values of each dep's foreign-key column
+   present in storage. The view by construction matches the
+   storage. (Approach 2.)
+3. **Replay materializer events from `L_outer`.** Track each outer
+   shape's `last_persisted_dep_lsn` and have the materializer
+   replay events `> last_persisted_dep_lsn` to the outer consumer
+   on subscribe. The consumer applies them, which writes the
+   missing ops to storage and advances `state.views` to match.
+   (Approach 3.)
+
+(1) is the simplest to implement and matches how the rest of the
+recovery machinery works. (2) is heavier on restart and requires the
+storage to expose a way to enumerate the dep-key column values. (3)
+is closest to the steady-state event flow but requires threading
+offsets through the materializer↔consumer subscription protocol and
+co-ordinating with `Buffering`.
 
 Bug 3 only manifests under restart and is likely related to the
 active-readiness signal — small fix once Bug 2 is closed.
