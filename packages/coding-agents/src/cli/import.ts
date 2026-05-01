@@ -53,7 +53,14 @@ async function locateSessionFile(
     }
   }
   // codex: use asp's scanner since the path embeds a wall-clock timestamp.
-  const found = await findSessionPath(`codex`, sessionId)
+  let found: string | null
+  try {
+    found = await findSessionPath(`codex`, sessionId)
+  } catch (err) {
+    return {
+      error: `failed to scan codex sessions: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
   if (!found)
     return {
       error: `codex session ${sessionId} not found under ${homeDir}/.codex/sessions`,

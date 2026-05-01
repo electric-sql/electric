@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,6 +9,10 @@ import { listAdapters } from '../../src'
 describe.each(listAdapters().map((a) => [a.kind] as const))(
   `runImportCli — %s`,
   (kind) => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
     it(`builds the correct PUT body and URL`, async () => {
       const home = await mkdtemp(join(tmpdir(), `cli-home-`))
       const ws = await mkdtemp(join(tmpdir(), `cli-ws-`))
@@ -35,30 +39,24 @@ describe.each(listAdapters().map((a) => [a.kind] as const))(
 
       try {
         // codex's findSessionPath uses os.homedir() — override $HOME for the test.
-        const origHome = process.env.HOME
-        process.env.HOME = home
-        try {
-          const result = await runImportCli({
-            argv: [
-              `--agent`,
-              kind,
-              `--workspace`,
-              ws,
-              `--session-id`,
-              `s1`,
-              `--server`,
-              `http://localhost:9999`,
-              `--agent-id`,
-              `imp-1`,
-            ],
-            homeDir: home,
-            fetchFn: fetchMock as any,
-          })
-          expect(result.exitCode).toBe(0)
-        } finally {
-          if (origHome === undefined) delete process.env.HOME
-          else process.env.HOME = origHome
-        }
+        vi.stubEnv(`HOME`, home)
+        const result = await runImportCli({
+          argv: [
+            `--agent`,
+            kind,
+            `--workspace`,
+            ws,
+            `--session-id`,
+            `s1`,
+            `--server`,
+            `http://localhost:9999`,
+            `--agent-id`,
+            `imp-1`,
+          ],
+          homeDir: home,
+          fetchFn: fetchMock as any,
+        })
+        expect(result.exitCode).toBe(0)
         expect(fetchMock).toHaveBeenCalledTimes(1)
         const [url, init] = fetchMock.mock.calls[0]!
         expect(url).toMatch(/\/coding-agent\/imp-1$/)
@@ -98,21 +96,15 @@ describe.each(listAdapters().map((a) => [a.kind] as const))(
       const ws = await mkdtemp(join(tmpdir(), `cli-ws-`))
       const fetchMock = vi.fn()
       try {
-        const origHome = process.env.HOME
-        process.env.HOME = home
-        try {
-          const result = await runImportCli({
-            argv: [`--agent`, kind, `--workspace`, ws, `--session-id`, `nope`],
-            homeDir: home,
-            fetchFn: fetchMock as any,
-          })
-          expect(result.exitCode).not.toBe(0)
-          expect(result.stderr).toMatch(/not found/)
-          expect(fetchMock).not.toHaveBeenCalled()
-        } finally {
-          if (origHome === undefined) delete process.env.HOME
-          else process.env.HOME = origHome
-        }
+        vi.stubEnv(`HOME`, home)
+        const result = await runImportCli({
+          argv: [`--agent`, kind, `--workspace`, ws, `--session-id`, `nope`],
+          homeDir: home,
+          fetchFn: fetchMock as any,
+        })
+        expect(result.exitCode).not.toBe(0)
+        expect(result.stderr).toMatch(/not found/)
+        expect(fetchMock).not.toHaveBeenCalled()
       } finally {
         await rm(home, { recursive: true, force: true })
         await rm(ws, { recursive: true, force: true })
