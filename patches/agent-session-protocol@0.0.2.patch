@@ -1,0 +1,44 @@
+diff --git a/dist/src-8t6qdcZ0.js b/dist/src-8t6qdcZ0.js
+index a8ea793056f33405df8f85049c3a8879f809e7e7..6d3d672a2d9b066455f5a789bb8a7a6a18a46e6e 100644
+--- a/dist/src-8t6qdcZ0.js
++++ b/dist/src-8t6qdcZ0.js
+@@ -154,7 +154,7 @@ function normalizeClaude(lines, options = {}) {
+ 					v: 1,
+ 					ts,
+ 					type: `session_init`,
+-					sessionId: entry.sessionId ?? ``,
++					sessionId: entry.session_id ?? entry.sessionId ?? ``,
+ 					cwd: entry.cwd ?? ``,
+ 					model: entry.message?.model ?? entry.model,
+ 					agent: `claude`,
+@@ -305,7 +305,7 @@ function normalizeClaude(lines, options = {}) {
+ 			v: 1,
+ 			ts: parseTimestamp$1(first),
+ 			type: `session_init`,
+-			sessionId: first.sessionId ?? ``,
++			sessionId: first.session_id ?? first.sessionId ?? ``,
+ 			cwd: first.cwd ?? ``,
+ 			agent: `claude`,
+ 			agentVersion: first.version,
+diff --git a/dist/src-Det_CZei.cjs b/dist/src-Det_CZei.cjs
+index 1028f41e4111efade618530b7b6d3bebdc949c9c..d2dfcbbd3bfa050d46eecc390f6b8708441a0ced 100644
+--- a/dist/src-Det_CZei.cjs
++++ b/dist/src-Det_CZei.cjs
+@@ -156,7 +156,7 @@ function normalizeClaude(lines, options = {}) {
+ 					v: 1,
+ 					ts,
+ 					type: `session_init`,
+-					sessionId: entry.sessionId ?? ``,
++					sessionId: entry.session_id ?? entry.sessionId ?? ``,
+ 					cwd: entry.cwd ?? ``,
+ 					model: entry.message?.model ?? entry.model,
+ 					agent: `claude`,
+@@ -307,7 +307,7 @@ function normalizeClaude(lines, options = {}) {
+ 			v: 1,
+ 			ts: parseTimestamp$1(first),
+ 			type: `session_init`,
+-			sessionId: first.sessionId ?? ``,
++			sessionId: first.session_id ?? first.sessionId ?? ``,
+ 			cwd: first.cwd ?? ``,
+ 			agent: `claude`,
+ 			agentVersion: first.version,
