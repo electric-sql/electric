@@ -23,7 +23,7 @@ The platform spec (`2026-04-30-coding-agents-platform-primitive-design.md §Test
 ## Non-goals
 
 - **Full edge-case coverage.** Stress tests, large-payload paths, concurrency races — out of scope for v1.
-- **Cross-kind resume.** Deferred per slice C₂ §Non-goals.
+- **Cross-kind resume.** Deferred per slice C₂ §Non-goals. **Resolved by:** [`docs/superpowers/specs/2026-05-02-coding-agents-cross-kind-resume-design.md`](./2026-05-02-coding-agents-cross-kind-resume-design.md).
 - **Performance benchmarks.** Wall-clock thresholds are intentionally absent; the suite asserts correctness, not speed.
 - **Tests for the bridge in isolation** (without a provider). The bridge already has unit tests via `FakeSandbox`; conformance scenarios always involve a real provider since that's what authors need to verify.
 - **A separate published package.** v1 lives in-tree under `packages/coding-agents/src/conformance/` and is exported via a sub-path. No new npm artefact.

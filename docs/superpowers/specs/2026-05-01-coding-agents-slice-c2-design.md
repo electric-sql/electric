@@ -16,11 +16,11 @@ This slice does two things in one merge:
 1. **Adds codex parity.** Bridge runs codex turns; image bakes codex; host provider runs codex on the host; lifecycle (cold-boot, resume, lease serialisation, crash recovery, destroy) works identically for codex.
 2. **Refactors the test harness so agent N+1 is cheap.** A single registry of `CodingAgentAdapter`s drives bridge, handler, CLI, and tests. Every test layer is parameterized by adapter; adding a new agent means writing one adapter file, recording three transcript fixtures, and dropping in an API key.
 
-Cross-kind resume (claude → codex on the same agent) is **out of scope** — deferred to a follow-up. The architecture supports it (events collection is canonical) but the test surface and `denormalize` correctness work belong in their own slice.
+Cross-kind resume (claude → codex on the same agent) is **out of scope** — deferred to a follow-up. The architecture supports it (events collection is canonical) but the test surface and `denormalize` correctness work belong in their own slice. **Resolved by:** [`docs/superpowers/specs/2026-05-02-coding-agents-cross-kind-resume-design.md`](./2026-05-02-coding-agents-cross-kind-resume-design.md).
 
 ## Non-goals
 
-- **Cross-kind resume.** Programmatic conversion of an agent's `kind` after spawn. Deferred.
+- **Cross-kind resume.** Programmatic conversion of an agent's `kind` after spawn. Deferred. **Resolved by:** [`docs/superpowers/specs/2026-05-02-coding-agents-cross-kind-resume-design.md`](./2026-05-02-coding-agents-cross-kind-resume-design.md).
 - **`SandboxProvider` conformance suite.** Provider-parameterized tests (Modal/Fly/E2B). Deferred — orthogonal axis.
 - **UI affordance for codex.** The kind enum widens, so the existing spawn dialog renders codex automatically; no new dialog work in this slice.
 - **Codex authentication via `codex login`.** Operators provide `OPENAI_API_KEY`; ChatGPT-login flow not supported.

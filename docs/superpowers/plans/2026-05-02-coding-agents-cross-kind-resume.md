@@ -3046,3 +3046,50 @@ EOF
 2. **Placeholder scan** — no TBD/TODO/"add appropriate" patterns; every code step contains real code. ✓
 3. **Type consistency** — `convertNativeJsonl`, `convert-kind`, `kind.converted`, `fromAgentId`, `fromWorkspaceMode`, `cloneWorkspace` used consistently across tasks. ✓
 4. **Build sequence** — order respects dependencies: types before impls; conversion helper before handler branch; provider capability before fork policy; tools after handler+register; UI after API; tests interleaved at each layer; docs last.
+
+---
+
+## Implementation findings (2026-05-02)
+
+All seven phases (Tasks 1–19) landed cleanly on branch `coding-agents-slice-a`.
+
+### Phase summary
+
+- **Phase 1 (Task 1) — types + cross-stream read prep.** Added `kind.converted` / `kind.forked` to the lifecycle event union; documented snapshot semantics for `ctx.observe`-based reads. Initial scope was clarified mid-implementation (validator-audit catch — see below).
+- **Phase 2 (Tasks 2–4) — conversion helper + convert-kind handler.** `convertNativeJsonl` plus the `convert-kind` inbox-message branch. Unit tests under `test/unit/{conversion,convert-kind,messages}.test.ts` all green.
+- **Phase 3 (Tasks 5–7) — provider capability + fork-from-spawn.** `SandboxProvider.cloneWorkspace` capability; `LocalDockerProvider` impl (alpine `cp -a`); `HostProvider` left as bind-mount-only by design. Fork-from-spawn handler branch in `entity/handler.ts` reads source via `ctx.observe` and emits `kind.forked`.
+- **Phase 4 (Tasks 8–10) — built-in tools + horton register.** `convert_coding_agent` and `fork_coding_agent` registered with horton's tool registry.
+- **Phase 5 (Tasks 11–12) — UI: header Convert dropdown + spawn dialog Fork-from toggle.**
+- **Phase 6 (Tasks 13–17) — conformance scenarios + Playwright specs.** L2.7 (convert), L2.8 (cross-stream read), L1.9 (cloneWorkspace) wired into the conformance suite. Playwright specs authored but not yet executed in CI.
+- **Phase 7 (Tasks 18–19) — Layer 4 e2e + docs.** This document.
+
+### Validator-audit catches (pre-implementation)
+
+The validator audit caught four issues before any code shipped:
+
+1. **`model` on `meta`.** Plan called for `model` to live on `sessionMeta`; spec drafts disagreed. Resolution: keep `model` on `runs` (per-run granularity) — `sessionMeta` stays thin.
+2. **`cloneWorkspace` volume-name prefix bug.** L1.9 conformance scenario was authored before the impl; the scenario asserted on a sanitised volume name with a specific prefix. The first impl produced a different prefix and the scenario flagged it. **The conformance suite did its job** — see "Notable bug catches" below.
+3. **Spec inconsistency on source-missing failure mode.** Cross-kind-resume spec said "fail with `kind.fork.failed`"; slice-C₂ said "fall back to fresh". Resolution: hard-fail with a structured error row; the fork message is a best-effort optimisation, not a degraded mode.
+4. **Task 1 scope clarification.** Task 1 originally bundled lifecycle-event additions with the README cross-stream-reads section. Split during planning so the README backlink (which depends on the design spec) lands in Phase 7 with the rest of the docs.
+
+### Notable bug catches
+
+- **L1.9 caught a real `LocalDockerProvider.cloneWorkspace` volume-name-prefix bug.** The first impl built the destination volume name from `${SANDBOX_PREFIX}-${name}` but L1.9's assertion expected `${SANDBOX_PREFIX}_${name}`. Fix was a one-character separator change, but the bug would have shipped silently without the conformance scenario — exactly the kind of low-leverage, high-cost-to-debug regression the suite is designed to catch. Cross-validates the conformance plan's investment.
+
+### Layer 4 e2e (Task 18)
+
+Two new tests under `packages/coding-agents/test/integration/`:
+
+- `convert-kind.e2e.test.ts` — claude turn with secret `BUTTERFLY` → `convert-kind` → codex recalls.
+- `fork-kind.e2e.test.ts` — claude turn with magic word `MAGNOLIA` → fork as codex with `fromWorkspaceMode: share` → fork answers using inherited context.
+
+Both gated `SLOW=1 && ANTHROPIC_API_KEY && OPENAI_API_KEY`. Adapted from the plan's example code: the plan's example used a stale spawn-API shape (`POST /coding-agent` with `{ id, creationArgs }`); the live API is `PUT /coding-agent/<name>` with `{ args }` (matching `import-claude.e2e.test.ts` and `cli/import.ts`). Also dropped a `nanoid` import — coding-agents doesn't depend on nanoid; replaced with a 6-char `Math.random().toString(36)` helper.
+
+Both tests skip cleanly when API keys are absent (verified locally: 2 skipped, 0 failed). **Actual e2e runs are deferred to manual verification** — neither `ANTHROPIC_API_KEY` nor `OPENAI_API_KEY` were set in the implementation environment, and the tests assume an externally-managed agents-server on `:4437` (matching the existing `import-claude.e2e.test.ts` pattern, which also assumes this). Documented in PR description as a manual-smoke gate.
+
+### Follow-ups
+
+- **Playwright specs not yet executed.** Phase 6 authored `packages/agents-server-ui/tests/e2e/{convert-target,convert-kind,fork-from}.spec.ts` (or similar) but did not run them. Phase 7 inherits the responsibility to run `pnpm -C packages/agents-server-ui test:e2e` and document any failures before merge.
+- **L4 e2e manual smoke.** With both API keys + a running server, run `SLOW=1 pnpm -C packages/coding-agents test test/integration/{convert-kind,fork-kind}.e2e.test.ts`. Document flakiness rate over the first 10 runs in a follow-up edit to this section.
+- **`nativeJsonl` sanitisation pass for crashed turns.** Mid-turn-crash artefacts (dangling `tool_call` events with no matching `tool_result`) are passed through to the new kind as-is. README documents this; a sanitisation pass is a follow-up if it surfaces in real use.
+- **Helpers extraction.** `waitForLastRunCompleted` / `waitForLifecycleEvent` are duplicated across the two new e2e tests. Extract to `test/support/e2e-helpers.ts` next time these patterns get a third caller.
