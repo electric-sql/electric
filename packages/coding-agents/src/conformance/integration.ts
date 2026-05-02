@@ -89,7 +89,11 @@ export function runCodingAgentsIntegrationConformance(
         beforeAll(() => {
           wr = new WorkspaceRegistry()
           lm = new LifecycleManager({
-            providers: { sandbox: provider, host: provider },
+            providers: {
+              sandbox: provider,
+              host: provider,
+              ...(config.target === `sprites` ? { sprites: provider } : {}),
+            },
             bridge,
           })
           handler = makeCodingAgentHandler(lm, wr, {
