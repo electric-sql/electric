@@ -72,6 +72,10 @@ export function makeFakeCtx(
         events_insert: ({ row }: any) => state.events.rows.set(row.key, row),
         nativeJsonl_insert: ({ row }: any) =>
           state.nativeJsonl.rows.set(row.key, row),
+        nativeJsonl_update: ({ key, updater }: any) => {
+          const r = state.nativeJsonl.rows.get(key)
+          if (r) updater(r)
+        },
         lifecycle_insert: ({ row }: any) =>
           state.lifecycle.rows.set(row.key, row),
       },
