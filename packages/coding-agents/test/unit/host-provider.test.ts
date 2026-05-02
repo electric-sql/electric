@@ -53,7 +53,9 @@ describe(`HostProvider lifecycle`, () => {
     })
     expect(inst.agentId).toBe(agentId)
     expect(inst.workspaceMount).toBe(dir)
-    expect(inst.instanceId).toBe(`host:${agentId}`)
+    expect(inst.instanceId).toMatch(
+      new RegExp(`^host:${agentId.replace(/[/]/g, `\\/`)}#`)
+    )
     expect(await p.status(agentId)).toBe(`running`)
 
     await p.destroy(agentId)

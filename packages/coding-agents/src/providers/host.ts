@@ -17,6 +17,8 @@ import type {
 interface AgentRecord {
   workspaceMount: string
   env: Record<string, string>
+  /** Per-start nonce so each fresh start (after destroy) has a unique instanceId. */
+  nonce: string
 }
 
 export class HostProvider implements SandboxProvider {
@@ -37,7 +39,8 @@ export class HostProvider implements SandboxProvider {
     if (!s.isDirectory()) {
       throw new Error(`HostProvider workspace is not a directory: ${real}`)
     }
-    const rec: AgentRecord = { workspaceMount: real, env: spec.env }
+    const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    const rec: AgentRecord = { workspaceMount: real, env: spec.env, nonce }
     this.agents.set(spec.agentId, rec)
     log.info(
       { agentId: spec.agentId, workspaceMount: real },
@@ -65,7 +68,7 @@ export class HostProvider implements SandboxProvider {
 
   private makeInstance(agentId: string, rec: AgentRecord): SandboxInstance {
     return {
-      instanceId: `host:${agentId}`,
+      instanceId: `host:${agentId}#${rec.nonce}`,
       agentId,
       workspaceMount: rec.workspaceMount,
       homeDir: os.homedir(),
@@ -87,6 +90,7 @@ async function execOnHost(
 ): Promise<ExecHandle> {
   const env: Record<string, string> = { ...rec.env, ...(req.env ?? {}) }
   if (!env.PATH && process.env.PATH) env.PATH = process.env.PATH
+  if (!env.HOME && process.env.HOME) env.HOME = process.env.HOME
   const cwd = req.cwd ?? rec.workspaceMount
   const child = spawn(req.cmd[0]!, req.cmd.slice(1), {
     cwd,
