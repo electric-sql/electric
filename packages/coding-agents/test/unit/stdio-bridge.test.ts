@@ -113,7 +113,7 @@ describe(`StdioBridge — claude-specific argv`, () => {
 })
 
 describe(`StdioBridge — codex-specific argv`, () => {
-  it(`puts the prompt on argv and passes codex exec flags`, async () => {
+  it(`pipes the prompt through stdin and passes codex exec flags`, async () => {
     let cmd: ReadonlyArray<string> = []
     let stdin = ``
     let execReq: ExecRequest | null = null
@@ -141,13 +141,16 @@ describe(`StdioBridge — codex-specific argv`, () => {
     expect(cmd).toContain(`exec`)
     expect(cmd).toContain(`--skip-git-repo-check`)
     expect(cmd).toContain(`--json`)
-    expect(cmd[cmd.length - 1]).toBe(`hello codex`)
-    expect(stdin).toBe(``)
+    // Trailing positional is `-` to tell codex to read from stdin.
+    expect(cmd[cmd.length - 1]).toBe(`-`)
+    // Prompt is NOT on argv anywhere; it goes through stdin.
+    expect(cmd).not.toContain(`hello codex`)
+    expect(stdin).toBe(`hello codex`)
     expect(execReq).not.toBeNull()
-    expect(execReq!.stdin).toBe(`ignore`)
+    expect(execReq!.stdin).toBe(`pipe`)
   })
 
-  it(`passes 'resume <id>' before the prompt when nativeSessionId set`, async () => {
+  it(`passes 'resume <id>' before the stdin sentinel when nativeSessionId set`, async () => {
     let cmd: ReadonlyArray<string> = []
     const b = new StdioBridge()
     await b.runTurn({
@@ -165,7 +168,9 @@ describe(`StdioBridge — codex-specific argv`, () => {
     const resumeIdx = cmd.indexOf(`resume`)
     expect(resumeIdx).toBeGreaterThan(0)
     expect(cmd[resumeIdx + 1]).toBe(`prior-session-id`)
-    expect(cmd.indexOf(`keep going`)).toBeGreaterThan(resumeIdx)
+    // The stdin sentinel `-` follows after the trailing `--`.
+    expect(cmd[cmd.length - 1]).toBe(`-`)
+    expect(cmd).not.toContain(`keep going`)
   })
 
   it(`passes -c model="..." when model is supplied`, async () => {

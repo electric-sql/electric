@@ -81,7 +81,7 @@ export const CodexAdapter: CodingAgentAdapter = {
   cliBinary: `sh`,
   defaultEnvVars: [`OPENAI_API_KEY`],
 
-  buildCliInvocation({ prompt, nativeSessionId, model }) {
+  buildCliInvocation({ prompt: _prompt, nativeSessionId, model }) {
     // Global `-c model="..."` override goes BEFORE the `exec` subcommand
     // because codex's clap parser scopes `-c` flags at the top-level.
     // Codex 0.128.0 does NOT read OPENAI_MODEL — the only ways to pin a
@@ -95,10 +95,16 @@ export const CodexAdapter: CodingAgentAdapter = {
       `--json`,
     ]
     if (nativeSessionId) codexArgs.push(`resume`, nativeSessionId)
-    // The trailing `--` tells codex's clap parser "everything after this
-    // is positional", so prompts starting with `-` (e.g. "--explain why")
-    // aren't misparsed as flags.
-    codexArgs.push(`--`, prompt)
+    // Use `-` as the positional prompt to tell codex to read the prompt
+    // from stdin. From `codex exec --help`: "If not provided as an
+    // argument (or if `-` is used), instructions are read from stdin."
+    // The bridge pipes args.prompt into stdin via promptDelivery: 'stdin'.
+    // The `--` keeps clap from misparsing the trailing `-` as a flag.
+    // Stdin avoids ARG_MAX (TL-1) and the Node-shim ~969 KB call-stack
+    // crash on macOS that surfaces below the kernel's E2BIG. The
+    // CODEX_BOOTSTRAP_SCRIPT uses `exec`, which preserves stdin into
+    // the codex child process.
+    codexArgs.push(`--`, `-`)
     // sh -c '<script>' -- <codex argv ...> — positional args become "$@".
     const args: Array<string> = [
       `-c`,
@@ -106,7 +112,7 @@ export const CodexAdapter: CodingAgentAdapter = {
       `--`,
       ...codexArgs,
     ]
-    return { args, promptDelivery: `argv` }
+    return { args, promptDelivery: `stdin` }
   },
 
   probeCommand({ homeDir, sessionId }) {
