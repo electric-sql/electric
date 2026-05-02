@@ -240,6 +240,9 @@ function LifecycleEventRow({ row }: { row: LifecycleRow }): React.ReactElement {
     'kind.converted': `Kind converted`,
     'kind.convert_failed': `Kind convert failed`,
     'kind.forked': `Forked from agent`,
+    'bootstrap.starting': `Sprite bootstrap starting`,
+    'bootstrap.complete': `Sprite bootstrap complete`,
+    'bootstrap.failed': `Sprite bootstrap failed`,
   }
   return (
     <Flex

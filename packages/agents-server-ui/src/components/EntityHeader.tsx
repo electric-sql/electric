@@ -71,7 +71,7 @@ export function EntityHeader({
   stateExplorerOpen?: boolean
   onToggleStateExplorer?: () => void
   baseUrl?: string
-  codingAgentTarget?: `sandbox` | `host`
+  codingAgentTarget?: `sandbox` | `host` | `sprites`
   codingAgentWorkspaceSpec?: CodingAgentWorkspaceSpec
   codingAgentStatus?: string
   codingAgentLastError?: string
@@ -180,6 +180,20 @@ export function EntityHeader({
                   </DropdownMenu.Item>
                 )
               })}
+              {codingAgentTarget !== `sprites` && (
+                <DropdownMenu.Item
+                  disabled
+                  data-testid="fork-cross-provider-disabled"
+                  title="Cross-provider fork not supported. Spawn a fresh agent on Sprites instead."
+                >
+                  <Flex align="center" gap="2">
+                    <GitFork size={14} />
+                    <Text size="2">
+                      Fork to Sprites (cross-provider not supported)
+                    </Text>
+                  </Flex>
+                </DropdownMenu.Item>
+              )}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         ) : (
@@ -278,42 +292,85 @@ export function EntityHeader({
             </Button>
             {codingAgentTarget &&
               (() => {
-                const convertTo =
-                  codingAgentTarget === `sandbox` ? `host` : `sandbox`
+                const allTargets: ReadonlyArray<
+                  `sandbox` | `host` | `sprites`
+                > = [`sandbox`, `host`, `sprites`]
+                const others = allTargets.filter((t) => t !== codingAgentTarget)
                 const inFlight =
                   codingAgentStatus === `running` ||
                   codingAgentStatus === `starting` ||
                   codingAgentStatus === `stopping`
-                const requiresBindMount =
-                  convertTo === `host` &&
-                  codingAgentWorkspaceSpec?.type === `volume`
-                const disabled = inFlight || requiresBindMount
-                const title = inFlight
-                  ? `Cannot convert while ${codingAgentStatus}`
-                  : requiresBindMount
-                    ? `Convert to host requires a bindMount workspace`
-                    : `Convert this agent to run on ${convertTo}`
                 return (
-                  <Button
-                    variant="soft"
-                    size="1"
-                    color="amber"
-                    disabled={disabled}
-                    title={title}
-                    onClick={() => {
-                      void fetch(`${baseUrl}${entity.url}/send`, {
-                        method: `POST`,
-                        headers: { 'content-type': `application/json` },
-                        body: JSON.stringify({
-                          from: `user`,
-                          type: `convert-target`,
-                          payload: { to: convertTo },
-                        }),
-                      })
-                    }}
-                  >
-                    Convert → {convertTo === `host` ? `Host` : `Sandbox`}
-                  </Button>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      <Button
+                        variant="soft"
+                        size="1"
+                        color="amber"
+                        disabled={inFlight}
+                        title={
+                          inFlight
+                            ? `Cannot convert while ${codingAgentStatus}`
+                            : `Convert this agent to a different target`
+                        }
+                        data-testid="convert-target-button"
+                      >
+                        Convert target
+                      </Button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content>
+                      {others.map((t) => {
+                        const sourceIsSprites = codingAgentTarget === `sprites`
+                        const targetIsSprites = t === `sprites`
+                        const crossProvider =
+                          sourceIsSprites !== targetIsSprites
+                        const requiresBindMount =
+                          t === `host` &&
+                          codingAgentWorkspaceSpec?.type === `volume`
+                        const disabled = crossProvider || requiresBindMount
+                        const label =
+                          t === `sandbox`
+                            ? `Sandbox`
+                            : t === `host`
+                              ? `Host`
+                              : `Sprites`
+                        const title = crossProvider
+                          ? `Cross-provider conversion is not supported. Spawn a fresh agent on ${label} instead.`
+                          : requiresBindMount
+                            ? `Convert to host requires a bindMount workspace`
+                            : `Convert this agent to ${label}`
+                        return (
+                          <DropdownMenu.Item
+                            key={t}
+                            data-testid={`convert-to-${t}`}
+                            disabled={disabled}
+                            onSelect={() => {
+                              if (disabled) return
+                              void fetch(`${baseUrl}${entity.url}/send`, {
+                                method: `POST`,
+                                headers: {
+                                  'content-type': `application/json`,
+                                },
+                                body: JSON.stringify({
+                                  from: `user`,
+                                  type: `convert-target`,
+                                  payload: { to: t },
+                                }),
+                              })
+                            }}
+                            title={title}
+                          >
+                            Convert → {label}
+                            {crossProvider
+                              ? ` (cross-provider not supported)`
+                              : requiresBindMount
+                                ? ` (needs bindMount)`
+                                : ``}
+                          </DropdownMenu.Item>
+                        )
+                      })}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 )
               })()}
             {codingAgentKind &&

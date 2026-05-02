@@ -23,7 +23,7 @@ export type CodingAgentSliceAStatus =
   | `destroyed`
 
 export type CodingAgentKind = `claude` | `codex`
-export type CodingAgentTarget = `sandbox` | `host`
+export type CodingAgentTarget = `sandbox` | `host` | `sprites`
 
 export type CodingAgentWorkspaceSpec =
   | { type: `volume`; name: string }

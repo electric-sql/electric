@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
 
 type WorkspaceMode = `volume` | `bindMount`
-type Target = `sandbox` | `host`
+type Target = `sandbox` | `host` | `sprites`
 type Kind = `claude` | `codex` | `opencode`
 type ForkWorkspaceMode = `` | `share` | `clone` | `fresh`
 
@@ -237,6 +237,22 @@ export function CodingAgentSpawnDialog({
                 >
                   Host
                 </Button>
+                <Button
+                  type="button"
+                  variant={target === `sprites` ? `solid` : `soft`}
+                  color="gray"
+                  size="2"
+                  data-testid="target-sprites"
+                  onClick={() => {
+                    setTarget(`sprites`)
+                    setImportSessionId(``)
+                    if (workspaceMode === `bindMount`) {
+                      setWorkspaceMode(`volume`)
+                    }
+                  }}
+                >
+                  Sprites
+                </Button>
               </Flex>
             </Flex>
 
@@ -260,9 +276,16 @@ export function CodingAgentSpawnDialog({
                   variant={workspaceMode === `bindMount` ? `solid` : `soft`}
                   color="gray"
                   size="2"
+                  disabled={target === `sprites`}
+                  title={
+                    target === `sprites`
+                      ? `Sprites do not support bind-mount workspaces`
+                      : undefined
+                  }
+                  data-testid="workspace-bindmount"
                   onClick={() => setWorkspaceMode(`bindMount`)}
                 >
-                  Bind mount
+                  Bind mount{target === `sprites` ? ` (n/a)` : ``}
                 </Button>
               </Flex>
             </Flex>
