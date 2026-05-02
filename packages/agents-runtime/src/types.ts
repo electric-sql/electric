@@ -753,6 +753,20 @@ export interface SpawnCodingAgentOptions {
   initialPrompt?: string
   wake?: { on: `runFinished`; includeResponse?: boolean }
   lifecycle?: { idleTimeoutMs?: number; keepWarm?: boolean }
+  /**
+   * Optional source agent to fork from. The new agent's events history
+   * starts as denormalize(source.events, this.kind, ...). Workspace
+   * inheritance is controlled by `workspaceMode`:
+   *   - 'share': inherit source's workspace identity (lease-serialised).
+   *   - 'clone': copy source's workspace into a fresh volume (provider must support cloneWorkspace).
+   *   - 'fresh': new empty workspace (no file context).
+   * Default policy: 'share' for bindMount sources; 'clone' for volume
+   * sources (errors at spawn-time if the provider can't clone).
+   */
+  from?: {
+    agentId: string
+    workspaceMode?: `share` | `clone` | `fresh`
+  }
 }
 
 export interface CodingAgentRunSummary {

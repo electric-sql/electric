@@ -72,6 +72,8 @@ const creationArgsSchema = z.object({
     .optional(),
   idleTimeoutMs: z.number().optional(),
   keepWarm: z.boolean().optional(),
+  fromAgentId: z.string().optional(),
+  fromWorkspaceMode: z.enum([`share`, `clone`, `fresh`]).optional(),
 })
 
 export function registerCodingAgent(

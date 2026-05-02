@@ -578,6 +578,12 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       if (opts.lifecycle?.keepWarm !== undefined) {
         spawnArgs.keepWarm = opts.lifecycle.keepWarm
       }
+      if (opts.from !== undefined) {
+        spawnArgs.fromAgentId = opts.from.agentId
+        if (opts.from.workspaceMode !== undefined) {
+          spawnArgs.fromWorkspaceMode = opts.from.workspaceMode
+        }
+      }
 
       // initialMessage is stored verbatim as the inbox row's payload (no message_type
       // extraction in the spawn path). Match the entity's promptMessageSchema shape:
