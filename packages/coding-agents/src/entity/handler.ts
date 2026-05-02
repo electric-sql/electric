@@ -1260,6 +1260,31 @@ async function processConvertTarget(
   // No-op if already on the requested target
   if (meta.target === to) return
 
+  // Cross-provider transitions are not supported. Sprites is its own
+  // provider universe — agents can't migrate between sandbox/host and
+  // sprites mid-life. Convert-kind (claude↔codex↔opencode) and same-
+  // provider fork still work.
+  const involvesSprites = meta.target === `sprites` || to === `sprites`
+  const bothSprites = meta.target === `sprites` && to === `sprites`
+  if (involvesSprites && !bothSprites) {
+    // sandbox/host ↔ sprites → reject
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.lastError = `cross-provider conversion is not supported (${meta.target} → ${to})`
+      },
+    })
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`target`),
+        ts: Date.now(),
+        event: `target.changed`,
+        detail: `failed: cross-provider (${meta.target} → ${to})`,
+      } satisfies LifecycleRow,
+    })
+    return
+  }
+
   // Validation: host requires bindMount
   if (to === `host` && meta.workspaceSpec.type !== `bindMount`) {
     ctx.db.actions.sessionMeta_update({
