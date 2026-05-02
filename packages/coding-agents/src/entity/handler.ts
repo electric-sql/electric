@@ -936,6 +936,31 @@ async function processPrompt(
     })
 
     let seq = 0
+    // Synthesise a `user_message` event from the prompt text BEFORE the CLI
+    // runs. None of the supported CLIs (claude, codex, opencode) echo the
+    // user prompt back in their stream-json stdout — empirically verified
+    // for all three. Without this, `denormalize(events, kind)` produces a
+    // transcript with assistant turns but no user turns, which breaks
+    // cross-kind fork/convert into claude (the new claude session sees no
+    // user prompts and replies "I don't have a secret word"). Always-inject
+    // is universal and adds at most one event row per turn.
+    const userTs = Date.now()
+    ctx.db.actions.events_insert({
+      row: {
+        key: eventKey(runId, seq),
+        runId,
+        seq,
+        ts: userTs,
+        type: `user_message`,
+        payload: {
+          type: `user_message`,
+          ts: userTs,
+          text: promptText,
+        } as unknown as Record<string, unknown>,
+      } satisfies EventRow,
+    })
+    seq++
+
     let finalText: string | undefined
     try {
       const result = await raceTimeout(

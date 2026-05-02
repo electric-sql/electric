@@ -484,7 +484,10 @@ describe(`entity handler — processPrompt happy path`, () => {
     expect((runs[0] as any).status).toBe(`completed`)
 
     const eventRows = Array.from(ctx.db.collections.events.rows.values())
-    expect(eventRows).toHaveLength(2)
+    // 1 synthetic user_message (handler injects from promptText) + 2 from bridge.
+    expect(eventRows).toHaveLength(3)
+    expect((eventRows[0] as any).type).toBe(`user_message`)
+    expect((eventRows[0] as any).payload.text).toBe(`hi`)
   })
 })
 
