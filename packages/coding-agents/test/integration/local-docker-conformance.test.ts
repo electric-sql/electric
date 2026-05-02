@@ -25,6 +25,7 @@ runSandboxProviderConformance(`LocalDockerProvider`, {
   }),
   target: `sandbox`,
   skipIf: () => !SHOULD_RUN,
+  supportsCloneWorkspace: true,
 })
 
 runCodingAgentsIntegrationConformance(`LocalDockerProvider`, {

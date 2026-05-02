@@ -21,6 +21,11 @@ export interface SandboxProviderConformanceConfig {
    * because the provider's `recover()` is documented to return `[]`.
    */
   supportsRecovery?: boolean
+  /**
+   * If true, L1.9 (cloneWorkspace) is included. Default: provider's
+   * cloneWorkspace presence is checked at runtime.
+   */
+  supportsCloneWorkspace?: boolean
 }
 
 export function runSandboxProviderConformance(
@@ -225,5 +230,59 @@ export function runSandboxProviderConformance(
         await provider.destroy(agentId).catch(() => undefined)
       }
     }, 60_000)
+
+    // Defaults to false when supportsCloneWorkspace is unset because
+    // provider isn't constructed until beforeAll runs. Providers that
+    // implement cloneWorkspace should set supportsCloneWorkspace: true.
+    const cloneShould = config.supportsCloneWorkspace === true
+    const dClone = cloneShould ? it : it.skip
+    dClone(
+      `L1.9 cloneWorkspace copies source contents into target`,
+      async () => {
+        if (!provider.cloneWorkspace) {
+          // Defensive: skip if provider doesn't expose the method even though
+          // config said supportsCloneWorkspace=true.
+          return
+        }
+        const sourceWs = await config.scratchWorkspace()
+        const targetWs = await config.scratchWorkspace()
+        pendingCleanups.push(sourceWs.cleanup, targetWs.cleanup)
+
+        // Seed source workspace with a sentinel via provider.start + copyTo.
+        const sourceAgentId = `/test/coding-agent/conf-l1-9s-${Date.now().toString(36)}`
+        const inst = await provider.start(specFor(sourceAgentId, sourceWs.spec))
+        await inst.copyTo({
+          destPath: `${inst.workspaceMount}/sentinel.txt`,
+          content: `cloneme`,
+          mode: 0o644,
+        })
+        await provider.destroy(sourceAgentId).catch(() => undefined)
+
+        await provider.cloneWorkspace({
+          source: sourceWs.spec,
+          target: targetWs.spec,
+        })
+
+        const verifyAgentId = `/test/coding-agent/conf-l1-9v-${Date.now().toString(36)}`
+        const inst2 = await provider.start(
+          specFor(verifyAgentId, targetWs.spec)
+        )
+        try {
+          const h = await inst2.exec({
+            cmd: [`cat`, `${inst2.workspaceMount}/sentinel.txt`],
+          })
+          const [out, , exit] = await Promise.all([
+            drain(h.stdout),
+            discardStream(h.stderr),
+            h.wait(),
+          ])
+          expect(exit.exitCode).toBe(0)
+          expect(out.trim()).toBe(`cloneme`)
+        } finally {
+          await provider.destroy(verifyAgentId).catch(() => undefined)
+        }
+      },
+      90_000
+    )
   })
 }

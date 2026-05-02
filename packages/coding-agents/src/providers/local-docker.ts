@@ -175,22 +175,40 @@ export class LocalDockerProvider implements SandboxProvider {
         `LocalDockerProvider.cloneWorkspace: target must be a volume (got ${opts.target.type})`
       )
     }
-    const sourceName = opts.source.name
-    const targetName = opts.target.name
-    if (!sourceName || !targetName) {
+    const sourceRaw = opts.source.name
+    const targetRaw = opts.target.name
+    if (!sourceRaw || !targetRaw) {
       throw new Error(
         `LocalDockerProvider.cloneWorkspace: both source and target must have a name`
       )
     }
 
-    // Verify source exists; fail fast if not. runDocker throws on non-zero exit.
+    // mountFlag prefixes spec.workspace.name with `coding-agent-workspace-`
+    // when starting a container. Volumes seeded via provider.start() therefore
+    // live under the prefixed name, while volumes pre-created via raw
+    // `docker volume create` (e.g. in clone-workspace.test.ts) use the raw
+    // name. Try the prefixed name first and fall back to raw, so both seeding
+    // patterns work. Target follows the same namespace as the resolved source
+    // so a follow-up provider.start() with the same raw name finds the clone.
+    const prefixed = (n: string): string => `coding-agent-workspace-${n}`
+    let sourceName: string
+    let useRawNamespace: boolean
     try {
-      await runDocker([`volume`, `inspect`, sourceName])
+      await runDocker([`volume`, `inspect`, prefixed(sourceRaw)])
+      sourceName = prefixed(sourceRaw)
+      useRawNamespace = false
     } catch {
-      throw new Error(
-        `LocalDockerProvider.cloneWorkspace: source volume '${sourceName}' not found`
-      )
+      try {
+        await runDocker([`volume`, `inspect`, sourceRaw])
+        sourceName = sourceRaw
+        useRawNamespace = true
+      } catch {
+        throw new Error(
+          `LocalDockerProvider.cloneWorkspace: source volume '${sourceRaw}' not found`
+        )
+      }
     }
+    const targetName = useRawNamespace ? targetRaw : prefixed(targetRaw)
 
     // Ensure target exists (idempotent).
     await runDocker([`volume`, `create`, targetName])
