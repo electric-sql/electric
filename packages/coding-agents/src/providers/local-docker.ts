@@ -161,6 +161,64 @@ export class LocalDockerProvider implements SandboxProvider {
       })
   }
 
+  async cloneWorkspace(opts: {
+    source: SandboxSpec[`workspace`]
+    target: SandboxSpec[`workspace`]
+  }): Promise<void> {
+    if (opts.source.type !== `volume`) {
+      throw new Error(
+        `LocalDockerProvider.cloneWorkspace: source must be a volume (got ${opts.source.type}); bindMount sources are not supported`
+      )
+    }
+    if (opts.target.type !== `volume`) {
+      throw new Error(
+        `LocalDockerProvider.cloneWorkspace: target must be a volume (got ${opts.target.type})`
+      )
+    }
+    const sourceName = opts.source.name
+    const targetName = opts.target.name
+    if (!sourceName || !targetName) {
+      throw new Error(
+        `LocalDockerProvider.cloneWorkspace: both source and target must have a name`
+      )
+    }
+
+    // Verify source exists; fail fast if not. runDocker throws on non-zero exit.
+    try {
+      await runDocker([`volume`, `inspect`, sourceName])
+    } catch {
+      throw new Error(
+        `LocalDockerProvider.cloneWorkspace: source volume '${sourceName}' not found`
+      )
+    }
+
+    // Ensure target exists (idempotent).
+    await runDocker([`volume`, `create`, targetName])
+
+    // Copy contents via a throwaway alpine container.
+    // `cp -a /from/. /to/` copies including dotfiles, preserving perms.
+    const args = [
+      `run`,
+      `--rm`,
+      `-v`,
+      `${sourceName}:/from:ro`,
+      `-v`,
+      `${targetName}:/to`,
+      `alpine`,
+      `sh`,
+      `-c`,
+      `cp -a /from/. /to/`,
+    ]
+    try {
+      await runDocker(args)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new Error(
+        `LocalDockerProvider.cloneWorkspace: copy failed: ${msg.slice(0, 400)}`
+      )
+    }
+  }
+
   // ── private helpers ──
 
   private async findContainerByAgentId(
