@@ -183,3 +183,88 @@ describe(`fork first-wake`, () => {
     expect(lifecycle.find((l) => l.event === `kind.forked`)).toBeDefined()
   })
 })
+
+describe(`fork workspaceMode default policy`, () => {
+  it(`bindMount source defaults to share (no clone attempt)`, async () => {
+    const sourceId = `/test/coding-agent/bm-src-${Date.now().toString(36)}`
+    const { state: sourceState } = makeFakeCtx(sourceId, {
+      kind: `claude`,
+      target: `host`,
+      workspaceType: `bindMount`,
+      workspaceHostPath: `/tmp/source-bm`,
+    })
+    sourceState.sessionMeta.rows.set(`current`, {
+      ...(sourceState.sessionMeta.get(`current`) as SessionMetaRow),
+      workspaceSpec: { type: `bindMount`, hostPath: `/tmp/source-bm` },
+    })
+
+    const handler = makeHandler()
+    const forkId = `/test/coding-agent/bm-fork-${Date.now().toString(36)}`
+    const { ctx: forkCtx, state: forkState } = makeFakeCtx(forkId, {
+      kind: `codex`,
+      target: `sandbox`,
+      workspaceType: `volume`,
+      fromAgentId: sourceId,
+      // No fromWorkspaceMode — policy should default to share for bindMount.
+    })
+    ;(forkCtx as any).observe = async () => ({
+      sourceType: `entity`,
+      sourceRef: sourceId,
+      db: {
+        collections: {
+          events: sourceState.events,
+          runs: sourceState.runs,
+          sessionMeta: sourceState.sessionMeta,
+        },
+      },
+      events: [],
+    })
+
+    await handler(forkCtx, { type: `message_received` })
+
+    const lifecycle = Array.from(
+      forkState.lifecycle.rows.values()
+    ) as Array<LifecycleRow>
+    const forked = lifecycle.find((l) => l.event === `kind.forked`)
+    expect(forked?.detail).toContain(`mode=share`)
+  })
+
+  it(`explicit clone against provider without cloneWorkspace errors`, async () => {
+    const sourceId = `/test/coding-agent/v-src-${Date.now().toString(36)}`
+    const { state: sourceState } = makeFakeCtx(sourceId, {
+      kind: `claude`,
+      target: `sandbox`,
+      workspaceType: `volume`,
+      workspaceName: `src-vol`,
+    })
+
+    const handler = makeHandler()
+    const forkId = `/test/coding-agent/v-fork-${Date.now().toString(36)}`
+    const { ctx: forkCtx, state: forkState } = makeFakeCtx(forkId, {
+      kind: `codex`,
+      target: `sandbox`,
+      workspaceType: `volume`,
+      fromAgentId: sourceId,
+      fromWorkspaceMode: `clone`,
+    })
+    ;(forkCtx as any).observe = async () => ({
+      sourceType: `entity`,
+      sourceRef: sourceId,
+      db: {
+        collections: {
+          events: sourceState.events,
+          runs: sourceState.runs,
+          sessionMeta: sourceState.sessionMeta,
+        },
+      },
+      events: [],
+    })
+
+    // makeHandler's fakeProvider doesn't expose cloneWorkspace.
+    await handler(forkCtx, { type: `message_received` })
+
+    const meta = forkState.sessionMeta.get(`current`) as SessionMetaRow
+    expect(meta.status).toBe(`error`)
+    expect(meta.lastError).toMatch(/clone/i)
+  })
+})

@@ -35,6 +35,10 @@ export class LifecycleManager {
     return this.providers[spec.target].start(spec)
   }
 
+  providerFor(target: Target): SandboxProvider {
+    return this.providers[target]
+  }
+
   async statusFor(
     agentId: string,
     target: Target

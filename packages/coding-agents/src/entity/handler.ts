@@ -462,6 +462,40 @@ export function makeCodingAgentHandler(
             (r) => r.payload as unknown as NormalizedEvent
           )
 
+          // Resolve effective workspace mode and (optionally) clone.
+          const sourceMetaCol = sourceHandle?.db?.collections?.sessionMeta
+          const sourceMeta = sourceMetaCol?.get?.(`current`) as
+            | SessionMetaRow
+            | undefined
+          const sourceWsType = sourceMeta?.workspaceSpec?.type ?? `volume`
+          const requested = args.fromWorkspaceMode
+          const effectiveMode: `share` | `clone` | `fresh` =
+            requested ?? (sourceWsType === `bindMount` ? `share` : `clone`)
+
+          if (effectiveMode === `clone`) {
+            // The handler doesn't have direct provider access; LifecycleManager does.
+            // Acquire it via lm and check capability before proceeding.
+            const provider = lm.providerFor(meta.target)
+            if (!provider.cloneWorkspace) {
+              throw new Error(
+                `fork: workspaceMode=clone requires provider.cloneWorkspace; provider '${provider.name}' does not implement it`
+              )
+            }
+            if (
+              sourceMeta?.workspaceSpec?.type === `volume` &&
+              ws.type === `volume` &&
+              sourceMeta.workspaceSpec.name &&
+              ws.name
+            ) {
+              await provider.cloneWorkspace({
+                source: sourceMeta.workspaceSpec,
+                target: { type: `volume`, name: ws.name },
+              })
+            }
+          }
+          // 'share' and 'fresh' need no action here — share inherits via the
+          // existing workspace identity passed at spawn; fresh is a normal spawn.
+
           const newSessionId = randomUUID()
           const cwd = ws.type === `bindMount` ? ws.hostPath : `/work`
           const result = convertNativeJsonl(
@@ -491,7 +525,7 @@ export function makeCodingAgentHandler(
               key: lifecycleKey(`fork`),
               ts: Date.now(),
               event: `kind.forked`,
-              detail: `source=${args.fromAgentId};mode=${args.fromWorkspaceMode ?? `share`};events=${sourceEvents.length}`,
+              detail: `source=${args.fromAgentId};mode=${effectiveMode};events=${sourceEvents.length}`,
             } satisfies LifecycleRow,
           })
           meta = sessionMetaCol.get(`current`) as SessionMetaRow
