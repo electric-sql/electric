@@ -36,11 +36,16 @@ const STATUS_COLOR: Record<
   destroyed: `gray`,
 }
 
+export type CodingAgentWorkspaceSpec =
+  | { type: `volume`; name?: string }
+  | { type: `bindMount`; hostPath: string }
+
 export function EntityHeader({
   entity,
   pinned,
   onTogglePin,
   onFork,
+  onForkToKind,
   onKill,
   killError,
   forkError,
@@ -58,6 +63,7 @@ export function EntityHeader({
   pinned: boolean
   onTogglePin: () => void
   onFork?: () => void
+  onForkToKind?: (kind: `claude` | `codex`) => void
   onKill: () => void
   killError?: string | null
   forkError?: string | null
@@ -66,7 +72,7 @@ export function EntityHeader({
   onToggleStateExplorer?: () => void
   baseUrl?: string
   codingAgentTarget?: `sandbox` | `host`
-  codingAgentWorkspaceSpec?: { type: `volume` | `bindMount` }
+  codingAgentWorkspaceSpec?: CodingAgentWorkspaceSpec
   codingAgentStatus?: string
   codingAgentLastError?: string
   codingAgentKind?: `claude` | `codex`
@@ -127,21 +133,59 @@ export function EntityHeader({
           {displayStatus}
         </Badge>
 
-        {onFork && (
-          <Button
-            variant="soft"
-            size="1"
-            onClick={onFork}
-            disabled={forking || entity.status === `stopped`}
-            title={
-              entity.status === `idle`
-                ? `Fork subtree`
-                : `Fork subtree once idle`
-            }
-          >
-            <GitFork size={14} />
-            <Text size="1">{forking ? `Forking` : `Fork`}</Text>
-          </Button>
+        {onForkToKind && entity.type === `coding-agent` ? (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <Button
+                variant="soft"
+                size="1"
+                disabled={forking || entity.status === `stopped`}
+                title={
+                  entity.status === `idle`
+                    ? `Fork to a new agent`
+                    : `Fork once idle`
+                }
+                data-testid="fork-button"
+              >
+                <GitFork size={14} />
+                <Text size="1">{forking ? `Forking` : `Fork`}</Text>
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content>
+              {([`claude`, `codex`] as const).map((k) => (
+                <DropdownMenu.Item
+                  key={k}
+                  data-testid={`fork-to-${k}`}
+                  onSelect={() => onForkToKind(k)}
+                >
+                  <Flex align="center" gap="2">
+                    <GitFork size={14} />
+                    <Text size="2">
+                      Fork to {k}
+                      {codingAgentKind === k ? ` (same kind)` : ``}
+                    </Text>
+                  </Flex>
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        ) : (
+          onFork && (
+            <Button
+              variant="soft"
+              size="1"
+              onClick={onFork}
+              disabled={forking || entity.status === `stopped`}
+              title={
+                entity.status === `idle`
+                  ? `Fork subtree`
+                  : `Fork subtree once idle`
+              }
+            >
+              <GitFork size={14} />
+              <Text size="1">{forking ? `Forking` : `Fork`}</Text>
+            </Button>
+          )
         )}
 
         {onToggleStateExplorer && (

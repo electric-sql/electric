@@ -11,6 +11,7 @@ import {
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { Flex, Text } from '@radix-ui/themes'
+import { nanoid } from 'nanoid'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
@@ -18,6 +19,7 @@ import { useEntityTimeline } from './hooks/useEntityTimeline'
 import { useCodingAgent } from './hooks/useCodingAgent'
 import { Sidebar } from './components/Sidebar'
 import { EntityHeader } from './components/EntityHeader'
+import type { CodingAgentWorkspaceSpec } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
@@ -68,7 +70,8 @@ function EntityPage(): React.ReactElement {
   const entityUrl = `/${_splat}`
   const { activeServer } = useServerConnection()
   const { pinnedUrls, togglePin } = usePinnedEntities()
-  const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
+  const { entitiesCollection, forkEntity, killEntity, spawnEntity } =
+    useElectricAgents()
   const navigate = useNavigate()
 
   const { data: matchingEntities = [] } = useLiveQuery(
@@ -129,6 +132,77 @@ function EntityPage(): React.ReactElement {
     isCodingAgent ? connectUrl : null
   )
 
+  const codingAgentMeta = codingAgentHook.meta
+  const handleForkToKind = useCallback(
+    (pickedKind: `claude` | `codex`) => {
+      if (forking) return
+      const sourceKind = codingAgentMeta?.kind
+      // Same-kind fork preserves the runtime's subtree-clone semantics.
+      if (!sourceKind || sourceKind === pickedKind) {
+        if (!forkEntity) return
+        setForkError(null)
+        setForking(true)
+        forkEntity(entityUrl)
+          .then((root) => {
+            navigate({
+              to: `/entity/$`,
+              params: { _splat: root.url.replace(/^\//, ``) },
+            })
+          })
+          .catch((err: Error) => {
+            setForkError(err.message)
+          })
+          .finally(() => {
+            setForking(false)
+          })
+        return
+      }
+      // Different-kind fork → spawn a new top-level coding-agent inheriting
+      // transcript via fromAgentId. Workspace mode defaults via runtime
+      // policy (bind-mount → share, volume → clone-or-error).
+      if (!spawnEntity) return
+      const sourceWorkspace = codingAgentMeta?.workspaceSpec
+      const sourceTarget = codingAgentMeta?.target ?? `sandbox`
+      if (!sourceWorkspace) {
+        setForkError(`Cannot fork: source workspace unknown`)
+        return
+      }
+      const args: Record<string, unknown> = {
+        kind: pickedKind,
+        workspaceType: sourceWorkspace.type,
+        target: sourceTarget,
+        fromAgentId: entityUrl,
+      }
+      if (sourceWorkspace.type === `bindMount`) {
+        args.workspaceHostPath = sourceWorkspace.hostPath
+      } else if (sourceWorkspace.name) {
+        args.workspaceName = sourceWorkspace.name
+      }
+      const newName = nanoid(10)
+      setForkError(null)
+      setForking(true)
+      const tx = spawnEntity({
+        type: `coding-agent`,
+        name: newName,
+        args,
+      })
+      tx.isPersisted.promise
+        .then(() => {
+          navigate({
+            to: `/entity/$`,
+            params: { _splat: `coding-agent/${newName}` },
+          })
+        })
+        .catch((err: Error) => {
+          setForkError(err.message)
+        })
+        .finally(() => {
+          setForking(false)
+        })
+    },
+    [codingAgentMeta, entityUrl, forkEntity, forking, navigate, spawnEntity]
+  )
+
   if (!selectedEntity) {
     return (
       <Flex align="center" justify="center" flexGrow="1">
@@ -148,6 +222,11 @@ function EntityPage(): React.ReactElement {
         onKill={handleKill}
         killError={killError}
         onFork={forkEntity && !selectedEntity.parent ? handleFork : undefined}
+        onForkToKind={
+          isCodingAgent && !selectedEntity.parent && (forkEntity || spawnEntity)
+            ? handleForkToKind
+            : undefined
+        }
         forkError={forkError}
         forking={forking}
         stateExplorerOpen={stateExplorerOpen}
@@ -159,7 +238,7 @@ function EntityPage(): React.ReactElement {
         codingAgentWorkspaceSpec={
           isCodingAgent
             ? (codingAgentHook.meta?.workspaceSpec as
-                | { type: `volume` | `bindMount` }
+                | CodingAgentWorkspaceSpec
                 | undefined)
             : undefined
         }
