@@ -21,3 +21,9 @@ export const convertTargetMessageSchema = z.object({
   to: z.enum([`sandbox`, `host`]),
 })
 export type ConvertTargetMessage = z.infer<typeof convertTargetMessageSchema>
+
+export const convertKindMessageSchema = z.object({
+  kind: z.enum([`claude`, `codex`]),
+  model: z.string().optional(),
+})
+export type ConvertKindMessage = z.infer<typeof convertKindMessageSchema>
