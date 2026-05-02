@@ -5,6 +5,12 @@ import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
 type WorkspaceMode = `volume` | `bindMount`
 type Target = `sandbox` | `host`
 type Kind = `claude` | `codex`
+type ForkWorkspaceMode = `` | `share` | `clone` | `fresh`
+
+export interface ForkSourceOption {
+  url: string
+  kind: Kind
+}
 
 interface CodingAgentSpawnDialogProps {
   open: boolean
@@ -13,12 +19,14 @@ interface CodingAgentSpawnDialogProps {
     args: Record<string, unknown>,
     initialMessage?: { text: string }
   ) => void
+  availableCodingAgents?: ReadonlyArray<ForkSourceOption>
 }
 
 export function CodingAgentSpawnDialog({
   open,
   onOpenChange,
   onSpawn,
+  availableCodingAgents = [],
 }: CodingAgentSpawnDialogProps): React.ReactElement {
   const [kind, setKind] = useState<Kind>(`claude`)
   const [target, setTarget] = useState<Target>(`sandbox`)
@@ -29,11 +37,20 @@ export function CodingAgentSpawnDialog({
   const [initialPrompt, setInitialPrompt] = useState(``)
   const [idleTimeoutSec, setIdleTimeoutSec] = useState(``)
   const [keepWarm, setKeepWarm] = useState(false)
+  const [forkEnabled, setForkEnabled] = useState(false)
+  const [forkSourceUrl, setForkSourceUrl] = useState(``)
+  const [forkWorkspaceMode, setForkWorkspaceMode] =
+    useState<ForkWorkspaceMode>(``)
 
   const canSubmit = useMemo(() => {
-    if (workspaceMode === `bindMount`) return hostPath.trim().length > 0
+    if (workspaceMode === `bindMount` && hostPath.trim().length === 0) {
+      return false
+    }
+    if (forkEnabled && !forkSourceUrl) {
+      return false
+    }
     return true
-  }, [workspaceMode, hostPath])
+  }, [workspaceMode, hostPath, forkEnabled, forkSourceUrl])
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -60,6 +77,12 @@ export function CodingAgentSpawnDialog({
       if (keepWarm) {
         args.keepWarm = true
       }
+      if (forkEnabled && forkSourceUrl) {
+        args.fromAgentId = forkSourceUrl
+        if (forkWorkspaceMode) {
+          args.fromWorkspaceMode = forkWorkspaceMode
+        }
+      }
       onSpawn(
         args,
         initialPrompt.trim() ? { text: initialPrompt.trim() } : undefined
@@ -76,6 +99,9 @@ export function CodingAgentSpawnDialog({
       initialPrompt,
       idleTimeoutSec,
       keepWarm,
+      forkEnabled,
+      forkSourceUrl,
+      forkWorkspaceMode,
       onSpawn,
     ]
   )
@@ -303,6 +329,98 @@ export function CodingAgentSpawnDialog({
                   (disable idle timer)
                 </Text>
               </label>
+            </Flex>
+
+            <Flex direction="column" gap="2">
+              <Flex align="center" gap="2">
+                <input
+                  id="coding-agent-fork-toggle"
+                  type="checkbox"
+                  checked={forkEnabled}
+                  onChange={(e) => {
+                    setForkEnabled(e.target.checked)
+                    if (!e.target.checked) {
+                      setForkSourceUrl(``)
+                      setForkWorkspaceMode(``)
+                    }
+                  }}
+                  data-testid="fork-toggle"
+                />
+                <label
+                  htmlFor="coding-agent-fork-toggle"
+                  style={{
+                    fontSize: `var(--font-size-2)`,
+                    fontWeight: 500,
+                    cursor: `pointer`,
+                  }}
+                >
+                  Fork from existing agent{` `}
+                  <Text size="1" color="gray">
+                    (inherit transcript from another coding-agent)
+                  </Text>
+                </label>
+              </Flex>
+
+              {forkEnabled && (
+                <>
+                  <Flex direction="column" gap="1">
+                    <Text size="2" weight="medium">
+                      Source agent{` `}
+                      <Text size="1" color="red">
+                        *
+                      </Text>
+                    </Text>
+                    <select
+                      style={inputStyle}
+                      value={forkSourceUrl}
+                      onChange={(e) => setForkSourceUrl(e.target.value)}
+                      required
+                      data-testid="fork-source-select"
+                    >
+                      <option value="">— pick a coding agent —</option>
+                      {availableCodingAgents.map((a) => (
+                        <option key={a.url} value={a.url}>
+                          {a.url} ({a.kind})
+                        </option>
+                      ))}
+                    </select>
+                    {availableCodingAgents.length === 0 && (
+                      <Text size="1" color="gray">
+                        No coding agents available to fork from.
+                      </Text>
+                    )}
+                    {forkEnabled && !forkSourceUrl && (
+                      <Text size="1" color="red" role="alert">
+                        Pick a source agent to fork from.
+                      </Text>
+                    )}
+                  </Flex>
+
+                  <Flex direction="column" gap="1">
+                    <Text size="2" weight="medium">
+                      Workspace mode{` `}
+                      <Text size="1" color="gray">
+                        (optional — provider default when blank)
+                      </Text>
+                    </Text>
+                    <select
+                      style={inputStyle}
+                      value={forkWorkspaceMode}
+                      onChange={(e) =>
+                        setForkWorkspaceMode(
+                          e.target.value as ForkWorkspaceMode
+                        )
+                      }
+                      data-testid="fork-workspace-mode-select"
+                    >
+                      <option value="">(default)</option>
+                      <option value="share">share</option>
+                      <option value="clone">clone</option>
+                      <option value="fresh">fresh</option>
+                    </select>
+                  </Flex>
+                </>
+              )}
             </Flex>
 
             <Flex justify="end" gap="2" mt="2">

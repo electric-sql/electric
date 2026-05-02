@@ -388,6 +388,13 @@ export function Sidebar({
       <CodingAgentSpawnDialog
         open={codingAgentDialogOpen}
         onOpenChange={setCodingAgentDialogOpen}
+        availableCodingAgents={entities
+          .filter((e) => e.type === `coding-agent` && e.status !== `stopped`)
+          .map((e) => ({
+            url: e.url,
+            kind:
+              (e.spawn_args.kind as `claude` | `codex` | undefined) ?? `claude`,
+          }))}
         onSpawn={(args, initialMessage) => {
           doSpawn(`coding-agent`, args, initialMessage)
           setCodingAgentDialogOpen(false)
