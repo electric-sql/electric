@@ -75,6 +75,7 @@
   "sideEffects": [
     "./src/agents/claude.ts",
     "./src/agents/codex.ts",
+    "./src/agents/opencode.ts",
     "./src/index.ts"
   ],
   "license": "Apache-2.0"
