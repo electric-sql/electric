@@ -49,6 +49,8 @@
 
 ## Task 1: Live Sprites API smoke (recon-as-task)
 
+> **STATUS: DONE (2026-05-02, commit `9495130d6`).** Smoke probe ran with a real `SPRITES_TOKEN`; recon-corrected three deviations from the original docs reading. The corrections are reflected in the spec and folded into Tasks 3/4/6 below. The bash snippets in the steps below remain useful for re-running the probe; their URLs have been updated to include the `/v1/` prefix.
+
 **Why first.** The Sprites API is v0.0.1-rc30. Recon was based on docs; behavior may drift. A 30-min spike with a real `SPRITES_TOKEN` confirms the spec's assumptions before we write code that depends on them.
 
 **Files:**
@@ -65,7 +67,7 @@
 
 ```bash
 # Create
-RESP=$(curl -sX POST https://api.sprites.dev/sprites \
+RESP=$(curl -sX POST https://api.sprites.dev/v1/sprites \
   -H "Authorization: Bearer $SPRITES_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"smoke-coding-agents-'$(date +%s | tail -c 6)'"}')
@@ -74,22 +76,22 @@ SID=$(echo "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get
 echo "sprite id: $SID"
 
 # Get
-curl -sX GET "https://api.sprites.dev/sprites/$SID" -H "Authorization: Bearer $SPRITES_TOKEN" | python3 -m json.tool | head
+curl -sX GET "https://api.sprites.dev/v1/sprites/$SID" -H "Authorization: Bearer $SPRITES_TOKEN" | python3 -m json.tool | head
 
 # List with name prefix
-curl -sX GET "https://api.sprites.dev/sprites?name_prefix=smoke-" -H "Authorization: Bearer $SPRITES_TOKEN" | python3 -m json.tool | head -20
+curl -sX GET "https://api.sprites.dev/v1/sprites?name_prefix=smoke-" -H "Authorization: Bearer $SPRITES_TOKEN" | python3 -m json.tool | head -20
 
 # Filesystem write
-curl -sX PUT "https://api.sprites.dev/sprites/$SID/fs/etc/test.txt" \
+curl -sX PUT "https://api.sprites.dev/v1/sprites/$SID/fs/etc/test.txt" \
   -H "Authorization: Bearer $SPRITES_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content":"hello from smoke","mode":420}'
 
 # Filesystem read
-curl -sX GET "https://api.sprites.dev/sprites/$SID/fs/etc/test.txt" -H "Authorization: Bearer $SPRITES_TOKEN"
+curl -sX GET "https://api.sprites.dev/v1/sprites/$SID/fs/etc/test.txt" -H "Authorization: Bearer $SPRITES_TOKEN"
 
 # Cleanup
-curl -sX DELETE "https://api.sprites.dev/sprites/$SID" -H "Authorization: Bearer $SPRITES_TOKEN"
+curl -sX DELETE "https://api.sprites.dev/v1/sprites/$SID" -H "Authorization: Bearer $SPRITES_TOKEN"
 ```
 
 - [ ] **Step 3: Probe WebSocket exec**
@@ -99,7 +101,7 @@ Use `wscat` (`npm i -g wscat`) or a small node script:
 ```js
 // /tmp/sprites-ws-smoke.mjs
 const ws = new WebSocket(
-  `wss://api.sprites.dev/sprites/${process.env.SID}/exec`,
+  `wss://api.sprites.dev/v1/sprites/${process.env.SID}/exec`,
   { headers: { Authorization: `Bearer ${process.env.SPRITES_TOKEN}` } }
 )
 ws.onopen = () => {
@@ -290,7 +292,7 @@ describe(`SpritesApiClient`, () => {
     })
     expect(r.id).toBe(`spr_abc`)
     expect(fetchMock).toHaveBeenCalledWith(
-      `https://api.sprites.dev/sprites`,
+      `https://api.sprites.dev/v1/sprites`,
       expect.objectContaining({
         method: `POST`,
         headers: expect.objectContaining({
@@ -302,14 +304,14 @@ describe(`SpritesApiClient`, () => {
     )
   })
 
-  it(`GET /sprites/{id}`, async () => {
+  it(`GET /sprites/{name}`, async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ id: `spr_abc`, status: `running` }), {
         status: 200,
       })
     )
     const c = new SpritesApiClient({ token: `tok_xyz` })
-    const r = await c.getSprite(`spr_abc`)
+    const r = await c.getSprite(`coding-agent-x`)
     expect(r.status).toBe(`running`)
   })
 
@@ -329,25 +331,12 @@ describe(`SpritesApiClient`, () => {
     expect(url).toContain(`name_prefix=coding-agent-`)
   })
 
-  it(`PUT /sprites/{id}/fs/{path} writes content + mode`, async () => {
+  it(`DELETE /sprites/{name}`, async () => {
     fetchMock.mockResolvedValue(new Response(``, { status: 204 }))
     const c = new SpritesApiClient({ token: `tok_xyz` })
-    await c.writeFile(`spr_abc`, `/work/hello.txt`, `hello`, 0o600)
+    await c.deleteSprite(`coding-agent-x`)
     expect(fetchMock).toHaveBeenCalledWith(
-      `https://api.sprites.dev/sprites/spr_abc/fs/work/hello.txt`,
-      expect.objectContaining({
-        method: `PUT`,
-        body: JSON.stringify({ content: `hello`, mode: 0o600 }),
-      })
-    )
-  })
-
-  it(`DELETE /sprites/{id}`, async () => {
-    fetchMock.mockResolvedValue(new Response(``, { status: 204 }))
-    const c = new SpritesApiClient({ token: `tok_xyz` })
-    await c.deleteSprite(`spr_abc`)
-    expect(fetchMock).toHaveBeenCalledWith(
-      `https://api.sprites.dev/sprites/spr_abc`,
+      `https://api.sprites.dev/v1/sprites/coding-agent-x`,
       expect.objectContaining({ method: `DELETE` })
     )
   })
@@ -389,6 +378,7 @@ export interface SpriteSummary {
   id: string
   name: string
   status?: string
+  url?: string // per-sprite URL e.g. https://<name>-<suffix>.sprites.app — used for WebSocket exec
 }
 
 export interface ListSpritesOptions {
@@ -401,43 +391,30 @@ export class SpritesApiClient {
 
   constructor(opts: SpritesApiClientOptions) {
     this.token = opts.token
-    this.baseUrl = opts.baseUrl ?? `https://api.sprites.dev`
+    this.baseUrl = opts.baseUrl ?? `https://api.sprites.dev/v1`
   }
 
   async createSprite(req: CreateSpriteRequest): Promise<SpriteSummary> {
     return await this.request(`POST`, `/sprites`, req)
   }
 
-  async getSprite(id: string): Promise<SpriteSummary> {
-    return await this.request(`GET`, `/sprites/${encodeURIComponent(id)}`)
+  async getSprite(name: string): Promise<SpriteSummary> {
+    return await this.request(`GET`, `/sprites/${encodeURIComponent(name)}`)
   }
 
-  async listSprites(
-    opts: ListSpritesOptions = {}
-  ): Promise<{ sprites: Array<SpriteSummary> }> {
+  async listSprites(opts: ListSpritesOptions = {}): Promise<{
+    sprites: Array<SpriteSummary>
+    has_more?: boolean
+    next_continuation_token?: string | null
+  }> {
     const qs = opts.namePrefix
       ? `?name_prefix=${encodeURIComponent(opts.namePrefix)}`
       : ``
     return await this.request(`GET`, `/sprites${qs}`)
   }
 
-  async writeFile(
-    id: string,
-    destPath: string,
-    content: string,
-    mode = 0o600
-  ): Promise<void> {
-    // destPath: leading slash dropped before joining into the URL.
-    const trimmed = destPath.replace(/^\//, ``)
-    await this.request(
-      `PUT`,
-      `/sprites/${encodeURIComponent(id)}/fs/${trimmed}`,
-      { content, mode }
-    )
-  }
-
-  async deleteSprite(id: string): Promise<void> {
-    await this.request(`DELETE`, `/sprites/${encodeURIComponent(id)}`)
+  async deleteSprite(name: string): Promise<void> {
+    await this.request(`DELETE`, `/sprites/${encodeURIComponent(name)}`)
   }
 
   private async request<T = any>(
@@ -480,7 +457,7 @@ export class SpritesApiClient {
 pnpm -C packages/coding-agents test test/unit/fly-sprites-client.test.ts
 ```
 
-Expected: 6 tests PASS.
+Expected: 5 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -490,10 +467,13 @@ git add packages/coding-agents/src/providers/fly-sprites/api-client.ts \
 git commit -m "feat(coding-agents): SpritesApiClient — Bearer-auth REST
 
 Bearer token in Authorization header. Methods: createSprite,
-getSprite, listSprites (with name_prefix filter), writeFile,
-deleteSprite. Throws on non-2xx with status + body for debugging.
-204 returns undefined. JSON content-type auto-detected on response.
-Six unit tests with mocked fetch."
+getSprite, listSprites (with name_prefix filter), deleteSprite.
+writeFile is intentionally not implemented — live recon found no
+public filesystem REST endpoint, so file writes are routed through
+exec + cat in Task 6. Throws on non-2xx with status + body for
+debugging. 204 returns undefined. JSON content-type auto-detected
+on response. Five unit tests with mocked fetch (test count dropped
+from 6 to 5 due to writeFile removal)."
 ```
 
 ---
@@ -531,6 +511,9 @@ class MockWebSocket extends EventEmitter {
   emitFrame(data: any) {
     this.emit(`message`, { data: JSON.stringify(data) })
   }
+  emitText(data: string) {
+    this.emit(`message`, { data })
+  }
 }
 
 describe(`createExecHandle`, () => {
@@ -540,13 +523,14 @@ describe(`createExecHandle`, () => {
   })
 
   it(`drains stdout frames as async-iterable lines`, async () => {
-    // The exec WebSocket emits frames like { stream: 'stdout', data: '...' }
-    // (verbatim shape per recon — adjust if Task 1 finds otherwise).
+    // Per live recon: stdout is RAW TEXT WebSocket messages (NOT JSON-wrapped).
+    // stderr/lifecycle uses {type:'debug', msg:'...'}, exit uses snake_case
+    // {type:'exit', exit_code:N}.
     setTimeout(() => {
       ws.emitOpen()
-      ws.emitFrame({ stream: `stdout`, data: `hello\n` })
-      ws.emitFrame({ stream: `stdout`, data: `world\n` })
-      ws.emitFrame({ type: `exit`, exitCode: 0 })
+      ws.emitText(`hello\n`)
+      ws.emitText(`world\n`)
+      ws.emitFrame({ type: `exit`, exit_code: 0 })
       ws.close()
     }, 5)
 
@@ -566,10 +550,10 @@ describe(`createExecHandle`, () => {
   it(`drains stderr separately from stdout`, async () => {
     setTimeout(() => {
       ws.emitOpen()
-      ws.emitFrame({ stream: `stdout`, data: `out1\n` })
-      ws.emitFrame({ stream: `stderr`, data: `err1\n` })
-      ws.emitFrame({ stream: `stdout`, data: `out2\n` })
-      ws.emitFrame({ type: `exit`, exitCode: 1 })
+      ws.emitText(`out1\n`)
+      ws.emitFrame({ type: `debug`, msg: `err1` })
+      ws.emitText(`out2\n`)
+      ws.emitFrame({ type: `exit`, exit_code: 1 })
       ws.close()
     }, 5)
 
@@ -597,7 +581,7 @@ describe(`createExecHandle`, () => {
   it(`supports stdin via writeStdin / closeStdin when stdin: 'pipe'`, async () => {
     setTimeout(() => {
       ws.emitOpen()
-      ws.emitFrame({ type: `exit`, exitCode: 0 })
+      ws.emitFrame({ type: `exit`, exit_code: 0 })
       ws.close()
     }, 5)
 
@@ -620,7 +604,7 @@ describe(`createExecHandle`, () => {
   it(`emits start frame with cmd argv on open`, async () => {
     setTimeout(() => {
       ws.emitOpen()
-      ws.emitFrame({ type: `exit`, exitCode: 0 })
+      ws.emitFrame({ type: `exit`, exit_code: 0 })
       ws.close()
     }, 5)
 
@@ -767,19 +751,25 @@ export function createExecHandle(args: CreateExecHandleArgs): ExecHandle {
   })
 
   args.ws.addEventListener(`message`, (event) => {
+    const data = typeof event.data === `string` ? event.data : ``
     let frame: any
     try {
-      frame = JSON.parse(typeof event.data === `string` ? event.data : ``)
+      frame = JSON.parse(data)
     } catch {
+      // Raw text message → stdout. Sprites streams stdout as plain text
+      // WebSocket messages, not JSON frames.
+      feedFrameData(stdoutQ, data)
       return
     }
-    if (frame.stream === `stdout` && typeof frame.data === `string`) {
-      feedFrameData(stdoutQ, frame.data)
-    } else if (frame.stream === `stderr` && typeof frame.data === `string`) {
-      feedFrameData(stderrQ, frame.data)
-    } else if (frame.type === `exit` && typeof frame.exitCode === `number`) {
-      exitInfo = { exitCode: frame.exitCode }
+    if (frame.type === `debug` && typeof frame.msg === `string`) {
+      // Sprites' stderr / lifecycle log channel.
+      feedFrameData(stderrQ, frame.msg)
+    } else if (frame.type === `exit` && typeof frame.exit_code === `number`) {
+      exitInfo = { exitCode: frame.exit_code }
+    } else if (frame.type === `session_info`) {
+      // No-op: session metadata; logged elsewhere if desired.
     }
+    // Unknown frame types ignored.
   })
 
   args.ws.addEventListener(`close`, () => {
@@ -837,12 +827,14 @@ git add packages/coding-agents/src/providers/fly-sprites/exec-adapter.ts \
         packages/coding-agents/test/unit/fly-sprites-exec.test.ts
 git commit -m "feat(coding-agents): WebSocket → ExecHandle adapter for sprites
 
-Translates Sprites' exec WebSocket frames ({stream:'stdout'|'stderr',
-data:'...'} + {type:'exit',exitCode:N}) into the existing ExecHandle
+Translates Sprites' exec WebSocket frames into the existing ExecHandle
 contract (async-iterable stdout/stderr lines, exit promise, kill).
-Stdin pipe routes via {type:'stdin', data:'...'} frames.
-
-Frame shape may differ from recon — Task 1's smoke test refines."
+Per live recon (Task 1):
+- stdout = raw text WebSocket messages (NOT JSON-wrapped).
+- stderr / lifecycle = {type:'debug', msg:'...'} JSON frames.
+- exit = {type:'exit', exit_code:N} (snake_case).
+- session_info frames are no-ops.
+Stdin pipe routes via {type:'stdin', data:'...'} frames."
 ```
 
 ---
@@ -1030,7 +1022,9 @@ describe(`FlySpriteProvider`, () => {
       [string, RequestInit]
     >
     const deleteCall = calls.find((c) => c[1].method === `DELETE`)
-    expect(deleteCall?.[0]).toBe(`https://api.sprites.dev/sprites/spr_x`)
+    expect(deleteCall?.[0]).toBe(
+      `https://api.sprites.dev/v1/sprites/coding-agent-foo`
+    )
   })
 
   it(`status() returns 'unknown' when sprite not found`, async () => {
@@ -1118,8 +1112,14 @@ export class FlySpriteProvider implements SandboxProvider {
   readonly name = `fly-sprites`
   private readonly client: SpritesApiClient
   private readonly idleTimeoutSecs: number
-  // Cache agentId → spriteId resolution between calls within one process.
-  private readonly agentToSprite = new Map<string, string>()
+  // Cache agentId → { sprite name, per-sprite URL } resolution between calls
+  // within one process. Sprite NAME (not id) is the API path parameter; the
+  // per-sprite URL (e.g. https://<name>-<suffix>.sprites.app) is what the
+  // exec WebSocket connects to (NOT api.sprites.dev).
+  private readonly agentToSprite = new Map<
+    string,
+    { name: string; url: string }
+  >()
 
   constructor(opts: FlySpriteProviderOptions = {}) {
     const token = opts.token ?? process.env.SPRITES_TOKEN
@@ -1139,28 +1139,40 @@ export class FlySpriteProvider implements SandboxProvider {
       )
     }
     const name = spriteName(spec.agentId)
-    let spriteId = await this.findExisting(name)
-    if (!spriteId) {
+    let spriteName_ = await this.findExisting(name)
+    let spriteUrl: string
+    if (!spriteName_) {
       const created = await this.client.createSprite({
         name,
         idleTimeoutSecs: this.idleTimeoutSecs,
       })
-      spriteId = created.id
+      spriteName_ = created.name
+      spriteUrl = created.url ?? ``
+    } else {
+      // Find-existing returned only the name; fetch full record to get url.
+      const full = await this.client.getSprite(spriteName_)
+      spriteUrl = full.url ?? ``
     }
-    this.agentToSprite.set(spec.agentId, spriteId)
+    if (!spriteUrl) {
+      throw new Error(
+        `FlySpriteProvider: sprite ${spriteName_} has no per-sprite url; cannot open exec WebSocket`
+      )
+    }
+    this.agentToSprite.set(spec.agentId, { name: spriteName_, url: spriteUrl })
 
     // Run bootstrap (idempotent — marker check inside the script).
-    await this.runBootstrap(spriteId)
+    await this.runBootstrap(spriteUrl)
 
     // Write spec.env to /run/agent.env so subsequent execs source it.
+    // Routed through exec + cat (no public REST filesystem endpoint).
     if (Object.keys(spec.env).length > 0) {
       const envBody = Object.entries(spec.env)
         .map(([k, v]) => `${k}=${shellEscape(v)}`)
         .join(`\n`)
-      await this.client.writeFile(spriteId, `/run/agent.env`, envBody, 0o600)
+      await this.writeFileViaExec(spriteUrl, `/run/agent.env`, envBody, 0o600)
     }
 
-    return this.makeInstance(spriteId, spec)
+    return this.makeInstance(spriteName_, spriteUrl, spec)
   }
 
   async exec(_req: ExecRequest): Promise<ExecHandle> {
@@ -1173,29 +1185,32 @@ export class FlySpriteProvider implements SandboxProvider {
 
   async stop(_instanceId: string): Promise<void> {
     // Sprites auto-sleep — explicit stop is a no-op. v1.x can add cordon
-    // via PUT /sprites/{id} if explicit force-sleep is needed.
+    // via PUT /sprites/{name} if explicit force-sleep is needed.
   }
 
   async destroy(agentId: string): Promise<void> {
     const name = spriteName(agentId)
-    const spriteId =
-      this.agentToSprite.get(agentId) ?? (await this.findExisting(name))
-    if (!spriteId) return
+    const cached = this.agentToSprite.get(agentId)
+    const spriteName_ = cached?.name ?? (await this.findExisting(name))
+    if (!spriteName_) return
     try {
-      await this.client.deleteSprite(spriteId)
+      await this.client.deleteSprite(spriteName_)
     } catch (err) {
-      log.warn({ err, agentId, spriteId }, `sprites destroy failed`)
+      log.warn(
+        { err, agentId, spriteName: spriteName_ },
+        `sprites destroy failed`
+      )
     }
     this.agentToSprite.delete(agentId)
   }
 
   async status(agentId: string): Promise<`running` | `stopped` | `unknown`> {
     const name = spriteName(agentId)
-    const spriteId =
-      this.agentToSprite.get(agentId) ?? (await this.findExisting(name))
-    if (!spriteId) return `unknown`
+    const cached = this.agentToSprite.get(agentId)
+    const spriteName_ = cached?.name ?? (await this.findExisting(name))
+    if (!spriteName_) return `unknown`
     try {
-      const sprite = await this.client.getSprite(spriteId)
+      const sprite = await this.client.getSprite(spriteName_)
       // Treat any non-deleted sprite as 'running' (auto-slept sprites wake).
       return sprite.status === `destroyed` ? `stopped` : `running`
     } catch {
@@ -1207,7 +1222,14 @@ export class FlySpriteProvider implements SandboxProvider {
     try {
       const r = await this.client.listSprites({ namePrefix: NAME_PREFIX })
       return r.sprites.map((s) => ({
-        agentId: `/${s.name.replace(/-/g, `/`)}`, // best-effort reverse of spriteName()
+        // Best-effort reconstruction of agentId from sprite name. The runtime
+        // spawn pattern is one-segment ('/coding-agent/<id>'), so we strip
+        // NAME_PREFIX and treat the rest as the trailing segment. Agent IDs
+        // with embedded slashes deeper than that won't roundtrip cleanly —
+        // acceptable for v1; revisit if we add nested agent paths.
+        agentId: s.name.startsWith(NAME_PREFIX)
+          ? `/coding-agent/${s.name.slice(NAME_PREFIX.length)}`
+          : `/${s.name}`, // best-effort fallback for sprites not created via this provider
         instanceId: s.id,
         status:
           s.status === `destroyed`
@@ -1226,12 +1248,12 @@ export class FlySpriteProvider implements SandboxProvider {
   private async findExisting(name: string): Promise<string | null> {
     const r = await this.client.listSprites({ namePrefix: name })
     const exact = r.sprites.find((s) => s.name === name)
-    return exact?.id ?? null
+    return exact?.name ?? null
   }
 
-  private async runBootstrap(spriteId: string): Promise<void> {
+  private async runBootstrap(spriteUrl: string): Promise<void> {
     // Run BOOTSTRAP_SCRIPT via /bin/sh. Drain to completion.
-    const ws = this.openExecWebSocket(spriteId)
+    const ws = this.openExecWebSocket(spriteUrl)
     const handle = createExecHandle({
       ws,
       cmd: [`/bin/sh`, `-c`, BOOTSTRAP_SCRIPT],
@@ -1246,31 +1268,66 @@ export class FlySpriteProvider implements SandboxProvider {
     const exitInfo = await exit
     if (exitInfo.exitCode !== 0) {
       throw new Error(
-        `sprites bootstrap failed: exit ${exitInfo.exitCode} on sprite ${spriteId}`
+        `sprites bootstrap failed: exit ${exitInfo.exitCode} on sprite ${spriteUrl}`
       )
     }
   }
 
-  private openExecWebSocket(spriteId: string): WebSocket {
-    const url = `${this.client.baseUrl.replace(/^http/, `ws`)}/sprites/${encodeURIComponent(
-      spriteId
-    )}/exec`
-    return new WebSocket(url, {
-      // Headers passed via subprotocol/options; if global WebSocket doesn't
-      // support headers, switch to a `ws` lib instance — this needs Task 1
-      // smoke verification.
+  private openExecWebSocket(spriteUrl: string): WebSocket {
+    // Convert https://<name>-<suffix>.sprites.app to wss://<name>-<suffix>.sprites.app/exec
+    // The exec WebSocket lives on the per-sprite URL, NOT api.sprites.dev.
+    const wsUrl = spriteUrl.replace(/^https?:/, `wss:`) + `/exec`
+    return new WebSocket(wsUrl, {
       headers: { authorization: `Bearer ${this.client.tokenForExec()}` },
     } as any)
   }
 
-  private makeInstance(spriteId: string, spec: SandboxSpec): SandboxInstance {
+  private async writeFileViaExec(
+    spriteUrl: string,
+    destPath: string,
+    content: string,
+    mode = 0o600
+  ): Promise<void> {
+    const ws = this.openExecWebSocket(spriteUrl)
+    const handle = createExecHandle({
+      ws,
+      cmd: [
+        `sh`,
+        `-c`,
+        `cat > ${shellEscape(destPath)} && chmod ${mode.toString(8)} ${shellEscape(destPath)}`,
+      ],
+      stdin: `pipe`,
+    })
+    await handle.writeStdin!(content)
+    await handle.closeStdin!()
+    const drain = async (s: AsyncIterable<string>) => {
+      for await (const _ of s) {
+        // discard
+      }
+    }
+    const exit = handle.wait()
+    await Promise.all([drain(handle.stdout), drain(handle.stderr), exit])
+    const exitInfo = await exit
+    if (exitInfo.exitCode !== 0) {
+      throw new Error(
+        `writeFileViaExec failed: exit ${exitInfo.exitCode} writing ${destPath}`
+      )
+    }
+  }
+
+  private makeInstance(
+    name: string,
+    url: string,
+    spec: SandboxSpec
+  ): SandboxInstance {
+    const spriteUrl = url
     return {
-      instanceId: spriteId,
+      instanceId: name,
       agentId: spec.agentId,
       workspaceMount: `/work`,
       homeDir: `/root`,
       exec: async (req) => {
-        const ws = this.openExecWebSocket(spriteId)
+        const ws = this.openExecWebSocket(spriteUrl)
         return createExecHandle({
           ws,
           cmd: req.cmd,
@@ -1280,8 +1337,8 @@ export class FlySpriteProvider implements SandboxProvider {
         })
       },
       copyTo: async (args) => {
-        await this.client.writeFile(
-          spriteId,
+        await this.writeFileViaExec(
+          spriteUrl,
           args.destPath,
           args.content,
           args.mode ?? 0o600
@@ -1299,25 +1356,21 @@ function shellEscape(v: string): string {
 // Expose tokenForExec on SpritesApiClient for the WS auth header use-site.
 declare module './api-client' {
   interface SpritesApiClient {
-    baseUrl: string
     tokenForExec(): string
   }
 }
 ```
 
-In `packages/coding-agents/src/providers/fly-sprites/api-client.ts`, expose the `baseUrl` and add a `tokenForExec()` accessor:
+In `packages/coding-agents/src/providers/fly-sprites/api-client.ts`, add a `tokenForExec()` accessor:
 
 ```ts
 // At the top of the class:
-public get baseUrl(): string {
-  return this._baseUrl
-}
 public tokenForExec(): string {
   return this._token
 }
 ```
 
-Rename the private `token` and `baseUrl` to `_token` and `_baseUrl` to avoid name collision with the new public accessors.
+Rename the private `token` to `_token` to avoid name collision with the new public accessor. (`baseUrl` no longer needs to be exposed — the exec WebSocket URL comes from each sprite's per-sprite `url` field, not from `api.sprites.dev`.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1325,7 +1378,7 @@ Rename the private `token` and `baseUrl` to `_token` and `_baseUrl` to avoid nam
 pnpm -C packages/coding-agents test test/unit/fly-sprites.test.ts test/unit/fly-sprites-client.test.ts
 ```
 
-Expected: PASS — 7 + 6 = 13 tests.
+Expected: PASS — 7 + 5 = 12 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1336,15 +1389,22 @@ git add packages/coding-agents/src/providers/fly-sprites/index.ts \
 git commit -m "feat(coding-agents): FlySpriteProvider — start/stop/destroy/status/recover
 
 Implements every required SandboxProvider method against the Sprites
-REST + WebSocket API. start() resolves agentId → spriteId via name-prefix
-list (idempotent), creates if missing (~1-2s cold-boot), runs the
-bootstrap script via exec WebSocket, writes spec.env to /run/agent.env.
+REST + WebSocket API. start() resolves agentId → sprite name via
+name-prefix list (idempotent), creates if missing (~1-2s cold-boot),
+runs the bootstrap script via exec WebSocket on the per-sprite URL,
+writes spec.env to /run/agent.env via exec + cat (no public REST
+filesystem endpoint).
 
-stop() is a no-op (sprites auto-sleep). destroy() DELETE /sprites/{id}.
-status() maps the API's sprite-state to {running,stopped,unknown}.
-recover() lists with name_prefix='coding-agent-' for crash recovery.
+Cache stores {name, url} per agentId; the per-sprite URL
+(https://<name>-<suffix>.sprites.app) is what the exec WebSocket
+connects to, NOT api.sprites.dev. stop() is a no-op (sprites
+auto-sleep). destroy() DELETE /v1/sprites/{name}. status() maps
+the API's sprite-state to {running,stopped,unknown}. recover()
+lists with name_prefix='coding-agent-' and reconstructs agentId
+by stripping the prefix (one-segment runtime pattern).
 
 Workspace bindMount rejected at start() — sprites have intrinsic FS.
+copyTo + env-file writes share writeFileViaExec helper (cat > path).
 cloneWorkspace deliberately NOT implemented (deferred to v1.5)."
 ```
 
