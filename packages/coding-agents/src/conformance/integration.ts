@@ -340,6 +340,37 @@ export function runCodingAgentsIntegrationConformance(
           await provider.destroy(agentIdA).catch(() => undefined)
           await provider.destroy(agentIdB).catch(() => undefined)
         }, 360_000)
+
+        it(`L2.7 convert mid-conversation switches kind`, async () => {
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+          const agentId = `/test/coding-agent/${kind}-l2-7-${Date.now().toString(36)}`
+          const { ctx, state } = makeFakeCtx(agentId, buildArgs(kind, ws))
+
+          await handler(ctx, { type: `message_received` })
+          pushInbox(state, `i1`, `prompt`, { text: probe.prompt })
+          await handler(ctx, { type: `message_received` })
+
+          const beforeKind = (
+            state.sessionMeta.get(`current`) as SessionMetaRow
+          ).kind
+          // Pick the *other* kind for the conversion target.
+          const otherKind: CodingAgentKind =
+            beforeKind === `claude` ? `codex` : `claude`
+
+          pushInbox(state, `i2`, `convert-kind`, { kind: otherKind })
+          await handler(ctx, { type: `message_received` })
+
+          const afterMeta = state.sessionMeta.get(`current`) as SessionMetaRow
+          expect(afterMeta.kind).toBe(otherKind)
+          expect(afterMeta.nativeSessionId).toBeDefined()
+          const lifecycle = Array.from(state.lifecycle.rows.values()).map(
+            (l: any) => l.event
+          )
+          expect(lifecycle).toContain(`kind.converted`)
+
+          await provider.destroy(agentId).catch(() => undefined)
+        }, 180_000)
       })
     }
   })
