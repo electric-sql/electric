@@ -134,7 +134,7 @@ function EntityPage(): React.ReactElement {
 
   const codingAgentMeta = codingAgentHook.meta
   const handleForkToKind = useCallback(
-    (pickedKind: `claude` | `codex`) => {
+    (pickedKind: `claude` | `codex` | `opencode`) => {
       if (forking) return
       // Both same-kind and cross-kind forks go through the fromAgentId
       // path so the new agent inherits the source's denormalized event

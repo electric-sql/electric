@@ -63,7 +63,7 @@ export function EntityHeader({
   pinned: boolean
   onTogglePin: () => void
   onFork?: () => void
-  onForkToKind?: (kind: `claude` | `codex`) => void
+  onForkToKind?: (kind: `claude` | `codex` | `opencode`) => void
   onKill: () => void
   killError?: string | null
   forkError?: string | null
@@ -75,7 +75,7 @@ export function EntityHeader({
   codingAgentWorkspaceSpec?: CodingAgentWorkspaceSpec
   codingAgentStatus?: string
   codingAgentLastError?: string
-  codingAgentKind?: `claude` | `codex`
+  codingAgentKind?: `claude` | `codex` | `opencode`
 }): React.ReactElement {
   // For coding-agents, prefer the coding-agent-specific status (cold /
   // starting / idle / running / stopping / error / destroyed) over the
@@ -152,18 +152,34 @@ export function EntityHeader({
               </Button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Content>
-              {([`claude`, `codex`] as const).map((k) => (
-                <DropdownMenu.Item
-                  key={k}
-                  data-testid={`fork-to-${k}`}
-                  onSelect={() => onForkToKind(k)}
-                >
-                  <Flex align="center" gap="2">
-                    <GitFork size={14} />
-                    <Text size="2">Fork to {k}</Text>
-                  </Flex>
-                </DropdownMenu.Item>
-              ))}
+              {([`claude`, `codex`, `opencode`] as const).map((k) => {
+                const involvesOpencode =
+                  k === `opencode` || codingAgentKind === `opencode`
+                return (
+                  <DropdownMenu.Item
+                    key={k}
+                    data-testid={`fork-to-${k}`}
+                    disabled={involvesOpencode}
+                    onSelect={() => {
+                      if (involvesOpencode) return
+                      onForkToKind(k)
+                    }}
+                    title={
+                      involvesOpencode
+                        ? `Cross-kind support for opencode is deferred — see follow-up slice.`
+                        : undefined
+                    }
+                  >
+                    <Flex align="center" gap="2">
+                      <GitFork size={14} />
+                      <Text size="2">
+                        Fork to {k}
+                        {involvesOpencode ? ` (deferred)` : ``}
+                      </Text>
+                    </Flex>
+                  </DropdownMenu.Item>
+                )
+              })}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         ) : (
@@ -302,10 +318,8 @@ export function EntityHeader({
               })()}
             {codingAgentKind &&
               (() => {
-                const allKinds: ReadonlyArray<`claude` | `codex`> = [
-                  `claude`,
-                  `codex`,
-                ]
+                const allKinds: ReadonlyArray<`claude` | `codex` | `opencode`> =
+                  [`claude`, `codex`, `opencode`]
                 const others = allKinds.filter((k) => k !== codingAgentKind)
                 const inFlight =
                   codingAgentStatus === `running` ||
@@ -330,26 +344,39 @@ export function EntityHeader({
                       </Button>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content>
-                      {others.map((k) => (
-                        <DropdownMenu.Item
-                          key={k}
-                          onSelect={() => {
-                            void fetch(`${baseUrl}${entity.url}/send`, {
-                              method: `POST`,
-                              headers: {
-                                'content-type': `application/json`,
-                              },
-                              body: JSON.stringify({
-                                from: `user`,
-                                type: `convert-kind`,
-                                payload: { kind: k },
-                              }),
-                            })
-                          }}
-                        >
-                          Convert to {k}
-                        </DropdownMenu.Item>
-                      ))}
+                      {others.map((k) => {
+                        const involvesOpencode =
+                          k === `opencode` || codingAgentKind === `opencode`
+                        return (
+                          <DropdownMenu.Item
+                            key={k}
+                            data-testid={`convert-to-${k}`}
+                            disabled={involvesOpencode}
+                            onSelect={() => {
+                              if (involvesOpencode) return
+                              void fetch(`${baseUrl}${entity.url}/send`, {
+                                method: `POST`,
+                                headers: {
+                                  'content-type': `application/json`,
+                                },
+                                body: JSON.stringify({
+                                  from: `user`,
+                                  type: `convert-kind`,
+                                  payload: { kind: k },
+                                }),
+                              })
+                            }}
+                            title={
+                              involvesOpencode
+                                ? `Cross-kind support for opencode is deferred — see follow-up slice.`
+                                : `Convert this agent to ${k}`
+                            }
+                          >
+                            Convert to {k}
+                            {involvesOpencode ? ` (deferred)` : ``}
+                          </DropdownMenu.Item>
+                        )
+                      })}
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
                 )
