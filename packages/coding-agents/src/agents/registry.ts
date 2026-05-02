@@ -40,6 +40,19 @@ export interface CodingAgentAdapter {
     cwd: string
     sessionId: string
   }): ReadonlyArray<string>
+
+  /**
+   * Optional. If present, the handler runs this command AFTER copyTo
+   * has written the captured transcript to materialiseTargetPath.
+   * Used by adapters whose transcript isn't directly readable by the
+   * CLI (e.g. opencode stores in SQLite; the materialised JSON file
+   * has to be ingested via `opencode import <file>`).
+   */
+  postMaterialiseCommand?(opts: {
+    homeDir: string
+    cwd: string
+    sessionId: string
+  }): ReadonlyArray<string>
 }
 
 const adapters = new Map<CodingAgentKind, CodingAgentAdapter>()
