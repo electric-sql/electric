@@ -2886,3 +2886,33 @@ git push origin coding-agents-slice-a
 2. **Placeholder scan** — every code step has real code; no TBDs. ✓
 3. **Type consistency** — `FlySpriteProvider`, `SpritesApiClient`, `target: 'sprites'`, `BOOTSTRAP_SCRIPT`, `bootstrap.starting`/`.complete`/`.failed` all consistent across tasks. ✓
 4. **Build sequence** — Task 1 (recon) gates assumptions; Task 2 (schema) precedes provider; Tasks 3–6 build the provider bottom-up; Task 7 (workspace registry) before Task 8 (lifecycle manager); Task 9 (convert-target validation) after schema is in place; conformance/e2e (10–12) after wiring; UI (13–14) after backend; Playwright (15) and docs (16) last.
+
+---
+
+## Implementation findings (2026-05-02)
+
+Highlights from execution; supersedes any plan steps where they conflict.
+
+### API recon corrections (Task 1 → spec/plan validator audit)
+
+The doc-only recon needed three live-API corrections before code could be written:
+
+1. **Base URL requires `/v1` prefix.** `https://api.sprites.dev` returns 404 HTML; `https://api.sprites.dev/v1` is the actual REST root. `SpritesApiClient.baseUrl` defaults accordingly.
+2. **Path lookups use sprite _name_, not id.** `GET /v1/sprites/{id}` returns "sprite not found"; the API expects the human-readable `name`. All single-sprite methods (`getSprite`, `deleteSprite`) take `name` and the in-memory cache stores `{name, url}`.
+3. **Exec WebSocket frame protocol.** Stdout arrives as raw text WebSocket messages, not JSON. Stderr and lifecycle events arrive as JSON: `{type:"debug", msg}` for stderr, `{type:"exit", exit_code:N}` (snake_case) for exit, and `{type:"session_info"}` (no-op). The exec adapter try-parses each message: parse-failure → stdoutQ; otherwise dispatch by `type`.
+
+### Phase ordering tweak
+
+Pulling forward the `LifecycleManager.Target` widening into Phase 1 was necessary — the plan claimed widening `SandboxSpec.target` was "additive", but it broke 8 type errors immediately because `providers` lookup is exhaustive. Phase 1 now widens both `SandboxSpec.target` and the lifecycle manager's `Target` together.
+
+### Cross-provider gate semantics
+
+The first draft of the gate in `processConvertTarget` used `if (sprites && !local)` which is logically "any-side-sprites" — would never reject. The correct semantics are `involvesSprites && !bothSprites` (XOR — reject only when sides disagree on sprites-or-not).
+
+### Bootstrap-failure follow-up (TL-S2)
+
+Real-API conformance run shows L2.7 (convert mid-conversation) PASS, proving the core mechanism works end-to-end. Other scenarios fail with `sprites bootstrap failed: exit -1`. Most likely root causes: (a) DNS allowlist policy blocking `npm install -g opencode-ai`, or (b) exec adapter not draining `exit_code` frames cleanly for long-running scripts. Tracked as TL-S2; not blocking provider-parity acceptance.
+
+### Cleanup script runtime
+
+Plan's `tsx scripts/cleanup-sprites.ts` was changed to `node --experimental-strip-types --no-warnings scripts/cleanup-sprites.ts` because `tsx` is not a direct dependency of `@electric-ax/coding-agents`. Node 24 strips TS types natively; the import uses an explicit `.ts` suffix to satisfy strict ESM resolution.

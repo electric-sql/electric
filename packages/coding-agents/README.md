@@ -115,3 +115,53 @@ transcripts do.
 - **TL-3 (opencode-only)**: cross-kind UI is gated. Discoverable absence,
   not silent failure. See
   [`…opencode-design.md` §10 TL-3](../../docs/superpowers/specs/2026-05-02-coding-agents-opencode-design.md).
+
+## Fly Sprites provider
+
+[sprites.dev](https://sprites.dev) is supported as a third sandbox target alongside `sandbox` (LocalDocker) and `host`. v1 is **provider-parity only** for the existing surface area:
+
+- All three coding-agent kinds (`claude`, `codex`, `opencode`) work on sprites.
+- `convert-kind` (claude↔codex↔opencode) works in place on a sprites agent.
+- `fork` **within sprites** (kind picker) carries conversation history forward.
+- Cross-provider transitions (sandbox/host ↔ sprites) are **not supported** — sprites is its own provider universe. The UI surfaces the option but disables it with an explanatory tooltip.
+
+### Setup
+
+```bash
+export SPRITES_TOKEN=<bearer-token-from-sprites.dev>
+```
+
+The `FlySpriteProvider` is registered automatically when `SPRITES_TOKEN` is present. Without it, spawning `target='sprites'` fails with a clear error message.
+
+### Spawning
+
+From code:
+
+```ts
+await ctx.spawnCodingAgent({
+  id: nanoid(10),
+  kind: `claude`,
+  target: `sprites`,
+  workspace: { type: `volume` },
+})
+```
+
+From the UI: New session → coding-agent → pick **Sprites** target. Workspace type auto-switches to volume; bind-mount is intentionally disabled (sprites have intrinsic FS).
+
+### Tracked limitations
+
+- **TL-S1**: Sprites API is `v0.0.1-rc30` (pre-1.0); expect churn.
+- **TL-S2**: No custom OCI image input. First sprite cold-boot per agent includes ~10–30s for `opencode-ai` install (idempotent — bootstrap is keyed off `/opt/electric-ax/.bootstrapped`). Some bootstrap scenarios currently fail with `exit -1` on the live API; root-cause likely a DNS allowlist policy. See the design's open follow-ups.
+- **TL-S3**: No `cloneWorkspace`. Workspace files don't transfer on fork within sprites; conversation history does.
+- **TL-S4**: No cross-provider migration (by design — see above).
+- **TL-S5**: DNS allowlist policy may need updates for additional egress endpoints.
+- **TL-S6**: Real Sprites runs are billed. Use `pnpm cleanup:sprites` (below) to find and remove leaks.
+
+### Cleanup script
+
+```bash
+SPRITES_TOKEN=... pnpm -C packages/coding-agents cleanup:sprites           # dry-run
+SPRITES_TOKEN=... pnpm -C packages/coding-agents cleanup:sprites --delete  # actually delete
+```
+
+Lists or deletes any sprites whose name starts with `conf-sprite-` or `e2e-sprites-` — the prefixes used by conformance and e2e tests.
