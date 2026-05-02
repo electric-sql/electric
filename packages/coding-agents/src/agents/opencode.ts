@@ -5,7 +5,10 @@ import { registerAdapter } from './registry'
  * opencode (sst/opencode-ai) — third coding-agent kind.
  *
  * Headless mode: `opencode run --format json --dangerously-skip-permissions`.
- * Prompt delivery: argv tail (after `--`).
+ * Prompt delivery: stdin. opencode silently consumes stdin when no
+ * positional argv message is provided. Switching from argv-tail to stdin
+ * avoids ARG_MAX (TL-1) for long prompts — confirmed empirically with
+ * 200 KB round-trips. (See spec §10 TL-1 for the full story.)
  * Resume: `-s <sessionId>` (or `--continue` for last session — we always pin
  * to a specific sessionId so concurrent agents on the same host don't race).
  *
@@ -24,7 +27,7 @@ export const OpencodeAdapter: CodingAgentAdapter = {
   cliBinary: `opencode`,
   defaultEnvVars: [`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`],
 
-  buildCliInvocation({ prompt, nativeSessionId, model }) {
+  buildCliInvocation({ prompt: _prompt, nativeSessionId, model }) {
     const args: Array<string> = [
       `run`,
       `--format`,
@@ -33,8 +36,9 @@ export const OpencodeAdapter: CodingAgentAdapter = {
     ]
     if (model) args.push(`-m`, model)
     if (nativeSessionId) args.push(`-s`, nativeSessionId)
-    args.push(`--`, prompt)
-    return { args, promptDelivery: `argv` }
+    // No trailing `--` or positional prompt — opencode reads from stdin
+    // when argv has no message. The bridge pipes args.prompt in.
+    return { args, promptDelivery: `stdin` }
   },
 
   probeCommand({ sessionId }) {

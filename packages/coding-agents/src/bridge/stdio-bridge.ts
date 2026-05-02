@@ -5,8 +5,25 @@ import { normalizeOpencode } from '../agents/opencode-normalize'
 import { log } from '../log'
 import type { Bridge, RunTurnArgs, RunTurnResult } from '../types'
 
+// Pre-flight cap on prompt size. Linux ARG_MAX is ~2 MB, macOS ~1 MB; argv
+// and envp share that budget. Stdin delivery (the primary mitigation, see
+// spec §10 TL-1) sidesteps the kernel limit, but this guard catches
+// pathological inputs (multi-MB prompts) with a clear error rather than a
+// cryptic E2BIG or — on macOS — the codex npm-shim's RangeError stack
+// overflow that fires around ~969 KB. The threshold is conservative so it
+// stays safe across both platforms.
+const PROMPT_LIMIT_BYTES = 900_000
+
 export class StdioBridge implements Bridge {
   async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
+    if (args.prompt.length > PROMPT_LIMIT_BYTES) {
+      throw new Error(
+        `Prompt exceeds ${PROMPT_LIMIT_BYTES} bytes (got ${args.prompt.length}). ` +
+          `Stage long prompts via the workspace; the agent CLI accepts stdin so ` +
+          `most cases route through there, but this guard catches pathological inputs.`
+      )
+    }
+
     const adapter = getAdapter(args.kind)
     const { args: cliArgs, promptDelivery } = adapter.buildCliInvocation({
       prompt: args.prompt,

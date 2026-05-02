@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { OpencodeAdapter } from '../../src/agents/opencode'
 
 describe(`OpencodeAdapter — invocation shape`, () => {
-  it(`baseline argv has run --format json --dangerously-skip-permissions and prompt on argv tail`, () => {
+  it(`baseline argv has run --format json --dangerously-skip-permissions and prompt on stdin`, () => {
     const r = OpencodeAdapter.buildCliInvocation({ prompt: `hi there` })
-    expect(r.promptDelivery).toBe(`argv`)
+    expect(r.promptDelivery).toBe(`stdin`)
     expect(r.args[0]).toBe(`run`)
     expect(r.args).toContain(`--format`)
     expect(r.args).toContain(`json`)
     expect(r.args).toContain(`--dangerously-skip-permissions`)
-    // Prompt is positional after `--`
-    expect(r.args[r.args.length - 2]).toBe(`--`)
-    expect(r.args[r.args.length - 1]).toBe(`hi there`)
+    // Stdin delivery means no positional prompt and no trailing `--`.
+    expect(r.args).not.toContain(`--`)
+    expect(r.args).not.toContain(`hi there`)
   })
 
   it(`includes -m model when model is passed`, () => {
