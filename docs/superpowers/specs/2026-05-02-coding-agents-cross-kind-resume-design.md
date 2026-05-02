@@ -46,7 +46,7 @@ Convert (mid-life, queued):
                                                                       ▼
   meta.kind        ◄─ update                              nativeJsonl row replaced
   meta.nativeSessionId ◄─ newId                           lifecycle.kind.converted row inserted
-  meta.model       ◄─ update if provided
+  (model passed through to lifecycle.detail; not persisted on meta)
        │
        ▼
   next prompt → handler routes through getAdapter(meta.kind) (already kind-agnostic)
@@ -155,7 +155,7 @@ interface SandboxProvider {
 
 1. Read `events` collection.
 2. Call `denormalize(events, newKind, { sessionId, cwd })`.
-3. Update `meta.kind`, `meta.nativeSessionId`, `meta.model` (if specified).
+3. Update `meta.kind` and `meta.nativeSessionId`. (The `model` payload is recorded in the lifecycle row's `detail` string; `SessionMetaRow` has no `model` field.)
 4. Replace the `nativeJsonl` row.
 5. Insert `lifecycle.kind.converted` row.
 
@@ -180,18 +180,18 @@ No CLI spawn, no `--resume`, no transcript materialise. The next prompt's existi
 
 ## §4. Failure model
 
-| Failure                                                 | Behaviour                                                                                                                                          |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Empty events on convert                                 | Allowed. nativeJsonl empty; new kind starts conversation fresh under the same agent. lifecycle row still inserted.                                 |
-| `denormalize` throws                                    | Conversion fails; meta untouched; `lifecycle.kind.convert_failed` row + log.                                                                       |
-| Source agent missing (fork)                             | Spawn fails before any state is written. Caller sees error.                                                                                        |
-| Source has no events (fork)                             | Fork proceeds; new agent starts with empty history. Equivalent to a normal spawn.                                                                  |
-| `cloneWorkspace` fails                                  | Spawn fails before any state is written. New agent never registered.                                                                               |
-| Same-kind convert                                       | Allowed; regenerates nativeJsonl + sessionId; useful for model swap.                                                                               |
-| Trailing dangling `tool_call` (bridge crashed mid-turn) | `denormalize` processes as-is. Risk: target CLI may complain on resume. Documented edge case; mitigation is a follow-up sanitise pass.             |
-| Convert called twice in a row (claude → codex → claude) | Round-trips through events. Tool calls degrade per asp's rules (cross-agent tool-call → `Bash`-with-description). Lossy but semantically coherent. |
-| Convert to a kind that isn't registered                 | Reject at zod validation; lifecycle row not inserted.                                                                                              |
-| Fork to a kind that isn't registered                    | Reject at spawn validation.                                                                                                                        |
+| Failure                                                 | Behaviour                                                                                                                                                                                             |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Empty events on convert                                 | Allowed. nativeJsonl empty; new kind starts conversation fresh under the same agent. lifecycle row still inserted.                                                                                    |
+| `denormalize` throws                                    | Conversion fails; meta untouched; `lifecycle.kind.convert_failed` row + log.                                                                                                                          |
+| Source agent missing (fork)                             | First-wake init persists `sessionMeta` then fails the fork branch; agent is registered with `status: 'error'` and `lastError` set. Caller observes the error via the entity's lifecycle row and meta. |
+| Source has no events (fork)                             | Fork proceeds; new agent starts with empty history. Equivalent to a normal spawn.                                                                                                                     |
+| `cloneWorkspace` fails                                  | First-wake init fails the fork branch after `sessionMeta` is persisted; agent ends in `status: 'error'`. Same shape as the source-missing case.                                                       |
+| Same-kind convert                                       | Allowed; regenerates nativeJsonl + sessionId; useful for model swap.                                                                                                                                  |
+| Trailing dangling `tool_call` (bridge crashed mid-turn) | `denormalize` processes as-is. Risk: target CLI may complain on resume. Documented edge case; mitigation is a follow-up sanitise pass.                                                                |
+| Convert called twice in a row (claude → codex → claude) | Round-trips through events. Tool calls degrade per asp's rules (cross-agent tool-call → `Bash`-with-description). Lossy but semantically coherent.                                                    |
+| Convert to a kind that isn't registered                 | Reject at zod validation; lifecycle row not inserted.                                                                                                                                                 |
+| Fork to a kind that isn't registered                    | Reject at spawn validation.                                                                                                                                                                           |
 
 **Atomicity.** All meta + nativeJsonl + lifecycle writes for a single conversion go through a single batched transaction (existing `ctx.db.actions.*` pattern). Either all visible or none. No half-converted states.
 

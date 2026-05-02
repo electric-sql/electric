@@ -49,9 +49,14 @@
 
 ---
 
-## Task 1: Verify cross-stream read pattern
+## Task 1: Smoke-test cross-stream read pattern (import-shape gate)
 
-**Why this is task 1.** Fork needs to read another agent's `events` collection. `ctx.observe({ sourceType: 'entity', sourceRef })` is the runtime primitive (see `packages/agents-runtime/src/types.ts:895`). This task confirms the API works from inside a coding-agent first-wake handler and writes a smoke test that locks the contract before any mechanism work.
+**Scope (validator-audit clarification).** This is a _pure import-shape smoke test_, not a behavioral verification of cross-stream reads.
+
+- Real cross-stream behavior (an actual coding-agent reading another's `events`) is verified by **Task 13's L2.8 conformance scenario** (stubs `ctx.observe` on a fake ctx) and **Task 18's Layer 4 e2e** (runs against a real agents-server with real entities).
+- This task only catches gross breakage like `agent-session-protocol` or runtime exports being renamed/removed.
+
+**Risk note.** The runtime's production `ctx.observe({ sourceType: 'entity', sourceRef })` flows through `wiring.createChildDb(streamPath, observedType, ...)` in `packages/agents-runtime/src/setup-context.ts:760-773`. If `observedType` is undefined or wrong, the returned `db.collections` may not contain `coding-agent.events`. That risk is **not gated by this task**; it surfaces at Task 13/18. Task 9's fork branch defensively handles a missing/null `events` collection.
 
 **Files:**
 
@@ -795,7 +800,7 @@ describe(`processConvertKind — happy path`, () => {
     expect(converted?.detail).toContain(`codex`)
   })
 
-  it(`updates meta.model when payload.model is provided`, async () => {
+  it(`records model in lifecycle.detail when payload.model is provided`, async () => {
     const agentId = `/test/coding-agent/cv-2-${Date.now().toString(36)}`
     const { ctx, state } = makeFakeCtx(agentId, {
       kind: `claude`,
@@ -812,8 +817,8 @@ describe(`processConvertKind — happy path`, () => {
 
     const meta = state.sessionMeta.get(`current`) as SessionMetaRow
     expect(meta.kind).toBe(`codex`)
-    // Model is stored on meta if the schema supports it; otherwise it's
-    // only persisted in lifecycle detail. For now we assert lifecycle.
+    // Model is recorded in the lifecycle row's detail string only;
+    // SessionMetaRow has no `model` field (validator audit confirmed).
     const lifecycle = Array.from(
       state.lifecycle.rows.values()
     ) as Array<LifecycleRow>
