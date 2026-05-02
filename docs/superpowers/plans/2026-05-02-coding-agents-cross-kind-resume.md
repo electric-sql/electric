@@ -3093,6 +3093,7 @@ Both tests skip cleanly when API keys are absent (verified locally: 2 skipped, 0
 - **L4 e2e manual smoke.** With both API keys + a running server, run `SLOW=1 pnpm -C packages/coding-agents test test/integration/{convert-kind,fork-kind}.e2e.test.ts`. Document flakiness rate over the first 10 runs in a follow-up edit to this section.
 - **`nativeJsonl` sanitisation pass for crashed turns.** Mid-turn-crash artefacts (dangling `tool_call` events with no matching `tool_result`) are passed through to the new kind as-is. README documents this; a sanitisation pass is a follow-up if it surfaces in real use.
 - **Helpers extraction.** `waitForLastRunCompleted` / `waitForLifecycleEvent` are duplicated across the two new e2e tests. Extract to `test/support/e2e-helpers.ts` next time these patterns get a third caller.
+- **ARG_MAX-bounded prompt size for argv-only CLIs.** Both codex and (post-opencode-slice) opencode require the prompt as a positional argv tail; on Linux this caps prompts at ~256 KB total (argv + envp). Long-context use cases hit `E2BIG` with the opaque message `"Argument list too long"`. Tracked formally in `docs/superpowers/specs/2026-05-02-coding-agents-opencode-design.md` §10 TL-1 with three mitigation paths (preflight size check; workspace-staged prompt + tool-call ingestion; upstream stdin support). None implemented; severity low; opportunistic fix post-MVP based on user reports.
 
 ### Post-merge findings (2026-05-02)
 
