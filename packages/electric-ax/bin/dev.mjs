@@ -4,9 +4,14 @@
  * dev.mjs — Host-mode dev script for the electric-ax / coding-agents stack.
  *
  * Usage (from the repo root):
- *   node packages/electric-ax/bin/dev.mjs up      # start all services
- *   node packages/electric-ax/bin/dev.mjs down     # stop all services
- *   node packages/electric-ax/bin/dev.mjs restart  # down + up
+ *   node packages/electric-ax/bin/dev.mjs up                    # start all services
+ *   node packages/electric-ax/bin/dev.mjs down                  # stop all services
+ *   node packages/electric-ax/bin/dev.mjs down --remove-volumes # also drop pg/electric volumes
+ *   node packages/electric-ax/bin/dev.mjs clear-state           # down + wipe ALL local state
+ *                                                               #   (postgres, electric, every
+ *                                                               #    coding-agent-* workspace volume,
+ *                                                               #    every sandbox container)
+ *   node packages/electric-ax/bin/dev.mjs restart               # down + up
  *
  * What runs in Docker (postgres + electric only):
  *   postgres  → host port 54321  (or ELECTRIC_AGENTS_POSTGRES_HOST_PORT)
@@ -493,11 +498,15 @@ async function up() {
 
 // ─── down ─────────────────────────────────────────────────────────────────────
 
-async function down() {
+async function down(opts = {}) {
   const env = buildEnv()
+  const removeVolumes = opts.removeVolumes === true
 
   log(`dev`, colours.info, `Stopping Docker services...`)
-  await runDockerCompose([`down`], env)
+  const composeDownArgs = removeVolumes
+    ? [`down`, `--volumes`, `--remove-orphans`]
+    : [`down`]
+  await runDockerCompose(composeDownArgs, env)
   log(`dev`, colours.info, `Docker services stopped.`)
 
   // Kill any host-side processes still listening on the managed ports
@@ -521,6 +530,60 @@ async function down() {
   }
 }
 
+// ─── clear-state ──────────────────────────────────────────────────────────────
+//
+// Stops everything and wipes ALL local state:
+//   - Compose volumes (postgres data, electric WAL state)
+//   - Per-agent workspace volumes created by LocalDockerProvider
+//     (named `coding-agent-workspace-*`)
+//   - Sandbox containers labeled `electric-ax.agent-id=*`
+//   - Test stragglers from the conformance suite (`electric-ax-test-*`)
+//
+// After this, `up` brings the stack back with a fresh database and no
+// orphan coding-agent entities in the sidebar.
+
+async function clearState() {
+  await down({ removeVolumes: true })
+
+  const { execSync } = await import(`node:child_process`)
+
+  const tryDocker = (cmd, label) => {
+    try {
+      const out = execSync(cmd, { shell: true, stdio: [`ignore`, `pipe`, `pipe`] })
+        .toString()
+        .trim()
+      if (out) {
+        const n = out.split(`\n`).filter(Boolean).length
+        log(`dev`, colours.info, `Removed ${n} ${label}`)
+      } else {
+        log(`dev`, colours.info, `No ${label} to remove`)
+      }
+    } catch {
+      // best-effort — not fatal (e.g. Docker not running)
+    }
+  }
+
+  // Sandbox containers (LocalDockerProvider labels each container).
+  tryDocker(
+    `docker ps -aq --filter 'label=electric-ax.agent-id' | xargs -r docker rm -f`,
+    `electric-ax-labeled containers`
+  )
+
+  // Per-agent workspace volumes.
+  tryDocker(
+    `docker volume ls --format '{{.Name}}' | grep -E '^coding-agent-' | xargs -r docker volume rm`,
+    `coding-agent-* volumes`
+  )
+
+  // Conformance test stragglers (from test/integration/clone-workspace.test.ts).
+  tryDocker(
+    `docker volume ls --format '{{.Name}}' | grep -E '^electric-ax-test-' | xargs -r docker volume rm`,
+    `electric-ax-test-* volumes`
+  )
+
+  log(`dev`, colours.info, `Local state cleared.`)
+}
+
 // ─── restart ──────────────────────────────────────────────────────────────────
 
 async function restart() {
@@ -531,16 +594,22 @@ async function restart() {
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 const cmd = process.argv[2]
+const flags = process.argv.slice(3)
 
-if (!cmd || ![`up`, `down`, `restart`].includes(cmd)) {
+if (!cmd || ![`up`, `down`, `restart`, `clear-state`].includes(cmd)) {
   process.stderr.write(`
 Usage: node packages/electric-ax/bin/dev.mjs <command>
 
 Commands:
-  up       Start postgres + electric in Docker; run agents-server, agents-server-ui,
-           and the built-in agent handler (Horton, worker, coding-agent) on the host.
-  down     Stop Docker services and kill host processes started by this script.
-  restart  down + up.
+  up           Start postgres + electric in Docker; run agents-server, agents-server-ui,
+               and the built-in agent handler (Horton, worker, coding-agent) on the host.
+  down         Stop Docker services and kill host processes started by this script.
+               Pass --remove-volumes to also drop postgres/electric volumes.
+  clear-state  down --remove-volumes plus: wipe per-agent workspace volumes
+               (coding-agent-*), labeled sandbox containers, and conformance test
+               stragglers (electric-ax-test-*). After this 'up' brings up a clean
+               slate with no orphan entities in the UI sidebar.
+  restart      down + up.
 
 Required env (at least one):
   ANTHROPIC_API_KEY   Required for claude coding-agents (and Horton/worker).
@@ -560,7 +629,8 @@ Optional overrides (shell env or .env):
 
 try {
   if (cmd === `up`) await up()
-  else if (cmd === `down`) await down()
+  else if (cmd === `down`) await down({ removeVolumes: flags.includes(`--remove-volumes`) })
+  else if (cmd === `clear-state`) await clearState()
   else if (cmd === `restart`) await restart()
 } catch (error) {
   process.stderr.write(
