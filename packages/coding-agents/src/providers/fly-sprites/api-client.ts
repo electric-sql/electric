@@ -20,12 +20,21 @@ export interface ListSpritesOptions {
 }
 
 export class SpritesApiClient {
-  private readonly token: string
+  private readonly _token: string
   private readonly baseUrl: string
 
   constructor(opts: SpritesApiClientOptions) {
-    this.token = opts.token
+    this._token = opts.token
     this.baseUrl = opts.baseUrl ?? `https://api.sprites.dev/v1`
+  }
+
+  /**
+   * Expose the bearer token for the per-sprite exec WebSocket auth header.
+   * The exec WebSocket lives on each sprite's per-sprite URL (NOT
+   * api.sprites.dev) but uses the same Bearer token.
+   */
+  public tokenForExec(): string {
+    return this._token
   }
 
   async createSprite(req: CreateSpriteRequest): Promise<SpriteSummary> {
@@ -57,7 +66,7 @@ export class SpritesApiClient {
     body?: unknown
   ): Promise<T> {
     const headers: Record<string, string> = {
-      authorization: `Bearer ${this.token}`,
+      authorization: `Bearer ${this._token}`,
     }
     let bodyInit: string | undefined
     if (body !== undefined) {

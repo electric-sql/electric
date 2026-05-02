@@ -69,7 +69,7 @@ export interface RecoveredSandbox {
   agentId: string
   instanceId: string
   status: `running` | `stopped`
-  target: `sandbox` | `host`
+  target: `sandbox` | `host` | `sprites`
 }
 
 export interface SandboxProvider {
