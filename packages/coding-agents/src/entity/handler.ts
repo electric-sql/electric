@@ -1215,14 +1215,29 @@ async function processConvertKind(ctx: any, inboxMsg: InboxRow): Promise<void> {
     return
   }
 
-  // Atomic-ish: replace nativeJsonl, update meta, insert lifecycle row.
-  ctx.db.actions.nativeJsonl_insert({
-    row: {
+  // Atomic-ish: replace nativeJsonl (upsert — prior turn already inserted
+  // this row, so insert alone fails with "ID already exists"), update meta,
+  // insert lifecycle row.
+  const existingNative = ctx.db.collections.nativeJsonl.get(`current`) as
+    | NativeJsonlRow
+    | undefined
+  if (existingNative) {
+    ctx.db.actions.nativeJsonl_update({
       key: `current`,
-      nativeSessionId: result.sessionId,
-      content: result.content,
-    } satisfies NativeJsonlRow,
-  })
+      updater: (d: NativeJsonlRow) => {
+        d.nativeSessionId = result.sessionId
+        d.content = result.content
+      },
+    })
+  } else {
+    ctx.db.actions.nativeJsonl_insert({
+      row: {
+        key: `current`,
+        nativeSessionId: result.sessionId,
+        content: result.content,
+      } satisfies NativeJsonlRow,
+    })
+  }
   ctx.db.actions.sessionMeta_update({
     key: `current`,
     updater: (d: SessionMetaRow) => {

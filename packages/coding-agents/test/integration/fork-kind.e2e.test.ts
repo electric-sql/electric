@@ -62,6 +62,17 @@ d(`E5 — fork claude → codex (real CLIs, e2e)`, () => {
         },
       }),
     })
+    // PUT alone doesn't fire first-wake init — the runtime needs a fresh
+    // wake input. Send a lifecycle/init nudge (same pattern as import CLI).
+    await fetch(`${SERVER}/coding-agent/${forkId}/send`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        from: `e2e-test`,
+        type: `lifecycle/init`,
+        payload: {},
+      }),
+    })
     await waitForLifecycleEvent(forkId, `kind.forked`, 30_000)
 
     // Ask the fork for the magic word.
