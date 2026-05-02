@@ -11,12 +11,15 @@
 
 `SandboxProvider` was designed to support multiple provider backends from day one — slice 2026-04-30's platform spec explicitly listed Modal/Fly/E2B as future implementations that "reuse the conformance suite". Adding sprites tests that promise.
 
-[sprites.dev](https://sprites.dev) (Fly's purpose-built agentic-sandbox product, distinct from Fly Machines) maps cleanly onto `SandboxProvider`:
+[sprites.dev](https://sprites.dev) (Fly's purpose-built agentic-sandbox product, distinct from Fly Machines) maps cleanly onto `SandboxProvider`. **Recon-confirmed (2026-05-02) endpoint shapes:**
 
-- `start` → `POST /sprites` (~1–2s cold-boot)
-- `exec` → `WSS /sprites/{id}/exec` with stdin/stdout/stderr (matches our `ExecHandle` contract)
-- `copyTo` → Filesystem REST endpoint
-- `recover` → `GET /sprites` with name-prefix filter
+- Base URL: `https://api.sprites.dev/v1` (the `/v1` prefix is required; bare `/sprites` returns 404 HTML)
+- Path lookups use the **sprite name**, not its id: `GET /v1/sprites/{name}` (the id is only returned by create/list and not accepted by other endpoints)
+- `start` → `POST /v1/sprites` with `{"name": "..."}` (returns `{id, name, status, url, ...}`; ~1–2s cold-boot from `cold` → `warm`)
+- `exec` → WebSocket against the per-sprite URL (each sprite gets a unique `url: "https://<name>-<suffix>.sprites.app"`; the CLI sniff revealed JSON frames typed `session_info`, `debug`, `exit` (with `exit_code`), text payloads for stdout)
+- `copyTo` → TBD endpoint shape; CLI's `proxy`/`upload` flow needs further probing (filesystem REST may not be a public endpoint at all — fallback to exec + `cat > path` is reliable)
+- `recover` → `GET /v1/sprites` returns `{sprites: [...], next_continuation_token, has_more}` (paginated; filter by name prefix client-side or via `?prefix=` query param TBD)
+- Status enum: `cold` / `warm` / `running` (instead of just running/stopped — `cold` means create-not-yet-warmed; treat as `unknown` from our 3-value enum's perspective)
 - 100GB persistent FS per sprite, auto-sleep when idle (cost-bounded)
 
 Reconnaissance confirmed:
