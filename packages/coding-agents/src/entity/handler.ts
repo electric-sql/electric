@@ -975,6 +975,12 @@ async function processPrompt(
       }
 
       // Capture the on-disk transcript so a future cold-boot can resume.
+      // Upsert: claude's transcript file IS append-only and cumulative across
+      // --resume invocations, so each turn we re-capture the full file. The
+      // first turn inserts; subsequent turns must update (insert would throw
+      // "ID already exists" and we'd silently swallow it, leaving the row
+      // frozen at turn 1's contents — which broke same-kind fork because the
+      // forkee got a stale snapshot).
       if (finalNativeSessionId) {
         try {
           const content = await captureTranscript(
@@ -983,13 +989,26 @@ async function processPrompt(
             finalNativeSessionId
           )
           if (content) {
-            ctx.db.actions.nativeJsonl_insert({
-              row: {
+            const existingNative = ctx.db.collections.nativeJsonl.get(
+              `current`
+            ) as NativeJsonlRow | undefined
+            if (existingNative) {
+              ctx.db.actions.nativeJsonl_update({
                 key: `current`,
-                nativeSessionId: finalNativeSessionId,
-                content,
-              } satisfies NativeJsonlRow,
-            })
+                updater: (d: NativeJsonlRow) => {
+                  d.nativeSessionId = finalNativeSessionId
+                  d.content = content
+                },
+              })
+            } else {
+              ctx.db.actions.nativeJsonl_insert({
+                row: {
+                  key: `current`,
+                  nativeSessionId: finalNativeSessionId,
+                  content,
+                } satisfies NativeJsonlRow,
+              })
+            }
           }
         } catch (err) {
           log.warn(

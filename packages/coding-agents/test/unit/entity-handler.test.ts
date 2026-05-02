@@ -101,6 +101,16 @@ function makeFakeCtx(opts: {
         events_insert: ({ row }: { row: any }) => events.rows.set(row.key, row),
         nativeJsonl_insert: ({ row }: { row: any }) =>
           nativeJsonl.rows.set(row.key, row),
+        nativeJsonl_update: ({
+          key,
+          updater,
+        }: {
+          key: string
+          updater: (d: any) => void
+        }) => {
+          const cur = nativeJsonl.rows.get(key)
+          if (cur) updater(cur)
+        },
         lifecycle_insert: ({ row }: { row: any }) =>
           lifecycle.rows.set(row.key, row),
       },
