@@ -371,6 +371,60 @@ export function runCodingAgentsIntegrationConformance(
 
           await provider.destroy(agentId).catch(() => undefined)
         }, 180_000)
+
+        it(`L2.8 fork into sibling inherits source events`, async () => {
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+          // Source agent: prompt once so events accumulate.
+          const sourceId = `/test/coding-agent/${kind}-l2-8s-${Date.now().toString(36)}`
+          const { ctx: sourceCtx, state: sourceState } = makeFakeCtx(
+            sourceId,
+            buildArgs(kind, ws)
+          )
+          await handler(sourceCtx, { type: `message_received` })
+          pushInbox(sourceState, `i1`, `prompt`, { text: probe.prompt })
+          await handler(sourceCtx, { type: `message_received` })
+
+          expect(sourceState.events.rows.size).toBeGreaterThan(0)
+
+          // Fork into other kind. Stub observe() to point at sourceState.
+          const otherKind: CodingAgentKind =
+            kind === `claude` ? `codex` : `claude`
+          const forkId = `/test/coding-agent/${otherKind}-l2-8f-${Date.now().toString(36)}`
+          const forkArgs = {
+            ...buildArgs(otherKind, ws),
+            fromAgentId: sourceId,
+            fromWorkspaceMode: `share`,
+          }
+          const { ctx: forkCtx, state: forkState } = makeFakeCtx(
+            forkId,
+            forkArgs
+          )
+          ;(forkCtx as any).observe = async () => ({
+            sourceType: `entity`,
+            sourceRef: sourceId,
+            db: {
+              collections: {
+                events: sourceState.events,
+                runs: sourceState.runs,
+                sessionMeta: sourceState.sessionMeta,
+              },
+            },
+            events: [],
+          })
+
+          await handler(forkCtx, { type: `message_received` })
+
+          const native = forkState.nativeJsonl.get(`current`)
+          expect(native?.content?.length).toBeGreaterThan(0)
+          const lifecycle = Array.from(forkState.lifecycle.rows.values()).map(
+            (l: any) => l.event
+          )
+          expect(lifecycle).toContain(`kind.forked`)
+
+          await provider.destroy(sourceId).catch(() => undefined)
+          await provider.destroy(forkId).catch(() => undefined)
+        }, 180_000)
       })
     }
   })
