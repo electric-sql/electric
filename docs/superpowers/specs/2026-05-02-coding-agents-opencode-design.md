@@ -310,7 +310,7 @@ Recorded fixtures: `test/fixtures/opencode/{first-turn,resume-turn,error}.jsonl`
 - **opencode export/import schema instability.** opencode is actively released (1.14.x at recon time, weekly snapshot tags). Export/import JSON shape isn't formally documented as stable across versions. **Mitigation:** pin `opencode-ai` to a known-good version in the Dockerfile; regression-test export/import compatibility on each opencode bump (re-record `test/fixtures/opencode/`).
 - **Reasoning encryption.** OpenAI-provider reasoning parts contain `reasoningEncryptedContent` (opaque blob). `normalizeOpencode` treats these as opaque thinking events; UI renders as collapsed thinking blocks. Lossy by design — accepted.
 - **Tool-event granularity.** opencode emits one `tool_use` per call (terminal state only). `normalizeOpencode` synthesises both `tool_call` and `tool_result` from one input event. Tool-call latency timing in the UI is approximate (no separate request/response timestamps).
-- **No stdin prompt delivery / ARG_MAX-bounded prompt size.** Argv-only, like codex. Tracked formally in **§10 TL-1** with mitigation paths.
+- ~~**No stdin prompt delivery / ARG_MAX-bounded prompt size.** Argv-only, like codex.~~ Resolved 2026-05-02: both codex and opencode support stdin; adapters now use it. See **§10 TL-1** for the full story and the 900 KB bridge guard.
 - **Convert/Fork-to-opencode disabled in UI** but the user's expectation may not match. **Mitigation:** clear tooltip text + spec section in README explaining v1 spawn-only semantics.
 - **opencode binary size.** ~129 MB statically-linked. Acceptable for a sandbox image but bumps the cold-start docker pull cost on first use.
 
@@ -331,30 +331,22 @@ Recorded fixtures: `test/fixtures/opencode/{first-turn,resume-turn,error}.jsonl`
 
 These are known constraints we ship with — not blockers for v1, but documented so they're visible to operators and to whoever extends the system later.
 
-### TL-1: argv-only prompt delivery (ARG_MAX-bounded)
+### TL-1: ~~argv-only prompt delivery (ARG_MAX-bounded)~~ — **resolved 2026-05-02 via stdin delivery**
 
-**Affected kinds:** `codex` (existing), `opencode` (new in this slice). `claude` is unaffected — it accepts the prompt on stdin.
+**Affected kinds:** `codex`, `opencode`. `claude` was already on stdin.
 
-**Constraint.** Both codex and opencode require the prompt as a positional argv tail (`codex exec ... -- "<prompt>"`, `opencode run ... -- "<prompt>"`). On Linux, the kernel's `ARG_MAX` caps the total bytes of argv + envp passed to `execve(2)` — typically **~256 KB** (128 KB historically, 256 KB on most modern kernels via `ulimit -s` quirks). Prompts that exceed this fail at spawn with `E2BIG` ("Argument list too long").
+**Status:** Resolved. The original framing of this limitation was based on a wrong premise: a closer reading of each CLI's headless interface showed both codex and opencode support stdin prompt delivery.
 
-**Practical impact.**
+- **codex 0.128.0:** `codex exec ... -- -` reads the prompt from stdin. Documented in `--help`: _"If not provided as an argument (or if `-` is used), instructions are read from stdin."_
+- **opencode 1.14.31:** silently consumes stdin when invoked without a positional message argument. `opencode run --format json --dangerously-skip-permissions [-m model] [-s sessionId]` (no trailing prompt) plus a piped stdin works.
 
-- A typical chat prompt is well under 1 KB; users won't notice.
-- Long-context use cases — pasting in a multi-file diff, a large stack trace, or asking the agent to summarise a 200 KB document — can hit the limit, especially if the spec.env has many large vars (envp shares the budget).
-- The limit is per-invocation, not per-conversation, so subsequent turns in a session have a fresh budget.
-- Affected workflows are silent until they break — `execve` returns `E2BIG` which surfaces as a CLI exit 1 and we render it as `cli-exit:E2BIG: Argument list too long` in the lifecycle. There's no graceful upper-bound check in the bridge today.
+The adapters were switched to stdin delivery in the same change as this update; the bridge's existing `promptDelivery: 'stdin'` lane (already used for `claude`) writes `args.prompt` into the child stdin and closes it. ARG_MAX is no longer a practical limit for normal prompts on either kind.
 
-**Mitigation paths (none implemented in v1):**
+**What we kept as a defensive guard.** The bridge has a `PROMPT_LIMIT_BYTES = 900_000` pre-flight check in `runTurn` that throws a clear error before exec when the prompt exceeds the threshold. Conservative on both Linux (~2 MB) and macOS (~1 MB) and below the secondary cliff documented next.
 
-1. **Pre-flight size check in the bridge.** Before invoking the CLI, sum `prompt.length + sum(env values)` and reject prompts that exceed a conservative threshold (e.g. 200 KB). Return a structured error to the caller surface ("prompt too large for codex/opencode") rather than a cryptic `E2BIG`. ~half-day of work; covers ~90% of the user-experience pain.
+**Codex npm-shim secondary cliff (~969 KB on macOS).** The codex distributed via the `@openai/codex` npm package uses a Node shim launcher that crashes with `RangeError: Maximum call stack size exceeded` somewhere around 969 KB of argv on macOS — well below the kernel's E2BIG. Stdin delivery sidesteps this entirely (no large argv), but the cliff still exists for any future code path that goes back through argv. Documented here for future maintainers; the 900 KB bridge guard sits comfortably under it as belt-and-braces.
 
-2. **Stage prompt to a workspace file + tool-call ingestion.** Caller writes the prompt to a file in the workspace; spawn the CLI with a stub argv prompt that says `"read /work/.electric/prompt.md and proceed"`. The CLI reads the file via its own bash tool. Bypasses ARG_MAX entirely. ~1-2 days, requires deciding a stable workspace prompt-staging path + UI handling for "this prompt was staged because it was too big" hint.
-
-3. **Codex/opencode upstream support for stdin.** Both CLIs could plausibly add stdin prompt support; we'd track upstream bug reports. Not a path we control.
-
-**Severity.** Low for v1; opportunistic to fix post-MVP based on user reports.
-
-**Tracked because** users will hit this eventually, the failure mode is opaque (`E2BIG`), and the codex slice introduced this without explicit documentation. This is the canonical place for it; future slices that touch the bridge should respect the size budget.
+**Original framing (kept for archaeology):** Earlier drafts of this spec asserted both CLIs were "argv-only" without verifying against `--help` output. The recon pass that triggered this resolution found stdin support in both, and the empirical 200 KB round-trip (claude / codex / opencode) confirmed it on the live `localhost:4437` stack.
 
 ### TL-2: opencode-only — `export`/`import` JSON schema instability
 
