@@ -160,10 +160,7 @@ export function EntityHeader({
                 >
                   <Flex align="center" gap="2">
                     <GitFork size={14} />
-                    <Text size="2">
-                      Fork to {k}
-                      {codingAgentKind === k ? ` (same kind)` : ``}
-                    </Text>
+                    <Text size="2">Fork to {k}</Text>
                   </Flex>
                 </DropdownMenu.Item>
               ))}

@@ -496,28 +496,62 @@ export function makeCodingAgentHandler(
           // 'share' and 'fresh' need no action here — share inherits via the
           // existing workspace identity passed at spawn; fresh is a normal spawn.
 
-          const newSessionId = randomUUID()
-          const cwd = ws.type === `bindMount` ? ws.hostPath : `/work`
-          const result = convertNativeJsonl(
-            sourceEvents,
-            args.kind ?? `claude`,
-            {
+          // Same-kind fork: copy the source's nativeJsonl byte-for-byte
+          // and reuse its sessionId. The on-disk transcript at the
+          // source already contains everything the CLI's --resume parser
+          // expects — denormalize(events, sameKind) is a lossy round-trip
+          // (claude rejects synthetic transcripts that lack rich fields).
+          // Cross-kind fork: denormalize is the only option since the
+          // source's transcript is in a different format.
+          const forkKind = args.kind ?? `claude`
+          const isSameKind = sourceMeta?.kind === forkKind
+
+          let resolvedSessionId: string
+          let resolvedContent: string
+          if (isSameKind) {
+            const sourceNativeCol = sourceHandle?.db?.collections?.nativeJsonl
+            const sourceNative = sourceNativeCol?.get?.(`current`) as
+              | NativeJsonlRow
+              | undefined
+            if (!sourceNative?.nativeSessionId || !sourceNative.content) {
+              // Source has no captured transcript yet (e.g. forked before
+              // first turn completed). Fall back to denormalize so the
+              // fork at least gets the events history; first turn will
+              // start a fresh session.
+              const fallbackId = randomUUID()
+              const cwd = ws.type === `bindMount` ? ws.hostPath : `/work`
+              const r = convertNativeJsonl(sourceEvents, forkKind, {
+                sessionId: fallbackId,
+                cwd,
+              })
+              resolvedSessionId = r.sessionId
+              resolvedContent = r.content
+            } else {
+              resolvedSessionId = sourceNative.nativeSessionId
+              resolvedContent = sourceNative.content
+            }
+          } else {
+            const newSessionId = randomUUID()
+            const cwd = ws.type === `bindMount` ? ws.hostPath : `/work`
+            const r = convertNativeJsonl(sourceEvents, forkKind, {
               sessionId: newSessionId,
               cwd,
-            }
-          )
+            })
+            resolvedSessionId = r.sessionId
+            resolvedContent = r.content
+          }
 
           ctx.db.actions.nativeJsonl_insert({
             row: {
               key: `current`,
-              nativeSessionId: result.sessionId,
-              content: result.content,
+              nativeSessionId: resolvedSessionId,
+              content: resolvedContent,
             } satisfies NativeJsonlRow,
           })
           ctx.db.actions.sessionMeta_update({
             key: `current`,
             updater: (d: SessionMetaRow) => {
-              d.nativeSessionId = result.sessionId
+              d.nativeSessionId = resolvedSessionId
             },
           })
           ctx.db.actions.lifecycle_insert({

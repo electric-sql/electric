@@ -136,30 +136,13 @@ function EntityPage(): React.ReactElement {
   const handleForkToKind = useCallback(
     (pickedKind: `claude` | `codex`) => {
       if (forking) return
-      const sourceKind = codingAgentMeta?.kind
-      // Same-kind fork preserves the runtime's subtree-clone semantics.
-      if (!sourceKind || sourceKind === pickedKind) {
-        if (!forkEntity) return
-        setForkError(null)
-        setForking(true)
-        forkEntity(entityUrl)
-          .then((root) => {
-            navigate({
-              to: `/entity/$`,
-              params: { _splat: root.url.replace(/^\//, ``) },
-            })
-          })
-          .catch((err: Error) => {
-            setForkError(err.message)
-          })
-          .finally(() => {
-            setForking(false)
-          })
-        return
-      }
-      // Different-kind fork → spawn a new top-level coding-agent inheriting
-      // transcript via fromAgentId. Workspace mode defaults via runtime
-      // policy (bind-mount → share, volume → clone-or-error).
+      // Both same-kind and cross-kind forks go through the fromAgentId
+      // path so the new agent inherits the source's denormalized event
+      // history. The runtime's generic /fork (subtree clone) does not
+      // carry forward the kind-specific transcript, so a "Fork to claude"
+      // on a claude agent without fromAgentId would produce a fresh
+      // session with no conversation context. Treating same- and
+      // cross-kind identically gives users one mental model.
       if (!spawnEntity) return
       const sourceWorkspace = codingAgentMeta?.workspaceSpec
       const sourceTarget = codingAgentMeta?.target ?? `sandbox`
@@ -208,7 +191,7 @@ function EntityPage(): React.ReactElement {
           setForking(false)
         })
     },
-    [codingAgentMeta, entityUrl, forkEntity, forking, navigate, spawnEntity]
+    [codingAgentMeta, entityUrl, forking, navigate, spawnEntity]
   )
 
   if (!selectedEntity) {
