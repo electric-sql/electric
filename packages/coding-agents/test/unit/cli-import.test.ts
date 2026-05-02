@@ -6,7 +6,10 @@ import '../../src' // ensures built-in adapters are registered
 import { runImportCli } from '../../src/cli/import'
 import { listAdapters } from '../../src'
 
-describe.each(listAdapters().map((a) => [a.kind] as const))(
+// opencode is intentionally excluded from host-side session import (see
+// spec §"Non-goals"). The --agent validator only accepts 'claude' | 'codex'.
+const importableAdapters = listAdapters().filter((a) => a.kind !== `opencode`)
+describe.each(importableAdapters.map((a) => [a.kind] as const))(
   `runImportCli — %s`,
   (kind) => {
     afterEach(() => {

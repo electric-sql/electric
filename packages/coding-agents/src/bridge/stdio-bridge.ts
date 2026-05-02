@@ -1,6 +1,7 @@
 import { normalize } from 'agent-session-protocol'
 import type { NormalizedEvent } from 'agent-session-protocol'
 import { getAdapter } from '../agents/registry'
+import { normalizeOpencode } from '../agents/opencode-normalize'
 import { log } from '../log'
 import type { Bridge, RunTurnArgs, RunTurnResult } from '../types'
 
@@ -55,12 +56,10 @@ export class StdioBridge implements Bridge {
 
     let events: Array<NormalizedEvent> = []
     try {
-      // opencode is normalized by a local normalizer (Task 8 wires it in);
-      // narrow to AgentType for asp's normalize until then.
-      if (args.kind === `opencode`) {
-        throw new Error(`opencode normalize not yet wired (Task 8)`)
-      }
-      events = normalize(rawLines, args.kind)
+      events =
+        args.kind === `opencode`
+          ? normalizeOpencode(rawLines)
+          : normalize(rawLines, args.kind as `claude` | `codex`)
     } catch (err) {
       log.error({ err, sample: rawLines.slice(0, 3) }, `normalize failed`)
       throw err
