@@ -1,7 +1,11 @@
 import type { AgentType, NormalizedEvent } from 'agent-session-protocol'
 import type { CodingAgentStatus } from './entity/collections'
 
-export type CodingAgentKind = AgentType
+// asp's AgentType = 'claude' | 'codex'. opencode is a third kind we
+// support locally without an asp upstream patch — normalize/denormalize
+// for opencode lives in this package. A future upstream PR widens
+// AgentType and this becomes `= AgentType` again.
+export type CodingAgentKind = AgentType | `opencode`
 
 // ─── Sandbox provider ──────────────────────────────────────────────────────
 
