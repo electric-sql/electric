@@ -158,6 +158,7 @@ export function Sidebar({
 
   return (
     <Flex
+      data-testid="sidebar"
       direction="column"
       style={{
         width,

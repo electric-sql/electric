@@ -84,6 +84,21 @@ export async function spawnAndWake(
   await wakeHandlerWithPin(request, name)
 }
 
+/**
+ * Convenience wrapper around spawnAndWake that returns the canonical agent
+ * url (e.g. `/coding-agent/<name>`) so callers can chain it into UI flows or
+ * subsequent fork operations without hard-coding the prefix.
+ */
+export async function spawnCodingAgent(
+  request: APIRequestContext,
+  args: Record<string, unknown>,
+  prefix = `pw-`
+): Promise<{ name: string; url: string }> {
+  const name = uniqueAgentName(prefix)
+  await spawnAndWake(request, name, args)
+  return { name, url: `/coding-agent/${name}` }
+}
+
 export async function deleteEntity(
   request: APIRequestContext,
   name: string
