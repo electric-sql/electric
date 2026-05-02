@@ -153,3 +153,95 @@ describe(`processConvertKind — happy path`, () => {
     expect(converted?.detail).toContain(`gpt-5-codex-latest`)
   })
 })
+
+describe(`processConvertKind — edge cases`, () => {
+  let handler: ReturnType<typeof makeHandler>
+  beforeEach(() => {
+    handler = makeHandler()
+  })
+
+  it(`same-kind convert regenerates sessionId and nativeJsonl`, async () => {
+    const agentId = `/test/coding-agent/cv-same-${Date.now().toString(36)}`
+    const { ctx, state } = makeFakeCtx(agentId, {
+      kind: `claude`,
+      target: `sandbox`,
+      workspaceType: `volume`,
+    })
+    await handler(ctx, { type: `message_received` })
+
+    state.sessionMeta.rows.set(`current`, {
+      ...(state.sessionMeta.get(`current`) as SessionMetaRow),
+      kind: `claude`,
+      nativeSessionId: `old-id-keep-different`,
+    })
+
+    pushInbox(state, `i1`, `convert-kind`, { kind: `claude` })
+    await handler(ctx, { type: `message_received` })
+
+    const meta = state.sessionMeta.get(`current`) as SessionMetaRow
+    expect(meta.kind).toBe(`claude`)
+    expect(meta.nativeSessionId).not.toBe(`old-id-keep-different`)
+  })
+
+  it(`empty events → conversion succeeds with empty nativeJsonl`, async () => {
+    const agentId = `/test/coding-agent/cv-empty-${Date.now().toString(36)}`
+    const { ctx, state } = makeFakeCtx(agentId, {
+      kind: `claude`,
+      target: `sandbox`,
+      workspaceType: `volume`,
+    })
+    await handler(ctx, { type: `message_received` })
+
+    pushInbox(state, `i1`, `convert-kind`, { kind: `codex` })
+    await handler(ctx, { type: `message_received` })
+
+    const meta = state.sessionMeta.get(`current`) as SessionMetaRow
+    expect(meta.kind).toBe(`codex`)
+    const native = state.nativeJsonl.get(`current`)
+    expect(native?.content).toBe(``)
+    const lifecycle = Array.from(
+      state.lifecycle.rows.values()
+    ) as Array<LifecycleRow>
+    expect(lifecycle.find((l) => l.event === `kind.converted`)).toBeDefined()
+  })
+
+  it(`unknown kind in payload → safeParse fails, no state change`, async () => {
+    const agentId = `/test/coding-agent/cv-unknown-${Date.now().toString(36)}`
+    const { ctx, state } = makeFakeCtx(agentId, {
+      kind: `claude`,
+      target: `sandbox`,
+      workspaceType: `volume`,
+    })
+    await handler(ctx, { type: `message_received` })
+    const before = (state.sessionMeta.get(`current`) as SessionMetaRow).kind
+
+    pushInbox(state, `i1`, `convert-kind`, { kind: `gemini` })
+    await handler(ctx, { type: `message_received` })
+
+    const meta = state.sessionMeta.get(`current`) as SessionMetaRow
+    expect(meta.kind).toBe(before)
+    const lifecycle = Array.from(
+      state.lifecycle.rows.values()
+    ) as Array<LifecycleRow>
+    expect(lifecycle.find((l) => l.event === `kind.converted`)).toBeUndefined()
+  })
+
+  it(`convertKind queued behind a prompt processes after the turn finishes`, async () => {
+    // The inbox is naturally serial. Push prompt + convertKind in the
+    // same wake; both process in order.
+    const agentId = `/test/coding-agent/cv-q-${Date.now().toString(36)}`
+    const { ctx, state } = makeFakeCtx(agentId, {
+      kind: `claude`,
+      target: `sandbox`,
+      workspaceType: `volume`,
+    })
+    await handler(ctx, { type: `message_received` })
+
+    pushInbox(state, `i1`, `prompt`, { text: `hi` })
+    pushInbox(state, `i2`, `convert-kind`, { kind: `codex` })
+    await handler(ctx, { type: `message_received` })
+
+    const meta = state.sessionMeta.get(`current`) as SessionMetaRow
+    expect(meta.kind).toBe(`codex`)
+  })
+})
