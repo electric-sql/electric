@@ -2139,3 +2139,71 @@ git push origin coding-agents-slice-a
 2. **Placeholder scan** — no TBD/TODO/"add appropriate" patterns; every code step contains real code. ✓
 3. **Type consistency** — `OpencodeAdapter`, `normalizeOpencode`, `'opencode'`, `postMaterialiseCommand` used consistently across tasks. ✓
 4. **Build sequence** — types widened first (Task 1, 2), then adapter contract (Task 3), then handler (Task 4) — fails until Task 5 lands but doesn't block other commits, then adapter (Task 5), then fixtures + normalizer (Tasks 6-7), then bridge wiring (Task 8), then image (Task 9), then conformance (Task 10), then e2e (Tasks 11-12), then UI (Tasks 13-14), then Playwright (Task 15), then docs (Task 16). One slight ordering caveat: the handler-resume.test.ts test added in Task 4 stays red until OpencodeAdapter lands in Task 5. Documented in Task 4 step 5.
+
+---
+
+## Implementation findings (2026-05-02)
+
+### Result
+
+- **Unit / integration**: 115 unit tests across `packages/coding-agents` + `packages/agents` PASS.
+- **Conformance**: 32/33 PASS. The one non-pass is opencode L2.1 (cold-boot first prompt) intermittently returning empty `responseText` — model flakiness with `openai/gpt-5.4-mini-fast`, manual reproduction succeeds. Documented as a follow-up.
+- **Layer 4 e2e**: 2/2 PASS (`spawn-opencode.e2e.test.ts`, `resume-opencode.e2e.test.ts`).
+- **Playwright UI**: 3/3 PASS (`spawn-opencode.spec.ts`).
+- **Typecheck**: clean across `packages/coding-agents`, `packages/agents`, `packages/agents-server-ui`.
+- **Image**: `opencode-ai@1.14.31` pinned in the sandbox Dockerfile.
+
+### What worked first time
+
+- **Adapter contract slot** — adding optional `postMaterialiseCommand` to the adapter interface dropped in cleanly; existing claude/codex adapters returned `undefined` and the handler's `if (cmd) await exec(cmd)` was a one-line addition.
+- **Local `normalizeOpencode`** — driving the normalizer from real recorded fixtures (Task 6) rather than handwritten ones meant the event-mapping table fell out from inspection; no schema-drift surprises.
+- **Header / spawn dialog UI** — model selector slotted into the existing kind picker dropdown without restructuring; the visible-but-disabled gating for Convert/Fork → opencode reused the existing dropdown-item disabled state and tooltip.
+- **Playwright `data-testid` selectors** — every selector landed first try because the existing dialog already had stable testids; the new opencode-specific selectors followed the same convention.
+- **Conformance suite parametrisation** — wiring opencode into `envForKind` / `probeForKind` was a pure-data change; the existing per-kind block iteration picked it up.
+
+### What had to be fixed mid-flight
+
+- **Validator audit caught 3 real issues pre-implementation** (paid for itself in one run):
+  - `convertKindMessageSchema` needed widening to accept `kind: 'opencode'`.
+  - `creationArgsSchema` and `sessionMetaRowSchema` were missing the `model` field that opencode requires (and that we'd want for explicit-model claude/codex anyway).
+  - The host-provider conformance suite needed an `opencode` on `$PATH` guard mirroring the existing claude/codex guards.
+
+- **Phase 1: model threading was missing end-to-end.** `lm.bridge.runTurn(...)` wasn't passing `model` through to the per-kind invocation; agents-runtime's `SpawnCodingAgentOptions` lacked the field; and the fork-branch's `sessionMeta_update` was dropping it. Threaded model through bridge → adapter → meta and made it persist via `meta.model` so subsequent turns reuse the same model.
+
+- **Phase 2: 6 parametrised tests broke** because `listAdapters()` started returning `opencode` while its bridge wiring hadn't landed yet:
+  - 3 stdio-bridge tests hit Phase 1 placeholder throws.
+  - 3 cli-import tests expected the old kind enum.
+  - Resolved in Phase 4 once bridge wiring + cli-import gating landed; these are the cost of registering an adapter early in the build sequence.
+
+- **Phase 3: local opencode `auth.json` was openai-only**, not anthropic. The plan's probe model `anthropic/claude-haiku-4-5` couldn't authenticate, so we switched the slice's probe model to `openai/gpt-5.4-mini-fast` everywhere (conformance probe, e2e tests, spawn-dialog default). Recorded as the v1 default in the README; the curated list is still kept ordered by general availability.
+
+- **Phase 4: tsdown tree-shook the side-effect-only `import './agents/opencode'`.** The dist bundle didn't run the `registerAdapter()` call at runtime, so the kind looked unregistered to consumers. Fix: add `./src/agents/opencode.ts` to `package.json#sideEffects`. This is the same footgun the claude and codex adapters hit historically.
+
+- **Phase 5: `waitForLastRunCompleted` poll loop crashed on `"Stream not found"` non-JSON responses** during cold-boot. Wrapped JSON parse in try/catch. Also the plan's spec-implied "wait for ANY completed run" pattern raced — a turn-2 e2e returned turn-1's result. Replaced with a `waitForRunCount(min)` variant that gates on monotonic run count rather than terminal status.
+
+### What still doesn't work
+
+- **opencode L2.1 (cold-boot first-prompt) intermittently returns empty `responseText`** in conformance. Manual reproduction (same image, same model, same prompt) works. Looks like model flakiness rather than wiring; the run completes successfully and emits transcript events, just with an empty text segment. Tracked as a follow-up — likely fixable by either upgrading the probe model or adding a single retry on empty responseText.
+
+### Architectural notes
+
+- **Model field promoted to `meta.model`.** opencode is the first kind that requires a model parameter (no provider auto-detect), so we promoted `model` from a per-call hint to first-class meta on the coding-agent. Persists across turns and is propagated by fork/convert. This also generalises cleanly to explicit-model claude/codex if/when we want it.
+
+- **Local `normalizeOpencode` (no asp fork).** The asp protocol's `AgentType` enum doesn't include opencode. Rather than fork asp, we ship a local normalizer in `packages/coding-agents` that reuses asp's primitive event types and casts at the bridge boundary. The cast is small, scoped, and documented; the asp upstream PR is captured as a follow-up so we can delete the local normalizer + cast once it lands.
+
+- **`postMaterialiseCommand` adapter slot.** opencode persists in SQLite, not files, so the existing `copyTo` workspace materialisation isn't sufficient — we need to run `opencode import <file>` after the file lands. Adding an optional `postMaterialiseCommand` to the adapter contract (rather than special-casing opencode in the handler) keeps the handler kind-agnostic and gives us the slot for any future SQLite/binary-storage CLI.
+
+- **UI gates for cross-kind opencode.** Convert/Fork dropdowns show opencode as visible-but-disabled with a tooltip pointing at the deferred follow-up slice. This is "discoverable absence" — users can see the kind exists and where to look for the follow-up, rather than silent missing affordance.
+
+### Lessons
+
+- **Validator-audit before implementation has very high ROI.** Three real wiring bugs were caught before any code was written, all of which would have surfaced as confusing test failures partway through the build sequence.
+- **Phase-N parametrised tests can break Phase-M state if an adapter is registered before its bridge wiring lands.** When the suite iterates `listAdapters()`, registering early means existing tests start exercising the new kind before its dependencies are in place. Either gate the adapter registration behind a flag during the wiring phases, or accept the temporary red and resolve in the wiring commit.
+- **Tree-shaking of side-effect imports is a recurring footgun for adapter registries.** Every kind we add re-discovers this: the `import './agents/X'` for side-effect registration gets dropped from the bundle. Worth a one-line lint or a preflight assertion: "kind X registered at runtime?".
+
+### Follow-ups
+
+- **opencode L2.1 first-prompt empty-text flake** — probe model upgrade (try a non-`-fast` variant) or add a single retry on empty responseText.
+- **Cross-kind in/out of opencode** — the deferred slice; UI gates already exist as the discoverability anchor.
+- **asp upstream PR widening `AgentType`** — would let us delete the local `normalizeOpencode` + the cast in the stdio-bridge.
+- **opencode export/import schema instability (TL-2)** — pin the `opencode-ai` version in CI bump tests; add a fixture-replay test that fails loudly on schema drift.

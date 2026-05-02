@@ -600,6 +600,7 @@ The tool descriptions are updated to mention sandboxing and workspace sharing.
 - `ShimBridge` and remote provider impls (Modal / Fly / E2B / Cloudflare).
 - ACP adapter.
 - Cross-kind resume in the spawn dialog (works programmatically; no UI affordance yet). **Resolved by:** [`docs/superpowers/specs/2026-05-02-coding-agents-cross-kind-resume-design.md`](./2026-05-02-coding-agents-cross-kind-resume-design.md).
+  > **Related:** [`2026-05-02-coding-agents-opencode-design.md`](./2026-05-02-coding-agents-opencode-design.md) ships opencode as a third spawnable kind; cross-kind in/out of opencode is the next deferred follow-up.
 - Per-event approve/deny UI for `permission_request`.
 - Replay / time-travel UI scrubber.
 - Workspace file browser.
