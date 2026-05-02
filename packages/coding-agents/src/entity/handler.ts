@@ -832,6 +832,17 @@ async function processPrompt(
     })
   }
 
+  if (wasCold && meta.target === `sprites`) {
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`bootstrap`),
+        ts: Date.now(),
+        event: `bootstrap.starting`,
+        detail: `installing opencode-ai (~10-30s on first cold-boot)`,
+      } satisfies LifecycleRow,
+    })
+  }
+
   let sandbox
   try {
     sandbox = await raceTimeout(
@@ -860,6 +871,16 @@ async function processPrompt(
         detail: err instanceof Error ? err.message : String(err),
       } satisfies LifecycleRow,
     })
+    if (meta.target === `sprites` && /bootstrap/i.test(String(err))) {
+      ctx.db.actions.lifecycle_insert({
+        row: {
+          key: lifecycleKey(`bootstrap`),
+          ts: Date.now(),
+          event: `bootstrap.failed`,
+          detail: err instanceof Error ? err.message : String(err),
+        } satisfies LifecycleRow,
+      })
+    }
     return
   }
 
@@ -878,6 +899,15 @@ async function processPrompt(
         event: `sandbox.started`,
       } satisfies LifecycleRow,
     })
+    if (meta.target === `sprites`) {
+      ctx.db.actions.lifecycle_insert({
+        row: {
+          key: lifecycleKey(`bootstrap`),
+          ts: Date.now(),
+          event: `bootstrap.complete`,
+        } satisfies LifecycleRow,
+      })
+    }
   } else if (!meta.instanceId) {
     // Warm path but instanceId wasn't recorded (defensive backfill).
     ctx.db.actions.sessionMeta_update({
