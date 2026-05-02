@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { entity } from '@electric-ax/agents-runtime'
 import { findSessionPath, normalize } from 'agent-session-protocol'
 import type { NormalizedEvent } from 'agent-session-protocol'
 import { log } from '../log'
@@ -445,10 +446,9 @@ export function makeCodingAgentHandler(
 
       if (args.fromAgentId) {
         try {
-          const sourceHandle = await (ctx as any).observe({
-            sourceType: `entity`,
-            sourceRef: args.fromAgentId,
-          })
+          const sourceHandle = await (ctx as any).observe(
+            entity(args.fromAgentId)
+          )
           const sourceEventsCol = sourceHandle?.db?.collections?.events
           if (!sourceEventsCol) {
             throw new Error(

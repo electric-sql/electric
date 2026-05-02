@@ -17,6 +17,7 @@ import {
   sessionMetaRowSchema,
 } from './collections'
 import {
+  convertKindMessageSchema,
   convertTargetMessageSchema,
   destroyMessageSchema,
   idleEvictionFiredMessageSchema,
@@ -116,6 +117,7 @@ export function registerCodingAgent(
       'lifecycle/idle-eviction-fired': idleEvictionFiredMessageSchema,
       'lifecycle/init': initNudgeMessageSchema,
       'convert-target': convertTargetMessageSchema,
+      'convert-kind': convertKindMessageSchema,
     },
     state: {
       sessionMeta: {
