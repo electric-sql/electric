@@ -23,7 +23,7 @@ export const convertTargetMessageSchema = z.object({
 export type ConvertTargetMessage = z.infer<typeof convertTargetMessageSchema>
 
 export const convertKindMessageSchema = z.object({
-  kind: z.enum([`claude`, `codex`]),
+  kind: z.enum([`claude`, `codex`, `opencode`]),
   model: z.string().optional(),
 })
 export type ConvertKindMessage = z.infer<typeof convertKindMessageSchema>

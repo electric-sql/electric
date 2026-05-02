@@ -563,6 +563,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       // SpawnCodingAgentOptions.workspace into the flat workspaceType/Name/HostPath
       // fields that the handler reconstructs on first-wake init.
       const spawnArgs: Record<string, unknown> = { kind: opts.kind }
+      if (opts.model !== undefined) {
+        spawnArgs.model = opts.model
+      }
       if (opts.workspace.type === `volume`) {
         spawnArgs.workspaceType = `volume`
         if (opts.workspace.name !== undefined) {

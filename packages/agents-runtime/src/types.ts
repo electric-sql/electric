@@ -747,6 +747,13 @@ export type CodingAgentKind = `claude` | `codex`
 export interface SpawnCodingAgentOptions {
   id: string
   kind: CodingAgentKind
+  /**
+   * Optional model selection passed through to the CLI invocation.
+   * For opencode this is required by the adapter (e.g.
+   * 'opencode/anthropic/claude-sonnet-4-5'); for claude/codex it
+   * overrides the CLI's default model when set.
+   */
+  model?: string
   workspace:
     | { type: `volume`; name?: string }
     | { type: `bindMount`; hostPath: string }

@@ -55,6 +55,11 @@ export class StdioBridge implements Bridge {
 
     let events: Array<NormalizedEvent> = []
     try {
+      // opencode is normalized by a local normalizer (Task 8 wires it in);
+      // narrow to AgentType for asp's normalize until then.
+      if (args.kind === `opencode`) {
+        throw new Error(`opencode normalize not yet wired (Task 8)`)
+      }
       events = normalize(rawLines, args.kind)
     } catch (err) {
       log.error({ err, sample: rawLines.slice(0, 3) }, `normalize failed`)

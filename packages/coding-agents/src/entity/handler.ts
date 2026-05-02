@@ -224,6 +224,7 @@ export function makeCodingAgentHandler(
     if (!initialMeta) {
       const args = ctx.args as {
         kind?: CodingAgentKind
+        model?: string
         target?: `sandbox` | `host`
         workspaceType?: `volume` | `bindMount`
         workspaceName?: string
@@ -290,6 +291,7 @@ export function makeCodingAgentHandler(
         workspaceSpec: resolved.resolved,
         idleTimeoutMs,
         keepWarm,
+        ...(args.model !== undefined ? { model: args.model } : {}),
       }
       ctx.db.actions.sessionMeta_insert({ row: initial })
       wr.register(resolved.identity, agentId)
@@ -365,6 +367,11 @@ export function makeCodingAgentHandler(
             const lines = content
               .split(`\n`)
               .filter((l: string) => l.trim().length > 0)
+            if (importedKind === `opencode`) {
+              throw new Error(
+                `opencode import normalize not yet wired (Task 8)`
+              )
+            }
             const importedEvents = normalize(lines, importedKind)
             if (importedEvents.length > 0) {
               const importedRunId = `imported`
@@ -552,6 +559,9 @@ export function makeCodingAgentHandler(
             key: `current`,
             updater: (d: SessionMetaRow) => {
               d.nativeSessionId = resolvedSessionId
+              if (sourceMeta?.model !== undefined) {
+                d.model = sourceMeta.model
+              }
             },
           })
           ctx.db.actions.lifecycle_insert({
@@ -905,6 +915,7 @@ async function processPrompt(
           kind: meta.kind,
           prompt: promptText,
           nativeSessionId: meta.nativeSessionId,
+          model: meta.model,
           onEvent: (e: NormalizedEvent) => {
             ctx.db.actions.events_insert({
               row: {

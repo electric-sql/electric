@@ -20,10 +20,11 @@ export type CodingAgentStatus = z.infer<typeof codingAgentStatusSchema>
 export const sessionMetaRowSchema = z.object({
   key: z.literal(`current`),
   status: codingAgentStatusSchema,
-  kind: z.enum([`claude`, `codex`]),
+  kind: z.enum([`claude`, `codex`, `opencode`]),
   target: z.enum([`sandbox`, `host`]),
   pinned: z.boolean(),
   workspaceIdentity: z.string(),
+  model: z.string().optional(),
   workspaceSpec: z.discriminatedUnion(`type`, [
     z.object({
       type: z.literal(`volume`),

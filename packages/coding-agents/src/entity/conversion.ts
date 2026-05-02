@@ -27,6 +27,11 @@ export function convertNativeJsonl(
   if (events.length === 0) {
     return { sessionId: opts.sessionId, content: `` }
   }
+  // opencode denormalize is handled by a local path (later tasks); asp's
+  // denormalize only knows 'claude' | 'codex'. Narrow defensively.
+  if (newKind === `opencode`) {
+    throw new Error(`opencode denormalize not yet wired (Task 7+)`)
+  }
   const lines = denormalize(events as Array<NormalizedEvent>, newKind, {
     sessionId: opts.sessionId,
     cwd: opts.cwd,

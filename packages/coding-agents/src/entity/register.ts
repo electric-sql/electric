@@ -60,7 +60,8 @@ export interface RegisterCodingAgentDeps {
 // at all and the dialog rejects the request. The handler reconstructs
 // the nested workspace shape from these flat fields on first-wake init.
 const creationArgsSchema = z.object({
-  kind: z.enum([`claude`, `codex`]).optional(),
+  kind: z.enum([`claude`, `codex`, `opencode`]).optional(),
+  model: z.string().optional(),
   target: z.enum([`sandbox`, `host`]).optional(),
   workspaceType: z.enum([`volume`, `bindMount`]).optional(),
   /** For workspaceType='volume'. Defaults to slug(agentId) when omitted. */
