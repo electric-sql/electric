@@ -174,10 +174,18 @@ function EntityPage(): React.ReactElement {
         fromAgentId: entityUrl,
       }
       if (sourceWorkspace.type === `bindMount`) {
+        // bind-mount source → share mode (default policy). Same hostPath
+        // is the share semantics; the runtime serialises access via the
+        // workspace lease.
         args.workspaceHostPath = sourceWorkspace.hostPath
-      } else if (sourceWorkspace.name) {
-        args.workspaceName = sourceWorkspace.name
       }
+      // Volume source: deliberately OMIT workspaceName so the runtime
+      // auto-derives a fresh volume name from the new agent's id. The
+      // default policy for volume sources is `clone`, and the fork branch
+      // reads the source's volume from its sessionMeta and copies it into
+      // the new agent's freshly-named volume. Passing the source's name
+      // here would cause cloneWorkspace to copy a volume into itself
+      // ("cp: '/from/.' and '/to/.' are the same file").
       const newName = nanoid(10)
       setForkError(null)
       setForking(true)
