@@ -76,6 +76,17 @@ export interface SandboxProvider {
   status(agentId: string): Promise<`running` | `stopped` | `unknown`>
   /** Discover sandboxes adopted across host restarts. MVP: may return []. */
   recover(): Promise<Array<RecoveredSandbox>>
+  /**
+   * Optional. If implemented, fork can use 'clone' workspace mode.
+   * Copies contents of `source` into `target`. Implementations must:
+   *   - Fail fast if either workspace doesn't exist.
+   *   - Be idempotent (overwriting target is allowed).
+   *   - Not mutate the source.
+   */
+  cloneWorkspace?(opts: {
+    source: SandboxSpec[`workspace`]
+    target: SandboxSpec[`workspace`]
+  }): Promise<void>
 }
 
 // ─── Bridge ────────────────────────────────────────────────────────────────
