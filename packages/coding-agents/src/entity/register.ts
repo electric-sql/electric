@@ -62,7 +62,7 @@ export interface RegisterCodingAgentDeps {
 const creationArgsSchema = z.object({
   kind: z.enum([`claude`, `codex`, `opencode`]).optional(),
   model: z.string().optional(),
-  target: z.enum([`sandbox`, `host`]).optional(),
+  target: z.enum([`sandbox`, `host`, `sprites`]).optional(),
   workspaceType: z.enum([`volume`, `bindMount`]).optional(),
   /** For workspaceType='volume'. Defaults to slug(agentId) when omitted. */
   workspaceName: z.string().optional(),

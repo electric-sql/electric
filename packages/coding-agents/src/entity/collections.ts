@@ -21,7 +21,7 @@ export const sessionMetaRowSchema = z.object({
   key: z.literal(`current`),
   status: codingAgentStatusSchema,
   kind: z.enum([`claude`, `codex`, `opencode`]),
-  target: z.enum([`sandbox`, `host`]),
+  target: z.enum([`sandbox`, `host`, `sprites`]),
   pinned: z.boolean(),
   workspaceIdentity: z.string(),
   model: z.string().optional(),
@@ -84,6 +84,9 @@ export const lifecycleRowSchema = z.object({
     `kind.converted`,
     `kind.convert_failed`,
     `kind.forked`,
+    `bootstrap.starting`,
+    `bootstrap.complete`,
+    `bootstrap.failed`,
   ]),
   detail: z.string().optional(),
 })

@@ -18,7 +18,7 @@ export const initNudgeMessageSchema = z.object({}).passthrough()
 export type PromptMessage = z.infer<typeof promptMessageSchema>
 
 export const convertTargetMessageSchema = z.object({
-  to: z.enum([`sandbox`, `host`]),
+  to: z.enum([`sandbox`, `host`, `sprites`]),
 })
 export type ConvertTargetMessage = z.infer<typeof convertTargetMessageSchema>
 

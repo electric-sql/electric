@@ -8,14 +8,22 @@ import type {
 } from './types'
 
 export interface LifecycleManagerDeps {
-  providers: { sandbox: SandboxProvider; host: SandboxProvider }
+  providers: {
+    sandbox: SandboxProvider
+    host: SandboxProvider
+    sprites?: SandboxProvider // optional — present iff SPRITES_TOKEN set
+  }
   bridge: Bridge
 }
 
-export type Target = `sandbox` | `host`
+export type Target = `sandbox` | `host` | `sprites`
 
 export class LifecycleManager {
-  readonly providers: { sandbox: SandboxProvider; host: SandboxProvider }
+  readonly providers: {
+    sandbox: SandboxProvider
+    host: SandboxProvider
+    sprites?: SandboxProvider
+  }
   readonly bridge: Bridge
   /** Wall-clock ms captured at construction. Used to detect orphan runs. */
   readonly startedAtMs: number
@@ -32,25 +40,34 @@ export class LifecycleManager {
   // ── sandbox lifecycle ──
 
   async ensureRunning(spec: SandboxSpec): Promise<SandboxInstance> {
-    return this.providers[spec.target].start(spec)
+    return this.providerFor(spec.target).start(spec)
   }
 
   providerFor(target: Target): SandboxProvider {
-    return this.providers[target]
+    const p = this.providers[target]
+    if (!p) {
+      throw new Error(
+        `No provider configured for target='${target}'. ` +
+          (target === `sprites` ? `Set SPRITES_TOKEN to enable.` : ``)
+      )
+    }
+    return p
   }
 
   async statusFor(
     agentId: string,
     target: Target
   ): Promise<`running` | `stopped` | `unknown`> {
-    return this.providers[target].status(agentId)
+    return this.providerFor(target).status(agentId)
   }
 
   async destroyFor(agentId: string, target: Target): Promise<void> {
     this.cancelIdleTimer(agentId)
-    await this.providers[target].destroy(agentId).catch((err) => {
-      log.warn({ err, agentId, target }, `lifecycleManager.destroyFor failed`)
-    })
+    await this.providerFor(target)
+      .destroy(agentId)
+      .catch((err) => {
+        log.warn({ err, agentId, target }, `lifecycleManager.destroyFor failed`)
+      })
   }
 
   async destroyAndForget(agentId: string, target: Target): Promise<void> {

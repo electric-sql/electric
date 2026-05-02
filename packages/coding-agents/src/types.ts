@@ -14,7 +14,7 @@ export interface SandboxSpec {
   agentId: string
   kind: CodingAgentKind
   /** Execution target. 'sandbox' = Docker; 'host' = direct on-host (no isolation). */
-  target: `sandbox` | `host`
+  target: `sandbox` | `host` | `sprites`
   workspace:
     | { type: `volume`; name: string }
     | { type: `bindMount`; hostPath: string }
