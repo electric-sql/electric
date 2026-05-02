@@ -93,12 +93,15 @@ A future upstream PR will widen AgentType and this becomes
 
 ---
 
-## Task 2: Widen `kind` enum in collections + creation args
+## Task 2: Widen schemas — kind enum, creation args, inbox messages
+
+**Validator-audit finding** (commit `81588155e`): three schemas need widening, not just one. `convertKindMessageSchema` in `messages.ts` validates the inbox `convert-kind` payload — leaving it as `'claude' | 'codex'` is a silent-failure trap if any future code (UI dispatch, tool, programmatic test) sends `kind: 'opencode'`. And `creationArgsSchema` needs a `model` field for opencode's spawn args (Task 13 emits `model: opencodeModel` — without the schema field, zod `.strip()`s it silently and the handler never sees it).
 
 **Files:**
 
 - Modify: `packages/coding-agents/src/entity/collections.ts`
 - Modify: `packages/coding-agents/src/entity/register.ts`
+- Modify: `packages/coding-agents/src/entity/messages.ts`
 
 - [ ] **Step 1: Widen sessionMetaRowSchema's kind enum**
 
@@ -114,21 +117,61 @@ to:
 kind: z.enum([`claude`, `codex`, `opencode`]),
 ```
 
-- [ ] **Step 2: Widen creation args schema**
+- [ ] **Step 2: Widen creation args schema + add `model` field**
 
-In `packages/coding-agents/src/entity/register.ts`, find the `creationArgsSchema` (grep `kind:`):
+In `packages/coding-agents/src/entity/register.ts`, locate the `creationArgsSchema`:
 
 ```bash
-grep -n "kind:.*z.enum\|z.enum.*claude" packages/coding-agents/src/entity/register.ts
+grep -n "creationArgsSchema\|kind:.*z.enum" packages/coding-agents/src/entity/register.ts
 ```
 
-Wherever `z.enum(['claude', 'codex'])` (or equivalent) appears in the creation args schema, add `'opencode'`. Example expected change:
+Two edits:
+
+(a) Wherever `z.enum(['claude', 'codex'])` (or equivalent) appears in the creation args schema, add `'opencode'`:
 
 ```ts
 kind: z.enum([`claude`, `codex`, `opencode`]).optional(),
 ```
 
-- [ ] **Step 3: Run typecheck**
+(b) Add a `model` field to the same schema (placed near `kind:`):
+
+```ts
+model: z.string().optional(),
+```
+
+This carries the `opencode/<provider>/<model>` selection from the spawn dialog (Task 13) through to the handler's first-wake init. The handler will read `meta.model` (existing field on `SessionMetaRow`) — wait, `SessionMetaRow` actually doesn't have a `model` field today. The model is currently only stored in `lifecycle.detail` for convertKind. For opencode we need to **persist the model on `meta` so it's available across turns**. Add it to `sessionMetaRowSchema` in step 1 too:
+
+```ts
+model: z.string().optional(),
+```
+
+(Adjust step 1's edit to include this.)
+
+The handler's `processPrompt` calls `lm.bridge.runTurn({ ..., model: meta.model })` — verify the existing `RunTurnArgs.model` field is plumbed through (it already is per `types.ts:90`). The fork branch in handler.ts also needs to copy `meta.model` from source to fork; verify and add if missing.
+
+- [ ] **Step 3: Widen `convertKindMessageSchema`**
+
+In `packages/coding-agents/src/entity/messages.ts`, locate `convertKindMessageSchema`:
+
+```ts
+export const convertKindMessageSchema = z.object({
+  kind: z.enum([`claude`, `codex`]),
+  model: z.string().optional(),
+})
+```
+
+Widen the `kind` enum:
+
+```ts
+export const convertKindMessageSchema = z.object({
+  kind: z.enum([`claude`, `codex`, `opencode`]),
+  model: z.string().optional(),
+})
+```
+
+This is forward-compat: opencode is gated in the v1 UI but the schema mustn't reject the payload silently if anything sends it.
+
+- [ ] **Step 4: Run typecheck**
 
 ```bash
 pnpm -C packages/coding-agents typecheck
@@ -136,7 +179,7 @@ pnpm -C packages/coding-agents typecheck
 
 Expected: PASS.
 
-- [ ] **Step 4: Run unit suite to confirm no regressions**
+- [ ] **Step 5: Run unit suite to confirm no regressions**
 
 ```bash
 pnpm -C packages/coding-agents test
@@ -144,14 +187,25 @@ pnpm -C packages/coding-agents test
 
 Expected: full unit suite green.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/coding-agents/src/entity/collections.ts packages/coding-agents/src/entity/register.ts
-git commit -m "feat(coding-agents): widen kind enum to include 'opencode'
+git add packages/coding-agents/src/entity/collections.ts packages/coding-agents/src/entity/register.ts packages/coding-agents/src/entity/messages.ts
+git commit -m "feat(coding-agents): widen schemas for opencode
 
-Additive: existing 'claude'/'codex' rows remain valid; new spawns
-can use 'opencode'."
+Three additive widenings:
+- sessionMetaRowSchema.kind enum gains 'opencode' + a new optional
+  'model' field (opencode requires a provider/model selection that
+  must be persisted across turns, unlike claude/codex which use
+  defaults).
+- creationArgsSchema in register.ts gains 'opencode' kind + 'model'
+  field so spawn args carry the selection through to first-wake init.
+- convertKindMessageSchema in messages.ts gains 'opencode' so the
+  inbox payload validator doesn't silently reject opencode targets
+  if a future caller sends them (UI gates them as disabled in v1).
+
+Existing 'claude'/'codex' rows remain valid; new spawns can use
+'opencode'."
 ```
 
 ---
@@ -1277,13 +1331,47 @@ probeForKind: (kind) => {
 
 (Match whatever the actual function shapes are — those above are illustrative based on the spec.)
 
-- [ ] **Step 3: Apply the same change to host-provider-conformance**
+- [ ] **Step 3: Apply the same change to host-provider-conformance + add a $PATH guard**
 
 ```bash
 grep -n "envForKind\|probeForKind" packages/coding-agents/test/integration/host-provider-conformance.test.ts
 ```
 
-Make the same additions.
+Make the same `envForKind`/`probeForKind` additions as in step 2.
+
+**Validator-audit finding** (commit `81588155e`): host-target runs the CLI from the host's `$PATH`, not from the sandbox image. Task 9's Dockerfile bump only covers `target=sandbox`. If `opencode` isn't on the host's `$PATH`, the host-conformance opencode block will fail with a confusing "command not found" error halfway through the suite. Add a guard that skips the opencode kind on host when the binary is missing.
+
+In `host-provider-conformance.test.ts`, add a top-of-file synchronous probe and wire it into `envForKind` so the opencode block is skipped (returns `null`) when opencode isn't installed:
+
+```ts
+import { execSync } from 'node:child_process'
+
+function hasOpencodeOnPath(): boolean {
+  try {
+    execSync(`command -v opencode`, { stdio: `ignore` })
+    return true
+  } catch {
+    return false
+  }
+}
+const OPENCODE_AVAILABLE = hasOpencodeOnPath()
+```
+
+Then in the `envForKind` opencode branch:
+
+```ts
+if (kind === `opencode`) {
+  if (!OPENCODE_AVAILABLE) return null // skip the kind block entirely on this provider
+  const env: Record<string, string> = {}
+  if (process.env.ANTHROPIC_API_KEY)
+    env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
+  if (process.env.OPENAI_API_KEY)
+    env.OPENAI_API_KEY = process.env.OPENAI_API_KEY
+  return Object.keys(env).length > 0 ? env : null
+}
+```
+
+Returning `null` from `envForKind` is the existing skip mechanism (matches how unset API keys skip a kind block). The local-docker conformance doesn't need this guard — the Dockerfile guarantees opencode is installed inside the sandbox image.
 
 - [ ] **Step 4: Run conformance under DOCKER=1**
 
