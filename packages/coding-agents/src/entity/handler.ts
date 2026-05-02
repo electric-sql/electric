@@ -137,6 +137,35 @@ async function ensureTranscriptMaterialised(
     content,
     mode: 0o600,
   })
+  if (adapter.postMaterialiseCommand) {
+    const post = await sandbox.exec({
+      cmd: [
+        ...adapter.postMaterialiseCommand({
+          homeDir,
+          cwd,
+          sessionId: nativeSessionId,
+        }),
+      ],
+    })
+    let postErr = ``
+    const drainPostOut = async () => {
+      for await (const _ of post.stdout) {
+        // discard
+      }
+    }
+    const drainPostErr = async () => {
+      for await (const line of post.stderr) postErr += line + `\n`
+    }
+    const postOutP = drainPostOut()
+    const postErrP = drainPostErr()
+    const postExit = await post.wait()
+    await Promise.all([postOutP, postErrP])
+    if (postExit.exitCode !== 0) {
+      throw new Error(
+        `postMaterialiseCommand failed: exit ${postExit.exitCode}, stderr=${postErr.slice(0, 200)}`
+      )
+    }
+  }
   return { written: true }
 }
 
