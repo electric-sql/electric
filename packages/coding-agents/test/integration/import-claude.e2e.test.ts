@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
@@ -17,7 +17,13 @@ d(`E1 — claude native session import (e2e)`, () => {
   const SERVER = `http://localhost:4437`
 
   beforeAll(async () => {
-    workspace = await mkdtemp(join(tmpdir(), `import-claude-e2e-`))
+    // realpath because the import CLI calls realpath(workspace) before
+    // computing the sanitised .claude/projects/<sanitised>/<id>.jsonl
+    // path. On macOS /var/folders/... resolves to /private/var/folders/...
+    // so without the realpath here the staged file lands in the wrong dir.
+    workspace = await realpath(
+      await mkdtemp(join(tmpdir(), `import-claude-e2e-`))
+    )
     const sanitised = workspace.replace(/\//g, `-`)
     claudeProjectDir = join(process.env.HOME!, `.claude`, `projects`, sanitised)
     await mkdir(claudeProjectDir, { recursive: true })
