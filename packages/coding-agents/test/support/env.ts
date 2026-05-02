@@ -66,6 +66,20 @@ export function envForKind(
       ...(env.OPENAI_MODEL ? { OPENAI_MODEL: env.OPENAI_MODEL } : {}),
     }
   }
+  if (kind === `opencode`) {
+    // opencode picks the provider matching the model arg; pass through
+    // both keys so it can route to whichever the probe model selects.
+    // Plan-deviation: the original plan suggested `anthropic/claude-haiku-4-5`
+    // as the probe model, but Phase 3 fixtures revealed only the openai
+    // provider is authed locally, so probeForKind(opencode) returns
+    // `openai/gpt-5.4-mini-fast`. Gate this kind block on OPENAI_API_KEY
+    // accordingly. ANTHROPIC_API_KEY is forwarded too (no-op here, but
+    // future-proof if someone flips the probe model back to anthropic).
+    if (!env.OPENAI_API_KEY) return null
+    const out: Record<string, string> = { OPENAI_API_KEY: env.OPENAI_API_KEY }
+    if (env.ANTHROPIC_API_KEY) out.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY
+    return out
+  }
   return null
 }
 
@@ -84,6 +98,19 @@ export function probeForKind(
       prompt: `Reply with the single word: ok`,
       expectsResponseMatching: /ok/i,
       model: env.ANTHROPIC_MODEL,
+    }
+  }
+  if (kind === `opencode`) {
+    // Plan-deviation: the original plan suggested `anthropic/claude-haiku-4-5`,
+    // but Phase 3 reconnaissance found that local opencode auth was only
+    // configured for the `openai` provider. For consistency across the
+    // slice (conformance + Layer 4 e2e), the probe model is
+    // `openai/gpt-5.4-mini-fast` and envForKind(opencode) gates on
+    // OPENAI_API_KEY accordingly.
+    return {
+      prompt: `Reply with just: ok`,
+      expectsResponseMatching: /ok/i,
+      model: `openai/gpt-5.4-mini-fast`,
     }
   }
   return {
