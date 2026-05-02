@@ -52,6 +52,7 @@ export function EntityHeader({
   codingAgentWorkspaceSpec,
   codingAgentStatus,
   codingAgentLastError,
+  codingAgentKind,
 }: {
   entity: ElectricEntity
   pinned: boolean
@@ -68,6 +69,7 @@ export function EntityHeader({
   codingAgentWorkspaceSpec?: { type: `volume` | `bindMount` }
   codingAgentStatus?: string
   codingAgentLastError?: string
+  codingAgentKind?: `claude` | `codex`
 }): React.ReactElement {
   // For coding-agents, prefer the coding-agent-specific status (cold /
   // starting / idle / running / stopping / error / destroyed) over the
@@ -80,6 +82,7 @@ export function EntityHeader({
 
   return (
     <Flex
+      data-testid="entity-header"
       p="3"
       align="center"
       gap="3"
@@ -254,6 +257,60 @@ export function EntityHeader({
                   >
                     Convert → {convertTo === `host` ? `Host` : `Sandbox`}
                   </Button>
+                )
+              })()}
+            {codingAgentKind &&
+              (() => {
+                const allKinds: ReadonlyArray<`claude` | `codex`> = [
+                  `claude`,
+                  `codex`,
+                ]
+                const others = allKinds.filter((k) => k !== codingAgentKind)
+                const inFlight =
+                  codingAgentStatus === `running` ||
+                  codingAgentStatus === `starting` ||
+                  codingAgentStatus === `stopping`
+                return (
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      <Button
+                        variant="soft"
+                        size="1"
+                        color="amber"
+                        disabled={inFlight}
+                        title={
+                          inFlight
+                            ? `Cannot convert while ${codingAgentStatus}`
+                            : `Convert this agent to a different kind`
+                        }
+                        data-testid="convert-kind-button"
+                      >
+                        Convert kind
+                      </Button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content>
+                      {others.map((k) => (
+                        <DropdownMenu.Item
+                          key={k}
+                          onSelect={() => {
+                            void fetch(`${baseUrl}${entity.url}/send`, {
+                              method: `POST`,
+                              headers: {
+                                'content-type': `application/json`,
+                              },
+                              body: JSON.stringify({
+                                from: `user`,
+                                type: `convert-kind`,
+                                payload: { kind: k },
+                              }),
+                            })
+                          }}
+                        >
+                          Convert to {k}
+                        </DropdownMenu.Item>
+                      ))}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 )
               })()}
           </>

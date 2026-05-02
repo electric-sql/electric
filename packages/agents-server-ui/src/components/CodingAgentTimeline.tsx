@@ -237,9 +237,17 @@ function LifecycleEventRow({ row }: { row: LifecycleRow }): React.ReactElement {
     'import.restored': `Imported session`,
     'import.failed': `Import failed`,
     'target.changed': `Target changed`,
+    'kind.converted': `Kind converted`,
+    'kind.convert_failed': `Kind convert failed`,
+    'kind.forked': `Forked from agent`,
   }
   return (
-    <Flex gap="2" align="center" style={{ opacity: 0.55 }}>
+    <Flex
+      data-event={row.event}
+      gap="2"
+      align="center"
+      style={{ opacity: 0.55 }}
+    >
       <Text size="1" color="gray">
         {new Date(row.ts).toLocaleTimeString()}
       </Text>
