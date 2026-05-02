@@ -307,7 +307,11 @@ export function makeCodingAgentHandler(
         return
       }
 
-      const resolved = await WorkspaceRegistry.resolveIdentity(agentId, ws)
+      const resolved = await WorkspaceRegistry.resolveIdentity(
+        agentId,
+        ws,
+        target
+      )
       const idleTimeoutMs = args.idleTimeoutMs ?? options.defaults.idleTimeoutMs
       const keepWarm = args.keepWarm ?? false
       const initial: SessionMetaRow = {

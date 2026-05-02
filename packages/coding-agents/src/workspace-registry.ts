@@ -26,8 +26,20 @@ export class WorkspaceRegistry {
     agentId: string,
     spec:
       | { type: `volume`; name?: string }
-      | { type: `bindMount`; hostPath: string }
+      | { type: `bindMount`; hostPath: string },
+    target: `sandbox` | `host` | `sprites` = `sandbox`
   ): Promise<{ identity: string; resolved: ResolvedWorkspaceSpec }> {
+    if (target === `sprites`) {
+      // One sprite per agent; the sprite IS the workspace. workspace.name is
+      // informational; identity is per-agent.
+      if (spec.type !== `volume`) {
+        throw new Error(`sprites only support workspace.type='volume'`)
+      }
+      return {
+        identity: `sprite:${agentId}`,
+        resolved: { type: `volume`, name: spec.name ?? agentId },
+      }
+    }
     if (spec.type === `volume`) {
       const name = spec.name ?? slugifyForVolumeName(agentId)
       return {
