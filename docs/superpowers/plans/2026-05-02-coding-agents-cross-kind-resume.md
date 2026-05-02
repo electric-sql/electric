@@ -3093,3 +3093,59 @@ Both tests skip cleanly when API keys are absent (verified locally: 2 skipped, 0
 - **L4 e2e manual smoke.** With both API keys + a running server, run `SLOW=1 pnpm -C packages/coding-agents test test/integration/{convert-kind,fork-kind}.e2e.test.ts`. Document flakiness rate over the first 10 runs in a follow-up edit to this section.
 - **`nativeJsonl` sanitisation pass for crashed turns.** Mid-turn-crash artefacts (dangling `tool_call` events with no matching `tool_result`) are passed through to the new kind as-is. README documents this; a sanitisation pass is a follow-up if it surfaces in real use.
 - **Helpers extraction.** `waitForLastRunCompleted` / `waitForLifecycleEvent` are duplicated across the two new e2e tests. Extract to `test/support/e2e-helpers.ts` next time these patterns get a third caller.
+
+### Post-merge findings (2026-05-02)
+
+After the cross-kind work landed, the header `Fork` button was unified so both same-kind and cross-kind forks go through the `fromAgentId` path (commit `794719fe4`). Driving that end-to-end via Playwright over LAN HTTP surfaced four issues, three fixed, one tracked here:
+
+- **`crypto.randomUUID` undefined in non-secure contexts** — fixed in `packages/agents-server-ui/src/main.tsx` with a `getRandomValues`-based polyfill (commit `b0caf9676`). The browser only exposes the API on HTTPS or localhost; LAN HTTP made `nanoid()` and any other consumer throw `TypeError`. No-op when running on localhost or HTTPS.
+- **Header fork dropdown self-cloned the source's volume** — fixed in the same commit. The router was passing the source's `workspaceName` straight through to the new agent, so `cloneWorkspace` was asked to copy a volume into itself. Volume sources now omit `workspaceName` so the runtime auto-derives it.
+- **`processConvertKind` tried to `_insert` over an existing `nativeJsonl` row** — fixed by switching to upsert (commit `220ca5b3b`); fake-ctx in conformance got the missing `nativeJsonl_update` action (commit `bb9bfbf0f`).
+- **claude's on-disk transcript is non-cumulative under `--resume`** — **TRACKED, NOT FIXED**. Surfaced when verifying that same-kind fork preserves conversation context. See below.
+
+#### Tracked: non-cumulative claude transcript capture
+
+**Symptom.** Same-kind fork (`Fork to claude` on a claude agent), cold-boot resume of an idle claude agent, and convert-to-claude all fail to surface prior-turn conversation in the new claude session, even when:
+
+- The new session is `--resume`-ed against the source's `nativeSessionId` (so claude reuses the same session id)
+- The captured `nativeJsonl` is materialised verbatim into `~/.claude/projects/<sanitised-cwd>/<sessionId>.jsonl` inside the sandbox
+- The events collection (canonical, cumulative across all turns) clearly contains the prior `user_message`/`assistant_message`/`tool_use` rows
+
+**Root cause.** The file at `~/.claude/projects/<sanitised-cwd>/<sessionId>.jsonl` that `ClaudeAdapter.captureCommand` reads is _not_ the conversation transcript. In the current claude CLI version it contains only `queue-operation`, `summary`, and `ai-title` records — claude's internal session bookkeeping. Successive `--resume` invocations overwrite it; it never accumulates `user` / `assistant` / `tool_use` entries. Direct inspection of the captured blob from a real session showed just 9 lines of queue-ops despite the agent having run 5+ conversation turns.
+
+asp's `normalizeClaude` (see `agent-session-protocol@0.0.2/dist/src-8t6qdcZ0.js`) reads `type: 'user' | 'assistant' | 'system'` entries and would happily normalize a real conversation transcript — but what we're capturing isn't that. The actual conversation log lives somewhere else in the current claude CLI version (TBD which file), or is held only in memory and dumped on stdout as stream-json.
+
+**What this breaks.**
+
+- **Same-kind fork.** Mechanism works (no error, sessionId preserved, run completes). But the new claude session has no view of prior conversation — it sees only the last turn at best, and often only metadata.
+- **Cold-boot resume.** When an idle agent is woken cold, `ensureTranscriptMaterialised` writes the same partial file back. Claude resumes with very little context.
+- **Convert-to-claude (codex → claude).** Falls back on denormalize-into-claude, which is independently lossy enough that claude often refuses or produces empty replies. The cross-kind-resume conformance L2.7 passes only because the fake-ctx assertion is on the lifecycle row, not the actual response quality. The Layer 4 e2e `convert-kind.e2e.test.ts` E4 fails for this reason ("expected 'acknowledged.' to contain 'butterfly'").
+
+**What works despite this.**
+
+- **Cross-kind fork claude → codex** appears to inherit context because (a) the `clone` workspace mode copies workspace files (the source's tool calls write to e.g. `~/.claude/projects/.../memory/*.md`, but those are per-container — the relevant case is when files land in `/work` which IS the cloned volume), and (b) codex's `--resume` accepts a denormalized claude transcript more leniently than claude does with its own kind. So this looks fine in tests but is partly luck.
+- **Bind-mount source forks (Test 3 in the post-merge verification)** work fully because the workspace IS the host filesystem and survives container restart untouched.
+
+**Investigation pointers for whoever picks this up.**
+
+1. Find where the current claude CLI actually writes the conversation log. Likely candidates inside the sandbox:
+
+   ```sh
+   docker exec <coding-agent-container> sh -c '
+     ls -la ~/.claude/ ~/.claude/projects/ ~/.claude/projects/*/ 2>/dev/null
+     find ~/.claude -name "*.jsonl" -exec ls -la {} \;
+     find ~/.claude -name "*.json" -exec ls -la {} \;
+   '
+   ```
+
+   Look for the file that grows turn-over-turn and contains `user`/`assistant`/`tool_use` records.
+
+2. If the canonical conversation lives only in stream-json STDOUT, switch the bridge to **store the per-turn stream-json** as the cumulative source of truth (append each turn's stream-json output to a single `nativeJsonl` row), rather than reading a non-cumulative on-disk file.
+
+3. If a different on-disk path exists, update `ClaudeAdapter.captureCommand` (and `materialiseTargetPath` / `probeCommand`) to point at it. Verify the format matches what asp's `normalizeClaude` expects so cross-kind round-trips remain valid.
+
+4. Once capture is fixed, `denormalizeClaude` lossiness for claude→claude becomes irrelevant (we copy raw); but claude←codex (convert/fork to claude) still depends on `denormalizeClaude` producing claude-acceptable output. Verify with a real claude run.
+
+**Severity.** Medium. The mechanism we shipped works correctly (kind flips, lifecycle rows render, agents run, no errors). The fidelity gap is invisible to the conformance suite (which uses fake-ctx) but observable end-to-end. Documented as a known limitation in the cross-kind-resume design's §"Lossy aspects" section so users aren't surprised. Fixing this unlocks the Layer 4 `convert-kind.e2e.test.ts` E4 test and makes `Fork to claude` semantically correct, but is independent of the cross-kind-resume slice's core deliverables.
+
+**Effort estimate.** 1–3 days, dominated by step 1 (figuring out where claude actually writes the conversation in the current CLI version). Steps 2/3 are mechanical adapter changes once the right path is known.
