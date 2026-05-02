@@ -230,6 +230,8 @@ export function makeCodingAgentHandler(
         importNativeSessionId?: string
         idleTimeoutMs?: number
         keepWarm?: boolean
+        fromAgentId?: string
+        fromWorkspaceMode?: `share` | `clone` | `fresh`
       }
       const target = args.target ?? `sandbox`
       const ws =
@@ -436,6 +438,72 @@ export function makeCodingAgentHandler(
               event: `import.failed`,
               detail: msg,
             } satisfies LifecycleRow,
+          })
+          return
+        }
+      }
+
+      if (args.fromAgentId) {
+        try {
+          const sourceHandle = await (ctx as any).observe({
+            sourceType: `entity`,
+            sourceRef: args.fromAgentId,
+          })
+          const sourceEventsCol = sourceHandle?.db?.collections?.events
+          if (!sourceEventsCol) {
+            throw new Error(
+              `fork: source agent ${args.fromAgentId} has no events collection`
+            )
+          }
+          const sourceEventRows = (sourceEventsCol.toArray as Array<EventRow>)
+            .slice()
+            .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+          const sourceEvents = sourceEventRows.map(
+            (r) => r.payload as unknown as NormalizedEvent
+          )
+
+          const newSessionId = randomUUID()
+          const cwd = ws.type === `bindMount` ? ws.hostPath : `/work`
+          const result = convertNativeJsonl(
+            sourceEvents,
+            args.kind ?? `claude`,
+            {
+              sessionId: newSessionId,
+              cwd,
+            }
+          )
+
+          ctx.db.actions.nativeJsonl_insert({
+            row: {
+              key: `current`,
+              nativeSessionId: result.sessionId,
+              content: result.content,
+            } satisfies NativeJsonlRow,
+          })
+          ctx.db.actions.sessionMeta_update({
+            key: `current`,
+            updater: (d: SessionMetaRow) => {
+              d.nativeSessionId = result.sessionId
+            },
+          })
+          ctx.db.actions.lifecycle_insert({
+            row: {
+              key: lifecycleKey(`fork`),
+              ts: Date.now(),
+              event: `kind.forked`,
+              detail: `source=${args.fromAgentId};mode=${args.fromWorkspaceMode ?? `share`};events=${sourceEvents.length}`,
+            } satisfies LifecycleRow,
+          })
+          meta = sessionMetaCol.get(`current`) as SessionMetaRow
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          log.warn({ err, agentId, sourceId: args.fromAgentId }, `fork failed`)
+          ctx.db.actions.sessionMeta_update({
+            key: `current`,
+            updater: (d: SessionMetaRow) => {
+              d.status = `error`
+              d.lastError = `fork failed: ${msg}`
+            },
           })
           return
         }
