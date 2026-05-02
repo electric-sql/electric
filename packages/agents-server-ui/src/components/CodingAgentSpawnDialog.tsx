@@ -4,8 +4,19 @@ import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
 
 type WorkspaceMode = `volume` | `bindMount`
 type Target = `sandbox` | `host`
-type Kind = `claude` | `codex`
+type Kind = `claude` | `codex` | `opencode`
 type ForkWorkspaceMode = `` | `share` | `clone` | `fresh`
+
+// Curated opencode model list. Default ordering puts the openai entry first
+// because the local dev environment is authed against OpenAI; anthropic
+// entries remain available for environments that have ANTHROPIC_API_KEY.
+const OPENCODE_MODELS = [
+  `openai/gpt-5.4-mini-fast`,
+  `openai/gpt-5.5`,
+  `openai/gpt-5.5-fast`,
+  `anthropic/claude-haiku-4-5`,
+  `anthropic/claude-sonnet-4-6`,
+] as const
 
 export interface ForkSourceOption {
   url: string
@@ -29,6 +40,7 @@ export function CodingAgentSpawnDialog({
   availableCodingAgents = [],
 }: CodingAgentSpawnDialogProps): React.ReactElement {
   const [kind, setKind] = useState<Kind>(`claude`)
+  const [opencodeModel, setOpencodeModel] = useState<string>(OPENCODE_MODELS[0])
   const [target, setTarget] = useState<Target>(`sandbox`)
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(`volume`)
   const [workspaceName, setWorkspaceName] = useState(``)
@@ -49,8 +61,11 @@ export function CodingAgentSpawnDialog({
     if (forkEnabled && !forkSourceUrl) {
       return false
     }
+    if (kind === `opencode` && !opencodeModel) {
+      return false
+    }
     return true
-  }, [workspaceMode, hostPath, forkEnabled, forkSourceUrl])
+  }, [workspaceMode, hostPath, forkEnabled, forkSourceUrl, kind, opencodeModel])
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -60,6 +75,7 @@ export function CodingAgentSpawnDialog({
         kind,
         workspaceType: workspaceMode,
         target,
+        ...(kind === `opencode` ? { model: opencodeModel } : {}),
       }
       if (workspaceMode === `volume` && workspaceName.trim()) {
         args.workspaceName = workspaceName.trim()
@@ -91,6 +107,7 @@ export function CodingAgentSpawnDialog({
     [
       canSubmit,
       kind,
+      opencodeModel,
       target,
       workspaceMode,
       workspaceName,
@@ -152,8 +169,42 @@ export function CodingAgentSpawnDialog({
                 >
                   Codex
                 </Button>
+                <Button
+                  type="button"
+                  variant={kind === `opencode` ? `solid` : `soft`}
+                  color="gray"
+                  size="2"
+                  onClick={() => setKind(`opencode`)}
+                  data-testid="kind-opencode"
+                >
+                  opencode
+                </Button>
               </Flex>
             </Flex>
+
+            {kind === `opencode` && (
+              <Flex direction="column" gap="1">
+                <Text size="2" weight="medium">
+                  Model{` `}
+                  <Text size="1" color="red">
+                    *
+                  </Text>
+                </Text>
+                <select
+                  style={inputStyle}
+                  value={opencodeModel}
+                  onChange={(e) => setOpencodeModel(e.target.value)}
+                  required
+                  data-testid="opencode-model-select"
+                >
+                  {OPENCODE_MODELS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </Flex>
+            )}
 
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">
