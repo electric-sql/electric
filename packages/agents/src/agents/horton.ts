@@ -5,6 +5,8 @@ import { createSkillTools } from '../skills/tools'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import { createSpawnCodingAgentTool } from '../tools/spawn-coding-agent'
 import { createPromptCodingAgentTool } from '../tools/prompt-coding-agent'
+import { createConvertCodingAgentTool } from '../tools/convert-coding-agent'
+import { createForkCodingAgentTool } from '../tools/fork-coding-agent'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import type {
   EntityRegistry,
@@ -215,6 +217,8 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - spawn_worker: dispatch a subagent for an isolated task
 - spawn_coding_agent: spawn a long-lived coding agent (Claude Code or Codex CLI, selectable via the kind argument) in a Docker sandbox for code changes, file edits, debugging
 - prompt_coding_agent: send a follow-up prompt to a coding agent you previously spawned
+- convert_coding_agent: convert a coding agent's kind in place (claude↔codex). History preserved.
+- fork_coding_agent: spawn a new coding agent inheriting another's conversation history.
 ${docsTools}${skillsTools}
 
 # Working with files
@@ -272,6 +276,8 @@ export function createHortonTools(
     createSpawnWorkerTool(ctx),
     createSpawnCodingAgentTool(ctx),
     createPromptCodingAgentTool(ctx),
+    createConvertCodingAgentTool(ctx),
+    createForkCodingAgentTool(ctx),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }
