@@ -80,6 +80,9 @@ export const lifecycleRowSchema = z.object({
     `import.restored`,
     `import.failed`,
     `target.changed`,
+    `kind.converted`,
+    `kind.convert_failed`,
+    `kind.forked`,
   ]),
   detail: z.string().optional(),
 })

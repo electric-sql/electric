@@ -16,7 +16,13 @@ import type {
   LifecycleRow,
   NativeJsonlRow,
 } from './collections'
-import { convertTargetMessageSchema, promptMessageSchema } from './messages'
+import { randomUUID } from 'node:crypto'
+import {
+  convertKindMessageSchema,
+  convertTargetMessageSchema,
+  promptMessageSchema,
+} from './messages'
+import { convertNativeJsonl } from './conversion'
 
 export interface CodingAgentHandlerOptions {
   defaults: {
@@ -602,6 +608,8 @@ async function dispatchInboxMessage(
       return
     case `convert-target`:
       return processConvertTarget(ctx, lm, options, inboxMsg)
+    case `convert-kind`:
+      return processConvertKind(ctx, inboxMsg)
     default:
       log.warn({ type }, `coding-agent: unknown inbox message type`)
   }
@@ -1060,6 +1068,75 @@ async function processConvertTarget(
       ts: Date.now(),
       event: `target.changed`,
       detail: `from=${from};to=${to}`,
+    } satisfies LifecycleRow,
+  })
+}
+
+async function processConvertKind(ctx: any, inboxMsg: InboxRow): Promise<void> {
+  const parsed = convertKindMessageSchema.safeParse(inboxMsg.payload)
+  if (!parsed.success) return
+  const { kind: newKind, model } = parsed.data
+  const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
+  const oldKind = meta.kind
+
+  // Read all events for this agent.
+  const eventRows = (ctx.db.collections.events.toArray as Array<EventRow>)
+    .slice()
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+  const events: Array<NormalizedEvent> = eventRows.map(
+    (r) => r.payload as unknown as NormalizedEvent
+  )
+
+  const newSessionId = randomUUID()
+  const cwd =
+    meta.workspaceSpec.type === `bindMount`
+      ? meta.workspaceSpec.hostPath
+      : `/work`
+
+  let result
+  try {
+    result = convertNativeJsonl(events, newKind, {
+      sessionId: newSessionId,
+      cwd,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`convert`),
+        ts: Date.now(),
+        event: `kind.convert_failed`,
+        detail: msg,
+      } satisfies LifecycleRow,
+    })
+    log.warn({ err, oldKind, newKind }, `convertKind: denormalize threw`)
+    return
+  }
+
+  // Atomic-ish: replace nativeJsonl, update meta, insert lifecycle row.
+  ctx.db.actions.nativeJsonl_insert({
+    row: {
+      key: `current`,
+      nativeSessionId: result.sessionId,
+      content: result.content,
+    } satisfies NativeJsonlRow,
+  })
+  ctx.db.actions.sessionMeta_update({
+    key: `current`,
+    updater: (d: SessionMetaRow) => {
+      d.kind = newKind
+      d.nativeSessionId = result.sessionId
+      d.lastError = undefined
+    },
+  })
+  const detailParts = [`from=${oldKind}`, `to=${newKind}`]
+  if (model) detailParts.push(`model=${model}`)
+  ctx.db.actions.lifecycle_insert({
+    row: {
+      key: lifecycleKey(`convert`),
+      ts: Date.now(),
+      event: `kind.converted`,
+      detail: detailParts.join(`;`),
     } satisfies LifecycleRow,
   })
 }
