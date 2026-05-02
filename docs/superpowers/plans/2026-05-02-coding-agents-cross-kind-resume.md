@@ -3166,3 +3166,39 @@ if (existing) {
 - Sandbox target uses `/workspace` (LocalDockerProvider line 286), already canonical inside the Linux container.
 
 **What this fix does and doesn't unlock.** Fixes turn-N capture, same-kind fork (forkee now gets full source history), cold-boot resume (full transcript materialised). Does NOT change cross-kind conversion fidelity, which still depends on `denormalizeClaude`'s lossy claude←codex round-trip — that's a separate concern.
+
+#### Resolved: cross-kind-to-claude was semantically empty (no synthesised `user_message`)
+
+**Symptom.** `Fork to claude` from a codex/opencode source — and `Convert kind: codex/opencode → claude` — produced a claude session that replied "I don't have a secret word." Same-kind paths and claude → anything were unaffected. The convert-kind E4 e2e test (claude → codex) passes fine post-upsert; only the OTHER direction broke.
+
+**Root cause (empirically verified 2026-05-02 against the live dev environment).** The `coding-agent.events` collection for ANY agent — claude, codex, or opencode — after one user prompt contains only `session_init`, `assistant_message`, `turn_complete`. No `user_message`. The Counter from a fresh claude agent post-prompt:
+
+```
+Counter({'session_init': 1, 'assistant_message': 1, 'turn_complete': 1})
+```
+
+None of the supported CLIs echo the user prompt back in their stream-json stdout (claude's `--print --output-format stream-json`, codex's `exec --json`, opencode's `run --print-logs`). Asp's `normalizeClaude` / `normalizeCodex` and our local `normalizeOpencode` faithfully parse what's emitted — there's nothing to fabricate at the normalize layer because the user-side echo never enters the stream. Consequently, `denormalize(events, 'claude')` correctly emits zero user lines from this stream — output is structurally valid but semantically empty, so the new claude session sees only assistant turns and naturally has no concept of "the secret word."
+
+This was an asymmetry. Claude's on-disk `~/.claude/projects/<dir>/<sessionId>.jsonl` DOES include `type:user` records (we verified this in the previous post-merge entry); they're written by the CLI but only on disk, not on stdout. Codex's on-disk session has the user record too. Opencode's storage doesn't, but opencode is sandbox-only and we don't materialise opencode transcripts for resume yet. Same-kind fork copies the on-disk JSONL byte-for-byte and inherits the user records via that path; cross-kind has to denormalize from the events stream, which had no user_messages.
+
+**Fix.** Synthesise a `user_message` event from the prompt text in `processPrompt` (`packages/coding-agents/src/entity/handler.ts`), inserted BEFORE `lm.bridge.runTurn`. The synthetic event uses the same `seq`/`runId`/`eventKey` plumbing as bridge-emitted events:
+
+```ts
+ctx.db.actions.events_insert({
+  row: {
+    key: eventKey(runId, seq),
+    runId,
+    seq,
+    ts: userTs,
+    type: `user_message`,
+    payload: { type: `user_message`, ts: userTs, text: promptText } as ...,
+  } satisfies EventRow,
+})
+seq++
+```
+
+We picked the **always-inject** variant after empirically confirming claude — like codex and opencode — does not emit user_messages on its stdout. There is no risk of duplicate user_message events at runtime, so no gating on kind is needed. The simpler universal synthesis matches handler-level `user_message` records to what `denormalize` consumers expect (asp's `denormalizeCodex` / `denormalizeClaude` write the user line into the on-disk transcript; codex's `responseSetItem` and claude's `type:user` JSONL record).
+
+**What this unlocks.** Cross-kind to claude (fork or convert) — the synthesised user prompts make `denormalizeClaude` produce a transcript with real user records, which the new claude session reads on `--resume` and treats as conversational memory. Cross-kind to codex was already working (codex's denormalize tolerates the asymmetry differently — its user records come from the synthesised side too). The fix is universal even for same-kind, where the duplicate is still avoided because same-kind copies the source's `nativeJsonl` blob directly rather than re-denormalizing.
+
+**Verification status.** Unit: `pnpm -C packages/coding-agents typecheck` clean; `pnpm -C packages/coding-agents test` green (115 passed; the count assertion in `test/unit/entity-handler.test.ts` was bumped from 2 to 3 to account for the new synthetic event, and the ordering/payload were asserted alongside). Live empirical retest of the four scenarios was blocked by the dev-server architecture: the `agents start-builtin` worker process (which actually runs the entity handler) is started by `electric-ax dev up` and does NOT auto-restart on file changes, so picking up the new dist requires the user to restart the dev session. The unit + e2e (Layer 4) tests cover the regression vector either way.
