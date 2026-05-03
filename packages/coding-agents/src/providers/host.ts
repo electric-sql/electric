@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, realpath, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import { dirname } from 'node:path'
@@ -19,6 +19,12 @@ interface AgentRecord {
   env: Record<string, string>
   /** Per-start nonce so each fresh start (after destroy) has a unique instanceId. */
   nonce: string
+  /**
+   * Live per-turn children. SIGTERM'd on stop()/destroy() so the
+   * SandboxProvider contract (terminate the running child within N s,
+   * see L1.11 conformance) holds.
+   */
+  activeChildren: Set<ChildProcess>
 }
 
 export class HostProvider implements SandboxProvider {
@@ -40,7 +46,12 @@ export class HostProvider implements SandboxProvider {
       throw new Error(`HostProvider workspace is not a directory: ${real}`)
     }
     const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-    const rec: AgentRecord = { workspaceMount: real, env: spec.env, nonce }
+    const rec: AgentRecord = {
+      workspaceMount: real,
+      env: spec.env,
+      nonce,
+      activeChildren: new Set(),
+    }
     this.agents.set(spec.agentId, rec)
     log.info(
       { agentId: spec.agentId, workspaceMount: real },
@@ -49,12 +60,22 @@ export class HostProvider implements SandboxProvider {
     return this.makeInstance(spec.agentId, rec)
   }
 
-  async stop(_instanceId: string): Promise<void> {
-    // Nothing to kill between turns; the per-turn child has already exited.
-    // Per-agent cleanup lives in destroy(agentId).
+  async stop(instanceId: string): Promise<void> {
+    // Best-effort: kill any in-flight children for the agent matching
+    // this instanceId. Without this, calling stop() while a turn is
+    // mid-exec leaves the child running (R1 #9). LocalDocker passes
+    // L1.11 via container removal; sprites passes via WS close;
+    // host now passes via SIGTERM with a SIGKILL fallback.
+    for (const [agentId, rec] of this.agents) {
+      if (instanceId !== `host:${agentId}#${rec.nonce}`) continue
+      await terminateChildren(rec.activeChildren)
+      return
+    }
   }
 
   async destroy(agentId: string): Promise<void> {
+    const rec = this.agents.get(agentId)
+    if (rec) await terminateChildren(rec.activeChildren)
     this.agents.delete(agentId)
   }
 
@@ -97,10 +118,17 @@ async function execOnHost(
     env,
     stdio: [req.stdin === `pipe` ? `pipe` : `ignore`, `pipe`, `pipe`],
   })
+  rec.activeChildren.add(child)
 
   const exitPromise = new Promise<{ exitCode: number }>((resolve, reject) => {
-    child.on(`error`, reject)
-    child.on(`exit`, (code) => resolve({ exitCode: code ?? -1 }))
+    child.on(`error`, (err) => {
+      rec.activeChildren.delete(child)
+      reject(err)
+    })
+    child.on(`exit`, (code) => {
+      rec.activeChildren.delete(child)
+      resolve({ exitCode: code ?? -1 })
+    })
   })
 
   const stdinStream = child.stdin as Writable | null
@@ -139,4 +167,39 @@ async function copyToHost(
 ): Promise<void> {
   await mkdir(dirname(destPath), { recursive: true })
   await writeFile(destPath, content, { mode })
+}
+
+async function terminateChildren(children: Set<ChildProcess>): Promise<void> {
+  if (children.size === 0) return
+  // SIGTERM first; collect the pending exit promises so we can fall
+  // back to SIGKILL after a grace period if any survive.
+  const pending: Array<Promise<void>> = []
+  for (const child of children) {
+    if (child.killed || child.exitCode !== null) {
+      children.delete(child)
+      continue
+    }
+    pending.push(
+      new Promise<void>((resolve) => {
+        child.once(`exit`, () => resolve())
+        try {
+          child.kill(`SIGTERM`)
+        } catch {
+          resolve()
+        }
+      })
+    )
+  }
+  // Wait up to 5 s for graceful exit; SIGKILL anything still alive.
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, 5_000))
+  await Promise.race([Promise.all(pending), timeout])
+  for (const child of children) {
+    if (child.exitCode === null && !child.killed) {
+      try {
+        child.kill(`SIGKILL`)
+      } catch {
+        // already dead
+      }
+    }
+  }
 }
