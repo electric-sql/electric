@@ -1,0 +1,294 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`status × control-plane-message transition table > matches the snapshot for every (status, message) cell 1`] = `
+{
+  "cold + convert-kind→codex": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "kind.converted",
+    ],
+  },
+  "cold + convert-target→host": {
+    "finalStatus": "cold",
+    "lastErrorSet": true,
+    "lifecycleEvents": [
+      "target.changed",
+    ],
+  },
+  "cold + destroy": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "cold + pin": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "pin",
+    ],
+  },
+  "cold + release": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "release",
+    ],
+  },
+  "cold + stop": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "destroyed + convert-kind→codex": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [],
+  },
+  "destroyed + convert-target→host": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [],
+  },
+  "destroyed + destroy": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [],
+  },
+  "destroyed + pin": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [],
+  },
+  "destroyed + release": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [],
+  },
+  "destroyed + stop": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [],
+  },
+  "error + convert-kind→codex": {
+    "finalStatus": "error",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "kind.converted",
+    ],
+  },
+  "error + convert-target→host": {
+    "finalStatus": "error",
+    "lastErrorSet": true,
+    "lifecycleEvents": [
+      "target.changed",
+    ],
+  },
+  "error + destroy": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "error + pin": {
+    "finalStatus": "error",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "pin",
+    ],
+  },
+  "error + release": {
+    "finalStatus": "error",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "release",
+    ],
+  },
+  "error + stop": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "idle + convert-kind→codex": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "kind.converted",
+    ],
+  },
+  "idle + convert-target→host": {
+    "finalStatus": "cold",
+    "lastErrorSet": true,
+    "lifecycleEvents": [
+      "target.changed",
+    ],
+  },
+  "idle + destroy": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "idle + pin": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "pin",
+    ],
+  },
+  "idle + release": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "release",
+    ],
+  },
+  "idle + stop": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "running + convert-kind→codex": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "orphan.detected",
+      "kind.converted",
+    ],
+  },
+  "running + convert-target→host": {
+    "finalStatus": "cold",
+    "lastErrorSet": true,
+    "lifecycleEvents": [
+      "orphan.detected",
+      "target.changed",
+    ],
+  },
+  "running + destroy": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "orphan.detected",
+      "sandbox.stopped",
+    ],
+  },
+  "running + pin": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "orphan.detected",
+      "pin",
+    ],
+  },
+  "running + release": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "orphan.detected",
+      "release",
+    ],
+  },
+  "running + stop": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "orphan.detected",
+      "sandbox.stopped",
+    ],
+  },
+  "starting + convert-kind→codex": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "kind.converted",
+    ],
+  },
+  "starting + convert-target→host": {
+    "finalStatus": "cold",
+    "lastErrorSet": true,
+    "lifecycleEvents": [
+      "target.changed",
+    ],
+  },
+  "starting + destroy": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "starting + pin": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "pin",
+    ],
+  },
+  "starting + release": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "release",
+    ],
+  },
+  "starting + stop": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "stopping + convert-kind→codex": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "kind.converted",
+    ],
+  },
+  "stopping + convert-target→host": {
+    "finalStatus": "cold",
+    "lastErrorSet": true,
+    "lifecycleEvents": [
+      "target.changed",
+    ],
+  },
+  "stopping + destroy": {
+    "finalStatus": "destroyed",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+  "stopping + pin": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "pin",
+    ],
+  },
+  "stopping + release": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "release",
+    ],
+  },
+  "stopping + stop": {
+    "finalStatus": "cold",
+    "lastErrorSet": false,
+    "lifecycleEvents": [
+      "sandbox.stopped",
+    ],
+  },
+}
+`;
