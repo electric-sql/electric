@@ -15,30 +15,33 @@ import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
 import { useEntityTimeline } from './hooks/useEntityTimeline'
-import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
+import {
+  SidebarCollapsedProvider,
+  useSidebarCollapsed,
+} from './hooks/useSidebarCollapsed'
 import { useHotkey } from './hooks/useHotkey'
 import {
   SearchPaletteProvider,
   useSearchPalette,
 } from './hooks/useSearchPalette'
 import { Sidebar } from './components/Sidebar'
-import { AppTopBar, TopBarSlotsProvider } from './components/AppTopBar'
 import { SearchPalette } from './components/SearchPalette'
 import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { CodingSessionView } from './components/CodingSessionView'
-import { Stack, Text } from './ui'
+import { NewSessionPage } from './components/NewSessionPage'
+import { Stack } from './ui'
 import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
   return (
-    <SearchPaletteProvider>
-      <TopBarSlotsProvider>
+    <SidebarCollapsedProvider>
+      <SearchPaletteProvider>
         <RootShell />
-      </TopBarSlotsProvider>
-    </SearchPaletteProvider>
+      </SearchPaletteProvider>
+    </SidebarCollapsedProvider>
   )
 }
 
@@ -70,33 +73,16 @@ function RootShell(): React.ReactElement {
 
   return (
     <div className={styles.appShell}>
-      <AppTopBar
-        collapsed={collapsed}
-        onToggleSidebar={toggle}
-        onOpenSearch={search.open}
-      />
-      <div className={styles.contentRow}>
-        {!collapsed && (
-          <Sidebar
-            selectedEntityUrl={selectedEntityUrl}
-            onSelectEntity={navigateToEntity}
-            pinnedUrls={pinnedUrls}
-          />
-        )}
-        <Outlet />
-      </div>
+      {!collapsed && (
+        <Sidebar
+          selectedEntityUrl={selectedEntityUrl}
+          onSelectEntity={navigateToEntity}
+          pinnedUrls={pinnedUrls}
+        />
+      )}
+      <Outlet />
       <SearchPalette />
     </div>
-  )
-}
-
-function IndexPage(): React.ReactElement {
-  return (
-    <Stack align="center" justify="center" grow>
-      <Text tone="muted" size={2}>
-        Select an entity from the sidebar
-      </Text>
-    </Stack>
   )
 }
 
@@ -158,16 +144,18 @@ function EntityPage(): React.ReactElement {
 
   if (!selectedEntity) {
     return (
-      <Stack align="center" justify="center" grow>
-        <Text tone="muted" size={2}>
-          Loading entity...
-        </Text>
+      <Stack
+        align="center"
+        justify="center"
+        grow
+        className={styles.entityShell}
+      >
+        <span>Loading entity...</span>
       </Stack>
     )
   }
 
   const baseUrl = activeServer?.url ?? ``
-  // Hide the body while spawning — server streams don't exist yet.
   const connectUrl = isSpawning ? null : entityUrl
 
   return (
@@ -293,7 +281,7 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/`,
-  component: IndexPage,
+  component: NewSessionPage,
 })
 
 const entityRoute = createRoute({

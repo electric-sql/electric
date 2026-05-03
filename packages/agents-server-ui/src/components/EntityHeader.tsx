@@ -9,10 +9,10 @@ import {
   PinOff,
   Trash2,
 } from 'lucide-react'
-import { getEntityInstanceName } from '../lib/types'
+import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { Badge, Button, Dialog, IconButton, Menu, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
-import { TopBarActions, TopBarTitle } from './AppTopBar'
+import { MainHeader } from './MainHeader'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
@@ -38,11 +38,12 @@ type EntityHeaderProps = {
 }
 
 /**
- * Renders the entity-page chrome: title (left) and action cluster (right)
- * are portaled into the global `<AppTopBar>` so they read as part of one
- * unified bar with the sidebar toggle and search button. Errors render
- * in a thin alert strip below the bar (returned as a sibling node so
- * route layout stays simple).
+ * Top of the entity-page column. A flat header strip with the session
+ * name + id on the left and an actions cluster on the right, plus a
+ * thin error strip below when kill / fork surface errors.
+ *
+ * No border-bottom — the strip shares the chat background, matching
+ * Cursor / Codex chrome.
  */
 export function EntityHeader(
   props: EntityHeaderProps
@@ -53,12 +54,10 @@ export function EntityHeader(
   )
   return (
     <>
-      <TopBarTitle>
-        <EntityTitle entity={entity} />
-      </TopBarTitle>
-      <TopBarActions>
-        <EntityActions {...props} />
-      </TopBarActions>
+      <MainHeader
+        title={<EntityTitle entity={entity} />}
+        actions={<EntityActions {...props} />}
+      />
       {errors.length > 0 && (
         <div className={styles.errorBar} role="alert">
           {errors.map((msg, i) => (
@@ -77,23 +76,26 @@ function EntityTitle({
 }: {
   entity: ElectricEntity
 }): React.ReactElement {
-  const instanceName = getEntityInstanceName(entity.url)
+  const { title } = getEntityDisplayTitle(entity)
+  // The session id is the URL minus the leading slash (e.g.
+  // `horton/gpt5-verify-1777802612`). The type is encoded in the path
+  // so a separate type pill would be redundant.
+  const sessionId = entity.url.replace(/^\//, ``)
   const decoded = decodeURIComponent(entity.url)
   return (
     <span className={styles.title}>
-      <Text size={2} weight="bold" className={styles.titleName} title={decoded}>
-        {instanceName}
+      <Text size={2} className={styles.titleName} title={decoded}>
+        {title}
       </Text>
-      <span className={styles.typePill}>{entity.type}</span>
       <button
         type="button"
-        className={styles.url}
+        className={styles.subtitle}
         title={`${decoded} — click to copy`}
         onClick={() => {
           void navigator.clipboard.writeText(entity.url)
         }}
       >
-        {decoded}
+        {sessionId}
       </button>
     </span>
   )
@@ -111,7 +113,7 @@ function EntityActions({
 }: EntityHeaderProps): React.ReactElement {
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
-  const instanceName = getEntityInstanceName(entity.url)
+  const { title: instanceName } = getEntityDisplayTitle(entity)
 
   return (
     <span className={styles.actions}>

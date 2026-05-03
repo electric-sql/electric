@@ -79,9 +79,8 @@
 .groupLabel {
   display: block;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   font-size: 10px;
-  font-weight: 500;
   color: var(--ds-text-3);
   padding: 10px 12px 4px;
 }
@@ -106,7 +105,6 @@
   flex: 1;
   min-width: 0;
   font-size: var(--ds-text-sm);
-  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -114,13 +112,9 @@
 
 .rowType {
   flex-shrink: 0;
-  padding: 1px 5px;
-  border-radius: var(--ds-radius-2);
   font-size: 10px;
-  font-weight: 500;
   letter-spacing: 0.04em;
   color: var(--ds-text-3);
-  background: var(--ds-gray-a3);
   text-transform: lowercase;
 }
 

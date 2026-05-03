@@ -1,0 +1,126 @@
+.shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-bg);
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.container {
+  width: 100%;
+  max-width: 640px;
+  padding: var(--ds-space-7) var(--ds-space-5) var(--ds-space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-5);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+}
+
+.headingTitle {
+  font-weight: 400;
+  margin: 0;
+}
+
+.headingSubtitle {
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-sm);
+}
+
+.typeGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ds-space-2);
+}
+
+.typeCard {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+  padding: var(--ds-space-3) var(--ds-space-4);
+  background: transparent;
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.typeCard:hover {
+  background: var(--ds-gray-a2);
+  border-color: var(--ds-border-2);
+}
+.typeCardName {
+  color: var(--ds-text-1);
+  font-size: var(--ds-text-base);
+}
+.typeCardDescription {
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-sm);
+  line-height: 1.45;
+}
+
+.formCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-5);
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-4);
+}
+
+.formHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+}
+
+.formHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.backLink {
+  all: unset;
+  cursor: pointer;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-sm);
+}
+.backLink:hover {
+  color: var(--ds-text-1);
+}
+
+.error {
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border-radius: var(--ds-radius-2);
+  background: var(--ds-red-a2);
+  color: var(--ds-red-11);
+  font-size: var(--ds-text-sm);
+}
+
+.empty {
+  padding: var(--ds-space-5);
+  text-align: center;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-sm);
+  border: 1px dashed var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+}

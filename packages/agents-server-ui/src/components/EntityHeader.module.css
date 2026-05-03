@@ -1,7 +1,7 @@
 .title {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  gap: var(--ds-space-2);
   min-width: 0;
   flex: 1;
 }
@@ -10,42 +10,32 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
-.typePill {
-  flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: var(--ds-radius-2);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  color: var(--ds-text-2);
-  background: var(--ds-gray-a3);
-  text-transform: lowercase;
-}
-
-.url {
+.subtitle {
   flex-shrink: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--ds-font-mono);
-  font-size: 11px;
+  font-size: var(--ds-text-xs);
   color: var(--ds-text-3);
   cursor: pointer;
   background: none;
   border: none;
   padding: 0;
 }
-.url:hover {
+.subtitle:hover {
   color: var(--ds-text-2);
 }
 
 .actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .statusBadge {
@@ -60,9 +50,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 4px 12px;
+  padding: 4px var(--ds-space-3);
   background: var(--ds-red-a2);
-  border-bottom: 1px solid var(--ds-red-a3);
 }
 
 .inspectPre {

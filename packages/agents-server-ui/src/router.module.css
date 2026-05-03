@@ -1,15 +1,9 @@
 .appShell {
   display: flex;
-  flex-direction: column;
   height: 100vh;
   min-height: 0;
-}
-
-.contentRow {
-  display: flex;
-  flex: 1;
-  min-height: 0;
   overflow: hidden;
+  background: var(--ds-bg);
 }
 
 .entityShell {
@@ -17,6 +11,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  background: var(--ds-bg);
 }
 
 .entityBody {

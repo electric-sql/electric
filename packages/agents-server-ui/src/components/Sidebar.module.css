@@ -1,7 +1,6 @@
 .root {
   flex-shrink: 0;
-  border-right: 1px solid var(--ds-gray-a5);
-  background: var(--ds-gray-a2);
+  background: var(--ds-bg-subtle);
   position: relative;
 }
 
@@ -21,86 +20,33 @@
   background: var(--ds-accent-a6);
 }
 
-.newSessionRow {
-  padding-top: 12px;
-  padding-bottom: 4px;
-}
-
-.newSessionPopupHeader {
-  padding-top: 12px;
-  padding-bottom: 8px;
-}
-
-.newSessionItemDescription {
-  line-height: 1.4;
-}
-
 .treeRow {
   padding-bottom: 8px;
 }
 
-.newSessionBtn {
+.newSessionRow {
   all: unset;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 6px;
+  gap: 8px;
   height: var(--ds-row-height-md);
-  padding: 0 10px;
-  cursor: pointer;
-  font-size: var(--ds-text-sm);
-  font-weight: 500;
-  color: var(--ds-text-on-accent);
-  background: var(--ds-accent-9);
+  padding: 0 8px;
   border-radius: var(--ds-radius-2);
-  box-sizing: border-box;
-  transition: background 0.12s ease;
-}
-.newSessionBtn:hover:not(:disabled) {
-  background: var(--ds-accent-10);
-}
-.newSessionBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.newSessionPopup {
-  padding: 0;
-  width: 320px;
-  max-height: 400px;
-}
-
-.newSessionHeader {
-  border-bottom: 1px solid var(--ds-gray-a4);
-}
-
-.newSessionList {
-  max-height: 340px;
-  overflow-y: auto;
-}
-
-.newSessionItem {
-  all: unset;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid var(--ds-gray-a3);
+  color: var(--ds-text-1);
+  transition: background 0.08s ease;
 }
-.newSessionItem:last-child {
-  border-bottom: none;
-}
-.newSessionItem:hover {
+.newSessionRow:hover {
   background: var(--ds-gray-a3);
 }
-
-.emptyHint {
-  padding: 12px;
+.newSessionIcon {
+  flex-shrink: 0;
+  color: var(--ds-text-2);
+}
+.newSessionLabel {
+  font-size: var(--ds-text-sm);
+  flex: 1;
+  min-width: 0;
 }
 
 .scrollFlex {
@@ -115,9 +61,8 @@
 .sectionLabel {
   display: block;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   font-size: 10px;
-  font-weight: 500;
   padding: 14px 12px 4px;
   color: var(--ds-text-3);
 }

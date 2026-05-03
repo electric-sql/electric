@@ -1,23 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
-import { eq, not } from '@tanstack/db'
-import { nanoid } from 'nanoid'
-import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
+import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { Popover, ScrollArea, Stack, Text } from '../ui'
+import { ScrollArea, Stack, Text } from '../ui'
+import { SidebarHeader } from './SidebarHeader'
 import { SidebarRow } from './SidebarRow'
 import { SidebarTree } from './SidebarTree'
 import { SidebarFooter } from './SidebarFooter'
-import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
-import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
 import { useExpandedTreeNodes } from '../hooks/useExpandedTreeNodes'
 import { bucketEntities } from '../lib/sessionGroups'
 import styles from './Sidebar.module.css'
-import type {
-  ElectricEntity,
-  ElectricEntityType,
-} from '../lib/ElectricAgentsProvider'
+import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -54,13 +48,9 @@ export function Sidebar({
   onSelectEntity: (url: string) => void
   pinnedUrls: Array<string>
 }): React.ReactElement {
-  const { entitiesCollection, entityTypesCollection, spawnEntity } =
-    useElectricAgents()
+  const { entitiesCollection } = useElectricAgents()
   const expanded = useExpandedTreeNodes()
-  const [spawnError, setSpawnError] = useState<string | null>(null)
-  const [spawnDialogType, setSpawnDialogType] =
-    useState<ElectricEntityType | null>(null)
-  const [codingDialogOpen, setCodingDialogOpen] = useState(false)
+  const navigate = useNavigate()
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
@@ -102,16 +92,6 @@ export function Sidebar({
     },
     [entitiesCollection]
   )
-  const { data: entityTypes = [] } = useLiveQuery(
-    (query) => {
-      if (!entityTypesCollection) return undefined
-      return query
-        .from({ t: entityTypesCollection })
-        .where(({ t }) => not(eq(t.name, `worker`)))
-        .orderBy(({ t }) => t.name, `asc`)
-    },
-    [entityTypesCollection]
-  )
   const pinnedEntities = entities.filter((e) => pinnedUrls.includes(e.url))
 
   const { roots, childrenByParent } = useMemo(
@@ -121,46 +101,9 @@ export function Sidebar({
 
   const sessionGroups = useMemo(() => bucketEntities(roots), [roots])
 
-  const doSpawn = useCallback(
-    (typeName: string, args?: Record<string, unknown>) => {
-      if (!spawnEntity) return
-      setSpawnError(null)
-      const name = nanoid(10)
-      // Coder entities need a fresh-input event on the first wake to
-      // actually invoke the handler — `entity_created` alone is a
-      // management event and the runtime skips the initial handler
-      // pass when only management events are present. A sentinel inbox
-      // message delivers that fresh input; the coder handler ignores
-      // non-prompt payloads. Covers create, attach, and import modes.
-      const initialMessage =
-        typeName === CODING_SESSION_ENTITY_TYPE
-          ? { __bootstrap: true }
-          : undefined
-      const tx = spawnEntity({ type: typeName, name, args, initialMessage })
-      onSelectEntity(`/${typeName}/${name}`)
-      tx.isPersisted.promise.catch((err: Error) => {
-        setSpawnError(
-          `Could not start session: ${err.message}. The server may be missing ANTHROPIC_API_KEY.`
-        )
-      })
-    },
-    [onSelectEntity, spawnEntity]
-  )
-
-  const handleNewSession = useCallback(
-    (entityType: ElectricEntityType) => {
-      if (entityType.name === CODING_SESSION_ENTITY_TYPE) {
-        setCodingDialogOpen(true)
-        return
-      }
-      if (hasSchemaProperties(entityType.creation_schema)) {
-        setSpawnDialogType(entityType)
-      } else {
-        doSpawn(entityType.name)
-      }
-    },
-    [doSpawn]
-  )
+  const handleNewSession = useCallback(() => {
+    navigate({ to: `/` })
+  }, [navigate])
 
   return (
     <Stack
@@ -179,87 +122,19 @@ export function Sidebar({
           resizing || resizeHandleHover ? styles.resizeHandleActive : ``
         }`}
       />
-      {spawnError && (
-        <Stack px={3} py={3}>
-          <Text size={1} tone="danger" role="alert">
-            {spawnError}
-          </Text>
-        </Stack>
-      )}
-
-      <Stack px={3} className={styles.newSessionRow}>
-        <Popover.Root>
-          <Popover.Trigger
-            render={
-              <button
-                type="button"
-                disabled={!spawnEntity || entityTypes.length === 0}
-                className={styles.newSessionBtn}
-              >
-                New session
-                <ChevronDown size={14} />
-              </button>
-            }
-          />
-          <Popover.Content
-            side="right"
-            align="start"
-            padded={false}
-            className={styles.newSessionPopup}
-          >
-            <Stack
-              px={3}
-              className={`${styles.newSessionHeader} ${styles.newSessionPopupHeader}`}
-            >
-              <Text size={2} weight="bold">
-                New session
-              </Text>
-            </Stack>
-            <div className={styles.newSessionList}>
-              <Stack direction="column" gap={0}>
-                {entityTypes.map((t) => (
-                  <Popover.Close
-                    key={t.name}
-                    render={
-                      <button
-                        type="button"
-                        onClick={() => handleNewSession(t)}
-                        className={styles.newSessionItem}
-                      >
-                        <Text size={2} weight="medium">
-                          {t.name}
-                        </Text>
-                        {t.description && (
-                          <Text
-                            size={1}
-                            tone="muted"
-                            className={styles.newSessionItemDescription}
-                          >
-                            {t.description}
-                          </Text>
-                        )}
-                      </button>
-                    }
-                  />
-                ))}
-                {entityTypes.length === 0 && (
-                  <Text
-                    size={1}
-                    tone="muted"
-                    align="center"
-                    className={styles.emptyHint}
-                  >
-                    No entity types registered
-                  </Text>
-                )}
-              </Stack>
-            </div>
-          </Popover.Content>
-        </Popover.Root>
-      </Stack>
+      <SidebarHeader />
 
       <ScrollArea className={styles.scrollFlex}>
         <Stack direction="column" px={2} className={styles.treeRow}>
+          <button
+            type="button"
+            onClick={handleNewSession}
+            className={styles.newSessionRow}
+          >
+            <SquarePen size={14} className={styles.newSessionIcon} />
+            <span className={styles.newSessionLabel}>New session</span>
+          </button>
+
           {pinnedEntities.length > 0 && (
             <>
               <SectionLabel>Pinned</SectionLabel>
@@ -303,28 +178,6 @@ export function Sidebar({
       </ScrollArea>
 
       <SidebarFooter />
-
-      {spawnDialogType && (
-        <SpawnArgsDialog
-          entityType={spawnDialogType}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) setSpawnDialogType(null)
-          }}
-          onSpawn={(args) => {
-            doSpawn(spawnDialogType.name, args)
-            setSpawnDialogType(null)
-          }}
-        />
-      )}
-      <CodingSessionSpawnDialog
-        open={codingDialogOpen}
-        onOpenChange={setCodingDialogOpen}
-        onSpawn={(args) => {
-          doSpawn(CODING_SESSION_ENTITY_TYPE, args)
-          setCodingDialogOpen(false)
-        }}
-      />
     </Stack>
   )
 }
@@ -355,7 +208,7 @@ function SectionLabel({
   children: React.ReactNode
 }): React.ReactElement {
   return (
-    <Text size={1} weight="medium" tone="muted" className={styles.sectionLabel}>
+    <Text size={1} tone="muted" className={styles.sectionLabel}>
       {children}
     </Text>
   )

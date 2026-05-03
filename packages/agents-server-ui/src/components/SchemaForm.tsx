@@ -1,8 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
 import {
   Button,
-  Dialog,
   Field,
   Input,
   NativeSelect,
@@ -10,14 +8,7 @@ import {
   Text,
   Textarea,
 } from '../ui'
-import styles from './SpawnArgsDialog.module.css'
-
-interface SpawnArgsDialogProps {
-  entityType: ElectricEntityType
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSpawn: (args: Record<string, unknown>) => void
-}
+import styles from './SchemaForm.module.css'
 
 interface SchemaProperty {
   type?: string
@@ -87,7 +78,6 @@ function parseStringArray(text: string): Array<string> {
     .filter(Boolean)
 }
 
-/** Display a string array as comma-separated text for editing. */
 function stringArrayToDisplay(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map(String).join(`, `)
@@ -96,40 +86,51 @@ function stringArrayToDisplay(value: unknown): string {
   return ``
 }
 
-export function SpawnArgsDialog({
-  entityType,
-  open,
-  onOpenChange,
-  onSpawn,
-}: SpawnArgsDialogProps): React.ReactElement {
-  const schema = entityType.creation_schema
-  const objSchema = isObjectSchema(schema) ? schema : null
-
+/**
+ * Renders a JSON-Schema `properties` object as a stack of form fields,
+ * with a single submit button. Used by the new-session page to spawn
+ * any entity type whose `creation_schema` is a flat object.
+ */
+export function SchemaForm({
+  schema,
+  submitLabel = `Create`,
+  onSubmit,
+  onCancel,
+}: {
+  schema: unknown
+  submitLabel?: string
+  onSubmit: (args: Record<string, unknown>) => void
+  onCancel?: () => void
+}): React.ReactElement {
+  if (isObjectSchema(schema)) {
+    return (
+      <ObjectSchemaForm
+        schema={schema}
+        submitLabel={submitLabel}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+      />
+    )
+  }
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth={480}>
-        <Dialog.Title>New {entityType.name}</Dialog.Title>
-        {entityType.description && (
-          <Dialog.Description className={styles.dialogDescription}>
-            {entityType.description}
-          </Dialog.Description>
-        )}
-        {objSchema ? (
-          <ObjectSchemaForm schema={objSchema} onSpawn={onSpawn} />
-        ) : (
-          <RawJsonForm onSpawn={onSpawn} />
-        )}
-      </Dialog.Content>
-    </Dialog.Root>
+    <RawJsonForm
+      submitLabel={submitLabel}
+      onSubmit={onSubmit}
+      onCancel={onCancel}
+    />
   )
 }
 
 function ObjectSchemaForm({
   schema,
-  onSpawn,
+  submitLabel,
+  onSubmit,
+  onCancel,
 }: {
   schema: ObjectSchema
-  onSpawn: (args: Record<string, unknown>) => void
+  submitLabel: string
+  onSubmit: (args: Record<string, unknown>) => void
+  onCancel?: () => void
 }): React.ReactElement {
   const properties = schema.properties
   const requiredSet = useMemo(
@@ -188,9 +189,9 @@ function ObjectSchemaForm({
           }
         }
       }
-      onSpawn(args)
+      onSubmit(args)
     },
-    [values, properties, onSpawn]
+    [values, properties, onSubmit]
   )
 
   return (
@@ -209,15 +210,18 @@ function ObjectSchemaForm({
         ))}
       </Stack>
       <Stack gap={3} justify="end" className={styles.actions}>
-        <Dialog.Close
-          render={
-            <Button variant="soft" tone="neutral">
-              Cancel
-            </Button>
-          }
-        />
+        {onCancel && (
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </Button>
+        )}
         <Button type="submit" disabled={!canSubmit}>
-          Create
+          {submitLabel}
         </Button>
       </Stack>
     </form>
@@ -241,9 +245,6 @@ function SchemaField({
 }): React.ReactElement {
   const label = prop.title ?? name
 
-  // String array: render comma-separated text input.
-  // We store the raw text as a string while editing and convert to a
-  // proper array at submit time (see handleSubmit).
   if (isStringArrayType(prop)) {
     return (
       <Field label={label} required={required} description={prop.description}>
@@ -365,9 +366,13 @@ function SchemaField({
 }
 
 function RawJsonForm({
-  onSpawn,
+  submitLabel,
+  onSubmit,
+  onCancel,
 }: {
-  onSpawn: (args: Record<string, unknown>) => void
+  submitLabel: string
+  onSubmit: (args: Record<string, unknown>) => void
+  onCancel?: () => void
 }): React.ReactElement {
   const [raw, setRaw] = useState(`{}`)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -386,20 +391,18 @@ function RawJsonForm({
           return
         }
         setParseError(null)
-        onSpawn(parsed as Record<string, unknown>)
+        onSubmit(parsed as Record<string, unknown>)
       } catch {
         setParseError(`Invalid JSON`)
       }
     },
-    [raw, onSpawn]
+    [raw, onSubmit]
   )
 
   return (
     <form onSubmit={handleSubmit}>
       <Stack direction="column" gap={2}>
-        <Text size={2} weight="medium">
-          Arguments (JSON)
-        </Text>
+        <Text size={2}>Arguments (JSON)</Text>
         <Textarea
           value={raw}
           onChange={(e) => {
@@ -417,14 +420,17 @@ function RawJsonForm({
         )}
       </Stack>
       <Stack gap={3} justify="end" className={styles.actions}>
-        <Dialog.Close
-          render={
-            <Button variant="soft" tone="neutral">
-              Cancel
-            </Button>
-          }
-        />
-        <Button type="submit">Create</Button>
+        {onCancel && (
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </Button>
+        )}
+        <Button type="submit">{submitLabel}</Button>
       </Stack>
     </form>
   )

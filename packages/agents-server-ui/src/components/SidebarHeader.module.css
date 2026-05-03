@@ -1,0 +1,15 @@
+/**
+ * Tiny header row at the top of the sidebar. Holds the sidebar
+ * collapse button + the search trigger as icon-only ghost buttons.
+ *
+ * No border-bottom, same background as the rest of the sidebar — the
+ * row reads as part of the sidebar surface, not a separate top bar.
+ */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 44px;
+  padding: 0 var(--ds-space-2);
+}

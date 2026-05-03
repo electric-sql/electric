@@ -1,7 +1,3 @@
-.dialogDescription {
-  margin-bottom: var(--ds-space-4);
-}
-
 .tabs {
   border-bottom: 1px solid var(--ds-gray-a4);
 }
@@ -11,13 +7,11 @@
   padding: 8px 16px;
   cursor: pointer;
   font-size: var(--ds-text-sm);
-  font-weight: 400;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   color: var(--ds-gray-10);
 }
 .tabActive {
-  font-weight: 600;
   border-bottom-color: var(--ds-accent-9);
   color: var(--ds-text-1);
 }

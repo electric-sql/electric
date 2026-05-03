@@ -23,7 +23,6 @@
   align-items: center;
   gap: 8px;
   font-size: var(--ds-text-sm);
-  font-weight: 500;
 }
 
 .tileName {

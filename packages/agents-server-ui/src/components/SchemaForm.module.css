@@ -1,0 +1,10 @@
+.actions {
+  margin-top: var(--ds-space-4);
+}
+
+.checkboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  cursor: pointer;
+}
