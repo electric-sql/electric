@@ -1,0 +1,210 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`adapter argv stability — claude, codex, opencode > claude — prompt-only 1`] = `
+{
+  "args": [
+    "--print",
+    "--output-format=stream-json",
+    "--verbose",
+    "--dangerously-skip-permissions",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "prompt": "P",
+  },
+  "kind": "claude",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > claude — with-model 1`] = `
+{
+  "args": [
+    "--print",
+    "--output-format=stream-json",
+    "--verbose",
+    "--dangerously-skip-permissions",
+    "--model",
+    "gpt-5-codex-latest",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "model": "gpt-5-codex-latest",
+    "prompt": "P",
+  },
+  "kind": "claude",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > claude — with-model-and-session 1`] = `
+{
+  "args": [
+    "--print",
+    "--output-format=stream-json",
+    "--verbose",
+    "--dangerously-skip-permissions",
+    "--model",
+    "gpt-5-codex-latest",
+    "--resume",
+    "01900000-0000-7000-8000-000000000000",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "model": "gpt-5-codex-latest",
+    "nativeSessionId": "01900000-0000-7000-8000-000000000000",
+    "prompt": "P",
+  },
+  "kind": "claude",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > claude — with-session 1`] = `
+{
+  "args": [
+    "--print",
+    "--output-format=stream-json",
+    "--verbose",
+    "--dangerously-skip-permissions",
+    "--resume",
+    "01900000-0000-7000-8000-000000000000",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "nativeSessionId": "01900000-0000-7000-8000-000000000000",
+    "prompt": "P",
+  },
+  "kind": "claude",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > codex — prompt-only 1`] = `
+{
+  "args": [
+    "-c",
+    "if [ -n "\${OPENAI_API_KEY:-}" ]; then printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 || true; fi; exec codex "$@"",
+    "--",
+    "exec",
+    "--skip-git-repo-check",
+    "--json",
+    "--",
+    "-",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "prompt": "P",
+  },
+  "kind": "codex",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > codex — with-model 1`] = `
+{
+  "args": [
+    "-c",
+    "if [ -n "\${OPENAI_API_KEY:-}" ]; then printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 || true; fi; exec codex "$@"",
+    "--",
+    "-c",
+    "model="gpt-5-codex-latest"",
+    "exec",
+    "--skip-git-repo-check",
+    "--json",
+    "--",
+    "-",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "model": "gpt-5-codex-latest",
+    "prompt": "P",
+  },
+  "kind": "codex",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > codex — with-model-and-session 1`] = `
+{
+  "args": [
+    "-c",
+    "if [ -n "\${OPENAI_API_KEY:-}" ]; then printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 || true; fi; exec codex "$@"",
+    "--",
+    "-c",
+    "model="gpt-5-codex-latest"",
+    "exec",
+    "--skip-git-repo-check",
+    "--json",
+    "resume",
+    "01900000-0000-7000-8000-000000000000",
+    "--",
+    "-",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "model": "gpt-5-codex-latest",
+    "nativeSessionId": "01900000-0000-7000-8000-000000000000",
+    "prompt": "P",
+  },
+  "kind": "codex",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > codex — with-session 1`] = `
+{
+  "args": [
+    "-c",
+    "if [ -n "\${OPENAI_API_KEY:-}" ]; then printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 || true; fi; exec codex "$@"",
+    "--",
+    "exec",
+    "--skip-git-repo-check",
+    "--json",
+    "resume",
+    "01900000-0000-7000-8000-000000000000",
+    "--",
+    "-",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "nativeSessionId": "01900000-0000-7000-8000-000000000000",
+    "prompt": "P",
+  },
+  "kind": "codex",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > opencode — with-model 1`] = `
+{
+  "args": [
+    "run",
+    "--format",
+    "json",
+    "--dangerously-skip-permissions",
+    "-m",
+    "gpt-5-codex-latest",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "model": "gpt-5-codex-latest",
+    "prompt": "P",
+  },
+  "kind": "opencode",
+}
+`;
+
+exports[`adapter argv stability — claude, codex, opencode > opencode — with-model-and-session 1`] = `
+{
+  "args": [
+    "run",
+    "--format",
+    "json",
+    "--dangerously-skip-permissions",
+    "-m",
+    "gpt-5-codex-latest",
+    "-s",
+    "01900000-0000-7000-8000-000000000000",
+  ],
+  "delivery": "stdin",
+  "input": {
+    "model": "gpt-5-codex-latest",
+    "nativeSessionId": "01900000-0000-7000-8000-000000000000",
+    "prompt": "P",
+  },
+  "kind": "opencode",
+}
+`;
