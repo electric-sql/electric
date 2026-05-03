@@ -18,6 +18,24 @@
 - **Fix**: added `coding-agent-` to the PREFIXES array in `packages/coding-agents/scripts/cleanup-sprites.ts`.
 - **Verified during iteration #9**: an entity DELETE-without-destroy left a sprite behind; running the script with the fix caught it (`Found 1 sprites matching 'conf-sprite-': coding-agent-irez9`).
 
+### F-2: O-2 — Pin/Release/Stop/Convert disabled on destroyed entities
+
+- **Symptom**: see O-2 below (now closed).
+- **Fix**: `packages/agents-server-ui/src/components/EntityHeader.tsx` wraps the action group in an IIFE that derives `isDestroyed = codingAgentStatus === 'destroyed'` once and disables Pin / Release / Stop / Convert-target / Convert-kind triggers. Tooltips swap to "Agent is destroyed" when set.
+- **Test**: `packages/agents-server-ui/test/e2e/spawn-via-dialog.spec.ts` → `destroyed-entity buttons gate (O-2 fix)` — spawns a real entity, sends destroy, polls for status=destroyed, asserts all five buttons disabled.
+
+### F-3: O-1 — `pnpm cleanup:volumes` script
+
+- **Symptom**: see O-1 below (mitigated, not closed: the design itself defers volume removal in MVP `LocalDockerProvider.destroy()`).
+- **Fix**: new `packages/coding-agents/scripts/cleanup-volumes.ts`. Lists `coding-agent-workspace-*` volumes; default skips still-mounted ones; `--delete` and `--in-use` flags. README updated with usage. Verified end-to-end against test fixture volumes and against an actual leaked agent volume.
+
+### F-4: O-3 — durable-streams data persists across host restarts
+
+- **Symptom**: see O-3 below (now closed).
+- **Root cause**: `dev.mjs` spawned a fresh `DurableStreamTestServer` on each `up`. Without `STREAMS_DATA_DIR`, the server kept its registry in memory; restart wiped every existing stream and entities looking up `/coding-agent/<name>/main` got 404.
+- **Fix**: `packages/electric-ax/bin/dev.mjs` now sets `ELECTRIC_AGENTS_STREAMS_DATA_DIR=.local/dev-streams` (overridable). `clear-state` wipes the directory alongside the postgres/electric volumes, so it parallels existing reset semantics.
+- **Verified end-to-end**: spawn agent → first turn 'ok' → bounce host services (no clear-state) → 2nd prompt POST returns 204 → run completes 'ok'. No `Stream not found`.
+
 ## Open / cannot fix
 
 ### O-3: Existing entity streams 404 after host service restart (no clear-state)

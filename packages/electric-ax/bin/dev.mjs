@@ -153,6 +153,16 @@ function buildEnv() {
     ELECTRIC_AGENTS_HOST: `0.0.0.0`,
     ELECTRIC_AGENTS_BASE_URL: agentsServerUrl,
 
+    // Persist the embedded durable-streams server's data across host
+    // process restarts. Without this, dev.mjs spawns a fresh
+    // DurableStreamTestServer on each `up`, which forgets every existing
+    // stream — and any pre-existing entity row in postgres ends up with
+    // a 404 'Stream not found' on its /main path. Co-locating with
+    // `.local/` keeps it out of git and easy to wipe via `clear-state`.
+    ELECTRIC_AGENTS_STREAMS_DATA_DIR:
+      merged.ELECTRIC_AGENTS_STREAMS_DATA_DIR?.trim() ||
+      resolve(REPO_ROOT, `.local`, `dev-streams`),
+
     // For the built-in agent handler (bootstrap.ts / start.ts)
     ELECTRIC_AGENTS_BUILTIN_PORT: builtinPort,
     ELECTRIC_AGENTS_BUILTIN_HOST:
@@ -549,7 +559,10 @@ async function clearState() {
 
   const tryDocker = (cmd, label) => {
     try {
-      const out = execSync(cmd, { shell: true, stdio: [`ignore`, `pipe`, `pipe`] })
+      const out = execSync(cmd, {
+        shell: true,
+        stdio: [`ignore`, `pipe`, `pipe`],
+      })
         .toString()
         .trim()
       if (out) {
@@ -580,6 +593,22 @@ async function clearState() {
     `docker volume ls --format '{{.Name}}' | grep -E '^electric-ax-test-' | xargs -r docker volume rm`,
     `electric-ax-test-* volumes`
   )
+
+  // Embedded durable-streams data dir (set in buildEnv()). Wiping this
+  // forces the next `up` to start with a clean stream registry, parallel
+  // to dropping postgres volumes.
+  try {
+    const { rmSync } = await import(`node:fs`)
+    const dataDir = resolve(REPO_ROOT, `.local`, `dev-streams`)
+    rmSync(dataDir, { recursive: true, force: true })
+    log(`dev`, colours.info, `Wiped durable-streams data dir: ${dataDir}`)
+  } catch (err) {
+    log(
+      `dev`,
+      colours.warning,
+      `Failed to wipe streams data dir: ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
 
   log(`dev`, colours.info, `Local state cleared.`)
 }
@@ -629,7 +658,8 @@ Optional overrides (shell env or .env):
 
 try {
   if (cmd === `up`) await up()
-  else if (cmd === `down`) await down({ removeVolumes: flags.includes(`--remove-volumes`) })
+  else if (cmd === `down`)
+    await down({ removeVolumes: flags.includes(`--remove-volumes`) })
   else if (cmd === `clear-state`) await clearState()
   else if (cmd === `restart`) await restart()
 } catch (error) {
