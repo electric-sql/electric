@@ -229,7 +229,7 @@ export function Sidebar({
                       <button
                         type="button"
                         onClick={() => handleNewSession(t)}
-                        className={`${styles.newSessionItem} entity-list-item`}
+                        className={styles.newSessionItem}
                       >
                         <Text size={2} weight="medium">
                           {t.name}
@@ -284,7 +284,7 @@ export function Sidebar({
           placeholder="Filter by type or name..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className={`${styles.filterInput} agent-ui-input`}
+          className={styles.filterInput}
         />
       </Stack>
 

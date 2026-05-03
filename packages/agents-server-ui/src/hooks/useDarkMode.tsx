@@ -59,9 +59,8 @@ export function DarkModeProvider({
 
   const darkMode = preference === `system` ? systemDark : preference === `dark`
 
-  useEffect(() => {
-    document.documentElement.classList.toggle(`dark`, darkMode)
-  }, [darkMode])
+  // Note: applying the resolved theme to <html> is owned by the
+  // design-system <ThemeProvider> (it sets `data-theme="dark|light"`).
 
   const cyclePreference = useCallback(() => {
     setPreference((current) => {

@@ -20,9 +20,7 @@ interface ThemeProviderProps {
  * - Wraps children in a Base UI <TooltipProvider> so `<Tooltip>` calls
  *   share a delay timer (instant follow-up tooltips after one opens).
  *
- * Replaces `<Theme>` from `@radix-ui/themes`. The legacy `.dark` class on
- * <html> is also kept in sync during the in-progress refactor so any
- * still-mounted Radix Themes tree continues to dark-mode correctly.
+ * Replaces `<Theme>` from `@radix-ui/themes`.
  */
 export function ThemeProvider({
   appearance,
@@ -32,9 +30,6 @@ export function ThemeProvider({
   useEffect(() => {
     const root = document.documentElement
     root.setAttribute(`data-theme`, appearance)
-    // Compat: keep the legacy `.dark` class in sync until the Radix
-    // Themes wrapper is fully removed in Phase 3.
-    root.classList.toggle(`dark`, appearance === `dark`)
     return () => {
       root.removeAttribute(`data-theme`)
     }

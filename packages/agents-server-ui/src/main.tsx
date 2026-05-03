@@ -1,8 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './ui'
-import '@radix-ui/themes/styles.css'
-import './styles.css'
+import './markdown.css'
 import { App } from './App'
 
 // ngrok's free tier intercepts browser requests with an HTML warning page

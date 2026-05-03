@@ -2,24 +2,13 @@
  * Design tokens (`--ds-*`)
  *
  * Self-contained token sheet for the agents-server-ui design system.
- * Mirrors the surface previously borrowed from @radix-ui/themes (spacing,
- * radii, type, gray + accent color scales) plus the project-specific
- * status colours used in badges/timeline.
- *
  * Light values default; dark overrides apply when the document root has
- * `data-theme="dark"`. The ThemeProvider toggles that attribute. (During
- * the in-progress Base UI refactor the legacy `.dark` class is also still
- * supported so we can land tokens before flipping the theme switch.)
- *
- * Tokens here intentionally do NOT redefine Radix Themes' own variables
- * (`--gray-1`, `--accent-9`, etc.) so they coexist with the live <Theme>
- * wrapper during phased migration. Phase 3/4 of the refactor will add
- * compat aliases (`--gray-1: var(--ds-gray-1)`) once Radix is removed.
+ * `data-theme="dark"`. The <ThemeProvider> in `src/ui/ThemeProvider.tsx`
+ * is responsible for setting that attribute.
  * ========================================================================== */
 
 :root,
-:root[data-theme='light'],
-:root.light {
+:root[data-theme='light'] {
   /* ---- Spacing scale (matches Radix `space-*` 1:1) ------------------- */
   --ds-space-1: 4px;
   --ds-space-2: 8px;
@@ -215,17 +204,10 @@
 }
 
 /* ==========================================================================
- * Dark theme
- * ==========================================================================
- *
- * Triggered by `data-theme="dark"` on <html>. The legacy `.dark` class is
- * still honoured because the existing useDarkMode hook toggles that
- * attribute today; once Phase 3 of the refactor lands, useDarkMode will
- * switch to `data-theme` only.
+ * Dark theme — triggered by `data-theme="dark"` on <html>.
  * ========================================================================== */
 
-:root[data-theme='dark'],
-:root.dark {
+:root[data-theme='dark'] {
   --ds-bg: #111318;
   --ds-bg-subtle: #16181f;
   --ds-surface: #1a1d27;

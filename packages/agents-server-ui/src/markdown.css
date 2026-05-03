@@ -1,0 +1,314 @@
+/* ==========================================================================
+ * Streamdown markdown styles
+ *
+ * Targets the `.agent-ui-markdown` wrapper added by AgentResponse and
+ * CodingSessionTimeline. Streamdown's Tailwind utility classes are inert
+ * (Tailwind is not loaded), so all visual styling lives here.
+ *
+ * Uses the `--ds-*` design tokens defined in `src/ui/tokens.css`.
+ * Capsize-style pseudo-element line-height trimming has been intentionally
+ * removed in favour of a flat type scale; vertical rhythm is provided by
+ * the parent flex container's `gap`.
+ * ========================================================================== */
+
+@import 'streamdown/styles.css';
+
+.agent-ui-markdown > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-5);
+}
+.agent-ui-markdown > div > * + * {
+  margin-top: var(--ds-space-5);
+}
+
+.agent-ui-markdown p,
+.agent-ui-markdown li {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+  margin: 0;
+}
+
+.agent-ui-markdown h1 {
+  font-size: var(--ds-text-2xl);
+  line-height: var(--ds-text-2xl-lh);
+  font-family: var(--ds-font-heading);
+  font-weight: 600;
+  margin: 0;
+}
+
+.agent-ui-markdown h2 {
+  font-size: var(--ds-text-xl);
+  line-height: var(--ds-text-xl-lh);
+  font-family: var(--ds-font-heading);
+  font-weight: 600;
+  margin: 0;
+}
+
+.agent-ui-markdown h3 {
+  font-size: var(--ds-text-lg);
+  line-height: var(--ds-text-lg-lh);
+  font-family: var(--ds-font-heading);
+  font-weight: 500;
+  margin: 0;
+}
+
+.agent-ui-markdown h4,
+.agent-ui-markdown h5,
+.agent-ui-markdown h6 {
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-text-base-lh);
+  font-family: var(--ds-font-heading);
+  font-weight: 500;
+  margin: 0;
+}
+
+.agent-ui-markdown ul,
+.agent-ui-markdown ol {
+  list-style-position: outside;
+  padding-left: 1.5em;
+  margin: 0;
+}
+.agent-ui-markdown ul {
+  list-style: disc;
+}
+.agent-ui-markdown ol {
+  list-style: decimal;
+}
+.agent-ui-markdown li {
+  padding: 0;
+}
+.agent-ui-markdown li > p {
+  display: contents;
+}
+.agent-ui-markdown li::marker {
+  font-size: var(--ds-text-sm);
+}
+
+.agent-ui-markdown pre {
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-gray-a3);
+  padding: var(--ds-space-3);
+  overflow-x: auto;
+  margin: 0;
+}
+.agent-ui-markdown pre code {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  line-height: 1.6;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.agent-ui-markdown code:not(pre code) {
+  font-family: var(--ds-font-mono);
+  font-size: 0.9em;
+  background: var(--ds-gray-a3);
+  padding: 0.1em 0.4em;
+  border-radius: var(--ds-radius-1);
+}
+
+.agent-ui-markdown blockquote {
+  border-left: 4px solid var(--ds-gray-a6);
+  padding-left: var(--ds-space-4);
+  color: var(--ds-text-2);
+  font-style: italic;
+  margin: 0;
+}
+
+.agent-ui-markdown a {
+  color: var(--ds-accent-11);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-accent-a5);
+  text-underline-offset: calc(0.025em + 2px);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.agent-ui-markdown a:hover {
+  text-decoration-color: inherit;
+}
+
+.agent-ui-markdown strong {
+  font-weight: 600;
+}
+
+.agent-ui-markdown hr {
+  border: none;
+  border-top: 1px solid var(--ds-border-2);
+  margin: 0;
+}
+
+.agent-ui-markdown img {
+  max-width: 100%;
+  border-radius: var(--ds-radius-3);
+}
+
+/* --- Streamdown-specific structural rules --------------------------- */
+
+.agent-ui-markdown
+  div.my-4.flex.w-full.flex-col.gap-2.rounded-xl.border.border-border.bg-sidebar.p-2 {
+  margin: 0;
+}
+
+.agent-ui-markdown [data-streamdown='code-block'] {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-gray-a3);
+  padding: 4px;
+  gap: 2px;
+  margin: 0;
+  position: relative;
+}
+
+.agent-ui-markdown [data-streamdown='code-block-header'] {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 40px 0 4px;
+  color: var(--ds-text-2);
+}
+
+.agent-ui-markdown [data-streamdown='code-block-header'] span {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  font-family: var(--ds-font-mono);
+  font-size: 11px;
+  line-height: 1;
+  text-transform: lowercase;
+  margin-left: 0;
+}
+
+.agent-ui-markdown
+  [data-streamdown='code-block']
+  > .pointer-events-none.sticky.top-2.z-10.flex.h-8.items-center.justify-end {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  margin-top: 0;
+  height: 22px;
+  pointer-events: none;
+}
+
+.agent-ui-markdown [data-streamdown='code-block-actions'] {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--ds-gray-a3);
+  border-radius: 5px;
+  padding: 2px;
+}
+
+.agent-ui-markdown [data-streamdown='code-block-copy-button'],
+.agent-ui-markdown [data-streamdown='code-block-download-button'] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-2);
+  cursor: pointer;
+  border-radius: 3px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.agent-ui-markdown [data-streamdown='code-block-copy-button'] svg,
+.agent-ui-markdown [data-streamdown='code-block-download-button'] svg {
+  width: 14px;
+  height: 14px;
+}
+
+.agent-ui-markdown [data-streamdown='code-block-copy-button']:hover,
+.agent-ui-markdown [data-streamdown='code-block-download-button']:hover {
+  color: var(--ds-text-1);
+  background: var(--ds-border-2);
+}
+
+.agent-ui-markdown [data-streamdown='code-block-body'] {
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-border-2);
+  padding: var(--ds-space-3) var(--ds-space-4);
+}
+
+.agent-ui-markdown [data-streamdown='code-block-body'] pre {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.agent-ui-markdown [data-streamdown='code-block-body'] code {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  line-height: 1.6;
+}
+
+/* Streamdown renders each code line as a <span>; make them block-level */
+.agent-ui-markdown [data-streamdown='code-block-body'] code > span {
+  display: block;
+}
+
+/* Streamdown sets --sdm-c via inline style; Tailwind's text-[var(--sdm-c)] is inert */
+.agent-ui-markdown [data-streamdown='code-block-body'] code span[style] {
+  color: var(--sdm-c, inherit);
+  background-color: var(--sdm-tbg, transparent);
+}
+
+[data-theme='dark']
+  .agent-ui-markdown
+  [data-streamdown='code-block-body']
+  code
+  span[style] {
+  color: var(--shiki-dark, var(--sdm-c, inherit));
+  background-color: var(--shiki-dark-bg, var(--sdm-tbg, transparent));
+}
+
+.agent-ui-markdown [data-streamdown='table-wrapper'] {
+  position: relative;
+  overflow-x: auto;
+}
+
+.agent-ui-markdown [data-streamdown='table-wrapper'] > div:first-child {
+  position: absolute;
+  top: var(--ds-space-2);
+  right: var(--ds-space-2);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--ds-bg);
+  border-radius: 6px;
+  padding: 2px;
+  z-index: 1;
+}
+
+.agent-ui-markdown [data-streamdown='table-wrapper'] > div:first-child button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-2);
+  cursor: pointer;
+  border-radius: 4px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.agent-ui-markdown
+  [data-streamdown='table-wrapper']
+  > div:first-child
+  button:hover {
+  color: var(--ds-text-1);
+  background: var(--ds-border-2);
+}

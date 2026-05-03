@@ -124,7 +124,6 @@ export function EntityListItem({
     styles.row,
     selected ? styles.selected : null,
     isStopped ? styles.stopped : null,
-    `entity-list-item`,
   ]
     .filter(Boolean)
     .join(` `)
