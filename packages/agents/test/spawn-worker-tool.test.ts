@@ -37,6 +37,35 @@ describe(`spawn_worker tool`, () => {
     expect(text).toMatch(/end your turn/i)
   })
 
+  it(`passes the selected model config to the spawned worker`, async () => {
+    const spawn = vi.fn(async (type, id) => ({
+      entityUrl: `/${type}/${id}`,
+      writeToken: `tok`,
+      txid: 1,
+    }))
+    const ctx = { spawn } as any
+    const tool = createSpawnWorkerTool(ctx, {
+      provider: `openai`,
+      model: `gpt-4.1`,
+      reasoningEffort: `high`,
+    })
+
+    await tool.execute(`call-model`, {
+      systemPrompt: `Do a thing`,
+      tools: [`read`],
+      initialMessage: `Please do it`,
+    })
+
+    const [, , args] = spawn.mock.calls[0]! as Array<any>
+    expect(args).toEqual({
+      systemPrompt: `Do a thing`,
+      tools: [`read`],
+      provider: `openai`,
+      model: `gpt-4.1`,
+      reasoningEffort: `high`,
+    })
+  })
+
   it(`rejects when tools is empty`, async () => {
     const spawn = vi.fn()
     const ctx = { spawn } as any

@@ -9,7 +9,11 @@ import {
   createWriteTool,
 } from '@electric-ax/agents-runtime/tools'
 import { WORKER_TOOL_NAMES, createSpawnWorkerTool } from '../tools/spawn-worker'
-import { HORTON_MODEL } from './horton'
+import {
+  REASONING_EFFORT_VALUES,
+  resolveBuiltinModelConfig,
+  type BuiltinModelCatalog,
+} from '../model-catalog'
 import type { WorkerToolName } from '../tools/spawn-worker'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import type {
@@ -25,6 +29,9 @@ interface WorkerArgs {
   tools: Array<WorkerToolName>
   sharedDb?: { id: string; schema: SharedStateSchemaMap }
   sharedDbToolMode?: `full` | `write-only`
+  model?: string
+  provider?: string
+  reasoningEffort?: string
 }
 
 function isWorkerToolName(value: unknown): value is WorkerToolName {
@@ -82,6 +89,23 @@ function parseWorkerArgs(value: Readonly<Record<string, unknown>>): WorkerArgs {
 
   if (tools.length === 0 && !args.sharedDb) {
     throw new Error(`[worker] must provide tools and/or sharedDb`)
+  }
+
+  if (typeof value.model === `string`) {
+    args.model = value.model
+  }
+
+  if (typeof value.provider === `string`) {
+    args.provider = value.provider
+  }
+
+  if (
+    typeof value.reasoningEffort === `string` &&
+    (REASONING_EFFORT_VALUES as ReadonlyArray<string>).includes(
+      value.reasoningEffort
+    )
+  ) {
+    args.reasoningEffort = value.reasoningEffort
   }
 
   return args
@@ -254,9 +278,13 @@ function buildSharedStateTools(
 
 export function registerWorker(
   registry: EntityRegistry,
-  options: { workingDirectory: string; streamFn?: StreamFn }
+  options: {
+    workingDirectory: string
+    streamFn?: StreamFn
+    modelCatalog: BuiltinModelCatalog
+  }
 ): void {
-  const { workingDirectory, streamFn } = options
+  const { workingDirectory, streamFn, modelCatalog } = options
   registry.define(`worker`, {
     description: `Internal — generic worker spawned by other agents. Configure via spawn args (systemPrompt + tools + optional sharedDb).`,
     async handler(ctx) {
@@ -267,6 +295,10 @@ export function registerWorker(
         workingDirectory,
         ctx,
         readSet
+      )
+      const modelConfig = resolveBuiltinModelConfig(
+        modelCatalog,
+        args as unknown as Readonly<Record<string, unknown>>
       )
 
       const sharedStateTools: Array<AgentTool> = []
@@ -285,7 +317,7 @@ export function registerWorker(
 
       ctx.useAgent({
         systemPrompt: `${args.systemPrompt}${WORKER_PROMPT_FOOTER}`,
-        model: HORTON_MODEL,
+        ...modelConfig,
         tools: [...builtinTools, ...sharedStateTools],
         ...(streamFn && { streamFn }),
       })

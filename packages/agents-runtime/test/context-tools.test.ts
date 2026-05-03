@@ -21,6 +21,15 @@ function firstText(result: {
 }
 
 describe(`context tools`, () => {
+  it(`uses OpenAI-compatible object schemas with properties`, () => {
+    for (const tool of createContextTools(makeCtx())) {
+      expect(tool.parameters).toMatchObject({
+        type: `object`,
+        properties: expect.any(Object),
+      })
+    }
+  })
+
   it(`load_timeline_range returns the expected payload`, async () => {
     const tool = createContextTools(makeCtx()).find(
       (candidate) => candidate.name === `load_timeline_range`

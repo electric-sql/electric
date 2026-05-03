@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { Type } from '@sinclair/typebox'
 import type { AgentTool } from '../types'
 
 export interface ContextToolsContext {
@@ -25,10 +25,10 @@ export function createContextTools(ctx: ContextToolsContext): Array<AgentTool> {
       name: `load_timeline_range`,
       label: `Load Timeline Range`,
       description: `Load the rendered messages for a dropped timeline offset range.`,
-      parameters: z.object({
-        from: z.number(),
-        to: z.number(),
-      }) as unknown as AgentTool[`parameters`],
+      parameters: Type.Object({
+        from: Type.Number(),
+        to: Type.Number(),
+      }) as AgentTool[`parameters`],
       execute: async (_toolCallId, params) =>
         textResult(
           await ctx.loadTimelineRange(
@@ -43,12 +43,12 @@ export function createContextTools(ctx: ContextToolsContext): Array<AgentTool> {
       name: `load_source_range`,
       label: `Load Source Range`,
       description: `Load a character range from a truncated source snapshot.`,
-      parameters: z.object({
-        name: z.string(),
-        from: z.number(),
-        to: z.number(),
-        snapshot: z.string(),
-      }) as unknown as AgentTool[`parameters`],
+      parameters: Type.Object({
+        name: Type.String(),
+        from: Type.Number(),
+        to: Type.Number(),
+        snapshot: Type.String(),
+      }) as AgentTool[`parameters`],
       execute: async (_toolCallId, params) =>
         textResult(
           await ctx.loadSourceRange(
@@ -65,10 +65,10 @@ export function createContextTools(ctx: ContextToolsContext): Array<AgentTool> {
       name: `load_context_history`,
       label: `Load Context History`,
       description: `Load a tombstoned context entry by its original offset.`,
-      parameters: z.object({
-        id: z.string(),
-        offset: z.string(),
-      }) as unknown as AgentTool[`parameters`],
+      parameters: Type.Object({
+        id: Type.String(),
+        offset: Type.String(),
+      }) as AgentTool[`parameters`],
       execute: async (_toolCallId, params) =>
         textResult(
           await ctx.loadContextHistory(
