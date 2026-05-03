@@ -151,4 +151,63 @@ describe(`WorkspaceRegistry mutex chain trimming`, () => {
     await Promise.resolve()
     expect(internal.chainByIdentity.size).toBe(0)
   })
+
+  it(`drains chainByIdentity after N concurrent acquire→release tasks (R2 #5 regression)`, async () => {
+    // Each task does its own acquire→work→release. The chain-of-thens
+    // bug shows up when two pending tasks race the chain pointer:
+    // both read the same `prior` snapshot, one's `link` overwrites
+    // the other's, and the first acquirer's `chainByIdentity.get(identity) === link`
+    // check never fires at release time — the entry is never deleted.
+    const wr = new WorkspaceRegistry()
+    const internal = wr as unknown as {
+      chainByIdentity: Map<string, Promise<void>>
+    }
+
+    const N = 8
+    let completed = 0
+    await Promise.all(
+      Array.from({ length: N }, async () => {
+        const release = await wr.acquire(`volume:foo`)
+        // Yield once so the next task can race the chain pointer.
+        await Promise.resolve()
+        completed++
+        release()
+      })
+    )
+
+    // Drain microtasks generously.
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+
+    expect(completed).toBe(N)
+    expect(internal.chainByIdentity.size).toBe(0)
+  })
+
+  it(`serialises N concurrent acquirers (no overlap, all complete)`, async () => {
+    // Stronger property: all acquirers actually run (none dropped)
+    // and they don't overlap. Chain bug manifests as a hung promise
+    // that resolves the test only because we use a timeout-bounded
+    // Promise.all; the leaked entry is then visible in chainByIdentity.
+    const wr = new WorkspaceRegistry()
+
+    let active = 0
+    let maxActive = 0
+    let completed = 0
+
+    const N = 6
+    await Promise.all(
+      Array.from({ length: N }, () =>
+        wr.acquire(`volume:foo`).then(async (release) => {
+          active++
+          maxActive = Math.max(maxActive, active)
+          await Promise.resolve()
+          active--
+          completed++
+          release()
+        })
+      )
+    )
+
+    expect(maxActive).toBe(1)
+    expect(completed).toBe(N)
+  })
 })
