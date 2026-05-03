@@ -10,6 +10,134 @@
 
 **Calibration vs Critical fix-list:** Important issues do not block merge. Treat the phase order below as priority, not as gating; phases 1–4 are independent and can be parallelised across sessions if needed.
 
+**TDD via conformance:** Phase 0 lands seven new conformance scenarios as failing (or skipping) tests **before** the implementation tasks in phases 1–2. The implementation tasks then drive those scenarios green. This means: (a) every behaviour the review flagged becomes a contract test that holds for every current and future provider/adapter, (b) the implementer of each fix has a precise repro to drive against. Tier 2 fuzz/contract tests live in [the companion plan](./2026-05-03-coding-agents-conformance-tier-2.md).
+
+---
+
+## Phase 0 — New conformance scenarios (write the failing tests first)
+
+Each task here adds one scenario to either the Layer-1 (`runSandboxProviderConformance`) or Layer-2 (`runCodingAgentsIntegrationConformance`) harness. Land them as failing tests on this branch; the implementation tasks in phases 1–2 turn them green.
+
+> **Order of operations per scenario:** write the test → commit (test fails or skips on every provider that doesn't yet implement the fix) → leave for the matching impl task in phase 1 / 2 → impl task drives it green → impl commit references the scenario id.
+
+### Task 0.1: L2.9 — concurrent prompts on shared workspace resolve in FIFO order
+
+**Files:**
+
+- Modify: `packages/coding-agents/src/conformance/integration.ts`
+
+**What:** Extends L2.6 ("shared lease serialises concurrent runs") by also asserting **ordering**. Spawn agent A and B on the same workspace identity; send prompt to A, then immediately to B; assert B's `runs[0].startedAt > A's runs[0].endedAt` (B waited for A) **and** that A's startedAt comes first regardless of inbox-arrival jitter. Catches the WorkspaceRegistry chain-leak bug where the second acquirer can win the chain pointer and serve out-of-order.
+
+- [ ] **Step 1: Read the existing L2.6 implementation** (around `integration.ts:312` per the conformance harness layout). It already serialises but doesn't assert order.
+
+- [ ] **Step 2: Add a new `it('L2.9 concurrent prompts on shared workspace resolve FIFO')` block** that submits A's prompt, waits 50 ms, submits B's, and after both complete asserts `aStart < bStart` and `aEnd <= bStart`.
+
+- [ ] **Step 3: Gate it like L2.6: `const sharedIt = config.supportsSharedWorkspace === false ? it.skip : it`.**
+
+- [ ] **Step 4: Run all three conformance suites. Sprites skips it (correct). LocalDocker and Host should pass today (the chain-leak triggers under higher concurrency than the conformance has) — that's fine, the scenario codifies the contract.**
+
+- [ ] **Step 5: Commit** (`test(coding-agents): L2.9 conformance scenario — FIFO on shared workspace`).
+
+---
+
+### Task 0.2: L2.10 — agent in `error` status recovers on next prompt
+
+**Files:**
+
+- Modify: `packages/coding-agents/src/conformance/integration.ts`
+
+**What:** Inject `meta.status = 'error'` and `lastError = 'whatever'` directly into sessionMeta (mirroring L2.4's stale-running injection pattern). Send a new prompt. Assert: `lastError` is cleared, `runs[last].status === 'completed'`, and at least one `sandbox.starting` lifecycle row is emitted between the prompt and the completion. Catches the missing `error → cold` transition.
+
+- [ ] **Step 1: Inject error-state directly using the same fake-ctx pattern L2.4 uses; run a new prompt; assert.**
+
+- [ ] **Step 2: This will FAIL on every provider today.** That's intentional — Phase 1 Task T2 makes it pass.
+
+- [ ] **Step 3: Commit** with a comment that the scenario is expected to fail until handler.processPrompt clears `error` status. Use `it.todo` if the harness should not block on it before T2 lands; prefer a real failing `it` so CI is loud.
+
+---
+
+### Task 0.3: L2.11 — `convert-kind` during in-flight prompt is rejected
+
+**Files:**
+
+- Modify: `packages/coding-agents/src/conformance/integration.ts`
+
+**What:** Start a prompt; **before** awaiting completion, post a `convert-kind` inbox message to the same agent. After both settle, assert: (a) `meta.kind` is unchanged, (b) a `kind.convert_failed` lifecycle row exists with `detail` containing `in-flight`, (c) `nativeJsonl` content is unchanged. Codifies the C3 fix.
+
+- [ ] **Step 1: Use the bridge's existing test-bridge slow-mode (or a sleep adapter) to keep the prompt alive long enough to inject the convert.**
+
+- [ ] **Step 2: Should PASS today after C3 (commit `59e2b2534`). If it doesn't, the C3 fix has a hole — investigate before continuing.**
+
+- [ ] **Step 3: Commit** (`test(coding-agents): L2.11 — convert-kind rejected during in-flight prompt`).
+
+---
+
+### Task 0.4: L2.12 — `stop` during in-flight prompt is rejected
+
+**Files:**
+
+- Modify: `packages/coding-agents/src/conformance/integration.ts`
+
+**What:** Same shape as L2.11 but with a `stop` message. Assert: `meta.lastError` contains "cannot stop while status=running", no `sandbox.stopped` lifecycle row, the prompt's run completes normally. Codifies the C3 fix.
+
+- [ ] **Step 1: Mirror L2.11's structure, swap message type.**
+
+- [ ] **Step 2: Should PASS today after C3.**
+
+- [ ] **Step 3: Commit.**
+
+---
+
+### Task 0.5: L2.13 — fork from a non-quiescent source is rejected
+
+**Files:**
+
+- Modify: `packages/coding-agents/src/conformance/integration.ts`
+
+**What:** Spawn agent A; while A is mid-prompt (`status=running`), spawn agent B with `from: { agentId: A }`. Assert B's first wake produces a `kind.convert_failed` (or `fork.failed`) lifecycle row with `detail` mentioning source status; B's `nativeJsonl` is empty; A's prompt still completes successfully.
+
+- [ ] **Step 1: Use a slow-bridge for A to keep it `running` long enough.**
+
+- [ ] **Step 2: This will FAIL on every provider today.** Phase 1 Task T8 (in the renumbered plan, originally T3) makes it pass.
+
+- [ ] **Step 3: Commit.**
+
+---
+
+### Task 0.6: L1.10 — `exec` defaults `cwd` to `workspaceMount`
+
+**Files:**
+
+- Modify: `packages/coding-agents/src/conformance/provider.ts`
+
+**What:** New L1 scenario. After `start`, call `exec({ cmd: ['pwd'] })` **without** passing `cwd`. Assert stdout is exactly `sandbox.workspaceMount + '\n'`. Catches C1 (sprites) plus locks the contract for any future provider.
+
+- [ ] **Step 1: Add the scenario after L1.5 (which tests cwd-explicit).**
+
+- [ ] **Step 2: Should PASS today on LocalDocker (-w workspaceMount), HostProvider (spawn cwd), and Sprites (post-C1 default).**
+
+- [ ] **Step 3: Commit.**
+
+---
+
+### Task 0.7: L1.11 — `stop()` mid-exec terminates the child within N s
+
+**Files:**
+
+- Modify: `packages/coding-agents/src/conformance/provider.ts`
+
+**What:** New L1 scenario. After `start`, kick off an exec running `sleep 60` in the background. Call `provider.stop(instanceId)` from a different async context. Assert: within 10 seconds, the exec's `wait()` resolves with a non-zero exit code (or rejects), and `provider.status(agentId)` flips off `running`. Catches HostProvider's child-tracking gap (R1 #9); also exercises sprites' WS close path.
+
+- [ ] **Step 1: Add the scenario.**
+
+- [ ] **Step 2: Will FAIL on HostProvider today (Phase 2 Task T15 in renumbered, originally T8 makes it pass). LocalDocker passes via container removal; sprites passes via WS close.**
+
+- [ ] **Step 3: Commit.**
+
+---
+
+> **After Phase 0 lands**, the conformance baseline is: LocalDocker 33→ ~38, Host 23→ ~25 (some scenarios still skip), Sprites 25→ ~28 (L2.9 still skipped, others added). The exact numbers depend on which scenarios stay green vs fail on day 1 — that's expected. Phase 1 + Phase 2 close the gaps; the table in the README's `## Conformance status` section gets updated as part of each impl task.
+
 ---
 
 ## Phase 1 — Handler + lifecycle correctness (R2 findings)
@@ -20,6 +148,8 @@
 
 - Modify: `packages/coding-agents/src/workspace-registry.ts`
 - Test: `packages/coding-agents/test/unit/workspace-registry.test.ts`
+
+**Conformance scenarios this drives green:** Task 0.1 (L2.9 FIFO ordering on shared workspace).
 
 **Issue (R2 #5):** `acquire()` reads `chainByIdentity.get(identity)` once and links onto it. Two concurrent acquirers read the same `prior` value, both append a `next` link, but only the second's link wins the `set()`. The first's release branch (`if (this.chainByIdentity.get(identity) === link)`) never fires, leaving stale promise pointers in the map for the lifetime of the workspace. Memory grows; release ordering is wrong.
 
@@ -78,6 +208,8 @@ git commit -m "fix(coding-agents): WorkspaceRegistry — proper FIFO queue, no c
 - Modify: `packages/coding-agents/src/entity/handler.ts` (processPrompt)
 - Test: `packages/coding-agents/test/unit/handler-error-recovery.test.ts` (new)
 
+**Conformance scenarios this drives green:** Task 0.2 (L2.10 error recovery).
+
 **Issue (R2 #7):** A prior turn that left `meta.status = 'error'` blocks the next prompt's `wasCold` branch (`status === 'cold'`); the handler doesn't emit `sandbox.starting`, doesn't transition through `starting`, and writes `running` directly. The state-machine paper claims `error → cold → starting → running`; reality is `error → running`. Either reconcile or processPrompt entry must clear `lastError` and treat `error` as `cold`.
 
 - [ ] **Step 1: Write failing test**
@@ -118,6 +250,8 @@ git commit -m "fix(coding-agents): processPrompt clears error status on retry"
 
 - Modify: `packages/coding-agents/src/entity/handler.ts` (firstWakeFork or wherever observe-source meta is read)
 - Test: `packages/coding-agents/test/unit/fork.test.ts` (extend)
+
+**Conformance scenarios this drives green:** Task 0.5 (L2.13 fork-from-running rejected).
 
 **Issue (R2 #9):** Fork copies events + nativeJsonl unconditionally. If the source is `running|starting|stopping`, events are still streaming; convertNativeJsonl produces a transcript ending mid-assistant-message. Resume from that transcript can corrupt state.
 
@@ -271,6 +405,8 @@ function wrapWithAgentEnv(
 
 - Modify: `packages/coding-agents/src/providers/host.ts`
 - Test: `packages/coding-agents/test/unit/host-provider.test.ts` (new)
+
+**Conformance scenarios this drives green:** Task 0.7 (L1.11 stop() mid-exec terminates the child).
 
 **Issue (R1 #9):** `provider.stop(instanceId)` is a no-op if a child is mid-turn; the SandboxProvider contract doesn't say "between turns only". A `stop` request during an in-flight CLI turn lets the child keep running.
 
