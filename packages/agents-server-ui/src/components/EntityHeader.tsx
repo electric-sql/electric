@@ -233,213 +233,247 @@ export function EntityHeader({
           {pinned ? <PinOff size={14} /> : <Pin size={14} />}
         </Button>
 
-        {entity.type === `coding-agent` && baseUrl && (
-          <>
-            <Button
-              variant="soft"
-              size="1"
-              onClick={() => {
-                void fetch(`${baseUrl}${entity.url}/send`, {
-                  method: `POST`,
-                  headers: { 'content-type': `application/json` },
-                  body: JSON.stringify({
-                    from: `user`,
-                    type: `pin`,
-                    payload: {},
-                  }),
-                })
-              }}
-              title="Pin — keep sandbox alive past idle timeout"
-            >
-              Pin
-            </Button>
-            <Button
-              variant="soft"
-              size="1"
-              onClick={() => {
-                void fetch(`${baseUrl}${entity.url}/send`, {
-                  method: `POST`,
-                  headers: { 'content-type': `application/json` },
-                  body: JSON.stringify({
-                    from: `user`,
-                    type: `release`,
-                    payload: {},
-                  }),
-                })
-              }}
-              title="Release — allow idle hibernation"
-            >
-              Release
-            </Button>
-            <Button
-              variant="soft"
-              size="1"
-              color="orange"
-              onClick={() => {
-                void fetch(`${baseUrl}${entity.url}/send`, {
-                  method: `POST`,
-                  headers: { 'content-type': `application/json` },
-                  body: JSON.stringify({
-                    from: `user`,
-                    type: `stop`,
-                    payload: {},
-                  }),
-                })
-              }}
-              title="Stop — hibernate the sandbox now"
-            >
-              Stop
-            </Button>
-            {codingAgentTarget &&
-              (() => {
-                const allTargets: ReadonlyArray<
-                  `sandbox` | `host` | `sprites`
-                > = [`sandbox`, `host`, `sprites`]
-                const others = allTargets.filter((t) => t !== codingAgentTarget)
-                const inFlight =
-                  codingAgentStatus === `running` ||
-                  codingAgentStatus === `starting` ||
-                  codingAgentStatus === `stopping`
-                return (
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      <Button
-                        variant="soft"
-                        size="1"
-                        color="amber"
-                        disabled={inFlight}
-                        title={
-                          inFlight
-                            ? `Cannot convert while ${codingAgentStatus}`
-                            : `Convert this agent to a different target`
-                        }
-                        data-testid="convert-target-button"
-                      >
-                        Convert target
-                      </Button>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content>
-                      {others.map((t) => {
-                        const sourceIsSprites = codingAgentTarget === `sprites`
-                        const targetIsSprites = t === `sprites`
-                        const crossProvider =
-                          sourceIsSprites !== targetIsSprites
-                        const requiresBindMount =
-                          t === `host` &&
-                          codingAgentWorkspaceSpec?.type === `volume`
-                        const disabled = crossProvider || requiresBindMount
-                        const label =
-                          t === `sandbox`
-                            ? `Sandbox`
-                            : t === `host`
-                              ? `Host`
-                              : `Sprites`
-                        const title = crossProvider
-                          ? `Cross-provider conversion is not supported. Spawn a fresh agent on ${label} instead.`
-                          : requiresBindMount
-                            ? `Convert to host requires a bindMount workspace`
-                            : `Convert this agent to ${label}`
-                        return (
-                          <DropdownMenu.Item
-                            key={t}
-                            data-testid={`convert-to-${t}`}
-                            disabled={disabled}
-                            onSelect={() => {
-                              if (disabled) return
-                              void fetch(`${baseUrl}${entity.url}/send`, {
-                                method: `POST`,
-                                headers: {
-                                  'content-type': `application/json`,
-                                },
-                                body: JSON.stringify({
-                                  from: `user`,
-                                  type: `convert-target`,
-                                  payload: { to: t },
-                                }),
-                              })
-                            }}
-                            title={title}
-                          >
-                            Convert → {label}
-                            {crossProvider
-                              ? ` (cross-provider not supported)`
-                              : requiresBindMount
-                                ? ` (needs bindMount)`
-                                : ``}
-                          </DropdownMenu.Item>
-                        )
-                      })}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
-                )
-              })()}
-            {codingAgentKind &&
-              (() => {
-                const allKinds: ReadonlyArray<`claude` | `codex` | `opencode`> =
-                  [`claude`, `codex`, `opencode`]
-                const others = allKinds.filter((k) => k !== codingAgentKind)
-                const inFlight =
-                  codingAgentStatus === `running` ||
-                  codingAgentStatus === `starting` ||
-                  codingAgentStatus === `stopping`
-                return (
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                      <Button
-                        variant="soft"
-                        size="1"
-                        color="amber"
-                        disabled={inFlight}
-                        title={
-                          inFlight
-                            ? `Cannot convert while ${codingAgentStatus}`
-                            : `Convert this agent to a different kind`
-                        }
-                        data-testid="convert-kind-button"
-                      >
-                        Convert kind
-                      </Button>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content>
-                      {others.map((k) => {
-                        const involvesOpencode =
-                          k === `opencode` || codingAgentKind === `opencode`
-                        return (
-                          <DropdownMenu.Item
-                            key={k}
-                            data-testid={`convert-to-${k}`}
-                            disabled={involvesOpencode}
-                            onSelect={() => {
-                              if (involvesOpencode) return
-                              void fetch(`${baseUrl}${entity.url}/send`, {
-                                method: `POST`,
-                                headers: {
-                                  'content-type': `application/json`,
-                                },
-                                body: JSON.stringify({
-                                  from: `user`,
-                                  type: `convert-kind`,
-                                  payload: { kind: k },
-                                }),
-                              })
-                            }}
+        {entity.type === `coding-agent` &&
+          baseUrl &&
+          (() => {
+            // Once destroyed, Pin/Release/Stop/Convert are no-ops; disable
+            // them so users see the absence rather than clicking through
+            // to a confusing 200 with no effect.
+            const isDestroyed = codingAgentStatus === `destroyed`
+            const destroyedTitle = `Agent is destroyed`
+            return (
+              <>
+                <Button
+                  variant="soft"
+                  size="1"
+                  disabled={isDestroyed}
+                  title={
+                    isDestroyed
+                      ? destroyedTitle
+                      : `Pin — keep sandbox alive past idle timeout`
+                  }
+                  onClick={() => {
+                    void fetch(`${baseUrl}${entity.url}/send`, {
+                      method: `POST`,
+                      headers: { 'content-type': `application/json` },
+                      body: JSON.stringify({
+                        from: `user`,
+                        type: `pin`,
+                        payload: {},
+                      }),
+                    })
+                  }}
+                >
+                  Pin
+                </Button>
+                <Button
+                  variant="soft"
+                  size="1"
+                  disabled={isDestroyed}
+                  title={
+                    isDestroyed
+                      ? destroyedTitle
+                      : `Release — allow idle hibernation`
+                  }
+                  onClick={() => {
+                    void fetch(`${baseUrl}${entity.url}/send`, {
+                      method: `POST`,
+                      headers: { 'content-type': `application/json` },
+                      body: JSON.stringify({
+                        from: `user`,
+                        type: `release`,
+                        payload: {},
+                      }),
+                    })
+                  }}
+                >
+                  Release
+                </Button>
+                <Button
+                  variant="soft"
+                  size="1"
+                  color="orange"
+                  disabled={isDestroyed}
+                  title={
+                    isDestroyed
+                      ? destroyedTitle
+                      : `Stop — hibernate the sandbox now`
+                  }
+                  onClick={() => {
+                    void fetch(`${baseUrl}${entity.url}/send`, {
+                      method: `POST`,
+                      headers: { 'content-type': `application/json` },
+                      body: JSON.stringify({
+                        from: `user`,
+                        type: `stop`,
+                        payload: {},
+                      }),
+                    })
+                  }}
+                >
+                  Stop
+                </Button>
+                {codingAgentTarget &&
+                  (() => {
+                    const allTargets: ReadonlyArray<
+                      `sandbox` | `host` | `sprites`
+                    > = [`sandbox`, `host`, `sprites`]
+                    const others = allTargets.filter(
+                      (t) => t !== codingAgentTarget
+                    )
+                    const inFlight =
+                      codingAgentStatus === `running` ||
+                      codingAgentStatus === `starting` ||
+                      codingAgentStatus === `stopping`
+                    const triggerDisabled = inFlight || isDestroyed
+                    return (
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger>
+                          <Button
+                            variant="soft"
+                            size="1"
+                            color="amber"
+                            disabled={triggerDisabled}
                             title={
-                              involvesOpencode
-                                ? `Cross-kind support for opencode is deferred — see follow-up slice.`
-                                : `Convert this agent to ${k}`
+                              isDestroyed
+                                ? destroyedTitle
+                                : inFlight
+                                  ? `Cannot convert while ${codingAgentStatus}`
+                                  : `Convert this agent to a different target`
                             }
+                            data-testid="convert-target-button"
                           >
-                            Convert to {k}
-                            {involvesOpencode ? ` (deferred)` : ``}
-                          </DropdownMenu.Item>
-                        )
-                      })}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
-                )
-              })()}
-          </>
-        )}
+                            Convert target
+                          </Button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content>
+                          {others.map((t) => {
+                            const sourceIsSprites =
+                              codingAgentTarget === `sprites`
+                            const targetIsSprites = t === `sprites`
+                            const crossProvider =
+                              sourceIsSprites !== targetIsSprites
+                            const requiresBindMount =
+                              t === `host` &&
+                              codingAgentWorkspaceSpec?.type === `volume`
+                            const disabled = crossProvider || requiresBindMount
+                            const label =
+                              t === `sandbox`
+                                ? `Sandbox`
+                                : t === `host`
+                                  ? `Host`
+                                  : `Sprites`
+                            const title = crossProvider
+                              ? `Cross-provider conversion is not supported. Spawn a fresh agent on ${label} instead.`
+                              : requiresBindMount
+                                ? `Convert to host requires a bindMount workspace`
+                                : `Convert this agent to ${label}`
+                            return (
+                              <DropdownMenu.Item
+                                key={t}
+                                data-testid={`convert-to-${t}`}
+                                disabled={disabled}
+                                onSelect={() => {
+                                  if (disabled) return
+                                  void fetch(`${baseUrl}${entity.url}/send`, {
+                                    method: `POST`,
+                                    headers: {
+                                      'content-type': `application/json`,
+                                    },
+                                    body: JSON.stringify({
+                                      from: `user`,
+                                      type: `convert-target`,
+                                      payload: { to: t },
+                                    }),
+                                  })
+                                }}
+                                title={title}
+                              >
+                                Convert → {label}
+                                {crossProvider
+                                  ? ` (cross-provider not supported)`
+                                  : requiresBindMount
+                                    ? ` (needs bindMount)`
+                                    : ``}
+                              </DropdownMenu.Item>
+                            )
+                          })}
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Root>
+                    )
+                  })()}
+                {codingAgentKind &&
+                  (() => {
+                    const allKinds: ReadonlyArray<
+                      `claude` | `codex` | `opencode`
+                    > = [`claude`, `codex`, `opencode`]
+                    const others = allKinds.filter((k) => k !== codingAgentKind)
+                    const inFlight =
+                      codingAgentStatus === `running` ||
+                      codingAgentStatus === `starting` ||
+                      codingAgentStatus === `stopping`
+                    const triggerDisabled = inFlight || isDestroyed
+                    return (
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger>
+                          <Button
+                            variant="soft"
+                            size="1"
+                            color="amber"
+                            disabled={triggerDisabled}
+                            title={
+                              isDestroyed
+                                ? destroyedTitle
+                                : inFlight
+                                  ? `Cannot convert while ${codingAgentStatus}`
+                                  : `Convert this agent to a different kind`
+                            }
+                            data-testid="convert-kind-button"
+                          >
+                            Convert kind
+                          </Button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content>
+                          {others.map((k) => {
+                            const involvesOpencode =
+                              k === `opencode` || codingAgentKind === `opencode`
+                            return (
+                              <DropdownMenu.Item
+                                key={k}
+                                data-testid={`convert-to-${k}`}
+                                disabled={involvesOpencode}
+                                onSelect={() => {
+                                  if (involvesOpencode) return
+                                  void fetch(`${baseUrl}${entity.url}/send`, {
+                                    method: `POST`,
+                                    headers: {
+                                      'content-type': `application/json`,
+                                    },
+                                    body: JSON.stringify({
+                                      from: `user`,
+                                      type: `convert-kind`,
+                                      payload: { kind: k },
+                                    }),
+                                  })
+                                }}
+                                title={
+                                  involvesOpencode
+                                    ? `Cross-kind support for opencode is deferred — see follow-up slice.`
+                                    : `Convert this agent to ${k}`
+                                }
+                              >
+                                Convert to {k}
+                                {involvesOpencode ? ` (deferred)` : ``}
+                              </DropdownMenu.Item>
+                            )
+                          })}
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Root>
+                    )
+                  })()}
+              </>
+            )
+          })()}
 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>

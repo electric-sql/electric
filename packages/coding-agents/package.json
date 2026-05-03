@@ -23,7 +23,8 @@
     "test:integration:host": "HOST_PROVIDER=1 vitest run test/integration/host-provider.test.ts",
     "typecheck": "tsc --noEmit",
     "stylecheck": "eslint . --quiet",
-    "cleanup:sprites": "node --experimental-strip-types --no-warnings scripts/cleanup-sprites.ts"
+    "cleanup:sprites": "node --experimental-strip-types --no-warnings scripts/cleanup-sprites.ts",
+    "cleanup:volumes": "node --experimental-strip-types --no-warnings scripts/cleanup-volumes.ts"
   },
   "exports": {
     ".": {

@@ -149,6 +149,60 @@ test.describe(`Spawn dialog combos (claude/codex/opencode × sandbox/host × vol
   })
 })
 
+test.describe(`destroyed-entity buttons gate (O-2 fix)`, () => {
+  test(`Pin/Release/Stop/Convert all disabled when status=destroyed`, async ({
+    page,
+    request,
+  }) => {
+    const name = uniqueAgentName(`pw-destroyed-`)
+    try {
+      await request.put(`http://localhost:4437/coding-agent/${name}`, {
+        data: {
+          args: { kind: `claude`, target: `sandbox`, workspaceType: `volume` },
+        },
+      })
+      // Trigger destroy via the inbox.
+      await request.post(`http://localhost:4437/coding-agent/${name}/send`, {
+        data: { from: `pw-test`, type: `destroy`, payload: {} },
+      })
+      // Poll for status=destroyed.
+      await expect
+        .poll(
+          async () => {
+            const r = await request.get(
+              `http://localhost:4437/coding-agent/${name}/main?offset=-1`
+            )
+            const data = (await r.json()) as Array<any>
+            const meta = data
+              .filter((e) => e.type === `coding-agent.sessionMeta`)
+              .map((e) => e.value)
+              .at(-1) as any
+            return meta?.status
+          },
+          { timeout: 15_000 }
+        )
+        .toBe(`destroyed`)
+
+      await page.goto(`/#/entity/coding-agent/${name}`)
+      await expect(page.getByTestId(`entity-header`)).toBeVisible()
+
+      await expect(
+        page.getByRole(`button`, { name: `Pin`, exact: true })
+      ).toBeDisabled()
+      await expect(
+        page.getByRole(`button`, { name: `Release`, exact: true })
+      ).toBeDisabled()
+      await expect(
+        page.getByRole(`button`, { name: `Stop`, exact: true })
+      ).toBeDisabled()
+      await expect(page.getByTestId(`convert-target-button`)).toBeDisabled()
+      await expect(page.getByTestId(`convert-kind-button`)).toBeDisabled()
+    } finally {
+      await deleteEntity(request, name)
+    }
+  })
+})
+
 test.describe(`convert-target gate`, () => {
   test(`server rejects sandbox+volume → host with 'requires bindMount'`, async ({
     request,

@@ -164,4 +164,16 @@ SPRITES_TOKEN=... pnpm -C packages/coding-agents cleanup:sprites           # dry
 SPRITES_TOKEN=... pnpm -C packages/coding-agents cleanup:sprites --delete  # actually delete
 ```
 
-Lists or deletes any sprites whose name starts with `conf-sprite-` or `e2e-sprites-` — the prefixes used by conformance and e2e tests.
+Lists or deletes any sprites whose name starts with `conf-sprite-`, `e2e-sprites-`, or `coding-agent-` — the prefixes used by conformance / e2e tests and production UI-spawned sprites.
+
+### Volume cleanup
+
+`LocalDockerProvider.destroy()` intentionally keeps the agent's docker volume so the workspace survives idle eviction → resume cycles. After the agent's terminal DELETE the volume orphans indefinitely. This script lists/deletes them:
+
+```bash
+pnpm -C packages/coding-agents cleanup:volumes              # dry-run
+pnpm -C packages/coding-agents cleanup:volumes --delete     # delete unattached volumes
+pnpm -C packages/coding-agents cleanup:volumes --in-use     # also list still-mounted volumes
+```
+
+Volumes still mounted by a container are skipped by default (deletion would fail). `--in-use` widens the listing for visibility.
