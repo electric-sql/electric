@@ -235,6 +235,43 @@ export function runCodingAgentsIntegrationConformance(
           await provider.destroy(agentId).catch(() => undefined)
         }, 180_000)
 
+        it(`L2.10 agent in error status recovers on next prompt`, async () => {
+          // After a prior turn left the agent in `error`, the next prompt
+          // must clear lastError, transition through `starting`, and
+          // complete normally. The state machine paper says the only
+          // out-edges from `error` are via a re-prompt — but the handler
+          // doesn't currently treat `error` as `cold`-equivalent at
+          // entry, so the next prompt jumps straight to `running` with
+          // stale lastError. R2 #7. Phase 1 Task 2 of the post-review
+          // plan implements the fix.
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+          const agentId = `/test/coding-agent/${kind}-l2-10-${Date.now().toString(36)}`
+          const { ctx, state } = makeFakeCtx(agentId, buildArgs(kind, ws))
+          await handler(ctx, { type: `message_received` })
+
+          // Inject error state directly (mirrors L2.4's stale-run pattern).
+          state.sessionMeta.rows.set(`current`, {
+            ...(state.sessionMeta.get(`current`) as SessionMetaRow),
+            status: `error`,
+            lastError: `prior turn failed for some reason`,
+          })
+
+          pushInbox(state, `i1`, `prompt`, { text: probe.prompt })
+          await handler(ctx, { type: `message_received` })
+
+          const finalMeta = state.sessionMeta.get(`current`) as SessionMetaRow
+          expect(finalMeta.status).toMatch(/^(idle|cold)$/)
+          expect(finalMeta.lastError).toBeUndefined()
+          // The recovered run completed normally.
+          const completed = (
+            Array.from(state.runs.rows.values()) as Array<RunRow>
+          ).filter((r) => r.status === `completed`)
+          expect(completed.length).toBeGreaterThan(0)
+
+          await provider.destroy(agentId).catch(() => undefined)
+        }, 180_000)
+
         const sharedIt = config.supportsSharedWorkspace === false ? it.skip : it
         sharedIt(
           `L2.5 workspace persists across teardown`,
