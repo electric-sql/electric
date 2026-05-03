@@ -244,9 +244,17 @@ Mostly CSS / token tuning, no behaviour changes.
 - Delete the now-unused: sidebar filter input + helper, separate Pin/Fork
   buttons in the entity bar, `themeButtonIcon/themeButtonAriaLabel`
   helpers (subsumed by `SettingsMenu`).
-- Confirm `useDarkMode` exposes both `cyclePreference` (back-compat,
-  unused after Phase 3) and the new `setPreference`. Decide whether to
-  remove `cyclePreference` in this phase.
+- Drop `cyclePreference` from `useDarkMode`. `SettingsMenu` only ever
+  needs `setPreference(p)`, and no other callers remain — keeping
+  `cyclePreference` around as "back-compat" was just dead code.
+- Trim unused surface from `useExpandedTreeNodes`: only `isExpanded` and
+  `toggle` are consumed (children are collapsed by default; ⌘K
+  navigates straight to a row without auto-expanding parents). Drop
+  `expand` / `collapse` until a future caller actually needs them.
+- Drop the no-op `.statusDot` rule from `SidebarRow.module.css`
+  (`<StatusDot>` paints inline styles, not a class).
+- Update stale doc references (`sessionGroups.ts` mentioning
+  `EntityListItem`, `useSearchPalette` mentioning per-phase wiring).
 - Browser pass on http://localhost:5173/\_\_agent_ui/:
   - Top bar: sidebar toggle, search opens palette, ⌘K opens palette,
     ⌘B toggles sidebar.

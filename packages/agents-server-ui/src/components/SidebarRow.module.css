@@ -45,10 +45,6 @@
   flex-shrink: 0;
 }
 
-.statusDot {
-  flex-shrink: 0;
-}
-
 .title {
   flex: 1;
   min-width: 0;

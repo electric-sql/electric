@@ -2,12 +2,12 @@ import { createContext, useCallback, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 
 /**
- * Session-search palette (⌘K) — open/close state only.
+ * Session-search palette (⌘K) open/close state.
  *
- * Phase 1 ships the provider + hook so the global top-bar search button
- * has somewhere to call. Phase 4 mounts the actual `<SearchPalette />`
- * dialog inside the provider's render and consumes `open` / `close` /
- * `isOpen` to drive it.
+ * Mounted at the root of the app shell so any component (top-bar
+ * search button, ⌘K hotkey, future actions) can open / close the
+ * palette without prop-drilling. The actual UI lives in
+ * `<SearchPalette />` and is rendered once inside `RootShell`.
  */
 
 type SearchPaletteApi = {

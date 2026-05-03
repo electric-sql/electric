@@ -19,13 +19,11 @@ function readInitial(): Set<string> {
  * Per-row tree expansion state for the sidebar, persisted across reloads.
  *
  * Children are collapsed by default — a row only expands when the user
- * clicks its caret (or when an external caller forces it via `expand`).
+ * clicks its caret (`toggle`).
  */
 export function useExpandedTreeNodes(): {
   isExpanded: (url: string) => boolean
   toggle: (url: string) => void
-  expand: (url: string) => void
-  collapse: (url: string) => void
 } {
   const [expanded, setExpanded] = useState<Set<string>>(readInitial)
 
@@ -46,25 +44,7 @@ export function useExpandedTreeNodes(): {
     })
   }, [])
 
-  const expand = useCallback((url: string) => {
-    setExpanded((prev) => {
-      if (prev.has(url)) return prev
-      const next = new Set(prev)
-      next.add(url)
-      return next
-    })
-  }, [])
-
-  const collapse = useCallback((url: string) => {
-    setExpanded((prev) => {
-      if (!prev.has(url)) return prev
-      const next = new Set(prev)
-      next.delete(url)
-      return next
-    })
-  }, [])
-
   const isExpanded = useCallback((url: string) => expanded.has(url), [expanded])
 
-  return { isExpanded, toggle, expand, collapse }
+  return { isExpanded, toggle }
 }

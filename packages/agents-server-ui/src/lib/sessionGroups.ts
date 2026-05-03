@@ -16,7 +16,8 @@ import type { ElectricEntity } from './ElectricAgentsProvider'
  *
  * `updated_at` may arrive as either seconds-since-epoch or
  * milliseconds-since-epoch (the Electric backend has historically sent
- * both shapes). We normalise the same way `EntityListItem` does.
+ * both shapes). `normaliseTimestamp` below handles both — anything ≤ 1e12
+ * is treated as seconds and multiplied up.
  */
 
 export type BucketKey =
