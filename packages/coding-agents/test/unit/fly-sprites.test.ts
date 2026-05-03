@@ -92,4 +92,91 @@ describe(`FlySpriteProvider`, () => {
     const p = new FlySpriteProvider({ token: FAKE_TOKEN })
     expect((p as any).cloneWorkspace).toBeUndefined()
   })
+
+  // Regression: sprites.dev rejects names not matching [a-z0-9-]+. nanoid(10)
+  // (used for agent IDs in the runtime) produces mixed-case strings, so the
+  // sanitiser must lowercase. A previous version emitted 'coding-agent-2wLbrqPwAw'
+  // and got 400 'invalid sprite name format' from the live API.
+  describe(`sprite name format (regression: 2026-05-03)`, () => {
+    const SPRITE_NAME_RE = /^[a-z0-9-]+$/
+    const cases: Array<{ agentId: string; expected?: string }> = [
+      {
+        agentId: `/coding-agent/2wLbrqPwAw`,
+        expected: `coding-agent-2wlbrqpwaw`,
+      },
+      { agentId: `/coding-agent/UPPER123`, expected: `coding-agent-upper123` },
+      { agentId: `/coding-agent/has_underscores` },
+      { agentId: `/coding-agent/has.dots` },
+      {
+        agentId: `/coding-agent/HXLSm6dBT9`,
+        expected: `coding-agent-hxlsm6dbt9`,
+      },
+    ]
+
+    for (const { agentId, expected } of cases) {
+      it(`createSprite POSTs a name matching /^[a-z0-9-]+$/ for agentId='${agentId}'`, async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              id: `spr_x`,
+              name: `placeholder`,
+              url: `https://placeholder.sprites.app`,
+            }),
+            {
+              status: 201,
+              headers: { 'content-type': `application/json` },
+            }
+          )
+        )
+        // listSprites lookup runs before createSprite — return empty.
+        fetchMock.mockResolvedValueOnce(
+          new Response(JSON.stringify({ sprites: [] }), {
+            status: 200,
+            headers: { 'content-type': `application/json` },
+          })
+        )
+        // Then createSprite — return a fake sprite.
+        fetchMock.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              id: `spr_x`,
+              name: `placeholder`,
+              url: `https://placeholder.sprites.app`,
+            }),
+            {
+              status: 201,
+              headers: { 'content-type': `application/json` },
+            }
+          )
+        )
+        global.fetch = fetchMock as unknown as typeof fetch
+
+        const p = new FlySpriteProvider({ token: FAKE_TOKEN })
+        // start() will fail at exec-bootstrap (no real WS) but we only care
+        // about the createSprite call having happened with a valid name.
+        await p
+          .start({
+            agentId,
+            workspace: { type: `volume`, name: `vol` },
+            workspaceIdentity: `sprite:${agentId}`,
+            env: {},
+          })
+          .catch(() => undefined)
+
+        const calls = (global.fetch as any).mock.calls as Array<
+          [string, RequestInit]
+        >
+        const createCall = calls.find(
+          (c) => c[1].method === `POST` && String(c[0]).endsWith(`/v1/sprites`)
+        )
+        expect(
+          createCall,
+          `createSprite POST should have happened`
+        ).toBeDefined()
+        const body = JSON.parse(String(createCall![1].body)) as { name: string }
+        expect(body.name).toMatch(SPRITE_NAME_RE)
+        if (expected !== undefined) expect(body.name).toBe(expected)
+      })
+    }
+  })
 })

@@ -23,9 +23,18 @@ export interface FlySpriteProviderOptions {
 
 const NAME_PREFIX = `coding-agent-`
 
+// Sprites require names matching [a-z0-9-]+. agentIds use mixed-case nanoid,
+// and the path-style URL has slashes. This sanitiser is lossy: uppercase →
+// lowercase, any other non-allowed char → '-'. Collisions across distinct
+// agentIds with case-only differences are theoretically possible but vanishingly
+// unlikely with 10-char nanoids — accepted.
 function spriteName(agentId: string): string {
-  // agentId looks like '/coding-agent/foo' — sanitise to 'coding-agent-foo'.
-  return agentId.replace(/^\//, ``).replace(/\//g, `-`)
+  return agentId
+    .replace(/^\//, ``)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, `-`)
+    .replace(/-+/g, `-`)
+    .replace(/^-|-$/g, ``)
 }
 
 export class FlySpriteProvider implements SandboxProvider {

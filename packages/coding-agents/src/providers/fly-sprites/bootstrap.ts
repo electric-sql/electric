@@ -14,11 +14,17 @@ set -e
 # Skip if already bootstrapped.
 [ -f /opt/electric-ax/.bootstrapped ] && exit 0
 
-# Verify preinstalled CLIs (sanity).
-claude --version >/dev/null && codex --version >/dev/null
+# Sprites.dev currently doesn't accept custom OCI images (TL-S2), so we
+# install all three coding-agent CLIs into the sprite at first cold-boot.
+# Versions parity with packages/coding-agents/docker/Dockerfile.
+npm install -g \\
+  @anthropic-ai/claude-code@latest \\
+  @openai/codex@^0.128.0 \\
+  opencode-ai@1.14.31
 
-# Install opencode-ai. Pinned to match the local-docker bake.
-npm install -g opencode-ai@1.14.31
+# Sanity-check.
+claude --version >/dev/null
+codex --version >/dev/null
 opencode --version >/dev/null
 
 # Workspace mount point.

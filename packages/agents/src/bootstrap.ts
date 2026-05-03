@@ -14,6 +14,7 @@ import {
   LocalDockerProvider,
   HostProvider,
   StdioBridge,
+  createSpritesProviderIfConfigured,
   registerCodingAgent,
 } from '@electric-ax/coding-agents'
 import { registerHorton } from './agents/horton'
@@ -130,10 +131,17 @@ export async function createBuiltinAgentHandler(
   const codingAgentClient = createRuntimeServerClient({
     baseUrl: agentServerUrl,
   })
+  const spritesProvider = createSpritesProviderIfConfigured()
+  if (spritesProvider) {
+    serverLog.info(
+      `[coding-agent] FlySpriteProvider registered (SPRITES_TOKEN found)`
+    )
+  }
   registerCodingAgent(registry, {
     providers: {
       sandbox: new LocalDockerProvider(),
       host: new HostProvider(),
+      ...(spritesProvider ? { sprites: spritesProvider } : {}),
     },
     bridge: new StdioBridge(),
     wakeEntity: (agentId: string) => {

@@ -845,6 +845,14 @@ async function processPrompt(
 
   let sandbox
   try {
+    // Sprites cold-boot includes a per-sprite REST create + WebSocket exec
+    // bootstrap that installs opencode-ai (~10-30s) on first boot. The
+    // 30s default tuned for docker is too tight; give sprites a larger
+    // budget. Subsequent boots are fast (idempotent bootstrap marker).
+    const budgetMs =
+      meta.target === `sprites`
+        ? Math.max(options.defaults.coldBootBudgetMs, 240_000)
+        : options.defaults.coldBootBudgetMs
     sandbox = await raceTimeout(
       lm.ensureRunning({
         agentId,
@@ -853,7 +861,7 @@ async function processPrompt(
         workspace: meta.workspaceSpec,
         env: options.env(meta.kind),
       }),
-      options.defaults.coldBootBudgetMs
+      budgetMs
     )
   } catch (err) {
     ctx.db.actions.sessionMeta_update({

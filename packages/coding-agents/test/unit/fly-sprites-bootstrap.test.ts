@@ -7,7 +7,9 @@ describe(`Sprites bootstrap script`, () => {
     expect(BOOTSTRAP_SCRIPT).toContain(`exit 0`)
   })
 
-  it(`installs opencode-ai pinned to the conformance version`, () => {
+  it(`installs all three coding-agent CLIs (claude, codex, opencode-ai)`, () => {
+    expect(BOOTSTRAP_SCRIPT).toContain(`@anthropic-ai/claude-code`)
+    expect(BOOTSTRAP_SCRIPT).toContain(`@openai/codex`)
     expect(BOOTSTRAP_SCRIPT).toContain(`opencode-ai@1.14.31`)
   })
 

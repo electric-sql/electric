@@ -31,7 +31,11 @@ import { makeCodingAgentHandler } from './handler'
 import { z } from 'zod'
 
 export interface RegisterCodingAgentDeps {
-  providers: { sandbox: SandboxProvider; host: SandboxProvider }
+  providers: {
+    sandbox: SandboxProvider
+    host: SandboxProvider
+    sprites?: SandboxProvider
+  }
   bridge: Bridge
   /** Override defaults; used by tests. */
   defaults?: Partial<{
