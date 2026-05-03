@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # Architecture
 
-The `@electric-ax/coding-agents` package wires four orthogonal pieces around an entity handler.
+The `@electric-ax/coding-agents` package wires three orthogonal subsystems — providers, bridge, workspace registry — around the entity handler, with a lifecycle manager multiplexing the providers.
 
 ```text
               spawnCodingAgent(ctx)               POST /send {type: ...}
@@ -49,51 +49,4 @@ The `@electric-ax/coding-agents` package wires four orthogonal pieces around an 
 
 ## Setup
 
-### Required env
-
-At least one of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` must be set; both is fine. `SPRITES_TOKEN` is required only if you want the sprites target.
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-...                           # claude / opencode (anthropic models)
-OPENAI_API_KEY=sk-proj-...                             # codex / opencode (openai models)
-SPRITES_TOKEN=<bearer-token-from-sprites.dev>          # optional — enables target=sprites
-```
-
-`registerCodingAgent`'s default `env()` callback mirrors `ANTHROPIC_API_KEY` → `CLAUDE_CODE_OAUTH_TOKEN` when the value matches the OAuth shape (`sk-ant-oat...`), so a single `ANTHROPIC_API_KEY=sk-ant-oat...` covers both API-key and OAuth-token code paths transparently.
-
-### Local dev
-
-```bash
-node packages/electric-ax/bin/dev.mjs up           # spawn full stack on :4437
-node packages/electric-ax/bin/dev.mjs restart      # bounce host services (state preserved)
-node packages/electric-ax/bin/dev.mjs clear-state  # nuke postgres + volumes + streams
-```
-
-`dev.mjs` runs an embedded `DurableStreamTestServer` and persists its data directory to `.local/dev-streams` so existing entities survive `up`-after-`down`.
-
-### Bootstrap registration
-
-[`packages/agents/src/bootstrap.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/bootstrap.ts) wires the providers + bridge into the entity registry on dev-server startup:
-
-```ts
-import {
-  registerCodingAgent,
-  LocalDockerProvider,
-  HostProvider,
-  StdioBridge,
-  createSpritesProviderIfConfigured,
-} from '@electric-ax/coding-agents'
-
-const spritesProvider = createSpritesProviderIfConfigured()
-
-registerCodingAgent(registry, {
-  providers: {
-    sandbox: new LocalDockerProvider(),
-    host: new HostProvider(),
-    ...(spritesProvider ? { sprites: spritesProvider } : {}),
-  },
-  bridge: new StdioBridge(),
-})
-```
-
-The sprites provider is registered conditionally on `SPRITES_TOKEN` so deployments without it see no behavioural change.
+See [Operations → Setup](./operations#setup) for required env vars, local dev commands, and the bootstrap-registration snippet.

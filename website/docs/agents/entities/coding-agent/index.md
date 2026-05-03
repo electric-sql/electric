@@ -18,7 +18,7 @@ outline: [2, 3]
 
 ## Pages
 
-- **[Architecture](./architecture)** — package layout, dependency flow, the four pieces (handler / lifecycle-manager / workspace-registry / providers / bridges).
+- **[Architecture](./architecture)** — package layout, dependency flow, the handler / lifecycle-manager / workspace-registry / providers / bridge pieces.
 - **[Lifecycle](./lifecycle)** — state machine, inbox messages, idle eviction, lifecycle events.
 - **[Native API](./api)** — `ctx.spawnCodingAgent`, sending prompts, state collections, convert and fork.
 - **[Targets and kinds](./targets-and-kinds)** — sandbox / host / sprites; claude / codex / opencode; workspace types; cross-provider gates.

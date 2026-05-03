@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # Native API
 
-The coding-agent surface lives entirely on the `agents-runtime` `ctx` — no separate SDK is needed. Use the same primitives you'd use for any other entity (`ctx.spawn`, `ctx.send`, `ctx.observe`, `ctx.db.collections`/`actions`) plus one typed shortcut for spawn.
+Coding-agent uses the standard entity primitives — `ctx.send`, `ctx.observe`, `ctx.db.collections`/`actions` — plus one typed spawn shortcut.
 
 ## `ctx.spawnCodingAgent(opts)`
 
@@ -20,10 +20,9 @@ import { nanoid } from 'nanoid'
 const coder = await ctx.spawnCodingAgent({
   id: nanoid(10),                                           // stable agent id
   kind: 'claude',                                           // 'claude' | 'codex' | 'opencode'
-  target: 'sandbox',                                        // 'sandbox' | 'host' | 'sprites'
   workspace: { type: 'volume' },                            // or { type: 'bindMount', hostPath: '/abs/path' }
-  // model: 'openai/gpt-5.4-mini-fast',                     // required for opencode
-  initialPrompt: 'Add a sum() helper to src/math.ts.',     // optional first prompt
+  // model: 'anthropic/claude-haiku-4-5',                   // opencode requires a model arg
+  initialPrompt: 'Add a sum() helper to src/math.ts.',      // optional first prompt
   wake: { on: 'runFinished', includeResponse: true },       // optional: wake parent on completion
   lifecycle: { idleTimeoutMs: 300_000, keepWarm: false },   // optional: tune idle behaviour
   // from: { agentId: '/coding-agent/source', workspaceMode: 'clone' },  // optional: fork
@@ -34,13 +33,14 @@ const coder = await ctx.spawnCodingAgent({
 | --------------- | ---------------------------------------------------------------------------------------------------------- |
 | `id`            | Stable id scoped to the spawning entity. Re-using an id is a no-op (existing agent is observed instead).   |
 | `kind`          | Default `claude`.                                                                                          |
-| `target`        | Default `sandbox`. `sprites` requires `SPRITES_TOKEN`. `host` requires bindMount.                          |
 | `workspace`     | `{ type: 'volume', name?: string }` or `{ type: 'bindMount', hostPath: string }`.                          |
-| `model`         | Required for `opencode`; optional for claude/codex.                                                        |
+| `model`         | The opencode CLI exits with an error if `model` is omitted. Optional for claude / codex.                   |
 | `initialPrompt` | Queued before first wake — saves a second send.                                                            |
 | `wake`          | Async notification: `{ on: 'runFinished', includeResponse?: boolean }`. The parent is woken when this run completes. |
 | `lifecycle`     | `{ idleTimeoutMs?: number; keepWarm?: boolean }`. See [Lifecycle → Idle eviction](./lifecycle#idle-eviction-keepwarm). |
 | `from`          | Fork source: `{ agentId, workspaceMode?: 'share' \| 'clone' \| 'fresh' }`. See [Fork](#fork).              |
+
+> **Setting `target`.** `target` is **not** a field of `ctx.spawnCodingAgent`'s typed options — only the flat creation-args path (HTTP `PUT /coding-agent/<id>` or `ctx.spawn('coding-agent', ...)`) accepts it. Same for `importNativeSessionId`. See [Targets and kinds → Importing a host session](./targets-and-kinds#importing-a-host-session) for the host-import flow.
 
 ## Sending a prompt
 
@@ -58,6 +58,8 @@ curl -X POST http://localhost:4437/coding-agent/<name>/send \
 
 ## Observing another agent
 
+`ctx.observe` opens a snapshot read of another entity's state collections — used by [`fork`](#fork) to backfill the new agent's events from the source.
+
 ```ts
 const handle = await ctx.observe({
   sourceType: 'entity',
@@ -66,7 +68,8 @@ const handle = await ctx.observe({
 const sourceEvents = (handle.db?.collections.events.toArray ?? []) as Array<EventRow>
 ```
 
-The handle provides at-spawn-time snapshot semantics — subsequent source updates are not reflected. Used by [`fork`](#fork) to read the source agent's transcript.
+- Snapshot semantics: the read is at-spawn-time; subsequent source updates are not reflected.
+- The handle includes a wake subscription by default. Fork callers don't need wake; the runtime garbage-collects un-awaited subscriptions per existing semantics.
 
 ## State collections
 
@@ -136,23 +139,6 @@ const fork = await ctx.spawnCodingAgent({
 | `LocalDockerProvider` | yes (alpine cp -a)                        |
 | `HostProvider`        | no (bind-mount only)                      |
 | `FlySpriteProvider`   | no (deferred to v1.5; see TL-S3)          |
-
-## Cross-stream reads
-
-Fork (spawn-time inheritance) reads another agent's `events` via `ctx.observe`:
-
-```ts
-const handle = await ctx.observe({
-  sourceType: 'entity',
-  sourceRef: '/coding-agent/source-id',
-})
-const sourceEvents = (handle.db?.collections.events.toArray ?? []) as Array<EventRow>
-```
-
-Caveats:
-
-- Snapshot semantics: the read is at-spawn-time; subsequent source updates are not reflected.
-- The handle includes a wake subscription by default (entities are observed). Fork callers do not need wake; the runtime garbage-collects un-awaited subscriptions per existing semantics.
 
 ## Lossy aspects
 

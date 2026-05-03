@@ -20,7 +20,7 @@ A coding-agent picks a CLI **kind** (claude / codex / opencode) and a **target**
 
 ### Cross-provider transitions
 
-`sandbox`↔`sprites` and `host`↔`sprites` are **not supported**. Both Convert and Fork between them are rejected at the server (lifecycle event `target.changed: failed: cross-provider not supported`); the UI also disables those dropdown items. Spawn a fresh agent on the target instead.
+`sandbox`↔`sprites` and `host`↔`sprites` are **not supported**. Both Convert and Fork between them are rejected at the server — the lifecycle event is `target.changed` with `detail: "failed: cross-provider (<from> → <to>)"`; the UI also disables those dropdown items. Spawn a fresh agent on the target instead.
 
 `convert-target sandbox → host` requires a bind-mount workspace; volume-backed agents are rejected with `lastError = "convert to host requires a bindMount workspace"`.
 
@@ -67,13 +67,13 @@ Adding a new kind = registering a `CodingAgentAdapter` (see [Integrating → Bri
 
 ### opencode model picker
 
-opencode requires a model arg per spawn (no provider auto-detect in v1). Curated list:
+opencode requires a model arg per spawn (no provider auto-detect in v1). Curated list (UI dropdown order, see [`CodingAgentSpawnDialog.tsx`](https://github.com/electric-sql/electric/blob/main/packages/agents-server-ui/src/components/CodingAgentSpawnDialog.tsx)):
 
 - `openai/gpt-5.4-mini-fast` (default; chosen for auth-availability in this dev environment)
-- `anthropic/claude-haiku-4-5`
-- `anthropic/claude-sonnet-4-6`
 - `openai/gpt-5.5`
 - `openai/gpt-5.5-fast`
+- `anthropic/claude-haiku-4-5`
+- `anthropic/claude-sonnet-4-6`
 
 opencode reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` as per-provider fallback when `~/.local/share/opencode/auth.json` is missing. The handler passes whichever keys are in `process.env` through to the sandbox per-turn.
 
@@ -129,5 +129,5 @@ CLI shortcut after building the package:
 
 ```bash
 pnpm -C packages/coding-agents build
-electric-ax-import-claude --workspace /path/to/proj --session-id <claude-session-id>
+electric-ax-import --agent claude --workspace /path/to/proj --session-id <claude-session-id>
 ```

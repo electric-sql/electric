@@ -129,7 +129,7 @@ export interface ExecHandle {
   stdout: AsyncIterable<string>
   stderr: AsyncIterable<string>
   wait(): Promise<{ exitCode: number }>
-  kill(signal?: string): void
+  kill(signal?: NodeJS.Signals): void
   writeStdin?(chunk: string): Promise<void>                     // present iff stdin === 'pipe'
   closeStdin?(): Promise<void>
 }
