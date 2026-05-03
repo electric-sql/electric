@@ -31,7 +31,7 @@ async function main(): Promise<void> {
 
   let total = 0
   for (const prefix of PREFIXES) {
-    const r = await client.listSprites({ namePrefix: prefix })
+    const r = await client.listAllSprites({ namePrefix: prefix })
     if (r.sprites.length === 0) continue
     console.log(`Found ${r.sprites.length} sprites matching '${prefix}':`)
     for (const s of r.sprites) {

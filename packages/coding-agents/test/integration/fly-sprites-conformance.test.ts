@@ -114,7 +114,9 @@ afterAll(async () => {
   if (!token) return
   const client = new SpritesApiClient({ token })
   for (const prefix of [`test-coding-agent-`, `conf-sprite-`]) {
-    const r = await client.listSprites({ namePrefix: prefix }).catch(() => null)
+    const r = await client
+      .listAllSprites({ namePrefix: prefix })
+      .catch(() => null)
     if (!r) continue
     await Promise.all(
       r.sprites.map((s) => client.deleteSprite(s.name).catch(() => undefined))

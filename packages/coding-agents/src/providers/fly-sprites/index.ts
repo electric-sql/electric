@@ -210,7 +210,10 @@ export class FlySpriteProvider implements SandboxProvider {
   // ─── private helpers ─────────────────────────────────────────────────
 
   private async findExisting(name: string): Promise<string | null> {
-    const r = await this.client.listSprites({ namePrefix: name })
+    // Page through results — a single listSprites response is one page,
+    // and a sprite buried past the first page is silently missed,
+    // causing the next createSprite to 409 with "name already exists".
+    const r = await this.client.listAllSprites({ namePrefix: name })
     const exact = r.sprites.find((s) => s.name === name)
     return exact?.name ?? null
   }
