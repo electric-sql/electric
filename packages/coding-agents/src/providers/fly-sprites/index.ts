@@ -371,6 +371,7 @@ export class FlySpriteProvider implements SandboxProvider {
 
     let stdinBuf = ``
     let started = false
+    let closed = false
 
     const pushStdout = (line: string): void => {
       if (stdoutResolve) {
@@ -583,10 +584,18 @@ export class FlySpriteProvider implements SandboxProvider {
         // POST is a single shot; nothing to abort cleanly.
       },
       writeStdin: async (chunk: string) => {
+        if (closed) {
+          throw new Error(
+            `writeStdin after closeStdin on sprites POST exec; data lost`
+          )
+        }
         stdinBuf += chunk
       },
       closeStdin: async () => {
         // closeStdin triggers the actual POST. Bridge waits on stdout/exit.
+        // Idempotent: a second close is a no-op.
+        if (closed) return
+        closed = true
         void start()
       },
     }
