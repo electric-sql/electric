@@ -818,6 +818,22 @@ async function processPrompt(
 
   let meta = sessionMetaCol.get(`current`) as SessionMetaRow
 
+  // Treat `error` like `cold` at entry — clear the prior failure marker
+  // and let the cold-boot path run. The state-machine paper says the
+  // only out-edges from `error` are via a re-prompt; without this, the
+  // handler skips `sandbox.starting` and writes `running` directly,
+  // leaving stale `lastError` visible to the UI through completion.
+  if (meta.status === `error`) {
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.status = `cold`
+        d.lastError = undefined
+      },
+    })
+    meta = sessionMetaCol.get(`current`) as SessionMetaRow
+  }
+
   // Only emit sandbox.starting/sandbox.started lifecycle rows when we
   // actually cold-boot. lm.ensureRunning is idempotent (returns the
   // existing instance if already running); without this guard, every
