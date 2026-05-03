@@ -34,6 +34,14 @@ export interface CodingAgentsIntegrationConformanceConfig {
   target: SandboxSpec[`target`]
   /** Skip the entire suite if this returns truthy. */
   skipIf?: () => boolean
+  /**
+   * If false, skips scenarios that require workspace persistence
+   * across `destroy` (L2.5) and shared-workspace lease semantics
+   * (L2.6). Default `true`. Set to `false` for providers like
+   * sprites where the sandbox IS the workspace (each agentId gets
+   * its own sprite, FS gone on destroy, can't share).
+   */
+  supportsSharedWorkspace?: boolean
 }
 
 export function runCodingAgentsIntegrationConformance(
@@ -227,123 +235,132 @@ export function runCodingAgentsIntegrationConformance(
           await provider.destroy(agentId).catch(() => undefined)
         }, 180_000)
 
-        it(`L2.5 workspace persists across teardown`, async () => {
-          const { spec: ws, cleanup } = await config.scratchWorkspace()
-          pendingCleanups.push(cleanup)
+        const sharedIt = config.supportsSharedWorkspace === false ? it.skip : it
+        sharedIt(
+          `L2.5 workspace persists across teardown`,
+          async () => {
+            const { spec: ws, cleanup } = await config.scratchWorkspace()
+            pendingCleanups.push(cleanup)
 
-          // Spawn first agent on workspace; run a turn so the sandbox is up.
-          const agentIdA = `/test/coding-agent/${kind}-l2-5a-${Date.now().toString(36)}`
-          const argsBoth = buildArgs(kind, ws)
-          const { ctx: ctxA, state: stateA } = makeFakeCtx(agentIdA, argsBoth)
-          await handler(ctxA, { type: `message_received` })
-          pushInbox(stateA, `i1`, `prompt`, { text: probe.prompt })
-          await handler(ctxA, { type: `message_received` })
+            // Spawn first agent on workspace; run a turn so the sandbox is up.
+            const agentIdA = `/test/coding-agent/${kind}-l2-5a-${Date.now().toString(36)}`
+            const argsBoth = buildArgs(kind, ws)
+            const { ctx: ctxA, state: stateA } = makeFakeCtx(agentIdA, argsBoth)
+            await handler(ctxA, { type: `message_received` })
+            pushInbox(stateA, `i1`, `prompt`, { text: probe.prompt })
+            await handler(ctxA, { type: `message_received` })
 
-          // Use provider.start (idempotent — returns the running instance) to
-          // get an instance handle so we can copyTo a sentinel file. The
-          // workspace path of this provider may differ from previous agents
-          // for the same workspaceIdentity; copyTo writes into the workspace
-          // mount.
-          const instA = await provider.start({
-            agentId: agentIdA,
-            kind,
-            target: config.target,
-            workspace: ws,
-            env: kindEnv!,
-          })
-          const sentinelPath = `${instA.workspaceMount}/sentinel.txt`
-          await instA.copyTo({
-            destPath: sentinelPath,
-            content: `persisted`,
-            mode: 0o644,
-          })
+            // Use provider.start (idempotent — returns the running instance) to
+            // get an instance handle so we can copyTo a sentinel file. The
+            // workspace path of this provider may differ from previous agents
+            // for the same workspaceIdentity; copyTo writes into the workspace
+            // mount.
+            const instA = await provider.start({
+              agentId: agentIdA,
+              kind,
+              target: config.target,
+              workspace: ws,
+              env: kindEnv!,
+            })
+            const sentinelPath = `${instA.workspaceMount}/sentinel.txt`
+            await instA.copyTo({
+              destPath: sentinelPath,
+              content: `persisted`,
+              mode: 0o644,
+            })
 
-          // Destroy first agent.
-          pushInbox(stateA, `i2`, `destroy`)
-          await handler(ctxA, { type: `message_received` })
+            // Destroy first agent.
+            pushInbox(stateA, `i2`, `destroy`)
+            await handler(ctxA, { type: `message_received` })
 
-          // Spawn second agent on SAME workspace.
-          const agentIdB = `/test/coding-agent/${kind}-l2-5b-${Date.now().toString(36)}`
-          const { ctx: ctxB } = makeFakeCtx(agentIdB, argsBoth)
-          await handler(ctxB, { type: `message_received` })
-          const instB = await provider.start({
-            agentId: agentIdB,
-            kind,
-            target: config.target,
-            workspace: ws,
-            env: kindEnv!,
-          })
+            // Spawn second agent on SAME workspace.
+            const agentIdB = `/test/coding-agent/${kind}-l2-5b-${Date.now().toString(36)}`
+            const { ctx: ctxB } = makeFakeCtx(agentIdB, argsBoth)
+            await handler(ctxB, { type: `message_received` })
+            const instB = await provider.start({
+              agentId: agentIdB,
+              kind,
+              target: config.target,
+              workspace: ws,
+              env: kindEnv!,
+            })
 
-          const h = await instB.exec({
-            cmd: [`cat`, `${instB.workspaceMount}/sentinel.txt`],
-          })
-          // Drain stdout/stderr in parallel with wait(): some providers
-          // (e.g. docker exec) don't reliably end the host-side stderr
-          // readline iterator until both pipes have been drained, so a
-          // sequential `for await stderr` after the inner process exits
-          // can hang indefinitely.
-          const drain = async (s: AsyncIterable<string>): Promise<string> => {
-            let acc = ``
-            for await (const line of s) acc += line + `\n`
-            return acc
-          }
-          const discard = async (s: AsyncIterable<string>): Promise<void> => {
-            for await (const _ of s) {
-              /* discard */
+            const h = await instB.exec({
+              cmd: [`cat`, `${instB.workspaceMount}/sentinel.txt`],
+            })
+            // Drain stdout/stderr in parallel with wait(): some providers
+            // (e.g. docker exec) don't reliably end the host-side stderr
+            // readline iterator until both pipes have been drained, so a
+            // sequential `for await stderr` after the inner process exits
+            // can hang indefinitely.
+            const drain = async (s: AsyncIterable<string>): Promise<string> => {
+              let acc = ``
+              for await (const line of s) acc += line + `\n`
+              return acc
             }
-          }
-          const [out, , exit] = await Promise.all([
-            drain(h.stdout),
-            discard(h.stderr),
-            h.wait(),
-          ])
-          expect(exit.exitCode).toBe(0)
-          expect(out.trim()).toBe(`persisted`)
+            const discard = async (s: AsyncIterable<string>): Promise<void> => {
+              for await (const _ of s) {
+                /* discard */
+              }
+            }
+            const [out, , exit] = await Promise.all([
+              drain(h.stdout),
+              discard(h.stderr),
+              h.wait(),
+            ])
+            expect(exit.exitCode).toBe(0)
+            expect(out.trim()).toBe(`persisted`)
 
-          await provider.destroy(agentIdB).catch(() => undefined)
-        }, 240_000)
+            await provider.destroy(agentIdB).catch(() => undefined)
+          },
+          240_000
+        )
 
-        it(`L2.6 shared-workspace lease serialises concurrent runs`, async () => {
-          const { spec: ws, cleanup } = await config.scratchWorkspace()
-          pendingCleanups.push(cleanup)
+        sharedIt(
+          `L2.6 shared-workspace lease serialises concurrent runs`,
+          async () => {
+            const { spec: ws, cleanup } = await config.scratchWorkspace()
+            pendingCleanups.push(cleanup)
 
-          const agentIdA = `/test/coding-agent/${kind}-l2-6a-${Date.now().toString(36)}`
-          const agentIdB = `/test/coding-agent/${kind}-l2-6b-${Date.now().toString(36)}`
-          const args = buildArgs(kind, ws)
-          const { ctx: ctxA, state: stateA } = makeFakeCtx(agentIdA, args)
-          const { ctx: ctxB, state: stateB } = makeFakeCtx(agentIdB, args)
+            const agentIdA = `/test/coding-agent/${kind}-l2-6a-${Date.now().toString(36)}`
+            const agentIdB = `/test/coding-agent/${kind}-l2-6b-${Date.now().toString(36)}`
+            const args = buildArgs(kind, ws)
+            const { ctx: ctxA, state: stateA } = makeFakeCtx(agentIdA, args)
+            const { ctx: ctxB, state: stateB } = makeFakeCtx(agentIdB, args)
 
-          // First-wake init for both.
-          await handler(ctxA, { type: `message_received` })
-          await handler(ctxB, { type: `message_received` })
+            // First-wake init for both.
+            await handler(ctxA, { type: `message_received` })
+            await handler(ctxB, { type: `message_received` })
 
-          pushInbox(stateA, `i1`, `prompt`, { text: probe.prompt })
-          pushInbox(stateB, `j1`, `prompt`, { text: probe.prompt })
+            pushInbox(stateA, `i1`, `prompt`, { text: probe.prompt })
+            pushInbox(stateB, `j1`, `prompt`, { text: probe.prompt })
 
-          // Concurrently process both. The lease serialises through the
-          // workspace registry — only one runs at a time.
-          await Promise.all([
-            handler(ctxA, { type: `message_received` }),
-            handler(ctxB, { type: `message_received` }),
-          ])
+            // Concurrently process both. The lease serialises through the
+            // workspace registry — only one runs at a time.
+            await Promise.all([
+              handler(ctxA, { type: `message_received` }),
+              handler(ctxB, { type: `message_received` }),
+            ])
 
-          const runA = (
-            Array.from(stateA.runs.rows.values()) as Array<RunRow>
-          )[0]!
-          const runB = (
-            Array.from(stateB.runs.rows.values()) as Array<RunRow>
-          )[0]!
-          expect(runA.status).toBe(`completed`)
-          expect(runB.status).toBe(`completed`)
-          // Non-overlap: A.endedAt <= B.startedAt OR B.endedAt <= A.startedAt
-          const noOverlap =
-            (runA.endedAt ?? 0) <= runB.startedAt ||
-            (runB.endedAt ?? 0) <= runA.startedAt
-          expect(noOverlap).toBe(true)
+            const runA = (
+              Array.from(stateA.runs.rows.values()) as Array<RunRow>
+            )[0]!
+            const runB = (
+              Array.from(stateB.runs.rows.values()) as Array<RunRow>
+            )[0]!
+            expect(runA.status).toBe(`completed`)
+            expect(runB.status).toBe(`completed`)
+            // Non-overlap: A.endedAt <= B.startedAt OR B.endedAt <= A.startedAt
+            const noOverlap =
+              (runA.endedAt ?? 0) <= runB.startedAt ||
+              (runB.endedAt ?? 0) <= runA.startedAt
+            expect(noOverlap).toBe(true)
 
-          await provider.destroy(agentIdA).catch(() => undefined)
-          await provider.destroy(agentIdB).catch(() => undefined)
-        }, 360_000)
+            await provider.destroy(agentIdA).catch(() => undefined)
+            await provider.destroy(agentIdB).catch(() => undefined)
+          },
+          360_000
+        )
 
         it(`L2.7 convert mid-conversation switches kind`, async () => {
           const { spec: ws, cleanup } = await config.scratchWorkspace()

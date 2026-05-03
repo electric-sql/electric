@@ -51,22 +51,22 @@ export function normalizeOpencode(
         break
       }
       case `text`: {
+        // opencode emits a separate `reasoning` part for chain-of-thought,
+        // so any `text` part IS the assistant's user-visible response.
+        // Earlier versions of this normalizer keyed on
+        // `metadata.openai.phase === 'final_answer'`, but that field is
+        // emitted only when opencode is invoked with `--print-logs`; the
+        // headless `opencode run --format json` path the bridge uses omits
+        // it, leaving every text event misclassified as `thinking`. The
+        // L2.1 cold-boot conformance scenario surfaced this — `responseText`
+        // came back empty because no `assistant_message` event was emitted.
         const text = typeof part.text === `string` ? part.text : ``
         if (!text) break
-        const phase = part?.metadata?.openai?.phase
-        if (phase === `final_answer`) {
-          events.push({
-            type: `assistant_message`,
-            ts,
-            text,
-          } as NormalizedEvent)
-        } else {
-          events.push({
-            type: `thinking`,
-            ts,
-            text,
-          } as NormalizedEvent)
-        }
+        events.push({
+          type: `assistant_message`,
+          ts,
+          text,
+        } as NormalizedEvent)
         break
       }
       case `tool_use`: {

@@ -242,8 +242,10 @@ test.describe(`Import flow (Flows 7, 8)`, () => {
         importNativeSessionId: `definitely-not-on-disk-${Date.now()}`,
       })
       await page.goto(`/#/entity/coding-agent/${name}`)
+      // Both the header lastError block and the timeline lifecycle row
+      // render the same message — accept either by using .first().
       await expect(
-        page.getByText(/imported session file not found/i)
+        page.getByText(/imported session file not found/i).first()
       ).toBeVisible({ timeout: 10_000 })
     } finally {
       await deleteEntity(request, name)
@@ -279,6 +281,10 @@ test.describe(`Aligned bind-mount cwd (Flow 10)`, () => {
 })
 
 test.describe(`Convert-target operation (Flows 11–13)`, () => {
+  // Note: the Convert UI changed from a single Button to a 3-target
+  // DropdownMenu in 2026-05-03 (sprites slice). Selectors here use the
+  // dropdown's data-testids: `convert-target-button` (trigger) and
+  // `convert-to-{sandbox,host,sprites}` (items).
   test(`Convert button on a sandbox+bindMount agent flips it to host`, async ({
     page,
     request,
@@ -293,12 +299,11 @@ test.describe(`Convert-target operation (Flows 11–13)`, () => {
         workspaceHostPath: tmp,
       })
       await page.goto(`/#/entity/coding-agent/${name}`)
-      const convertBtn = page.getByRole(`button`, {
-        name: /Convert → Host/i,
-      })
-      await expect(convertBtn).toBeVisible({ timeout: 10_000 })
-      await expect(convertBtn).toBeEnabled()
-      await convertBtn.click()
+      await page.getByTestId(`convert-target-button`).click()
+      const item = page.getByTestId(`convert-to-host`)
+      await expect(item).toBeVisible({ timeout: 10_000 })
+      await expect(item).toBeEnabled()
+      await item.click()
 
       // Lifecycle row appears
       await expect(page.getByText(/Target changed/i)).toBeVisible({
@@ -308,10 +313,9 @@ test.describe(`Convert-target operation (Flows 11–13)`, () => {
       await expect(page.getByText(`host`, { exact: true }).first()).toBeVisible(
         { timeout: 5_000 }
       )
-      // Button now offers the reverse direction
-      await expect(
-        page.getByRole(`button`, { name: /Convert → Sandbox/i })
-      ).toBeVisible()
+      // Reopening the dropdown now offers Sandbox (and Sprites cross-provider).
+      await page.getByTestId(`convert-target-button`).click()
+      await expect(page.getByTestId(`convert-to-sandbox`)).toBeVisible()
     } finally {
       await deleteEntity(request, name)
       await rm(tmp, { recursive: true, force: true })
@@ -332,20 +336,18 @@ test.describe(`Convert-target operation (Flows 11–13)`, () => {
         workspaceHostPath: tmp,
       })
       await page.goto(`/#/entity/coding-agent/${name}`)
-      const convertBtn = page.getByRole(`button`, {
-        name: /Convert → Sandbox/i,
-      })
-      await expect(convertBtn).toBeVisible({ timeout: 10_000 })
-      await expect(convertBtn).toBeEnabled()
-      await convertBtn.click()
+      await page.getByTestId(`convert-target-button`).click()
+      const item = page.getByTestId(`convert-to-sandbox`)
+      await expect(item).toBeVisible({ timeout: 10_000 })
+      await expect(item).toBeEnabled()
+      await item.click()
 
       await expect(page.getByText(/Target changed/i)).toBeVisible({
         timeout: 10_000,
       })
-      // Host badge should disappear after the flip
-      await expect(
-        page.getByRole(`button`, { name: /Convert → Host/i })
-      ).toBeVisible()
+      // After flipping to sandbox the dropdown now offers Host again.
+      await page.getByTestId(`convert-target-button`).click()
+      await expect(page.getByTestId(`convert-to-host`)).toBeVisible()
     } finally {
       await deleteEntity(request, name)
       await rm(tmp, { recursive: true, force: true })
@@ -365,11 +367,12 @@ test.describe(`Convert-target operation (Flows 11–13)`, () => {
         workspaceName: `pw-conv-vol-${Date.now()}`,
       })
       await page.goto(`/#/entity/coding-agent/${name}`)
-      const convertBtn = page.getByRole(`button`, {
-        name: /Convert → Host/i,
-      })
-      await expect(convertBtn).toBeVisible({ timeout: 10_000 })
-      await expect(convertBtn).toBeDisabled()
+      await page.getByTestId(`convert-target-button`).click()
+      const item = page.getByTestId(`convert-to-host`)
+      await expect(item).toBeVisible({ timeout: 10_000 })
+      // The item itself shows but is disabled because volume → host needs
+      // a bindMount workspace (gated client-side; server also rejects).
+      await expect(item).toBeDisabled()
     } finally {
       await deleteEntity(request, name)
     }

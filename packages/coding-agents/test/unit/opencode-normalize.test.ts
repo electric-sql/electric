@@ -30,14 +30,68 @@ describe(`normalizeOpencode — first turn`, () => {
     expect(events[events.length - 1]!.type).toBe(`turn_complete`)
   })
 
-  it(`does NOT emit assistant_message for non-final-answer text parts`, () => {
-    // If the fixture has any phases other than 'final_answer', they
-    // should map to thinking, not assistant_message.
+  it(`every text-bearing event maps to assistant_message or thinking (no silent drops)`, () => {
     const am = events.filter((e) => e.type === `assistant_message`)
     const th = events.filter((e) => e.type === `thinking`)
-    // Sanity: total text-bearing events == total text parts in fixture
-    // (we don't drop them silently).
     expect(am.length + th.length).toBeGreaterThan(0)
+  })
+})
+
+describe(`normalizeOpencode — text without phase metadata (regression: 2026-05-03)`, () => {
+  // opencode 1.14.x emits `metadata.openai.phase = 'final_answer'` only
+  // when invoked with `--print-logs`. The bridge uses `opencode run
+  // --format json` which omits the field, leaving every text event
+  // mis-classified as `thinking` and `responseText` empty (failing the
+  // L2.1 cold-boot conformance scenario for opencode/local-docker).
+  // Fix: any `text` part is the assistant's user-visible response;
+  // chain-of-thought is emitted as a separate `reasoning` part.
+  const lines = [
+    JSON.stringify({
+      type: `step_start`,
+      sessionID: `ses_nophase`,
+      timestamp: 1,
+      part: { id: `prt_a`, messageID: `msg_a`, type: `step-start` },
+    }),
+    JSON.stringify({
+      type: `text`,
+      sessionID: `ses_nophase`,
+      timestamp: 2,
+      part: {
+        id: `prt_b`,
+        messageID: `msg_a`,
+        type: `text`,
+        text: `ok`,
+        // metadata.openai has no `phase` field — exactly what opencode
+        // emits without --print-logs.
+        metadata: { openai: { itemId: `msg_x` } },
+      },
+    }),
+    JSON.stringify({
+      type: `step_finish`,
+      sessionID: `ses_nophase`,
+      timestamp: 3,
+      part: {
+        id: `prt_c`,
+        messageID: `msg_a`,
+        reason: `stop`,
+        type: `step-finish`,
+        tokens: {
+          total: 0,
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { write: 0, read: 0 },
+        },
+        cost: 0,
+      },
+    }),
+  ]
+  const events = normalizeOpencode(lines)
+
+  it(`emits assistant_message when phase metadata is missing`, () => {
+    const am = events.filter((e) => e.type === `assistant_message`)
+    expect(am).toHaveLength(1)
+    expect((am[0] as any).text).toBe(`ok`)
   })
 })
 

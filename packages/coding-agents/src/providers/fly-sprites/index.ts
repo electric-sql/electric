@@ -41,13 +41,16 @@ export class FlySpriteProvider implements SandboxProvider {
   readonly name = `fly-sprites`
   private readonly client: SpritesApiClient
   private readonly idleTimeoutSecs: number
-  // Cache agentId → { sprite name, per-sprite URL } resolution between calls
-  // within one process. Sprite NAME (not id) is the API path parameter; the
-  // per-sprite URL (e.g. https://<name>-<suffix>.sprites.app) is what the
-  // exec WebSocket connects to (NOT api.sprites.dev).
+  // Cache agentId → { sprite name, per-sprite URL, sprite-id (UUID) }
+  // resolution between calls within one process. Sprite NAME (not id) is the
+  // API path parameter; the per-sprite URL (e.g. https://<name>-<suffix>.sprites.app)
+  // is what the per-sprite-services HTTP routes to. The sprite ID is the
+  // platform's stable UUID — used as the SandboxInstance.instanceId so the
+  // conformance suite's "destroy + recreate produces a fresh instance" check
+  // sees a new value (the name is reused since it's derived from agentId).
   private readonly agentToSprite = new Map<
     string,
-    { name: string; url: string }
+    { name: string; url: string; id: string }
   >()
 
   constructor(opts: FlySpriteProviderOptions = {}) {
@@ -67,9 +70,20 @@ export class FlySpriteProvider implements SandboxProvider {
         `FlySpriteProvider: only workspace.type='volume' is supported (got '${spec.workspace.type}'). Sprites have intrinsic FS; no bind-mount analog.`
       )
     }
+    // Fast path: already started in this process. The lifecycle-manager
+    // calls start() on every prompt; redoing bootstrap + writeFileViaExec
+    // each time costs two extra WS round-trips and trips the conformance
+    // L2.2 (warm second prompt) against the live API. Bootstrap is
+    // idempotent (marker file) and the env file already exists on the
+    // sprite — we can short-circuit safely.
+    const cached = this.agentToSprite.get(spec.agentId)
+    if (cached) {
+      return this.makeInstance(cached.name, cached.id, spec)
+    }
     const name = spriteName(spec.agentId)
     let resolvedName = await this.findExisting(name)
     let spriteUrl: string
+    let spriteId: string
     if (!resolvedName) {
       const created = await this.client.createSprite({
         name,
@@ -77,17 +91,24 @@ export class FlySpriteProvider implements SandboxProvider {
       })
       resolvedName = created.name
       spriteUrl = created.url ?? ``
+      spriteId = created.id
     } else {
-      // Find-existing returned only the name; fetch full record to get url.
+      // Find-existing returned only the name; fetch full record to get
+      // url + id.
       const full = await this.client.getSprite(resolvedName)
       spriteUrl = full.url ?? ``
+      spriteId = full.id
     }
     if (!spriteUrl) {
       throw new Error(
         `FlySpriteProvider: sprite ${resolvedName} has no per-sprite url; cannot open exec WebSocket`
       )
     }
-    this.agentToSprite.set(spec.agentId, { name: resolvedName, url: spriteUrl })
+    this.agentToSprite.set(spec.agentId, {
+      name: resolvedName,
+      url: spriteUrl,
+      id: spriteId,
+    })
 
     // Run bootstrap (idempotent — marker check inside the script).
     await this.runBootstrap(resolvedName)
@@ -108,7 +129,7 @@ export class FlySpriteProvider implements SandboxProvider {
       )
     }
 
-    return this.makeInstance(resolvedName, spec)
+    return this.makeInstance(resolvedName, spriteId, spec)
   }
 
   async exec(_req: ExecRequest): Promise<ExecHandle> {
@@ -128,6 +149,14 @@ export class FlySpriteProvider implements SandboxProvider {
     const name = spriteName(agentId)
     const cached = this.agentToSprite.get(agentId)
     const resolvedName = cached?.name ?? (await this.findExisting(name))
+    // Clear the cache BEFORE the REST delete. The idle timer's onFire
+    // calls destroy concurrently with the next prompt's start() — if
+    // we cleared after the delete, start() could read stale cache
+    // between the API call kicking off and completing, hand the bridge
+    // a SandboxInstance pointing at a sprite that's being deleted, and
+    // the bridge's first POST exec returns 404 'sprite not found'.
+    // Conformance L2.2 reproduces this when idleTimeoutMs is short.
+    this.agentToSprite.delete(agentId)
     if (!resolvedName) return
     try {
       await this.client.deleteSprite(resolvedName)
@@ -137,7 +166,6 @@ export class FlySpriteProvider implements SandboxProvider {
         `sprites destroy failed`
       )
     }
-    this.agentToSprite.delete(agentId)
   }
 
   async status(agentId: string): Promise<`running` | `stopped` | `unknown`> {
@@ -265,12 +293,20 @@ export class FlySpriteProvider implements SandboxProvider {
     }
   }
 
-  private makeInstance(name: string, spec: SandboxSpec): SandboxInstance {
+  private makeInstance(
+    name: string,
+    spriteId: string,
+    spec: SandboxSpec
+  ): SandboxInstance {
     return {
-      instanceId: name,
+      // The sprite's UUID changes on every fresh create; using the name
+      // (which is derived from agentId and reused after destroy) would
+      // make L1.2 think the recreated instance is the same as before.
+      instanceId: spriteId,
       agentId: spec.agentId,
       workspaceMount: `/work`,
-      homeDir: `/root`,
+      // Sprites run as the `sprite` user (uid 1001) — not root.
+      homeDir: `/home/sprite`,
       exec: async (req) => {
         // Wrap every exec in a shell that sources /run/agent.env so the
         // agent's env (ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN /
@@ -279,7 +315,7 @@ export class FlySpriteProvider implements SandboxProvider {
         // sprites don't have a container-level env knob in the public
         // API, so we stage them in /run/agent.env at start() time and
         // source on every exec.
-        const wrapped = wrapWithAgentEnv(req.cmd)
+        const wrapped = wrapWithAgentEnv(req.cmd, req.cwd)
         if (req.stdin === `pipe`) {
           // Sprites WS protocol for stdin isn't stable across rc30→rc43;
           // route stdin-bearing exec through HTTP POST instead, which
@@ -555,17 +591,22 @@ function shellEscape(v: string): string {
   return `'${v.replace(/'/g, `'\\''`)}'`
 }
 
-// Build a /bin/sh -c invocation that sources /run/agent.env (if present)
-// and then exec's the user argv via "$@". `set -a` (allexport) ensures
-// the file's `KEY=value` lines are EXPORTED — without it, `.` only sets
-// shell-local vars and child processes (e.g. claude) don't see them.
-// `exec` replaces the shell so signals and exit codes pass through cleanly.
-function wrapWithAgentEnv(cmd: ReadonlyArray<string>): Array<string> {
-  return [
-    `/bin/sh`,
-    `-c`,
-    `if [ -r /run/agent.env ]; then set -a; . /run/agent.env; set +a; fi; exec "$@"`,
-    `agent-env-wrapper`,
-    ...cmd,
+// Build a /bin/sh -c invocation that sources /run/agent.env (if present),
+// cd's into cwd (if provided), and then exec's the user argv via "$@".
+// `set -a` (allexport) ensures the file's `KEY=value` lines are EXPORTED —
+// without it, `.` only sets shell-local vars and child processes (e.g. claude)
+// don't see them. The explicit `cd` is necessary because sprites' exec
+// API ignores the `cwd=` query param when the cmd is wrapped in a shell;
+// we honour it here instead. `exec` replaces the shell so signals and
+// exit codes pass through cleanly.
+function wrapWithAgentEnv(
+  cmd: ReadonlyArray<string>,
+  cwd?: string
+): Array<string> {
+  const parts = [
+    `if [ -r /run/agent.env ]; then set -a; . /run/agent.env; set +a; fi`,
   ]
+  if (cwd) parts.push(`cd ${shellEscape(cwd)}`)
+  parts.push(`exec "$@"`)
+  return [`/bin/sh`, `-c`, parts.join(`; `), `agent-env-wrapper`, ...cmd]
 }

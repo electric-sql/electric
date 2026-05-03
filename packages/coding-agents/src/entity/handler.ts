@@ -807,6 +807,15 @@ async function processPrompt(
   const agentId = ctx.entityUrl as string
   const sessionMetaCol = ctx.db.collections.sessionMeta
 
+  // Cancel any pending idle eviction timer at the top of the turn. The
+  // timer's `onFire` calls destroyFor → for sprites this destroys the
+  // remote sprite — and if it fires concurrently with the next prompt's
+  // bridge.runTurn (typical when idleTimeoutMs is short, e.g. 5 s in
+  // the conformance fixture), the in-flight POST exec gets HTTP 404
+  // 'sprite not found'. Cancelling here is the right semantic anyway:
+  // a new prompt is arriving, the agent is no longer idle.
+  lm.cancelIdleTimer(agentId)
+
   let meta = sessionMetaCol.get(`current`) as SessionMetaRow
 
   // Only emit sandbox.starting/sandbox.started lifecycle rows when we
