@@ -14,15 +14,18 @@ set -e
 # Skip if already bootstrapped.
 [ -f /opt/electric-ax/.bootstrapped ] && exit 0
 
-# Sprites.dev currently doesn't accept custom OCI images (TL-S2), so we
-# install all three coding-agent CLIs into the sprite at first cold-boot.
-# Versions parity with packages/coding-agents/docker/Dockerfile.
-npm install -g \\
-  @anthropic-ai/claude-code@latest \\
-  @openai/codex@^0.128.0 \\
-  opencode-ai@1.14.31
+# Sprites' default Ubuntu image preinstalls Claude CLI and OpenAI Codex
+# (per https://docs.sprites.dev/working-with-sprites). We only need to
+# install opencode-ai, which isn't preinstalled. Pin matches the
+# local-docker bake (packages/coding-agents/docker/Dockerfile).
+#
+# --prefix=/usr/local routes the binary into /usr/local/bin, which is
+# already on PATH. The default npm prefix points at the nvm install
+# dir under /.sprite/languages/.../bin — NOT on PATH, which would
+# leave opencode unreachable after install.
+npm install -g --prefix=/usr/local opencode-ai@1.14.31
 
-# Sanity-check.
+# Sanity-check that the preinstalled CLIs are actually present.
 claude --version >/dev/null
 codex --version >/dev/null
 opencode --version >/dev/null

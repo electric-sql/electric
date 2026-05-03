@@ -7,10 +7,14 @@ describe(`Sprites bootstrap script`, () => {
     expect(BOOTSTRAP_SCRIPT).toContain(`exit 0`)
   })
 
-  it(`installs all three coding-agent CLIs (claude, codex, opencode-ai)`, () => {
-    expect(BOOTSTRAP_SCRIPT).toContain(`@anthropic-ai/claude-code`)
-    expect(BOOTSTRAP_SCRIPT).toContain(`@openai/codex`)
+  it(`installs opencode-ai pinned (claude + codex are preinstalled in the sprite image)`, () => {
     expect(BOOTSTRAP_SCRIPT).toContain(`opencode-ai@1.14.31`)
+  })
+
+  it(`sanity-checks all three CLIs after install`, () => {
+    expect(BOOTSTRAP_SCRIPT).toContain(`claude --version`)
+    expect(BOOTSTRAP_SCRIPT).toContain(`codex --version`)
+    expect(BOOTSTRAP_SCRIPT).toContain(`opencode --version`)
   })
 
   it(`creates /work and /run/agent.env`, () => {

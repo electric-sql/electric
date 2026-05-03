@@ -157,8 +157,9 @@ describe(`FlySpriteProvider`, () => {
         await p
           .start({
             agentId,
+            kind: `claude`,
+            target: `sprites`,
             workspace: { type: `volume`, name: `vol` },
-            workspaceIdentity: `sprite:${agentId}`,
             env: {},
           })
           .catch(() => undefined)

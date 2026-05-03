@@ -107,6 +107,23 @@ export function registerCodingAgent(
         const v = process.env[k]
         if (v) out[k] = v
       }
+      // Claude Code distinguishes plain API keys (ANTHROPIC_API_KEY) from
+      // OAuth subscription tokens (CLAUDE_CODE_OAUTH_TOKEN). The token
+      // shapes are recognisable: `sk-ant-oat...` is OAuth, `sk-ant-api...`
+      // is a plain API key. If the user only set ANTHROPIC_API_KEY and the
+      // value is an OAuth token, mirror it into CLAUDE_CODE_OAUTH_TOKEN so
+      // the CLI authenticates correctly. Without this, sprites' default
+      // ubuntu image with no preexisting `claude /login` credentials
+      // reports apiKeySource:"none" and exits with "Not logged in".
+      if (kind === `claude`) {
+        const anth = process.env.ANTHROPIC_API_KEY
+        const oat = process.env.CLAUDE_CODE_OAUTH_TOKEN
+        if (!oat && anth && anth.startsWith(`sk-ant-oat`)) {
+          out.CLAUDE_CODE_OAUTH_TOKEN = anth
+        } else if (oat) {
+          out.CLAUDE_CODE_OAUTH_TOKEN = oat
+        }
+      }
       return out
     })
 

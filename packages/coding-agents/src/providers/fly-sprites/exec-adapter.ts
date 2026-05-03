@@ -1,12 +1,26 @@
 import type { ExecHandle } from '../../types'
 
+// Sprites exec WebSocket protocol (api.sprites.dev/v1/sprites/{name}/exec):
+//   - cmd is passed via query params on the WS URL — no `start` frame.
+//   - JSON text frames: { type: 'debug', msg } (internal lifecycle),
+//                        { type: 'session_info', ... }
+//                        { type: 'exit', exit_code }
+//                        { type: 'port_notification', ... }
+//   - Binary frames: multiplexed output — first byte is the stream id:
+//        0x01 = stdout payload (rest is bytes)
+//        0x02 = stderr payload
+//        0x03 = control (next byte is exit code)
+//     The 'debug' JSON channel is informational; real stdout/stderr come
+//     here. Without de-mux, claude's stream-json output gets mixed with
+//     stderr and the bridge can't parse it.
+//   - On close without an exit frame → exitCode = -1.
 export interface CreateExecHandleArgs {
   ws: WebSocket
-  cmd: ReadonlyArray<string>
-  stdin?: `pipe` | `ignore`
-  cwd?: string
-  env?: Record<string, string>
 }
+
+const STREAM_STDOUT = 0x01
+const STREAM_STDERR = 0x02
+const STREAM_CONTROL = 0x03
 
 interface PendingFrame {
   resolve: (value: IteratorResult<string>) => void
@@ -90,38 +104,58 @@ export function createExecHandle(args: CreateExecHandleArgs): ExecHandle {
     exitResolve = resolve
   })
 
-  const send = (frame: unknown) => args.ws.send(JSON.stringify(frame))
-
-  args.ws.addEventListener(`open`, () => {
-    send({
-      type: `start`,
-      cmd: args.cmd,
-      cwd: args.cwd,
-      env: args.env,
-      stdin: args.stdin === `pipe`,
-    })
-  })
-
+  // Binary frame mode: ws.binaryType is set on the caller-provided WS.
   args.ws.addEventListener(`message`, (event: MessageEvent) => {
-    const data = typeof event.data === `string` ? event.data : ``
-    let frame: any
-    try {
-      frame = JSON.parse(data)
-    } catch {
-      // Raw text message → stdout. Sprites streams stdout as plain text
-      // WebSocket messages, not JSON frames.
-      feedFrameData(stdoutQ, data)
+    if (typeof event.data === `string`) {
+      // Text frame → JSON metadata.
+      let frame: any
+      try {
+        frame = JSON.parse(event.data)
+      } catch {
+        // Unexpected non-JSON text — push to stdout for visibility.
+        feedFrameData(stdoutQ, event.data)
+        return
+      }
+      if (frame.type === `debug` && typeof frame.msg === `string`) {
+        // Sprites' lifecycle log channel — informational, not user stderr.
+        feedFrameData(stderrQ, frame.msg)
+      } else if (frame.type === `exit` && typeof frame.exit_code === `number`) {
+        exitInfo = { exitCode: frame.exit_code }
+      }
+      // session_info, port_notification, and unknown frame types ignored.
       return
     }
-    if (frame.type === `debug` && typeof frame.msg === `string`) {
-      // Sprites' stderr / lifecycle log channel.
-      feedFrameData(stderrQ, frame.msg)
-    } else if (frame.type === `exit` && typeof frame.exit_code === `number`) {
-      exitInfo = { exitCode: frame.exit_code }
-    } else if (frame.type === `session_info`) {
-      // No-op: session metadata; logged elsewhere if desired.
+    // Binary frame → multiplexed output. Demux by first byte.
+    let buf: Uint8Array
+    if (event.data instanceof ArrayBuffer) {
+      buf = new Uint8Array(event.data)
+    } else if (typeof Buffer !== `undefined` && event.data instanceof Buffer) {
+      buf = new Uint8Array(
+        event.data.buffer,
+        event.data.byteOffset,
+        event.data.byteLength
+      )
+    } else {
+      // Blob (browser) or other — best-effort.
+      return
     }
-    // Unknown frame types ignored.
+    if (buf.length === 0) return
+    const streamId = buf[0]
+    if (streamId === STREAM_CONTROL) {
+      // Control frame: 0x03 <exit_code_byte>. JSON exit frame may arrive
+      // separately and authoritatively; both paths converge on exitInfo.
+      if (!exitInfo && buf.length >= 2) {
+        exitInfo = { exitCode: buf[1]! }
+      }
+      return
+    }
+    const text = new TextDecoder().decode(buf.subarray(1))
+    if (streamId === STREAM_STDOUT) {
+      feedFrameData(stdoutQ, text)
+    } else if (streamId === STREAM_STDERR) {
+      feedFrameData(stderrQ, text)
+    }
+    // Unknown stream IDs are dropped.
   })
 
   args.ws.addEventListener(`close`, () => {
@@ -149,16 +183,9 @@ export function createExecHandle(args: CreateExecHandleArgs): ExecHandle {
         // best-effort
       }
     },
-    ...(args.stdin === `pipe`
-      ? {
-          writeStdin: async (chunk: string) => {
-            send({ type: `stdin`, data: chunk })
-          },
-          closeStdin: async () => {
-            send({ type: `stdin_close` })
-          },
-        }
-      : {}),
+    // stdin support deferred — current callers (bootstrap, env-write,
+    // user execs) don't need it; if they do, encode the input into the
+    // cmd args (e.g. `printf '...' | tee ...`).
   }
   return handle
 }
