@@ -99,7 +99,20 @@ describe.each(importableAdapters.map((a) => [a.kind] as const))(
         fetchFn: fetchMock as any,
       })
       expect(result.exitCode).not.toBe(0)
-      expect(result.stderr).toMatch(/alphanumeric/i)
+      expect(result.stderr).toMatch(/session-id/i)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it(`rejects --session-id with a leading dash`, async () => {
+      // parseArgs treats `-rf` as a new flag; the `=` form passes it
+      // through as a value.
+      const fetchMock = vi.fn()
+      const result = await runImportCli({
+        argv: [`--agent`, `claude`, `--workspace`, `/tmp`, `--session-id=-rf`],
+        fetchFn: fetchMock as any,
+      })
+      expect(result.exitCode).not.toBe(0)
+      expect(result.stderr).toMatch(/session-id/i)
       expect(fetchMock).not.toHaveBeenCalled()
     })
 

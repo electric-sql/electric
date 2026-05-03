@@ -103,11 +103,15 @@ export async function runImportCli(
     }
   }
 
-  if (!/^[A-Za-z0-9_-]+$/.test(sessionId)) {
+  // Reject leading dashes — values like '-rf' could be misinterpreted by
+  // downstream tooling that *does* shell out (we don't, but the entity
+  // handler hands sessionId to the adapter's probe/capture commands;
+  // adapters now shellQuote, but defence-in-depth at the CLI boundary).
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(sessionId)) {
     return {
       exitCode: 1,
       stdout: ``,
-      stderr: `--session-id must be alphanumeric (with - or _); got ${JSON.stringify(sessionId)}\n`,
+      stderr: `--session-id must start with [A-Za-z0-9] and contain only [A-Za-z0-9_-]; got ${JSON.stringify(sessionId)}\n`,
     }
   }
 
@@ -196,9 +200,11 @@ export async function runImportCli(
   }
 }
 
+// Tighter than `endsWith('import.js')` — any consumer file with that
+// suffix would otherwise activate this CLI body when imported.
 const isMain =
   import.meta.url === `file://${process.argv[1]}` ||
-  process.argv[1]?.endsWith(`import.js`)
+  path.basename(process.argv[1] ?? ``) === `import.js`
 if (isMain) {
   runImportCli({ argv: process.argv.slice(2) }).then(
     (r) => {
