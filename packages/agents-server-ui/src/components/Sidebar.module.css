@@ -135,9 +135,11 @@
 }
 
 .sectionLabel {
+  display: block;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   font-size: 10px;
-  padding: 12px 16px 4px;
-  opacity: 0.6;
+  font-weight: 500;
+  padding: 14px 12px 4px;
+  color: var(--ds-text-3);
 }

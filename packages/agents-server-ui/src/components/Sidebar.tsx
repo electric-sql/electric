@@ -7,10 +7,14 @@ import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { IconButton, Popover, ScrollArea, Stack, Text } from '../ui'
 import { ServerPicker } from './ServerPicker'
-import { EntityListItem, getEntityDisplayTitle } from './EntityListItem'
+import { SidebarRow } from './SidebarRow'
+import { SidebarTree } from './SidebarTree'
+import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
 import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
 import { useDarkModeContext, type ThemePreference } from '../hooks/useDarkMode'
+import { useExpandedTreeNodes } from '../hooks/useExpandedTreeNodes'
+import { bucketEntities } from '../lib/sessionGroups'
 import styles from './Sidebar.module.css'
 import type {
   ElectricEntity,
@@ -55,6 +59,7 @@ export function Sidebar({
   const { entitiesCollection, entityTypesCollection, spawnEntity } =
     useElectricAgents()
   const { preference, cyclePreference } = useDarkModeContext()
+  const expanded = useExpandedTreeNodes()
   const [filter, setFilter] = useState(``)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [spawnDialogType, setSpawnDialogType] =
@@ -122,6 +127,8 @@ export function Sidebar({
     () => urlsMatchingFilter(entities, filter),
     [entities, filter]
   )
+
+  const sessionGroups = useMemo(() => bucketEntities(roots), [roots])
 
   const doSpawn = useCallback(
     (typeName: string, args?: Record<string, unknown>) => {
@@ -262,22 +269,6 @@ export function Sidebar({
         </Popover.Root>
       </Stack>
 
-      {pinnedEntities.length > 0 && (
-        <>
-          <SectionLabel>Pinned</SectionLabel>
-          <Stack direction="column" px={2} gap={1}>
-            {pinnedEntities.map((entity) => (
-              <EntityListItem
-                key={entity.url}
-                entity={entity}
-                selected={entity.url === selectedEntityUrl}
-                onSelect={() => onSelectEntity(entity.url)}
-              />
-            ))}
-          </Stack>
-        </>
-      )}
-
       <Stack px={3} className={styles.filterRow}>
         <input
           placeholder="Filter by type or name..."
@@ -289,25 +280,62 @@ export function Sidebar({
 
       <ScrollArea className={styles.scrollFlex}>
         <Stack direction="column" px={2} className={styles.treeRow}>
-          {roots.map((root) => (
-            <EntityTreeNode
-              key={root.url}
-              entity={root}
-              hasMoreAtDepth={[]}
-              childrenByParent={childrenByParent}
-              visibleUrls={visibleUrls}
-              selectedEntityUrl={selectedEntityUrl}
-              onSelectEntity={onSelectEntity}
-            />
-          ))}
-          {roots.length === 0 && (
+          {pinnedEntities.length > 0 && (
+            <>
+              <SectionLabel>Pinned</SectionLabel>
+              {pinnedEntities.map((entity) => (
+                <SidebarRow
+                  key={`pinned:${entity.url}`}
+                  entity={entity}
+                  selected={entity.url === selectedEntityUrl}
+                  onSelect={() => onSelectEntity(entity.url)}
+                />
+              ))}
+            </>
+          )}
+          {sessionGroups.map((group) => {
+            const visibleRoots = group.items.filter(
+              (root) =>
+                visibleUrls === null || subtreeMatches(root.url, visibleUrls)
+            )
+            if (visibleRoots.length === 0) return null
+            return (
+              <div key={group.id}>
+                <SectionLabel>{group.label}</SectionLabel>
+                {visibleRoots.map((root) => (
+                  <SidebarTree
+                    key={root.url}
+                    entity={root}
+                    childrenByParent={childrenByParent}
+                    selectedEntityUrl={selectedEntityUrl}
+                    onSelectEntity={onSelectEntity}
+                    isExpanded={expanded.isExpanded}
+                    toggleExpanded={expanded.toggle}
+                    expandNode={expanded.expand}
+                    visibleUrls={visibleUrls}
+                  />
+                ))}
+              </div>
+            )
+          })}
+          {entities.length === 0 && (
             <Text
               size={1}
               tone="muted"
               align="center"
               className={styles.emptyTreeText}
             >
-              {entities.length === 0 ? `No sessions` : `No matches`}
+              No sessions
+            </Text>
+          )}
+          {entities.length > 0 && sessionGroups.length === 0 && (
+            <Text
+              size={1}
+              tone="muted"
+              align="center"
+              className={styles.emptyTreeText}
+            >
+              No matches
             </Text>
           )}
         </Stack>
@@ -356,45 +384,10 @@ export function Sidebar({
   )
 }
 
-function EntityTreeNode({
-  entity,
-  hasMoreAtDepth,
-  childrenByParent,
-  visibleUrls,
-  selectedEntityUrl,
-  onSelectEntity,
-}: {
-  entity: ElectricEntity
-  hasMoreAtDepth: ReadonlyArray<boolean>
-  childrenByParent: Map<string, Array<ElectricEntity>>
-  visibleUrls: Set<string> | null
-  selectedEntityUrl: string | null
-  onSelectEntity: (url: string) => void
-}): React.ReactElement | null {
-  if (visibleUrls && !visibleUrls.has(entity.url)) return null
-  const children = childrenByParent.get(entity.url) ?? []
-  const lastIndex = children.length - 1
-  return (
-    <>
-      <EntityListItem
-        entity={entity}
-        selected={entity.url === selectedEntityUrl}
-        onSelect={() => onSelectEntity(entity.url)}
-        hasMoreAtDepth={hasMoreAtDepth}
-      />
-      {children.map((child, i) => (
-        <EntityTreeNode
-          key={child.url}
-          entity={child}
-          hasMoreAtDepth={[...hasMoreAtDepth, i < lastIndex]}
-          childrenByParent={childrenByParent}
-          visibleUrls={visibleUrls}
-          selectedEntityUrl={selectedEntityUrl}
-          onSelectEntity={onSelectEntity}
-        />
-      ))}
-    </>
-  )
+function subtreeMatches(rootUrl: string, visible: Set<string>): boolean {
+  // The visible set already contains every match plus its ancestor chain
+  // (built by `urlsMatchingFilter`), so testing the root alone is enough.
+  return visible.has(rootUrl)
 }
 
 function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
