@@ -1,0 +1,37 @@
+.searchBtn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 8px;
+  border-radius: var(--ds-radius-2);
+  cursor: pointer;
+  color: var(--ds-text-2);
+  background: var(--ds-gray-a2);
+  border: 1px solid var(--ds-gray-a4);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  min-width: 160px;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.searchBtn:hover {
+  background: var(--ds-gray-a3);
+  border-color: var(--ds-gray-a5);
+}
+.searchBtn:focus-visible {
+  outline: 2px solid var(--ds-focus-ring);
+  outline-offset: 1px;
+}
+
+.searchLabel {
+  flex: 1;
+  text-align: left;
+  color: var(--ds-text-3);
+}
+
+.toggleBtn {
+  color: var(--ds-text-2);
+}

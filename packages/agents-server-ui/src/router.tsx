@@ -15,7 +15,14 @@ import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
 import { useEntityTimeline } from './hooks/useEntityTimeline'
+import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
+import { useHotkey } from './hooks/useHotkey'
+import {
+  SearchPaletteProvider,
+  useSearchPalette,
+} from './hooks/useSearchPalette'
 import { Sidebar } from './components/Sidebar'
+import { AppTopBar, TopBarSlotsProvider } from './components/AppTopBar'
 import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
@@ -25,8 +32,26 @@ import { Stack, Text } from './ui'
 import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
+  return (
+    <SearchPaletteProvider>
+      <TopBarSlotsProvider>
+        <RootShell />
+      </TopBarSlotsProvider>
+    </SearchPaletteProvider>
+  )
+}
+
+function RootShell(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
   const navigate = useNavigate()
+  const { collapsed, toggle } = useSidebarCollapsed()
+  const search = useSearchPalette()
+
+  useHotkey(`mod+b`, toggle)
+  useHotkey(`mod+k`, (e) => {
+    e.preventDefault()
+    search.toggle()
+  })
 
   const navigateToEntity = useCallback(
     (entityUrl: string) => {
@@ -43,14 +68,23 @@ function RootLayout(): React.ReactElement {
   const selectedEntityUrl = splat ? `/${splat}` : null
 
   return (
-    <Stack className={styles.appShell}>
-      <Sidebar
-        selectedEntityUrl={selectedEntityUrl}
-        onSelectEntity={navigateToEntity}
-        pinnedUrls={pinnedUrls}
+    <div className={styles.appShell}>
+      <AppTopBar
+        collapsed={collapsed}
+        onToggleSidebar={toggle}
+        onOpenSearch={search.open}
       />
-      <Outlet />
-    </Stack>
+      <div className={styles.contentRow}>
+        {!collapsed && (
+          <Sidebar
+            selectedEntityUrl={selectedEntityUrl}
+            onSelectEntity={navigateToEntity}
+            pinnedUrls={pinnedUrls}
+          />
+        )}
+        <Outlet />
+      </div>
+    </div>
   )
 }
 

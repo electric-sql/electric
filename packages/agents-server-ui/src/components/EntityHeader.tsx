@@ -10,8 +10,9 @@ import {
   Trash2,
 } from 'lucide-react'
 import { getEntityInstanceName } from '../lib/types'
-import { Badge, Button, Dialog, Menu, Stack, Text } from '../ui'
+import { Badge, Button, Dialog, IconButton, Menu, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
+import { TopBarActions, TopBarTitle } from './AppTopBar'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
@@ -23,18 +24,7 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   stopped: `neutral`,
 }
 
-export function EntityHeader({
-  entity,
-  pinned,
-  onTogglePin,
-  onFork,
-  onKill,
-  killError,
-  forkError,
-  forking,
-  stateExplorerOpen,
-  onToggleStateExplorer,
-}: {
+type EntityHeaderProps = {
   entity: ElectricEntity
   pinned: boolean
   onTogglePin: () => void
@@ -45,118 +35,174 @@ export function EntityHeader({
   forking?: boolean
   stateExplorerOpen?: boolean
   onToggleStateExplorer?: () => void
+}
+
+/**
+ * Renders the entity-page chrome: title (left) and action cluster (right)
+ * are portaled into the global `<AppTopBar>` so they read as part of one
+ * unified bar with the sidebar toggle and search button. Errors render
+ * in a thin alert strip below the bar (returned as a sibling node so
+ * route layout stays simple).
+ */
+export function EntityHeader(
+  props: EntityHeaderProps
+): React.ReactElement | null {
+  const { entity, killError, forkError } = props
+  const errors = [killError, forkError].filter(
+    (e): e is string => typeof e === `string` && e.length > 0
+  )
+  return (
+    <>
+      <TopBarTitle>
+        <EntityTitle entity={entity} />
+      </TopBarTitle>
+      <TopBarActions>
+        <EntityActions {...props} />
+      </TopBarActions>
+      {errors.length > 0 && (
+        <div className={styles.errorBar} role="alert">
+          {errors.map((msg, i) => (
+            <Text key={i} size={1} tone="danger">
+              {msg}
+            </Text>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+function EntityTitle({
+  entity,
+}: {
+  entity: ElectricEntity
 }): React.ReactElement {
+  const instanceName = getEntityInstanceName(entity.url)
+  const decoded = decodeURIComponent(entity.url)
+  return (
+    <span className={styles.title}>
+      <Text size={2} weight="bold" className={styles.titleName} title={decoded}>
+        {instanceName}
+      </Text>
+      <span className={styles.typePill}>{entity.type}</span>
+      <button
+        type="button"
+        className={styles.url}
+        title={`${decoded} — click to copy`}
+        onClick={() => {
+          void navigator.clipboard.writeText(entity.url)
+        }}
+      >
+        {decoded}
+      </button>
+    </span>
+  )
+}
+
+function EntityActions({
+  entity,
+  pinned,
+  onTogglePin,
+  onFork,
+  onKill,
+  forking,
+  stateExplorerOpen,
+  onToggleStateExplorer,
+}: EntityHeaderProps): React.ReactElement {
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
   const instanceName = getEntityInstanceName(entity.url)
 
   return (
-    <Stack p={3} align="center" gap={3} className={styles.header}>
-      <Stack direction="column" gap={2}>
-        <Text size={4} weight="bold" className={styles.title}>
-          {instanceName}
-        </Text>
-        <Text size={1} tone="muted" className={styles.urlText}>
-          {decodeURIComponent(entity.url)}
-        </Text>
-        {killError && (
-          <Text size={1} tone="danger">
-            {killError}
-          </Text>
-        )}
-        {forkError && (
-          <Text size={1} tone="danger">
-            {forkError}
-          </Text>
-        )}
-      </Stack>
+    <span className={styles.actions}>
+      <Badge
+        tone={STATUS_TONE[entity.status] ?? `neutral`}
+        variant="soft"
+        className={styles.statusBadge}
+      >
+        {entity.status}
+      </Badge>
 
-      <Stack align="center" gap={2} className={styles.toolbar}>
-        <Badge tone={STATUS_TONE[entity.status] ?? `neutral`} variant="soft">
-          {entity.status}
-        </Badge>
+      {onToggleStateExplorer && (
+        <IconButton
+          variant="ghost"
+          tone="neutral"
+          size={1}
+          onClick={onToggleStateExplorer}
+          aria-label={
+            stateExplorerOpen ? `Hide state explorer` : `Show state explorer`
+          }
+          className={stateExplorerOpen ? styles.activeBg : undefined}
+        >
+          <Database size={14} />
+        </IconButton>
+      )}
 
-        {onFork && (
-          <Button
-            variant="soft"
-            tone="neutral"
-            size={1}
-            onClick={onFork}
-            disabled={forking || entity.status === `stopped`}
-            title={
-              entity.status === `idle`
-                ? `Fork subtree`
-                : `Fork subtree once idle`
-            }
-          >
-            <GitFork size={14} />
-            <Text size={1}>{forking ? `Forking` : `Fork`}</Text>
-          </Button>
-        )}
-
-        {onToggleStateExplorer && (
-          <Button
-            variant="ghost"
-            tone="neutral"
-            size={1}
-            onClick={onToggleStateExplorer}
-            title="Toggle state explorer"
-            className={stateExplorerOpen ? styles.activeBg : undefined}
-          >
-            <Database size={14} />
-          </Button>
-        )}
-
-        <Button variant="ghost" tone="neutral" size={1} onClick={onTogglePin}>
-          {pinned ? <PinOff size={14} /> : <Pin size={14} />}
-        </Button>
-
-        <Menu.Root>
-          <Menu.Trigger
-            render={
-              <Button variant="ghost" tone="neutral" size={1}>
-                <MoreHorizontal size={16} />
-              </Button>
-            }
-          />
-          <Menu.Content side="bottom" align="end">
-            <Menu.Item onSelect={() => setShowInspect(true)}>
-              <Eye size={14} />
-              <Text size={2}>Inspect</Text>
-            </Menu.Item>
-            {onToggleStateExplorer && (
-              <Menu.Item onSelect={onToggleStateExplorer}>
-                <Database size={14} />
-                <Text size={2}>
-                  {stateExplorerOpen ? `Hide State Explorer` : `State Explorer`}
-                </Text>
-              </Menu.Item>
-            )}
-            <Menu.Item
-              onSelect={() => navigator.clipboard.writeText(entity.url)}
+      <Menu.Root>
+        <Menu.Trigger
+          render={
+            <IconButton
+              variant="ghost"
+              tone="neutral"
+              size={1}
+              aria-label="More actions"
             >
-              <Copy size={14} />
-              <Text size={2}>Copy URL</Text>
+              <MoreHorizontal size={16} />
+            </IconButton>
+          }
+        />
+        <Menu.Content side="bottom" align="end">
+          <Menu.Item onSelect={() => setShowInspect(true)}>
+            <Eye size={14} />
+            <Text size={2}>Inspect</Text>
+          </Menu.Item>
+          {onToggleStateExplorer && (
+            <Menu.Item onSelect={onToggleStateExplorer}>
+              <Database size={14} />
+              <Text size={2}>
+                {stateExplorerOpen ? `Hide state explorer` : `State explorer`}
+              </Text>
             </Menu.Item>
-            {entity.status !== `stopped` && (
-              <>
-                <Menu.Separator />
-                <Menu.Item
-                  tone="danger"
-                  onSelect={() => setShowKillConfirm(true)}
-                >
-                  <Trash2 size={14} />
-                  <Text size={2}>Kill</Text>
-                </Menu.Item>
-              </>
-            )}
-          </Menu.Content>
-        </Menu.Root>
-      </Stack>
+          )}
+          <Menu.Item
+            onSelect={() => {
+              void navigator.clipboard.writeText(entity.url)
+            }}
+          >
+            <Copy size={14} />
+            <Text size={2}>Copy URL</Text>
+          </Menu.Item>
+          <Menu.Item onSelect={onTogglePin}>
+            {pinned ? <PinOff size={14} /> : <Pin size={14} />}
+            <Text size={2}>{pinned ? `Unpin` : `Pin`}</Text>
+          </Menu.Item>
+          {onFork && (
+            <Menu.Item
+              onSelect={onFork}
+              disabled={forking || entity.status === `stopped`}
+            >
+              <GitFork size={14} />
+              <Text size={2}>{forking ? `Forking…` : `Fork subtree`}</Text>
+            </Menu.Item>
+          )}
+          {entity.status !== `stopped` && (
+            <>
+              <Menu.Separator />
+              <Menu.Item
+                tone="danger"
+                onSelect={() => setShowKillConfirm(true)}
+              >
+                <Trash2 size={14} />
+                <Text size={2}>Kill</Text>
+              </Menu.Item>
+            </>
+          )}
+        </Menu.Content>
+      </Menu.Root>
 
       <Dialog.Root open={showInspect} onOpenChange={setShowInspect}>
         <Dialog.Content maxWidth={600}>
-          <Dialog.Title>Entity Details</Dialog.Title>
+          <Dialog.Title>Entity details</Dialog.Title>
           <pre className={styles.inspectPre}>
             {JSON.stringify(entity, null, 2)}
           </pre>
@@ -174,7 +220,7 @@ export function EntityHeader({
 
       <Dialog.Root open={showKillConfirm} onOpenChange={setShowKillConfirm}>
         <Dialog.Content maxWidth={400}>
-          <Dialog.Title>Kill Entity</Dialog.Title>
+          <Dialog.Title>Kill entity</Dialog.Title>
           <Text size={2} tone="muted">
             Are you sure you want to kill {instanceName}? The entity will stop
             processing and its stream will become read-only.
@@ -199,6 +245,6 @@ export function EntityHeader({
           </Stack>
         </Dialog.Content>
       </Dialog.Root>
-    </Stack>
+    </span>
   )
 }

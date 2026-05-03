@@ -9,7 +9,9 @@
   border: 1px solid var(--ds-gray-a5);
   background: var(--ds-gray-a2);
   color: var(--ds-text-2);
-  font-family: var(--ds-font-mono);
+  /* Body font, not mono — many monospace fonts (incl. Source Code Pro)
+     lack glyphs for ⌘/⌥/⇧/⌃, falling back to system fonts mid-pill. */
+  font-family: var(--ds-font-body);
   font-size: 10px;
   line-height: 1;
   letter-spacing: 0;
