@@ -9,7 +9,11 @@ import { LifecycleManager } from '../lifecycle-manager'
 import { WorkspaceRegistry } from '../workspace-registry'
 import { listAdapters } from '../agents/registry'
 import { makeCodingAgentHandler } from '../entity/handler'
-import type { RunRow, SessionMetaRow } from '../entity/collections'
+import type {
+  LifecycleRow,
+  RunRow,
+  SessionMetaRow,
+} from '../entity/collections'
 import { makeFakeCtx, pushInbox } from './fake-ctx'
 
 export interface CodingAgentsIntegrationConformanceConfig {
@@ -271,6 +275,97 @@ export function runCodingAgentsIntegrationConformance(
 
           await provider.destroy(agentId).catch(() => undefined)
         }, 180_000)
+
+        it(`L2.11 convert-kind during in-flight prompt is rejected`, async () => {
+          // Codifies the C3 guard: with status='running', a convert-kind
+          // message must (a) leave meta.kind unchanged, (b) emit a
+          // kind.convert_failed lifecycle row, (c) leave nativeJsonl
+          // untouched. We inject status='running' AFTER a real prompt
+          // has brought the sandbox up — reconcile would otherwise
+          // orphan the injected state because providerStatus=stopped
+          // for an agent that never started.
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+          const agentId = `/test/coding-agent/${kind}-l2-11-${Date.now().toString(36)}`
+          const { ctx, state } = makeFakeCtx(agentId, buildArgs(kind, ws))
+          await handler(ctx, { type: `message_received` })
+
+          // Run one real prompt so the sandbox is up; reconcile sees
+          // providerStatus=running and won't undo the injection below.
+          pushInbox(state, `i0`, `prompt`, { text: probe.prompt })
+          await handler(ctx, { type: `message_received` })
+
+          const beforeMeta = state.sessionMeta.get(`current`) as SessionMetaRow
+          state.sessionMeta.rows.set(`current`, {
+            ...beforeMeta,
+            status: `running`,
+          })
+          // Capture nativeJsonl content before to assert no change.
+          const beforeNative = state.nativeJsonl.get(`current`) as
+            | { content?: string }
+            | undefined
+          const beforeContent = beforeNative?.content
+
+          const otherKind: CodingAgentKind =
+            beforeMeta.kind === `claude` ? `codex` : `claude`
+          pushInbox(state, `i1`, `convert-kind`, { kind: otherKind })
+          await handler(ctx, { type: `message_received` })
+
+          const afterMeta = state.sessionMeta.get(`current`) as SessionMetaRow
+          expect(afterMeta.kind).toBe(beforeMeta.kind)
+          const afterNative = state.nativeJsonl.get(`current`) as
+            | { content?: string }
+            | undefined
+          expect(afterNative?.content).toBe(beforeContent)
+          const lifecycleRows = Array.from(
+            state.lifecycle.rows.values()
+          ) as Array<LifecycleRow>
+          const failed = lifecycleRows.find(
+            (r) =>
+              r.event === `kind.convert_failed` &&
+              (r.detail ?? ``).includes(`in-flight`)
+          )
+          expect(failed).toBeDefined()
+
+          await provider.destroy(agentId).catch(() => undefined)
+        }, 120_000)
+
+        it(`L2.12 stop during in-flight prompt is rejected`, async () => {
+          // Same shape as L2.11 but with a stop message. Assert no
+          // sandbox.stopped lifecycle row, status not flipped to cold,
+          // lastError populated. See L2.11's note on injecting status
+          // *after* a real prompt has brought the sandbox up.
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+          const agentId = `/test/coding-agent/${kind}-l2-12-${Date.now().toString(36)}`
+          const { ctx, state } = makeFakeCtx(agentId, buildArgs(kind, ws))
+          await handler(ctx, { type: `message_received` })
+
+          pushInbox(state, `i0`, `prompt`, { text: probe.prompt })
+          await handler(ctx, { type: `message_received` })
+
+          const beforeMeta = state.sessionMeta.get(`current`) as SessionMetaRow
+          state.sessionMeta.rows.set(`current`, {
+            ...beforeMeta,
+            status: `running`,
+          })
+
+          pushInbox(state, `i1`, `stop`, {})
+          await handler(ctx, { type: `message_received` })
+
+          const afterMeta = state.sessionMeta.get(`current`) as SessionMetaRow
+          expect(afterMeta.status).toBe(`running`)
+          expect(afterMeta.lastError).toMatch(/cannot stop while status=/)
+          const lifecycleRows = Array.from(
+            state.lifecycle.rows.values()
+          ) as Array<LifecycleRow>
+          const stopped = lifecycleRows.find(
+            (r) => r.event === `sandbox.stopped`
+          )
+          expect(stopped).toBeUndefined()
+
+          await provider.destroy(agentId).catch(() => undefined)
+        }, 120_000)
 
         const sharedIt = config.supportsSharedWorkspace === false ? it.skip : it
         sharedIt(
