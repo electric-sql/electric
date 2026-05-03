@@ -1,0 +1,51 @@
+.root {
+  border-top: 1px solid var(--ds-gray-a3);
+  padding: 16px 40px;
+  max-width: 72ch;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.composer {
+  background: var(--ds-gray-a2);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 12px;
+  padding: 12px 16px;
+  width: 100%;
+  transition: border-color 0.15s ease;
+}
+.composer:focus-within {
+  border-color: var(--ds-accent-a6);
+}
+.disabled {
+  opacity: 0.5;
+}
+
+.textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--ds-text-sm);
+  line-height: 1.5;
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+  resize: none;
+  overflow: auto;
+  max-height: 200px;
+}
+.textarea::placeholder {
+  color: var(--ds-text-3);
+}
+
+.sendIcon {
+  color: var(--ds-gray-8);
+  cursor: default;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+.sendIcon.active {
+  color: var(--ds-accent-9);
+  cursor: pointer;
+}

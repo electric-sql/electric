@@ -1,5 +1,6 @@
-import { Flex, Text } from '@radix-ui/themes'
+import { Stack, Text } from '../ui'
 import { StatusDot } from './StatusDot'
+import styles from './EntityListItem.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
 const NOISE_TAGS = new Set([`swarm_id`, `source`, `parent`])
@@ -62,14 +63,11 @@ function shortenSlug(slug: string): string {
   return `${slug.slice(0, SLUG_PREVIEW_MAX)}…`
 }
 
-const GUIDE_COLUMN_WIDTH = 16
-const GUIDE_LINE_LEFT = 7
-const GUIDE_LINE_COLOR = `var(--gray-a6)`
-// Each EntityListItem row uses py="2" (Radix space-2 = 8px) of vertical
-// padding. The TreeGuide flex item only stretches to the row's content
-// box (excluding padding), which leaves visible gaps in the vertical
-// line between adjacent rows. Extending the line `top` and `height` by
-// the row's padding bridges those gaps.
+// Each row uses py={2} (= 8px) of vertical padding. The TreeGuide flex
+// item only stretches to the row's content box (excluding padding),
+// leaving visible gaps in the vertical line between adjacent rows.
+// Extending the line `top` and `height` by the row's padding bridges
+// those gaps.
 const GUIDE_ROW_PADDING_Y = 8
 
 function TreeGuide({
@@ -79,49 +77,30 @@ function TreeGuide({
 }): React.ReactElement {
   const last = hasMoreAtDepth.length - 1
   return (
-    <Flex style={{ alignSelf: `stretch`, flexShrink: 0 }}>
+    <Stack className={styles.guide}>
       {hasMoreAtDepth.map((hasMore, i) => {
         const isCurrent = i === last
         const drawVertical = isCurrent ? true : hasMore
         const verticalStopsAtMid = isCurrent && !hasMore
         const drawBranch = isCurrent
         return (
-          <div
-            key={i}
-            style={{
-              width: GUIDE_COLUMN_WIDTH,
-              position: `relative`,
-              flexShrink: 0,
-            }}
-          >
+          <div key={i} className={styles.guideCol}>
             {drawVertical && (
               <div
+                className={styles.guideVertical}
                 style={{
-                  position: `absolute`,
-                  left: GUIDE_LINE_LEFT,
                   top: -GUIDE_ROW_PADDING_Y,
                   height: verticalStopsAtMid
                     ? `calc(50% + ${GUIDE_ROW_PADDING_Y}px)`
                     : `calc(100% + ${GUIDE_ROW_PADDING_Y * 2}px)`,
-                  borderLeft: `1px solid ${GUIDE_LINE_COLOR}`,
                 }}
               />
             )}
-            {drawBranch && (
-              <div
-                style={{
-                  position: `absolute`,
-                  left: GUIDE_LINE_LEFT,
-                  top: `50%`,
-                  width: GUIDE_COLUMN_WIDTH - GUIDE_LINE_LEFT,
-                  borderTop: `1px solid ${GUIDE_LINE_COLOR}`,
-                }}
-              />
-            )}
+            {drawBranch && <div className={styles.guideBranch} />}
           </div>
         )
       })}
-    </Flex>
+    </Stack>
   )
 }
 
@@ -141,71 +120,58 @@ export function EntityListItem({
   const isStopped = entity.status === `stopped`
   const guide = hasMoreAtDepth ?? []
 
+  const className = [
+    styles.row,
+    selected ? styles.selected : null,
+    isStopped ? styles.stopped : null,
+    `entity-list-item`,
+  ]
+    .filter(Boolean)
+    .join(` `)
+
   return (
-    <Flex
+    <Stack
       align="center"
-      gap="2"
-      py="2"
-      px="2"
-      className="entity-list-item"
-      style={{
-        borderRadius: 6,
-        cursor: `pointer`,
-        background: selected ? `var(--accent-a3)` : undefined,
-        opacity: isStopped ? 0.5 : 1,
-        transition: `background 0.1s`,
-      }}
+      gap={2}
+      py={2}
+      px={2}
+      className={className}
       onClick={onSelect}
     >
       {guide.length > 0 && <TreeGuide hasMoreAtDepth={guide} />}
       <StatusDot status={entity.status} />
-      <Flex direction="column" gap="1" style={{ minWidth: 0, flex: 1 }}>
-        <Text
-          size="2"
-          weight="medium"
-          style={{
-            whiteSpace: `nowrap`,
-            overflow: `hidden`,
-            textOverflow: `ellipsis`,
-          }}
-          title={title}
-        >
+      <Stack direction="column" gap={1} className={styles.body}>
+        <Text size={2} weight="medium" className={styles.title} title={title}>
           {title}
         </Text>
-        <Flex
-          align="center"
-          gap="1"
-          style={{ minWidth: 0, color: `var(--gray-11)` }}
-        >
-          <Text size="1" color="gray">
+        <Stack align="center" gap={1} className={styles.metaRow}>
+          <Text size={1} tone="muted">
             {entity.type}
           </Text>
-          <Text size="1" color="gray">
+          <Text size={1} tone="muted">
             ·
           </Text>
-          <Text size="1" color="gray">
+          <Text size={1} tone="muted">
             {formatRelativeTime(entity.updated_at)}
           </Text>
           {!isFromSlug && (
             <>
-              <Text size="1" color="gray">
+              <Text size={1} tone="muted">
                 ·
               </Text>
               <Text
-                size="1"
-                color="gray"
-                style={{
-                  fontFamily: `var(--font-mono, ui-monospace, monospace)`,
-                  opacity: 0.7,
-                }}
+                size={1}
+                tone="muted"
+                family="mono"
+                className={styles.slug}
                 title={slug}
               >
                 {shortenSlug(slug)}
               </Text>
             </>
           )}
-        </Flex>
-      </Flex>
-    </Flex>
+        </Stack>
+      </Stack>
+    </Stack>
   )
 }

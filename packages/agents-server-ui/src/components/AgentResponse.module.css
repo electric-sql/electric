@@ -1,0 +1,16 @@
+.root {
+  max-width: 68ch;
+}
+
+.markdown {
+  border-left: 3px solid var(--ds-accent-7);
+  padding: 4px 0 4px 20px;
+}
+
+.doneText {
+  opacity: 0.5;
+}
+
+.timeText {
+  opacity: 0.4;
+}

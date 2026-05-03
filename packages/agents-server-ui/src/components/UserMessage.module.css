@@ -1,0 +1,16 @@
+.root {
+  max-width: 68ch;
+}
+
+.bubble {
+  background: var(--ds-gray-a3);
+  border-radius: 12px;
+}
+
+.body {
+  white-space: pre-wrap;
+}
+
+.meta {
+  opacity: 0.4;
+}

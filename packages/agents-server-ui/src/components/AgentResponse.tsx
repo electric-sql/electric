@@ -1,5 +1,4 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Flex, Text } from '@radix-ui/themes'
 import { Streamdown } from 'streamdown'
 import { createCodePlugin } from '../lib/codeHighlighter'
 import {
@@ -9,7 +8,9 @@ import {
   setCachedMarkdownRender,
   warmMarkdownRenderCache,
 } from '../lib/markdownRenderCache'
+import { Stack, Text } from '../ui'
 import { ToolCallView } from './ToolCallView'
+import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
   EntityTimelineSection,
@@ -21,13 +22,6 @@ type AgentResponseSection = Extract<
 >
 
 const SHIKI_SETTLE_MS = 80
-
-const markdownContainerStyle = {
-  borderLeft: `3px solid var(--accent-7)`,
-  paddingLeft: 20,
-  paddingTop: 4,
-  paddingBottom: 4,
-} as const
 
 const codePluginSingleton = createCodePlugin()
 const streamdownPlugins = { code: codePluginSingleton }
@@ -145,19 +139,14 @@ const MarkdownSegment = memo(function MarkdownSegment({
     return (
       <div
         ref={wrapperRef}
-        className="agent-ui-markdown"
-        style={markdownContainerStyle}
+        className={`agent-ui-markdown ${styles.markdown}`}
         dangerouslySetInnerHTML={{ __html: cachedHtml }}
       />
     )
   }
 
   return (
-    <div
-      ref={wrapperRef}
-      className="agent-ui-markdown"
-      style={markdownContainerStyle}
-    >
+    <div ref={wrapperRef} className={`agent-ui-markdown ${styles.markdown}`}>
       <Streamdown
         isAnimating={isStreaming}
         plugins={streamdownPlugins}
@@ -190,7 +179,7 @@ export const AgentResponse = memo(function AgentResponse({
   const canCache = !isStreaming && section.done === true
 
   return (
-    <Flex direction="column" gap="2" style={{ maxWidth: `68ch` }}>
+    <Stack direction="column" gap={2} className={styles.root}>
       {section.items.map((item: EntityTimelineContentItem, i: number) => {
         if (item.kind === `text`) {
           const isLastText = isStreaming && i === section.items.length - 1
@@ -210,23 +199,23 @@ export const AgentResponse = memo(function AgentResponse({
         return <ToolCallView key={item.toolCallId} item={item} />
       })}
 
-      <Flex align="center" gap="3">
+      <Stack align="center" gap={3}>
         {section.done && (
-          <Text size="1" color="gray" style={{ opacity: 0.5 }}>
+          <Text size={1} tone="muted" className={styles.doneText}>
             ✓ done
           </Text>
         )}
         {section.error && (
-          <Text size="1" color="red">
+          <Text size={1} tone="danger">
             ✗ {section.error}
           </Text>
         )}
         {time && (
-          <Text size="1" color="gray" style={{ opacity: 0.4 }}>
+          <Text size={1} tone="muted" className={styles.timeText}>
             {time}
           </Text>
         )}
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 })
