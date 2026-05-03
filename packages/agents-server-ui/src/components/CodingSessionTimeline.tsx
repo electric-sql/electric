@@ -1,7 +1,9 @@
 import { memo, useMemo, useState } from 'react'
-import { Badge, Flex, ScrollArea, Text } from '@radix-ui/themes'
 import { Streamdown } from 'streamdown'
 import { createCodePlugin } from '../lib/codeHighlighter'
+import { Badge, Code, ScrollArea, Stack, Text } from '../ui'
+import type { BadgeTone } from '../ui'
+import styles from './CodingSessionTimeline.module.css'
 import type {
   CodingSessionEventRow,
   CodingSessionMetaRow,
@@ -25,31 +27,21 @@ export function CodingSessionTimeline({
   const items = useMemo(() => renderItems(events), [events])
 
   return (
-    <ScrollArea style={{ flex: 1, width: `100%` }}>
-      <Flex
-        direction="column"
-        gap="3"
-        style={{
-          maxWidth: `72ch`,
-          width: `100%`,
-          margin: `0 auto`,
-          padding: `16px 40px`,
-          boxSizing: `border-box`,
-        }}
-      >
+    <ScrollArea className={styles.scroll}>
+      <Stack direction="column" gap={3} className={styles.list}>
         {meta && <MetaRow meta={meta} />}
         {error && (
-          <Text size="2" color="red">
+          <Text size={2} tone="danger">
             {error}
           </Text>
         )}
         {!loading && events.length === 0 && !error && (
-          <Text size="1" color="gray" align="center">
+          <Text size={1} tone="muted" align="center">
             No events yet. Send a prompt to start the session.
           </Text>
         )}
         {items}
-      </Flex>
+      </Stack>
     </ScrollArea>
   )
 }
@@ -79,7 +71,7 @@ function renderItems(
     switch (e.type) {
       case `session_init`:
       case `session_end`:
-        break // invisible
+        break
       case `turn_complete`:
         items.push(<TurnDivider key={key} event={e} />)
         break
@@ -106,9 +98,6 @@ function renderItems(
         break
       }
       case `tool_result`: {
-        // Rendered inline with its tool_call. A stray result (no
-        // matching call in this view, e.g. when the tail cursor lands
-        // mid-session) is uncommon; show it as a tiny note.
         const callId = (e.payload.callId as string | undefined) ?? e.callId
         if (callId && !callsByCallId.has(callId)) {
           items.push(<OrphanToolResult key={key} event={e} />)
@@ -136,46 +125,35 @@ function renderItems(
 
 function MetaRow({ meta }: { meta: CodingSessionMetaRow }): React.ReactElement {
   return (
-    <Flex
-      direction="column"
-      gap="1"
-      style={{
-        padding: `8px 12px`,
-        background: `var(--gray-a2)`,
-        border: `1px solid var(--gray-a4)`,
-        borderRadius: `var(--radius-2)`,
-      }}
-    >
-      <Flex gap="2" align="center" wrap="wrap">
-        <Badge color="gray" variant="soft">
+    <Stack direction="column" gap={1} className={styles.metaCard}>
+      <Stack gap={2} align="center" wrap>
+        <Badge tone="neutral" variant="soft">
           {meta.agent}
         </Badge>
         <StatusBadge status={meta.status} />
         {meta.nativeSessionId && (
           <Text
-            size="1"
-            color="gray"
-            style={{
-              fontFamily: `var(--font-mono)`,
-              wordBreak: `break-all`,
-            }}
+            size={1}
+            tone="muted"
+            family="mono"
+            className={styles.nativeSessionId}
             title={meta.nativeSessionId}
           >
             {meta.nativeSessionId}
           </Text>
         )}
-      </Flex>
+      </Stack>
       {meta.cwd && (
-        <Text size="1" color="gray" style={{ fontFamily: `var(--font-mono)` }}>
+        <Text size={1} tone="muted" family="mono" className={styles.cwd}>
           {meta.cwd}
         </Text>
       )}
       {meta.error && (
-        <Text size="1" color="red">
+        <Text size={1} tone="danger">
           {meta.error}
         </Text>
       )}
-    </Flex>
+    </Stack>
   )
 }
 
@@ -184,16 +162,16 @@ function StatusBadge({
 }: {
   status: CodingSessionStatus
 }): React.ReactElement {
-  const color =
+  const tone: BadgeTone =
     status === `running`
-      ? `blue`
+      ? `info`
       : status === `error`
-        ? `red`
+        ? `danger`
         : status === `initializing`
-          ? `gray`
-          : `green`
+          ? `neutral`
+          : `success`
   return (
-    <Badge color={color} variant="soft">
+    <Badge tone={tone} variant="soft">
       {status}
     </Badge>
   )
@@ -213,28 +191,28 @@ const UserMessageRow = memo(function UserMessageRow({
   const user = event.payload.user as { name?: string } | undefined
   const pending = event.payload._pending === true
   return (
-    <Flex
+    <Stack
       direction="column"
-      gap="1"
-      style={{ maxWidth: `68ch`, opacity: pending ? 0.65 : 1 }}
+      gap={1}
+      className={`${styles.userBubble} ${pending ? styles.userBubblePending : ``}`}
     >
-      <Flex p="3" style={{ background: `var(--gray-a3)`, borderRadius: 12 }}>
-        <Text size="2" style={{ lineHeight: 1.55, whiteSpace: `pre-wrap` }}>
+      <Stack p={3} className={styles.userBubbleInner}>
+        <Text size={2} className={styles.userBubbleText}>
           {text}
         </Text>
-      </Flex>
-      <Flex gap="2" align="center" style={{ opacity: 0.4 }}>
-        <Text size="1" color="gray">
+      </Stack>
+      <Stack gap={2} align="center" className={styles.userMeta}>
+        <Text size={1} tone="muted">
           {user?.name ?? `user`}
         </Text>
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           ·
         </Text>
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           {pending ? `queued` : formatTime(event.ts)}
         </Text>
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 })
 
@@ -246,32 +224,24 @@ const AssistantMessageRow = memo(function AssistantMessageRow({
   const text = getText(event, `text`)
   const phase = event.payload.phase as `commentary` | `final` | undefined
   return (
-    <Flex direction="column" gap="1">
-      <Flex gap="2" align="center" style={{ opacity: 0.6 }}>
-        <Text size="1" color="gray">
+    <Stack direction="column" gap={1}>
+      <Stack gap={2} align="center" className={styles.assistantHeader}>
+        <Text size={1} tone="muted">
           Assistant{phase === `commentary` ? ` · commentary` : ``}
         </Text>
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           ·
         </Text>
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           {formatTime(event.ts)}
         </Text>
-      </Flex>
-      <div
-        className="agent-ui-markdown"
-        style={{
-          borderLeft: `3px solid var(--accent-7)`,
-          paddingLeft: 20,
-          paddingTop: 4,
-          paddingBottom: 4,
-        }}
-      >
+      </Stack>
+      <div className={`agent-ui-markdown ${styles.assistantMarkdown}`}>
         <Streamdown plugins={streamdownPlugins} linkSafety={{ enabled: false }}>
           {text}
         </Streamdown>
       </div>
-    </Flex>
+    </Stack>
   )
 })
 
@@ -282,16 +252,7 @@ function ThinkingRow({
 }): React.ReactElement {
   const summary = getText(event, `summary`) || `thinking…`
   return (
-    <Text
-      size="1"
-      color="gray"
-      style={{
-        fontStyle: `italic`,
-        opacity: 0.7,
-        borderLeft: `2px solid var(--gray-a5)`,
-        paddingLeft: 12,
-      }}
-    >
+    <Text size={1} tone="muted" className={styles.thinking}>
       {summary}
     </Text>
   )
@@ -310,83 +271,45 @@ function ToolBlock({
     (call.payload.input as Record<string, unknown> | undefined) ?? {}
   const summary = summarizeToolInput(input)
   const isError = result?.payload.isError === true
-  const statusColor = !result ? `gray` : isError ? `red` : `green`
+  const tone: BadgeTone = !result ? `neutral` : isError ? `danger` : `success`
   const statusLabel = !result ? `running` : isError ? `error` : `ok`
   const output = getText(result ?? call, `output`)
 
   return (
-    <Flex
-      direction="column"
-      style={{
-        border: `1px solid var(--gray-a4)`,
-        borderRadius: `var(--radius-2)`,
-        overflow: `hidden`,
-      }}
-    >
+    <Stack direction="column" className={styles.toolCard}>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        style={{
-          all: `unset`,
-          display: `flex`,
-          alignItems: `center`,
-          gap: 8,
-          padding: `6px 10px`,
-          cursor: `pointer`,
-          background: `var(--gray-a2)`,
-          fontSize: `var(--font-size-2)`,
-          fontFamily: `var(--font-mono)`,
-        }}
+        className={`${styles.toolHeader} ${styles.toolHeaderToggle}`}
+        style={{ display: `flex`, alignItems: `center`, gap: 8 }}
       >
-        <span style={{ opacity: 0.5 }}>{expanded ? `▼` : `▶`}</span>
-        <span style={{ fontWeight: 500 }}>{tool}</span>
-        {summary && (
-          <span
-            style={{
-              color: `var(--gray-11)`,
-              overflow: `hidden`,
-              textOverflow: `ellipsis`,
-              whiteSpace: `nowrap`,
-              maxWidth: `36ch`,
-            }}
-          >
-            {summary}
-          </span>
-        )}
-        <Badge
-          color={statusColor}
-          variant="soft"
-          style={{ marginLeft: `auto` }}
-        >
+        <span className={styles.toolToggleArrow}>{expanded ? `▼` : `▶`}</span>
+        <span className={styles.toolName}>{tool}</span>
+        {summary && <span className={styles.toolSummary}>{summary}</span>}
+        <Badge tone={tone} variant="soft" className={styles.toolStatusBadge}>
           {statusLabel}
         </Badge>
       </button>
       {expanded && (
-        <Flex
-          direction="column"
-          gap="2"
-          style={{
-            padding: `8px 12px`,
-            borderTop: `1px solid var(--gray-a4)`,
-            background: `var(--gray-a1)`,
-          }}
-        >
-          <Text size="1" color="gray" weight="medium">
+        <Stack direction="column" gap={2} className={styles.toolBody}>
+          <Text size={1} tone="muted" weight="medium">
             Input
           </Text>
-          <pre style={codeBlockStyle}>{JSON.stringify(input, null, 2)}</pre>
+          <pre className={styles.codeBlock}>
+            {JSON.stringify(input, null, 2)}
+          </pre>
           {result && (
             <>
-              <Text size="1" color="gray" weight="medium">
+              <Text size={1} tone="muted" weight="medium">
                 Output
               </Text>
-              <pre style={codeBlockStyle}>{output}</pre>
+              <pre className={styles.codeBlock}>{output}</pre>
             </>
           )}
-        </Flex>
+        </Stack>
       )}
-    </Flex>
+    </Stack>
   )
 }
 
@@ -413,7 +336,7 @@ function OrphanToolResult({
 }): React.ReactElement {
   const output = getText(event, `output`)
   return (
-    <Text size="1" color="gray" style={{ fontFamily: `var(--font-mono)` }}>
+    <Text size={1} tone="muted" family="mono">
       (orphan result {event.callId ?? ``}) {output.slice(0, 120)}
     </Text>
   )
@@ -427,20 +350,13 @@ function PermissionRequestRow({
   const tool = getText(event, `tool`)
   const input = event.payload.input as Record<string, unknown> | undefined
   return (
-    <Flex
-      p="2"
-      style={{
-        background: `var(--amber-a3)`,
-        border: `1px solid var(--amber-a5)`,
-        borderRadius: `var(--radius-2)`,
-      }}
-    >
-      <Text size="2">
+    <Stack p={2} className={styles.permissionRequest}>
+      <Text size={2}>
         <strong>Approval requested</strong> for{` `}
-        <code>{tool}</code>:{` `}
-        <code>{JSON.stringify(input ?? {}).slice(0, 80)}</code>
+        <Code>{tool}</Code>:{` `}
+        <Code>{JSON.stringify(input ?? {}).slice(0, 80)}</Code>
       </Text>
-    </Flex>
+    </Stack>
   )
 }
 
@@ -452,7 +368,7 @@ function PermissionResponseRow({
   const decision = getText(event, `decision`)
   const user = event.payload.user as { name?: string } | undefined
   return (
-    <Text size="2" color="gray">
+    <Text size={2} tone="muted">
       <strong>{user?.name ?? `user`}</strong> {decision}
     </Text>
   )
@@ -460,11 +376,11 @@ function PermissionResponseRow({
 
 function CompactionRow(): React.ReactElement {
   return (
-    <Flex justify="center">
-      <Badge color="gray" variant="soft">
+    <Stack justify="center">
+      <Badge tone="neutral" variant="soft">
         compacted
       </Badge>
-    </Flex>
+    </Stack>
   )
 }
 
@@ -476,19 +392,11 @@ function ErrorRow({
   const code = getText(event, `code`) || `error`
   const message = getText(event, `message`)
   return (
-    <Flex
-      p="2"
-      direction="column"
-      style={{
-        background: `var(--red-a3)`,
-        border: `1px solid var(--red-a5)`,
-        borderRadius: `var(--radius-2)`,
-      }}
-    >
-      <Text size="2" color="red">
+    <Stack p={2} direction="column" className={styles.errorRow}>
+      <Text size={2} tone="danger">
         <strong>{code}:</strong> {message}
       </Text>
-    </Flex>
+    </Stack>
   )
 }
 
@@ -501,24 +409,16 @@ function TurnDivider({
     | { inputTokens?: number; outputTokens?: number; costUsd?: number }
     | undefined
   return (
-    <Flex
-      align="center"
-      gap="2"
-      style={{
-        opacity: 0.35,
-        borderTop: `1px dashed var(--gray-a5)`,
-        paddingTop: 6,
-      }}
-    >
-      <Text size="1" color="gray">
+    <Stack align="center" gap={2} className={styles.turnDivider}>
+      <Text size={1} tone="muted">
         turn complete
       </Text>
       {usage?.inputTokens !== undefined && usage.outputTokens !== undefined && (
-        <Text size="1" color="gray" style={{ fontFamily: `var(--font-mono)` }}>
+        <Text size={1} tone="muted" family="mono">
           {usage.inputTokens}↑ {usage.outputTokens}↓
         </Text>
       )}
-    </Flex>
+    </Stack>
   )
 }
 
@@ -529,7 +429,7 @@ function TurnAbortedRow({
 }): React.ReactElement {
   const reason = getText(event, `reason`)
   return (
-    <Text size="1" color="gray">
+    <Text size={1} tone="muted">
       turn aborted{reason ? ` — ${reason}` : ``}
     </Text>
   )
@@ -541,7 +441,7 @@ function UnknownRow({
   event: CodingSessionEventRow
 }): React.ReactElement {
   return (
-    <Text size="1" color="gray" style={{ fontFamily: `var(--font-mono)` }}>
+    <Text size={1} tone="muted" family="mono">
       [{event.type}]
     </Text>
   )
@@ -552,18 +452,4 @@ function formatTime(ts: number): string {
     hour: `2-digit`,
     minute: `2-digit`,
   })
-}
-
-const codeBlockStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 8,
-  background: `var(--gray-a2)`,
-  border: `1px solid var(--gray-a4)`,
-  borderRadius: `var(--radius-2)`,
-  fontSize: `var(--font-size-1)`,
-  fontFamily: `var(--font-mono)`,
-  whiteSpace: `pre-wrap`,
-  wordBreak: `break-word`,
-  maxHeight: 320,
-  overflow: `auto`,
 }

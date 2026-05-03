@@ -1,0 +1,127 @@
+.scroll {
+  flex: 1;
+  width: 100%;
+}
+
+.list {
+  max-width: 72ch;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px 40px;
+  box-sizing: border-box;
+}
+
+.metaCard {
+  padding: 8px 12px;
+  background: var(--ds-gray-a2);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-2);
+}
+
+.userBubble {
+  max-width: 68ch;
+}
+.userBubblePending {
+  opacity: 0.65;
+}
+.userBubbleInner {
+  background: var(--ds-gray-a3);
+  border-radius: 12px;
+}
+.userBubbleText {
+  white-space: pre-wrap;
+}
+.userMeta {
+  opacity: 0.4;
+}
+
+.assistantHeader {
+  opacity: 0.6;
+}
+.assistantMarkdown {
+  border-left: 3px solid var(--ds-accent-7);
+  padding: 4px 0 4px 20px;
+}
+
+.thinking {
+  font-style: italic;
+  opacity: 0.7;
+  border-left: 2px solid var(--ds-gray-a5);
+  padding-left: 12px;
+}
+
+.toolCard {
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-2);
+  overflow: hidden;
+}
+
+.toolHeader {
+  padding: 6px 10px;
+  background: var(--ds-gray-a2);
+  font-size: var(--ds-text-sm);
+  font-family: var(--ds-font-mono);
+}
+.toolHeaderToggle {
+  all: unset;
+  cursor: pointer;
+  width: 100%;
+}
+.toolToggleArrow {
+  opacity: 0.5;
+}
+.toolName {
+  font-weight: 500;
+}
+.toolSummary {
+  color: var(--ds-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 36ch;
+}
+.toolStatusBadge {
+  margin-left: auto;
+}
+.toolBody {
+  padding: 8px 12px;
+  border-top: 1px solid var(--ds-gray-a4);
+  background: var(--ds-gray-a1);
+}
+
+.codeBlock {
+  margin: 0;
+  padding: 8px;
+  background: var(--ds-gray-a2);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-2);
+  font-size: var(--ds-text-xs);
+  font-family: var(--ds-font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.permissionRequest {
+  background: var(--ds-amber-a3);
+  border: 1px solid var(--ds-amber-a5);
+  border-radius: var(--ds-radius-2);
+}
+
+.errorRow {
+  background: var(--ds-red-a3);
+  border: 1px solid var(--ds-red-a5);
+  border-radius: var(--ds-radius-2);
+}
+
+.turnDivider {
+  opacity: 0.35;
+  border-top: 1px dashed var(--ds-gray-a5);
+  padding-top: 6px;
+}
+
+.cwd,
+.nativeSessionId {
+  word-break: break-all;
+}

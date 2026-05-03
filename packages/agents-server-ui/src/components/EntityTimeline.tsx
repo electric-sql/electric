@@ -11,15 +11,16 @@ import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
 } from '@tanstack/react-virtual'
-import { Flex, IconButton, ScrollArea, Text } from '@radix-ui/themes'
 import { ArrowDown } from 'lucide-react'
 import {
   loadTimelineRowHeights,
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
+import { ScrollArea, Stack, Text } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
+import styles from './EntityTimeline.module.css'
 import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
 
 function formatTime(ts: number): string {
@@ -46,13 +47,6 @@ function estimateRowHeight(row: EntityTimelineEntry | undefined): number {
 const SCROLL_THRESHOLD = 80
 const ROW_GAP = 24
 const ROW_SETTLE_MS = 500
-
-const statusPillStyle = {
-  padding: `4px 14px`,
-  borderRadius: 12,
-  opacity: 0.5,
-  letterSpacing: `0.02em`,
-} as const
 
 const TimelineRow = memo(function TimelineRow({
   row,
@@ -321,61 +315,50 @@ export function EntityTimeline({
 
   if (loading) {
     return (
-      <Flex align="center" justify="center" flexGrow="1">
-        <Text color="gray" size="2">
+      <Stack align="center" justify="center" grow>
+        <Text tone="muted" size={2}>
           Connecting to stream...
         </Text>
-      </Flex>
+      </Stack>
     )
   }
 
   if (error) {
     return (
-      <Flex align="center" justify="center" flexGrow="1">
-        <Text color="red" size="2">
+      <Stack align="center" justify="center" grow>
+        <Text tone="danger" size={2}>
           {error}
         </Text>
-      </Flex>
+      </Stack>
     )
   }
 
   return (
-    <div style={{ position: `relative`, flex: 1, overflow: `hidden` }}>
+    <div className={styles.root}>
       <ScrollArea
-        ref={scrollAreaRef}
-        style={{ height: `100%`, overflow: `hidden` }}
+        viewportRef={scrollAreaRef}
+        className={styles.scroll}
         scrollbars="vertical"
       >
-        <div
-          ref={contentRef}
-          style={{
-            padding: `32px 40px`,
-            maxWidth: `72ch`,
-            margin: `0 auto`,
-            overflowAnchor: `none`,
-            boxSizing: `border-box`,
-            width: `100%`,
-          }}
-        >
-          <Flex justify="center">
-            <Text size="1" color="gray" style={statusPillStyle}>
+        <div ref={contentRef} className={styles.content}>
+          <Stack justify="center">
+            <Text size={1} tone="muted" className={styles.statusPill}>
               spawned{spawnTime ? ` · ${formatTime(spawnTime)}` : ``}
             </Text>
-          </Flex>
+          </Stack>
 
           {rows.length === 0 ? (
-            <Flex justify="center" py="6">
-              <Text color="gray" size="2" style={{ opacity: 0.5 }}>
+            <Stack justify="center" py={6}>
+              <Text tone="muted" size={2} className={styles.emptyState}>
                 Waiting for events...
               </Text>
-            </Flex>
+            </Stack>
           ) : (
             <div
+              className={styles.virtualList}
               style={{
                 height: rowVirtualizer.getTotalSize(),
-                position: `relative`,
                 marginTop: ROW_GAP,
-                overflowAnchor: `none`,
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -387,13 +370,8 @@ export function EntityTimeline({
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
                     data-item-key={row.key}
-                    style={{
-                      position: `absolute`,
-                      top: 0,
-                      left: 0,
-                      width: `100%`,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
+                    className={styles.virtualRow}
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
                     <TimelineRow
                       row={row}
@@ -408,33 +386,24 @@ export function EntityTimeline({
           )}
 
           {entityStopped && (
-            <Flex justify="center" style={{ marginTop: ROW_GAP }}>
-              <Text size="1" color="gray" style={statusPillStyle}>
+            <Stack justify="center" style={{ marginTop: ROW_GAP }}>
+              <Text size={1} tone="muted" className={styles.statusPill}>
                 stopped
               </Text>
-            </Flex>
+            </Stack>
           )}
         </div>
       </ScrollArea>
 
       {showJumpToBottom && (
-        <IconButton
-          size="2"
-          color="gray"
-          variant="solid"
-          radius="full"
+        <button
+          type="button"
+          className={styles.jumpToBottom}
           onClick={jumpToBottom}
-          style={{
-            position: `absolute`,
-            bottom: 24,
-            left: `50%`,
-            transform: `translateX(-50%)`,
-            cursor: `pointer`,
-            zIndex: 10,
-          }}
+          aria-label="Jump to latest"
         >
           <ArrowDown size={16} />
-        </IconButton>
+        </button>
       )}
     </div>
   )

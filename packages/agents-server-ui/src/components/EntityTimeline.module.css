@@ -1,0 +1,65 @@
+.root {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+.scroll {
+  height: 100%;
+  overflow: hidden;
+}
+
+.content {
+  padding: 32px 40px;
+  max-width: 72ch;
+  margin: 0 auto;
+  overflow-anchor: none;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.statusPill {
+  padding: 4px 14px;
+  border-radius: 12px;
+  opacity: 0.5;
+  letter-spacing: 0.02em;
+}
+
+.emptyState {
+  opacity: 0.5;
+}
+
+.virtualList {
+  position: relative;
+  overflow-anchor: none;
+}
+
+.virtualRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.jumpToBottom {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--ds-gray-12);
+  color: var(--ds-gray-1);
+  cursor: pointer;
+  box-shadow: var(--ds-shadow-3);
+  transition: background 120ms ease;
+}
+.jumpToBottom:hover {
+  background: var(--ds-gray-11);
+}
