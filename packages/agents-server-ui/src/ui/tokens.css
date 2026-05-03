@@ -1,0 +1,283 @@
+/* ==========================================================================
+ * Design tokens (`--ds-*`)
+ *
+ * Self-contained token sheet for the agents-server-ui design system.
+ * Mirrors the surface previously borrowed from @radix-ui/themes (spacing,
+ * radii, type, gray + accent color scales) plus the project-specific
+ * status colours used in badges/timeline.
+ *
+ * Light values default; dark overrides apply when the document root has
+ * `data-theme="dark"`. The ThemeProvider toggles that attribute. (During
+ * the in-progress Base UI refactor the legacy `.dark` class is also still
+ * supported so we can land tokens before flipping the theme switch.)
+ *
+ * Tokens here intentionally do NOT redefine Radix Themes' own variables
+ * (`--gray-1`, `--accent-9`, etc.) so they coexist with the live <Theme>
+ * wrapper during phased migration. Phase 3/4 of the refactor will add
+ * compat aliases (`--gray-1: var(--ds-gray-1)`) once Radix is removed.
+ * ========================================================================== */
+
+:root,
+:root[data-theme='light'],
+:root.light {
+  /* ---- Spacing scale (matches Radix `space-*` 1:1) ------------------- */
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 24px;
+  --ds-space-6: 32px;
+  --ds-space-7: 40px;
+  --ds-space-8: 48px;
+  --ds-space-9: 64px;
+
+  /* ---- Radii (matches Radix radius="medium") ------------------------- */
+  --ds-radius-1: 3px;
+  --ds-radius-2: 4px;
+  --ds-radius-3: 6px;
+  --ds-radius-4: 8px;
+  --ds-radius-5: 12px;
+  --ds-radius-6: 16px;
+  --ds-radius-full: 9999px;
+
+  /* ---- Type scale (flat — no Capsize trim) --------------------------- *
+   * One font-size + one line-height per step. Vertical rhythm is
+   * controlled by the parent container's `gap`, not per-element trim.
+   * Sizes intentionally keep close to Radix's font-size-1..6 mapping
+   * so existing `size="1"`..`size="6"` migrations are visually 1:1.   */
+  --ds-text-xs: 12px;
+  --ds-text-xs-lh: 1.5;
+  --ds-text-sm: 14px;
+  --ds-text-sm-lh: 1.55;
+  --ds-text-base: 16px;
+  --ds-text-base-lh: 1.6;
+  --ds-text-lg: 18px;
+  --ds-text-lg-lh: 1.5;
+  --ds-text-xl: 20px;
+  --ds-text-xl-lh: 1.4;
+  --ds-text-2xl: 24px;
+  --ds-text-2xl-lh: 1.35;
+  --ds-text-3xl: 30px;
+  --ds-text-3xl-lh: 1.25;
+
+  /* ---- Font families ------------------------------------------------- */
+  --ds-font-body:
+    Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --ds-font-heading: var(--ds-font-body);
+  --ds-font-mono:
+    SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+
+  /* ---- Shadows ------------------------------------------------------- */
+  --ds-shadow-1: 0 1px 2px rgba(15, 15, 30, 0.04);
+  --ds-shadow-2:
+    0 2px 4px rgba(15, 15, 30, 0.06), 0 1px 2px rgba(15, 15, 30, 0.04);
+  --ds-shadow-3:
+    0 8px 24px rgba(15, 15, 30, 0.1), 0 2px 6px rgba(15, 15, 30, 0.06);
+  --ds-shadow-4:
+    0 16px 40px rgba(15, 15, 30, 0.14), 0 4px 12px rgba(15, 15, 30, 0.08);
+
+  /* ---- Surfaces ------------------------------------------------------ *
+   * `bg` is the page; `surface` sits on top (cards, popovers).         */
+  --ds-bg: #f7f7f5;
+  --ds-bg-subtle: #f0efed;
+  --ds-surface: #ffffff;
+  --ds-surface-raised: #ffffff;
+  --ds-overlay: rgba(15, 15, 30, 0.45);
+
+  /* ---- Gray scale (slate-flavoured neutral) -------------------------- *
+   * Solid steps roughly mirror Radix's slate scale; alpha steps are
+   * generated via color-mix to keep the file compact and tweakable.   */
+  --ds-gray-1: #fcfcfd;
+  --ds-gray-2: #f9f9fb;
+  --ds-gray-3: #eff0f3;
+  --ds-gray-4: #e7e8ec;
+  --ds-gray-5: #e0e1e6;
+  --ds-gray-6: #d8d9e0;
+  --ds-gray-7: #cdced7;
+  --ds-gray-8: #b9bbc6;
+  --ds-gray-9: #8b8d98;
+  --ds-gray-10: #80828d;
+  --ds-gray-11: #62636c;
+  --ds-gray-12: #1e1f24;
+
+  --ds-gray-a1: color-mix(in oklab, var(--ds-gray-12) 3%, transparent);
+  --ds-gray-a2: color-mix(in oklab, var(--ds-gray-12) 6%, transparent);
+  --ds-gray-a3: color-mix(in oklab, var(--ds-gray-12) 10%, transparent);
+  --ds-gray-a4: color-mix(in oklab, var(--ds-gray-12) 14%, transparent);
+  --ds-gray-a5: color-mix(in oklab, var(--ds-gray-12) 18%, transparent);
+  --ds-gray-a6: color-mix(in oklab, var(--ds-gray-12) 22%, transparent);
+  --ds-gray-a7: color-mix(in oklab, var(--ds-gray-12) 28%, transparent);
+  --ds-gray-a8: color-mix(in oklab, var(--ds-gray-12) 38%, transparent);
+  --ds-gray-a9: color-mix(in oklab, var(--ds-gray-12) 50%, transparent);
+  --ds-gray-a10: color-mix(in oklab, var(--ds-gray-12) 56%, transparent);
+  --ds-gray-a11: color-mix(in oklab, var(--ds-gray-12) 70%, transparent);
+  --ds-gray-a12: color-mix(in oklab, var(--ds-gray-12) 95%, transparent);
+
+  /* ---- Text -------------------------------------------------------- */
+  --ds-text-1: var(--ds-gray-12);
+  --ds-text-2: var(--ds-gray-11);
+  --ds-text-3: var(--ds-gray-10);
+  --ds-text-on-accent: #1a1a1a;
+
+  /* ---- Borders / dividers ---------------------------------------- */
+  --ds-border-1: var(--ds-gray-a4);
+  --ds-border-2: var(--ds-gray-a5);
+  --ds-border-3: var(--ds-gray-a6);
+  --ds-divider: var(--ds-gray-a4);
+  --ds-focus-ring: color-mix(in oklab, var(--ds-accent-9) 60%, transparent);
+
+  /* ---- Accent (teal, derived from a single base) --------------------- *
+   * Generated via color-mix against the page background so the lower
+   * steps stay legible on light backgrounds. Mirrors the formula that
+   * was previously inlined in the .radix-themes override block.       */
+  --ds-accent-base: #56e8ea;
+  --ds-accent-hover: #3cd5d8;
+  --ds-accent-active: #27bfc2;
+  --ds-accent-text: #0b6f78;
+
+  --ds-accent-1: color-mix(in oklab, var(--ds-accent-base) 8%, var(--ds-bg));
+  --ds-accent-2: color-mix(in oklab, var(--ds-accent-base) 13%, var(--ds-bg));
+  --ds-accent-3: color-mix(in oklab, var(--ds-accent-base) 20%, var(--ds-bg));
+  --ds-accent-4: color-mix(in oklab, var(--ds-accent-base) 28%, var(--ds-bg));
+  --ds-accent-5: color-mix(in oklab, var(--ds-accent-base) 38%, var(--ds-bg));
+  --ds-accent-6: color-mix(in oklab, var(--ds-accent-base) 50%, var(--ds-bg));
+  --ds-accent-7: color-mix(in oklab, var(--ds-accent-base) 64%, var(--ds-bg));
+  --ds-accent-8: color-mix(in oklab, var(--ds-accent-base) 78%, var(--ds-bg));
+  --ds-accent-9: var(--ds-accent-base);
+  --ds-accent-10: var(--ds-accent-hover);
+  --ds-accent-11: var(--ds-accent-text);
+  --ds-accent-12: #1a1a2e;
+
+  --ds-accent-a1: color-mix(in oklab, var(--ds-accent-base) 8%, transparent);
+  --ds-accent-a2: color-mix(in oklab, var(--ds-accent-base) 13%, transparent);
+  --ds-accent-a3: color-mix(in oklab, var(--ds-accent-base) 20%, transparent);
+  --ds-accent-a4: color-mix(in oklab, var(--ds-accent-base) 28%, transparent);
+  --ds-accent-a5: color-mix(in oklab, var(--ds-accent-base) 38%, transparent);
+  --ds-accent-a6: color-mix(in oklab, var(--ds-accent-base) 50%, transparent);
+  --ds-accent-a7: color-mix(in oklab, var(--ds-accent-base) 64%, transparent);
+  --ds-accent-a8: color-mix(in oklab, var(--ds-accent-base) 78%, transparent);
+  --ds-accent-a9: color-mix(in oklab, var(--ds-accent-base) 88%, transparent);
+  --ds-accent-a10: color-mix(in oklab, var(--ds-accent-hover) 88%, transparent);
+  --ds-accent-a11: var(--ds-accent-text);
+  --ds-accent-a12: var(--ds-accent-12);
+
+  /* ---- Status colours (badges, timeline rows, errors) ---------------- */
+  --ds-red-base: #dc2626;
+  --ds-red-9: var(--ds-red-base);
+  --ds-red-11: #b91c1c;
+  --ds-red-a2: color-mix(in oklab, var(--ds-red-base) 10%, transparent);
+  --ds-red-a3: color-mix(in oklab, var(--ds-red-base) 15%, transparent);
+  --ds-red-a5: color-mix(in oklab, var(--ds-red-base) 28%, transparent);
+  --ds-red-a9: color-mix(in oklab, var(--ds-red-base) 88%, transparent);
+
+  --ds-green-base: #059669;
+  --ds-green-9: var(--ds-green-base);
+  --ds-green-11: #047857;
+  --ds-green-a2: color-mix(in oklab, var(--ds-green-base) 10%, transparent);
+  --ds-green-a3: color-mix(in oklab, var(--ds-green-base) 15%, transparent);
+  --ds-green-a5: color-mix(in oklab, var(--ds-green-base) 28%, transparent);
+  --ds-green-a9: color-mix(in oklab, var(--ds-green-base) 88%, transparent);
+
+  --ds-amber-base: #d97706;
+  --ds-amber-9: var(--ds-amber-base);
+  --ds-amber-11: #b45309;
+  --ds-amber-a2: color-mix(in oklab, var(--ds-amber-base) 10%, transparent);
+  --ds-amber-a3: color-mix(in oklab, var(--ds-amber-base) 15%, transparent);
+  --ds-amber-a5: color-mix(in oklab, var(--ds-amber-base) 28%, transparent);
+  --ds-amber-a9: color-mix(in oklab, var(--ds-amber-base) 88%, transparent);
+
+  --ds-blue-base: #3b82f6;
+  --ds-blue-9: var(--ds-blue-base);
+  --ds-blue-11: #1d4ed8;
+  --ds-blue-a2: color-mix(in oklab, var(--ds-blue-base) 10%, transparent);
+  --ds-blue-a3: color-mix(in oklab, var(--ds-blue-base) 15%, transparent);
+  --ds-blue-a5: color-mix(in oklab, var(--ds-blue-base) 28%, transparent);
+  --ds-blue-a9: color-mix(in oklab, var(--ds-blue-base) 88%, transparent);
+
+  --ds-yellow-base: #eab308;
+  --ds-yellow-9: var(--ds-yellow-base);
+  --ds-yellow-11: #a16207;
+  --ds-yellow-a2: color-mix(in oklab, var(--ds-yellow-base) 10%, transparent);
+  --ds-yellow-a3: color-mix(in oklab, var(--ds-yellow-base) 15%, transparent);
+  --ds-yellow-a5: color-mix(in oklab, var(--ds-yellow-base) 28%, transparent);
+  --ds-yellow-a9: color-mix(in oklab, var(--ds-yellow-base) 88%, transparent);
+
+  /* ---- Z-index scale ------------------------------------------------- */
+  --ds-z-dropdown: 100;
+  --ds-z-sticky: 200;
+  --ds-z-overlay: 300;
+  --ds-z-modal: 400;
+  --ds-z-popover: 500;
+  --ds-z-tooltip: 600;
+  --ds-z-toast: 700;
+}
+
+/* ==========================================================================
+ * Dark theme
+ * ==========================================================================
+ *
+ * Triggered by `data-theme="dark"` on <html>. The legacy `.dark` class is
+ * still honoured because the existing useDarkMode hook toggles that
+ * attribute today; once Phase 3 of the refactor lands, useDarkMode will
+ * switch to `data-theme` only.
+ * ========================================================================== */
+
+:root[data-theme='dark'],
+:root.dark {
+  --ds-bg: #111318;
+  --ds-bg-subtle: #16181f;
+  --ds-surface: #1a1d27;
+  --ds-surface-raised: #22252f;
+  --ds-overlay: rgba(0, 0, 0, 0.55);
+
+  --ds-gray-1: #111113;
+  --ds-gray-2: #19191b;
+  --ds-gray-3: #222325;
+  --ds-gray-4: #292a2e;
+  --ds-gray-5: #303136;
+  --ds-gray-6: #393a40;
+  --ds-gray-7: #46484f;
+  --ds-gray-8: #5f606a;
+  --ds-gray-9: #6c6e79;
+  --ds-gray-10: #797b86;
+  --ds-gray-11: #b2b3bd;
+  --ds-gray-12: #eeeef0;
+
+  --ds-gray-a1: color-mix(in oklab, var(--ds-gray-12) 4%, transparent);
+  --ds-gray-a2: color-mix(in oklab, var(--ds-gray-12) 7%, transparent);
+  --ds-gray-a3: color-mix(in oklab, var(--ds-gray-12) 11%, transparent);
+  --ds-gray-a4: color-mix(in oklab, var(--ds-gray-12) 15%, transparent);
+  --ds-gray-a5: color-mix(in oklab, var(--ds-gray-12) 19%, transparent);
+  --ds-gray-a6: color-mix(in oklab, var(--ds-gray-12) 24%, transparent);
+  --ds-gray-a7: color-mix(in oklab, var(--ds-gray-12) 31%, transparent);
+  --ds-gray-a8: color-mix(in oklab, var(--ds-gray-12) 42%, transparent);
+  --ds-gray-a9: color-mix(in oklab, var(--ds-gray-12) 52%, transparent);
+  --ds-gray-a10: color-mix(in oklab, var(--ds-gray-12) 60%, transparent);
+  --ds-gray-a11: color-mix(in oklab, var(--ds-gray-12) 78%, transparent);
+  --ds-gray-a12: color-mix(in oklab, var(--ds-gray-12) 96%, transparent);
+
+  --ds-text-1: rgba(255, 255, 245, 0.92);
+  --ds-text-2: rgba(235, 235, 245, 0.78);
+  --ds-text-3: rgba(235, 235, 245, 0.62);
+  --ds-text-on-accent: #1a1a1a;
+
+  --ds-border-1: var(--ds-gray-a3);
+  --ds-border-2: var(--ds-gray-a5);
+  --ds-border-3: var(--ds-gray-a7);
+  --ds-divider: var(--ds-gray-a4);
+  --ds-focus-ring: color-mix(in oklab, var(--ds-accent-9) 60%, transparent);
+
+  /* In dark mode the brand teal becomes the accent base. */
+  --ds-accent-base: #75fbfd;
+  --ds-accent-hover: #56e8ea;
+  --ds-accent-active: #3cd5d8;
+  --ds-accent-text: #75fbfd;
+  --ds-accent-12: #b8fdfe;
+
+  --ds-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ds-shadow-2: 0 2px 4px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ds-shadow-3: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --ds-shadow-4: 0 16px 40px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.5);
+}
