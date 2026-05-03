@@ -2,434 +2,580 @@
 title: Coding Agent
 titleTemplate: "... - Electric Agents"
 description: >-
-  Long-lived, sandboxed Claude Code sessions with persistent Docker workspaces — the coding-agent platform primitive.
+  Long-lived, sandboxed coding-agent CLI sessions (claude / codex / opencode) with persistent workspaces.
 outline: [2, 3]
 ---
 
 # Coding Agent
 
-`coding-agent` is the built-in entity type for long-lived Claude Code sessions. By default each agent runs the `claude` CLI inside a Docker container with a persistent workspace (`target: 'sandbox'`); you can also opt into running directly on the host machine with no isolation (`target: 'host'`), which is useful for importing existing local Claude sessions or for environments where Docker is unavailable.
+`coding-agent` is the built-in entity type for long-lived, supervised coding-CLI sessions. Each agent owns a persistent workspace and a CLI process — claude, codex, or opencode — wrapped in a state machine that survives idle hibernation, host restart, kind switches, and forks. The runtime exposes a single typed API (`ctx.spawnCodingAgent`) for parent entities to delegate code work and be woken when it completes.
 
-**Source:**
-- Entity, lifecycle, and sandbox: [`packages/coding-agents/src/`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/)
-- Runtime API: [`packages/agents-runtime/src/types.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/src/types.ts)
-- Horton tools: [`packages/agents/src/tools/spawn-coding-agent.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/tools/spawn-coding-agent.ts), [`packages/agents/src/tools/prompt-coding-agent.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/tools/prompt-coding-agent.ts)
+**Sources**
+
+- Entity, lifecycle, providers, bridges: [`packages/coding-agents/src/`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/)
+- Runtime API surface: [`packages/agents-runtime/src/types.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/src/types.ts)
+- Horton tools: [`packages/agents/src/tools/spawn-coding-agent.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/tools/spawn-coding-agent.ts)
+
+## Quick reference
+
+| Aspect            | Values                                                                                       |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| Agent kinds       | `claude`, `codex`, `opencode`                                                                |
+| Sandbox targets   | `sandbox` (Docker), `host` (no isolation), `sprites` ([sprites.dev](https://sprites.dev))    |
+| Workspace types   | `volume` (named Docker volume — sandbox/sprites), `bindMount` (host path — host/sandbox)     |
+| Inbox messages    | `prompt`, `pin`, `release`, `stop`, `destroy`, `convert-kind`, `convert-target`              |
+| Status states     | `cold`, `starting`, `idle`, `running`, `stopping`, `error`, `destroyed`                      |
+| Provider env vars | `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`), `OPENAI_API_KEY`, `SPRITES_TOKEN`        |
 
 ## When to use it
 
-| Scenario | Use |
-| --- | --- |
-| Multi-turn, stateful code edits with filesystem isolation | `coding-agent` |
-| Multi-file changes that benefit from Claude Code's native tool set | `coding-agent` |
-| A parent entity that needs to delegate coding work and be notified on completion | `ctx.spawnCodingAgent` |
-| Conversational assistant that orchestrates coding as one of many tasks | Horton + `spawn_coding_agent` tool |
-| Short one-shot LLM completion or structured extraction | `ctx.useAgent` / `worker` |
-| Running a known shell command in isolation | `worker` |
+| Scenario                                                                              | Use                                                |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Multi-turn, stateful code edits with filesystem isolation                             | `coding-agent`                                     |
+| Multi-file changes that benefit from a CLI's native tool set                          | `coding-agent`                                     |
+| A parent entity that delegates coding work and is woken on completion                 | `ctx.spawnCodingAgent`                             |
+| Conversational assistant that orchestrates coding as one of many tasks                | Horton + `spawn_coding_agent` tool                 |
+| Short one-shot LLM completion or structured extraction                                | `ctx.useAgent` / `worker`                          |
+| Running a known shell command in isolation                                            | `worker`                                           |
 
-Use `coding-agent` when the task benefits from session continuity across turns — the agent can read its own prior work, iterate on a file, run tests, and resume exactly where it left off across idle hibernations.
+A `coding-agent` is the right primitive when continuity across turns matters — it can read its own prior work, iterate on a file, run tests, hibernate, and resume losslessly on the next prompt.
 
-## Target
+## Architecture
 
-Each `coding-agent` can run in one of two targets: **sandbox** (default) or **host**.
+The package wires four orthogonal pieces around an entity handler.
 
-**Sandbox** (`target: 'sandbox'`) runs the CLI inside a Docker container with full process and filesystem isolation. The container uses a persistent workspace volume or bind-mount, ensuring the filesystem layout is fresh on each cold-boot. This is the secure default for multi-tenant or untrusted workloads.
-
-**Host** (`target: 'host'`) runs the CLI directly on the host machine as the user running agents-server, with full filesystem and network access. Pick host mode when you want to import a local Claude session (restore an existing workflow), or when sandbox isolation isn't required or isn't possible in your environment (e.g., Docker is unavailable).
-
-**Trust and access:** Host mode runs with the permissions of the agents-server process — typically the user running the server. Sandbox mode isolates the CLI's filesystem and process namespace inside the container.
-
-**Workspace constraints:**
-- `target: 'host'` requires `workspaceType: 'bindMount'`. A local Claude session lives at `~/.claude/projects/<sanitised-cwd>/<sessionId>.jsonl` on disk; the host target reads from and writes back to this location after each turn.
-- `target: 'sandbox'` supports both `volume` and `bindMount`. Volume workspaces are sandbox-only and do not correspond to a host path.
-- **Aligned path for bind-mounts:** When using a bind-mount workspace, the container's cwd matches the host cwd because the bind-mount is mounted at `realpath(hostPath)` inside the container (not at a fixed `/workspace`). This means `~/.claude/projects/<sanitised-cwd>/...` lines up across both targets without rewriting transcripts, allowing seamless session migration. Volume workspaces still mount at `/workspace` (sandbox-only).
-
-## Importing a host session
-
-To resume a Claude session that was already in progress on the local machine, spawn a coding-agent with `target: 'host'` and a bind-mount workspace pointing to the project directory:
-
-```ts
-const agent = await ctx.spawnCodingAgent({
-  id: 'imported-session',
-  kind: 'claude',
-  target: 'host',  // Run directly on the host
-  workspace: { type: 'bindMount', hostPath: '/path/to/project' },
-  importNativeSessionId: '<session-id>',  // e.g., 'abc123def456'
-})
+```text
+              spawnCodingAgent(ctx)               POST /send {type: ...}
+                    │                                     │
+                    ▼                                     ▼
+           ┌──────────────────┐                  ┌──────────────────┐
+           │ entity / spawn   │                  │ entity / inbox   │
+           └─────────┬────────┘                  └─────────┬────────┘
+                     │                                     │
+                     ▼                                     ▼
+              ┌─────────────────────────────────────────────────┐
+              │             coding-agent handler                │  ── packages/coding-agents/src/entity/handler.ts
+              │   (sessionMeta / runs / events / lifecycle /    │
+              │    nativeJsonl  state collections)              │
+              └─────────────────────────────────────────────────┘
+                  │                  │                  │
+        provider.start /  bridge.runTurn          WorkspaceRegistry
+        destroy / status  (per kind)              (per-identity lease)
+                  ▼                  ▼                  ▼
+        ┌──────────────────┐  ┌────────────────┐  ┌──────────────┐
+        │ SandboxProvider  │  │     Bridge     │  │  Workspace   │
+        │  ─ LocalDocker   │  │  ─ StdioBridge │  │  Registry    │
+        │  ─ Host          │  │     ↓          │  └──────────────┘
+        │  ─ FlySprites    │  │  Adapter map   │
+        └──────────────────┘  │  ─ claude      │
+                              │  ─ codex       │
+                              │  ─ opencode    │
+                              └────────────────┘
 ```
 
-On first wake, the handler reads `~/.claude/projects/<sanitised-realpath>/<session-id>.jsonl` and the agent resumes that session. The agent reads and writes to the same location that `claude --resume` uses locally, keeping the history in sync.
+**Responsibility split**
 
-**CLI shortcut:** After building the agents package, use the import command to spawn an agent that resumes a local session:
+- [`entity/handler.ts`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/entity/handler.ts) — first-wake init, inbox dispatch, status machine, run accounting, transcript capture / materialise, fork backfill. Mutates state collections via `ctx.db.actions`.
+- [`lifecycle-manager.ts`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/lifecycle-manager.ts) — multiplexes the three providers, runs the idle eviction timer, and tracks the per-agent `pin` refcount.
+- [`workspace-registry.ts`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/workspace-registry.ts) — canonicalises workspace identities (`volume:<name>`, `bindMount:<realpath>`, `sprite:<agentId>`) and serialises concurrent runs that share an identity behind a per-identity mutex.
+- [`bridge/stdio-bridge.ts`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/bridge/stdio-bridge.ts) — runs one CLI turn: builds argv via the per-kind adapter, pipes prompt, drains stdout, normalises raw lines into `agent-session-protocol` events.
+- [`providers/`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/providers/) — three `SandboxProvider` implementations (LocalDocker, Host, FlySprites). The provider surface is small enough that a fourth (Modal, E2B, …) is a few hundred LOC.
 
-```sh
-pnpm -C packages/coding-agents build
+## Setup
 
-electric-ax-import-claude \
-  --workspace /path/to/proj \
-  --session-id <claude-session-id>
+```bash
+# At least one is required. Either may be the OAuth subscription token shape (sk-ant-oat...).
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-proj-...
+SPRITES_TOKEN=<bearer-token-from-sprites.dev>   # optional — enables target=sprites
 ```
 
-This is equivalent to calling `ctx.spawnCodingAgent` with the settings above, then sending an initial prompt.
+`registerCodingAgent`'s default `env()` callback mirrors `ANTHROPIC_API_KEY` → `CLAUDE_CODE_OAUTH_TOKEN` when the value matches the OAuth shape, so a single `ANTHROPIC_API_KEY=sk-ant-oat...` covers both API-key and OAuth-token code paths.
 
-**Note:** Host-target agents capture the transcript after each turn and write it back to `~/.claude/projects/<sanitised-realpath>/<session-id>.jsonl`. Imported sessions stay in sync with the local `claude` CLI — `claude --resume <session-id>` on the machine will see the same conversation history that the agent is working with.
+```bash
+node packages/electric-ax/bin/dev.mjs up           # spawn full stack on :4437
+node packages/electric-ax/bin/dev.mjs restart      # bounce host services (state preserved)
+node packages/electric-ax/bin/dev.mjs clear-state  # nuke postgres + volumes + streams
+```
+
+`dev.mjs` runs an embedded `DurableStreamTestServer` and persists its data directory to `.local/dev-streams` so existing entities survive `up`-after-`down`.
+
+## Targets and kinds
+
+### Targets
+
+| Target    | Backend                                     | Workspace types     | Cleanup on destroy                                  |
+| --------- | ------------------------------------------- | ------------------- | --------------------------------------------------- |
+| `sandbox` | `LocalDockerProvider` (Docker)              | volume, bindMount   | container removed; **volume kept for resume safety**|
+| `host`    | `HostProvider` (no isolation)               | bindMount only      | nothing to clean up                                 |
+| `sprites` | `FlySpriteProvider` ([sprites.dev](https://sprites.dev)) | volume only         | sprite deleted on the platform                      |
+
+**Cross-provider transitions are not supported.** Convert and Fork between `sandbox`↔`sprites` or `host`↔`sprites` are rejected at the server (lifecycle event `target.changed: failed: cross-provider not supported`); the UI also disables those dropdown items. Spawn a fresh agent on the target instead.
+
+`convert-target sandbox → host` requires a bind-mount workspace; volume-backed agents are rejected with `lastError = "convert to host requires a bindMount workspace"`.
+
+### Kinds
+
+| Kind     | CLI binary | Auth                                                              | Notes                                       |
+| -------- | ---------- | ----------------------------------------------------------------- | ------------------------------------------- |
+| claude   | `claude`   | `ANTHROPIC_API_KEY` (or OAuth via `CLAUDE_CODE_OAUTH_TOKEN`)      | Stream-JSON output; stdin prompt delivery   |
+| codex    | `codex`    | `OPENAI_API_KEY`                                                  | Stream-JSON output; stdin prompt delivery   |
+| opencode | `opencode` | `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` (per-provider routing) | Per-spawn `model` arg required              |
+
+Adding a new kind = registering a `CodingAgentAdapter` (see [Adding a coding-agent kind](#adding-a-coding-agent-kind)).
 
 ## Lifecycle
 
-A `coding-agent` moves through seven states:
+A `coding-agent` cycles through seven states.
 
-```
-                    ┌──────────┐
-        spawn ─────▶│   COLD   │◀── idle-timeout fires (& !pinned)
-                    └────┬─────┘    or stop() called
-                         │ send (prompt received)
-                         ▼
-                    ┌──────────┐
-                    │ STARTING │  provider.start() + resume materialise
-                    └────┬─────┘
-       cold-boot failed  │ ready
-              ┌──────────┴──────────┐
-              ▼                     ▼
-         ┌────────┐            ┌──────────┐
-         │ ERROR  │            │   IDLE   │◀──────┐
-         └────┬───┘            └────┬─────┘       │
-              │ next prompt         │ send         │ runTurn done
-              ▼                     ▼              │
-         ┌────────┐            ┌──────────┐        │
-         │  COLD  │◀─────┐     │ RUNNING  │────────┘
-         └────────┘       │    └────┬─────┘
-                          │         │ stop() or destroy()
-                          │         ▼
-                          │    ┌──────────┐
-                          └────│ STOPPING │  SIGTERM → SIGKILL after 5 s
-                          COLD └──────────┘
-                                    │ destroy() completes
-                                    ▼
-                              ┌───────────┐
-                              │ DESTROYED │  tombstone; no further ops
-                              └───────────┘
-```
-
-**State transitions:**
-
-| Transition | Trigger |
-| --- | --- |
-| `COLD → STARTING` | A prompt is received and the sandbox is not running. |
-| `STARTING → IDLE` | `provider.start()` succeeds and (if resuming) the transcript is materialised into the sandbox. |
-| `STARTING → ERROR` | Cold-boot exceeds `coldBootBudgetMs` (30 s default) or the provider fails. |
-| `IDLE → RUNNING` | The workspace lease is acquired and `bridge.runTurn()` starts. |
-| `RUNNING → IDLE` | `runTurn()` completes successfully. The idle timer is armed (unless pinned or `keepWarm`). |
-| `RUNNING → ERROR` | `runTurn()` exits non-zero or exceeds `runTimeoutMs` (30 min default). |
-| `ERROR → COLD` | The next prompt triggers a fresh start attempt. |
-| `IDLE/RUNNING/COLD → STOPPING` | `stop()` is called explicitly. |
-| `STOPPING → COLD` | The sandbox is torn down. |
-| `any → DESTROYED` | `destroy()` completes. The workspace ref is dropped. |
-
-**Idle hibernation.** After a run completes, if the agent is not pinned and `keepWarm` is false, an idle timer arms (default 5 minutes). When it fires, the sandbox container is stopped and status transitions to `COLD`. The workspace volume and the entity's durable stream survive — only the in-memory process and the container's tmpfs (`~/.claude`) are discarded.
-
-**Host target lifecycle note.** For `target: 'host'`, the `STARTING` step is essentially a no-op (there is no container to start), but the state machine still cycles through it for consistency with the sandbox target. The agent transitions from `COLD → STARTING → IDLE` the same way, then runs `claude` directly on the host when prompted.
-
-**Crash recovery.** On `agents-server` restart, `LocalDockerProvider.recover()` scans Docker containers labeled `electric-ax.agent-id`. On the next handler entry per agent, the reconcile step compares durable state against the live container state and marks any orphaned in-flight runs as `failed: orphaned`.
-
-## Workspace types
-
-Each `coding-agent` has a workspace — the filesystem the CLI operates in.
-
-### Named volume
-
-```ts
-workspace: { type: 'volume', name: 'my-project' }
-// identity: 'volume:my-project'
-// Docker volume: 'coding-agent-workspace-my-project'
+```text
+                spawn ─────▶ ┌───────┐ ◀── idle-timeout fires (& not pinned)
+                             │ COLD  │     or stop/destroy
+                             └───┬───┘
+                                 │ prompt
+                                 ▼
+                            ┌────────┐
+                            │STARTING│
+                            └───┬────┘
+            cold-boot fail      │ ready    (sprites: also bootstrap.starting → bootstrap.complete)
+              ┌─────────────────┴─────────────────┐
+              ▼                                   ▼
+          ┌───────┐                          ┌────────┐
+          │ ERROR │                          │  IDLE  │ ◀──┐
+          └──┬────┘                          └────┬───┘    │ runTurn done
+             │ next prompt                        │ prompt │
+             ▼                                    ▼        │
+          ┌───────┐                          ┌────────┐   │
+          │ COLD  │                          │RUNNING │───┘
+          └───────┘                          └───┬────┘
+                                                 │ stop / destroy
+                                                 ▼
+                                            ┌────────┐
+                                            │STOPPING│ ─── SIGTERM → SIGKILL after 5 s
+                                            └───┬────┘
+                                                │ destroy completes
+                                                ▼
+                                          ┌──────────┐
+                                          │DESTROYED │ tombstone — Pin/Release/Stop/Convert all gated
+                                          └──────────┘
 ```
 
-The volume is created if it does not exist and persists until the last referent calls `destroy()`. Omitting `name` generates a slug from the agent id — unique to that agent.
+### Status states (`sessionMeta.status`)
 
-### Bind mount
+| State       | Meaning                                                                                              |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| `cold`      | Sandbox is hibernated. Volume / sprite still exists; will wake on next prompt.                       |
+| `starting`  | Cold-boot in progress (provider creating container / sprite, bootstrap running).                     |
+| `idle`      | Sandbox up, no active turn. Idle timer counts down to eviction unless `keepWarm` or pinned.          |
+| `running`   | A prompt is being processed (CLI is executing).                                                      |
+| `stopping`  | Currently transitioning down (e.g. response to `stop` message or idle eviction).                     |
+| `error`     | Most recent operation failed; `lastError` carries the message.                                       |
+| `destroyed` | Permanent. Container removed; `pin`/`release`/`stop`/`convert-*` are no-ops.                         |
 
-```ts
-workspace: { type: 'bindMount', hostPath: '/Users/me/projects/my-repo' }
-// identity: 'bindMount:/Users/me/projects/my-repo'
+### Inbox messages (control plane)
+
+Send these via `POST /coding-agent/<name>/send` with body `{ from: 'user' | ..., type, payload }`.
+
+| Type             | Payload                                                          | Effect                                                                                            |
+| ---------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `prompt`         | `{ text: string }`                                               | Run a turn. If cold, triggers sandbox start + bootstrap (sprites only).                           |
+| `pin`            | `{}`                                                             | Increment pin refcount; while pinned, idle eviction is suppressed.                                |
+| `release`        | `{}`                                                             | Decrement pin refcount; if 0 and idle, re-arms idle timer.                                        |
+| `stop`           | `{}`                                                             | Hibernate now. Container removed; status → `cold`. Volume kept for resume.                       |
+| `destroy`        | `{}`                                                             | Terminal. Removes container; status → `destroyed`; releases workspace lease.                      |
+| `convert-target` | `{ to: 'sandbox' \| 'host' \| 'sprites' }`                        | Move the workspace to a different target. Cross-provider transitions rejected (see Targets).      |
+| `convert-kind`   | `{ kind: 'claude' \| 'codex' \| 'opencode'; model?: string }`     | Swap the CLI in place; events history is preserved (see [Convert kind](#convert-kind)).           |
+
+Two internal types are sent self-to-self by the runtime: `lifecycle/idle-eviction-fired` (re-enters the handler after the idle timer fires) and `lifecycle/init` (re-runs first-wake init after a CLI-driven import).
+
+### Idle eviction & keepWarm
+
+After a run completes, an idle timer arms (default 300 s). When it fires, the sandbox container is destroyed and status flips to `cold`. The workspace volume and the entity's durable stream survive — only the in-memory process and the container's tmpfs are discarded.
+
+- **Pin refcount.** `pin` increments a per-agent counter; idle eviction is suppressed while > 0. The first `release` (count → 0) re-arms the timer.
+- **`keepWarm`.** Spawning with `keepWarm: true` bypasses idle eviction entirely. Equivalent to a permanent self-pin.
+
+### Lifecycle event vocabulary (`coding-agent.lifecycle`)
+
+```text
+sandbox.starting     bootstrap.starting       pin
+sandbox.started      bootstrap.complete       release
+sandbox.stopped      bootstrap.failed         orphan.detected
+sandbox.failed       resume.restored          target.changed
+                     import.restored          kind.converted
+                     import.failed            kind.convert_failed
+                                              kind.forked
 ```
 
-The host directory is mounted at `realpath(hostPath)` inside the container (path-aligned with the host). Volume workspaces mount at `/workspace`. The runtime never deletes a bind-mount path; `destroy()` only drops the registry entry.
+`bootstrap.*` is sprites-only (per-sprite first-cold-boot install).
 
-### Sharing workspaces
-
-Two agents with the same workspace identity share the volume. Concurrent `IDLE` agents on a shared workspace coexist freely. Concurrent `RUNNING` agents are serialized: the second agent's `runTurn` waits for the first to release the per-identity workspace lease before it can execute.
-
-```ts
-// Agent A and Agent B share the same volume
-const agentA = await ctx.spawnCodingAgent({ id: 'impl', kind: 'claude',
-  workspace: { type: 'volume', name: 'feature-branch' }, ... })
-
-const agentB = await ctx.spawnCodingAgent({ id: 'review', kind: 'claude',
-  workspace: { type: 'volume', name: 'feature-branch' }, ... })
-// agentB.runTurn waits if agentA is RUNNING
-```
-
-## Resume semantics
-
-When a `coding-agent` hibernates (sandbox stopped) and is later prompted again, the prior Claude Code session is restored losslessly:
-
-1. **STARTING:** `provider.start()` creates a fresh container with an empty tmpfs at `~/.claude`.
-2. **Resume materialise:** The handler reads the `nativeJsonl` collection, which holds a single blob (`key='current'`) containing the full contents of claude's on-disk transcript from the last successful turn. This blob is written back to `~/.claude/projects/<sanitized-cwd>/<sessionId>.jsonl` inside the new container.
-3. **IDLE:** The workspace lease is acquired.
-4. **RUNNING:** `bridge.runTurn()` runs `claude --resume <nativeSessionId> ...`. Claude finds the restored transcript file and continues the session from where it left off.
-
-If the `nativeJsonl` collection is empty (first ever turn, or all prior turns failed before producing output), step 2 is skipped and the CLI starts a fresh session.
-
-**"Lossless" means** the CLI sees its own prior turns — including tool calls, tool results, and assistant messages — exactly as it wrote them. The `events` collection (normalized events) is the portable representation consumed by the UI and parent entities; `nativeJsonl` is the CLI-specific representation used only for resume.
-
-**Resume failure modes:**
-- If the transcript blob is missing or corrupt: `status='error'`, `lastError` set. Next prompt retries from scratch.
-- If `claude --resume` rejects the session ID (returns exit 1 with "No conversation found"): the session ID is cleared and the next prompt cold-boots a fresh session.
-
-## API reference
+## Native API
 
 ### `ctx.spawnCodingAgent(opts)`
 
-Available on `HandlerContext` inside any entity handler. Returns a `CodingAgentHandle`.
+Defined in [`packages/agents-runtime/src/types.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents-runtime/src/types.ts). Returns a spawn handle whose `.url` is the new entity URL.
 
 ```ts
-interface SpawnCodingAgentOptions {
-  /** Stable id, scoped to the spawning entity. Used to route the entity URL. */
-  id: string
+import { nanoid } from 'nanoid'
 
-  /** CLI to run. Currently only 'claude' is supported. */
-  kind: 'claude'
+const coder = await ctx.spawnCodingAgent({
+  id: nanoid(10),                                           // stable agent id
+  kind: 'claude',                                           // 'claude' | 'codex' | 'opencode'
+  target: 'sandbox',                                        // 'sandbox' | 'host' | 'sprites'
+  workspace: { type: 'volume' },                            // or { type: 'bindMount', hostPath: '/abs/path' }
+  // model: 'openai/gpt-5.4-mini-fast',                     // required for opencode
+  initialPrompt: 'Add a sum() helper to src/math.ts.',     // optional first prompt
+  wake: { on: 'runFinished', includeResponse: true },       // optional: wake parent on completion
+  lifecycle: { idleTimeoutMs: 300_000, keepWarm: false },   // optional: tune idle behaviour
+  // from: { agentId: '/coding-agent/source', workspaceMode: 'clone' },  // optional: fork
+})
+```
 
-  /**
-   * Workspace mount.
-   *   { type: 'volume', name: 'foo' }    → named Docker volume 'coding-agent-workspace-foo', mounted at /workspace
-   *   { type: 'volume' }                 → volume named from the agent id (per-agent default)
-   *   { type: 'bindMount', hostPath: P } → host directory mounted at realpath(P) inside the container
-   */
-  workspace:
-    | { type: 'volume'; name?: string }
-    | { type: 'bindMount'; hostPath: string }
+| Field           | Description                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `id`            | Stable id scoped to the spawning entity. Re-using an id is a no-op (existing agent is observed instead).   |
+| `kind`          | Default `claude`.                                                                                          |
+| `target`        | Default `sandbox`. `sprites` requires `SPRITES_TOKEN`. `host` requires bindMount.                          |
+| `workspace`     | `{ type: 'volume', name?: string }` or `{ type: 'bindMount', hostPath: string }`.                          |
+| `model`         | Required for `opencode`; optional for claude/codex.                                                        |
+| `initialPrompt` | Queued before first wake — saves a second send.                                                            |
+| `wake`          | Async notification: `{ on: 'runFinished', includeResponse?: boolean }`. The parent is woken when this run completes. |
+| `lifecycle`     | `{ idleTimeoutMs?: number; keepWarm?: boolean }`. See [Idle eviction & keepWarm](#idle-eviction-keepwarm). |
+| `from`          | Fork source: `{ agentId, workspaceMode?: 'share' \| 'clone' \| 'fresh' }`. See [Fork](#fork).              |
 
-  /** Runtime target: 'sandbox' (Docker, default) or 'host' (no isolation). */
-  target?: 'sandbox' | 'host'
+### Sending a prompt
 
-  /** Native session ID to import and resume. Used with target: 'host'. */
-  importNativeSessionId?: string
+```ts
+await ctx.send(`/coding-agent/${id}`, { text: 'reply with: ok' }, { type: 'prompt' })
+```
 
-  /** First prompt, queued before the entity's first wake. Optional. */
-  initialPrompt?: string
+### Observing another agent
 
-  /**
-   * When to wake the parent entity.
-   * Only 'runFinished' is supported. Defaults to { on: 'runFinished', includeResponse: true }.
-   */
-  wake?: { on: 'runFinished'; includeResponse?: boolean }
+```ts
+const handle = await ctx.observe({
+  sourceType: 'entity',
+  sourceRef: '/coding-agent/source-id',
+})
+const sourceEvents = (handle.db?.collections.events.toArray ?? []) as Array<EventRow>
+```
 
-  /** Lifecycle overrides. */
-  lifecycle?: {
-    /** Idle timeout in ms before the sandbox hibernates. Default: 300000 (5 min). */
-    idleTimeoutMs?: number
-    /** Keep the sandbox warm indefinitely — disables idle hibernation. Default: false. */
-    keepWarm?: boolean
-  }
+The handle provides at-spawn-time snapshot semantics — subsequent source updates are not reflected. Used by `fork` to read the source agent's transcript.
+
+### State collections
+
+`coding-agent` registers five state collections on its entity stream:
+
+| Collection      | Wire type                       | Key                  | Description                                                                              |
+| --------------- | ------------------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| `sessionMeta`   | `coding-agent.sessionMeta`      | `'current'`          | Singleton row: status, kind, target, pinned, workspace identity, last error, model.      |
+| `runs`          | `coding-agent.runs`             | `runId` (nanoid)     | One row per turn: status, timestamps, finish reason, response text.                      |
+| `events`        | `coding-agent.events`           | `<runId>:<seq>`      | Normalised `agent-session-protocol` events. Used by the timeline and by parent wakes.    |
+| `lifecycle`     | `coding-agent.lifecycle`        | `<label>:<ts>-<rand>`| Infrastructure events (sandbox start/stop, pin/release, resume.restored, kind.converted, bootstrap.* ).|
+| `nativeJsonl`   | `coding-agent.nativeJsonl`      | `'current'`          | Single-row blob: the CLI's on-disk transcript, captured post-turn. Used only for resume. |
+
+Wire-type constants are exported:
+
+```ts
+import {
+  CODING_AGENT_SESSION_META_COLLECTION_TYPE, // 'coding-agent.sessionMeta'
+  CODING_AGENT_RUNS_COLLECTION_TYPE,         // 'coding-agent.runs'
+  CODING_AGENT_EVENTS_COLLECTION_TYPE,       // 'coding-agent.events'
+  CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,    // 'coding-agent.lifecycle'
+  CODING_AGENT_NATIVE_JSONL_COLLECTION_TYPE, // 'coding-agent.nativeJsonl'
+} from '@electric-ax/coding-agents'
+```
+
+The handler reads/writes them through standard SDK primitives: `ctx.db.collections.<name>.{get,toArray,rows}` and `ctx.db.actions.<name>_{insert,update}`.
+
+## Convert and Fork
+
+### Convert kind
+
+Send a `convert-kind` inbox message to swap CLIs in place — the agent's events history is preserved by **denormalising** to common protocol events and re-rendering as the new kind's transcript format. The next prompt resumes with `--resume <new-session-id>` against the new CLI binary.
+
+```ts
+await ctx.send(`/coding-agent/foo`, { kind: 'codex' }, { type: 'convert-kind' })
+```
+
+Cross-kind support: claude ↔ codex and either → opencode (uni-directional in v1; opencode → claude/codex deferred). See `convertNativeJsonl` in [`entity/conversion.ts`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/entity/conversion.ts).
+
+### Convert target
+
+Send a `convert-target` to move the workspace between sandbox / host / sprites. Cross-provider transitions (sandbox/host ↔ sprites) are rejected; for sandbox+volume → host, the workspace must already be bindMount.
+
+```ts
+await ctx.send(`/coding-agent/foo`, { to: 'host' }, { type: 'convert-target' })
+```
+
+### Fork
+
+Spawn a sibling agent with `from: { agentId, workspaceMode }`. The new agent's events history is backfilled at first-wake (denormalised → renormalised per the new agent's kind), so cross-kind forks "remember" the parent's conversation.
+
+```ts
+const fork = await ctx.spawnCodingAgent({
+  id: nanoid(10),
+  kind: 'codex',
+  workspace: { type: 'volume' },
+  from: { agentId: '/coding-agent/source', workspaceMode: 'clone' },
+})
+```
+
+`workspaceMode` defaults: `share` for bind-mount sources (multiple agents on the same host path serialise via the workspace lease), `clone` for volume sources (errors at spawn time if the provider doesn't implement `cloneWorkspace`).
+
+### Provider capability matrix
+
+| Provider              | `cloneWorkspace`                          |
+| --------------------- | ----------------------------------------- |
+| `LocalDockerProvider` | yes (alpine cp -a)                        |
+| `HostProvider`        | no (bind-mount only)                      |
+| `FlySpriteProvider`   | no (deferred to v1.5; see TL-S3)          |
+
+## Bridges — integrating a new coding-agent kind
+
+A bridge runs one CLI turn end-to-end. The single ship-able `Bridge` impl is `StdioBridge`; the per-kind variability lives in `CodingAgentAdapter` registrations.
+
+### `Bridge` interface
+
+[`packages/coding-agents/src/types.ts`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/types.ts):
+
+```ts
+export interface Bridge {
+  runTurn(args: RunTurnArgs): Promise<RunTurnResult>
+}
+
+export interface RunTurnArgs {
+  sandbox: SandboxInstance
+  kind: CodingAgentKind
+  prompt: string
+  nativeSessionId?: string                                // for resume
+  model?: string
+  onEvent: (e: NormalizedEvent) => void                   // each parsed event
+  onNativeLine?: (line: string) => void                   // raw stdout sidecar
+}
+
+export interface RunTurnResult {
+  exitCode: number
+  finalText?: string                                      // last assistant_message text
+  nativeSessionId?: string                                // extracted from session_init
 }
 ```
 
-### `ctx.observeCodingAgent(id)`
+### Adding a coding-agent kind
 
-Attach to an existing `coding-agent` without spawning. Returns a `CodingAgentHandle`.
-
-```ts
-const handle = await ctx.observeCodingAgent('my-coder-id')
-```
-
-### `CodingAgentHandle`
+Register a `CodingAgentAdapter`:
 
 ```ts
-interface CodingAgentHandle {
-  /** Entity URL, e.g. '/coding-agent/abc123'. */
-  readonly url: string
-  readonly kind: 'claude'
+import { registerAdapter } from '@electric-ax/coding-agents'
 
-  /** Queue a prompt. Resolves when durably enqueued (not when the CLI replies). */
-  send(prompt: string): Promise<void>
+registerAdapter({
+  kind: 'mycoder',
+  cliBinary: 'mycoder',
+  defaultEnvVars: ['MYCODER_API_KEY'],
 
-  /** Async iterable over normalized events. 'now' (default) tails; 'start' replays from the beginning. */
-  events(opts?: { since?: 'start' | 'now' }): AsyncIterable<NormalizedEvent>
+  buildCliInvocation({ prompt, nativeSessionId, model }) {
+    const args = ['chat', '--format', 'jsonl']
+    if (model) args.push('--model', model)
+    if (nativeSessionId) args.push('--session', nativeSessionId)
+    return { args, promptDelivery: 'stdin' }              // or 'argv'
+  },
 
-  /**
-   * Synchronous snapshot of agent state.
-   * Note: workspace.sharedRefs is always 1 when called from a client handler context.
-   * Server-side handler contexts see the live refcount from WorkspaceRegistry.
-   */
-  state(): {
-    status: 'cold' | 'starting' | 'idle' | 'running' | 'stopping' | 'error' | 'destroyed'
-    pinned: boolean
-    workspace: { identity: string; sharedRefs: number }
-    lastError?: string
-    runs: ReadonlyArray<RunSummary>
-  }
+  probeCommand({ homeDir, sessionId }) {                  // exit 0 if transcript exists
+    return ['test', '-f', `${homeDir}/.mycoder/sessions/${sessionId}.jsonl`]
+  },
+  materialiseTargetPath({ homeDir, sessionId }) {
+    return `${homeDir}/.mycoder/sessions/${sessionId}.jsonl`
+  },
+  captureCommand({ homeDir, sessionId }) {                // base64 of the captured transcript on stdout
+    const path = `${homeDir}/.mycoder/sessions/${sessionId}.jsonl`
+    return ['sh', '-c', `[ -f ${path} ] && base64 -w 0 ${path}`]
+  },
+})
+```
 
-  /** Increment the pin refcount. Prevents idle hibernation while pinned. */
-  pin(): Promise<void>
+Plus, if the CLI's stdout isn't already in `agent-session-protocol` shape, wire a normaliser in `bridge/stdio-bridge.ts`. The shipped impls live in [`agents/`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/agents/) — claude/codex use the protocol's `normalize()`; opencode uses a local `normalizeOpencode` because its native shape diverges.
 
-  /** Decrement the pin refcount. Idle timer re-arms when count reaches zero. */
-  release(): Promise<void>
+`promptDelivery: 'stdin'` is preferred — it sidesteps `ARG_MAX` (~256 KB on Linux). The bridge enforces an upstream cap of 900 KB per prompt regardless of delivery.
 
-  /** Tear down the sandbox. Status → COLD. Workspace and stream survive. */
-  stop(): Promise<void>
+## Sandbox providers — integrating a new sandbox
 
-  /** stop() + drop workspace refcount + tombstone the entity stream. Irreversible. */
-  destroy(): Promise<void>
+A `SandboxProvider` owns the lifecycle of a single sandbox primitive (a Docker container, a sprite, a Modal Function, …) keyed by `agentId`.
+
+### `SandboxProvider` interface
+
+[`packages/coding-agents/src/types.ts`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/types.ts):
+
+```ts
+export interface SandboxProvider {
+  readonly name: string
+
+  start(spec: SandboxSpec): Promise<SandboxInstance>            // idempotent per agentId
+  stop(instanceId: string): Promise<void>                       // pause (may be no-op)
+  destroy(agentId: string): Promise<void>                       // teardown
+  status(agentId: string): Promise<'running' | 'stopped' | 'unknown'>
+  recover(): Promise<Array<RecoveredSandbox>>                   // adopt prior-process sandboxes
+
+  cloneWorkspace?(opts: { source: WorkspaceSpec; target: WorkspaceSpec }): Promise<void>
 }
 
-interface RunSummary {
-  runId: string
-  startedAt: number
-  endedAt?: number
-  status: 'running' | 'completed' | 'failed'
-  promptInboxKey: string
-  responseText?: string
+export interface SandboxInstance {
+  instanceId: string                                            // unique per (agentId, this start) — must change after destroy+restart
+  agentId: string
+  workspaceMount: string                                        // path inside the sandbox where workspace is mounted
+  homeDir: string                                               // user $HOME inside the sandbox
+  exec(req: ExecRequest): Promise<ExecHandle>                   // spawn a process
+  copyTo(args: { destPath: string; content: string; mode?: number }): Promise<void>
+}
+
+export interface ExecHandle {
+  stdout: AsyncIterable<string>
+  stderr: AsyncIterable<string>
+  wait(): Promise<{ exitCode: number }>
+  kill(signal?: string): void
+  writeStdin?(chunk: string): Promise<void>                     // present iff stdin === 'pipe'
+  closeStdin?(): Promise<void>
 }
 ```
 
-## Pin / Release / Stop / Destroy
+The contract is exercised by [`runSandboxProviderConformance`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/conformance/provider.ts). See [Conformance contract](#conformance-contract) below.
 
-| Operation | What it does | Status after | Workspace after | Stream after |
-| --- | --- | --- | --- | --- |
-| `pin()` | Increments in-memory refcount. Cancels any armed idle timer. | Unchanged | Unchanged | Unchanged |
-| `release()` | Decrements refcount. Re-arms idle timer when count reaches zero. | Unchanged | Unchanged | Unchanged |
-| `stop()` | Tears down the container. | `COLD` | Preserved | Preserved |
-| `destroy()` | Tears down the container, drops the workspace refcount (volume deleted when last referent), tombstones the entity stream. | `DESTROYED` | Volume deleted if last ref; bind-mount untouched | Tombstoned |
+### Adding a sandbox provider
 
-**Pin is reference-counted.** N calls to `pin()` require N calls to `release()` before the idle timer re-arms. Pin counts are in-memory only and reset to zero on server restart.
+Implement the interface, register it conditionally on the env var that gates it (mirroring `createSpritesProviderIfConfigured`), and wire the provider into [`packages/agents/src/bootstrap.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/bootstrap.ts):
 
-**`stop()` is reversible.** The next `send()` cold-boots the sandbox and resumes the session. Use `stop()` to free container resources when you know work is paused. Use `destroy()` only when the agent is no longer needed.
+```ts
+import { registerCodingAgent, LocalDockerProvider, HostProvider, StdioBridge,
+         createSpritesProviderIfConfigured } from '@electric-ax/coding-agents'
+import { MyProvider } from '@your-org/my-sandbox-provider'
 
-## Horton tools
-
-Users chatting with Horton interact with `coding-agent` through two tools. You do not need these tools when authoring your own entities — use `ctx.spawnCodingAgent` directly.
-
-### `spawn_coding_agent`
-
-Creates a new `coding-agent` entity, sends the first prompt, and wakes Horton when the run finishes.
-
-**Parameters:**
-
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `prompt` | `string` | Yes | First user message. Be concrete: describe the task, files, and expected output. |
-| `workspace_name` | `string` | No | Stable Docker volume name. Reuse the same name across Horton sessions to persist state. |
-| `idle_timeout_ms` | `number` | No | Milliseconds before the sandbox hibernates. Default: 300000 (5 min). |
-
-**Example Horton prompt:**
-```
-Spawn a coder and ask it to add a `sum` function to src/math.ts and write a test for it.
+registerCodingAgent(registry, {
+  providers: {
+    sandbox: new LocalDockerProvider(),
+    host: new HostProvider(),
+    ...(createSpritesProviderIfConfigured()
+      ? { sprites: createSpritesProviderIfConfigured()! }
+      : {}),
+    // mything: process.env.MYTHING_TOKEN ? new MyProvider() : undefined,
+  },
+  bridge: new StdioBridge(),
+  wakeEntity: (agentId) => { /* re-enter handler self-message */ },
+})
 ```
 
-Horton calls `spawn_coding_agent` with `prompt` set to your request. The resulting agent's URL is returned in `details.agentUrl` so Horton can send follow-up prompts.
+Widening `target: 'sandbox' | 'host' | 'sprites'` to include a new value is a 3-step change: schema enum (`entity/collections.ts` + `entity/messages.ts`), `LifecycleManager.providers` shape, and the `RegisterCodingAgentDeps.providers` type. Forgetting any one of them is a runtime no-op (the conformance test catches it within seconds).
 
-**Source:** [`packages/agents/src/tools/spawn-coding-agent.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/tools/spawn-coding-agent.ts)
+### Conformance contract
 
-### `prompt_coding_agent`
+Two harnesses verify any new provider matches the runtime's expectations. A new provider with both passing is interchangeable with the shipped ones.
 
-Sends a follow-up prompt to an existing `coding-agent`. The prompt is queued on the entity's inbox and runs as the next CLI turn, resuming from prior context.
+**Provider conformance** ([`runSandboxProviderConformance`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/conformance/provider.ts)):
 
-**Parameters:**
+| ID  | Scenario                                                                                                       |
+| --- | -------------------------------------------------------------------------------------------------------------- |
+| L1.1 | `start(agentId)` twice returns the same `instanceId` (idempotent)                                              |
+| L1.2 | `start(...)` → `destroy(...)` → `start(...)` produces a different `instanceId`                                 |
+| L1.3 | `status(agentId)` reflects lifecycle (`unknown` → `running` → `stopped/unknown`)                                |
+| L1.4 | `recover()` returns previously-running sandboxes from a prior process (optional; gate via `supportsRecovery`)   |
+| L1.5 | `exec` honours `cwd` and `env`                                                                                 |
+| L1.6 | `exec` round-trips stdin via `writeStdin`/`closeStdin`                                                         |
+| L1.7 | `copyTo` writes content at `destPath` (idempotent)                                                              |
+| L1.8 | `sandbox.homeDir` matches what `echo $HOME` prints inside an exec                                              |
+| L1.9 | `cloneWorkspace` copies source content into target (optional; gate via `supportsCloneWorkspace`)               |
 
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `coding_agent_url` | `string` | Yes | Entity URL from `spawn_coding_agent`, e.g. `/coding-agent/abc123`. |
-| `prompt` | `string` | Yes | Follow-up message. Reference earlier context rather than restating it. |
+**Integration conformance** ([`runCodingAgentsIntegrationConformance`](https://github.com/electric-sql/electric/blob/main/packages/coding-agents/src/conformance/integration.ts)):
 
-**Source:** [`packages/agents/src/tools/prompt-coding-agent.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/tools/prompt-coding-agent.ts)
+| ID  | Scenario                                                                                                       |
+| --- | -------------------------------------------------------------------------------------------------------------- |
+| L2.1 | Cold-boot + first prompt completes; `responseText` matches probe                                                |
+| L2.2 | Warm second prompt reuses the sandbox (same `instanceId`, no `sandbox.starting` row)                           |
+| L2.3 | Resume after `stop` cold-boots and continues conversation                                                      |
+| L2.4 | Reconcile transitions a stale `running` run to `failed: orphaned` after host restart                            |
+| L2.5 | Workspace persists across teardown (`destroy` keeps the data; only `clear-state` wipes it)                     |
+| L2.6 | Shared-workspace lease serialises concurrent runs                                                               |
+| L2.7 | Convert mid-conversation switches kind (claude → codex etc.)                                                    |
+| L2.8 | Fork into sibling inherits source events                                                                        |
+
+Run via:
+
+```bash
+DOCKER=1                                                       pnpm -C packages/coding-agents test test/integration/local-docker-conformance.test.ts
+HOST_PROVIDER=1                                                pnpm -C packages/coding-agents test test/integration/host-provider-conformance.test.ts
+SPRITES=1 SPRITES_TOKEN=...                                    pnpm -C packages/coding-agents test test/integration/fly-sprites-conformance.test.ts
+```
 
 ## UI
 
-The web UI at `http://localhost:4437` renders `coding-agent` entities via dedicated components. The sidebar lists all entities; `coding-agent` entries are created through the **Spawn Coding Agent** dialog.
+The `agents-server-ui` renders coding agents with a status badge, a streaming timeline, and Pin / Release / Stop / Convert-target / Convert-kind / Fork controls — all of which translate to the inbox messages described above. See [`packages/agents-server-ui/src/components/EntityHeader.tsx`](https://github.com/electric-sql/electric/blob/main/packages/agents-server-ui/src/components/EntityHeader.tsx) for the wire-up.
 
-### Status dot
+The spawn dialog ([`CodingAgentSpawnDialog.tsx`](https://github.com/electric-sql/electric/blob/main/packages/agents-server-ui/src/components/CodingAgentSpawnDialog.tsx)) auto-disables incompatible workspace types (e.g. bind-mount when `target=sprites`) and surfaces cross-provider Convert/Fork options as visible-but-disabled with a tooltip explaining why.
 
-The colored dot next to an entity name reflects the agent's current lifecycle state:
+## Operator scripts
 
-| Color | State | Meaning |
-| --- | --- | --- |
-| Gray | `cold` | No container running. Workspace persists. |
-| Amber | `starting` | Container is starting or transcript is being materialised. |
-| Green | `idle` | Container running, no active CLI turn. |
-| Blue | `running` | CLI turn in progress. |
-| Amber | `stopping` | Container is being torn down. |
-| Red | `error` | Last cold-boot or run failed. `lastError` shown in state explorer. |
-| Dim gray | `destroyed` | Entity tombstoned. |
+Two cleanup utilities ship in `packages/coding-agents/scripts/`. Both run via Node 24's native TypeScript stripping; no build or extra dependency required.
 
-### Spawn dialog
+```bash
+SPRITES_TOKEN=... pnpm -C packages/coding-agents cleanup:sprites           # dry-run
+SPRITES_TOKEN=... pnpm -C packages/coding-agents cleanup:sprites --delete  # actually delete
 
-Click **New → Coding Agent** in the sidebar to open the spawn dialog:
+pnpm -C packages/coding-agents cleanup:volumes                              # dry-run
+pnpm -C packages/coding-agents cleanup:volumes --delete                     # delete unattached volumes
+pnpm -C packages/coding-agents cleanup:volumes --in-use                     # also list still-mounted ones
+```
 
-- **Workspace — Volume / Bind mount toggle.** Volume: optional name (blank = derived from agent id). Bind mount: absolute host path.
-- **Initial prompt.** Optional first message sent before the first wake.
+`cleanup:sprites` lists/deletes sprites whose name starts with `coding-agent-`, `conf-sprite-`, or `e2e-sprites-`. `cleanup:volumes` lists/deletes `coding-agent-workspace-*` Docker volumes (kept by `LocalDockerProvider.destroy()` for resume safety, orphaned after entity DELETE).
 
-### Header buttons
+## Defaults
 
-When a `coding-agent` is selected, three lifecycle buttons appear in the header:
+| Setting             | Default                              | Override via                                          |
+| ------------------- | ------------------------------------ | ----------------------------------------------------- |
+| `idleTimeoutMs`     | 300 000 (5 min)                      | `lifecycle.idleTimeoutMs` in `spawnCodingAgent`       |
+| `keepWarm`          | `false`                              | `lifecycle.keepWarm` in `spawnCodingAgent`            |
+| `coldBootBudgetMs`  | 30 000 (sandbox/host) / 240 000 (sprites) | `RegisterCodingAgentDeps.defaults.coldBootBudgetMs` |
+| `runTimeoutMs`      | 1 800 000 (30 min)                   | `RegisterCodingAgentDeps.defaults.runTimeoutMs`       |
+| Sprites idle timeout| 300 s (auto-sleep)                   | `FlySpriteProviderOptions.idleTimeoutSecs`            |
 
-| Button | Action | Enabled when |
-| --- | --- | --- |
-| **Pin** | `POST /send { from: 'user', type: 'pin' }` — prevents idle hibernation. | `sessionMeta.pinned === false` |
-| **Release** | `POST /send { from: 'user', type: 'release' }` — re-arms idle timer. | `sessionMeta.pinned === true` |
-| **Stop** | `POST /send { from: 'user', type: 'stop' }` — tears down the sandbox. | Any state |
+## Tracked limitations
 
-The `from` field is required by the `/send` endpoint (HTTP 400 if absent). Pass `'user'` for
-UI-initiated sends. See the [programmatic client docs](../usage/programmatic-runtime-client#messages)
-for the full list of accepted values.
-
-The global **Kill** button (header, far right) sends `{ type: 'destroy' }` — drops the workspace ref and tombstones the entity.
-
-### Chat timeline
-
-The timeline interleaves two collections:
-
-- **`events`** — normalized `agent-session-protocol` events from the CLI. Rendered as conversation rows: user messages, assistant messages, tool calls, tool results, and thinking steps.
-- **`lifecycle`** — infrastructure events rendered as muted single-line entries (e.g., "▸ sandbox started", "▸ resume.restored (bytes=4821)", "▸ pin (count=1)"). Click to expand the `detail` field.
-
-The timeline auto-scrolls while a run is in progress and shows a loading indicator when `status === 'starting'` or `status === 'running'`.
-
-### State explorer
-
-The collapsible state panel below the timeline shows the raw `sessionMeta` row, the `runs` table, and a count of `events` and `lifecycle` rows — useful for debugging.
+- **TL-S1**: Sprites API is pre-1.0; the protocol has shifted (rc30 docs vs rc43 server) and is expected to keep shifting until 1.0.
+- **TL-S2**: Sprites have no custom OCI image input. First cold-boot per agent installs `opencode-ai` (~10 s on the default Ubuntu image, which preinstalls Claude CLI / OpenAI Codex / Gemini CLI / node).
+- **TL-S3**: `cloneWorkspace` is not supported on sprites (deferred to v1.5). Workspace files don't transfer on fork-within-sprites; conversation history does.
+- **TL-S4**: No cross-provider migration (sandbox/host ↔ sprites). By design.
+- **O-1 (mitigated)**: `LocalDockerProvider.destroy()` keeps the workspace volume for resume safety; the volume orphans after the entity's terminal DELETE. Mitigation: `pnpm cleanup:volumes`.
 
 ## Examples
 
-### Entity handler: spawn a coding agent and await its reply
+### Entity handler: spawn a coding-agent and await its reply
 
 ```ts
-import { registerCodingAgent, LocalDockerProvider, StdioBridge } from '@electric-ax/coding-agents'
+import { registerCodingAgent, LocalDockerProvider, HostProvider, StdioBridge,
+         createSpritesProviderIfConfigured } from '@electric-ax/coding-agents'
 
 // In your server bootstrap (called once):
 registerCodingAgent(registry, {
-  provider: new LocalDockerProvider(),
+  providers: {
+    sandbox: new LocalDockerProvider(),
+    host: new HostProvider(),
+    ...(createSpritesProviderIfConfigured()
+      ? { sprites: createSpritesProviderIfConfigured()! }
+      : {}),
+  },
   bridge: new StdioBridge(),
 })
 
 // In any entity handler:
 registry.define('my-orchestrator', {
   async handler(ctx, wake) {
-    // Spawn a coding agent for the first prompt, or re-observe if it already exists.
     const coder = await ctx.spawnCodingAgent({
       id: 'feature-impl',
       kind: 'claude',
       workspace: { type: 'volume', name: 'feature-branch' },
-      initialPrompt: 'Add a `sum(a, b)` function to src/math.ts and write a test.',
+      initialPrompt: 'Add a sum() helper to src/math.ts and a test.',
       wake: { on: 'runFinished', includeResponse: true },
     })
 
-    // The handler returns here. The runtime wakes this entity again
-    // when the coding agent's first run finishes.
-
-    // On the next wake (from runFinished):
     if (wake.source?.entityUrl === coder.url) {
       const responseText = wake.payload?.responseText
-      // inspect the response and send follow-up if needed
       if (responseText && !responseText.includes('test')) {
-        await coder.send('Please also add a test in src/math.test.ts.')
+        await coder.send('Please also add the test in src/math.test.ts.')
       }
     }
   },
@@ -444,62 +590,35 @@ With the dev server running (`npx electric-ax agents quickstart`):
 User: Spawn a coding agent and have it create a hello-world Express server in /workspace.
 ```
 
-Horton calls `spawn_coding_agent` with `prompt` set to the task. It ends its turn; when the coding agent's run finishes, Horton is woken with the response and reports the result.
+Horton calls `spawn_coding_agent`. The coding-agent runs the task and reports back; Horton is woken with the response and reports the result.
 
-To send a follow-up:
+### Importing a host session
 
-```
-User: Now have the same coding agent add a /health endpoint.
-```
-
-Horton calls `prompt_coding_agent` with the URL from the prior `spawn_coding_agent` result. The agent resumes its session — the container cold-boots if it has hibernated, but the Claude session is restored losslessly.
-
-## Collections
-
-`coding-agent` registers five state collections on its entity stream:
-
-| Collection | Wire type | Key | Description |
-| --- | --- | --- | --- |
-| `sessionMeta` | `coding-agent.sessionMeta` | `'current'` | Current lifecycle state: status, kind, pinned, workspace identity, error, native session id. |
-| `runs` | `coding-agent.runs` | `runId` (nanoid) | One row per CLI turn: status, timestamps, finish reason, response text. |
-| `events` | `coding-agent.events` | `<runId>:<seq>` | Normalized `agent-session-protocol` events in order. Used by the timeline and parent wakes. |
-| `lifecycle` | `coding-agent.lifecycle` | `<label>:<ts>-<rand>` | Infrastructure events (sandbox start/stop, pin/release, orphan detection, resume restore). Rendered as muted timeline rows. |
-| `nativeJsonl` | `coding-agent.nativeJsonl` | `'current'` | Single-row blob: claude's on-disk transcript captured post-turn. Used only for resume. |
-
-Wire-type constants are exported from `@electric-ax/coding-agents`:
+To resume a Claude session that's already in progress on the local machine:
 
 ```ts
-import {
-  CODING_AGENT_SESSION_META_COLLECTION_TYPE, // 'coding-agent.sessionMeta'
-  CODING_AGENT_RUNS_COLLECTION_TYPE,          // 'coding-agent.runs'
-  CODING_AGENT_EVENTS_COLLECTION_TYPE,        // 'coding-agent.events'
-  CODING_AGENT_LIFECYCLE_COLLECTION_TYPE,     // 'coding-agent.lifecycle'
-  CODING_AGENT_NATIVE_JSONL_COLLECTION_TYPE,  // 'coding-agent.nativeJsonl'
-} from '@electric-ax/coding-agents'
+const agent = await ctx.spawnCodingAgent({
+  id: 'imported-session',
+  kind: 'claude',
+  target: 'host',
+  workspace: { type: 'bindMount', hostPath: '/path/to/project' },
+  importNativeSessionId: 'abc123def456',
+})
 ```
 
-## Defaults
+The handler reads `~/.claude/projects/<sanitised-realpath>/<session-id>.jsonl` on first wake, so `claude --resume <session-id>` on the same machine sees the same conversation history that the agent is working with.
 
-| Setting | Default | Override via |
-| --- | --- | --- |
-| `idleTimeoutMs` | 300000 (5 min) | `lifecycle.idleTimeoutMs` in `spawnCodingAgent` |
-| `keepWarm` | `false` | `lifecycle.keepWarm` in `spawnCodingAgent` |
-| `coldBootBudgetMs` | 30000 | `RegisterCodingAgentDeps.defaults.coldBootBudgetMs` |
-| `runTimeoutMs` | 1800000 (30 min) | `RegisterCodingAgentDeps.defaults.runTimeoutMs` |
+CLI shortcut:
 
-## Limitations
-
-- **Claude only.** The bridge rejects `kind: 'codex'`. Codex support is planned for a future release.
-- **Local Docker only.** The sandbox provider is `LocalDockerProvider` (subprocess-driven Docker CLI). Remote providers (Modal, Fly, E2B) are designed for but not implemented.
-- **No shared-workspace UI indicator.** The "shared with N agents" header display is not yet implemented. `state().workspace.sharedRefs` returns `1` in all client contexts.
-- **No orphan-container cleanup.** Containers whose entities were destroyed accumulate until manually removed (`docker rm`). The runtime does not clean them on `recover()`.
-- **Pin counts reset on server restart.** In-memory only. Re-pin after a restart if needed.
-- **No `ctx.deleteEntityStream`.** `destroy()` tombstones the entity (`status='destroyed'`) but does not physically delete the durable stream.
-- **No per-event approve/deny.** CLIs run with `--dangerously-skip-permissions`. Interactive permission grants are not supported.
+```bash
+pnpm -C packages/coding-agents build
+electric-ax-import-claude --workspace /path/to/proj --session-id <claude-session-id>
+```
 
 ## Related
 
 - [Horton agent](./agents/horton) — the assistant that uses `spawn_coding_agent` / `prompt_coding_agent`.
 - [Worker agent](./agents/worker) — lightweight isolated subagent without session continuity.
 - [Spawning and coordinating](/docs/agents/usage/spawning-and-coordinating) — `ctx.spawn`, `ctx.observe`, and wake semantics.
-- [Implementation review](https://github.com/electric-sql/electric/blob/main/docs/superpowers/specs/notes/2026-04-30-coding-agents-implementation-review.md) — plan vs. implementation divergences, hot spots, and deferred work.
+- [Defining entities](/docs/agents/usage/defining-entities) — entity types and state collections.
+- [Implementation findings](https://github.com/electric-sql/electric/blob/main/docs/superpowers/plans/2026-05-02-coding-agents-fly-sprites.md#implementation-findings--round-2-2026-05-03) — round-2 sprites fixes, exec protocol details, and the bug-hunt report.
