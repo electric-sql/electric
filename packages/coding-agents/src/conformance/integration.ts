@@ -646,6 +646,79 @@ export function runCodingAgentsIntegrationConformance(
           await provider.destroy(sourceId).catch(() => undefined)
           await provider.destroy(forkId).catch(() => undefined)
         }, 180_000)
+
+        it(`L2.13 fork from a non-quiescent source is rejected`, async () => {
+          // Source A is in status='running' (mid-turn) when the fork's
+          // first-wake observes it. The fork must (a) NOT copy events,
+          // (b) NOT write nativeJsonl, (c) emit a kind.convert_failed
+          // (or fork.failed) lifecycle row mentioning source status.
+          // Fails today because firstWakeFork doesn't check source
+          // quiescence (R2 #9). Phase 1 Task T3 implements the guard.
+          const { spec: ws, cleanup } = await config.scratchWorkspace()
+          pendingCleanups.push(cleanup)
+          const sourceId = `/test/coding-agent/${kind}-l2-13s-${Date.now().toString(36)}`
+          const { ctx: sourceCtx, state: sourceState } = makeFakeCtx(
+            sourceId,
+            buildArgs(kind, ws)
+          )
+          await handler(sourceCtx, { type: `message_received` })
+          // Run a real prompt so events exist + sandbox is up.
+          pushInbox(sourceState, `i1`, `prompt`, { text: probe.prompt })
+          await handler(sourceCtx, { type: `message_received` })
+
+          // Inject source into running.
+          sourceState.sessionMeta.rows.set(`current`, {
+            ...(sourceState.sessionMeta.get(`current`) as SessionMetaRow),
+            status: `running`,
+          })
+
+          const otherKind: CodingAgentKind =
+            kind === `claude` ? `codex` : `claude`
+          const forkId = `/test/coding-agent/${otherKind}-l2-13f-${Date.now().toString(36)}`
+          const forkArgs = {
+            ...buildArgs(otherKind, ws),
+            fromAgentId: sourceId,
+            fromWorkspaceMode: `share`,
+          }
+          const { ctx: forkCtx, state: forkState } = makeFakeCtx(
+            forkId,
+            forkArgs
+          )
+          ;(forkCtx as any).observe = async () => ({
+            sourceType: `entity`,
+            sourceRef: sourceId,
+            db: {
+              collections: {
+                events: sourceState.events,
+                runs: sourceState.runs,
+                sessionMeta: sourceState.sessionMeta,
+              },
+            },
+            events: [],
+          })
+
+          await handler(forkCtx, { type: `message_received` })
+
+          // Fork's nativeJsonl must be empty / undefined.
+          const native = forkState.nativeJsonl.get(`current`) as
+            | { content?: string }
+            | undefined
+          expect(native?.content ?? ``).toBe(``)
+          // Lifecycle must contain a fork-rejected row.
+          const lifecycleRows = Array.from(
+            forkState.lifecycle.rows.values()
+          ) as Array<LifecycleRow>
+          const rejected = lifecycleRows.find(
+            (r) =>
+              (r.event === `kind.convert_failed` ||
+                r.event === `fork.failed`) &&
+              /running|starting|stopping|quiesc/i.test(r.detail ?? ``)
+          )
+          expect(rejected).toBeDefined()
+
+          await provider.destroy(sourceId).catch(() => undefined)
+          await provider.destroy(forkId).catch(() => undefined)
+        }, 180_000)
       })
     }
   })
