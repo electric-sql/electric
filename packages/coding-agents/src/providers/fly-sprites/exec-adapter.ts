@@ -26,7 +26,7 @@ interface PendingFrame {
   resolve: (value: IteratorResult<string>) => void
 }
 
-class StreamQueue {
+export class StreamQueue {
   private readonly buf: Array<string> = []
   // Holds the unterminated tail of the last frame. Frames split mid-line
   // (e.g. "a\nbcd" then "ef\n") must not push "bcd" as its own line — the
