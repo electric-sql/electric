@@ -41,6 +41,21 @@ export class StdioBridge implements Bridge {
       stdin: promptDelivery === `stdin` ? `pipe` : `ignore`,
     })
 
+    // Plumb the abort signal through to the child. The handler races
+    // runTurn against `runTimeoutMs`; without this, the loser leaves a
+    // zombie CLI behind. SIGTERM gives the CLI a chance to flush; the
+    // sandbox layer (LocalDocker / Host / Sprites) escalates to SIGKILL
+    // on its own teardown if needed.
+    let abortListener: (() => void) | undefined
+    if (args.signal) {
+      if (args.signal.aborted) {
+        handle.kill(`SIGTERM`)
+      } else {
+        abortListener = () => handle.kill(`SIGTERM`)
+        args.signal.addEventListener(`abort`, abortListener, { once: true })
+      }
+    }
+
     if (promptDelivery === `stdin`) {
       if (!handle.writeStdin || !handle.closeStdin) {
         throw new Error(
@@ -75,11 +90,21 @@ export class StdioBridge implements Bridge {
       handle.kill(`SIGTERM`)
     }
     const exitInfo = await handle.wait()
+    if (abortListener && args.signal) {
+      args.signal.removeEventListener(`abort`, abortListener)
+    }
     if (stdoutResult.status === `rejected`) {
       throw stdoutResult.reason
     }
     if (stderrResult.status === `rejected`) {
       log.warn({ err: stderrResult.reason }, `stderr drain failed`)
+    }
+
+    if (args.signal?.aborted) {
+      const stderrPreview = stderrLines.join(`\n`).slice(0, 200) || `<empty>`
+      throw new Error(
+        `${args.kind} CLI aborted (signal). exitCode=${exitInfo.exitCode}; stderr=${stderrPreview}`
+      )
     }
 
     if (exitInfo.exitCode !== 0) {
