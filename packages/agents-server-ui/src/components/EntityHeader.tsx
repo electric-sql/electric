@@ -325,7 +325,11 @@ export function EntityHeader({
                       codingAgentStatus === `running` ||
                       codingAgentStatus === `starting` ||
                       codingAgentStatus === `stopping`
-                    const triggerDisabled = inFlight || isDestroyed
+                    // Block error too — converting from a failed prior
+                    // turn risks acting on stale lastError state. The
+                    // user should retry to clear the error first.
+                    const inError = codingAgentStatus === `error`
+                    const triggerDisabled = inFlight || inError || isDestroyed
                     return (
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger>
@@ -337,7 +341,7 @@ export function EntityHeader({
                             title={
                               isDestroyed
                                 ? destroyedTitle
-                                : inFlight
+                                : inFlight || inError
                                   ? `Cannot convert while ${codingAgentStatus}`
                                   : `Convert this agent to a different target`
                             }
@@ -412,7 +416,11 @@ export function EntityHeader({
                       codingAgentStatus === `running` ||
                       codingAgentStatus === `starting` ||
                       codingAgentStatus === `stopping`
-                    const triggerDisabled = inFlight || isDestroyed
+                    // Block error too — converting from a failed prior
+                    // turn risks acting on stale lastError state. The
+                    // user should retry to clear the error first.
+                    const inError = codingAgentStatus === `error`
+                    const triggerDisabled = inFlight || inError || isDestroyed
                     return (
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger>
@@ -424,7 +432,7 @@ export function EntityHeader({
                             title={
                               isDestroyed
                                 ? destroyedTitle
-                                : inFlight
+                                : inFlight || inError
                                   ? `Cannot convert while ${codingAgentStatus}`
                                   : `Convert this agent to a different kind`
                             }

@@ -58,6 +58,16 @@ export function CodingAgentSpawnDialog({
     if (workspaceMode === `bindMount` && hostPath.trim().length === 0) {
       return false
     }
+    // target ⇄ workspace invariants. The button-click handlers force
+    // the right workspace when toggling target, but a future refactor
+    // (or strict-mode double-render) could submit a stale combo. Lock
+    // the invariant explicitly so the submit button stays disabled.
+    if (target === `host` && workspaceMode !== `bindMount`) {
+      return false
+    }
+    if (target === `sprites` && workspaceMode !== `volume`) {
+      return false
+    }
     if (forkEnabled && !forkSourceUrl) {
       return false
     }
@@ -65,7 +75,15 @@ export function CodingAgentSpawnDialog({
       return false
     }
     return true
-  }, [workspaceMode, hostPath, forkEnabled, forkSourceUrl, kind, opencodeModel])
+  }, [
+    workspaceMode,
+    hostPath,
+    target,
+    forkEnabled,
+    forkSourceUrl,
+    kind,
+    opencodeModel,
+  ])
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
