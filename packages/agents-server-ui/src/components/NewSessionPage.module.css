@@ -124,3 +124,145 @@
   border: 1px dashed var(--ds-border-1);
   border-radius: var(--ds-radius-3);
 }
+
+/* Default-agent quick-start composer ----------------------------- */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-3) var(--ds-space-4);
+  background: var(--ds-input-bg);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-4);
+  transition: border-color 0.15s ease;
+}
+.composer:focus-within {
+  border-color: var(--ds-accent-a6);
+}
+.composerDisabled {
+  opacity: 0.6;
+}
+
+.composerTextarea {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--ds-text-base);
+  line-height: 1.5;
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+  resize: none;
+  overflow: auto;
+  max-height: 280px;
+  width: 100%;
+  padding: 0;
+}
+.composerTextarea::placeholder {
+  color: var(--ds-text-3);
+}
+
+.composerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  flex-wrap: wrap;
+}
+.composerControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.composerSendCluster {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  margin-left: auto;
+}
+.composerHint {
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-3);
+}
+
+/*
+ * Pill-style toggle controls (inline boolean schema fields). The pill
+ * dropdown variant lives in `Select.module.css` (`.triggerPill`) so the
+ * Base UI Select can share its visual language; this style block now
+ * only covers the toggle button variant.
+ *
+ * Pills sit *on top* of the composer's input surface as little chips,
+ * so they need a slightly stronger background than the composer itself
+ * to read as overlaid controls. We use alpha-grey so the chip looks
+ * right against either a white (light mode) or raised (dark mode)
+ * composer surface.
+ */
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--ds-radius-2);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-2);
+  background: var(--ds-gray-a3);
+  cursor: pointer;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
+}
+.pill:hover {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+.pillButton {
+  border: none;
+  font-family: var(--ds-font-body);
+}
+.pillButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.pillButtonActive {
+  background: var(--ds-accent-a3);
+  color: var(--ds-text-1);
+}
+.pillButtonActive:hover {
+  background: var(--ds-accent-a4);
+}
+.composerSend {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-full);
+  color: var(--ds-gray-8);
+  cursor: not-allowed;
+  transition: color 0.12s ease;
+  flex-shrink: 0;
+}
+.composerSendActive {
+  color: var(--ds-accent-9);
+  cursor: pointer;
+}
+.composerSendActive:hover {
+  color: var(--ds-accent-10);
+}
+
+/* Other-agents section under the composer ----------------------- */
+
+.otherAgents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+}
+.otherAgentsLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+}

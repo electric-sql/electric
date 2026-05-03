@@ -473,7 +473,12 @@ function StateSourceHeader({
       <Badge size={1} variant="soft" tone="neutral">
         {sourceOptionsCount}
       </Badge>
-      <Select.Root value={selectedSourceKey} onValueChange={onSelectSource}>
+      <Select.Root
+        value={selectedSourceKey}
+        onValueChange={(v) => {
+          if (v !== null) onSelectSource(v)
+        }}
+      >
         <Select.Trigger className={styles.trigger} />
         <Select.Content>
           <Select.Item value="runtime">Runtime state</Select.Item>

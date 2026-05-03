@@ -1,14 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
-import {
-  Button,
-  Field,
-  Input,
-  NativeSelect,
-  Stack,
-  Text,
-  Textarea,
-} from '../ui'
+import { Button, Field, Input, Select, Stack, Text, Textarea } from '../ui'
 import styles from './SchemaForm.module.css'
+
+// Sentinel value the optional "—" item submits. We can't use the empty
+// string because Base UI's Select treats `value=""` as "no item", so an
+// item with that value would be unselectable; using a unique string and
+// converting in the change handler keeps the UX (clearable enum) intact.
+const EMPTY_VALUE = `__none__`
 
 interface SchemaProperty {
   type?: string
@@ -290,24 +288,40 @@ function SchemaField({
   }
 
   if (prop.enum) {
+    const enumValues = prop.enum
+    const currentString =
+      value === undefined || value === null || value === ``
+        ? required
+          ? null
+          : EMPTY_VALUE
+        : String(value)
     return (
       <Field label={label} required={required} description={prop.description}>
-        <NativeSelect
-          value={String(value ?? ``)}
-          onChange={(e) => {
-            const selected = e.target.value
-            const original = prop.enum!.find((v) => String(v) === selected)
-            onChange(original ?? selected)
+        <Select.Root<string>
+          value={currentString}
+          onValueChange={(next) => {
+            if (next === null || next === EMPTY_VALUE) {
+              onChange(``)
+              return
+            }
+            const original = enumValues.find((v) => String(v) === next)
+            onChange(original ?? next)
           }}
-          autoFocus={autoFocus}
         >
-          {!required && <option value="">—</option>}
-          {prop.enum.map((v) => (
-            <option key={String(v)} value={String(v)}>
-              {String(v)}
-            </option>
-          ))}
-        </NativeSelect>
+          <Select.Trigger
+            placeholder="Select…"
+            className={styles.selectTrigger}
+            autoFocus={autoFocus}
+          />
+          <Select.Content>
+            {!required && <Select.Item value={EMPTY_VALUE}>—</Select.Item>}
+            {enumValues.map((v) => (
+              <Select.Item key={String(v)} value={String(v)}>
+                {String(v)}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
       </Field>
     )
   }

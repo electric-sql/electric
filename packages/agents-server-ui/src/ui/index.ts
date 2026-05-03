@@ -52,8 +52,7 @@ export { Menu } from './Menu'
 export { Tooltip, TooltipProvider } from './Tooltip'
 
 export { Select } from './Select'
-
-export { NativeSelect } from './NativeSelect'
+export type { SelectSize } from './Select'
 
 export { ScrollArea } from './ScrollArea'
 

@@ -8,3 +8,12 @@
   gap: var(--ds-space-2);
   cursor: pointer;
 }
+
+/*
+ * Enum field renders a Base UI Select; stretch the trigger to fill the
+ * Field width so it lines up with neighbouring text inputs.
+ */
+.selectTrigger {
+  width: 100%;
+  justify-content: space-between;
+}

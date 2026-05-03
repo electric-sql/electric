@@ -23,3 +23,12 @@
 .actions {
   margin-top: var(--ds-space-4);
 }
+
+/*
+ * Agent picker inside this form is full-width so it lines up with the
+ * neighbouring text inputs.
+ */
+.agentSelectTrigger {
+  width: 100%;
+  justify-content: space-between;
+}

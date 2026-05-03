@@ -4,18 +4,38 @@ import type { CSSProperties, ReactNode } from 'react'
 import popoverStyles from './Popover.module.css'
 import styles from './Select.module.css'
 
+export type SelectSize = `md` | `pill`
+
 interface RootProps<V extends string> {
   value?: V | null
   defaultValue?: V | null
-  onValueChange?: (value: V) => void
+  /**
+   * Called when the selected value changes. Receives `null` when the user
+   * picks an item whose value is `null` (i.e. when the select is acting
+   * as a clearable input).
+   */
+  onValueChange?: (value: V | null) => void
   disabled?: boolean
+  /** Submitted form name + value (when used inside a `<form>`). */
+  name?: string
+  /** Render the trigger as part of an HTML form. */
+  required?: boolean
   children?: ReactNode
 }
 
 interface TriggerProps {
   placeholder?: ReactNode
+  size?: SelectSize
   className?: string
   style?: CSSProperties
+  autoFocus?: boolean
+  /**
+   * Optional aria-label, useful for compact triggers (e.g. pill) where
+   * there is no visible Field label.
+   */
+  [`aria-label`]?: string
+  /** Tooltip-style hint shown on hover. */
+  title?: string
 }
 
 interface ContentProps {
@@ -35,6 +55,8 @@ function Root<V extends string>({
   defaultValue,
   onValueChange,
   disabled,
+  name,
+  required,
   children,
 }: RootProps<V>): React.ReactElement {
   return (
@@ -43,12 +65,12 @@ function Root<V extends string>({
       defaultValue={defaultValue as string | null | undefined}
       onValueChange={
         onValueChange
-          ? (v: string | null) => {
-              if (v !== null) onValueChange(v as V)
-            }
+          ? (v: string | null) => onValueChange(v as V | null)
           : undefined
       }
       disabled={disabled}
+      name={name}
+      required={required}
     >
       {children}
     </BaseSelect.Root>
@@ -57,15 +79,28 @@ function Root<V extends string>({
 
 function Trigger({
   placeholder,
+  size = `md`,
   className,
   style,
+  autoFocus,
+  [`aria-label`]: ariaLabel,
+  title,
 }: TriggerProps): React.ReactElement {
-  const cls = [styles.trigger, className].filter(Boolean).join(` `)
+  const cls = [size === `pill` ? styles.triggerPill : styles.trigger, className]
+    .filter(Boolean)
+    .join(` `)
+  const iconSize = size === `pill` ? 12 : 14
   return (
-    <BaseSelect.Trigger className={cls} style={style}>
+    <BaseSelect.Trigger
+      className={cls}
+      style={style}
+      autoFocus={autoFocus}
+      aria-label={ariaLabel}
+      title={title}
+    >
       <BaseSelect.Value placeholder={placeholder} />
       <BaseSelect.Icon className={styles.icon}>
-        <ChevronDown size={14} />
+        <ChevronDown size={iconSize} />
       </BaseSelect.Icon>
     </BaseSelect.Trigger>
   )

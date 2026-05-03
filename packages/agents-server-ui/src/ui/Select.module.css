@@ -10,7 +10,7 @@
   line-height: 1;
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
-  background: var(--ds-gray-a2);
+  background: var(--ds-input-bg);
   border: 1px solid var(--ds-border-1);
   border-radius: var(--ds-radius-2);
   cursor: pointer;
@@ -31,6 +31,46 @@
 
 .trigger[data-disabled],
 .trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * Compact "pill" trigger variant — used inline alongside chat-input
+ * composers and other tight footers where a full 32px-tall bordered
+ * trigger would visually compete with the surrounding controls.
+ */
+.triggerPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--ds-text-xs);
+  line-height: 1;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-2);
+  background: var(--ds-gray-a3);
+  border: none;
+  border-radius: var(--ds-radius-2);
+  cursor: pointer;
+  outline: none;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.triggerPill:hover:not(:disabled) {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+
+.triggerPill:focus-visible {
+  box-shadow: 0 0 0 1px var(--ds-accent-9);
+}
+
+.triggerPill[data-disabled],
+.triggerPill:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

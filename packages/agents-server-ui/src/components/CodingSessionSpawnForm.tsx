@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Field, Input, NativeSelect, Stack } from '../ui'
+import { Button, Field, Input, Select, Stack } from '../ui'
 import styles from './CodingSessionSpawnForm.module.css'
 
 type AgentType = `claude` | `codex`
@@ -176,12 +176,17 @@ function AgentSelect({
   onChange: (v: AgentType) => void
 }): React.ReactElement {
   return (
-    <NativeSelect
+    <Select.Root<AgentType>
       value={value}
-      onChange={(e) => onChange(e.target.value as AgentType)}
+      onValueChange={(v) => {
+        if (v !== null) onChange(v)
+      }}
     >
-      <option value="claude">Claude Code</option>
-      <option value="codex">Codex</option>
-    </NativeSelect>
+      <Select.Trigger className={styles.agentSelectTrigger} />
+      <Select.Content>
+        <Select.Item value="claude">Claude Code</Select.Item>
+        <Select.Item value="codex">Codex</Select.Item>
+      </Select.Content>
+    </Select.Root>
   )
 }
