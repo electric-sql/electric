@@ -113,7 +113,7 @@ export function EventSidebar({
         <Badge size={1} variant="soft" tone="neutral">
           {events.length}
         </Badge>
-        <Stack align="center" gap={1} style={{ marginLeft: `auto` }}>
+        <Stack align="center" gap={1} className={styles.headerActions}>
           <IconButton
             size={1}
             variant="ghost"
@@ -150,7 +150,8 @@ export function EventSidebar({
 
       <div ref={scrollContainerRef} className={styles.eventListScroll}>
         <div
-          style={{ height: virtualizer.getTotalSize(), position: `relative` }}
+          className={styles.virtualWindow}
+          style={{ height: virtualizer.getTotalSize() }}
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
             const index = virtualItem.index
@@ -168,13 +169,7 @@ export function EventSidebar({
                 data-selected={isSelected}
                 data-dimmed={isDimmed}
                 className={styles.eventRow}
-                style={{
-                  position: `absolute`,
-                  top: 0,
-                  left: 0,
-                  width: `100%`,
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
+                style={{ transform: `translateY(${virtualItem.start}px)` }}
                 onClick={() => onSelectEvent(index)}
               >
                 {isControlEvent(event) ? (
@@ -216,7 +211,7 @@ export function EventSidebar({
 function EventIndex({ index, padWidth }: { index: number; padWidth: number }) {
   const padded = String(index + 1).padStart(padWidth, `0`)
   return (
-    <Text size={1} tone="muted" family="mono" style={{ flexShrink: 0 }}>
+    <Text size={1} tone="muted" family="mono" className={styles.shrink0}>
       {padded}
     </Text>
   )
@@ -240,12 +235,7 @@ function ControlEventContent({
     <>
       <Stack align="center" gap={2} className={styles.eventRowHeader}>
         <EventIndex index={index} padWidth={padWidth} />
-        <Badge
-          size={1}
-          variant="soft"
-          tone={tone}
-          style={{ fontFamily: `var(--ds-font-mono)` }}
-        >
+        <Badge size={1} variant="soft" tone={tone} className={styles.monoBadge}>
           {label}
         </Badge>
         <Code size={1} variant="ghost" className={styles.eventKey}>
@@ -293,12 +283,7 @@ function ChangeEventContent({
     <>
       <Stack align="center" gap={2} className={styles.eventRowHeader}>
         <EventIndex index={index} padWidth={padWidth} />
-        <Badge
-          size={1}
-          variant="soft"
-          tone={tone}
-          style={{ fontFamily: `var(--ds-font-mono)` }}
-        >
+        <Badge size={1} variant="soft" tone={tone} className={styles.monoBadge}>
           {label}
         </Badge>
         <Code size={1} variant="ghost" truncate className={styles.eventKey}>
@@ -322,7 +307,7 @@ function ChangeEventContent({
             variant="ghost"
             tone="neutral"
             onClick={onNavigate}
-            style={{ flexShrink: 0 }}
+            className={styles.shrink0}
             aria-label={`Focus ${event.type}:${event.key}`}
           >
             <Crosshair size={ICON_SIZE} />

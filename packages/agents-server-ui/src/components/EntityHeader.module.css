@@ -27,3 +27,11 @@
   max-height: 400px;
   font-family: var(--ds-font-mono);
 }
+
+.dialogActions {
+  margin-top: var(--ds-space-3);
+}
+
+.killActions {
+  margin-top: var(--ds-space-4);
+}

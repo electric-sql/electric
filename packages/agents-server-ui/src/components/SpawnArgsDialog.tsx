@@ -1,6 +1,15 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
-import { Button, Dialog, Input, Stack, Text, Textarea } from '../ui'
+import {
+  Button,
+  Dialog,
+  Field,
+  Input,
+  NativeSelect,
+  Stack,
+  Text,
+  Textarea,
+} from '../ui'
 import styles from './SpawnArgsDialog.module.css'
 
 interface SpawnArgsDialogProps {
@@ -237,11 +246,7 @@ function SchemaField({
   // proper array at submit time (see handleSubmit).
   if (isStringArrayType(prop)) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
+      <Field label={label} required={required} description={prop.description}>
         <Input
           type="text"
           value={stringArrayToDisplay(value)}
@@ -252,17 +257,13 @@ function SchemaField({
         <Text size={1} tone="muted">
           Separate multiple values with commas
         </Text>
-      </FieldWrapper>
+      </Field>
     )
   }
 
   if (!isSimpleType(prop)) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
+      <Field label={label} required={required} description={prop.description}>
         <Textarea
           value={
             typeof value === `string`
@@ -283,18 +284,14 @@ function SchemaField({
           autoFocus={autoFocus}
           mono
         />
-      </FieldWrapper>
+      </Field>
     )
   }
 
   if (prop.enum) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
-        <select
+      <Field label={label} required={required} description={prop.description}>
+        <NativeSelect
           value={String(value ?? ``)}
           onChange={(e) => {
             const selected = e.target.value
@@ -302,7 +299,6 @@ function SchemaField({
             onChange(original ?? selected)
           }}
           autoFocus={autoFocus}
-          className={styles.nativeSelect}
         >
           {!required && <option value="">—</option>}
           {prop.enum.map((v) => (
@@ -310,18 +306,14 @@ function SchemaField({
               {String(v)}
             </option>
           ))}
-        </select>
-      </FieldWrapper>
+        </NativeSelect>
+      </Field>
     )
   }
 
   if (prop.type === `boolean`) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
+      <Field label={label} required={required} description={prop.description}>
         <label className={styles.checkboxLabel}>
           <input
             type="checkbox"
@@ -331,17 +323,13 @@ function SchemaField({
           />
           <Text size={2}>{label}</Text>
         </label>
-      </FieldWrapper>
+      </Field>
     )
   }
 
   if (prop.type === `number` || prop.type === `integer`) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
+      <Field label={label} required={required} description={prop.description}>
         <Input
           type="number"
           value={value !== undefined && value !== null ? String(value) : ``}
@@ -359,16 +347,12 @@ function SchemaField({
           step={prop.type === `integer` ? 1 : `any`}
           placeholder={prop.description ?? name}
         />
-      </FieldWrapper>
+      </Field>
     )
   }
 
   return (
-    <FieldWrapper
-      label={label}
-      required={required}
-      description={prop.description}
-    >
+    <Field label={label} required={required} description={prop.description}>
       <Input
         type="text"
         value={String(value ?? ``)}
@@ -376,34 +360,7 @@ function SchemaField({
         autoFocus={autoFocus}
         placeholder={prop.description ?? name}
       />
-    </FieldWrapper>
-  )
-}
-
-function FieldWrapper({
-  label,
-  required,
-  description,
-  children,
-}: {
-  label: string
-  required: boolean
-  description?: string
-  children: React.ReactNode
-}): React.ReactElement {
-  return (
-    <Stack direction="column" gap={1}>
-      <Text size={2} weight="medium">
-        {label}
-        {required && <span className={styles.requiredMark}>*</span>}
-      </Text>
-      {children}
-      {description && (
-        <Text size={1} tone="muted">
-          {description}
-        </Text>
-      )}
-    </Stack>
+    </Field>
   )
 }
 

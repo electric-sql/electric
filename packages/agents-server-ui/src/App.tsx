@@ -27,9 +27,11 @@ function ThemedApp(): React.ReactElement {
 
   return (
     <ThemeProvider appearance={appearance}>
-      <ServerConnectionProvider>
-        <AppInner />
-      </ServerConnectionProvider>
+      <div className="app-root">
+        <ServerConnectionProvider>
+          <AppInner />
+        </ServerConnectionProvider>
+      </div>
     </ThemeProvider>
   )
 }

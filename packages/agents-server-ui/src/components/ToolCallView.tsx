@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime'
 import { Badge, Box, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
+import toolBlock from './toolBlock.module.css'
 import styles from './ToolCallView.module.css'
 
 type ToolCallItem = Extract<EntityTimelineContentItem, { kind: `tool_call` }>
@@ -101,7 +102,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
           <Text size={1} tone="muted" weight="medium">
             Command
           </Text>
-          <pre className={styles.codeBlock}>{args.command as string}</pre>
+          <pre className={toolBlock.codeBlock}>{args.command as string}</pre>
           {r.text && (
             <>
               <Stack align="center" gap={2}>
@@ -119,7 +120,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
                   </Badge>
                 )}
               </Stack>
-              <pre className={styles.codeBlock}>{r.text}</pre>
+              <pre className={toolBlock.codeBlock}>{r.text}</pre>
             </>
           )}
         </Stack>
@@ -132,7 +133,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
           <Text size={1} tone="muted" weight="medium">
             Content
           </Text>
-          <pre className={styles.codeBlock}>
+          <pre className={toolBlock.codeBlock}>
             {r.text ? truncate(r.text, 2000) : `(empty)`}
           </pre>
         </Stack>
@@ -146,7 +147,9 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
               <Text size={1} tone="danger" weight="medium">
                 Removed
               </Text>
-              <pre className={`${styles.codeBlock} ${styles.codeBlockRemoved}`}>
+              <pre
+                className={`${toolBlock.codeBlock} ${styles.codeBlockRemoved}`}
+              >
                 {truncate(args.old_string, 500)}
               </pre>
             </>
@@ -156,7 +159,9 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
               <Text size={1} tone="success" weight="medium">
                 Added
               </Text>
-              <pre className={`${styles.codeBlock} ${styles.codeBlockAdded}`}>
+              <pre
+                className={`${toolBlock.codeBlock} ${styles.codeBlockAdded}`}
+              >
                 {truncate(args.new_string, 500)}
               </pre>
             </>
@@ -177,7 +182,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
               <Text size={1} tone="muted" weight="medium">
                 Content
               </Text>
-              <pre className={styles.codeBlock}>
+              <pre className={toolBlock.codeBlock}>
                 {truncate(args.content, 1000)}
               </pre>
             </>
@@ -196,7 +201,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
           <Text size={1} tone="muted" weight="medium">
             Input
           </Text>
-          <pre className={styles.codeBlock}>
+          <pre className={toolBlock.codeBlock}>
             {JSON.stringify(args, null, 2)}
           </pre>
           {r.text && (
@@ -204,7 +209,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
               <Text size={1} tone="muted" weight="medium">
                 Output
               </Text>
-              <pre className={styles.codeBlock}>{r.text}</pre>
+              <pre className={toolBlock.codeBlock}>{r.text}</pre>
             </>
           )}
         </Stack>
@@ -222,10 +227,10 @@ export function ToolCallView({
     const { tone, label } = statusToTone(item)
 
     return (
-      <Stack direction="column" className={styles.card}>
-        <Stack align="center" gap={2} className={styles.header}>
-          <span className={styles.toolName}>send_message</span>
-          <Badge tone={tone} variant="soft" className={styles.statusBadge}>
+      <Stack direction="column" className={toolBlock.card}>
+        <Stack align="center" gap={2} className={toolBlock.header}>
+          <span className={toolBlock.toolName}>send_message</span>
+          <Badge tone={tone} variant="soft" className={toolBlock.statusBadge}>
             {label}
           </Badge>
         </Stack>
@@ -243,23 +248,22 @@ export function ToolCallView({
   const { tone, label } = statusToTone(item)
 
   return (
-    <Stack direction="column" className={styles.card}>
+    <Stack direction="column" className={toolBlock.card}>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className={`${styles.header} ${styles.headerToggle}`}
-        style={{ display: `flex`, alignItems: `center`, gap: 8 }}
+        className={`${toolBlock.header} ${toolBlock.headerToggle}`}
       >
-        <span className={styles.toggleArrow}>{expanded ? `▼` : `▶`}</span>
-        <span className={styles.toolName}>{item.toolName}</span>
-        {summary && <span className={styles.summary}>{summary}</span>}
-        <Badge tone={tone} variant="soft" className={styles.statusBadge}>
+        <span className={toolBlock.toggleArrow}>{expanded ? `▼` : `▶`}</span>
+        <span className={toolBlock.toolName}>{item.toolName}</span>
+        {summary && <span className={toolBlock.summary}>{summary}</span>}
+        <Badge tone={tone} variant="soft" className={toolBlock.statusBadge}>
           {label}
         </Badge>
       </button>
       {expanded && (
-        <Box className={styles.body}>
+        <Box className={toolBlock.body}>
           <ToolBody item={item} />
         </Box>
       )}

@@ -44,6 +44,7 @@ export const Box = forwardRef<HTMLElement, BoxProps>(function Box(
 ) {
   const cls = [
     styles.box,
+    grow ? styles.grow : null,
     PAD_CLASS(p, `p`),
     PAD_CLASS(px, `px`),
     PAD_CLASS(py, `py`),
@@ -51,6 +52,5 @@ export const Box = forwardRef<HTMLElement, BoxProps>(function Box(
   ]
     .filter(Boolean)
     .join(` `)
-  const finalStyle = grow ? { flexGrow: 1, ...style } : style
-  return <Component ref={ref} className={cls} style={finalStyle} {...rest} />
+  return <Component ref={ref} className={cls} style={style} {...rest} />
 })

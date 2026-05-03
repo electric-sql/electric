@@ -184,14 +184,14 @@ export function Sidebar({
       <ServerPicker />
 
       {spawnError && (
-        <Stack px={3} py={3} className={styles.spawnError}>
+        <Stack px={3} py={3}>
           <Text size={1} tone="danger" role="alert">
             {spawnError}
           </Text>
         </Stack>
       )}
 
-      <Stack px={3} style={{ paddingTop: 12, paddingBottom: 4 }}>
+      <Stack px={3} className={styles.newSessionRow}>
         <Popover.Root>
           <Popover.Trigger
             render={
@@ -213,8 +213,7 @@ export function Sidebar({
           >
             <Stack
               px={3}
-              style={{ paddingTop: 12, paddingBottom: 8 }}
-              className={styles.newSessionHeader}
+              className={`${styles.newSessionHeader} ${styles.newSessionPopupHeader}`}
             >
               <Text size={2} weight="bold">
                 New session
@@ -238,7 +237,7 @@ export function Sidebar({
                           <Text
                             size={1}
                             tone="muted"
-                            style={{ lineHeight: 1.4 }}
+                            className={styles.newSessionItemDescription}
                           >
                             {t.description}
                           </Text>
@@ -279,7 +278,7 @@ export function Sidebar({
         </>
       )}
 
-      <Stack px={3} style={{ paddingTop: 4, paddingBottom: 4 }}>
+      <Stack px={3} className={styles.filterRow}>
         <input
           placeholder="Filter by type or name..."
           value={filter}
@@ -289,7 +288,7 @@ export function Sidebar({
       </Stack>
 
       <ScrollArea className={styles.scrollFlex}>
-        <Stack direction="column" px={2} style={{ paddingBottom: 8 }}>
+        <Stack direction="column" px={2} className={styles.treeRow}>
           {roots.map((root) => (
             <EntityTreeNode
               key={root.url}

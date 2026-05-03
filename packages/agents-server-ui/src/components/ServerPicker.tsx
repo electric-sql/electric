@@ -80,7 +80,7 @@ export function ServerPicker(): React.ReactElement {
       </Menu.Root>
 
       {adding && (
-        <AddServerDialog
+        <AddServerPanel
           onAdd={(name, url) => {
             addServer({ name, url })
             setAdding(false)
@@ -94,7 +94,7 @@ export function ServerPicker(): React.ReactElement {
   )
 }
 
-function AddServerDialog({
+function AddServerPanel({
   onAdd,
   onCancel,
 }: {

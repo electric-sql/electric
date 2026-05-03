@@ -157,7 +157,7 @@ export function StateTable({
 
   if (!selectedType) {
     return (
-      <Stack align="center" justify="center" style={{ flex: 1, minHeight: 0 }}>
+      <Stack align="center" justify="center" className={styles.fillPanel}>
         <Text size={2} tone="muted">
           Select a type to view its state
         </Text>
@@ -168,10 +168,7 @@ export function StateTable({
   const headerGroups = table.getHeaderGroups()
 
   return (
-    <Stack
-      direction="column"
-      style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: `hidden` }}
-    >
+    <Stack direction="column" className={styles.tableRoot}>
       <Stack align="center" gap={2} px={3} py={1} className={styles.header}>
         <Text
           size={1}
@@ -311,7 +308,7 @@ function ForeignKeyCell({
           </Link>
         }
       />
-      <HoverCard.Content side="top" style={{ maxWidth: 360 }}>
+      <HoverCard.Content side="top" className={styles.fkHover}>
         <Stack direction="column" gap={2}>
           <Text size={1} weight="medium">
             {refType}:{key}

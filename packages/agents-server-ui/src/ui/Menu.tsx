@@ -78,20 +78,20 @@ function Content({
 }
 
 const Item = forwardRef<HTMLDivElement, ItemProps>(function Item(
-  { tone = `default`, className, onSelect, ...rest },
+  { tone = `default`, className, onSelect, onClick, ...rest },
   ref
 ) {
   const cls = [styles.item, className].filter(Boolean).join(` `)
   return (
     <BaseMenu.Item
       ref={ref}
+      {...rest}
       className={cls}
       data-tone={tone === `danger` ? `danger` : undefined}
       onClick={(e) => {
-        rest.onClick?.(e)
+        onClick?.(e)
         if (!e.defaultPrevented) onSelect?.(e.nativeEvent)
       }}
-      {...rest}
     />
   )
 })

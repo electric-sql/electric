@@ -50,59 +50,6 @@
   padding-left: 12px;
 }
 
-.toolCard {
-  border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-2);
-  overflow: hidden;
-}
-
-.toolHeader {
-  padding: 6px 10px;
-  background: var(--ds-gray-a2);
-  font-size: var(--ds-text-sm);
-  font-family: var(--ds-font-mono);
-}
-.toolHeaderToggle {
-  all: unset;
-  cursor: pointer;
-  width: 100%;
-}
-.toolToggleArrow {
-  opacity: 0.5;
-}
-.toolName {
-  font-weight: 500;
-}
-.toolSummary {
-  color: var(--ds-text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 36ch;
-}
-.toolStatusBadge {
-  margin-left: auto;
-}
-.toolBody {
-  padding: 8px 12px;
-  border-top: 1px solid var(--ds-gray-a4);
-  background: var(--ds-gray-a1);
-}
-
-.codeBlock {
-  margin: 0;
-  padding: 8px;
-  background: var(--ds-gray-a2);
-  border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-2);
-  font-size: var(--ds-text-xs);
-  font-family: var(--ds-font-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
-  overflow: auto;
-}
-
 .permissionRequest {
   background: var(--ds-amber-a3);
   border: 1px solid var(--ds-amber-a5);

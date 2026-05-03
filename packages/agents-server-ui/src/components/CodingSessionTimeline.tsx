@@ -3,6 +3,7 @@ import { Streamdown } from 'streamdown'
 import { createCodePlugin } from '../lib/codeHighlighter'
 import { Badge, Code, ScrollArea, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
+import toolBlock from './toolBlock.module.css'
 import styles from './CodingSessionTimeline.module.css'
 import type {
   CodingSessionEventRow,
@@ -276,27 +277,26 @@ function ToolBlock({
   const output = getText(result ?? call, `output`)
 
   return (
-    <Stack direction="column" className={styles.toolCard}>
+    <Stack direction="column" className={toolBlock.card}>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className={`${styles.toolHeader} ${styles.toolHeaderToggle}`}
-        style={{ display: `flex`, alignItems: `center`, gap: 8 }}
+        className={`${toolBlock.header} ${toolBlock.headerToggle}`}
       >
-        <span className={styles.toolToggleArrow}>{expanded ? `▼` : `▶`}</span>
-        <span className={styles.toolName}>{tool}</span>
-        {summary && <span className={styles.toolSummary}>{summary}</span>}
-        <Badge tone={tone} variant="soft" className={styles.toolStatusBadge}>
+        <span className={toolBlock.toggleArrow}>{expanded ? `▼` : `▶`}</span>
+        <span className={toolBlock.toolName}>{tool}</span>
+        {summary && <span className={toolBlock.summary}>{summary}</span>}
+        <Badge tone={tone} variant="soft" className={toolBlock.statusBadge}>
           {statusLabel}
         </Badge>
       </button>
       {expanded && (
-        <Stack direction="column" gap={2} className={styles.toolBody}>
+        <Stack direction="column" gap={2} className={toolBlock.body}>
           <Text size={1} tone="muted" weight="medium">
             Input
           </Text>
-          <pre className={styles.codeBlock}>
+          <pre className={toolBlock.codeBlock}>
             {JSON.stringify(input, null, 2)}
           </pre>
           {result && (
@@ -304,7 +304,7 @@ function ToolBlock({
               <Text size={1} tone="muted" weight="medium">
                 Output
               </Text>
-              <pre className={styles.codeBlock}>{output}</pre>
+              <pre className={toolBlock.codeBlock}>{output}</pre>
             </>
           )}
         </Stack>

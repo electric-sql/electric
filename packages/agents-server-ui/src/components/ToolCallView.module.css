@@ -1,67 +1,11 @@
-.codeBlock {
-  margin: 0;
-  padding: 8px;
-  background: var(--ds-gray-a2);
-  border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-2);
-  font-size: var(--ds-text-xs);
-  font-family: var(--ds-font-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
-  overflow: auto;
-}
+/* ToolCallView-specific bits. Common card / header / body / codeBlock
+ * styling lives in ./toolBlock.module.css and is composed alongside. */
 
 .codeBlockRemoved {
   background: var(--ds-red-a2);
 }
 .codeBlockAdded {
   background: var(--ds-green-a2);
-}
-
-.card {
-  border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-2);
-  overflow: hidden;
-}
-
-.header {
-  padding: 6px 10px;
-  background: var(--ds-gray-a2);
-  font-size: var(--ds-text-sm);
-  font-family: var(--ds-font-mono);
-}
-
-.toolName {
-  font-weight: 500;
-}
-
-.headerToggle {
-  all: unset;
-  cursor: pointer;
-  width: 100%;
-}
-
-.toggleArrow {
-  opacity: 0.5;
-}
-
-.summary {
-  color: var(--ds-text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 36ch;
-}
-
-.statusBadge {
-  margin-left: auto;
-}
-
-.body {
-  padding: 8px 12px;
-  border-top: 1px solid var(--ds-gray-a4);
-  background: var(--ds-gray-a1);
 }
 
 .sentMessage {

@@ -366,7 +366,12 @@ export function EntityTimeline({
 
                 return (
                   <div
-                    key={virtualRow.key}
+                    // Force remount when the content column width changes so
+                    // the virtualizer re-observes a fresh node and immediately
+                    // re-measures the row at the new width. Without this the
+                    // cached row heights from the previous width persist and
+                    // rows visually overlap until the next interaction.
+                    key={`${virtualRow.key}:${contentWidth}`}
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
                     data-item-key={row.key}

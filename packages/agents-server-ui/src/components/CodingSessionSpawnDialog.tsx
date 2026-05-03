@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Dialog, Input, Stack, Text } from '../ui'
+import { Button, Dialog, Field, Input, NativeSelect, Stack } from '../ui'
 import styles from './CodingSessionSpawnDialog.module.css'
 
 type AgentType = `claude` | `codex`
@@ -180,40 +180,12 @@ function AgentSelect({
   onChange: (v: AgentType) => void
 }): React.ReactElement {
   return (
-    <select
+    <NativeSelect
       value={value}
       onChange={(e) => onChange(e.target.value as AgentType)}
-      className={styles.nativeSelect}
     >
       <option value="claude">Claude Code</option>
       <option value="codex">Codex</option>
-    </select>
-  )
-}
-
-function Field({
-  label,
-  required,
-  description,
-  children,
-}: {
-  label: string
-  required?: boolean
-  description?: string
-  children: React.ReactNode
-}): React.ReactElement {
-  return (
-    <Stack direction="column" gap={1}>
-      <Text size={2} weight="medium">
-        {label}
-        {required && <span className={styles.requiredMark}>*</span>}
-      </Text>
-      {children}
-      {description && (
-        <Text size={1} tone="muted">
-          {description}
-        </Text>
-      )}
-    </Stack>
+    </NativeSelect>
   )
 }

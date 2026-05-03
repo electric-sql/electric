@@ -106,6 +106,22 @@
   font-family: var(--ds-font-mono);
 }
 
+.fillPanel {
+  flex: 1;
+  min-height: 0;
+}
+
+.tableRoot {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.fkHover {
+  max-width: 360px;
+}
+
 .cellWrap {
   white-space: nowrap;
 }

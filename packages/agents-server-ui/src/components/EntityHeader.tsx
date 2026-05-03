@@ -160,7 +160,7 @@ export function EntityHeader({
           <pre className={styles.inspectPre}>
             {JSON.stringify(entity, null, 2)}
           </pre>
-          <Stack justify="end" style={{ marginTop: 12 }}>
+          <Stack justify="end" className={styles.dialogActions}>
             <Dialog.Close
               render={
                 <Button variant="soft" tone="neutral">
@@ -179,7 +179,7 @@ export function EntityHeader({
             Are you sure you want to kill {instanceName}? The entity will stop
             processing and its stream will become read-only.
           </Text>
-          <Stack justify="end" gap={2} style={{ marginTop: 16 }}>
+          <Stack justify="end" gap={2} className={styles.killActions}>
             <Dialog.Close
               render={
                 <Button variant="soft" tone="neutral">

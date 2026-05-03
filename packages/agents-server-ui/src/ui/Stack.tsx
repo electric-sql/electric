@@ -74,6 +74,7 @@ export const Stack = forwardRef<HTMLElement, StackProps>(function Stack(
     align ? stackStyles[`align-${align}`] : null,
     justify ? stackStyles[`justify-${justify}`] : null,
     wrap ? stackStyles.wrap : null,
+    grow ? stackStyles.grow : null,
     GAP(gap),
     PAD(p, `p`),
     PAD(px, `px`),
@@ -82,6 +83,5 @@ export const Stack = forwardRef<HTMLElement, StackProps>(function Stack(
   ]
     .filter(Boolean)
     .join(` `)
-  const finalStyle = grow ? { flexGrow: 1, ...style } : style
-  return <Component ref={ref} className={cls} style={finalStyle} {...rest} />
+  return <Component ref={ref} className={cls} style={style} {...rest} />
 })

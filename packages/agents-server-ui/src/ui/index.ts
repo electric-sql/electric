@@ -20,16 +20,11 @@ export type {
   TextAlign,
 } from './Text'
 
-export { Heading } from './Heading'
-export type { HeadingSize } from './Heading'
-
 export { Code } from './Code'
 export type { CodeSize, CodeVariant, CodeTone } from './Code'
 
 export { Link } from './Link'
 export type { LinkSize } from './Link'
-
-export { Separator } from './Separator'
 
 export { Badge } from './Badge'
 export type { BadgeSize, BadgeVariant, BadgeTone } from './Badge'
@@ -47,7 +42,6 @@ export { Textarea } from './Textarea'
 export { Field } from './Field'
 
 export { Dialog } from './Dialog'
-export { AlertDialog } from './AlertDialog'
 
 export { Popover } from './Popover'
 export { HoverCard } from './HoverCard'
@@ -56,6 +50,8 @@ export { Menu } from './Menu'
 export { Tooltip, TooltipProvider } from './Tooltip'
 
 export { Select } from './Select'
+
+export { NativeSelect } from './NativeSelect'
 
 export { ScrollArea } from './ScrollArea'
 

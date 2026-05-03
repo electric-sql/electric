@@ -75,3 +75,8 @@
 .gap8 {
   gap: var(--ds-space-8);
 }
+
+/* Flex-grow shorthand */
+.grow {
+  flex-grow: 1;
+}

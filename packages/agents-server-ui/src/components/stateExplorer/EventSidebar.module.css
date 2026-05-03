@@ -23,6 +23,12 @@
   overflow: hidden;
   padding: var(--ds-space-1) var(--ds-space-2);
   box-sizing: border-box;
+  /* Virtualized rows are absolutely positioned; only `transform` is set
+   * inline (it varies per row from the virtualizer). */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 .eventRow[data-selected='true'] {
@@ -68,4 +74,20 @@
   overflow-y: hidden;
   width: 100%;
   font-size: var(--ds-text-xs);
+}
+
+.headerActions {
+  margin-left: auto;
+}
+
+.shrink0 {
+  flex-shrink: 0;
+}
+
+.monoBadge {
+  font-family: var(--ds-font-mono);
+}
+
+.virtualWindow {
+  position: relative;
 }

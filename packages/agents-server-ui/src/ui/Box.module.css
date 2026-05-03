@@ -50,6 +50,15 @@
 .px6 {
   padding-inline: var(--ds-space-6);
 }
+.px7 {
+  padding-inline: var(--ds-space-7);
+}
+.px8 {
+  padding-inline: var(--ds-space-8);
+}
+.px9 {
+  padding-inline: var(--ds-space-9);
+}
 
 .py1 {
   padding-block: var(--ds-space-1);
@@ -68,4 +77,17 @@
 }
 .py6 {
   padding-block: var(--ds-space-6);
+}
+.py7 {
+  padding-block: var(--ds-space-7);
+}
+.py8 {
+  padding-block: var(--ds-space-8);
+}
+.py9 {
+  padding-block: var(--ds-space-9);
+}
+
+.grow {
+  flex-grow: 1;
 }

@@ -21,8 +21,27 @@
   background: var(--ds-accent-a6);
 }
 
-.spawnError {
-  /* container only */
+.newSessionRow {
+  padding-top: 12px;
+  padding-bottom: 4px;
+}
+
+.newSessionPopupHeader {
+  padding-top: 12px;
+  padding-bottom: 8px;
+}
+
+.newSessionItemDescription {
+  line-height: 1.4;
+}
+
+.filterRow {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.treeRow {
+  padding-bottom: 8px;
 }
 
 .newSessionBtn {
