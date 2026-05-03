@@ -1,5 +1,9 @@
 .header {
-  border-bottom: 1px solid var(--gray-a5);
+  border-bottom: 1px solid var(--ds-gray-a5);
+}
+
+.headerLabel {
+  text-transform: uppercase;
 }
 
 .scrollContainer {
@@ -11,14 +15,14 @@
 }
 
 .gridTable {
-  font-size: var(--font-size-1);
+  font-size: var(--ds-text-xs);
 }
 
 .gridHead {
   position: sticky;
   top: 0;
   z-index: 1;
-  background-color: var(--gray-3);
+  background-color: var(--ds-gray-3);
 }
 
 .gridRow {
@@ -27,15 +31,15 @@
 
 .gridTh {
   position: relative;
-  border-right: 1px solid var(--gray-a4);
-  border-bottom: 1px solid var(--gray-a5);
+  border-right: 1px solid var(--ds-gray-a4);
+  border-bottom: 1px solid var(--ds-gray-a5);
   cursor: pointer;
   user-select: none;
   box-sizing: border-box;
 }
 
 .gridTh:hover {
-  background-color: var(--gray-a2);
+  background-color: var(--ds-gray-a2);
 }
 
 .resizer {
@@ -56,12 +60,12 @@
 
   *:hover > .resizer {
     opacity: 1;
-    background: var(--gray-a5);
+    background: var(--ds-gray-a5);
   }
 }
 
 .resizer[data-resizing] {
-  background: var(--accent-9);
+  background: var(--ds-accent-9);
   opacity: 1;
 }
 
@@ -77,32 +81,40 @@
 }
 
 .gridBodyRow:hover {
-  background: var(--gray-a2);
+  background: var(--ds-gray-a2);
 }
 
 .gridCell {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: var(--space-1) var(--space-2);
-  border-right: 1px solid var(--gray-a3);
-  border-bottom: 1px solid var(--gray-a3);
+  padding: var(--ds-space-1) var(--ds-space-2);
+  border-right: 1px solid var(--ds-gray-a3);
+  border-bottom: 1px solid var(--ds-gray-a3);
   display: flex;
   align-items: center;
   box-sizing: border-box;
 }
 
 .highlightedRow {
-  background: var(--accent-a3);
-  box-shadow: inset 2px 0 0 var(--accent-9);
+  background: var(--ds-accent-a3);
+  box-shadow: inset 2px 0 0 var(--ds-accent-9);
   animation: pulse 0.6s ease-out;
+}
+
+.fkLink {
+  font-family: var(--ds-font-mono);
+}
+
+.cellWrap {
+  white-space: nowrap;
 }
 
 @keyframes pulse {
   0% {
-    background: var(--accent-a5);
+    background: var(--ds-accent-a5);
   }
   100% {
-    background: var(--accent-a3);
+    background: var(--ds-accent-a3);
   }
 }

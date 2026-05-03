@@ -1,4 +1,3 @@
-import { Badge, Flex, Select, Text } from '@radix-ui/themes'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MaterializedState,
@@ -6,9 +5,11 @@ import {
   isControlEvent,
 } from '@durable-streams/state'
 import { stream as createStream } from '@durable-streams/client'
+import { Badge, Select, Stack, Text } from '../../ui'
 import { TypeList } from './TypeList'
 import { StateTable } from './StateTable'
 import { EventSidebar } from './EventSidebar'
+import styles from './StateExplorerPanel.module.css'
 import type { ChangeEvent, StateEvent } from '@durable-streams/state'
 
 type StreamLoadState = {
@@ -206,7 +207,7 @@ export function StateExplorerPanel({
     key: string
   } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [splitRatio, setSplitRatio] = useState(0.6) // top gets 60%
+  const [splitRatio, setSplitRatio] = useState(0.6)
 
   const runtimeStreamPath = `${entityUrl}/main`
   const runtimeStream = useStateStream(baseUrl, runtimeStreamPath, liveTail)
@@ -243,19 +244,16 @@ export function StateExplorerPanel({
     }
   }, [selectedSourceKey, sharedSources])
 
-  // Reset time-travel and focus when changing streams.
   useEffect(() => {
     setCursorIndex(null)
     setSelectedType(null)
     setFocusedRow(null)
   }, [selectedSourceKey])
 
-  // Derive materialized state at cursor
   const materializedState = useMemo(() => {
     return materializeEvents(events, cursorIndex)
   }, [events, cursorIndex])
 
-  // Auto-select first type, or reset if selected type disappears during time-travel
   useEffect(() => {
     const types = materializedState.types
     if (types.length === 0) {
@@ -265,7 +263,6 @@ export function StateExplorerPanel({
     }
   }, [materializedState, selectedType])
 
-  // Track the affected entity from the cursor event (type + key)
   const cursorTarget = useMemo(() => {
     if (cursorIndex === null) return null
     const event = events[cursorIndex]
@@ -276,7 +273,6 @@ export function StateExplorerPanel({
     return null
   }, [events, cursorIndex])
 
-  // Highlight from cursor event or from FK navigation
   const highlightKey =
     focusedRow && focusedRow.type === selectedType
       ? focusedRow.key
@@ -284,7 +280,6 @@ export function StateExplorerPanel({
         ? cursorTarget.key
         : null
 
-  // Clear focusedRow when user changes type or cursor
   useEffect(() => {
     setFocusedRow(null)
   }, [cursorIndex, selectedType])
@@ -316,82 +311,78 @@ export function StateExplorerPanel({
 
   if (error) {
     return (
-      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+      <Stack direction="column" className={styles.root}>
         <StateSourceHeader
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
           onSelectSource={setSelectedSourceKey}
         />
-        <Flex align="center" justify="center" py="8">
-          <Text size="1" color="red">
+        <Stack align="center" justify="center" className={styles.empty}>
+          <Text size={1} tone="danger">
             {error}
           </Text>
-        </Flex>
-      </Flex>
+        </Stack>
+      </Stack>
     )
   }
 
   if (runtimeStream.error && selectedSourceKey !== `runtime`) {
     return (
-      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+      <Stack direction="column" className={styles.root}>
         <StateSourceHeader
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
           onSelectSource={setSelectedSourceKey}
         />
-        <Flex align="center" justify="center" py="8">
-          <Text size="1" color="red">
+        <Stack align="center" justify="center" className={styles.empty}>
+          <Text size={1} tone="danger">
             {runtimeStream.error}
           </Text>
-        </Flex>
-      </Flex>
+        </Stack>
+      </Stack>
     )
   }
 
   if (isLoading && events.length === 0) {
     return (
-      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+      <Stack direction="column" className={styles.root}>
         <StateSourceHeader
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
           onSelectSource={setSelectedSourceKey}
         />
-        <Flex justify="center" align="center" py="8">
-          <Text size="1" color="gray">
+        <Stack justify="center" align="center" className={styles.empty}>
+          <Text size={1} tone="muted">
             Loading stream…
           </Text>
-        </Flex>
-      </Flex>
+        </Stack>
+      </Stack>
     )
   }
 
   if (events.length === 0) {
     return (
-      <Flex direction="column" style={{ flex: 1, minHeight: 0 }}>
+      <Stack direction="column" className={styles.root}>
         <StateSourceHeader
           selectedSourceKey={selectedSourceKey}
           sourceOptionsCount={sourceOptionsCount}
           sharedSources={sharedSources}
           onSelectSource={setSelectedSourceKey}
         />
-        <Flex align="center" justify="center" py="8">
-          <Text size="1" color="gray">
+        <Stack align="center" justify="center" className={styles.empty}>
+          <Text size={1} tone="muted">
             No state events in this stream yet
           </Text>
-        </Flex>
-      </Flex>
+        </Stack>
+      </Stack>
     )
   }
 
   return (
-    <Flex
-      ref={containerRef}
-      direction="column"
-      style={{ flex: 1, minHeight: 0, overflow: `hidden` }}
-    >
+    <Stack ref={containerRef} direction="column" className={styles.root}>
       <StateSourceHeader
         selectedSourceKey={selectedSourceKey}
         sourceOptionsCount={sourceOptionsCount}
@@ -399,14 +390,7 @@ export function StateExplorerPanel({
         onSelectSource={setSelectedSourceKey}
       />
 
-      {/* TypeList + StateTable */}
-      <Flex
-        style={{
-          flex: `${splitRatio} 1 0%`,
-          minHeight: 0,
-          overflow: `hidden`,
-        }}
-      >
+      <Stack className={styles.row} style={{ flex: `${splitRatio} 1 0%` }}>
         <TypeList
           state={materializedState}
           selectedType={selectedType}
@@ -418,16 +402,10 @@ export function StateExplorerPanel({
           onNavigateToRow={handleNavigateToRow}
           highlightKey={highlightKey}
         />
-      </Flex>
+      </Stack>
 
-      {/* Draggable separator */}
       <div
-        style={{
-          height: 4,
-          cursor: `row-resize`,
-          flexShrink: 0,
-          background: `var(--gray-a5)`,
-        }}
+        className={styles.splitter}
         onMouseDown={(e) => {
           e.preventDefault()
           const container = containerRef.current
@@ -456,7 +434,6 @@ export function StateExplorerPanel({
         }}
       />
 
-      {/* Events section */}
       <EventSidebar
         events={events}
         cursorIndex={cursorIndex}
@@ -465,7 +442,7 @@ export function StateExplorerPanel({
         onGoLive={handleGoLive}
         style={{ flex: `${1 - splitRatio} 1 0%`, minHeight: 0 }}
       />
-    </Flex>
+    </Stack>
   )
 }
 
@@ -480,30 +457,24 @@ function StateSourceHeader({
   sharedSources: Array<SharedStateSource>
   onSelectSource: (key: string) => void
 }) {
+  const selectedSource = sharedSources.find(
+    (source) => source.key === selectedSourceKey
+  )
   return (
-    <Flex
-      align="center"
-      gap="2"
-      px="3"
-      py="2"
-      style={{ borderBottom: `1px solid var(--gray-a5)`, flexShrink: 0 }}
-    >
+    <Stack align="center" gap={2} px={3} py={2} className={styles.header}>
       <Text
-        size="1"
-        color="gray"
+        size={1}
+        tone="muted"
         weight="medium"
-        style={{ textTransform: `uppercase` }}
+        className={styles.headerLabel}
       >
         StreamDB
       </Text>
-      <Badge size="1" variant="soft" color="gray">
+      <Badge size={1} variant="soft" tone="neutral">
         {sourceOptionsCount}
       </Badge>
       <Select.Root value={selectedSourceKey} onValueChange={onSelectSource}>
-        <Select.Trigger
-          variant="surface"
-          style={{ minWidth: 190, maxWidth: `100%` }}
-        />
+        <Select.Trigger className={styles.trigger} />
         <Select.Content>
           <Select.Item value="runtime">Runtime state</Select.Item>
           {sharedSources.map((source) => (
@@ -513,17 +484,11 @@ function StateSourceHeader({
           ))}
         </Select.Content>
       </Select.Root>
-      {selectedSourceKey !== `runtime` && (
-        <Text size="1" color="gray" truncate>
-          {sharedSources.find((source) => source.key === selectedSourceKey)
-            ? Object.keys(
-                sharedSources.find(
-                  (source) => source.key === selectedSourceKey
-                )!.collections
-              ).join(`, `)
-            : null}
+      {selectedSourceKey !== `runtime` && selectedSource && (
+        <Text size={1} tone="muted" truncate>
+          {Object.keys(selectedSource.collections).join(`, `)}
         </Text>
       )}
-    </Flex>
+    </Stack>
   )
 }
