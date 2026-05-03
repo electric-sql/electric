@@ -2916,3 +2916,88 @@ Real-API conformance run shows L2.7 (convert mid-conversation) PASS, proving the
 ### Cleanup script runtime
 
 Plan's `tsx scripts/cleanup-sprites.ts` was changed to `node --experimental-strip-types --no-warnings scripts/cleanup-sprites.ts` because `tsx` is not a direct dependency of `@electric-ax/coding-agents`. Node 24 strips TS types natively; the import uses an explicit `.ts` suffix to satisfy strict ESM resolution.
+
+---
+
+## Implementation findings — round 2 (2026-05-03)
+
+After the initial slice landed, end-to-end smoke (UI Playwright drive against a live `SPRITES_TOKEN`) hit a stack of bugs that all unit/conformance tests had missed. Capturing here so future slices treat them as load-bearing decisions; this section supersedes round-1 wherever they conflict.
+
+### Round-2 A: Bootstrap-wiring miss in `packages/agents/src/bootstrap.ts`
+
+`RegisterCodingAgentDeps.providers` only allowed `{ sandbox, host }`; the runtime LifecycleManager accepted optional `sprites` but TypeScript would have rejected any caller trying to pass it. The dev-server's bootstrap.ts wasn't even attempting to wire it. Symptom: PUT spawn target=sprites returned 201, then prompt failed with `No provider configured for target='sprites'. Set SPRITES_TOKEN to enable.`
+
+Fixes (commit `105cfe90d`):
+
+- Widened `RegisterCodingAgentDeps.providers` to accept optional `sprites`.
+- `packages/agents/src/bootstrap.ts` calls `createSpritesProviderIfConfigured()` and includes the result in the providers map when it exists. Logs `[coding-agent] FlySpriteProvider registered (SPRITES_TOKEN found)` so the wire is observable on boot.
+
+Lesson: when widening a type slot through multiple layers, widen at the OUTER public interface (where callers actually live), not just the inner ring. Conformance fixtures bypass `bootstrap.ts` so this class of bug is invisible to them. Added a Layer-4 wiring smoke test (`packages/coding-agents/test/integration/sprites-wiring.e2e.test.ts`) that PUTs against the live dev server and asserts on `lastError` for the two known regression strings (`'No provider configured for target=sprites'` and `'invalid sprite name format'`). Runs in ~2.5 s; gated `SPRITES=1 + SPRITES_TOKEN`.
+
+### Round-2 B: Sprite name format (`[a-z0-9-]+`)
+
+Live API rejected `coding-agent-<mixed-case-nanoid>` with HTTP 400 `invalid sprite name format`. Fixed `spriteName()` to lowercase + replace any non-allowed char with `-`, collapse repeats. Acceptable lossy mapping; collision risk vanishing for 10-char nanoids. Unit tests in `test/unit/fly-sprites.test.ts` cover mixed case, dots, underscores.
+
+### Round-2 C: Wrong exec endpoint URL — supersedes round-1 finding 3
+
+Round-1 said the exec WebSocket lives on the per-sprite URL. **It does not.** The per-sprite URL `https://<name>-bgy45.sprites.app` routes to **user services running INSIDE the sprite** (HTTP servers on :8080+ exposed via the Services API). The exec endpoint is on `api.sprites.dev`:
+
+```
+WSS  /v1/sprites/{name}/exec?cmd=...&cmd=...&stdin=...&cwd=...&env=K=V
+POST /v1/sprites/{name}/exec?cmd=...                                     # stdin in body
+```
+
+Cmd is in the URL query string (repeated `cmd=...` per argv element). There is no `start` JSON frame. Auth via `Authorization: Bearer` header. Discovered by reading `https://docs.sprites.dev/api/v001-rc30/exec/`.
+
+### Round-2 D: Output stream multiplexing — supersedes round-1 finding 3
+
+WebSocket _and_ HTTP POST exec output are multiplexed by a one-byte stream-id prefix on each binary frame:
+
+| Prefix | Stream                         |
+| ------ | ------------------------------ |
+| `0x01` | stdout                         |
+| `0x02` | stderr                         |
+| `0x03` | control: next byte = exit code |
+
+Without demux, claude's stream-json output got mixed with stderr and the bridge couldn't parse a response (run completed with empty `responseText`). Fixed in `exec-adapter.ts` (WS) and `index.ts:execWithStdinViaPost` (POST). JSON text frames are still emitted alongside: `{type:'debug',msg}` is informational lifecycle, `{type:'exit',exit_code}` carries the same code as the binary control frame (whichever arrives first wins).
+
+### Round-2 E: Stdin protocol unstable rc30 → rc43
+
+The server is on `sprite-version: 0.0.1-rc43` (the docs are for rc30). The WebSocket stdin protocol changed in undocumented ways. The CLI's `--http-post` mode was the workaround hint: HTTP POST `/v1/sprites/{name}/exec?...&stdin=true` accepts the stdin payload in the request body. Adopted that for the bridge's stdin-bearing exec (claude/codex/opencode prompt delivery). POST doesn't deliver an exit frame, so we wrap the user argv to emit a sentinel `__SPRITES_EXIT_CODE__:N` line that the adapter parses out of stdout.
+
+### Round-2 F: Bootstrap script over-installed — TL-S2 mitigated
+
+Original script tried to install all three CLIs every cold-boot. Sprites' default Ubuntu 25.10 image **preinstalls Claude CLI, OpenAI Codex, Gemini CLI, and node/npm** (per https://docs.sprites.dev/working-with-sprites). Only `opencode-ai` actually needs install. Plus `npm install -g` defaults to the nvm prefix (`/.sprite/languages/node/nvm/.../bin`) which is **not on PATH** — added `--prefix=/usr/local`. Cold-boot install dropped from 30+ s to ~10 s. TL-S2's first-boot bootstrap latency is now bounded by a single npm install, not three.
+
+### Round-2 G: Env file sourced but not exported
+
+`/run/agent.env` was being sourced via `. file`, which sets shell variables but does **not export** them. Child processes (claude) didn't see them; `apiKeySource: "none"` reported. Fix: `set -a; . /run/agent.env; set +a` in the agent-env shell wrapper (`wrapWithAgentEnv` in `index.ts`). Also: every `exec` is now wrapped so the env is sourced on every call (sprites have no container-level env knob in the public API; staging in `/run/agent.env` and sourcing is the closest analog).
+
+### Round-2 H: ANTHROPIC_API_KEY is often an OAuth subscription token
+
+`sk-ant-oat...` is Claude Code's OAuth subscription token, recognised via `CLAUDE_CODE_OAUTH_TOKEN`, not as `ANTHROPIC_API_KEY`. The dev's `.env` value is typically the OAuth shape. The default env() callback in `register.ts` now mirrors `ANTHROPIC_API_KEY → CLAUDE_CODE_OAUTH_TOKEN` when the value matches `sk-ant-oat`. Without this, claude reports `Not logged in · Please run /login` on sprites. Local-docker happens to read OAuth tokens through a different path so the symptom only shows up on sprites.
+
+### Round-2 I: Cleanup script missed UI-spawned prefix (F-1 in bug-hunt report)
+
+`cleanup-sprites.ts` listed sprites by prefix; PREFIXES included `conf-sprite-` and `e2e-sprites-` but missed `coding-agent-` (the production prefix). Any leak from the UI was invisible to operators. Added `coding-agent-` to PREFIXES.
+
+### Round-2 J: Operator volume cleanup (F-3 in bug-hunt report)
+
+`LocalDockerProvider.destroy()` keeps the workspace volume (resume safety). After terminal DELETE the volume orphans indefinitely. Added `pnpm cleanup:volumes` script (mirrors cleanup:sprites pattern). Default skips still-mounted volumes; `--delete` and `--in-use` flags. README updated.
+
+### Round-2 K: dev.mjs lost streams across host restart (F-4 in bug-hunt report)
+
+`DurableStreamTestServer` (the embedded streams server in dev) keeps its registry in memory. `dev.mjs up`-after-`dev.mjs down` lost every stream and existing entities looking up `/coding-agent/<name>/main` got HTTP 404 `Stream not found`. `dev.mjs` now sets `ELECTRIC_AGENTS_STREAMS_DATA_DIR=.local/dev-streams`; `clear-state` wipes the directory alongside compose volumes. Verified end-to-end: spawn → first turn → bounce host services → 2nd prompt completes without 404.
+
+### Round-2 L: UI buttons noop on destroyed entities (F-2 in bug-hunt report)
+
+`Pin / Release / Stop / Convert-target / Convert-kind` stayed enabled after status flipped to `destroyed`. `EntityHeader.tsx` now derives `isDestroyed` once and disables those triggers; tooltip swaps to "Agent is destroyed". Playwright spec in `spawn-via-dialog.spec.ts → destroyed-entity buttons gate (O-2 fix)`.
+
+### Coverage gap
+
+`fly-sprites-conformance.test.ts` predates the round-2 fixes. Re-running it under the new code is queued but blocked by vitest's verbose-reporter buffering — the run produces no output for 30+ minutes, indistinguishable from a hung test. Needs a streaming-reporter run or per-scenario splits before the suite can be trusted as a regression gate. The Layer-4 wiring smoke test catches the most regression-prone class (provider not wired, name format invalid) in 2.5 s and runs against the same dev server, so day-to-day signal is OK.
+
+### See also
+
+- Bug-hunt round companion: `docs/superpowers/specs/2026-05-03-bug-hunt-report.md` covers the broader UI walkthrough that surfaced O-1 / O-2 / O-3 outside the sprites code path.
+- Commits: `105cfe90d` (wiring + name format + bootstrap parity); `cca573eed` (exec URL + demux + env-export + oat-mirror + stdin-via-POST); `63441786c` (bug-hunt Playwright spec); `a8e3634a7` (cleanup:volumes + destroyed-button gate); `cfa927eb9` (dev.mjs streams data dir).

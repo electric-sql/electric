@@ -38,38 +38,48 @@
 
 ## Open / cannot fix
 
-### O-3: Existing entity streams 404 after host service restart (no clear-state)
-
-- **Repro**: spawn agent → reach idle → kill `dev.mjs up` and re-run `dev.mjs up` (postgres + electric stay up; only agents-server + handler bounce). Send prompt to existing entity → POST /send returns 500. Server logs `HTTP Error 404 at .../coding-agent/<name>/main: Stream not found`.
-- **Expected**: agents-server should re-attach existing entities' streams on boot, since the entity row in postgres is intact.
-- **Why deferred**: cuts across the agents-server entity-recovery path; not in this slice.
-- **Workaround**: full `dev.mjs clear-state && up` — but that wipes everything. For dev iteration the symptom is "my agent is broken after I restarted the script."
-
-### O-2: Pin/Release/Stop/Convert buttons stay enabled on destroyed entity
-
-- **Repro**: kill an agent → status flips to `destroyed` → header still shows Pin / Release / Stop / Convert target / Convert kind buttons, all enabled.
-- **Expected**: these are no-ops on a destroyed sandbox; should be disabled (or hidden), like Fork already is.
-- **Why deferred**: cosmetic + visible-but-noop is confusing rather than broken; one-line gate per button. Will fix later in this hunt if time.
-
-### O-1: Volume leak on Kill+DELETE entity (UI flow)
+### O-1 (mitigated, not closed): Volume leak on Kill+DELETE entity (UI flow)
 
 - **Repro**: spawn target=sandbox volume → first turn → click Kill in UI → DELETE entity. The container is removed but `coding-agent-workspace-<id>` volume persists.
 - **Root cause**: `LocalDockerProvider.destroy()` intentionally skips volume removal (`local-docker.ts:130` — "Volume cleanup is intentionally NOT done in MVP — tests clean up explicitly"). For the resume-after-idle path this is correct (volume is the persistent workspace). But for the _terminal_ DELETE path the volume is orphaned indefinitely.
-- **Why I didn't fix here**: cross-cuts the workspace-lease design — DELETE entity doesn't currently signal "this is terminal vs. ephemeral". Slice-B/C territory.
-- **Mitigation**: workaround for operators is `docker volume ls --filter name=coding-agent-` then `docker volume rm`. A `pnpm cleanup:volumes` script would parallel `cleanup:sprites`; recommend adding before mainline.
+- **Mitigation shipped (F-3)**: `pnpm -C packages/coding-agents cleanup:volumes` lists/deletes leaked workspace volumes. The design-level fix (DELETE entity signaling "terminal" → automatic volume reclaim) is still slice-B/C territory.
+
+### Coverage gap: sprites conformance not re-run under round-2 fixes
+
+- The original `fly-sprites-conformance.test.ts` predates the exec-URL / demux / env-export / oat-mirror fixes. Re-running it is queued, but vitest's verbose reporter buffers all output for 30+ minutes — indistinguishable from a hung suite.
+- **Why deferred**: needs a streaming reporter or per-scenario splits; doing that work mid-bug-hunt would break flow.
+- **Day-to-day signal**: `sprites-wiring.e2e.test.ts` runs in 2.5s and catches the regression-prone classes (provider-not-wired, invalid sprite name, schema not registered). The full conformance is the deeper net but not required to ship.
+
+## Closed (originally open)
+
+### O-2 (closed by F-2): Pin/Release/Stop/Convert disabled on destroyed entity
+
+Was: header showed Pin / Release / Stop / Convert target / Convert kind buttons enabled even after status flipped to `destroyed`.
+Fix in `EntityHeader.tsx` + Playwright test in `spawn-via-dialog.spec.ts → destroyed-entity buttons gate (O-2 fix)`.
+
+### O-3 (closed by F-4): Entity streams persist across host restart
+
+Was: bouncing `dev.mjs up` lost in-memory durable-streams registry; existing entities 404'd on `/coding-agent/<name>/main`.
+Fix: `dev.mjs` sets `ELECTRIC_AGENTS_STREAMS_DATA_DIR=.local/dev-streams`; `clear-state` wipes it. Verified end-to-end (spawn → bounce → 2nd prompt completes).
 
 ## Summary
 
-10 iterations driven via Playwright MCP against the live dev stack on http://localhost:4437. Three categories of finding:
+10 iterations driven via Playwright MCP against the live dev stack on http://localhost:4437.
 
-- **Fixed**: 1 (cleanup-sprites missed `coding-agent-` prefix; one-line fix).
-- **Open**: 3 (volume leak on Kill+DELETE for sandbox+volume; Pin/Release/Stop/Convert buttons stay enabled on destroyed entities; entity streams 404 after host service restart without clear-state).
-- **Passing**: every iteration's happy path completed end-to-end. 4 kinds × targets × workspaces work; convert-kind transcript carries forward; same-kind and cross-kind forks recall parent secrets; pin/release/stop/kill lifecycle correct; horton + worker stream correctly.
+**Findings:**
 
-The `coding-agents-slice-a` branch already has the prior sprites e2e fixes (commit `cca573eed` and earlier). This hunt's commit adds:
+- **Fixed**: 4 (F-1 cleanup-sprites prefix, F-2 destroyed-entity button gate, F-3 cleanup:volumes script, F-4 dev.mjs streams data-dir).
+- **Mitigated, design-level deferred**: 1 (O-1 volume leak on Kill+DELETE — operator can run `cleanup:volumes`; the lease/lifecycle redesign that closes it is slice-B/C territory).
+- **Coverage gap**: 1 (full sprites conformance not re-run under round-2 fixes; vitest reporter buffering issue. `sprites-wiring.e2e.test.ts` covers the regression-prone classes in 2.5 s as a smoke gate.)
+- **Passing**: every iteration's happy path completed end-to-end. claude/codex/opencode × sandbox/host × volume/bindMount; convert-kind transcript carries forward; same-kind and cross-kind forks recall parent secrets; pin/release/stop/kill lifecycle correct; horton + worker stream correctly.
 
-- `packages/coding-agents/scripts/cleanup-sprites.ts`: `coding-agent-` prefix added to PREFIXES.
-- `packages/agents-server-ui/test/e2e/spawn-via-dialog.spec.ts`: 5 Playwright cases capturing the spawn-dialog combos and the convert-target server gate.
+**Commits on `coding-agents-slice-a` from this hunt:**
+
+| Commit      | What                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `63441786c` | `cleanup:sprites` prefix gap (F-1) + `spawn-via-dialog.spec.ts` (5 Playwright cases)  |
+| `a8e3634a7` | `cleanup:volumes` script (F-3) + destroyed-entity button gate (F-2) + Playwright case |
+| `cfa927eb9` | `dev.mjs` persists `ELECTRIC_AGENTS_STREAMS_DATA_DIR=.local/dev-streams` (F-4)        |
 
 ## Iteration log
 

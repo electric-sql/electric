@@ -151,7 +151,7 @@ From the UI: New session → coding-agent → pick **Sprites** target. Workspace
 ### Tracked limitations
 
 - **TL-S1**: Sprites API is `v0.0.1-rc30` (pre-1.0); expect churn.
-- **TL-S2**: No custom OCI image input. First sprite cold-boot per agent includes ~10–30s for `opencode-ai` install (idempotent — bootstrap is keyed off `/opt/electric-ax/.bootstrapped`). Some bootstrap scenarios currently fail with `exit -1` on the live API; root-cause likely a DNS allowlist policy. See the design's open follow-ups.
+- **TL-S2**: No custom OCI image input. First sprite cold-boot per agent includes ~10s for `opencode-ai` install (idempotent — bootstrap is keyed off `/opt/electric-ax/.bootstrapped`). The default Ubuntu image preinstalls Claude CLI / OpenAI Codex / Gemini CLI / node / npm so we only install opencode. See [implementation findings round 2](../../docs/superpowers/plans/2026-05-02-coding-agents-fly-sprites.md#implementation-findings--round-2-2026-05-03) for bootstrap-script + exec-protocol details.
 - **TL-S3**: No `cloneWorkspace`. Workspace files don't transfer on fork within sprites; conversation history does.
 - **TL-S4**: No cross-provider migration (by design — see above).
 - **TL-S5**: DNS allowlist policy may need updates for additional egress endpoints.

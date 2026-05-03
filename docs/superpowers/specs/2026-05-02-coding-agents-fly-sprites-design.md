@@ -1,9 +1,11 @@
 # Coding-agents — Fly Sprites (second sandbox provider)
 
 **Date:** 2026-05-02
-**Status:** Draft (pending implementation)
+**Status:** Implemented + post-merge fixups (round 2: 2026-05-03).
 **Predecessors:** Slice A, B, C₁, C₂ (codex parity), Conformance suite, Cross-kind resume + fork, Opencode (third agent kind).
 **Branch:** `coding-agents-slice-a` (continued).
+
+> ⚠️ **Read this before acting on any §1–§5 detail.** The original design was written against a doc-only recon of Sprites API `v0.0.1-rc30`. End-to-end smoke against the live server (currently `0.0.1-rc43`) revealed the spec was wrong on three load-bearing points: the exec endpoint URL, the output-frame format, and the stdin protocol. The code was corrected; the section text below is preserved for historical context but the **plan's "Implementation findings — round 2"** in `docs/superpowers/plans/2026-05-02-coding-agents-fly-sprites.md` is the authoritative description of how exec and bootstrap actually work. Notable corrections summarised in §1 below.
 
 ---
 
@@ -109,6 +111,17 @@ export class FlySpriteProvider implements SandboxProvider {
 **Exec WebSocket** uses Node 22's global `WebSocket` — no extra dep. The async-iterable stdout/stderr adapter is ~50 LOC, mirrors `LocalDockerProvider`'s docker-exec stdio drain pattern.
 
 **SandboxInstance.homeDir** is `/root` (sprites run as root by default). `workspaceMount` is `/work`, ensured by bootstrap.
+
+> **§1 Round-2 corrections (live API).** As implemented:
+>
+> - The exec endpoint is `wss://api.sprites.dev/v1/sprites/{name}/exec?cmd=...&cmd=...` — **not** the per-sprite URL (the per-sprite URL routes to user-services running INSIDE the sprite, e.g. on :8080). Cmd is in the URL query; there's no `start` JSON frame.
+> - For stdin-bearing exec (the bridge's prompt delivery), the WS protocol changed between rc30 and rc43; we use the HTTP POST exec instead (`POST /v1/sprites/{name}/exec?...&stdin=true` with stdin in the request body).
+> - Output frames carry a 1-byte stream-id prefix: `0x01` stdout, `0x02` stderr, `0x03 <byte>` exit. Both WS and POST adapters de-multiplex.
+> - Path lookups use sprite **name**, not id (the docs are clear; the original recon was wrong).
+> - Sprites run as the **`sprite` user** (uid 1001) with home `/home/sprite`, not root. Bootstrap creates `/work` and `/run/agent.env` (mode 600, owner sprite).
+> - Volumes can't be created without a Service running on the per-sprite URL — sprites are warm/running but unreachable until an exec opens a session.
+>
+> See plan's "Implementation findings — round 2" for the bug-by-bug record.
 
 ---
 
@@ -313,8 +326,8 @@ This automatically runs **all 8 L1 scenarios + all 8 L2 scenarios for all 3 kind
 
 ## §8. Risks & tracked limitations
 
-- **TL-S1: Sprites API is v0.0.1-rc30.** Pre-1.0; expect breaking changes. Pin to a known-good API version once published; integration tests catch drift. Mitigation: re-run conformance on each Sprites version bump.
-- **TL-S2: No custom OCI image input.** Bootstrap latency on first sprite per agent (~10–30s for `opencode-ai`). Subsequent prompts hit the auto-sleep wake (~300ms). v1.5 can move to template-checkpoint to eliminate this.
+- **TL-S1: Sprites API is pre-1.0.** Spec was authored against `v0.0.1-rc30`; **the production server is currently on `0.0.1-rc43`** and the protocol has already shifted (see implementation findings round 2). Pin to a known-good API version once published; integration tests catch drift. Mitigation: re-run conformance on each Sprites version bump.
+- **TL-S2: No custom OCI image input — but the default image is rich.** Sprites' default Ubuntu 25.10 image preinstalls Claude CLI, OpenAI Codex, Gemini CLI, plus node / python / go / bun / deno (per https://docs.sprites.dev/working-with-sprites). Only `opencode-ai` is missing, and the bootstrap script installs it with `--prefix=/usr/local` so the binary lands in PATH. Cold-boot install is ~10 s, not the 30 s estimate from the original recon. Subsequent prompts hit the auto-sleep wake (~300 ms).
 - **TL-S3: No `cloneWorkspace`.** Workspace files don't transfer on fork within sprites. Fork inherits conversation only. v1.5 enables via cross-sprite checkpoint restore.
 - **TL-S4: No cross-provider migration.** Local-docker agents can't move to sprites or vice versa. By design (the "no handover with local" constraint). Permanent UX limitation, not a defect.
 - **TL-S5: DNS allowlist policy.** Sprites' egress is gated by a `Policy` endpoint. Tests that spawn agents which call out beyond the configured Anthropic/OpenAI endpoints may need policy updates. Document for operators.
