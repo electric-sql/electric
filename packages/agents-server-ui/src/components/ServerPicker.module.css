@@ -1,22 +1,66 @@
-.bar {
-  border-bottom: 1px solid var(--ds-gray-a5);
-  position: relative;
-}
-
-.trigger {
-  flex: 1;
-  justify-content: flex-start;
-  display: inline-flex;
+.tile {
+  all: unset;
+  display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.triggerLabel {
   flex: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
   min-width: 0;
+  height: var(--ds-row-height-md);
+  padding: 0 8px;
+  border-radius: var(--ds-radius-2);
+  cursor: pointer;
+  color: var(--ds-text-1);
+  transition: background 0.08s ease;
+}
+.tile:hover {
+  background: var(--ds-gray-a3);
+}
+
+.tileLabel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ds-text-sm);
+  font-weight: 500;
+}
+
+.tileName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.dot[data-state='ok'] {
+  background: var(--ds-green-9);
+}
+.dot[data-state='down'] {
+  background: var(--ds-red-9);
+}
+.dot[data-state='unset'] {
+  background: var(--ds-gray-8);
+}
+
+.menuRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.menuRowName {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .removeBtn {
@@ -24,12 +68,17 @@
 }
 
 .addPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
   position: absolute;
-  top: 48px;
-  left: 0;
-  right: 0;
-  z-index: var(--ds-z-dropdown);
-  background: var(--ds-bg);
-  border-bottom: 1px solid var(--ds-gray-a5);
+  bottom: calc(var(--ds-row-height-md) + 16px);
+  left: 8px;
+  right: 8px;
+  z-index: var(--ds-z-popover);
+  padding: 12px;
+  background: var(--ds-surface-raised);
+  border: 1px solid var(--ds-border-2);
+  border-radius: var(--ds-radius-3);
   box-shadow: var(--ds-shadow-3);
 }

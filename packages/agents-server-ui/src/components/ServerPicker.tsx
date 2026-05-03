@@ -1,9 +1,19 @@
 import { useState } from 'react'
-import { ChevronDown, Circle, Plus, Trash2 } from 'lucide-react'
+import { ChevronsUpDown, Plus, Trash2 } from 'lucide-react'
 import { useServerConnection } from '../hooks/useServerConnection'
 import { Button, IconButton, Input, Menu, Stack, Text } from '../ui'
 import styles from './ServerPicker.module.css'
 
+type ServerStatus = `ok` | `down` | `unset`
+
+/**
+ * Footer-anchored server picker tile (Cursor-style "user" slot).
+ *
+ * Renders a single-line tile showing `[● status] [server name] [chevron]`
+ * that opens a menu listing the saved servers + an "Add server" entry.
+ * The "Add server" inline panel pops above the tile so it doesn't push
+ * the rest of the footer around.
+ */
 export function ServerPicker(): React.ReactElement {
   const {
     servers,
@@ -15,62 +25,63 @@ export function ServerPicker(): React.ReactElement {
   } = useServerConnection()
   const [adding, setAdding] = useState(false)
 
-  let dotColor = `var(--ds-gray-8)`
-  if (activeServer && connected) dotColor = `#22c55e`
-  else if (activeServer) dotColor = `#ef4444`
+  const status: ServerStatus = !activeServer
+    ? `unset`
+    : connected
+      ? `ok`
+      : `down`
 
   return (
-    <Stack p={3} align="center" gap={2} className={styles.bar}>
+    <>
       <Menu.Root>
         <Menu.Trigger
           render={
-            <Button
-              variant="ghost"
-              tone="neutral"
-              size={2}
-              className={styles.trigger}
+            <button
+              type="button"
+              className={styles.tile}
+              aria-label="Switch server"
             >
-              <span className={styles.triggerLabel}>
-                <Circle size={8} fill={dotColor} stroke="none" />
-                <Text size={2} weight="bold" truncate>
+              <span className={styles.tileLabel}>
+                <span className={styles.dot} data-state={status} />
+                <span className={styles.tileName}>
                   {activeServer?.name ?? `No server`}
-                </Text>
+                </span>
               </span>
-              <ChevronDown size={14} />
-            </Button>
+              <ChevronsUpDown size={12} />
+            </button>
           }
         />
-        <Menu.Content side="bottom" align="start">
-          {servers.map((server, i) => (
-            <Menu.Item
-              key={`${server.url}-${i}`}
-              onSelect={() => setActiveServer(server)}
-            >
-              <Circle
-                size={8}
-                fill={
-                  server.url === activeServer?.url
-                    ? dotColor
-                    : `var(--ds-gray-8)`
-                }
-                stroke="none"
-              />
-              <Text size={2}>{server.name}</Text>
-              <IconButton
-                size={1}
-                variant="ghost"
-                tone="danger"
-                className={styles.removeBtn}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  removeServer(server.url)
-                }}
-                aria-label={`Remove ${server.name}`}
+        <Menu.Content side="top" align="start">
+          {servers.map((server, i) => {
+            const itemStatus: ServerStatus =
+              server.url === activeServer?.url ? status : `unset`
+            return (
+              <Menu.Item
+                key={`${server.url}-${i}`}
+                onSelect={() => setActiveServer(server)}
               >
-                <Trash2 size={12} />
-              </IconButton>
-            </Menu.Item>
-          ))}
+                <span className={styles.menuRow}>
+                  <span className={styles.dot} data-state={itemStatus} />
+                  <Text size={2} className={styles.menuRowName}>
+                    {server.name}
+                  </Text>
+                  <IconButton
+                    size={1}
+                    variant="ghost"
+                    tone="danger"
+                    className={styles.removeBtn}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeServer(server.url)
+                    }}
+                    aria-label={`Remove ${server.name}`}
+                  >
+                    <Trash2 size={12} />
+                  </IconButton>
+                </span>
+              </Menu.Item>
+            )
+          })}
           {servers.length > 0 && <Menu.Separator />}
           <Menu.Item onSelect={() => setAdding(true)}>
             <Plus size={14} />
@@ -90,7 +101,7 @@ export function ServerPicker(): React.ReactElement {
           }}
         />
       )}
-    </Stack>
+    </>
   )
 }
 
@@ -103,9 +114,8 @@ function AddServerPanel({
 }): React.ReactElement {
   const [name, setName] = useState(``)
   const [url, setUrl] = useState(``)
-
   return (
-    <Stack direction="column" gap={2} p={3} className={styles.addPanel}>
+    <div className={styles.addPanel}>
       <Input
         placeholder="Name (e.g. Local Dev)"
         value={name}
@@ -126,6 +136,6 @@ function AddServerPanel({
           Cancel
         </Button>
       </Stack>
-    </Stack>
+    </div>
   )
 }

@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Monitor, Moon, Sun } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { nanoid } from 'nanoid'
 import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { IconButton, Popover, ScrollArea, Stack, Text } from '../ui'
-import { ServerPicker } from './ServerPicker'
+import { Popover, ScrollArea, Stack, Text } from '../ui'
 import { SidebarRow } from './SidebarRow'
 import { SidebarTree } from './SidebarTree'
+import { SidebarFooter } from './SidebarFooter'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
 import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
-import { useDarkModeContext, type ThemePreference } from '../hooks/useDarkMode'
 import { useExpandedTreeNodes } from '../hooks/useExpandedTreeNodes'
 import { bucketEntities } from '../lib/sessionGroups'
 import styles from './Sidebar.module.css'
@@ -58,7 +57,6 @@ export function Sidebar({
 }): React.ReactElement {
   const { entitiesCollection, entityTypesCollection, spawnEntity } =
     useElectricAgents()
-  const { preference, cyclePreference } = useDarkModeContext()
   const expanded = useExpandedTreeNodes()
   const [filter, setFilter] = useState(``)
   const [spawnError, setSpawnError] = useState<string | null>(null)
@@ -188,8 +186,6 @@ export function Sidebar({
           resizing || resizeHandleHover ? styles.resizeHandleActive : ``
         }`}
       />
-      <ServerPicker />
-
       {spawnError && (
         <Stack px={3} py={3}>
           <Text size={1} tone="danger" role="alert">
@@ -341,23 +337,7 @@ export function Sidebar({
         </Stack>
       </ScrollArea>
 
-      <Stack
-        align="center"
-        justify="end"
-        px={3}
-        py={2}
-        className={styles.footer}
-      >
-        <IconButton
-          variant="ghost"
-          tone="neutral"
-          size={2}
-          onClick={cyclePreference}
-          aria-label={themeButtonAriaLabel(preference)}
-        >
-          {themeButtonIcon(preference)}
-        </IconButton>
-      </Stack>
+      <SidebarFooter />
 
       {spawnDialogType && (
         <SpawnArgsDialog
@@ -446,16 +426,4 @@ function SectionLabel({
       {children}
     </Text>
   )
-}
-
-function themeButtonIcon(preference: ThemePreference): React.ReactElement {
-  if (preference === `light`) return <Sun size={14} />
-  if (preference === `dark`) return <Moon size={14} />
-  return <Monitor size={14} />
-}
-
-function themeButtonAriaLabel(preference: ThemePreference): string {
-  if (preference === `light`) return `Theme: light. Click to switch to dark.`
-  if (preference === `dark`) return `Theme: dark. Click to follow system.`
-  return `Theme: system. Click to switch to light.`
 }

@@ -14,6 +14,7 @@ export type ThemePreference = `light` | `dark` | `system`
 type DarkModeContextValue = {
   darkMode: boolean
   preference: ThemePreference
+  setPreference: (next: ThemePreference) => void
   cyclePreference: () => void
 }
 
@@ -70,9 +71,19 @@ export function DarkModeProvider({
     })
   }, [])
 
+  const setExplicit = useCallback((next: ThemePreference) => {
+    setPreference(next)
+    window.localStorage.setItem(STORAGE_KEY, next)
+  }, [])
+
   const value = useMemo(
-    () => ({ darkMode, preference, cyclePreference }),
-    [darkMode, preference, cyclePreference]
+    () => ({
+      darkMode,
+      preference,
+      setPreference: setExplicit,
+      cyclePreference,
+    }),
+    [darkMode, preference, setExplicit, cyclePreference]
   )
 
   return (
