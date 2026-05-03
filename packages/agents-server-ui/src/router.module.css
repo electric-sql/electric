@@ -1,0 +1,40 @@
+.appShell {
+  height: 100vh;
+}
+
+.entityShell {
+  flex: 1;
+  min-width: 0;
+}
+
+.entityBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.entityMain {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statePanel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.splitter {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  background: var(--ds-gray-a5);
+}
+
+.splitter:hover {
+  background: var(--ds-accent-a6);
+}
+
+.placeholder {
+  flex: 1;
+}

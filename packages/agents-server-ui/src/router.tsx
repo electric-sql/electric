@@ -10,7 +10,6 @@ import {
 } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
-import { Flex, Text } from '@radix-ui/themes'
 import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
@@ -22,6 +21,8 @@ import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { CodingSessionView } from './components/CodingSessionView'
+import { Stack, Text } from './ui'
+import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
@@ -42,24 +43,24 @@ function RootLayout(): React.ReactElement {
   const selectedEntityUrl = splat ? `/${splat}` : null
 
   return (
-    <Flex style={{ height: `100vh` }}>
+    <Stack className={styles.appShell}>
       <Sidebar
         selectedEntityUrl={selectedEntityUrl}
         onSelectEntity={navigateToEntity}
         pinnedUrls={pinnedUrls}
       />
       <Outlet />
-    </Flex>
+    </Stack>
   )
 }
 
 function IndexPage(): React.ReactElement {
   return (
-    <Flex align="center" justify="center" flexGrow="1">
-      <Text color="gray" size="2">
+    <Stack align="center" justify="center" grow>
+      <Text tone="muted" size={2}>
         Select an entity from the sidebar
       </Text>
-    </Flex>
+    </Stack>
   )
 }
 
@@ -121,11 +122,11 @@ function EntityPage(): React.ReactElement {
 
   if (!selectedEntity) {
     return (
-      <Flex align="center" justify="center" flexGrow="1">
-        <Text color="gray" size="2">
+      <Stack align="center" justify="center" grow>
+        <Text tone="muted" size={2}>
           Loading entity...
         </Text>
-      </Flex>
+      </Stack>
     )
   }
 
@@ -134,7 +135,7 @@ function EntityPage(): React.ReactElement {
   const connectUrl = isSpawning ? null : entityUrl
 
   return (
-    <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
+    <Stack direction="column" className={styles.entityShell}>
       <EntityHeader
         entity={selectedEntity}
         pinned={pinnedUrls.includes(entityUrl)}
@@ -147,14 +148,8 @@ function EntityPage(): React.ReactElement {
         stateExplorerOpen={stateExplorerOpen}
         onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
       />
-      <Flex
-        ref={containerRef}
-        style={{ flex: 1, minHeight: 0, overflow: `hidden` }}
-      >
-        <Flex
-          direction="column"
-          style={{ flex: 1, minWidth: 0, overflow: `hidden` }}
-        >
+      <Stack ref={containerRef} className={styles.entityBody}>
+        <Stack direction="column" className={styles.entityMain}>
           {selectedEntity.type === CODING_SESSION_ENTITY_TYPE && connectUrl ? (
             <CodingSessionView
               baseUrl={baseUrl}
@@ -169,16 +164,11 @@ function EntityPage(): React.ReactElement {
               isSpawning={isSpawning}
             />
           )}
-        </Flex>
+        </Stack>
         {stateExplorerOpen && (
           <>
             <div
-              style={{
-                width: 4,
-                cursor: `col-resize`,
-                flexShrink: 0,
-                background: `var(--gray-a5)`,
-              }}
+              className={styles.splitter}
               onMouseDown={(e) => {
                 e.preventDefault()
                 const container = containerRef.current
@@ -206,20 +196,17 @@ function EntityPage(): React.ReactElement {
                 document.addEventListener(`mouseup`, onMouseUp)
               }}
             />
-            <Flex
+            <Stack
               direction="column"
-              style={{
-                flex: `0 0 ${statePanelWidth * 100}%`,
-                minWidth: 0,
-                overflow: `hidden`,
-              }}
+              className={styles.statePanel}
+              style={{ flex: `0 0 ${statePanelWidth * 100}%` }}
             >
               <StateExplorerPanel baseUrl={baseUrl} entityUrl={entityUrl} />
-            </Flex>
+            </Stack>
           </>
         )}
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 }
 
