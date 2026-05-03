@@ -18,6 +18,19 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`
 }
 
+// Codex model identifiers. Examples seen in the wild: "gpt-4",
+// "gpt-5-codex-latest", "openai/gpt-5", "anthropic/claude-sonnet-4-6:fp8".
+// Reject anything outside this charset to defend against config-injection
+// through the `-c model="..."` arg (e.g. `gpt-4";evil="x` would close
+// the value and inject a new key).
+const SAFE_MODEL = /^[A-Za-z0-9._/:-]+$/
+
+// Codex sessionIds are UUIDs in practice. The probe/capture commands
+// glob with `*-${sessionId}.jsonl` (`*` is allowed inside shellQuote'd
+// arguments), so a sessionId containing `*` or `?` would broaden the
+// match silently and could pick up an unrelated transcript.
+const SAFE_SESSION_ID = /^[A-Za-z0-9-]+$/
+
 interface RolloutMeta {
   yyyy: string
   mm: string
@@ -87,7 +100,19 @@ export const CodexAdapter: CodingAgentAdapter = {
     // Codex 0.128.0 does NOT read OPENAI_MODEL — the only ways to pin a
     // model are config.toml or this `-c` flag.
     const globalArgs: Array<string> = []
-    if (model) globalArgs.push(`-c`, `model="${model}"`)
+    if (model) {
+      if (!SAFE_MODEL.test(model)) {
+        throw new Error(
+          `codex model must match ${SAFE_MODEL}; got ${JSON.stringify(model)}`
+        )
+      }
+      globalArgs.push(`-c`, `model="${model}"`)
+    }
+    if (nativeSessionId && !SAFE_SESSION_ID.test(nativeSessionId)) {
+      throw new Error(
+        `codex nativeSessionId must match ${SAFE_SESSION_ID}; got ${JSON.stringify(nativeSessionId)}`
+      )
+    }
     const codexArgs: Array<string> = [
       ...globalArgs,
       `exec`,
@@ -116,6 +141,11 @@ export const CodexAdapter: CodingAgentAdapter = {
   },
 
   probeCommand({ homeDir, sessionId }) {
+    if (!SAFE_SESSION_ID.test(sessionId)) {
+      throw new Error(
+        `codex sessionId must match ${SAFE_SESSION_ID}; got ${JSON.stringify(sessionId)}`
+      )
+    }
     const dir = shellQuote(`${homeDir}/.codex/sessions`)
     const pattern = shellQuote(`*-${sessionId}.jsonl`)
     return [
@@ -131,6 +161,11 @@ export const CodexAdapter: CodingAgentAdapter = {
   },
 
   captureCommand({ homeDir, sessionId }) {
+    if (!SAFE_SESSION_ID.test(sessionId)) {
+      throw new Error(
+        `codex sessionId must match ${SAFE_SESSION_ID}; got ${JSON.stringify(sessionId)}`
+      )
+    }
     const dir = shellQuote(`${homeDir}/.codex/sessions`)
     const pattern = shellQuote(`*-${sessionId}.jsonl`)
     return [
