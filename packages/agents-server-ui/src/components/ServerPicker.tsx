@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ChevronsUpDown, Plus, Trash2 } from 'lucide-react'
 import { useServerConnection } from '../hooks/useServerConnection'
-import { Button, IconButton, Input, Menu, Stack, Text } from '../ui'
+import {
+  Button,
+  Dialog,
+  Field,
+  IconButton,
+  Input,
+  Menu,
+  Stack,
+  Text,
+} from '../ui'
 import styles from './ServerPicker.module.css'
 
 type ServerStatus = `ok` | `down` | `unset`
@@ -11,8 +20,10 @@ type ServerStatus = `ok` | `down` | `unset`
  *
  * Renders a single-line tile showing `[● status] [server name] [chevron]`
  * that opens a menu listing the saved servers + an "Add server" entry.
- * The "Add server" inline panel pops above the tile so it doesn't push
- * the rest of the footer around.
+ * Picking "Add server" launches a centered modal dialog with the
+ * connection form (instead of an absolute-positioned popover above the
+ * tile) so the form has the breathing room it needs even when the
+ * sidebar is narrow.
  */
 export function ServerPicker(): React.ReactElement {
   const {
@@ -30,6 +41,21 @@ export function ServerPicker(): React.ReactElement {
     : connected
       ? `ok`
       : `down`
+
+  // Dismissing the dialog when there is no configured server would leave
+  // the app in an unusable state — block it until at least one entry has
+  // been added. (`useServerConnection` seeds a fallback "This Server"
+  // entry on first load, so this is a defensive guard rather than a
+  // common path.)
+  const canDismissAdd = servers.length > 0
+
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open && !canDismissAdd) return
+      setAdding(open)
+    },
+    [canDismissAdd]
+  )
 
   return (
     <>
@@ -90,52 +116,84 @@ export function ServerPicker(): React.ReactElement {
         </Menu.Content>
       </Menu.Root>
 
-      {adding && (
-        <AddServerPanel
-          onAdd={(name, url) => {
-            addServer({ name, url })
-            setAdding(false)
-          }}
-          onCancel={() => {
-            if (servers.length > 0) setAdding(false)
-          }}
-        />
-      )}
+      <Dialog.Root open={adding} onOpenChange={handleOpenChange}>
+        <Dialog.Content maxWidth={440}>
+          <Dialog.Title>Add server</Dialog.Title>
+          <Dialog.Description>
+            Connect to an Electric Agents server by giving it a label and its
+            base URL.
+          </Dialog.Description>
+          <AddServerForm
+            onAdd={(name, url) => {
+              addServer({ name, url })
+              setAdding(false)
+            }}
+            canCancel={canDismissAdd}
+            onCancel={() => setAdding(false)}
+          />
+        </Dialog.Content>
+      </Dialog.Root>
     </>
   )
 }
 
-function AddServerPanel({
+function AddServerForm({
   onAdd,
   onCancel,
+  canCancel,
 }: {
   onAdd: (name: string, url: string) => void
   onCancel: () => void
+  canCancel: boolean
 }): React.ReactElement {
   const [name, setName] = useState(``)
   const [url, setUrl] = useState(``)
+  const trimmedName = name.trim()
+  const trimmedUrl = url.trim()
+  const canSubmit = trimmedName.length > 0 && trimmedUrl.length > 0
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canSubmit) return
+    onAdd(trimmedName, trimmedUrl)
+  }
+
   return (
-    <div className={styles.addPanel}>
-      <Input
-        placeholder="Name (e.g. Local Dev)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        size={2}
-      />
-      <Input
-        placeholder="URL (e.g. http://localhost:4437)"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        size={2}
-      />
-      <Stack gap={2}>
-        <Button size={1} onClick={() => name && url && onAdd(name, url)}>
-          Add
-        </Button>
-        <Button size={1} variant="soft" tone="neutral" onClick={onCancel}>
+    <form onSubmit={handleSubmit} className={styles.addForm}>
+      <Stack direction="column" gap={3}>
+        <Field label="Name">
+          <Input
+            placeholder="e.g. Local Dev"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            size={2}
+            autoFocus
+          />
+        </Field>
+        <Field label="URL">
+          <Input
+            placeholder="e.g. http://localhost:4437"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            type="url"
+            size={2}
+          />
+        </Field>
+      </Stack>
+      <Stack gap={2} justify="end" className={styles.addFormActions}>
+        <Button
+          type="button"
+          variant="soft"
+          tone="neutral"
+          onClick={onCancel}
+          disabled={!canCancel}
+        >
           Cancel
         </Button>
+        <Button type="submit" disabled={!canSubmit}>
+          Add server
+        </Button>
       </Stack>
-    </div>
+    </form>
   )
 }

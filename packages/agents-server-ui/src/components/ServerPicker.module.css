@@ -66,18 +66,16 @@
   margin-left: auto;
 }
 
-.addPanel {
+/*
+ * "Add server" form lives in a centered Dialog; spacing rules just
+ * separate the field group from the action row.
+ */
+.addForm {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-2);
-  position: absolute;
-  bottom: calc(var(--ds-row-height-md) + 16px);
-  left: 8px;
-  right: 8px;
-  z-index: var(--ds-z-popover);
-  padding: 12px;
-  background: var(--ds-surface-raised);
-  border: 1px solid var(--ds-border-2);
-  border-radius: var(--ds-radius-3);
-  box-shadow: var(--ds-shadow-3);
+  gap: var(--ds-space-4);
+}
+
+.addFormActions {
+  margin-top: var(--ds-space-2);
 }
