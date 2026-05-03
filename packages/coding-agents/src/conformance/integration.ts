@@ -362,6 +362,74 @@ export function runCodingAgentsIntegrationConformance(
           360_000
         )
 
+        sharedIt(
+          `L2.9 three concurrent agents on shared workspace all complete (no dropped acquirer)`,
+          async () => {
+            // L2.6 covers two-agent serialisation. With three concurrent
+            // acquirers the WorkspaceRegistry chain-of-thens has a window
+            // where two `acquire` calls read the same `prior` snapshot
+            // and one's `link` overwrites the other's; the overwritten
+            // acquirer's release never matches the chain pointer and its
+            // continuation is dropped. Manifests as one of the three runs
+            // never completing.
+            //
+            // We don't assert ordering (timing variance across providers
+            // makes it flaky); we assert all three completed and no
+            // pair's runs overlap.
+            const { spec: ws, cleanup } = await config.scratchWorkspace()
+            pendingCleanups.push(cleanup)
+
+            const ids = [`a`, `b`, `c`].map(
+              (s) =>
+                `/test/coding-agent/${kind}-l2-9${s}-${Date.now().toString(36)}`
+            )
+            const args = buildArgs(kind, ws)
+            const fakes = ids.map((id) => makeFakeCtx(id, args))
+
+            // First-wake init for all three.
+            for (const { ctx } of fakes) {
+              await handler(ctx, { type: `message_received` })
+            }
+            for (let i = 0; i < fakes.length; i++) {
+              pushInbox(fakes[i]!.state, `i${i}`, `prompt`, {
+                text: probe.prompt,
+              })
+            }
+
+            // Concurrent dispatch — three acquirers contending for one
+            // lease. With the chain-leak bug, one of the three would
+            // hang past the test timeout.
+            await Promise.all(
+              fakes.map(({ ctx }) => handler(ctx, { type: `message_received` }))
+            )
+
+            const runs = fakes.map(
+              ({ state }) =>
+                (Array.from(state.runs.rows.values()) as Array<RunRow>)[0]!
+            )
+            for (const r of runs) {
+              expect(r).toBeDefined()
+              expect(r.status).toBe(`completed`)
+            }
+            // Pairwise non-overlap.
+            for (let i = 0; i < runs.length; i++) {
+              for (let j = i + 1; j < runs.length; j++) {
+                const ri = runs[i]!
+                const rj = runs[j]!
+                const noOverlap =
+                  (ri.endedAt ?? 0) <= rj.startedAt ||
+                  (rj.endedAt ?? 0) <= ri.startedAt
+                expect(noOverlap).toBe(true)
+              }
+            }
+
+            for (const id of ids) {
+              await provider.destroy(id).catch(() => undefined)
+            }
+          },
+          480_000
+        )
+
         it(`L2.7 convert mid-conversation switches kind`, async () => {
           const { spec: ws, cleanup } = await config.scratchWorkspace()
           pendingCleanups.push(cleanup)
