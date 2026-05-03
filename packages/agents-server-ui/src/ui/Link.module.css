@@ -1,0 +1,33 @@
+.link {
+  color: var(--ds-accent-11);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-accent-a5);
+  text-underline-offset: calc(0.025em + 2px);
+  font-weight: 400;
+  cursor: pointer;
+  border-radius: var(--ds-radius-1);
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--ds-focus-ring);
+  outline-offset: 2px;
+}
+
+.size1 {
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+.size2 {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+}
+.size3 {
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-text-base-lh);
+}

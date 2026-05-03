@@ -1,0 +1,71 @@
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--ds-font-body);
+  background: var(--ds-gray-a2);
+  color: var(--ds-text-1);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-2);
+  outline: none;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.input::placeholder {
+  color: var(--ds-text-3);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--ds-border-2);
+}
+
+.input:focus-visible {
+  border-color: var(--ds-accent-9);
+  box-shadow: 0 0 0 1px var(--ds-accent-9);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.size1 {
+  font-size: var(--ds-text-xs);
+  padding: 4px 8px;
+  height: 24px;
+}
+.size2 {
+  font-size: var(--ds-text-sm);
+  padding: 6px 10px;
+  height: 32px;
+}
+.size3 {
+  font-size: var(--ds-text-base);
+  padding: 8px 12px;
+  height: 40px;
+}
+
+/* Textarea variant */
+.textarea {
+  height: auto;
+  min-height: 64px;
+  resize: vertical;
+  line-height: var(--ds-text-base-lh);
+}
+.textarea.size1 {
+  font-size: var(--ds-text-xs);
+  padding: 6px 10px;
+}
+.textarea.size2 {
+  font-size: var(--ds-text-sm);
+  padding: 8px 12px;
+}
+.textarea.size3 {
+  font-size: var(--ds-text-base);
+  padding: 10px 14px;
+}
+
+.mono {
+  font-family: var(--ds-font-mono);
+}

@@ -1,0 +1,56 @@
+.code {
+  font-family: var(--ds-font-mono);
+  margin: 0;
+  min-width: 0;
+}
+
+.size1 {
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+.size2 {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+}
+.size3 {
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-text-base-lh);
+}
+
+.variant-soft {
+  background: var(--ds-gray-a3);
+  padding: 0.1em 0.4em;
+  border-radius: var(--ds-radius-2);
+}
+
+.variant-ghost {
+  background: transparent;
+  padding: 0;
+}
+
+/* Tones (apply colour without changing background) */
+.tone-default {
+  color: inherit;
+}
+.tone-accent {
+  color: var(--ds-accent-11);
+}
+.tone-danger {
+  color: var(--ds-red-11);
+}
+.tone-success {
+  color: var(--ds-green-11);
+}
+.tone-warning {
+  color: var(--ds-amber-11);
+}
+.tone-muted {
+  color: var(--ds-text-2);
+}
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}

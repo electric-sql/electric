@@ -1,0 +1,77 @@
+.stack {
+  display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.row {
+  flex-direction: row;
+}
+.column {
+  flex-direction: column;
+}
+
+/* Wrap */
+.wrap {
+  flex-wrap: wrap;
+}
+
+/* Align (cross axis) */
+.align-start {
+  align-items: flex-start;
+}
+.align-center {
+  align-items: center;
+}
+.align-end {
+  align-items: flex-end;
+}
+.align-stretch {
+  align-items: stretch;
+}
+.align-baseline {
+  align-items: baseline;
+}
+
+/* Justify (main axis) */
+.justify-start {
+  justify-content: flex-start;
+}
+.justify-center {
+  justify-content: center;
+}
+.justify-end {
+  justify-content: flex-end;
+}
+.justify-between {
+  justify-content: space-between;
+}
+.justify-around {
+  justify-content: space-around;
+}
+
+/* Gap */
+.gap1 {
+  gap: var(--ds-space-1);
+}
+.gap2 {
+  gap: var(--ds-space-2);
+}
+.gap3 {
+  gap: var(--ds-space-3);
+}
+.gap4 {
+  gap: var(--ds-space-4);
+}
+.gap5 {
+  gap: var(--ds-space-5);
+}
+.gap6 {
+  gap: var(--ds-space-6);
+}
+.gap7 {
+  gap: var(--ds-space-7);
+}
+.gap8 {
+  gap: var(--ds-space-8);
+}

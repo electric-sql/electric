@@ -1,0 +1,33 @@
+/* Square / round button for icon-only triggers. Inherits Button's
+   tone/variant tokens via the same module. */
+
+.iconButton {
+  padding: 0;
+  flex-shrink: 0;
+  aspect-ratio: 1;
+}
+
+.size1 {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ds-radius-2);
+}
+.size2 {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ds-radius-2);
+}
+.size3 {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ds-radius-3);
+}
+.size4 {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--ds-radius-3);
+}
+
+.round {
+  border-radius: var(--ds-radius-full);
+}

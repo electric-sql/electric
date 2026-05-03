@@ -1,0 +1,71 @@
+.box {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Padding scale (1..9 maps 1:1 to --ds-space-*) */
+.p1 {
+  padding: var(--ds-space-1);
+}
+.p2 {
+  padding: var(--ds-space-2);
+}
+.p3 {
+  padding: var(--ds-space-3);
+}
+.p4 {
+  padding: var(--ds-space-4);
+}
+.p5 {
+  padding: var(--ds-space-5);
+}
+.p6 {
+  padding: var(--ds-space-6);
+}
+.p7 {
+  padding: var(--ds-space-7);
+}
+.p8 {
+  padding: var(--ds-space-8);
+}
+.p9 {
+  padding: var(--ds-space-9);
+}
+
+.px1 {
+  padding-inline: var(--ds-space-1);
+}
+.px2 {
+  padding-inline: var(--ds-space-2);
+}
+.px3 {
+  padding-inline: var(--ds-space-3);
+}
+.px4 {
+  padding-inline: var(--ds-space-4);
+}
+.px5 {
+  padding-inline: var(--ds-space-5);
+}
+.px6 {
+  padding-inline: var(--ds-space-6);
+}
+
+.py1 {
+  padding-block: var(--ds-space-1);
+}
+.py2 {
+  padding-block: var(--ds-space-2);
+}
+.py3 {
+  padding-block: var(--ds-space-3);
+}
+.py4 {
+  padding-block: var(--ds-space-4);
+}
+.py5 {
+  padding-block: var(--ds-space-5);
+}
+.py6 {
+  padding-block: var(--ds-space-6);
+}

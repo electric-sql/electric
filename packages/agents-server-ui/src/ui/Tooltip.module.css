@@ -1,0 +1,22 @@
+.popup {
+  background: var(--ds-gray-12);
+  color: var(--ds-gray-1);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  font-family: var(--ds-font-body);
+  padding: 4px 8px;
+  border-radius: var(--ds-radius-2);
+  z-index: var(--ds-z-tooltip);
+  box-shadow: var(--ds-shadow-2);
+  max-width: 280px;
+  outline: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}

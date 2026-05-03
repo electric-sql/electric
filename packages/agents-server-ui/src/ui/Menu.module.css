@@ -1,0 +1,57 @@
+.popup {
+  padding: 4px;
+  min-width: 180px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--ds-radius-2);
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  text-align: start;
+  text-decoration: none;
+  /* Items are typically <div> with role="menuitem" — give them block
+     layout so width:100% works in popups. */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.item[data-highlighted] {
+  background: var(--ds-gray-a3);
+}
+
+.item[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.item[data-tone='danger'] {
+  color: var(--ds-red-11);
+}
+.item[data-tone='danger'][data-highlighted] {
+  background: var(--ds-red-a3);
+}
+
+.separator {
+  height: 1px;
+  background: var(--ds-divider);
+  margin: 4px -4px;
+}
+
+.label {
+  padding: 6px 10px 4px;
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  color: var(--ds-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}

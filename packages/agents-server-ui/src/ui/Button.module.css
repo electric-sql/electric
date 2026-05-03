@@ -1,0 +1,144 @@
+.button {
+  --btn-bg: transparent;
+  --btn-fg: var(--ds-text-1);
+  --btn-bg-hover: var(--ds-gray-a3);
+  --btn-bg-active: var(--ds-gray-a4);
+  --btn-border: transparent;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--ds-radius-2);
+  font-family: var(--ds-font-body);
+  font-weight: 500;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  outline: none;
+  user-select: none;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.button:hover:not(:disabled),
+.button[data-popup-open]:not(:disabled),
+.button[data-pressed]:not(:disabled) {
+  background: var(--btn-bg-hover);
+}
+
+.button:active:not(:disabled) {
+  background: var(--btn-bg-active);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--ds-focus-ring);
+  outline-offset: 1px;
+}
+
+.button:disabled,
+.button[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── Sizes ────────────────────────────────────────────────────── */
+.size1 {
+  font-size: 12px;
+  padding: 4px 8px;
+  height: 24px;
+  border-radius: var(--ds-radius-2);
+}
+.size2 {
+  font-size: 13px;
+  padding: 6px 12px;
+  height: 32px;
+  border-radius: var(--ds-radius-2);
+}
+.size3 {
+  font-size: 14px;
+  padding: 8px 16px;
+  height: 40px;
+  border-radius: var(--ds-radius-3);
+}
+.size4 {
+  font-size: 16px;
+  padding: 10px 20px;
+  height: 48px;
+  border-radius: var(--ds-radius-3);
+}
+
+/* ── Tones ────────────────────────────────────────────────────── */
+.tone-neutral {
+  --btn-solid-bg: var(--ds-gray-12);
+  --btn-solid-fg: var(--ds-gray-1);
+  --btn-solid-bg-hover: var(--ds-gray-11);
+  --btn-soft-bg: var(--ds-gray-a3);
+  --btn-soft-fg: var(--ds-text-1);
+  --btn-soft-bg-hover: var(--ds-gray-a4);
+}
+.tone-accent {
+  --btn-solid-bg: var(--ds-accent-9);
+  --btn-solid-fg: var(--ds-text-on-accent);
+  --btn-solid-bg-hover: var(--ds-accent-10);
+  --btn-soft-bg: var(--ds-accent-a3);
+  --btn-soft-fg: var(--ds-accent-11);
+  --btn-soft-bg-hover: var(--ds-accent-a4);
+}
+.tone-danger {
+  --btn-solid-bg: var(--ds-red-9);
+  --btn-solid-fg: white;
+  --btn-solid-bg-hover: var(--ds-red-11);
+  --btn-soft-bg: var(--ds-red-a3);
+  --btn-soft-fg: var(--ds-red-11);
+  --btn-soft-bg-hover: var(--ds-red-a5);
+}
+
+/* ── Variants ─────────────────────────────────────────────────── */
+.variant-solid {
+  background: var(--btn-solid-bg);
+  color: var(--btn-solid-fg);
+}
+.variant-solid:hover:not(:disabled) {
+  background: var(--btn-solid-bg-hover);
+}
+
+.variant-soft {
+  background: var(--btn-soft-bg);
+  color: var(--btn-soft-fg);
+}
+.variant-soft:hover:not(:disabled) {
+  background: var(--btn-soft-bg-hover);
+}
+
+.variant-ghost {
+  background: transparent;
+  color: var(--btn-soft-fg);
+}
+.variant-ghost:hover:not(:disabled),
+.variant-ghost[data-popup-open]:not(:disabled),
+.variant-ghost[data-pressed]:not(:disabled) {
+  background: var(--btn-soft-bg);
+}
+
+.variant-outline {
+  background: transparent;
+  color: var(--btn-soft-fg);
+  --btn-border: var(--ds-border-2);
+}
+.variant-outline:hover:not(:disabled) {
+  background: var(--btn-soft-bg);
+  --btn-border: var(--ds-border-3);
+}
+
+/* Pressed/active state for toggle buttons (consumers set data-active) */
+.button[data-active='true'] {
+  background: var(--btn-soft-bg-hover);
+}

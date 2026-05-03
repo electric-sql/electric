@@ -1,0 +1,61 @@
+.root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.viewport {
+  width: 100%;
+  height: 100%;
+  outline: none;
+  overscroll-behavior: contain;
+  /* Hide native scrollbars (Base UI provides custom Scrollbar elements). */
+  scrollbar-width: none;
+}
+.viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar {
+  display: flex;
+  position: absolute;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  z-index: var(--ds-z-sticky);
+  user-select: none;
+  touch-action: none;
+}
+
+.scrollbar[data-orientation='vertical'] {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  padding: 2px;
+}
+
+.scrollbar[data-orientation='horizontal'] {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  padding: 2px;
+}
+
+.scrollbar[data-hovering],
+.scrollbar[data-scrolling] {
+  opacity: 1;
+}
+
+.thumb {
+  background: var(--ds-gray-a6);
+  border-radius: var(--ds-radius-full);
+  flex: 1;
+  transition: background 120ms ease;
+}
+
+.thumb:hover {
+  background: var(--ds-gray-a8);
+}

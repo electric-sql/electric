@@ -1,0 +1,38 @@
+/* Shared popup card style for Popover / HoverCard / Menu / Select.
+   Keep selectors generic so each wrapper can add only the bits it needs. */
+
+.popup {
+  background: var(--ds-surface-raised);
+  color: var(--ds-text-1);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  box-shadow: var(--ds-shadow-3);
+  z-index: var(--ds-z-popover);
+  outline: none;
+  /* Allow consumers to override min/max width/height via inline style. */
+  min-width: 8rem;
+  max-width: min(calc(100vw - 16px), 480px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+/* Sized variants (consumers compose these with the base .popup). */
+.padding {
+  padding: var(--ds-space-3);
+}
+
+.titleBar {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-weight: 600;
+  color: var(--ds-text-1);
+  padding: var(--ds-space-3) var(--ds-space-3) var(--ds-space-2);
+  border-bottom: 1px solid var(--ds-border-1);
+}
