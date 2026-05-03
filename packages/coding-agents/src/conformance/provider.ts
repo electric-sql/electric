@@ -170,6 +170,60 @@ export function runSandboxProviderConformance(
       }
     }, 60_000)
 
+    it(`L1.10 exec without cwd defaults to workspaceMount`, async () => {
+      // C1 (sprites). LocalDocker -w workspaceMount, HostProvider passes
+      // cwd=workspaceMount on spawn, sprites cd's via the wrapper.
+      // Locks the contract for any future provider.
+      const { spec: ws, cleanup } = await config.scratchWorkspace()
+      pendingCleanups.push(cleanup)
+      const agentId = `/test/coding-agent/conf-l1-10-${Date.now().toString(36)}`
+      const inst = await provider.start(specFor(agentId, ws))
+      try {
+        const h = await inst.exec({ cmd: [`pwd`] })
+        const [out] = await Promise.all([
+          drain(h.stdout),
+          discardStream(h.stderr),
+          h.wait(),
+        ])
+        expect(out.trim()).toBe(inst.workspaceMount)
+      } finally {
+        await provider.destroy(agentId).catch(() => undefined)
+      }
+    }, 60_000)
+
+    it(`L1.11 stop() mid-exec terminates the running child`, async () => {
+      // R1 #9. HostProvider currently no-ops `stop` while a turn is
+      // mid-exec — the child keeps running. LocalDocker passes via
+      // container removal; sprites passes via WS close.
+      const { spec: ws, cleanup } = await config.scratchWorkspace()
+      pendingCleanups.push(cleanup)
+      const agentId = `/test/coding-agent/conf-l1-11-${Date.now().toString(36)}`
+      const inst = await provider.start(specFor(agentId, ws))
+      try {
+        // Long-running exec; we'll stop the provider and expect this
+        // to wind down (non-zero exit or rejection) within 10 s.
+        const h = await inst.exec({ cmd: [`sleep`, `60`] })
+        // Race the wait against a deadline.
+        const stopP = provider.stop(inst.instanceId)
+        const start = Date.now()
+        const exitInfo = await Promise.race([
+          h.wait().then((info) => ({ kind: `wait` as const, info })),
+          new Promise<{ kind: `timeout` }>((resolve) =>
+            setTimeout(() => resolve({ kind: `timeout` }), 10_000)
+          ),
+        ])
+        await stopP.catch(() => undefined)
+        expect(exitInfo.kind).toBe(`wait`)
+        expect(Date.now() - start).toBeLessThan(10_000)
+        // Process did not exit cleanly with 0 (sleep would have).
+        if (exitInfo.kind === `wait`) {
+          expect(exitInfo.info.exitCode).not.toBe(0)
+        }
+      } finally {
+        await provider.destroy(agentId).catch(() => undefined)
+      }
+    }, 60_000)
+
     it(`L1.6 exec stdin pipe round-trip`, async () => {
       const { spec: ws, cleanup } = await config.scratchWorkspace()
       pendingCleanups.push(cleanup)
