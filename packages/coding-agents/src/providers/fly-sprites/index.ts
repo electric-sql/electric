@@ -237,22 +237,21 @@ export class FlySpriteProvider implements SandboxProvider {
   private openExecWebSocket(
     spriteName: string,
     cmd: ReadonlyArray<string>,
-    opts: { env?: Record<string, string>; cwd?: string } = {}
+    opts: { cwd?: string } = {}
   ): WebSocket {
     // Exec lives on api.sprites.dev — NOT the per-sprite URL (the per-sprite
     // URL routes to user services running inside the sprite, e.g. on :8080).
     // Cmd is passed via repeated ?cmd= query params; the API has no `start`
     // frame.
+    //
+    // Per-call env is NOT forwarded as a query param (the API ignores it
+    // when cmd is shell-wrapped, and the protocol shifted between rc30
+    // and rc43). Env is staged inside the wrapper script via wrapWithAgentEnv.
     const apiBase = `wss://api.sprites.dev/v1/sprites/${encodeURIComponent(
       spriteName
     )}/exec`
     const params = cmd.map((c) => `cmd=${encodeURIComponent(c)}`)
     if (opts.cwd) params.push(`cwd=${encodeURIComponent(opts.cwd)}`)
-    if (opts.env) {
-      for (const [k, v] of Object.entries(opts.env)) {
-        params.push(`env=${encodeURIComponent(`${k}=${v}`)}`)
-      }
-    }
     const wsUrl = `${apiBase}?${params.join(`&`)}`
     const ws = new WebSocket(wsUrl, {
       headers: { authorization: `Bearer ${this.client.tokenForExec()}` },
@@ -322,7 +321,9 @@ export class FlySpriteProvider implements SandboxProvider {
         // one — matches LocalDocker (`docker run -w workspaceMount`)
         // and Host (`spawn({cwd: workspaceMount})`).
         const cwd = req.cwd ?? workspaceMount
-        const wrapped = wrapWithAgentEnv(req.cmd, cwd)
+        // Per-call env is staged inside the wrapper as `export` lines,
+        // not via the unstable ?env= query param. See wrapWithAgentEnv.
+        const wrapped = wrapWithAgentEnv(req.cmd, cwd, req.env)
         if (req.stdin === `pipe`) {
           // Sprites WS protocol for stdin isn't stable across rc30→rc43;
           // route stdin-bearing exec through HTTP POST instead, which
@@ -331,10 +332,7 @@ export class FlySpriteProvider implements SandboxProvider {
           // an explicit marker line; the adapter parses it back.
           return this.execWithStdinViaPost(name, { ...req, cwd, cmd: wrapped })
         }
-        const ws = this.openExecWebSocket(name, wrapped, {
-          env: req.env,
-          cwd,
-        })
+        const ws = this.openExecWebSocket(name, wrapped, { cwd })
         return createExecHandle({ ws })
       },
       copyTo: async (args) => {
@@ -422,11 +420,9 @@ export class FlySpriteProvider implements SandboxProvider {
       const params = wrapper.map((c) => `cmd=${encodeURIComponent(c)}`)
       params.push(`stdin=true`)
       if (req.cwd) params.push(`cwd=${encodeURIComponent(req.cwd)}`)
-      if (req.env) {
-        for (const [k, v] of Object.entries(req.env)) {
-          params.push(`env=${encodeURIComponent(`${k}=${v}`)}`)
-        }
-      }
+      // Per-call env is staged inside the wrapper (see wrapWithAgentEnv).
+      // Don't forward via ?env= — the API ignores it for shell-wrapped
+      // cmds and the protocol shifted across rc30→rc43.
       const url = `https://api.sprites.dev/v1/sprites/${encodeURIComponent(
         spriteName
       )}/exec?${params.join(`&`)}`
@@ -608,20 +604,41 @@ function shellEscape(v: string): string {
 }
 
 // Build a /bin/sh -c invocation that sources /run/agent.env (if present),
-// cd's into cwd (if provided), and then exec's the user argv via "$@".
-// `set -a` (allexport) ensures the file's `KEY=value` lines are EXPORTED —
-// without it, `.` only sets shell-local vars and child processes (e.g. claude)
-// don't see them. The explicit `cd` is necessary because sprites' exec
-// API ignores the `cwd=` query param when the cmd is wrapped in a shell;
-// we honour it here instead. `exec` replaces the shell so signals and
-// exit codes pass through cleanly.
+// applies per-call env overrides (if any), cd's into cwd (if provided), and
+// then exec's the user argv via "$@".
+//
+// `set -a` (allexport) ensures the env-file's `KEY=value` lines are
+// EXPORTED — without it, `.` only sets shell-local vars and child
+// processes (e.g. claude) don't see them.
+//
+// Per-call env: sprites' exec `?env=` query param is unstable across
+// rc30→rc43 and ignored when the cmd is shell-wrapped. We instead emit
+// an `export` line per (k,v) inside the wrapper so children see them.
+// This also lets per-call env override the file's defaults (file
+// sourced first, exports next).
+//
+// The explicit `cd` is necessary because sprites' exec API ignores the
+// `cwd=` query param when the cmd is wrapped in a shell; we honour it
+// here instead. `exec` replaces the shell so signals and exit codes
+// pass through cleanly.
 function wrapWithAgentEnv(
   cmd: ReadonlyArray<string>,
-  cwd?: string
+  cwd?: string,
+  env?: Record<string, string>
 ): Array<string> {
   const parts = [
     `if [ -r /run/agent.env ]; then set -a; . /run/agent.env; set +a; fi`,
   ]
+  if (env) {
+    for (const [k, v] of Object.entries(env)) {
+      // Validate key is a safe identifier — protects against injection
+      // through caller-controlled env keys.
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+        throw new Error(`invalid env var name: ${JSON.stringify(k)}`)
+      }
+      parts.push(`export ${k}=${shellEscape(v)}`)
+    }
+  }
   if (cwd) parts.push(`cd ${shellEscape(cwd)}`)
   parts.push(`exec "$@"`)
   return [`/bin/sh`, `-c`, parts.join(`; `), `agent-env-wrapper`, ...cmd]
