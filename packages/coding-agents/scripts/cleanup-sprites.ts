@@ -10,7 +10,15 @@
  */
 import { SpritesApiClient } from '../src/providers/fly-sprites/api-client.ts'
 
-const PREFIXES = [`conf-sprite-`, `e2e-sprites-`]
+// Prefixes the script will list/delete:
+//   - conf-sprite-: conformance test stragglers
+//   - e2e-sprites-: integration e2e test stragglers
+//   - coding-agent-: production UI-spawned sprites (FlySpriteProvider's
+//     spriteName() prepends 'coding-agent-' to the agentId). Any
+//     coding-agent- sprite the operator finds here is a leak — destroy()
+//     should have removed it. Running this is safe even when nothing has
+//     leaked: the dry-run lists 0.
+const PREFIXES = [`conf-sprite-`, `e2e-sprites-`, `coding-agent-`]
 
 async function main(): Promise<void> {
   const token = process.env.SPRITES_TOKEN
