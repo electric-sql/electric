@@ -495,6 +495,40 @@ export function makeCodingAgentHandler(
               `fork: source agent ${args.fromAgentId} has no events collection`
             )
           }
+
+          // Reject forks from a non-quiescent source. Events are still
+          // streaming when the source is in flight; convertNativeJsonl
+          // would produce a transcript that ends mid-assistant-message
+          // and the fork's first --resume would corrupt state. The
+          // user can re-fork once the source quiesces.
+          const sourceMetaCol = sourceHandle?.db?.collections?.sessionMeta
+          const sourceMeta = sourceMetaCol?.get?.(`current`) as
+            | SessionMetaRow
+            | undefined
+          const sourceStatus = sourceMeta?.status
+          if (
+            sourceStatus === `running` ||
+            sourceStatus === `starting` ||
+            sourceStatus === `stopping`
+          ) {
+            ctx.db.actions.lifecycle_insert({
+              row: {
+                key: lifecycleKey(`fork`),
+                ts: Date.now(),
+                event: `kind.convert_failed`,
+                detail: `fork rejected: source not quiescent (status=${sourceStatus})`,
+              } satisfies LifecycleRow,
+            })
+            ctx.db.actions.sessionMeta_update({
+              key: `current`,
+              updater: (d: SessionMetaRow) => {
+                d.lastError = `cannot fork while source status=${sourceStatus}`
+                d.status = `error`
+              },
+            })
+            return
+          }
+
           const sourceEventRows = (sourceEventsCol.toArray as Array<EventRow>)
             .slice()
             .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
@@ -503,10 +537,6 @@ export function makeCodingAgentHandler(
           )
 
           // Resolve effective workspace mode and (optionally) clone.
-          const sourceMetaCol = sourceHandle?.db?.collections?.sessionMeta
-          const sourceMeta = sourceMetaCol?.get?.(`current`) as
-            | SessionMetaRow
-            | undefined
           const sourceWsType = sourceMeta?.workspaceSpec?.type ?? `volume`
           const requested = args.fromWorkspaceMode
           const effectiveMode: `share` | `clone` | `fresh` =
