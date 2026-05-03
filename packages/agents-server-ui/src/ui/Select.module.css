@@ -82,7 +82,7 @@
 }
 
 .popup {
-  padding: 4px;
+  padding: 3px;
   min-width: var(--anchor-width, 8rem);
   max-height: min(60vh, 360px);
   overflow: hidden;
@@ -96,8 +96,8 @@
 .item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 3px 8px;
   border-radius: var(--ds-radius-2);
   font-size: var(--ds-text-sm);
   line-height: var(--ds-text-sm-lh);
