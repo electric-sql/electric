@@ -46,7 +46,8 @@
   justify-content: space-between;
   width: 100%;
   gap: 6px;
-  padding: 6px 10px;
+  height: var(--ds-row-height-md);
+  padding: 0 10px;
   cursor: pointer;
   font-size: var(--ds-text-sm);
   font-weight: 500;
@@ -54,6 +55,10 @@
   background: var(--ds-accent-9);
   border-radius: var(--ds-radius-2);
   box-sizing: border-box;
+  transition: background 0.12s ease;
+}
+.newSessionBtn:hover:not(:disabled) {
+  background: var(--ds-accent-10);
 }
 .newSessionBtn:disabled {
   opacity: 0.4;

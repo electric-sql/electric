@@ -19,12 +19,12 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: var(--ds-surface);
+  background: var(--ds-surface-raised);
   color: var(--ds-text-1);
   border-radius: var(--ds-radius-4);
   box-shadow: var(--ds-shadow-3);
-  border: 1px solid var(--ds-border-1);
-  padding: var(--ds-space-5);
+  border: 1px solid var(--ds-border-2);
+  padding: var(--ds-space-4);
   width: calc(100vw - var(--ds-space-5) * 2);
   max-width: 480px;
   max-height: calc(100vh - var(--ds-space-5) * 2);

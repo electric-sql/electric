@@ -140,7 +140,7 @@ export function SearchPalette(): React.ReactElement | null {
   return (
     <BaseDialog.Root open={isOpen} onOpenChange={(open) => !open && close()}>
       <BaseDialog.Portal>
-        <BaseDialog.Backdrop />
+        <BaseDialog.Backdrop className={styles.backdrop} />
         <BaseDialog.Popup className={styles.popup}>
           <div className={styles.searchRow}>
             <Search size={16} className={styles.searchIcon} />

@@ -34,19 +34,19 @@
    * controlled by the parent container's `gap`, not per-element trim.
    * Sizes intentionally keep close to Radix's font-size-1..6 mapping
    * so existing `size="1"`..`size="6"` migrations are visually 1:1.   */
-  --ds-text-xs: 12px;
-  --ds-text-xs-lh: 1.5;
-  --ds-text-sm: 14px;
-  --ds-text-sm-lh: 1.55;
-  --ds-text-base: 16px;
-  --ds-text-base-lh: 1.6;
-  --ds-text-lg: 18px;
+  --ds-text-xs: 11px;
+  --ds-text-xs-lh: 1.45;
+  --ds-text-sm: 13px;
+  --ds-text-sm-lh: 1.5;
+  --ds-text-base: 14px;
+  --ds-text-base-lh: 1.55;
+  --ds-text-lg: 16px;
   --ds-text-lg-lh: 1.5;
-  --ds-text-xl: 20px;
+  --ds-text-xl: 18px;
   --ds-text-xl-lh: 1.4;
-  --ds-text-2xl: 24px;
+  --ds-text-2xl: 22px;
   --ds-text-2xl-lh: 1.35;
-  --ds-text-3xl: 30px;
+  --ds-text-3xl: 28px;
   --ds-text-3xl-lh: 1.25;
 
   /* ---- Font families ------------------------------------------------- */

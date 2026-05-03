@@ -1,3 +1,15 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--ds-overlay);
+  z-index: var(--ds-z-modal);
+  transition: opacity 160ms ease;
+}
+.backdrop[data-starting-style],
+.backdrop[data-ending-style] {
+  opacity: 0;
+}
+
 .popup {
   position: fixed;
   top: 12vh;
