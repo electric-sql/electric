@@ -1,4 +1,19 @@
 import { describe, it, expect, beforeAll } from 'vitest'
+
+// Polls `fn` every 100 ms until it returns a non-null value or the
+// deadline elapses. Returns the resolved value or null on timeout.
+async function pollUntil<T>(
+  fn: () => Promise<T | null>,
+  timeoutMs: number
+): Promise<T | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const v = await fn()
+    if (v !== null) return v
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  return null
+}
 import {
   LocalDockerProvider,
   StdioBridge,
@@ -146,8 +161,15 @@ describeMaybe(`Slice B — resume integration`, () => {
     const nativeRows = Array.from(state.nativeJsonl.rows.values()) as any[]
     expect(nativeRows.length).toBeGreaterThan(0)
 
-    await new Promise((r) => setTimeout(r, 2500))
-    expect([`stopped`, `unknown`]).toContain(await provider.status(agentId))
+    // Poll for idle eviction to land. The idle timer fires at ~1500 ms;
+    // adding container teardown, status flip, and recovery from a slow
+    // CI box can push the wall-clock past a fixed 2500 ms wait. Poll
+    // for up to 30 s — green CI usually completes in under 3 s.
+    const evicted = await pollUntil(async () => {
+      const s = await provider.status(agentId)
+      return [`stopped`, `unknown`].includes(s) ? s : null
+    }, 30_000)
+    expect(evicted).not.toBeNull()
 
     state.inbox.rows.set(`i2`, {
       key: `i2`,

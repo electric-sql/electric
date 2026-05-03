@@ -716,10 +716,11 @@ export function runCodingAgentsIntegrationConformance(
           const lifecycleRows = Array.from(
             forkState.lifecycle.rows.values()
           ) as Array<LifecycleRow>
+          // Schema event enum is `kind.convert_failed` (forks share the
+          // convert event family — see entity/collections.ts).
           const rejected = lifecycleRows.find(
             (r) =>
-              (r.event === `kind.convert_failed` ||
-                r.event === `fork.failed`) &&
+              r.event === `kind.convert_failed` &&
               /running|starting|stopping|quiesc/i.test(r.detail ?? ``)
           )
           expect(rejected).toBeDefined()
