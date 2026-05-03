@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { SidebarRow } from './SidebarRow'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
@@ -9,18 +8,13 @@ type SidebarTreeProps = {
   onSelectEntity: (url: string) => void
   isExpanded: (url: string) => boolean
   toggleExpanded: (url: string) => void
-  expandNode: (url: string) => void
-  /** When set, only render entities present in this set; auto-expands
-   *  ancestors so matches stay visible. Used by the filter input. */
-  visibleUrls?: Set<string> | null
   depth?: number
 }
 
 /**
  * Recursive subtree renderer. Children are hidden until the user clicks
- * the caret on a row. When a `visibleUrls` filter is active, ancestors
- * of any match are force-expanded so matches stay reachable without
- * requiring the user to drill in manually.
+ * the caret on a row; expansion state lives in `useExpandedTreeNodes`
+ * so it persists across reloads.
  */
 export function SidebarTree({
   entity,
@@ -29,23 +23,11 @@ export function SidebarTree({
   onSelectEntity,
   isExpanded,
   toggleExpanded,
-  expandNode,
-  visibleUrls = null,
   depth = 0,
-}: SidebarTreeProps): React.ReactElement | null {
+}: SidebarTreeProps): React.ReactElement {
   const children = childrenByParent.get(entity.url) ?? []
   const hasChildren = children.length > 0
-  const filtering = visibleUrls !== null
-  const matchesFilter = !filtering || visibleUrls!.has(entity.url)
-  const expanded = filtering ? hasChildren : isExpanded(entity.url)
-
-  useEffect(() => {
-    if (filtering && hasChildren && !isExpanded(entity.url)) {
-      expandNode(entity.url)
-    }
-  }, [filtering, hasChildren, entity.url, expandNode, isExpanded])
-
-  if (!matchesFilter) return null
+  const expanded = isExpanded(entity.url)
 
   return (
     <>
@@ -68,8 +50,6 @@ export function SidebarTree({
             onSelectEntity={onSelectEntity}
             isExpanded={isExpanded}
             toggleExpanded={toggleExpanded}
-            expandNode={expandNode}
-            visibleUrls={visibleUrls}
             depth={depth + 1}
           />
         ))}

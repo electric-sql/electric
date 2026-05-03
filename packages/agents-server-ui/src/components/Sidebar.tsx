@@ -9,7 +9,6 @@ import { Popover, ScrollArea, Stack, Text } from '../ui'
 import { SidebarRow } from './SidebarRow'
 import { SidebarTree } from './SidebarTree'
 import { SidebarFooter } from './SidebarFooter'
-import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
 import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
 import { useExpandedTreeNodes } from '../hooks/useExpandedTreeNodes'
@@ -58,7 +57,6 @@ export function Sidebar({
   const { entitiesCollection, entityTypesCollection, spawnEntity } =
     useElectricAgents()
   const expanded = useExpandedTreeNodes()
-  const [filter, setFilter] = useState(``)
   const [spawnError, setSpawnError] = useState<string | null>(null)
   const [spawnDialogType, setSpawnDialogType] =
     useState<ElectricEntityType | null>(null)
@@ -119,11 +117,6 @@ export function Sidebar({
   const { roots, childrenByParent } = useMemo(
     () => buildEntityTree(entities),
     [entities]
-  )
-
-  const visibleUrls = useMemo(
-    () => urlsMatchingFilter(entities, filter),
-    [entities, filter]
   )
 
   const sessionGroups = useMemo(() => bucketEntities(roots), [roots])
@@ -265,15 +258,6 @@ export function Sidebar({
         </Popover.Root>
       </Stack>
 
-      <Stack px={3} className={styles.filterRow}>
-        <input
-          placeholder="Filter by type or name..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className={styles.filterInput}
-        />
-      </Stack>
-
       <ScrollArea className={styles.scrollFlex}>
         <Stack direction="column" px={2} className={styles.treeRow}>
           {pinnedEntities.length > 0 && (
@@ -289,31 +273,22 @@ export function Sidebar({
               ))}
             </>
           )}
-          {sessionGroups.map((group) => {
-            const visibleRoots = group.items.filter(
-              (root) =>
-                visibleUrls === null || subtreeMatches(root.url, visibleUrls)
-            )
-            if (visibleRoots.length === 0) return null
-            return (
-              <div key={group.id}>
-                <SectionLabel>{group.label}</SectionLabel>
-                {visibleRoots.map((root) => (
-                  <SidebarTree
-                    key={root.url}
-                    entity={root}
-                    childrenByParent={childrenByParent}
-                    selectedEntityUrl={selectedEntityUrl}
-                    onSelectEntity={onSelectEntity}
-                    isExpanded={expanded.isExpanded}
-                    toggleExpanded={expanded.toggle}
-                    expandNode={expanded.expand}
-                    visibleUrls={visibleUrls}
-                  />
-                ))}
-              </div>
-            )
-          })}
+          {sessionGroups.map((group) => (
+            <div key={group.id}>
+              <SectionLabel>{group.label}</SectionLabel>
+              {group.items.map((root) => (
+                <SidebarTree
+                  key={root.url}
+                  entity={root}
+                  childrenByParent={childrenByParent}
+                  selectedEntityUrl={selectedEntityUrl}
+                  onSelectEntity={onSelectEntity}
+                  isExpanded={expanded.isExpanded}
+                  toggleExpanded={expanded.toggle}
+                />
+              ))}
+            </div>
+          ))}
           {entities.length === 0 && (
             <Text
               size={1}
@@ -322,16 +297,6 @@ export function Sidebar({
               className={styles.emptyTreeText}
             >
               No sessions
-            </Text>
-          )}
-          {entities.length > 0 && sessionGroups.length === 0 && (
-            <Text
-              size={1}
-              tone="muted"
-              align="center"
-              className={styles.emptyTreeText}
-            >
-              No matches
             </Text>
           )}
         </Stack>
@@ -364,12 +329,6 @@ export function Sidebar({
   )
 }
 
-function subtreeMatches(rootUrl: string, visible: Set<string>): boolean {
-  // The visible set already contains every match plus its ancestor chain
-  // (built by `urlsMatchingFilter`), so testing the root alone is enough.
-  return visible.has(rootUrl)
-}
-
 function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
   roots: Array<ElectricEntity>
   childrenByParent: Map<string, Array<ElectricEntity>>
@@ -388,32 +347,6 @@ function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
     }
   }
   return { roots, childrenByParent }
-}
-
-function urlsMatchingFilter(
-  entities: ReadonlyArray<ElectricEntity>,
-  filter: string
-): Set<string> | null {
-  if (!filter) return null
-  const needle = filter.toLowerCase()
-  const byUrl = new Map(entities.map((e) => [e.url, e]))
-  const visible = new Set<string>()
-  for (const entity of entities) {
-    const name = entity.url.split(`/`).pop() ?? ``
-    const { title } = getEntityDisplayTitle(entity)
-    const hit =
-      name.toLowerCase().includes(needle) ||
-      entity.type.toLowerCase().includes(needle) ||
-      title.toLowerCase().includes(needle)
-    if (!hit) continue
-    visible.add(entity.url)
-    let cursor: string | null = entity.parent
-    while (cursor && byUrl.has(cursor) && !visible.has(cursor)) {
-      visible.add(cursor)
-      cursor = byUrl.get(cursor)?.parent ?? null
-    }
-  }
-  return visible
 }
 
 function SectionLabel({

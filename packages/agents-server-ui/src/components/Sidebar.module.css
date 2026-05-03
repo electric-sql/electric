@@ -35,11 +35,6 @@
   line-height: 1.4;
 }
 
-.filterRow {
-  padding-top: 4px;
-  padding-bottom: 4px;
-}
-
 .treeRow {
   padding-bottom: 8px;
 }
@@ -101,23 +96,6 @@
 
 .emptyHint {
   padding: 12px;
-}
-
-.filterInput {
-  width: 100%;
-  padding: 6px 10px;
-  border-radius: var(--ds-radius-2);
-  border: 1px solid var(--ds-gray-a4);
-  background: var(--ds-gray-a2);
-  font-size: var(--ds-text-xs);
-  font-family: var(--ds-font-body);
-  color: var(--ds-text-1);
-  outline: none;
-  box-sizing: border-box;
-}
-.filterInput:focus-visible {
-  border-color: var(--ds-accent-9);
-  box-shadow: 0 0 0 1px var(--ds-accent-9);
 }
 
 .scrollFlex {

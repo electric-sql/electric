@@ -23,6 +23,7 @@ import {
 } from './hooks/useSearchPalette'
 import { Sidebar } from './components/Sidebar'
 import { AppTopBar, TopBarSlotsProvider } from './components/AppTopBar'
+import { SearchPalette } from './components/SearchPalette'
 import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
@@ -84,6 +85,7 @@ function RootShell(): React.ReactElement {
         )}
         <Outlet />
       </div>
+      <SearchPalette />
     </div>
   )
 }
