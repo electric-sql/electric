@@ -235,6 +235,14 @@ export function runCodingAgentsIntegrationConformance(
             Array.from(state.runs.rows.values()) as Array<RunRow>
           ).filter((r) => r.status === `completed`)
           expect(completed.length).toBeGreaterThan(0)
+          // Final status must land in cold or idle. A provider that
+          // returns `running` for a stale agent reaches the
+          // `isOrphaned` branch which transitions to `idle`; a
+          // provider that returns stopped/unknown lands at `cold`.
+          // Either is correct; anything else (e.g. running) means
+          // reconcile mis-classified the orphan.
+          const finalMeta = state.sessionMeta.get(`current`) as SessionMetaRow
+          expect(finalMeta.status).toMatch(/^(cold|idle)$/)
 
           await provider.destroy(agentId).catch(() => undefined)
         }, 180_000)
