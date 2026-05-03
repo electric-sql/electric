@@ -1,0 +1,56 @@
+.dialogDescription {
+  margin-bottom: var(--ds-space-4);
+}
+
+.tabs {
+  border-bottom: 1px solid var(--ds-gray-a4);
+}
+
+.tab {
+  all: unset;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: var(--ds-text-sm);
+  font-weight: 400;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--ds-gray-10);
+}
+.tabActive {
+  font-weight: 600;
+  border-bottom-color: var(--ds-accent-9);
+  color: var(--ds-text-1);
+}
+
+.fieldsetSpacing {
+  margin-top: var(--ds-space-3);
+}
+
+.actions {
+  margin-top: var(--ds-space-4);
+}
+
+.requiredMark {
+  color: var(--ds-red-9);
+  margin-left: 2px;
+}
+
+.nativeSelect {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--ds-radius-2);
+  border: 1px solid var(--ds-gray-a4);
+  background: var(--ds-gray-a2);
+  font-size: var(--ds-text-sm);
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  outline: none;
+  height: 32px;
+}
+.nativeSelect:hover {
+  border-color: var(--ds-border-2);
+}
+.nativeSelect:focus-visible {
+  border-color: var(--ds-accent-9);
+  box-shadow: 0 0 0 1px var(--ds-accent-9);
+}

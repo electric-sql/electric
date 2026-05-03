@@ -1,0 +1,124 @@
+.root {
+  flex-shrink: 0;
+  border-right: 1px solid var(--ds-gray-a5);
+  background: var(--ds-gray-a2);
+  position: relative;
+}
+
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -3px;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 20;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.resizeHandle:hover,
+.resizeHandleActive {
+  background: var(--ds-accent-a6);
+}
+
+.spawnError {
+  /* container only */
+}
+
+.newSessionBtn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: var(--ds-text-sm);
+  font-weight: 500;
+  color: var(--ds-text-on-accent);
+  background: var(--ds-accent-9);
+  border-radius: var(--ds-radius-2);
+  box-sizing: border-box;
+}
+.newSessionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.newSessionPopup {
+  padding: 0;
+  width: 320px;
+  max-height: 400px;
+}
+
+.newSessionHeader {
+  border-bottom: 1px solid var(--ds-gray-a4);
+}
+
+.newSessionList {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.newSessionItem {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--ds-gray-a3);
+}
+.newSessionItem:last-child {
+  border-bottom: none;
+}
+.newSessionItem:hover {
+  background: var(--ds-gray-a3);
+}
+
+.emptyHint {
+  padding: 12px;
+}
+
+.filterInput {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--ds-radius-2);
+  border: 1px solid var(--ds-gray-a4);
+  background: var(--ds-gray-a2);
+  font-size: var(--ds-text-xs);
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  outline: none;
+  box-sizing: border-box;
+}
+.filterInput:focus-visible {
+  border-color: var(--ds-accent-9);
+  box-shadow: 0 0 0 1px var(--ds-accent-9);
+}
+
+.scrollFlex {
+  flex: 1;
+  min-height: 0;
+}
+
+.emptyTreeText {
+  padding-top: 20px;
+}
+
+.footer {
+  border-top: 1px solid var(--ds-gray-a5);
+  flex-shrink: 0;
+}
+
+.sectionLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  padding: 12px 16px 4px;
+  opacity: 0.6;
+}

@@ -1,7 +1,8 @@
-import { Button, DropdownMenu, Flex, IconButton, Text } from '@radix-ui/themes'
-import { ChevronDown, Circle, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { ChevronDown, Circle, Plus, Trash2 } from 'lucide-react'
 import { useServerConnection } from '../hooks/useServerConnection'
+import { Button, IconButton, Input, Menu, Stack, Text } from '../ui'
+import styles from './ServerPicker.module.css'
 
 export function ServerPicker(): React.ReactElement {
   const {
@@ -14,74 +15,69 @@ export function ServerPicker(): React.ReactElement {
   } = useServerConnection()
   const [adding, setAdding] = useState(false)
 
-  let dotColor = `var(--gray-8)`
+  let dotColor = `var(--ds-gray-8)`
   if (activeServer && connected) dotColor = `#22c55e`
   else if (activeServer) dotColor = `#ef4444`
 
   return (
-    <Flex
-      p="3"
-      align="center"
-      gap="2"
-      style={{ borderBottom: `1px solid var(--gray-a5)`, position: `relative` }}
-    >
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          <Button
-            variant="ghost"
-            size="2"
-            style={{ flex: 1, justifyContent: `flex-start` }}
-          >
-            <Flex align="center" gap="2" style={{ flex: 1 }}>
-              <Circle size={8} fill={dotColor} stroke="none" />
-              <Text size="2" weight="bold" truncate>
-                {activeServer?.name ?? `No server`}
-              </Text>
-            </Flex>
-            <ChevronDown size={14} />
-          </Button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content>
+    <Stack p={3} align="center" gap={2} className={styles.bar}>
+      <Menu.Root>
+        <Menu.Trigger
+          render={
+            <Button
+              variant="ghost"
+              tone="neutral"
+              size={2}
+              className={styles.trigger}
+            >
+              <span className={styles.triggerLabel}>
+                <Circle size={8} fill={dotColor} stroke="none" />
+                <Text size={2} weight="bold" truncate>
+                  {activeServer?.name ?? `No server`}
+                </Text>
+              </span>
+              <ChevronDown size={14} />
+            </Button>
+          }
+        />
+        <Menu.Content side="bottom" align="start">
           {servers.map((server, i) => (
-            <DropdownMenu.Item
+            <Menu.Item
               key={`${server.url}-${i}`}
               onSelect={() => setActiveServer(server)}
             >
-              <Flex align="center" gap="2">
-                <Circle
-                  size={8}
-                  fill={
-                    server.url === activeServer?.url
-                      ? dotColor
-                      : `var(--gray-8)`
-                  }
-                  stroke="none"
-                />
-                <Text size="2">{server.name}</Text>
-                <IconButton
-                  size="1"
-                  variant="ghost"
-                  color="red"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeServer(server.url)
-                  }}
-                  aria-label={`Remove ${server.name}`}
-                >
-                  <Trash2 size={12} />
-                </IconButton>
-              </Flex>
-            </DropdownMenu.Item>
+              <Circle
+                size={8}
+                fill={
+                  server.url === activeServer?.url
+                    ? dotColor
+                    : `var(--ds-gray-8)`
+                }
+                stroke="none"
+              />
+              <Text size={2}>{server.name}</Text>
+              <IconButton
+                size={1}
+                variant="ghost"
+                tone="danger"
+                className={styles.removeBtn}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeServer(server.url)
+                }}
+                aria-label={`Remove ${server.name}`}
+              >
+                <Trash2 size={12} />
+              </IconButton>
+            </Menu.Item>
           ))}
-          {servers.length > 0 && <DropdownMenu.Separator />}
-          <DropdownMenu.Item onSelect={() => setAdding(true)}>
-            <Flex align="center" gap="2">
-              <Plus size={14} />
-              <Text size="2">Add server</Text>
-            </Flex>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+          {servers.length > 0 && <Menu.Separator />}
+          <Menu.Item onSelect={() => setAdding(true)}>
+            <Plus size={14} />
+            <Text size={2}>Add server</Text>
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Root>
 
       {adding && (
         <AddServerDialog
@@ -94,7 +90,7 @@ export function ServerPicker(): React.ReactElement {
           }}
         />
       )}
-    </Flex>
+    </Stack>
   )
 }
 
@@ -109,51 +105,27 @@ function AddServerDialog({
   const [url, setUrl] = useState(``)
 
   return (
-    <Flex
-      direction="column"
-      gap="2"
-      p="3"
-      style={{
-        position: `absolute`,
-        top: 48,
-        left: 0,
-        right: 0,
-        zIndex: 10,
-        background: `var(--color-background)`,
-        borderBottom: `1px solid var(--gray-a5)`,
-        boxShadow: `var(--shadow-3)`,
-      }}
-    >
-      <input
+    <Stack direction="column" gap={2} p={3} className={styles.addPanel}>
+      <Input
         placeholder="Name (e.g. Local Dev)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        style={{
-          padding: `6px 10px`,
-          borderRadius: 6,
-          border: `1px solid var(--gray-a5)`,
-          fontSize: 13,
-        }}
+        size={2}
       />
-      <input
+      <Input
         placeholder="URL (e.g. http://localhost:4437)"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        style={{
-          padding: `6px 10px`,
-          borderRadius: 6,
-          border: `1px solid var(--gray-a5)`,
-          fontSize: 13,
-        }}
+        size={2}
       />
-      <Flex gap="2">
-        <Button size="1" onClick={() => name && url && onAdd(name, url)}>
+      <Stack gap={2}>
+        <Button size={1} onClick={() => name && url && onAdd(name, url)}>
           Add
         </Button>
-        <Button size="1" variant="soft" color="gray" onClick={onCancel}>
+        <Button size={1} variant="soft" tone="neutral" onClick={onCancel}>
           Cancel
         </Button>
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 }

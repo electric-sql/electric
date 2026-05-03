@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
+import { Button, Dialog, Input, Stack, Text } from '../ui'
+import styles from './CodingSessionSpawnDialog.module.css'
 
 type AgentType = `claude` | `codex`
 type Mode = `create` | `attach` | `import`
@@ -59,15 +60,15 @@ export function CodingSessionSpawnDialog({
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth="480px">
+      <Dialog.Content maxWidth={480}>
         <Dialog.Title>New coder</Dialog.Title>
-        <Dialog.Description size="2" color="gray" mb="4">
+        <Dialog.Description className={styles.dialogDescription}>
           Start a fresh Claude Code / Codex session, attach to an existing local
           session, or import a session (optionally across agents).
         </Dialog.Description>
         <ModeTabs mode={mode} onChange={setMode} />
         <form onSubmit={handleSubmit}>
-          <Flex direction="column" gap="3" mt="3">
+          <Stack direction="column" gap={3} className={styles.fieldsetSpacing}>
             <Field label="Target agent">
               <AgentSelect value={targetAgent} onChange={setTargetAgent} />
             </Field>
@@ -77,13 +78,12 @@ export function CodingSessionSpawnDialog({
                 required
                 description="UUID of an existing local Claude/Codex session (e.g. as listed in ~/.claude/projects/... or ~/.codex/sessions/...)."
               >
-                <input
+                <Input
                   type="text"
                   value={nativeSessionId}
                   onChange={(e) => setNativeSessionId(e.target.value)}
                   placeholder="e.g. 3f2a…"
                   autoFocus
-                  style={inputStyle}
                 />
               </Field>
             )}
@@ -100,13 +100,12 @@ export function CodingSessionSpawnDialog({
                   required
                   description="UUID of the source session. Same-agent imports are lossless; cross-agent imports round-trip through the normalized event stream."
                 >
-                  <input
+                  <Input
                     type="text"
                     value={sourceSessionId}
                     onChange={(e) => setSourceSessionId(e.target.value)}
                     placeholder="e.g. 3f2a…"
                     autoFocus
-                    style={inputStyle}
                   />
                 </Field>
               </>
@@ -115,21 +114,22 @@ export function CodingSessionSpawnDialog({
               label="Working directory"
               description="Path the CLI runs in. Leave blank to use the server's default cwd (or, for imports, the source session's cwd)."
             >
-              <input
+              <Input
                 type="text"
                 value={cwd}
                 onChange={(e) => setCwd(e.target.value)}
                 placeholder="optional"
-                style={inputStyle}
               />
             </Field>
-          </Flex>
-          <Flex gap="3" mt="4" justify="end">
-            <Dialog.Close>
-              <Button variant="soft" color="gray" type="button">
-                Cancel
-              </Button>
-            </Dialog.Close>
+          </Stack>
+          <Stack gap={3} justify="end" className={styles.actions}>
+            <Dialog.Close
+              render={
+                <Button variant="soft" tone="neutral" type="button">
+                  Cancel
+                </Button>
+              }
+            />
             <Button type="submit" disabled={!canSubmit}>
               {mode === `create`
                 ? `Create`
@@ -137,7 +137,7 @@ export function CodingSessionSpawnDialog({
                   ? `Attach`
                   : `Import`}
             </Button>
-          </Flex>
+          </Stack>
         </form>
       </Dialog.Content>
     </Dialog.Root>
@@ -151,42 +151,24 @@ function ModeTabs({
   mode: Mode
   onChange: (m: Mode) => void
 }): React.ReactElement {
+  const tabs: Array<[Mode, string]> = [
+    [`create`, `Create`],
+    [`attach`, `Attach`],
+    [`import`, `Import`],
+  ]
   return (
-    <Flex
-      gap="0"
-      style={{
-        borderBottom: `1px solid var(--gray-a4)`,
-      }}
-    >
-      {(
-        [
-          [`create`, `Create`],
-          [`attach`, `Attach`],
-          [`import`, `Import`],
-        ] as Array<[Mode, string]>
-      ).map(([m, label]) => (
+    <Stack className={styles.tabs}>
+      {tabs.map(([m, label]) => (
         <button
           key={m}
           type="button"
           onClick={() => onChange(m)}
-          style={{
-            all: `unset`,
-            padding: `8px 16px`,
-            cursor: `pointer`,
-            fontSize: `var(--font-size-2)`,
-            fontWeight: m === mode ? 600 : 400,
-            borderBottom:
-              m === mode
-                ? `2px solid var(--accent-9)`
-                : `2px solid transparent`,
-            marginBottom: -1,
-            color: m === mode ? `var(--gray-12)` : `var(--gray-10)`,
-          }}
+          className={`${styles.tab} ${m === mode ? styles.tabActive : ``}`}
         >
           {label}
         </button>
       ))}
-    </Flex>
+    </Stack>
   )
 }
 
@@ -201,7 +183,7 @@ function AgentSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as AgentType)}
-      style={inputStyle}
+      className={styles.nativeSelect}
     >
       <option value="claude">Claude Code</option>
       <option value="codex">Codex</option>
@@ -221,31 +203,17 @@ function Field({
   children: React.ReactNode
 }): React.ReactElement {
   return (
-    <Flex direction="column" gap="1">
-      <Text size="2" weight="medium">
+    <Stack direction="column" gap={1}>
+      <Text size={2} weight="medium">
         {label}
-        {required && (
-          <span style={{ color: `var(--red-9)`, marginLeft: 2 }}>*</span>
-        )}
+        {required && <span className={styles.requiredMark}>*</span>}
       </Text>
       {children}
       {description && (
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           {description}
         </Text>
       )}
-    </Flex>
+    </Stack>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  width: `100%`,
-  padding: `6px 10px`,
-  borderRadius: `var(--radius-2)`,
-  border: `1px solid var(--gray-a4)`,
-  background: `var(--gray-a2)`,
-  fontSize: `var(--font-size-2)`,
-  fontFamily: `var(--default-font-family)`,
-  color: `var(--gray-12)`,
-  outline: `none`,
 }

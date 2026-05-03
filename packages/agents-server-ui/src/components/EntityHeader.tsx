@@ -1,13 +1,5 @@
 import { useState } from 'react'
 import {
-  Badge,
-  Button,
-  Dialog,
-  DropdownMenu,
-  Flex,
-  Text,
-} from '@radix-ui/themes'
-import {
   Copy,
   Database,
   Eye,
@@ -18,14 +10,17 @@ import {
   Trash2,
 } from 'lucide-react'
 import { getEntityInstanceName } from '../lib/types'
+import { Badge, Button, Dialog, Menu, Stack, Text } from '../ui'
+import type { BadgeTone } from '../ui'
+import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
-const STATUS_COLOR: Record<string, `blue` | `green` | `amber` | `gray`> = {
-  active: `blue`,
-  running: `blue`,
-  idle: `green`,
-  spawning: `amber`,
-  stopped: `gray`,
+const STATUS_TONE: Record<string, BadgeTone> = {
+  active: `info`,
+  running: `info`,
+  idle: `success`,
+  spawning: `warning`,
+  stopped: `neutral`,
 }
 
 export function EntityHeader({
@@ -56,44 +51,36 @@ export function EntityHeader({
   const instanceName = getEntityInstanceName(entity.url)
 
   return (
-    <Flex
-      p="3"
-      align="center"
-      gap="3"
-      style={{ borderBottom: `1px solid var(--gray-a5)` }}
-    >
-      <Flex direction="column" gap="2">
-        <Text
-          size="4"
-          weight="bold"
-          style={{ fontFamily: `var(--heading-font)` }}
-        >
+    <Stack p={3} align="center" gap={3} className={styles.header}>
+      <Stack direction="column" gap={2}>
+        <Text size={4} weight="bold" className={styles.title}>
           {instanceName}
         </Text>
-        <Text size="1" color="gray" style={{ opacity: 0.6 }}>
+        <Text size={1} tone="muted" className={styles.urlText}>
           {decodeURIComponent(entity.url)}
         </Text>
         {killError && (
-          <Text size="1" color="red">
+          <Text size={1} tone="danger">
             {killError}
           </Text>
         )}
         {forkError && (
-          <Text size="1" color="red">
+          <Text size={1} tone="danger">
             {forkError}
           </Text>
         )}
-      </Flex>
+      </Stack>
 
-      <Flex ml="auto" align="center" gap="2">
-        <Badge color={STATUS_COLOR[entity.status] ?? `gray`} variant="soft">
+      <Stack align="center" gap={2} className={styles.toolbar}>
+        <Badge tone={STATUS_TONE[entity.status] ?? `neutral`} variant="soft">
           {entity.status}
         </Badge>
 
         {onFork && (
           <Button
             variant="soft"
-            size="1"
+            tone="neutral"
+            size={1}
             onClick={onFork}
             disabled={forking || entity.status === `stopped`}
             title={
@@ -103,119 +90,105 @@ export function EntityHeader({
             }
           >
             <GitFork size={14} />
-            <Text size="1">{forking ? `Forking` : `Fork`}</Text>
+            <Text size={1}>{forking ? `Forking` : `Fork`}</Text>
           </Button>
         )}
 
         {onToggleStateExplorer && (
           <Button
             variant="ghost"
-            size="1"
+            tone="neutral"
+            size={1}
             onClick={onToggleStateExplorer}
             title="Toggle state explorer"
-            style={
-              stateExplorerOpen ? { background: `var(--accent-a4)` } : undefined
-            }
+            className={stateExplorerOpen ? styles.activeBg : undefined}
           >
             <Database size={14} />
           </Button>
         )}
 
-        <Button variant="ghost" size="1" onClick={onTogglePin}>
+        <Button variant="ghost" tone="neutral" size={1} onClick={onTogglePin}>
           {pinned ? <PinOff size={14} /> : <Pin size={14} />}
         </Button>
 
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <Button variant="ghost" size="1">
-              <MoreHorizontal size={16} />
-            </Button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item onSelect={() => setShowInspect(true)}>
-              <Flex align="center" gap="2">
-                <Eye size={14} />
-                <Text size="2">Inspect</Text>
-              </Flex>
-            </DropdownMenu.Item>
+        <Menu.Root>
+          <Menu.Trigger
+            render={
+              <Button variant="ghost" tone="neutral" size={1}>
+                <MoreHorizontal size={16} />
+              </Button>
+            }
+          />
+          <Menu.Content side="bottom" align="end">
+            <Menu.Item onSelect={() => setShowInspect(true)}>
+              <Eye size={14} />
+              <Text size={2}>Inspect</Text>
+            </Menu.Item>
             {onToggleStateExplorer && (
-              <DropdownMenu.Item onSelect={onToggleStateExplorer}>
-                <Flex align="center" gap="2">
-                  <Database size={14} />
-                  <Text size="2">
-                    {stateExplorerOpen
-                      ? `Hide State Explorer`
-                      : `State Explorer`}
-                  </Text>
-                </Flex>
-              </DropdownMenu.Item>
+              <Menu.Item onSelect={onToggleStateExplorer}>
+                <Database size={14} />
+                <Text size={2}>
+                  {stateExplorerOpen ? `Hide State Explorer` : `State Explorer`}
+                </Text>
+              </Menu.Item>
             )}
-            <DropdownMenu.Item
+            <Menu.Item
               onSelect={() => navigator.clipboard.writeText(entity.url)}
             >
-              <Flex align="center" gap="2">
-                <Copy size={14} />
-                <Text size="2">Copy URL</Text>
-              </Flex>
-            </DropdownMenu.Item>
+              <Copy size={14} />
+              <Text size={2}>Copy URL</Text>
+            </Menu.Item>
             {entity.status !== `stopped` && (
               <>
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item
-                  color="red"
+                <Menu.Separator />
+                <Menu.Item
+                  tone="danger"
                   onSelect={() => setShowKillConfirm(true)}
                 >
-                  <Flex align="center" gap="2">
-                    <Trash2 size={14} />
-                    <Text size="2">Kill</Text>
-                  </Flex>
-                </DropdownMenu.Item>
+                  <Trash2 size={14} />
+                  <Text size={2}>Kill</Text>
+                </Menu.Item>
               </>
             )}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </Flex>
+          </Menu.Content>
+        </Menu.Root>
+      </Stack>
 
       <Dialog.Root open={showInspect} onOpenChange={setShowInspect}>
-        <Dialog.Content maxWidth="600px">
+        <Dialog.Content maxWidth={600}>
           <Dialog.Title>Entity Details</Dialog.Title>
-          <pre
-            style={{
-              background: `var(--gray-a3)`,
-              padding: 16,
-              borderRadius: 8,
-              overflow: `auto`,
-              fontSize: 12,
-              maxHeight: 400,
-            }}
-          >
+          <pre className={styles.inspectPre}>
             {JSON.stringify(entity, null, 2)}
           </pre>
-          <Flex justify="end" mt="3">
-            <Dialog.Close>
-              <Button variant="soft" color="gray">
-                Close
-              </Button>
-            </Dialog.Close>
-          </Flex>
+          <Stack justify="end" style={{ marginTop: 12 }}>
+            <Dialog.Close
+              render={
+                <Button variant="soft" tone="neutral">
+                  Close
+                </Button>
+              }
+            />
+          </Stack>
         </Dialog.Content>
       </Dialog.Root>
 
       <Dialog.Root open={showKillConfirm} onOpenChange={setShowKillConfirm}>
-        <Dialog.Content maxWidth="400px">
+        <Dialog.Content maxWidth={400}>
           <Dialog.Title>Kill Entity</Dialog.Title>
-          <Text size="2" color="gray">
+          <Text size={2} tone="muted">
             Are you sure you want to kill {instanceName}? The entity will stop
             processing and its stream will become read-only.
           </Text>
-          <Flex justify="end" gap="2" mt="4">
-            <Dialog.Close>
-              <Button variant="soft" color="gray">
-                Cancel
-              </Button>
-            </Dialog.Close>
+          <Stack justify="end" gap={2} style={{ marginTop: 16 }}>
+            <Dialog.Close
+              render={
+                <Button variant="soft" tone="neutral">
+                  Cancel
+                </Button>
+              }
+            />
             <Button
-              color="red"
+              tone="danger"
               onClick={() => {
                 onKill()
                 setShowKillConfirm(false)
@@ -223,9 +196,9 @@ export function EntityHeader({
             >
               Kill
             </Button>
-          </Flex>
+          </Stack>
         </Dialog.Content>
       </Dialog.Root>
-    </Flex>
+    </Stack>
   )
 }

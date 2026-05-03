@@ -1,0 +1,35 @@
+.bar {
+  border-bottom: 1px solid var(--ds-gray-a5);
+  position: relative;
+}
+
+.trigger {
+  flex: 1;
+  justify-content: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.triggerLabel {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.removeBtn {
+  margin-left: auto;
+}
+
+.addPanel {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  right: 0;
+  z-index: var(--ds-z-dropdown);
+  background: var(--ds-bg);
+  border-bottom: 1px solid var(--ds-gray-a5);
+  box-shadow: var(--ds-shadow-3);
+}

@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Flex, IconButton, Popover, ScrollArea, Text } from '@radix-ui/themes'
 import { ChevronDown, Monitor, Moon, Sun } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { nanoid } from 'nanoid'
 import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import { IconButton, Popover, ScrollArea, Stack, Text } from '../ui'
 import { ServerPicker } from './ServerPicker'
 import { EntityListItem, getEntityDisplayTitle } from './EntityListItem'
 import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
 import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
 import { useDarkModeContext, type ThemePreference } from '../hooks/useDarkMode'
+import styles from './Sidebar.module.css'
+import type {
+  ElectricEntity,
+  ElectricEntityType,
+} from '../lib/ElectricAgentsProvider'
 
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -37,10 +42,6 @@ function useSidebarWidth(): readonly [number, (w: number) => void] {
   }, [width])
   return [width, setWidth] as const
 }
-import type {
-  ElectricEntity,
-  ElectricEntityType,
-} from '../lib/ElectricAgentsProvider'
 
 export function Sidebar({
   selectedEntityUrl,
@@ -164,16 +165,10 @@ export function Sidebar({
   )
 
   return (
-    <Flex
+    <Stack
       direction="column"
-      style={{
-        width,
-        minWidth: SIDEBAR_MIN_WIDTH,
-        flexShrink: 0,
-        borderRight: `1px solid var(--gray-a5)`,
-        background: `var(--gray-a2)`,
-        position: `relative`,
-      }}
+      className={styles.root}
+      style={{ width, minWidth: SIDEBAR_MIN_WIDTH }}
     >
       <div
         role="separator"
@@ -182,125 +177,96 @@ export function Sidebar({
         onMouseDown={startResize}
         onMouseEnter={() => setResizeHandleHover(true)}
         onMouseLeave={() => setResizeHandleHover(false)}
-        style={{
-          position: `absolute`,
-          top: 0,
-          bottom: 0,
-          right: -3,
-          width: 6,
-          cursor: `col-resize`,
-          zIndex: 20,
-          background:
-            resizing || resizeHandleHover ? `var(--accent-a6)` : `transparent`,
-          transition: `background 0.15s`,
-        }}
+        className={`${styles.resizeHandle} ${
+          resizing || resizeHandleHover ? styles.resizeHandleActive : ``
+        }`}
       />
       <ServerPicker />
 
       {spawnError && (
-        <Flex px="3" pt="3">
-          <Text size="1" color="red" role="alert">
+        <Stack px={3} py={3} className={styles.spawnError}>
+          <Text size={1} tone="danger" role="alert">
             {spawnError}
           </Text>
-        </Flex>
+        </Stack>
       )}
 
-      <Flex px="3" pt="3" pb="1">
+      <Stack px={3} style={{ paddingTop: 12, paddingBottom: 4 }}>
         <Popover.Root>
-          <Popover.Trigger>
-            <button
-              type="button"
-              disabled={!spawnEntity || entityTypes.length === 0}
-              style={{
-                all: `unset`,
-                display: `flex`,
-                alignItems: `center`,
-                justifyContent: `space-between`,
-                width: `100%`,
-                gap: 6,
-                padding: `6px 10px`,
-                cursor: `pointer`,
-                fontSize: `var(--font-size-2)`,
-                fontWeight: 500,
-                color: `var(--accent-contrast)`,
-                background: `var(--accent-9)`,
-                borderRadius: `var(--radius-2)`,
-                opacity: !spawnEntity || entityTypes.length === 0 ? 0.4 : 1,
-              }}
-            >
-              New session
-              <ChevronDown size={14} />
-            </button>
-          </Popover.Trigger>
+          <Popover.Trigger
+            render={
+              <button
+                type="button"
+                disabled={!spawnEntity || entityTypes.length === 0}
+                className={styles.newSessionBtn}
+              >
+                New session
+                <ChevronDown size={14} />
+              </button>
+            }
+          />
           <Popover.Content
             side="right"
             align="start"
-            style={{ padding: 0, width: 320, maxHeight: 400 }}
+            padded={false}
+            className={styles.newSessionPopup}
           >
-            <Flex
-              px="3"
-              pt="3"
-              pb="2"
-              style={{ borderBottom: `1px solid var(--gray-a4)` }}
+            <Stack
+              px={3}
+              style={{ paddingTop: 12, paddingBottom: 8 }}
+              className={styles.newSessionHeader}
             >
-              <Text size="2" weight="bold">
+              <Text size={2} weight="bold">
                 New session
               </Text>
-            </Flex>
-            <div style={{ maxHeight: 340, overflowY: `auto` }}>
-              <Flex direction="column" gap="0">
-                {entityTypes.map((t, i) => (
-                  <Popover.Close key={t.name}>
-                    <button
-                      type="button"
-                      onClick={() => handleNewSession(t)}
-                      style={{
-                        all: `unset`,
-                        display: `flex`,
-                        flexDirection: `column`,
-                        alignItems: `flex-start`,
-                        gap: 4,
-                        width: `100%`,
-                        boxSizing: `border-box`,
-                        padding: `12px 16px`,
-                        cursor: `pointer`,
-                        ...(i < entityTypes.length - 1
-                          ? { borderBottom: `1px solid var(--gray-a3)` }
-                          : {}),
-                      }}
-                      className="entity-list-item"
-                    >
-                      <Text size="2" weight="medium">
-                        {t.name}
-                      </Text>
-                      {t.description && (
-                        <Text size="1" color="gray" style={{ lineHeight: 1.4 }}>
-                          {t.description}
+            </Stack>
+            <div className={styles.newSessionList}>
+              <Stack direction="column" gap={0}>
+                {entityTypes.map((t) => (
+                  <Popover.Close
+                    key={t.name}
+                    render={
+                      <button
+                        type="button"
+                        onClick={() => handleNewSession(t)}
+                        className={`${styles.newSessionItem} entity-list-item`}
+                      >
+                        <Text size={2} weight="medium">
+                          {t.name}
                         </Text>
-                      )}
-                    </button>
-                  </Popover.Close>
+                        {t.description && (
+                          <Text
+                            size={1}
+                            tone="muted"
+                            style={{ lineHeight: 1.4 }}
+                          >
+                            {t.description}
+                          </Text>
+                        )}
+                      </button>
+                    }
+                  />
                 ))}
                 {entityTypes.length === 0 && (
                   <Text
-                    size="1"
-                    color="gray"
+                    size={1}
+                    tone="muted"
                     align="center"
-                    style={{ padding: 12 }}
+                    className={styles.emptyHint}
                   >
                     No entity types registered
                   </Text>
                 )}
-              </Flex>
+              </Stack>
             </div>
           </Popover.Content>
         </Popover.Root>
-      </Flex>
+      </Stack>
 
       {pinnedEntities.length > 0 && (
         <>
           <SectionLabel>Pinned</SectionLabel>
-          <Flex direction="column" px="2" gap="1">
+          <Stack direction="column" px={2} gap={1}>
             {pinnedEntities.map((entity) => (
               <EntityListItem
                 key={entity.url}
@@ -309,32 +275,21 @@ export function Sidebar({
                 onSelect={() => onSelectEntity(entity.url)}
               />
             ))}
-          </Flex>
+          </Stack>
         </>
       )}
 
-      <Flex px="3" pb="1" pt="1">
+      <Stack px={3} style={{ paddingTop: 4, paddingBottom: 4 }}>
         <input
           placeholder="Filter by type or name..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="agent-ui-input"
-          style={{
-            width: `100%`,
-            padding: `6px 10px`,
-            borderRadius: `var(--radius-2)`,
-            border: `1px solid var(--gray-a4)`,
-            background: `var(--gray-a2)`,
-            fontSize: `var(--font-size-1)`,
-            fontFamily: `var(--default-font-family)`,
-            color: `var(--gray-12)`,
-            outline: `none`,
-          }}
+          className={`${styles.filterInput} agent-ui-input`}
         />
-      </Flex>
+      </Stack>
 
-      <ScrollArea style={{ flex: 1 }}>
-        <Flex direction="column" px="2" pb="2">
+      <ScrollArea className={styles.scrollFlex}>
+        <Stack direction="column" px={2} style={{ paddingBottom: 8 }}>
           {roots.map((root) => (
             <EntityTreeNode
               key={root.url}
@@ -348,36 +303,34 @@ export function Sidebar({
           ))}
           {roots.length === 0 && (
             <Text
-              size="1"
-              color="gray"
+              size={1}
+              tone="muted"
               align="center"
-              style={{ paddingTop: 20 }}
+              className={styles.emptyTreeText}
             >
               {entities.length === 0 ? `No sessions` : `No matches`}
             </Text>
           )}
-        </Flex>
+        </Stack>
       </ScrollArea>
 
-      <Flex
+      <Stack
         align="center"
         justify="end"
-        px="3"
-        py="2"
-        style={{
-          borderTop: `1px solid var(--gray-a5)`,
-          flexShrink: 0,
-        }}
+        px={3}
+        py={2}
+        className={styles.footer}
       >
         <IconButton
           variant="ghost"
-          size="2"
+          tone="neutral"
+          size={2}
           onClick={cyclePreference}
           aria-label={themeButtonAriaLabel(preference)}
         >
           {themeButtonIcon(preference)}
         </IconButton>
-      </Flex>
+      </Stack>
 
       {spawnDialogType && (
         <SpawnArgsDialog
@@ -400,7 +353,7 @@ export function Sidebar({
           setCodingDialogOpen(false)
         }}
       />
-    </Flex>
+    </Stack>
   )
 }
 
@@ -497,18 +450,7 @@ function SectionLabel({
   children: React.ReactNode
 }): React.ReactElement {
   return (
-    <Text
-      size="1"
-      weight="medium"
-      color="gray"
-      style={{
-        textTransform: `uppercase`,
-        letterSpacing: `0.1em`,
-        fontSize: 10,
-        padding: `12px 16px 4px`,
-        opacity: 0.6,
-      }}
-    >
+    <Text size={1} weight="medium" tone="muted" className={styles.sectionLabel}>
       {children}
     </Text>
   )

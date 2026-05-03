@@ -1,0 +1,29 @@
+.header {
+  border-bottom: 1px solid var(--ds-gray-a5);
+}
+
+.title {
+  font-family: var(--ds-font-heading);
+}
+
+.urlText {
+  opacity: 0.6;
+}
+
+.toolbar {
+  margin-left: auto;
+}
+
+.activeBg {
+  background: var(--ds-accent-a4);
+}
+
+.inspectPre {
+  background: var(--ds-gray-a3);
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 12px;
+  max-height: 400px;
+  font-family: var(--ds-font-mono);
+}

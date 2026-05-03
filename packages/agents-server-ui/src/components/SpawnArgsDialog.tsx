@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
 import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
+import { Button, Dialog, Input, Stack, Text, Textarea } from '../ui'
+import styles from './SpawnArgsDialog.module.css'
 
 interface SpawnArgsDialogProps {
   entityType: ElectricEntityType
@@ -61,7 +62,6 @@ function isStringArrayType(prop: SchemaProperty): boolean {
 function parseStringArray(text: string): Array<string> {
   const trimmed = text.trim()
   if (trimmed === ``) return []
-  // Try JSON parse first (handles ["a","b"] syntax)
   if (trimmed.startsWith(`[`)) {
     try {
       const parsed: unknown = JSON.parse(trimmed)
@@ -72,7 +72,6 @@ function parseStringArray(text: string): Array<string> {
       // Fall through to comma-separated parsing
     }
   }
-  // Comma-separated fallback
   return trimmed
     .split(`,`)
     .map((s) => s.trim())
@@ -99,10 +98,10 @@ export function SpawnArgsDialog({
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth="480px">
+      <Dialog.Content maxWidth={480}>
         <Dialog.Title>New {entityType.name}</Dialog.Title>
         {entityType.description && (
-          <Dialog.Description size="2" color="gray" mb="4">
+          <Dialog.Description className={styles.dialogDescription}>
             {entityType.description}
           </Dialog.Description>
         )}
@@ -155,7 +154,6 @@ function ObjectSchemaForm({
       const v = values[key]
       if (v === undefined || v === null || v === ``) return false
       if (Array.isArray(v) && v.length === 0) return false
-      // String-array fields are stored as a display string while editing
       const prop = properties[key] as SchemaProperty | undefined
       if (prop && isStringArrayType(prop) && typeof v === `string`) {
         if (parseStringArray(v).length === 0) return false
@@ -167,12 +165,10 @@ function ObjectSchemaForm({
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
-      // Strip undefined/empty optional values
       const args: Record<string, unknown> = {}
       for (const [key, val] of Object.entries(values)) {
         if (val !== undefined && val !== ``) {
           const prop = properties[key] as SchemaProperty | undefined
-          // Convert string-array fields from display string to actual array
           if (prop && isStringArrayType(prop) && typeof val === `string`) {
             const arr = parseStringArray(val)
             if (arr.length > 0) {
@@ -190,7 +186,7 @@ function ObjectSchemaForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <Flex direction="column" gap="3">
+      <Stack direction="column" gap={3}>
         {Object.entries(properties).map(([key, prop], i) => (
           <SchemaField
             key={key}
@@ -202,17 +198,19 @@ function ObjectSchemaForm({
             autoFocus={i === 0}
           />
         ))}
-      </Flex>
-      <Flex gap="3" mt="4" justify="end">
-        <Dialog.Close>
-          <Button variant="soft" color="gray">
-            Cancel
-          </Button>
-        </Dialog.Close>
+      </Stack>
+      <Stack gap={3} justify="end" className={styles.actions}>
+        <Dialog.Close
+          render={
+            <Button variant="soft" tone="neutral">
+              Cancel
+            </Button>
+          }
+        />
         <Button type="submit" disabled={!canSubmit}>
           Create
         </Button>
-      </Flex>
+      </Stack>
     </form>
   )
 }
@@ -235,8 +233,8 @@ function SchemaField({
   const label = prop.title ?? name
 
   // String array: render comma-separated text input.
-  // We store the raw text as a string while editing and convert
-  // to a proper array at submit time (see handleSubmit).
+  // We store the raw text as a string while editing and convert to a
+  // proper array at submit time (see handleSubmit).
   if (isStringArrayType(prop)) {
     return (
       <FieldWrapper
@@ -244,15 +242,14 @@ function SchemaField({
         required={required}
         description={prop.description}
       >
-        <input
+        <Input
           type="text"
           value={stringArrayToDisplay(value)}
           onChange={(e) => onChange(e.target.value)}
           autoFocus={autoFocus}
           placeholder={prop.description ?? `Comma-separated values`}
-          style={inputStyle}
         />
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           Separate multiple values with commas
         </Text>
       </FieldWrapper>
@@ -266,7 +263,7 @@ function SchemaField({
         required={required}
         description={prop.description}
       >
-        <textarea
+        <Textarea
           value={
             typeof value === `string`
               ? value
@@ -284,7 +281,7 @@ function SchemaField({
           placeholder="JSON value"
           rows={3}
           autoFocus={autoFocus}
-          style={textareaStyle}
+          mono
         />
       </FieldWrapper>
     )
@@ -305,7 +302,7 @@ function SchemaField({
             onChange(original ?? selected)
           }}
           autoFocus={autoFocus}
-          style={inputStyle}
+          className={styles.nativeSelect}
         >
           {!required && <option value="">—</option>}
           {prop.enum.map((v) => (
@@ -325,21 +322,14 @@ function SchemaField({
         required={required}
         description={prop.description}
       >
-        <label
-          style={{
-            display: `flex`,
-            alignItems: `center`,
-            gap: 8,
-            cursor: `pointer`,
-          }}
-        >
+        <label className={styles.checkboxLabel}>
           <input
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => onChange(e.target.checked)}
             autoFocus={autoFocus}
           />
-          <Text size="2">{label}</Text>
+          <Text size={2}>{label}</Text>
         </label>
       </FieldWrapper>
     )
@@ -352,7 +342,7 @@ function SchemaField({
         required={required}
         description={prop.description}
       >
-        <input
+        <Input
           type="number"
           value={value !== undefined && value !== null ? String(value) : ``}
           autoFocus={autoFocus}
@@ -368,26 +358,23 @@ function SchemaField({
           }}
           step={prop.type === `integer` ? 1 : `any`}
           placeholder={prop.description ?? name}
-          style={inputStyle}
         />
       </FieldWrapper>
     )
   }
 
-  // Default: string
   return (
     <FieldWrapper
       label={label}
       required={required}
       description={prop.description}
     >
-      <input
+      <Input
         type="text"
         value={String(value ?? ``)}
         onChange={(e) => onChange(e.target.value)}
         autoFocus={autoFocus}
         placeholder={prop.description ?? name}
-        style={inputStyle}
       />
     </FieldWrapper>
   )
@@ -405,20 +392,18 @@ function FieldWrapper({
   children: React.ReactNode
 }): React.ReactElement {
   return (
-    <Flex direction="column" gap="1">
-      <Text size="2" weight="medium">
+    <Stack direction="column" gap={1}>
+      <Text size={2} weight="medium">
         {label}
-        {required && (
-          <span style={{ color: `var(--red-9)`, marginLeft: 2 }}>*</span>
-        )}
+        {required && <span className={styles.requiredMark}>*</span>}
       </Text>
       {children}
       {description && (
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           {description}
         </Text>
       )}
-    </Flex>
+    </Stack>
   )
 }
 
@@ -454,11 +439,11 @@ function RawJsonForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <Flex direction="column" gap="2">
-        <Text size="2" weight="medium">
+      <Stack direction="column" gap={2}>
+        <Text size={2} weight="medium">
           Arguments (JSON)
         </Text>
-        <textarea
+        <Textarea
           value={raw}
           onChange={(e) => {
             setRaw(e.target.value)
@@ -466,41 +451,24 @@ function RawJsonForm({
           }}
           rows={6}
           autoFocus
-          style={textareaStyle}
+          mono
         />
         {parseError && (
-          <Text size="1" color="red">
+          <Text size={1} tone="danger">
             {parseError}
           </Text>
         )}
-      </Flex>
-      <Flex gap="3" mt="4" justify="end">
-        <Dialog.Close>
-          <Button variant="soft" color="gray">
-            Cancel
-          </Button>
-        </Dialog.Close>
+      </Stack>
+      <Stack gap={3} justify="end" className={styles.actions}>
+        <Dialog.Close
+          render={
+            <Button variant="soft" tone="neutral">
+              Cancel
+            </Button>
+          }
+        />
         <Button type="submit">Create</Button>
-      </Flex>
+      </Stack>
     </form>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  width: `100%`,
-  padding: `6px 10px`,
-  borderRadius: `var(--radius-2)`,
-  border: `1px solid var(--gray-a4)`,
-  background: `var(--gray-a2)`,
-  fontSize: `var(--font-size-2)`,
-  fontFamily: `var(--default-font-family)`,
-  color: `var(--gray-12)`,
-  outline: `none`,
-}
-
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  resize: `vertical`,
-  fontFamily: `monospace`,
-  fontSize: `var(--font-size-1)`,
 }
