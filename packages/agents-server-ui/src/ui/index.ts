@@ -11,6 +11,10 @@ export type { Spacing } from './Box'
 
 export { Stack } from './Stack'
 
+export { Kbd } from './Kbd'
+
+export { TopBar } from './TopBar'
+
 export { Text } from './Text'
 export type {
   TextSize,

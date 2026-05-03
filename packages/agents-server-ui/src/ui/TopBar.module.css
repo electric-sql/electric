@@ -1,0 +1,39 @@
+.bar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: var(--ds-row-height-lg);
+  padding: 0 8px;
+  gap: 6px;
+  border-bottom: 1px solid var(--ds-divider);
+  background: var(--ds-bg-subtle);
+  -webkit-app-region: drag;
+}
+
+.start,
+.end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.titleStart {
+  justify-content: flex-start;
+}
+.titleCenter {
+  justify-content: center;
+}
+.titleEnd {
+  justify-content: flex-end;
+}
