@@ -60,11 +60,20 @@ export async function spawnEntity(
  * Send a pin message to wake the handler so first-wake init runs (sessionMeta
  * populated, import flow executed). Avoids invoking claude — pin is a no-op
  * inbox message that just triggers the handler.
+ *
+ * Polls before sending: PUT /coding-agent/<name> returns once the entity
+ * row is durable, but the handler registration (which can dispatch our
+ * `pin` payload) lands on a separate path. Several specs raced
+ * `spawn → pin → goto → assert` and saw the timeline empty because the
+ * pin landed before init wiring was complete. We poll up to 5 s waiting
+ * for GET /coding-agent/<name>/sessionMeta to return a row, then fire
+ * the pin.
  */
 export async function wakeHandlerWithPin(
   request: APIRequestContext,
   name: string
 ): Promise<void> {
+  await waitForEntityReady(request, name, 5_000)
   const res = await request.post(`${SERVER_BASE}/coding-agent/${name}/send`, {
     data: { from: `e2e-test`, type: `pin`, payload: {} },
   })
@@ -72,6 +81,27 @@ export async function wakeHandlerWithPin(
     throw new Error(
       `pin failed: ${res.status()} ${await res.text().catch(() => ``)}`
     )
+  }
+}
+
+/**
+ * Polls `GET /coding-agent/<name>` until it returns 200 (entity is
+ * registered and discoverable) or the deadline elapses. Returns
+ * silently — callers that need a stricter ready signal can chain
+ * additional polling on collection rows.
+ */
+async function waitForEntityReady(
+  request: APIRequestContext,
+  name: string,
+  timeoutMs: number
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const res = await request
+      .get(`${SERVER_BASE}/coding-agent/${name}`)
+      .catch(() => null)
+    if (res && res.ok()) return
+    await new Promise((r) => setTimeout(r, 100))
   }
 }
 
