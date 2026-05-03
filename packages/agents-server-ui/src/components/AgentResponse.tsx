@@ -40,15 +40,29 @@ const MarkdownSegment = memo(function MarkdownSegment({
   canCache: boolean
 }): React.ReactElement {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
-  const [cachedHtml, setCachedHtml] = useState<string | null>(() => {
+  // Tracks the content hash that the currently-displayed `cachedHtml`
+  // belongs to, so we can distinguish "the underlying text changed and our
+  // cached HTML is now stale" from "only the column width changed and our
+  // cached HTML is still semantically correct, just laid out for a
+  // different width".
+  const cachedHtmlHashRef = useRef<number | null>(null)
+  const [cachedHtml, setCachedHtmlState] = useState<string | null>(() => {
     if (!canCache || !isMarkdownRenderCacheReady() || renderWidth <= 0)
       return null
-    return getCachedMarkdownRender(contentHash, renderWidth, text)?.html ?? null
+    const hit = getCachedMarkdownRender(contentHash, renderWidth, text)
+    if (!hit) return null
+    cachedHtmlHashRef.current = contentHash
+    return hit.html
   })
+
+  const setCachedHtml = (next: string | null, hash: number | null) => {
+    cachedHtmlHashRef.current = next === null ? null : hash
+    setCachedHtmlState(next)
+  }
 
   useEffect(() => {
     if (!canCache) {
-      setCachedHtml(null)
+      setCachedHtml(null, null)
       return
     }
 
@@ -57,14 +71,25 @@ const MarkdownSegment = memo(function MarkdownSegment({
         ? getCachedMarkdownRender(contentHash, renderWidth, text)
         : null
     if (cached) {
-      setCachedHtml(cached.html)
+      setCachedHtml(cached.html, contentHash)
       return
     }
 
-    // Width changed and we do not have a matching cached render. Drop back to
-    // the live Streamdown path so the DOM can reflow honestly and be captured
-    // again at the new width.
-    setCachedHtml(null)
+    // Cache miss at the requested width.
+    //
+    // - If the displayed `cachedHtml` belongs to a DIFFERENT content hash
+    //   (e.g. the agent message text was replaced after streaming ended,
+    //   or this row was reused for a different segment), drop it
+    //   immediately so we render the new content via Streamdown.
+    //
+    // - If it belongs to the SAME content hash, KEEP showing it: the
+    //   cached HTML is just static markup and reflows correctly at any
+    //   width. Dropping back to a live Streamdown render here would
+    //   briefly clear the row and produce a visible flicker plus a
+    //   row-height jump that the virtualizer has to chase.
+    if (cachedHtmlHashRef.current !== contentHash) {
+      setCachedHtml(null, null)
+    }
 
     let cancelled = false
     void warmMarkdownRenderCache().then(() => {
@@ -75,15 +100,13 @@ const MarkdownSegment = memo(function MarkdownSegment({
           : Math.round(wrapperRef.current?.getBoundingClientRect().width ?? 0)
       if (resolvedWidth <= 0) return
       const hit = getCachedMarkdownRender(contentHash, resolvedWidth, text)
-      if (hit) {
-        setCachedHtml(hit.html)
-      }
+      if (hit) setCachedHtml(hit.html, contentHash)
     })
 
     return () => {
       cancelled = true
     }
-  }, [canCache, contentHash, renderWidth])
+  }, [canCache, contentHash, renderWidth, text])
 
   useLayoutEffect(() => {
     if (!canCache || cachedHtml !== null) return
@@ -134,6 +157,32 @@ const MarkdownSegment = memo(function MarkdownSegment({
       }
     }
   }, [cachedHtml, canCache, contentHash, text])
+
+  // When we are displaying previously cached HTML at a width that itself
+  // has no cache entry yet (e.g. the column resized after we cached at
+  // an earlier width), re-persist the same HTML keyed by the new
+  // measured width so subsequent lookups at this width hit immediately
+  // and we never have to drop back to a live Streamdown re-render.
+  useLayoutEffect(() => {
+    if (!canCache) return
+    if (cachedHtml === null) return
+
+    const element = wrapperRef.current
+    if (!element) return
+
+    const rect = element.getBoundingClientRect()
+    const width = Math.round(rect.width)
+    const height = Math.round(rect.height)
+    if (width <= 0 || height <= 0) return
+
+    if (getCachedMarkdownRender(contentHash, width, text)) return
+    setCachedMarkdownRender(contentHash, {
+      html: cachedHtml,
+      width,
+      height,
+      sourceText: text,
+    })
+  }, [cachedHtml, canCache, contentHash, renderWidth, text])
 
   if (cachedHtml !== null) {
     return (

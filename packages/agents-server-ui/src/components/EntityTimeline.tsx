@@ -30,18 +30,46 @@ function formatTime(ts: number): string {
   })
 }
 
-function estimateRowHeight(row: EntityTimelineEntry | undefined): number {
+/**
+ * Width-aware row-height estimate used as the initial size hint for the
+ * virtualizer (before the real DOM has been measured). Producing an estimate
+ * that's close to the eventual measured height matters because the
+ * virtualizer absolutely-positions rows based on these values: when the
+ * estimate is wildly off, rows visually overlap or leave gaps for a frame
+ * before `ResizeObserver` catches up.
+ *
+ * The previous heuristic ignored the column width and used a flat
+ * ~0.12 px/char ratio, which only happened to be roughly right at one
+ * specific column width and was noticeably wrong on resize / chat swap.
+ * We now derive an approximate chars-per-line from the actual column
+ * width and multiply by the body line height.
+ */
+function estimateRowHeight(
+  row: EntityTimelineEntry | undefined,
+  contentWidth: number
+): number {
   if (!row) return 120
+
+  // Inter at 14px averages ~7px per character; clamp to keep narrow
+  // viewports / a yet-unknown contentWidth from producing nonsense values.
+  const usableWidth = contentWidth > 0 ? contentWidth : 720
+  const charsPerLine = Math.max(40, Math.floor(usableWidth / 7))
+  const lineHeight = 22 // 14px font * ~1.55 leading
+
   if (row.section.kind === `user_message`) {
-    return Math.max(84, 44 + row.section.text.length * 0.18)
+    const lines = Math.max(1, Math.ceil(row.section.text.length / charsPerLine))
+    // bubble padding (24) + meta row (~24) + content
+    return Math.max(64, 48 + lines * lineHeight)
   }
 
   const textLength = row.section.items.reduce((total: number, item) => {
     if (item.kind === `text`) return total + item.text.length
-    return total + 48
+    // Tool calls render as a compact block; assume ~3 lines.
+    return total + charsPerLine * 3
   }, 0)
-
-  return Math.max(140, 72 + textLength * 0.12)
+  const lines = Math.max(2, Math.ceil(textLength / charsPerLine))
+  // status row (~24) + content + a little breathing room
+  return Math.max(120, 32 + lines * lineHeight)
 }
 
 const SCROLL_THRESHOLD = 80
@@ -161,31 +189,23 @@ export function EntityTimeline({
   >(
     (element, entry, instance) => {
       const itemKey = element.getAttribute(`data-item-key`)
-
-      if (entry === undefined) {
-        if (itemKey !== null) {
-          const cached = cachedSizeMapRef.current.get(itemKey)
-          if (cached !== undefined && cached > 0) {
-            return cached
-          }
-        }
-
-        const initialDomSize = defaultMeasureElement(element, entry, instance)
-        if (itemKey !== null && initialDomSize > 0) {
-          cachedSizeMapRef.current.set(itemKey, initialDomSize)
-          lastMeasureAtRef.current.set(itemKey, Date.now())
-          settledKeysRef.current.delete(itemKey)
-          scheduleSettleCheck()
-        }
-        return initialDomSize
-      }
-
       const domSize = defaultMeasureElement(element, entry, instance)
+
+      // A real, non-zero measurement is the source of truth: cache it and
+      // surface it to the virtualizer. A zero (e.g. element detached, not
+      // yet laid out) must not poison the cache or replace a known good
+      // size — fall back to whatever we already had.
       if (itemKey !== null && domSize > 0) {
         cachedSizeMapRef.current.set(itemKey, domSize)
         lastMeasureAtRef.current.set(itemKey, Date.now())
         settledKeysRef.current.delete(itemKey)
         scheduleSettleCheck()
+        return domSize
+      }
+
+      if (itemKey !== null) {
+        const cached = cachedSizeMapRef.current.get(itemKey)
+        if (cached !== undefined && cached > 0) return cached
       }
       return domSize
     },
@@ -197,7 +217,7 @@ export function EntityTimeline({
     getScrollElement: () => viewport,
     estimateSize: (index) =>
       cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
-      estimateRowHeight(rows[index]),
+      estimateRowHeight(rows[index], contentWidth),
     getItemKey: (index) => rows[index]?.key ?? index,
     gap: ROW_GAP,
     overscan: 6,
@@ -228,10 +248,13 @@ export function EntityTimeline({
       const w = Math.round(viewport.clientWidth)
       setViewportWidth((prev) => {
         if (prev !== w && prev > 0) {
-          // Container resized (e.g. state explorer toggled) — clear settled
-          // cache so virtualizer re-measures all rows at the new width.
+          // Container resized (e.g. state explorer toggled, window resize) —
+          // mark all rows as un-settled so we'll persist new heights once
+          // ResizeObserver remeasures them at the new width. Crucially we
+          // KEEP the prior heights as estimates so the virtualizer's
+          // initial layout at the new width stays close to truth; rows
+          // would otherwise visually overlap while they remeasure.
           settledKeysRef.current = new Set()
-          cachedSizeMapRef.current = new Map()
         }
         return w
       })
@@ -256,19 +279,59 @@ export function EntityTimeline({
     return () => observer.disconnect()
   }, [contentElement])
 
+  // Track cacheKey/viewportWidth across renders so the effect below can tell
+  // a chat swap apart from a width change. They have very different reset
+  // semantics: a chat swap throws away all known row sizes (different
+  // entries with different keys), while a width change wants to PRESERVE
+  // the old heights as estimates so the layout stays put while
+  // ResizeObserver remeasures at the new width.
+  const prevCacheKeyRef = useRef<string | null | undefined>(undefined)
+  const prevViewportWidthRef = useRef(0)
+
   useEffect(() => {
+    const isChatSwap = prevCacheKeyRef.current !== cacheKey
+    const widthChanged = prevViewportWidthRef.current !== viewportWidth
+    prevCacheKeyRef.current = cacheKey
+    prevViewportWidthRef.current = viewportWidth
+
     if (!cacheKey || viewportWidth <= 0) {
-      cachedSizeMapRef.current = new Map()
-      settledKeysRef.current = new Set()
+      if (isChatSwap) {
+        cachedSizeMapRef.current = new Map()
+        settledKeysRef.current = new Set()
+        lastMeasureAtRef.current = new Map()
+        rowVirtualizer.measure()
+      }
+      return
+    }
+
+    if (isChatSwap) {
+      // Different chat → different row keys. Reload heights from
+      // localStorage and invalidate the virtualizer's internal item-size
+      // cache so it consults `estimateSize` for every new key.
+      const restored = loadTimelineRowHeights(cacheKey, viewportWidth)
+      cachedSizeMapRef.current = restored
+      settledKeysRef.current = new Set(restored.keys())
+      lastMeasureAtRef.current = new Map()
       rowVirtualizer.measure()
       return
     }
 
-    const restored = loadTimelineRowHeights(cacheKey, viewportWidth)
-    cachedSizeMapRef.current = restored
-    settledKeysRef.current = new Set(restored.keys())
-    lastMeasureAtRef.current = new Map()
-    rowVirtualizer.measure()
+    if (widthChanged) {
+      // Same chat, new viewport width. Pull in any heights we previously
+      // persisted at this width as updated estimates, but DO NOT call
+      // `rowVirtualizer.measure()` here: the existing rows are still
+      // mounted and ResizeObserver will deliver fresh measurements as
+      // they reflow. Calling `measure()` would throw away the
+      // virtualizer's internal cache between ResizeObserver firing and
+      // our re-render, producing the visible row-overlap glitch.
+      const restored = loadTimelineRowHeights(cacheKey, viewportWidth)
+      if (restored.size > 0) {
+        for (const [key, size] of restored) {
+          cachedSizeMapRef.current.set(key, size)
+        }
+        for (const key of restored.keys()) settledKeysRef.current.add(key)
+      }
+    }
   }, [cacheKey, rowVirtualizer, viewportWidth])
 
   useEffect(() => {
@@ -364,14 +427,18 @@ export function EntityTimeline({
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const row = rows[virtualRow.index]
 
+                // Stable row key. The previous implementation appended
+                // `:${contentWidth}` to force remount on every column-width
+                // change, which paid for the workaround with a full
+                // unmount/remount of every row (including a wasted Streamdown
+                // render on initial mount when contentWidth went from 0 to
+                // its real value). The new measurement-cache logic above
+                // preserves prior heights as estimates and lets
+                // ResizeObserver deliver new heights, so a remount is no
+                // longer needed.
                 return (
                   <div
-                    // Force remount when the content column width changes so
-                    // the virtualizer re-observes a fresh node and immediately
-                    // re-measures the row at the new width. Without this the
-                    // cached row heights from the previous width persist and
-                    // rows visually overlap until the next interaction.
-                    key={`${virtualRow.key}:${contentWidth}`}
+                    key={virtualRow.key}
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
                     data-item-key={row.key}
