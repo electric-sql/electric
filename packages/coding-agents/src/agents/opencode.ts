@@ -1,6 +1,10 @@
 import type { CodingAgentAdapter } from './registry'
 import { registerAdapter } from './registry'
 
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
 /**
  * opencode (sst/opencode-ai) — third coding-agent kind.
  *
@@ -43,35 +47,34 @@ export const OpencodeAdapter: CodingAgentAdapter = {
 
   probeCommand({ sessionId }) {
     // Exits 0 if the session is in opencode's SQLite, 1 otherwise.
-    return [
-      `sh`,
-      `-c`,
-      `opencode session list 2>/dev/null | grep -q '${sessionId}'`,
-    ]
+    const id = shellQuote(sessionId)
+    return [`sh`, `-c`, `opencode session list 2>/dev/null | grep -qF -- ${id}`]
   },
 
   captureCommand({ sessionId }) {
     // opencode export prints the session JSON to stdout. base64 to avoid
     // newline / binary corruption on the docker exec stdio pipe.
+    const id = shellQuote(sessionId)
     return [
       `sh`,
       `-c`,
-      `f="$(opencode export ${sessionId} 2>/dev/null)"; ` +
+      `f="$(opencode export ${id} 2>/dev/null)"; ` +
         `if [ -n "$f" ]; then printf '%s' "$f" | base64 -w 0; fi`,
     ]
   },
 
   materialiseTargetPath({ sessionId }) {
+    // sessionId is interpolated into a path consumed by postMaterialise's
+    // shell. The handler validates `importNativeSessionId` against
+    // /^[A-Za-z0-9_-]+$/ at the entity boundary; defence-in-depth via the
+    // shellQuote there. The path itself stays raw so the handler can
+    // copyTo it (which accepts a string, not argv).
     return `/tmp/opencode-import-${sessionId}.json`
   },
 
   postMaterialiseCommand({ sessionId }) {
-    return [
-      `sh`,
-      `-c`,
-      `opencode import /tmp/opencode-import-${sessionId}.json && ` +
-        `rm -f /tmp/opencode-import-${sessionId}.json`,
-    ]
+    const path = shellQuote(`/tmp/opencode-import-${sessionId}.json`)
+    return [`sh`, `-c`, `opencode import ${path} && rm -f ${path}`]
   },
 }
 

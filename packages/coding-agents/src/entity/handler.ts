@@ -1213,6 +1213,24 @@ function processRelease(
 async function processStop(ctx: any, lm: LifecycleManager): Promise<void> {
   const agentId = ctx.entityUrl as string
   const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
+  // Reject stop while a turn is in flight. processPrompt holds the
+  // workspace lease and is mid-bridge.runTurn; tearing down the sandbox
+  // here surfaces the same 404/connection-reset that the idle-timer
+  // race produced. Convert-target has the same guard for the same
+  // reason — keep behaviour symmetric.
+  if (
+    meta.status === `running` ||
+    meta.status === `starting` ||
+    meta.status === `stopping`
+  ) {
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.lastError = `cannot stop while status=${meta.status}`
+      },
+    })
+    return
+  }
   ctx.db.actions.sessionMeta_update({
     key: `current`,
     updater: (d: SessionMetaRow) => {
@@ -1374,6 +1392,34 @@ async function processConvertKind(ctx: any, inboxMsg: InboxRow): Promise<void> {
   const { kind: newKind, model } = parsed.data
   const meta = ctx.db.collections.sessionMeta.get(`current`) as SessionMetaRow
   const oldKind = meta.kind
+
+  // Reject during in-flight turns. processConvertKind reads the events
+  // collection to denormalise the transcript; events still streaming
+  // from the in-flight bridge.runTurn would land *after* this read,
+  // producing a truncated transcript. The next prompt would then
+  // resume from a session id pointing at incomplete history.
+  // Convert-target has the same guard.
+  if (
+    meta.status === `running` ||
+    meta.status === `starting` ||
+    meta.status === `stopping`
+  ) {
+    ctx.db.actions.sessionMeta_update({
+      key: `current`,
+      updater: (d: SessionMetaRow) => {
+        d.lastError = `cannot convert kind while status=${meta.status}`
+      },
+    })
+    ctx.db.actions.lifecycle_insert({
+      row: {
+        key: lifecycleKey(`kind`),
+        ts: Date.now(),
+        event: `kind.convert_failed`,
+        detail: `in-flight (status=${meta.status})`,
+      } satisfies LifecycleRow,
+    })
+    return
+  }
 
   // Read all events for this agent.
   const eventRows = (ctx.db.collections.events.toArray as Array<EventRow>)

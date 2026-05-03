@@ -5,6 +5,7 @@ Coding-agent runtime + sandbox providers for the agents-server platform. A codin
 ## Contents
 
 - [Quick reference](#quick-reference)
+- [Conformance status](#conformance-status)
 - [Setup](#setup)
 - [Spawning](#spawning)
 - [Agent lifecycle](#agent-lifecycle)
@@ -28,6 +29,28 @@ Coding-agent runtime + sandbox providers for the agents-server platform. A codin
 | Inbox messages    | `prompt`, `pin`, `release`, `stop`, `destroy`, `convert-kind`, `convert-target`          |
 | Status states     | `cold`, `starting`, `idle`, `running`, `stopping`, `error`, `destroyed`                  |
 | Provider env vars | `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`), `OPENAI_API_KEY`, `SPRITES_TOKEN`    |
+
+---
+
+## Conformance status
+
+Two parameterized harnesses exercise the package: `runSandboxProviderConformance` (Layer 1, the `SandboxProvider` contract — 9 scenarios L1.1–L1.9) and `runCodingAgentsIntegrationConformance` (Layer 2, provider+bridge+handler against real CLIs — 8 scenarios × 3 kinds = 24 cells). Capability flags (`supportsRecovery`, `supportsCloneWorkspace`, `supportsSharedWorkspace`) skip scenarios a provider can't satisfy by design.
+
+| Provider              | Pass | Skip | Fail | Skipped scenarios                         |
+| --------------------- | ---- | ---- | ---- | ----------------------------------------- |
+| `LocalDockerProvider` | 33   | 0    | 0    | —                                         |
+| `HostProvider`        | 23   | 10   | 0    | L1.4 / L1.9 + opencode (CLI not on host)  |
+| `FlySpriteProvider`   | 25   | 8    | 0    | L1.4 / L1.9 (TL-S3) + L2.5 / L2.6 (TL-S4) |
+
+Run conformance:
+
+```bash
+DOCKER=1                            pnpm -C packages/coding-agents test test/integration/local-docker-conformance.test.ts
+HOST_PROVIDER=1                     pnpm -C packages/coding-agents test test/integration/host-provider-conformance.test.ts
+SPRITES=1 SPRITES_TOKEN=...         pnpm -C packages/coding-agents test test/integration/fly-sprites-conformance.test.ts
+```
+
+Layer-4 e2e (real CLIs + a live `agents-server`) live in `test/integration/*.e2e.test.ts` and require `SLOW=1` plus a running dev server (`node packages/electric-ax/bin/dev.mjs up`). Coverage is structurally parallel to Layer 2; Layer 4 adds the HTTP plumbing assertion the conformance harness skips.
 
 ---
 
@@ -317,12 +340,12 @@ Both scripts run via Node 24's native TS strip — no `tsx` dependency.
 
 ### Fly Sprites
 
-- **TL-S1**: Sprites API is pre-1.0. Spec was authored against `v0.0.1-rc30`; the production server is currently on `0.0.1-rc43` and the protocol has already shifted. Pin to a known-good version when published; integration tests catch drift.
+- **TL-S1**: Sprites API is pre-1.0. Spec was authored against `v0.0.1-rc30`; the production server is on `0.0.1-rc43` (validated). Pin to a known-good version when published; integration tests catch drift. Resolved deltas vs rc30 captured in [`docs/superpowers/plans/2026-05-02-coding-agents-fly-sprites.md` § Implementation findings — round 2](../../docs/superpowers/plans/2026-05-02-coding-agents-fly-sprites.md#implementation-findings--round-2-2026-05-03): exec URL on `api.sprites.dev` (not per-sprite), output multiplexed `0x01/0x02/0x03` stream-id frames, stdin via HTTP POST (not WS), `cwd=` query param ignored when cmd is shell-wrapped (honored by explicit `cd` in the wrapper instead), `homeDir = /home/sprite` (not `/root`).
 - **TL-S2**: No custom OCI image input. First sprite cold-boot per agent includes ~10 s for `opencode-ai` install (idempotent — bootstrap is keyed off `/opt/electric-ax/.bootstrapped`). The default Ubuntu image preinstalls Claude CLI / OpenAI Codex / Gemini CLI / node / npm so we only install opencode.
-- **TL-S3**: No `cloneWorkspace`. Workspace files don't transfer on fork within sprites; conversation history does.
-- **TL-S4**: No cross-provider migration (by design — see Targets above).
+- **TL-S3**: No `cloneWorkspace`. Workspace files don't transfer on fork within sprites; conversation history does. Conformance L1.9 skipped via `supportsCloneWorkspace: false`.
+- **TL-S4**: No cross-provider migration (by design — see Targets above). The sandbox IS the workspace on sprites; conformance L2.5 / L2.6 skipped via `supportsSharedWorkspace: false`.
 - **TL-S5**: DNS allowlist policy may need updates for additional egress endpoints.
-- **TL-S6**: Real Sprites runs are billed. Use `pnpm cleanup:sprites` to find and remove leaks.
+- **TL-S6**: Real Sprites runs are billed. The conformance harness's `afterAll` scrubs orphans matching `test-coding-agent-` and `conf-sprite-` prefixes; for ad-hoc cleanup run `pnpm cleanup:sprites --delete`.
 
 ### LocalDocker
 

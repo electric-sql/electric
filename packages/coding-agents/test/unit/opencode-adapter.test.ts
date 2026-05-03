@@ -43,7 +43,8 @@ describe(`OpencodeAdapter — invocation shape`, () => {
       sessionId: `ses_abc`,
     })
     expect(cmd[0]).toBe(`sh`)
-    expect(cmd.join(` `)).toContain(`opencode export ses_abc`)
+    // sessionId is shell-quoted to defend against injection.
+    expect(cmd.join(` `)).toContain(`opencode export 'ses_abc'`)
     expect(cmd.join(` `)).toContain(`base64`)
   })
 

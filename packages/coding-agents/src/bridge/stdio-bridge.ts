@@ -16,9 +16,13 @@ const PROMPT_LIMIT_BYTES = 900_000
 
 export class StdioBridge implements Bridge {
   async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
-    if (args.prompt.length > PROMPT_LIMIT_BYTES) {
+    // Use byte length, not string.length — multi-byte characters (CJK,
+    // emoji) make UTF-16 code units a poor proxy for the kernel's argv
+    // budget.
+    const promptBytes = Buffer.byteLength(args.prompt, `utf8`)
+    if (promptBytes > PROMPT_LIMIT_BYTES) {
       throw new Error(
-        `Prompt exceeds ${PROMPT_LIMIT_BYTES} bytes (got ${args.prompt.length}). ` +
+        `Prompt exceeds ${PROMPT_LIMIT_BYTES} bytes (got ${promptBytes}). ` +
           `Stage long prompts via the workspace; the agent CLI accepts stdin so ` +
           `most cases route through there, but this guard catches pathological inputs.`
       )
@@ -61,8 +65,22 @@ export class StdioBridge implements Bridge {
       }
     }
 
-    await Promise.all([drainStdout(), drainStderr()])
+    // allSettled — not all — so a stdout-callback throw doesn't orphan
+    // the stderr iteration. We still need to reap the child either way.
+    const [stdoutResult, stderrResult] = await Promise.allSettled([
+      drainStdout(),
+      drainStderr(),
+    ])
+    if (stdoutResult.status === `rejected`) {
+      handle.kill(`SIGTERM`)
+    }
     const exitInfo = await handle.wait()
+    if (stdoutResult.status === `rejected`) {
+      throw stdoutResult.reason
+    }
+    if (stderrResult.status === `rejected`) {
+      log.warn({ err: stderrResult.reason }, `stderr drain failed`)
+    }
 
     if (exitInfo.exitCode !== 0) {
       const stderrPreview = stderrLines.join(`\n`).slice(0, 800) || `<empty>`

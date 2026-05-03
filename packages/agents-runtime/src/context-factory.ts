@@ -596,8 +596,10 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           ? { text: opts.initialPrompt }
           : undefined
 
-      // Slice A: only `runFinished` wake (eventAppended is Slice C).
-      const wake: Wake = `runFinished`
+      // Honour opts.wake when supplied (the public type allows
+      // includeResponse). Default to bare `runFinished` so existing
+      // callers see no behavioural change.
+      const wake: Wake = opts.wake ?? `runFinished`
 
       const entityHandle = await config.doSpawn(
         `coding-agent`,

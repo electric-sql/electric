@@ -28,11 +28,27 @@ interface PendingFrame {
 
 class StreamQueue {
   private readonly buf: Array<string> = []
+  // Holds the unterminated tail of the last frame. Frames split mid-line
+  // (e.g. "a\nbcd" then "ef\n") must not push "bcd" as its own line — the
+  // next frame's first segment continues it. Cleared whenever the prior
+  // tail is folded into a complete line, or flushed at end().
+  private tail = ``
   private pending: PendingFrame | null = null
   private done = false
 
-  push(line: string): void {
+  feed(data: string): void {
     if (this.done) return
+    const merged = this.tail + data
+    const lines = merged.split(`\n`)
+    // All but the last entry are newline-terminated; the last is the
+    // (possibly empty) tail to carry over.
+    for (let i = 0; i < lines.length - 1; i++) {
+      this.deliver(lines[i]!)
+    }
+    this.tail = lines[lines.length - 1]!
+  }
+
+  private deliver(line: string): void {
     if (this.pending) {
       const p = this.pending
       this.pending = null
@@ -43,6 +59,10 @@ class StreamQueue {
   }
 
   end(): void {
+    if (this.tail !== ``) {
+      this.deliver(this.tail)
+      this.tail = ``
+    }
     this.done = true
     if (this.pending) {
       this.pending.resolve({
@@ -79,21 +99,6 @@ function makeAsyncIterable(q: StreamQueue): AsyncIterable<string> {
   }
 }
 
-function feedFrameData(q: StreamQueue, data: string): void {
-  // Split on newlines; keep any incomplete trailing line for the next frame.
-  // For simplicity, push each newline-terminated segment as its own line and
-  // the trailing remainder (if any) as a final partial line at end().
-  const lines = data.split(`\n`)
-  // Last element is the unterminated tail; push the rest as full lines.
-  for (let i = 0; i < lines.length - 1; i++) {
-    q.push(lines[i]!)
-  }
-  // Tail: if non-empty, also push (caller emits flush via end() when stream closes).
-  if (lines[lines.length - 1] !== ``) {
-    q.push(lines[lines.length - 1]!)
-  }
-}
-
 export function createExecHandle(args: CreateExecHandleArgs): ExecHandle {
   const stdoutQ = new StreamQueue()
   const stderrQ = new StreamQueue()
@@ -113,12 +118,12 @@ export function createExecHandle(args: CreateExecHandleArgs): ExecHandle {
         frame = JSON.parse(event.data)
       } catch {
         // Unexpected non-JSON text — push to stdout for visibility.
-        feedFrameData(stdoutQ, event.data)
+        stdoutQ.feed(event.data)
         return
       }
       if (frame.type === `debug` && typeof frame.msg === `string`) {
         // Sprites' lifecycle log channel — informational, not user stderr.
-        feedFrameData(stderrQ, frame.msg)
+        stderrQ.feed(frame.msg)
       } else if (frame.type === `exit` && typeof frame.exit_code === `number`) {
         exitInfo = { exitCode: frame.exit_code }
       }
@@ -151,9 +156,9 @@ export function createExecHandle(args: CreateExecHandleArgs): ExecHandle {
     }
     const text = new TextDecoder().decode(buf.subarray(1))
     if (streamId === STREAM_STDOUT) {
-      feedFrameData(stdoutQ, text)
+      stdoutQ.feed(text)
     } else if (streamId === STREAM_STDERR) {
-      feedFrameData(stderrQ, text)
+      stderrQ.feed(text)
     }
     // Unknown stream IDs are dropped.
   })

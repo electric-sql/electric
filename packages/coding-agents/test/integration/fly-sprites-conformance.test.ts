@@ -1,8 +1,10 @@
+import { afterAll } from 'vitest'
 import {
   runSandboxProviderConformance,
   runCodingAgentsIntegrationConformance,
 } from '../../src/conformance'
 import { FlySpriteProvider, StdioBridge } from '../../src'
+import { SpritesApiClient } from '../../src/providers/fly-sprites/api-client'
 
 const SPRITES_ENABLED =
   process.env.SPRITES === `1` && !!process.env.SPRITES_TOKEN
@@ -100,3 +102,22 @@ runCodingAgentsIntegrationConformance(`FlySpriteProvider`, {
   // deletes the sprite, and two agents can't share. TL-S3 / TL-S4.
   supportsSharedWorkspace: false,
 })
+
+// Belt-and-braces leak guard. The conformance harness destroys per-test
+// sprites in afterEach, but if a scenario throws between `start()` and
+// the harness's destroy (e.g. assertion failure mid-exec, network blip)
+// the sprite leaks and bills until the next operator cleanup run. List
+// any sprites matching the conformance prefixes and delete them.
+afterAll(async () => {
+  if (!SPRITES_ENABLED) return
+  const token = process.env.SPRITES_TOKEN
+  if (!token) return
+  const client = new SpritesApiClient({ token })
+  for (const prefix of [`test-coding-agent-`, `conf-sprite-`]) {
+    const r = await client.listSprites({ namePrefix: prefix }).catch(() => null)
+    if (!r) continue
+    await Promise.all(
+      r.sprites.map((s) => client.deleteSprite(s.name).catch(() => undefined))
+    )
+  }
+}, 60_000)

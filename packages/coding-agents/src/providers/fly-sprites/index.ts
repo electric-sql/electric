@@ -298,13 +298,14 @@ export class FlySpriteProvider implements SandboxProvider {
     spriteId: string,
     spec: SandboxSpec
   ): SandboxInstance {
+    const workspaceMount = `/work`
     return {
       // The sprite's UUID changes on every fresh create; using the name
       // (which is derived from agentId and reused after destroy) would
       // make L1.2 think the recreated instance is the same as before.
       instanceId: spriteId,
       agentId: spec.agentId,
-      workspaceMount: `/work`,
+      workspaceMount,
       // Sprites run as the `sprite` user (uid 1001) — not root.
       homeDir: `/home/sprite`,
       exec: async (req) => {
@@ -315,18 +316,24 @@ export class FlySpriteProvider implements SandboxProvider {
         // sprites don't have a container-level env knob in the public
         // API, so we stage them in /run/agent.env at start() time and
         // source on every exec.
-        const wrapped = wrapWithAgentEnv(req.cmd, req.cwd)
+        // The sprites exec API ignores `cwd=` query params when the cmd
+        // is shell-wrapped, so we honor it via an explicit `cd` in the
+        // wrapper. Default to workspaceMount when caller didn't pass
+        // one — matches LocalDocker (`docker run -w workspaceMount`)
+        // and Host (`spawn({cwd: workspaceMount})`).
+        const cwd = req.cwd ?? workspaceMount
+        const wrapped = wrapWithAgentEnv(req.cmd, cwd)
         if (req.stdin === `pipe`) {
           // Sprites WS protocol for stdin isn't stable across rc30→rc43;
           // route stdin-bearing exec through HTTP POST instead, which
           // accepts stdin in the request body. POST doesn't deliver an
           // exit frame, so we wrap the user's argv in a sh that emits
           // an explicit marker line; the adapter parses it back.
-          return this.execWithStdinViaPost(name, { ...req, cmd: wrapped })
+          return this.execWithStdinViaPost(name, { ...req, cwd, cmd: wrapped })
         }
         const ws = this.openExecWebSocket(name, wrapped, {
           env: req.env,
-          cwd: req.cwd,
+          cwd,
         })
         return createExecHandle({ ws })
       },
