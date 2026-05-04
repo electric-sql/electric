@@ -102,7 +102,7 @@ The where clause must be a valid [PostgreSQL query expression](https://www.postg
 - `status IN ('backlog', 'todo')`
 
 :::tip Column Names
-Where clauses use your **database column names** exactly as they appear in PostgreSQL. If your database uses `snake_case` columns (e.g., `user_id`, `created_at`), use those names in your where clauses. If you're using [column mapping](/docs/api/clients/typescript#column-mapping) in your TypeScript client, the mapper will automatically transform where clause column names for you.
+Where clauses use your **database column names** exactly as they appear in PostgreSQL. If your database uses `snake_case` columns (e.g., `user_id`, `created_at`), use those names in your where clauses. If you're using [column mapping](/docs/sync/api/clients/typescript#column-mapping) in your TypeScript client, the mapper will automatically transform where clause column names for you.
 :::
 
 Where clauses support:
