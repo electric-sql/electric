@@ -61,12 +61,17 @@
   color: var(--ds-text-1);
   font-family: var(--ds-font-body);
   /* Auto-grow is driven by inline `height = scrollHeight` from
-     MessageInput.tsx; the cap below + `overflow: auto` together
-     make the input scroll once it hits the limit (~10 lines at the
-     current 13px/1.5 type size). `resize: none` hides the native
-     handle since the auto-resize already does the right thing. */
+     MessageInput.tsx. `min-height` floors the resting state at ~2
+     lines so the empty composer reads as a multi-line input rather
+     than a single-line field; `max-height` + `overflow: auto` make
+     it start scrolling internally once content passes ~10 lines.
+     The browser clamps the inline height against both bounds, so
+     the JS auto-resize stays a one-liner. `resize: none` hides the
+     native handle since the auto-resize already does the right
+     thing. */
   resize: none;
   overflow: auto;
+  min-height: 40px;
   max-height: 200px;
 }
 .textarea::placeholder {

@@ -38,6 +38,12 @@
 
 @import 'streamdown/styles.css';
 
+/* KaTeX glyph fonts + layout for inline (`$x$` / `$$x$$`) math
+   handled by `@streamdown/math` and for fenced ```` ```math ```` blocks
+   rendered ourselves in `MarkdownCodeBlock.tsx`. Imported once
+   here so every consumer of the markdown stylesheet picks it up. */
+@import 'katex/dist/katex.min.css';
+
 /* --- Vertical rhythm ------------------------------------------------ */
 
 .agent-ui-markdown > div {
@@ -159,12 +165,33 @@
   color: var(--ds-text-1);
 }
 
-/* --- Block quotes --------------------------------------------------- */
+/* --- Block quotes --------------------------------------------------- *
+ * Streamdown emits nested quotes as literal `<blockquote>` ancestors,
+ * so each level naturally compounds whatever indent the rule below
+ * applies. Keep the outer step modest (8px gap + 3px border) and
+ * suppress the chrome on every nested level so they read as "quoted
+ * inside a quote" rather than escalating block-level indents.
+ */
 
 .agent-ui-markdown blockquote {
   border-left: 3px solid var(--ds-gray-a5);
-  padding: 2px 0 2px 12px;
+  padding: 2px 0 2px 8px;
   color: var(--ds-text-2);
+}
+
+/* Nested quotes share the parent's left rule; collapse padding to a
+   small gap and drop the extra border so the indent stays linear
+   and shallow rather than ladder-stepping by ~15px per level. */
+.agent-ui-markdown blockquote blockquote {
+  margin-top: 4px;
+  padding: 0 0 0 8px;
+  border-left-color: var(--ds-gray-a4);
+}
+
+/* Tighten paragraph stacking inside quotes so multi-paragraph quotes
+   don't inherit the chat-level 12px gap (set on `> div`). */
+.agent-ui-markdown blockquote p + p {
+  margin-top: 4px;
 }
 
 /* --- Links ---------------------------------------------------------- */
@@ -192,9 +219,88 @@
   border-top: 1px solid var(--ds-gray-a3);
 }
 
+/* Markdown images render at their intrinsic size by default and only
+   shrink to fit when they're wider than the available column.
+   `max-width: 100%` does the clamp; `height: auto` keeps the aspect
+   ratio when that clamp kicks in.
+
+   The `align-self: flex-start` matters because the markdown body is
+   a `display: flex; flex-direction: column` container (see top of
+   this file) — without it, an `<img>` that ends up as a direct flex
+   child (CommonMark hoists a paragraph-only image out of its `<p>`)
+   would inherit `align-items: stretch` and balloon to the column
+   width regardless of its natural dimensions. */
 .agent-ui-markdown img {
   max-width: 100%;
+  height: auto;
+  align-self: flex-start;
   border-radius: var(--ds-radius-3);
+}
+
+/* --- Disclosure (details/summary) ---------------------------------- *
+ *
+ * Native HTML `<details>` doesn't go through any Streamdown override
+ * (it's not in the registered components map), so we style it
+ * straight from CSS. Chevron + colour intentionally mirror the
+ * tool-call header's `.toggleArrow` so disclosure widgets in chat
+ * markdown read as the same affordance as expanding a tool call.
+ */
+
+.agent-ui-markdown details {
+  border-radius: var(--ds-radius-2);
+}
+
+.agent-ui-markdown summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--ds-radius-2);
+  list-style: none;
+}
+.agent-ui-markdown summary::-webkit-details-marker {
+  display: none;
+}
+.agent-ui-markdown summary:hover {
+  background: var(--ds-gray-a3);
+}
+
+/* Chevron — SVG mask of lucide's `chevron-right` so the colour
+   tracks `currentColor` (and therefore swaps with theme). Rotates
+   90° when the disclosure is open, matching the tool-call expand
+   animation. */
+.agent-ui-markdown summary::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  background-color: var(--ds-text-3);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  transition: transform 0.12s ease;
+}
+.agent-ui-markdown details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+/* Body of an open disclosure — small left-aligned column under the
+   summary, separated by a subtle vertical gap so it reads as
+   "details for the heading above". */
+.agent-ui-markdown details[open] > :not(summary) {
+  margin-top: 6px;
 }
 
 /* ==========================================================================
@@ -318,6 +424,132 @@
   [data-md-code-block-line]
   span[style*='--shiki'] {
   color: var(--shiki-dark, inherit);
+}
+
+/* ==========================================================================
+ * Math
+ *
+ *   <div data-md-math-block>            ← MarkdownCodeBlock.tsx (math branch)
+ *     <span class="katex-display">…</span>   ← KaTeX HTML output
+ *   </div>
+ *
+ *   $inline$ / $$display$$ inside body copy are produced by
+ *   `@streamdown/math` (remark-math + rehype-katex) and KaTeX
+ *   styles them via the `.katex` / `.katex-display` classes from
+ *   the imported stylesheet. Our overrides here only need to:
+ *     - give the fenced block a clean panel (no code chrome)
+ *     - keep horizontal overflow scrollable for very wide equations
+ *     - degrade gracefully while the fence is still streaming
+ * ----------------------------------------------------------------------- */
+
+.agent-ui-markdown [data-md-math-block] {
+  margin: 0.75em 0;
+  padding: 12px 16px;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 8px;
+  background: var(--ds-background);
+  overflow-x: auto;
+  font-size: 1.05em;
+  line-height: 1.4;
+}
+
+/* KaTeX wraps display math in `.katex-display` which adds its own
+   1em vertical margin and centres the equation. The wrapper above
+   already provides the spacing/padding, so collapse the inner
+   margins. */
+.agent-ui-markdown [data-md-math-block] .katex-display {
+  margin: 0;
+  padding: 0;
+}
+
+/* While the fence is still streaming we render the raw source as
+   monospace text instead of KaTeX. Match the inline-code chip so it
+   still reads as code-in-progress, not a parse error. */
+.agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] {
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--ds-gray-a3);
+}
+
+.agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+ * Mermaid diagrams
+ *
+ *   <div data-md-mermaid-block>          ← MarkdownCodeBlock.tsx (mermaid branch)
+ *     <svg …>…</svg>                     ← mermaid.render output
+ *   </div>
+ *
+ *   While the fence is still streaming or mermaid is still loading
+ *   we render the source as a pre/code placeholder
+ *   (`[data-md-mermaid-block-pending]`); on a parse failure we show
+ *   the error message above the source
+ *   (`[data-md-mermaid-block-error]`).
+ * ----------------------------------------------------------------------- */
+
+.agent-ui-markdown [data-md-mermaid-block] {
+  margin: 0.75em 0;
+  padding: 16px;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 8px;
+  background: var(--ds-background);
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+/* Mermaid sets an inline `width` on the SVG (its computed pixel
+   width) which prevents responsive shrink. Override so the diagram
+   fits its container; height stays proportional via viewBox. */
+.agent-ui-markdown [data-md-mermaid-block] > svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Pending / streaming → render the source as monospace code chip,
+   matching the math block placeholder for visual consistency. */
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-pending] {
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--ds-gray-a3);
+  display: block;
+}
+
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-pending] pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Error → keep the panel chrome but stack a red message above the
+   raw source so authors can fix syntax without losing context. */
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-error] {
+  display: block;
+  padding: 12px 14px;
+  background: var(--ds-red-a3, var(--ds-gray-a3));
+  border-color: var(--ds-red-a6, var(--ds-gray-a4));
+}
+
+.agent-ui-markdown
+  [data-md-mermaid-block][data-md-mermaid-block-error]
+  [data-md-mermaid-block-error-message] {
+  font-size: 12px;
+  color: var(--ds-red-11, var(--ds-foreground-muted));
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+}
+
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-error] pre {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 /* ==========================================================================

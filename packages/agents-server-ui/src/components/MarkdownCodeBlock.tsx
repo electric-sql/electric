@@ -1,16 +1,19 @@
 import {
   isValidElement,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactElement,
 } from 'react'
 import { Check, Copy, Download } from 'lucide-react'
+import katex from 'katex'
 import { useIsCodeFenceIncomplete } from 'streamdown'
 import {
   highlightCodeTokens,
   type HighlightTokensResult,
 } from '../lib/codeHighlighter'
+import { useDarkModeContext } from '../hooks/useDarkMode'
 import { IconButton, Tooltip } from '../ui'
 
 // Streamdown threads its rehype `Element` through every component
@@ -66,6 +69,16 @@ function extractLanguage(className: string | undefined): string {
   }
   return ``
 }
+
+// Languages we route through KaTeX instead of the syntax-highlighting
+// path. Authors writing ```` ```math ```` (the convention in our prompts)
+// or ```` ```latex ```` / ```` ```tex ```` get a typeset display equation
+// with no toolbar / dark code chrome.
+const MATH_LANGUAGES = new Set([`math`, `latex`, `tex`])
+
+// ```` ```mermaid ```` blocks render as actual SVG diagrams. Aliases
+// included for the common ad-hoc spellings agents emit.
+const MERMAID_LANGUAGES = new Set([`mermaid`, `mmd`])
 
 // Streamdown calls our `code` override with `children` that may be:
 //   - a string (when there's no animate plugin / streaming markup)
@@ -147,6 +160,20 @@ function FencedCodeBlock({
   const codeText = extractCodeText(children)
   const isIncomplete = useIsCodeFenceIncomplete()
 
+  // ```math (or ```latex / ```tex) → typeset display equation via
+  // KaTeX. Skip while the fence is still streaming so half-typed
+  // expressions don't render as red error text mid-keystroke.
+  if (MATH_LANGUAGES.has(language)) {
+    return <MathBlock source={codeText} streaming={isIncomplete} />
+  }
+
+  // ```mermaid → render an SVG diagram via the (lazy-loaded) mermaid
+  // engine. Same streaming-skip rationale as math: a partial graph
+  // definition would just paint a parse error every keystroke.
+  if (MERMAID_LANGUAGES.has(language)) {
+    return <MermaidBlock source={codeText} streaming={isIncomplete} />
+  }
+
   // Hold the highlight result in component state. We start with
   // whatever `highlightCodeTokens` can give us synchronously (null
   // until Shiki has loaded) and update once the async-warm callback
@@ -219,6 +246,179 @@ function FencedCodeBlock({
         </pre>
       </div>
     </div>
+  )
+}
+
+// Render a fenced math block via KaTeX. We compute the HTML in
+// `useMemo` (KaTeX is synchronous + small) and feed it through
+// `dangerouslySetInnerHTML` — KaTeX always returns a static
+// well-formed string, no user-supplied HTML reaches the DOM.
+//
+// `displayMode: true` selects centred display style (matching
+// `$$…$$`). `throwOnError: false` makes parse errors render inline
+// in red instead of throwing during render. `errorColor` matches
+// the value passed to `@streamdown/math` for visual consistency
+// between fenced and inline math.
+//
+// While the surrounding fence is still being streamed we skip
+// rendering and show the raw source — KaTeX would otherwise paint
+// the unfinished expression in error red on every keystroke.
+function MathBlock({
+  source,
+  streaming,
+}: {
+  source: string
+  streaming: boolean
+}): React.ReactElement {
+  const html = useMemo(() => {
+    if (streaming) return null
+    try {
+      return katex.renderToString(source.trim(), {
+        displayMode: true,
+        throwOnError: false,
+        errorColor: `var(--color-muted-foreground)`,
+        output: `html`,
+      })
+    } catch {
+      return null
+    }
+  }, [source, streaming])
+
+  if (streaming || !html) {
+    return (
+      <div data-md-math-block="" data-md-math-block-streaming="">
+        <pre>
+          <code>{source}</code>
+        </pre>
+      </div>
+    )
+  }
+
+  return (
+    <div data-md-math-block="" dangerouslySetInnerHTML={{ __html: html }} />
+  )
+}
+
+// Mermaid is heavy (~500 KB minified). Lazy-load it on first render
+// of any ```mermaid block so users who never see a diagram pay no
+// bundle cost. The resulting promise is module-scoped so subsequent
+// blocks reuse the already-loaded copy.
+//
+// `typeof import(...)` and dynamic `import(...)` both require a
+// plain string literal per the TS / ESM spec, so the quotes rule is
+// disabled for those two lines only.
+// eslint-disable-next-line quotes
+type MermaidModule = (typeof import('mermaid'))['default']
+let mermaidModulePromise: Promise<MermaidModule> | null = null
+function loadMermaid(): Promise<MermaidModule> {
+  if (!mermaidModulePromise) {
+    // eslint-disable-next-line quotes
+    mermaidModulePromise = import('mermaid').then((m) => m.default)
+  }
+  return mermaidModulePromise
+}
+
+// `mermaid.initialize` mutates global state, so we track the last
+// theme it was initialised with and re-initialise only on change.
+let mermaidInitTheme: `default` | `dark` | null = null
+async function initMermaid(theme: `default` | `dark`): Promise<MermaidModule> {
+  const m = await loadMermaid()
+  if (mermaidInitTheme !== theme) {
+    m.initialize({
+      startOnLoad: false,
+      theme,
+      // Strict is the default but we set it explicitly so a future
+      // mermaid bump can't quietly relax it for fenced agent output.
+      securityLevel: `strict`,
+      fontFamily: `inherit`,
+    })
+    mermaidInitTheme = theme
+  }
+  return m
+}
+
+// Each render needs a unique element id. We bump a module-level
+// counter rather than using the source as a key so identical
+// diagrams in the same document still get distinct ids.
+let mermaidRenderCounter = 0
+
+/**
+ * Render a fenced mermaid diagram as inline SVG. Mermaid's render
+ * pipeline is asynchronous (it spins up an off-screen DOM node,
+ * walks the parsed AST, lays out the diagram, and serialises it
+ * back to an SVG string), so we hold the result in `useState` and
+ * paint a streaming/loading placeholder in the meantime.
+ *
+ * Theme is wired to our `useDarkModeContext` so the diagram swaps
+ * to mermaid's `'dark'` palette when the rest of the UI does. The
+ * output SVG is well-formed mermaid output (security level
+ * `strict`), making `dangerouslySetInnerHTML` safe here.
+ */
+function MermaidBlock({
+  source,
+  streaming,
+}: {
+  source: string
+  streaming: boolean
+}): React.ReactElement {
+  const { darkMode } = useDarkModeContext()
+  const theme: `default` | `dark` = darkMode ? `dark` : `default`
+  const [svg, setSvg] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (streaming) {
+      setSvg(null)
+      setError(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const m = await initMermaid(theme)
+        const id = `agent-ui-mermaid-${++mermaidRenderCounter}`
+        const result = await m.render(id, source.trim())
+        if (cancelled) return
+        setSvg(result.svg)
+        setError(null)
+      } catch (err) {
+        if (cancelled) return
+        setSvg(null)
+        setError(
+          err instanceof Error ? err.message : `Failed to render diagram`
+        )
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [source, theme, streaming])
+
+  if (streaming || (!svg && !error)) {
+    return (
+      <div data-md-mermaid-block="" data-md-mermaid-block-pending="">
+        <pre>
+          <code>{source}</code>
+        </pre>
+      </div>
+    )
+  }
+
+  if (error || !svg) {
+    return (
+      <div data-md-mermaid-block="" data-md-mermaid-block-error="">
+        <div data-md-mermaid-block-error-message="">
+          {error ?? `Failed to render diagram`}
+        </div>
+        <pre>
+          <code>{source}</code>
+        </pre>
+      </div>
+    )
+  }
+
+  return (
+    <div data-md-mermaid-block="" dangerouslySetInnerHTML={{ __html: svg }} />
   )
 }
 

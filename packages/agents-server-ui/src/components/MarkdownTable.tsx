@@ -1,12 +1,18 @@
 import { useRef, useState } from 'react'
-import { Copy, Download, Maximize2 } from 'lucide-react'
+import {
+  Copy,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Maximize2,
+} from 'lucide-react'
 import {
   extractTableDataFromElement,
   tableDataToCSV,
   tableDataToMarkdown,
   tableDataToTSV,
 } from 'streamdown'
-import { Dialog, IconButton, Menu, Tooltip } from '../ui'
+import { Dialog, IconButton, Menu, Text, Tooltip } from '../ui'
 import styles from './MarkdownTable.module.css'
 
 // Streamdown threads its rehype `Element` through every component
@@ -140,9 +146,18 @@ export function MarkdownTable({
           </Menu.Trigger>
         </Tooltip>
         <Menu.Content side="bottom" align="end" sideOffset={4}>
-          <Menu.Item onSelect={() => copy(`md`)}>Markdown</Menu.Item>
-          <Menu.Item onSelect={() => copy(`csv`)}>CSV</Menu.Item>
-          <Menu.Item onSelect={() => copy(`tsv`)}>TSV</Menu.Item>
+          <Menu.Item onSelect={() => copy(`md`)}>
+            <FileText size={14} />
+            <Text size={2}>Markdown</Text>
+          </Menu.Item>
+          <Menu.Item onSelect={() => copy(`csv`)}>
+            <FileSpreadsheet size={14} />
+            <Text size={2}>CSV</Text>
+          </Menu.Item>
+          <Menu.Item onSelect={() => copy(`tsv`)}>
+            <FileSpreadsheet size={14} />
+            <Text size={2}>TSV</Text>
+          </Menu.Item>
         </Menu.Content>
       </Menu.Root>
 
@@ -162,8 +177,14 @@ export function MarkdownTable({
           </Menu.Trigger>
         </Tooltip>
         <Menu.Content side="bottom" align="end" sideOffset={4}>
-          <Menu.Item onSelect={() => download(`md`)}>Markdown</Menu.Item>
-          <Menu.Item onSelect={() => download(`csv`)}>CSV</Menu.Item>
+          <Menu.Item onSelect={() => download(`md`)}>
+            <FileText size={14} />
+            <Text size={2}>Markdown</Text>
+          </Menu.Item>
+          <Menu.Item onSelect={() => download(`csv`)}>
+            <FileSpreadsheet size={14} />
+            <Text size={2}>CSV</Text>
+          </Menu.Item>
         </Menu.Content>
       </Menu.Root>
 
@@ -208,8 +229,13 @@ export function MarkdownTable({
           {/* Render the same children inside a separate <table>
               instance — React reconciles each location independently
               so the data shows up in both the inline table and the
-              fullscreen one without any cloning gymnastics. */}
-          <div className={styles.fullscreenScroll}>
+              fullscreen one without any cloning gymnastics.
+
+              The scroll container carries `agent-ui-markdown` so all
+              the table cell / header / row selectors in `markdown.css`
+              (which are scoped to that wrapper class) cascade onto
+              this table the same way they do inline. */}
+          <div className={`agent-ui-markdown ${styles.fullscreenScroll}`}>
             <table data-streamdown="table" {...props}>
               {children}
             </table>
