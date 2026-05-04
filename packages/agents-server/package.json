@@ -35,6 +35,7 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "start": "cross-env DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents ELECTRIC_URL=http://localhost:3060 tsx --watch src/entrypoint.ts",
     "test": "vitest run",
     "coverage": "ELECTRIC_AGENTS_KEEP_BACKEND=1 pnpm exec vitest run --coverage $(find test -name '*.test.ts' ! -name 'conformance.test.ts' | sort) && pnpm exec vitest run test/conformance.test.ts",
     "typecheck": "tsc --noEmit",
@@ -62,12 +63,14 @@
   },
   "devDependencies": {
     "@electric-ax/agents": "workspace:*",
-    "@electric-ax/agents-server-ui": "workspace:*",
     "@electric-ax/agents-server-conformance-tests": "workspace:*",
+    "@electric-ax/agents-server-ui": "workspace:*",
     "@types/node": "^22.19.15",
     "@vitest/coverage-v8": "^4.1.0",
+    "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.0",
     "tsdown": "^0.9.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.0"
   },
