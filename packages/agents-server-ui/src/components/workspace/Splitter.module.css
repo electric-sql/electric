@@ -1,0 +1,21 @@
+.splitter {
+  flex-shrink: 0;
+  background: var(--ds-gray-a5);
+  position: relative;
+  z-index: 1;
+}
+
+.horizontal {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.vertical {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.splitter:hover,
+.active {
+  background: var(--ds-accent-a6);
+}

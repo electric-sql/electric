@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import {
   Outlet,
   createHashHistory,
@@ -7,14 +7,9 @@ import {
   createRouter,
   useNavigate,
   useParams,
-  useSearch,
 } from '@tanstack/react-router'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq } from '@tanstack/db'
 import { z } from 'zod'
-import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
-import { useElectricAgents } from './lib/ElectricAgentsProvider'
 import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
@@ -24,19 +19,20 @@ import {
   SearchPaletteProvider,
   useSearchPalette,
 } from './hooks/useSearchPalette'
+import { WorkspaceProvider } from './hooks/useWorkspace'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
-import { EntityHeader } from './components/EntityHeader'
 import { NewSessionPage } from './components/NewSessionPage'
-import { getView, listViews, type ViewId } from './lib/workspace/viewRegistry'
-import { Stack } from './ui'
+import { Workspace } from './components/workspace/Workspace'
 import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
   return (
     <SidebarCollapsedProvider>
       <SearchPaletteProvider>
-        <RootShell />
+        <WorkspaceProvider>
+          <RootShell />
+        </WorkspaceProvider>
       </SearchPaletteProvider>
     </SidebarCollapsedProvider>
   )
@@ -110,144 +106,17 @@ const entitySearchSchema = z.object({
   view: z.string().optional(),
 })
 
+/**
+ * Thin route component — all the rendering work happens inside
+ * `<Workspace>`, which reads the route params (entity splat + ?view)
+ * via TanStack Router hooks and reflects them into the workspace
+ * tree. Keeping the route handler this small means the component tree
+ * underneath stays the same regardless of which entity is selected,
+ * which lets per-tile state (scroll, selection, etc.) survive
+ * navigation between entities.
+ */
 function EntityPage(): React.ReactElement {
-  const { _splat } = useParams({ from: `/entity/$` })
-  const entityUrl = `/${_splat}`
-  const { activeServer } = useServerConnection()
-  const { pinnedUrls, togglePin } = usePinnedEntities()
-  const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
-  const navigate = useNavigate()
-  const search = useSearch({ from: `/entity/$` })
-
-  const { data: matchingEntities = [] } = useLiveQuery(
-    (query) => {
-      if (!entitiesCollection) return undefined
-      return query
-        .from({ e: entitiesCollection })
-        .where(({ e }) => eq(e.url, entityUrl))
-    },
-    [entitiesCollection, entityUrl]
-  )
-  const selectedEntity = matchingEntities.at(0) ?? null
-  const isSpawning = selectedEntity?.status === `spawning`
-  const entityStopped = selectedEntity?.status === `stopped`
-
-  // Resolve the active view from the URL. The first registered view
-  // (`chat`) is the implicit default when the param is absent or
-  // points at an unknown id — we never fail closed.
-  const requestedViewId = search.view as ViewId | undefined
-  const availableViews = selectedEntity ? listViews(selectedEntity) : []
-  const defaultViewId = availableViews[0]?.id ?? `chat`
-  const activeViewId: ViewId =
-    requestedViewId && availableViews.some((v) => v.id === requestedViewId)
-      ? requestedViewId
-      : defaultViewId
-
-  const setActiveView = useCallback(
-    (viewId: ViewId) => {
-      // Omit the param from the URL when it matches the default view —
-      // keeps `/entity/foo` clean for the chat case rather than always
-      // showing `?view=chat`.
-      void navigate({
-        to: `/entity/$`,
-        params: { _splat },
-        search: viewId === defaultViewId ? {} : { view: viewId },
-      })
-    },
-    [navigate, _splat, defaultViewId]
-  )
-
-  const [killError, setKillError] = useState<string | null>(null)
-  const [forkError, setForkError] = useState<string | null>(null)
-  const [forking, setForking] = useState(false)
-
-  const handleKill = useCallback(() => {
-    if (!killEntity) return
-    setKillError(null)
-    const tx = killEntity(entityUrl)
-    tx.isPersisted.promise.catch((err: Error) => {
-      setKillError(err.message)
-    })
-  }, [killEntity, entityUrl])
-
-  const handleFork = useCallback(() => {
-    if (!forkEntity || forking) return
-    setForkError(null)
-    setForking(true)
-    forkEntity(entityUrl)
-      .then((root) => {
-        navigate({
-          to: `/entity/$`,
-          params: { _splat: root.url.replace(/^\//, ``) },
-        })
-      })
-      .catch((err: Error) => {
-        setForkError(err.message)
-      })
-      .finally(() => {
-        setForking(false)
-      })
-  }, [entityUrl, forkEntity, forking, navigate])
-
-  if (!selectedEntity) {
-    return (
-      <Stack
-        align="center"
-        justify="center"
-        grow
-        className={styles.entityShell}
-      >
-        <span>Loading entity...</span>
-      </Stack>
-    )
-  }
-
-  const baseUrl = activeServer?.url ?? ``
-  const ViewComponent = getView(activeViewId)?.Component
-
-  return (
-    <Stack direction="column" className={styles.entityShell}>
-      <EntityHeader
-        entity={selectedEntity}
-        pinned={pinnedUrls.includes(entityUrl)}
-        onTogglePin={() => togglePin(entityUrl)}
-        onKill={handleKill}
-        killError={killError}
-        onFork={forkEntity && !selectedEntity.parent ? handleFork : undefined}
-        forkError={forkError}
-        forking={forking}
-        currentViewId={activeViewId}
-        onSetView={setActiveView}
-      />
-      <Stack className={styles.entityBody}>
-        <Stack direction="column" className={styles.entityMain}>
-          {ViewComponent ? (
-            <ViewComponent
-              baseUrl={baseUrl}
-              entityUrl={entityUrl}
-              entity={selectedEntity}
-              entityStopped={entityStopped}
-              isSpawning={isSpawning}
-              // Stage 1 has no tile concept yet — synthesise a stable id
-              // from the entity URL + view so per-tile state hooks behave
-              // (a single-tile workspace effectively has one tile per
-              // (entity, view) pair).
-              tileId={`${entityUrl}::${activeViewId}`}
-            />
-          ) : (
-            <Stack
-              align="center"
-              justify="center"
-              grow
-              className={styles.entityShell}
-            >
-              <span>Unknown view: {activeViewId}</span>
-            </Stack>
-          )}
-        </Stack>
-      </Stack>
-    </Stack>
-  )
+  return <Workspace />
 }
 
 const rootRoute = createRootRoute({ component: RootLayout })
