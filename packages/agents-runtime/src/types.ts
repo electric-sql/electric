@@ -725,98 +725,6 @@ export type AgentRunResult = {
 export type AgentTool = PiAgentTool
 export type AgentModel = string | Model<any>
 
-/**
- * Which CLI backs a `coding-session` entity. The same normalized event
- * shape is written regardless.
- */
-export type CodingAgentType = `claude` | `codex`
-
-export type CodingSessionStatus = `initializing` | `idle` | `running` | `error`
-
-/**
- * One row in a coding-session entity's `events` collection — the mirror
- * of an `agent-session-protocol` NormalizedEvent. `payload` holds the
- * original event as returned by `loadSession` / `tailSession`.
- */
-export interface CodingSessionEventRow {
-  key: string
-  ts: number
-  type: string
-  callId?: string
-  payload: Record<string, unknown>
-}
-
-export interface CodingSessionMeta {
-  /** Electric-side session id (matches the spawn id passed to useCodingAgent). */
-  electricSessionId: string
-  /** Native session id assigned by the CLI. Populated after the first CLI invocation. */
-  nativeSessionId?: string
-  agent: CodingAgentType
-  cwd?: string
-  status: CodingSessionStatus
-  error?: string
-  /** Inbox key of the prompt currently running, when status === `running`. */
-  currentPromptInboxKey?: string
-}
-
-/**
- * One row in a coding-session entity's `sessionMeta` collection. Same
- * shape as `CodingSessionMeta` plus the table primary key. Exported so
- * consumers (e.g. the agents-server-ui hook) don't have to redeclare
- * the row type and risk drifting on optionality (`cwd`, etc.).
- */
-export interface CodingSessionMetaRow extends CodingSessionMeta {
-  key: string
-}
-
-export interface UseCodingAgentOptions {
-  agent: CodingAgentType
-  /**
-   * Attach to an existing local session by native id (as written to
-   * `~/.claude/projects/...` or `~/.codex/sessions/...`). When omitted,
-   * a fresh session is created on the first prompt.
-   */
-  nativeSessionId?: string
-  /**
-   * Import an existing local session into a fresh session of `agent`.
-   * Same-agent imports are lossless (native rewrite); cross-agent
-   * imports round-trip through the normalized event stream.
-   */
-  importFrom?: {
-    agent: CodingAgentType
-    sessionId: string
-  }
-  /** Working directory the CLI runs in. Defaults to the runtime's cwd. */
-  cwd?: string
-  /**
-   * Wake policy for the caller observing this session. Defaults to
-   * `"runFinished"` — the caller wakes each time the session entity
-   * finishes a prompt. Pass a `{ on: "change", ... }` wake to stream
-   * per-event updates.
-   */
-  wake?: Wake
-}
-
-export interface CodingSessionHandle {
-  /** Electric entity URL backing this session (e.g. `/coding-session/<id>`). */
-  readonly entityUrl: string
-  /** Electric-side session id (the id passed to `ctx.useCodingAgent`). */
-  readonly sessionId: string
-  readonly agent: CodingAgentType
-  /** Current metadata, or undefined until the session entity has initialized. */
-  meta: () => CodingSessionMeta | undefined
-  /** Shortcut for `meta()?.status`. */
-  status: () => CodingSessionStatus | undefined
-  /** Resolves when the session entity finishes its current run. */
-  run: Promise<void>
-  /** Queue a prompt. Prompts run serially on the session. */
-  send: (prompt: string) => void
-  /** Live view of normalized session events as rows. */
-  readonly events: ReadonlyArray<CodingSessionEventRow>
-  /** Live filtered view — only `user_message` and `assistant_message` rows. */
-  readonly messages: ReadonlyArray<CodingSessionEventRow>
-}
-
 export interface AgentConfig {
   systemPrompt: string
   model: AgentModel
@@ -941,17 +849,6 @@ export interface HandlerContext<
     id: string,
     schema: T
   ) => SharedStateHandle<T>
-  /**
-   * Spawn-or-attach a `coding-session` entity that runs a Claude Code or
-   * Codex CLI session, and return a typed handle for prompting it and
-   * observing its normalized event stream. Requires
-   * `registerCodingSession` to have been called on the runtime's
-   * registry.
-   */
-  useCodingAgent: (
-    sessionId: string,
-    opts: UseCodingAgentOptions
-  ) => Promise<CodingSessionHandle>
   send: (
     entityUrl: string,
     payload: unknown,

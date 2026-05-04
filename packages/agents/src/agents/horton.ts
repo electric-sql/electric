@@ -10,10 +10,6 @@ import {
   resolveBuiltinModelConfig,
   type BuiltinModelCatalog,
 } from '../model-catalog'
-import {
-  createPromptCoderTool,
-  createSpawnCoderTool,
-} from '../tools/spawn-coder'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import type {
   EntityRegistry,
@@ -233,8 +229,6 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - brave_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
-- spawn_coder: spawn a long-lived coding agent (Claude Code or Codex CLI) for code changes, file edits, debugging
-- prompt_coder: send a follow-up prompt to a coder you previously spawned
 ${docsTools}${skillsTools}
 
 # Working with files
@@ -262,13 +256,6 @@ When you spawn a worker, write its system prompt the way you'd brief a colleague
 
 After spawning, end your turn (optionally with a brief "I've dispatched a worker for X; I'll respond when it finishes"). When the worker finishes, you'll receive a message describing which worker completed and what it returned. Multiple workers may finish at different times — check the message for the worker URL to know which one you're hearing about.
 
-# When to spawn a coder
-Spawn a coder when the user asks for code changes, file edits, debugging, or any task that benefits from a real coding agent with full tool access (bash, file edits, etc.). A coder runs Claude Code or Codex CLI under the hood.
-
-Unlike a worker, a coder is **long-lived**: its URL stays valid across many turns. Spawn once with spawn_coder, then keep prompting it via prompt_coder for follow-ups — don't spawn a new coder for each turn. Treat the coder URL like a chat handle.
-
-After calling spawn_coder or prompt_coder, end your turn. When the coder's reply lands, you'll be woken with the response in the wake message — relay it (or a summary) back to the user, and call prompt_coder again if there's a follow-up.
-
 # Reporting
 Report outcomes faithfully. If a command failed, say so with the relevant output. If you didn't run a verification step, say that rather than implying you did. Don't hedge confirmed results with unnecessary disclaimers.
 
@@ -293,8 +280,6 @@ export function createHortonTools(
     braveSearchTool,
     fetchUrlTool,
     createSpawnWorkerTool(ctx, opts.modelConfig),
-    createSpawnCoderTool(ctx),
-    createPromptCoderTool(ctx),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
   ]
 }

@@ -10,7 +10,6 @@ import {
 } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
-import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
@@ -32,7 +31,6 @@ import { EntityTimeline } from './components/EntityTimeline'
 import { EntityContextDrawer } from './components/EntityContextDrawer'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
-import { CodingSessionView } from './components/CodingSessionView'
 import { NewSessionPage } from './components/NewSessionPage'
 import { Stack } from './ui'
 import styles from './router.module.css'
@@ -192,21 +190,13 @@ function EntityPage(): React.ReactElement {
       />
       <Stack ref={containerRef} className={styles.entityBody}>
         <Stack direction="column" className={styles.entityMain}>
-          {selectedEntity.type === CODING_SESSION_ENTITY_TYPE && connectUrl ? (
-            <CodingSessionView
-              baseUrl={baseUrl}
-              entityUrl={connectUrl}
-              entityStopped={entityStopped}
-            />
-          ) : (
-            <GenericEntityBody
-              baseUrl={baseUrl}
-              entityUrl={connectUrl}
-              entity={selectedEntity}
-              entityStopped={entityStopped}
-              isSpawning={isSpawning}
-            />
-          )}
+          <GenericEntityBody
+            baseUrl={baseUrl}
+            entityUrl={connectUrl}
+            entity={selectedEntity}
+            entityStopped={entityStopped}
+            isSpawning={isSpawning}
+          />
         </Stack>
         {stateExplorerOpen && (
           <>

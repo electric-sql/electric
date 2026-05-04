@@ -6,11 +6,10 @@ import { MarkdownImage } from '../components/MarkdownImage'
 import { MarkdownTable } from '../components/MarkdownTable'
 
 // Shared Streamdown configuration used by every consumer that
-// renders agent / assistant markdown (currently AgentResponse and
-// CodingSessionTimeline). Centralising the plugin singleton +
-// component overrides means the two render paths stay in lockstep
-// — same Shiki highlighter, same custom block renderers, same
-// toolbar behaviour.
+// renders agent / assistant markdown (currently AgentResponse).
+// Centralising the plugin singleton + component overrides means
+// render paths stay in lockstep — same Shiki highlighter, same
+// custom block renderers, same toolbar behaviour.
 
 const codePluginSingleton = createCodePlugin()
 

@@ -273,6 +273,59 @@
   color: var(--ds-accent-10);
 }
 
+/* Project picker -------------------------------------------------- */
+
+.projectPicker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+}
+.projectPickerLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+}
+.projectPickerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  flex-wrap: wrap;
+}
+.projectCreateForm {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.projectCreateInput {
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-2);
+  padding: 4px 8px;
+  font-size: var(--ds-text-sm);
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  background: var(--ds-input-bg);
+  outline: none;
+  height: 28px;
+}
+.projectCreateInput:focus {
+  border-color: var(--ds-accent-a6);
+}
+.projectCreateBtn {
+  all: unset;
+  cursor: pointer;
+  font-size: var(--ds-text-sm);
+  color: var(--ds-accent-9);
+  padding: 4px 8px;
+  border-radius: var(--ds-radius-2);
+}
+.projectCreateBtn:hover {
+  background: var(--ds-accent-a2);
+}
+.projectCreateBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* Other-agents section under the composer ----------------------- */
 
 .otherAgents {

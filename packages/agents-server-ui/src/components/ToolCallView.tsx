@@ -54,9 +54,6 @@ function getSummary(toolName: string, args: Record<string, unknown>): string {
       return (args.url as string) ?? ``
     case `spawn_worker`:
       return truncate((args.initialMessage as string) ?? ``, 60)
-    case `spawn_coder`:
-    case `prompt_coder`:
-      return truncate((args.prompt as string) ?? ``, 60)
     default:
       for (const field of [
         `command`,

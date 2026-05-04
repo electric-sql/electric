@@ -59,10 +59,6 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     id: string,
     schema: T
   ): SharedStateHandle<T>
-  useCodingAgent(
-    sessionId: string,
-    opts: UseCodingAgentOptions
-  ): Promise<CodingSessionHandle>
   send(
     entityUrl: string,
     payload: unknown,
@@ -107,42 +103,11 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `spawn(type, id, args?, opts?)`   | `Promise<EntityHandle>`                                           | Spawn a child entity. `opts` accepts `tags`, `observe`, `initialMessage`, and `wake`. See [`EntityHandle`](./entity-handle).                                                                                                               |
 | `observe(source, opts?)`          | `Promise<EntityHandle \| SharedStateHandle \| ObservationHandle>` | Observe a source. Return type depends on source type: `EntityHandle` for entities, `SharedStateHandle & ObservationHandle` for db, `ObservationHandle` otherwise. Use `entity()`, `cron()`, `entities()`, `db()` helpers to build sources. |
 | `mkdb(id, schema)`                | `SharedStateHandle<T>`                                            | Create a new shared state stream. See [`SharedStateHandle`](./shared-state-handle).                                                                                                                                                        |
-| `useCodingAgent(sessionId, opts)` | `Promise<CodingSessionHandle>`                                    | Spawn or attach to the built-in `coder` entity for a Claude Code or Codex CLI session. Requires the `coder` type to be registered.                                                                                                         |
 | `send(entityUrl, payload, opts?)` | `void`                                                            | Send a message to another entity. `opts` accepts `type` and `afterMs` (delay in milliseconds).                                                                                                                                             |
 | `recordRun()`                     | `RunHandle`                                                       | Record a non-LLM run in the built-in `runs` collection, so observers using `wake: "runFinished"` are notified when external work completes.                                                                                               |
 | `setTag(key, value)`              | `Promise<void>`                                                   | Set a tag on this entity.                                                                                                                                                                                                                  |
 | `removeTag(key)`                  | `Promise<void>`                                                   | Remove a tag from this entity.                                                                                                                                                                                                             |
 | `sleep()`                         | `void`                                                            | End the handler without running an agent. The entity remains idle until the next wake.                                                                                                                                                     |
-
-## Coding sessions
-
-`useCodingAgent()` is a convenience wrapper around the built-in `coder` entity type.
-
-```ts
-type CodingAgentType = "claude" | "codex"
-
-interface UseCodingAgentOptions {
-  agent: CodingAgentType
-  nativeSessionId?: string
-  importFrom?: { agent: CodingAgentType; sessionId: string }
-  cwd?: string
-  wake?: Wake
-}
-
-interface CodingSessionHandle {
-  readonly entityUrl: string
-  readonly sessionId: string
-  readonly agent: CodingAgentType
-  meta(): CodingSessionMeta | undefined
-  status(): "initializing" | "idle" | "running" | "error" | undefined
-  run: Promise<void>
-  send(prompt: string): void
-  readonly events: ReadonlyArray<CodingSessionEventRow>
-  readonly messages: ReadonlyArray<CodingSessionEventRow>
-}
-```
-
-By default, `useCodingAgent()` observes the coder with `wake: "runFinished"`, so the caller wakes when a prompt finishes. Pass a change wake if you need per-event updates.
 
 ## RunHandle
 

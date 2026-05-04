@@ -75,34 +75,6 @@ export function entity(entityUrl: string): EntityObservationSource {
   }
 }
 
-/** Entity type name for the built-in coder entity. */
-export const CODING_SESSION_ENTITY_TYPE = `coder`
-
-/**
- * Collection event-type strings used by the coder entity's state. The
- * coder entity (in `@electric-ax/agents`) declares its three custom
- * collections under these names, and any consumer that needs to read
- * the same collections back out (the agents-server-ui hook is the
- * primary one) imports these constants instead of hard-coding the
- * strings — so the entity's contract has a single source of truth.
- */
-export const CODING_SESSION_META_COLLECTION_TYPE = `coding_session_meta`
-export const CODING_SESSION_CURSOR_COLLECTION_TYPE = `coding_session_cursor`
-export const CODING_SESSION_EVENT_COLLECTION_TYPE = `coding_session_event`
-
-export function codingSessionEntityUrl(sessionId: string): string {
-  return `/${CODING_SESSION_ENTITY_TYPE}/${sessionId}`
-}
-
-/**
- * Observation source for a coding-session entity (Claude Code / Codex
- * CLI session). Sugar for `entity(codingSessionEntityUrl(sessionId))`
- * so callers don't have to hard-code the type-name prefix.
- */
-export function codingSession(sessionId: string): EntityObservationSource {
-  return entity(codingSessionEntityUrl(sessionId))
-}
-
 export function cron(
   expression: string,
   opts?: { timezone?: string }

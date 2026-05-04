@@ -1,8 +1,8 @@
 /* ==========================================================================
  * Markdown styles
  *
- * Targets the `.agent-ui-markdown` wrapper added by AgentResponse and
- * CodingSessionTimeline. Streamdown ships its components with Tailwind
+ * Targets the `.agent-ui-markdown` wrapper added by AgentResponse.
+ * Streamdown ships its components with Tailwind
  * utility class strings baked into the rendered HTML; Tailwind itself
  * is NOT loaded in this app, so those classes are inert. The visual
  * rules below own all formatting and reference only stable hooks:
