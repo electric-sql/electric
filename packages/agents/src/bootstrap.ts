@@ -12,6 +12,7 @@ import { serverLog } from './log'
 import { registerCodingSession } from './agents/coding-session'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
+import { createBuiltinModelCatalog } from './model-catalog'
 import { createSkillsRegistry } from './skills/registry'
 import type {
   AgentTool,
@@ -76,9 +77,13 @@ export async function createBuiltinAgentHandler(
     createElectricTools,
   } = options
 
-  if (!streamFn && !process.env.ANTHROPIC_API_KEY) {
+  const modelCatalog = await createBuiltinModelCatalog({
+    allowMockFallback: Boolean(streamFn),
+  })
+
+  if (!modelCatalog) {
     serverLog.warn(
-      `[builtin-agents] ANTHROPIC_API_KEY not set — skipping built-in agent registration`
+      `[builtin-agents] no supported model provider API key found — set ANTHROPIC_API_KEY or OPENAI_API_KEY`
     )
     return null
   }
@@ -111,9 +116,10 @@ export async function createBuiltinAgentHandler(
     workingDirectory: cwd,
     streamFn,
     skillsRegistry,
+    modelCatalog,
   })
 
-  registerWorker(registry, { workingDirectory: cwd, streamFn })
+  registerWorker(registry, { workingDirectory: cwd, streamFn, modelCatalog })
   typeNames.push(`worker`)
 
   registerCodingSession(registry, { defaultWorkingDirectory: cwd })

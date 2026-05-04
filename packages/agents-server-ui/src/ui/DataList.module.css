@@ -1,0 +1,33 @@
+.root {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--ds-space-1) var(--ds-space-3);
+  align-items: baseline;
+}
+
+.size1 {
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+.size2 {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+}
+.size3 {
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-text-base-lh);
+}
+
+.label {
+  color: var(--ds-text-2);
+  font-weight: 400;
+  white-space: nowrap;
+  /* Make grid items participate; React Fragment children would not. */
+  grid-column: 1;
+}
+
+.value {
+  color: var(--ds-text-1);
+  min-width: 0;
+  grid-column: 2;
+}

@@ -1,0 +1,31 @@
+/* User-message outer column matches the chat surface width (composer
+ * width). The bubble inside gets 12px (1× corner radius) horizontal
+ * padding so the actual *text* lines up with the agent text column —
+ * only the white background extends past it. */
+.root {
+  max-width: var(--chat-surface-width);
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* Match the composer (.composer in MessageInput.module.css): same
+   white surface + 1px hairline + 12px corner radius. Lines the user
+   bubble up visually with the input box below — they read as the
+   user's "voice" turn. */
+.bubble {
+  background: var(--ds-input-bg);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 12px;
+}
+
+.body {
+  white-space: pre-wrap;
+}
+
+.meta {
+  opacity: 0.4;
+  /* Match the bubble's 12px horizontal padding so the timestamp/sender
+   * row aligns with the agent text column rather than with the wider
+   * bubble background. */
+  padding-inline: 12px;
+}

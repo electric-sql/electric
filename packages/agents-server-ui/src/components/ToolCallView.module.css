@@ -1,0 +1,19 @@
+/* ToolCallView-specific bits. Common card / header / body / codeBlock
+ * styling lives in ./toolBlock.module.css and is composed alongside. */
+
+.codeBlockRemoved {
+  background: var(--ds-red-a2);
+}
+.codeBlockAdded {
+  background: var(--ds-green-a2);
+}
+
+.sentMessage {
+  padding: 8px 12px;
+  border-top: 1px solid var(--ds-gray-a4);
+  background: var(--ds-accent-a2);
+}
+
+.sentMessageBody {
+  white-space: pre-wrap;
+}

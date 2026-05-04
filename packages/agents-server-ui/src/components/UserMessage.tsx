@@ -1,6 +1,8 @@
 import { memo } from 'react'
-import { Flex, Text } from '@radix-ui/themes'
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime'
+import { Stack, Text } from '../ui'
+import { TimeText } from './TimeText'
+import styles from './UserMessage.module.css'
 
 type UserMessageSection = Extract<
   EntityTimelineSection,
@@ -12,43 +14,28 @@ export const UserMessage = memo(function UserMessage({
 }: {
   section: UserMessageSection
 }): React.ReactElement {
-  const time = section.timestamp
-    ? new Date(section.timestamp).toLocaleTimeString([], {
-        hour: `2-digit`,
-        minute: `2-digit`,
-      })
-    : ``
-
   const sender = section.from ?? `user`
 
   return (
-    <Flex direction="column" gap="1" style={{ maxWidth: `68ch` }}>
-      <Flex
-        p="3"
-        style={{
-          background: `var(--gray-a3)`,
-          borderRadius: 12,
-        }}
-      >
-        <Text size="2" style={{ lineHeight: 1.55, whiteSpace: `pre-wrap` }}>
+    <Stack direction="column" gap={1} className={styles.root}>
+      <Stack p={3} className={styles.bubble}>
+        <Text size={2} className={styles.body}>
           {section.text}
         </Text>
-      </Flex>
-      <Flex gap="2" align="center" style={{ opacity: 0.4 }}>
-        <Text size="1" color="gray">
+      </Stack>
+      <Stack gap={2} align="center" className={styles.meta}>
+        <Text size={1} tone="muted">
           {sender}
         </Text>
-        {time && (
+        {section.timestamp && (
           <>
-            <Text size="1" color="gray">
+            <Text size={1} tone="muted">
               ·
             </Text>
-            <Text size="1" color="gray">
-              {time}
-            </Text>
+            <TimeText ts={section.timestamp} />
           </>
         )}
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 })

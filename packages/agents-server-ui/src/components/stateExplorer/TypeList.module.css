@@ -1,0 +1,35 @@
+.root {
+  min-width: fit-content;
+  border-right: 1px solid var(--ds-gray-a5);
+}
+
+.header {
+  border-bottom: 1px solid var(--ds-gray-a5);
+}
+
+.headerLabel {
+  text-transform: uppercase;
+}
+
+.list {
+  flex: 1;
+  overflow: auto;
+  padding: var(--ds-space-2);
+}
+
+.item {
+  padding: var(--ds-space-1) var(--ds-space-2);
+  border-radius: var(--ds-radius-2);
+  cursor: pointer;
+  color: var(--ds-text-2);
+}
+.item:hover {
+  background: var(--ds-gray-a3);
+}
+.itemSelected {
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11);
+}
+.itemSelected:hover {
+  background: var(--ds-accent-a3);
+}

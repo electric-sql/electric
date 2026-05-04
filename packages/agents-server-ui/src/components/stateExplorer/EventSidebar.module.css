@@ -3,7 +3,7 @@
 }
 
 .header {
-  border-bottom: 1px solid var(--gray-a5);
+  border-bottom: 1px solid var(--ds-gray-a5);
 }
 
 .headerLabel {
@@ -18,15 +18,21 @@
 
 .eventRow {
   cursor: pointer;
-  border-radius: var(--radius-2);
+  border-radius: var(--ds-radius-2);
   background: transparent;
   overflow: hidden;
-  padding: var(--space-1) var(--space-2);
+  padding: var(--ds-space-1) var(--ds-space-2);
   box-sizing: border-box;
+  /* Virtualized rows are absolutely positioned; only `transform` is set
+   * inline (it varies per row from the virtualizer). */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 .eventRow[data-selected='true'] {
-  background: var(--accent-a3);
+  background: var(--ds-accent-a3);
 }
 
 .eventRow[data-dimmed='true'] {
@@ -40,7 +46,7 @@
 }
 
 .eventKey {
-  font-family: var(--code-font-family);
+  font-family: var(--ds-font-mono);
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -67,5 +73,21 @@
   overflow-x: auto;
   overflow-y: hidden;
   width: 100%;
-  font-size: var(--font-size-1);
+  font-size: var(--ds-text-xs);
+}
+
+.headerActions {
+  margin-left: auto;
+}
+
+.shrink0 {
+  flex-shrink: 0;
+}
+
+.monoBadge {
+  font-family: var(--ds-font-mono);
+}
+
+.virtualWindow {
+  position: relative;
 }

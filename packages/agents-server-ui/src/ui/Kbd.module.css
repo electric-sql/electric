@@ -1,0 +1,28 @@
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid var(--ds-gray-a5);
+  background: var(--ds-gray-a2);
+  color: var(--ds-text-2);
+  /* Body font, not mono — many monospace fonts (incl. Source Code Pro)
+     lack glyphs for ⌘/⌥/⇧/⌃, falling back to system fonts mid-pill. */
+  font-family: var(--ds-font-body);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-weight: 500;
+  user-select: none;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}

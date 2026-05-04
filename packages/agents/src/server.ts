@@ -124,7 +124,7 @@ export class BuiltinAgentsServer {
           })
           if (!this.bootstrap) {
             throw new Error(
-              `ANTHROPIC_API_KEY must be set before starting builtin agents`
+              `ANTHROPIC_API_KEY or OPENAI_API_KEY must be set before starting builtin agents`
             )
           }
 

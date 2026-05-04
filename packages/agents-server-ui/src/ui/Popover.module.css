@@ -1,0 +1,57 @@
+/* Shared popup card style for Popover / HoverCard / Menu / Select.
+   Keep selectors generic so each wrapper can add only the bits it needs. */
+
+.popup {
+  background: var(--ds-surface-raised);
+  color: var(--ds-text-1);
+  /* Single defined edge — see `--ds-overlay-border` /
+     `--ds-overlay-shadow` in tokens.css. The border IS the edge;
+     the shadow handles elevation only. Stacking a border and a
+     ring shadow read as a "double rim" and is avoided here. */
+  border: 1px solid var(--ds-overlay-border);
+  /*
+   * Concentric with the 7px-rounded Menu.Item / Select.Item children:
+   *
+   *   popup_outer_radius = border + padding + item_radius
+   *                      =   1px  +   3px   +    7px      = 11px
+   *
+   * That puts the popup's outer corner curve and each item's corner
+   * curve on the same center point (border+padding+item_radius from
+   * the outer corner), so the visible padding-box gap between an
+   * item's edge and the popup's interior is the same 3px around all
+   * four sides — matching the 3px gap on the straight edges.
+   *
+   * No exact design-token at 11px; literal value used because this
+   * is a one-off concentric calculation tied to the item radius.
+   */
+  border-radius: 11px;
+  box-shadow: var(--ds-overlay-shadow);
+  z-index: var(--ds-z-popover);
+  outline: none;
+  /* Allow consumers to override min/max width/height via inline style. */
+  min-width: 8rem;
+  max-width: min(calc(100vw - 16px), 480px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+/* Sized variants (consumers compose these with the base .popup). */
+.padding {
+  padding: var(--ds-space-3);
+}
+
+.titleBar {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-weight: 600;
+  color: var(--ds-text-1);
+  padding: var(--ds-space-3) var(--ds-space-3) var(--ds-space-2);
+  border-bottom: 1px solid var(--ds-border-1);
+}

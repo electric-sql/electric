@@ -1,8 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSkillTools } from '../skills/tools'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import {
+  modelChoiceValues,
+  REASONING_EFFORT_VALUES,
+  resolveBuiltinModelConfig,
+  type BuiltinModelCatalog,
+} from '../model-catalog'
 import {
   createPromptCoderTool,
   createSpawnCoderTool,
@@ -151,7 +158,13 @@ export async function generateTitle(
 
 export function buildHortonSystemPrompt(
   workingDirectory: string,
-  opts: { hasDocsSupport?: boolean; hasSkills?: boolean; docsUrl?: string } = {}
+  opts: {
+    hasDocsSupport?: boolean
+    hasSkills?: boolean
+    docsUrl?: string
+    modelProvider?: string
+    modelId?: string
+  } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
     ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
@@ -202,6 +215,11 @@ Don't force onboarding. If someone just wants to chat or code, let them. When in
 - The docs site covers: Usage (entity definition, handlers, tools, state, spawning, coordination, waking, shared state, client integration, app setup), Reference (handler context, entity definitions, configurations, tools, state proxies, wake events, registries), Entities (Horton, Worker), and Patterns (Manager-Worker, Pipeline, Map-Reduce, Dispatcher, Blackboard, Reactive Observers).
 - For general coding questions unrelated to Electric Agents, use brave_search or your own knowledge.`
     : ``
+  const modelGuidance =
+    opts.modelProvider && opts.modelId
+      ? `\n# Runtime model
+You are currently running via provider "${opts.modelProvider}" with model "${opts.modelId}". If the user asks what model or provider you are using, answer with these exact runtime values. Do not infer your model identity from training data or from the name of another coding tool.`
+      : ``
   return `You are Horton, a friendly and capable assistant. You can chat, research the web, read and edit code, run shell commands, and dispatch subagents (workers) for isolated subtasks. Be warm and engaging in conversation; be precise and concrete when working with code.
 
 # Greetings
@@ -223,7 +241,7 @@ ${docsTools}${skillsTools}
 - Prefer edit over write when modifying existing files.
 - You must read a file before you can edit it.
 - Use absolute paths or paths relative to the current working directory.
-${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
+${modelGuidance}${docsGuidance}${skillsGuidance}${onboardingGuidance}${docsUrlGuidance}
 
 # Risky actions
 Pause and confirm with the user before:
@@ -262,7 +280,10 @@ export function createHortonTools(
   workingDirectory: string,
   ctx: HandlerContext,
   readSet: Set<string>,
-  opts: { docsSearchTool?: AgentTool } = {}
+  opts: {
+    docsSearchTool?: AgentTool
+    modelConfig?: ReturnType<typeof resolveBuiltinModelConfig>
+  } = {}
 ): Array<AgentTool> {
   return [
     createBashTool(workingDirectory),
@@ -271,7 +292,7 @@ export function createHortonTools(
     createEditTool(workingDirectory, readSet),
     braveSearchTool,
     fetchUrlTool,
-    createSpawnWorkerTool(ctx),
+    createSpawnWorkerTool(ctx, opts.modelConfig),
     createSpawnCoderTool(ctx),
     createPromptCoderTool(ctx),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
@@ -302,6 +323,7 @@ function createAssistantHandler(options: {
   docsSupport: HortonDocsSupport | null
   docsSearchTool?: AgentTool
   skillsRegistry: SkillsRegistry | null
+  modelCatalog: BuiltinModelCatalog
   docsUrl?: string
 }) {
   const {
@@ -310,6 +332,7 @@ function createAssistantHandler(options: {
     docsSupport,
     docsSearchTool,
     skillsRegistry,
+    modelCatalog,
     docsUrl,
   } = options
   const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
@@ -319,9 +342,13 @@ function createAssistantHandler(options: {
     wake: WakeEvent
   ): Promise<void> {
     const readSet = new Set<string>()
+    const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(workingDirectory, ctx, readSet, { docsSearchTool }),
+      ...createHortonTools(workingDirectory, ctx, readSet, {
+        docsSearchTool,
+        modelConfig,
+      }),
       ...(skillsRegistry && skillsRegistry.catalog.size > 0
         ? createSkillTools(skillsRegistry, ctx)
         : []),
@@ -383,8 +410,10 @@ function createAssistantHandler(options: {
         hasDocsSupport: Boolean(docsSupport),
         hasSkills,
         docsUrl,
+        modelProvider: modelConfig.provider,
+        modelId: String(modelConfig.model),
       }),
-      model: HORTON_MODEL,
+      ...modelConfig,
       tools,
       ...(streamFn && { streamFn }),
     })
@@ -422,10 +451,16 @@ export function registerHorton(
     workingDirectory: string
     streamFn?: StreamFn
     skillsRegistry?: SkillsRegistry | null
+    modelCatalog: BuiltinModelCatalog
     docsUrl?: string
   }
 ): Array<string> {
-  const { workingDirectory, streamFn, skillsRegistry = null } = options
+  const {
+    workingDirectory,
+    streamFn,
+    skillsRegistry = null,
+    modelCatalog,
+  } = options
   const docsUrl = options.docsUrl ?? process.env.HORTON_DOCS_URL
 
   if (process.env.BRAVE_SEARCH_API_KEY) {
@@ -451,11 +486,25 @@ export function registerHorton(
     docsSupport,
     docsSearchTool,
     skillsRegistry,
+    modelCatalog,
     docsUrl,
+  })
+
+  const hortonCreationSchema = z.object({
+    model: z
+      .enum(modelChoiceValues(modelCatalog))
+      .default(modelCatalog.defaultChoice.value),
+    reasoningEffort: z
+      .enum(REASONING_EFFORT_VALUES)
+      .default(`auto`)
+      .describe(
+        `Reasoning effort for compatible reasoning models. Auto uses a safe provider default.`
+      ),
   })
 
   registry.define(`horton`, {
     description: `Friendly capable assistant — chat, code, research, dispatch`,
+    creationSchema: hortonCreationSchema,
     handler: assistantHandler,
   })
 

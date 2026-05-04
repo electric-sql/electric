@@ -51,33 +51,56 @@ function parseToolArgs(argsRaw: unknown): Record<string, unknown> {
   return {}
 }
 
-// Identity-stable section caches, keyed on the row objects from TanStack DB.
-// When IVM preserves a row's reference across reactive updates, the cache
-// returns the same section object, letting React.memo bail out on unchanged
-// timeline entries. Entries are GC'd with their source rows via WeakMap, so
-// no explicit eviction is needed in production. The user cache has two slots
-// because `isInitial` depends on the message's position, not just the row —
-// if an earlier message is ever inserted, the previously-first message must
-// produce a new, non-initial section.
+// Identity-stable section caches keyed on a row's stable identifier
+// (`run.key` / `msg.key`) plus a content fingerprint.
 //
-// Agent runs are only cached once `status` is terminal. While a run is
-// in-flight, IVM may preserve the outer run reference even as nested texts
-// and tool-call arrays mutate, so caching during streaming would freeze the
-// section at its first observed state. Terminal runs are immutable, so
-// caching them is safe and still gives the full perf win for long transcripts
-// (everything but the streaming tail).
-// Slot types branded on the `isInitial` literal so the compiler enforces that
-// the `initial` slot never holds a section with `isInitial: false` (or vice
-// versa). Without this, a future refactor that swapped the slot key could
-// silently return a section with the wrong `isInitial` value.
+// **Why not WeakMap on row references?** The runtime's includes-build
+// pipeline (`buildIncludesRuns` → `normalizeTimelineRun`) rebuilds every
+// `IncludesRun` and `IncludesInboxMessage` on every emit — each layer
+// does `.map(row => ({...row, ...}))`. So the row reference observed by
+// React on tick N is never the reference observed on tick N+1, even
+// when nothing about the row changed. A WeakMap keyed on the row would
+// miss every render, defeating the cache and forcing every `<AgentResponse>`
+// in the timeline to re-render on every streamed chunk.
+//
+// **Key + fingerprint instead.** Cache on `row.key`, then verify a
+// cheap content fingerprint. Unchanged rows hit (because key + fingerprint
+// match) and return the same `EntityTimelineSection` reference, so
+// `React.memo<AgentResponse>` and `React.memo<UserMessage>` bail out on
+// every settled row during streaming. Changed rows miss, rebuild, and
+// overwrite. The fingerprint also defends against `run.key` collisions
+// between separate entity timelines that share the module-level cache —
+// different content fingerprints invalidate each other rather than
+// serving stale data.
+//
+// **Streaming runs are cached too** (was previously `isTerminal`-only).
+// The fingerprint catches text growth and status flips, so caching is
+// safe even mid-stream — and it's what makes settled rows actually skip
+// re-renders while a single tail run is generating tokens.
+//
+// **Bounded by `pruneSectionCaches` at the end of each
+// `buildTimelineEntries` call** so navigating between entities doesn't
+// grow the cache without limit. Entries whose keys don't appear in the
+// current build are dropped.
+//
+// The user cache still has two slots because `isInitial` depends on the
+// message's position in the timeline, not on the row alone — if an
+// earlier message is ever prepended, the previously-first message must
+// produce a new, non-initial section. Slot types are branded on the
+// `isInitial` literal so the compiler enforces the slot never holds the
+// wrong polarity.
 type InitialUserSection = UserMessageSection & { isInitial: true }
 type NonInitialUserSection = UserMessageSection & { isInitial: false }
-type UserSectionSlots = {
+type UserSectionCacheEntry = {
+  fingerprint: string
   initial?: InitialUserSection
   nonInitial?: NonInitialUserSection
 }
-let userSectionCache = new WeakMap<IncludesInboxMessage, UserSectionSlots>()
-let agentSectionCache = new WeakMap<IncludesRun, AgentResponseSection>()
+let userSectionCache = new Map<string, UserSectionCacheEntry>()
+let agentSectionCache = new Map<
+  string,
+  { fingerprint: string; section: AgentResponseSection }
+>()
 
 /**
  * Test-only hook: drops both section caches so tests that share row literals
@@ -85,18 +108,129 @@ let agentSectionCache = new WeakMap<IncludesRun, AgentResponseSection>()
  * Production code should never call this.
  */
 export function __resetSectionCachesForTesting(): void {
-  userSectionCache = new WeakMap()
-  agentSectionCache = new WeakMap()
+  userSectionCache = new Map()
+  agentSectionCache = new Map()
+}
+
+/**
+ * Cheap content fingerprint of an `IncludesRun`. Captures every field
+ * that influences the rendered section without paying for a full
+ * `JSON.stringify` of potentially-large tool-call args / results.
+ *
+ * - `run.status` — terminal flips finalize the section (`done: true`).
+ * - `run.errors.length` — error appends populate `section.error`.
+ * - per-text `key`, `text.length`, `status` — texts grow monotonically
+ *   during streaming, so length is a reliable change detector.
+ * - per-toolCall `key`, `status`, plus a length / key-count sniff of
+ *   `args` and `result`. Status flips capture most transitions in
+ *   production (args finalize at `args_complete`, results at
+ *   `completed`/`failed`), but the length sniff defends against
+ *   key-collision cases where two unrelated runs share a `key` but
+ *   have different payloads — without it, navigating away from one
+ *   timeline and back into another with overlapping run keys could
+ *   serve a stale section.
+ *
+ * Stable order: walks `run.texts` and `run.toolCalls` in their already-
+ * sorted-by-order arrays, so the fingerprint string is deterministic.
+ */
+function fingerprintRun(run: IncludesRun): string {
+  let fp = `${run.status}|e:${run.errors.length}|t:${run.texts.length}`
+  for (const t of run.texts) {
+    fp += `:${t.key}.${t.text.length}.${t.status}`
+  }
+  fp += `|tc:${run.toolCalls.length}`
+  for (const tc of run.toolCalls) {
+    fp += `:${tc.key}.${tc.status}${payloadSniff(`a`, tc.args)}${payloadSniff(`r`, tc.result)}`
+  }
+  return fp
+}
+
+/**
+ * Cheap fixed-cost content sniff for a tool-call arg / result value.
+ * Encodes a one-character type tag plus a size hint:
+ *
+ *   - `0` — null / undefined
+ *   - `s<n>` — string of length n
+ *   - `o<n>` — plain object with n own enumerable keys
+ *   - `n<v>` — number / boolean / bigint, encoded as its `String()`
+ *   - `x` — anything else (function / symbol / etc.; should never
+ *     happen for real tool data)
+ *
+ * Designed so that the typical tool-call argument shapes (string
+ * payloads, small object literals) produce distinct fingerprints
+ * without ever scanning recursively into nested structures.
+ */
+function payloadSniff(prefix: `a` | `r`, value: unknown): string {
+  if (value == null) return `.${prefix}0`
+  if (typeof value === `string`) return `.${prefix}s${value.length}`
+  if (typeof value === `object`) {
+    return `.${prefix}o${Object.keys(value).length}`
+  }
+  if (
+    typeof value === `number` ||
+    typeof value === `boolean` ||
+    typeof value === `bigint`
+  ) {
+    return `.${prefix}n${String(value)}`
+  }
+  return `.${prefix}x`
+}
+
+/**
+ * Bounds both module-level caches by dropping entries whose keys aren't
+ * present in the latest `buildTimelineEntries` call. Without this the
+ * cache would accumulate every run / message ever observed across every
+ * entity the user has navigated through. The size check skips the
+ * O(cache + rows) walk in the common case where the cache is already
+ * the right size or smaller.
+ */
+function pruneSectionCaches(
+  runs: ReadonlyArray<IncludesRun>,
+  inbox: ReadonlyArray<IncludesInboxMessage>
+): void {
+  if (agentSectionCache.size > runs.length) {
+    const live = new Set(runs.map((r) => r.key))
+    for (const k of agentSectionCache.keys()) {
+      if (!live.has(k)) agentSectionCache.delete(k)
+    }
+  }
+  if (userSectionCache.size > inbox.length) {
+    const live = new Set(inbox.map((m) => m.key))
+    for (const k of userSectionCache.keys()) {
+      if (!live.has(k)) userSectionCache.delete(k)
+    }
+  }
+}
+
+/**
+ * Content fingerprint for an inbox message. Inbox messages are
+ * immutable in production (same `key` ⇒ same content), so this is
+ * essentially a no-op there. It defends against (1) cross-entity
+ * `msg.key` collisions in the module-level cache (each entity numbers
+ * its inbox from 0), and (2) test patterns that reuse a `key` with
+ * different payloads across `it()` blocks.
+ *
+ * `payloadToText` is duplicated work with `buildUserSection`, but the
+ * cost is bounded by message size and only avoided on cache hits —
+ * which is the common case during streaming where the inbox doesn't
+ * change at all.
+ */
+function fingerprintMessage(msg: IncludesInboxMessage): string {
+  return `${msg.from}|${msg.timestamp}|${payloadToText(msg.payload)}`
 }
 
 function buildUserSection(
   msg: IncludesInboxMessage,
   isInitial: boolean
 ): UserMessageSection {
-  let slots = userSectionCache.get(msg)
-  if (!slots) {
-    slots = {}
-    userSectionCache.set(msg, slots)
+  const fingerprint = fingerprintMessage(msg)
+  let entry = userSectionCache.get(msg.key)
+  // Stale entry (fingerprint mismatch) ⇒ blow away both slots so we
+  // don't return a section built from a previous payload that happened
+  // to share a key.
+  if (!entry || entry.fingerprint !== fingerprint) {
+    entry = { fingerprint }
+    userSectionCache.set(msg.key, entry)
   }
 
   const timestamp = Date.parse(msg.timestamp)
@@ -107,23 +241,27 @@ function buildUserSection(
     timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
   }
 
+  // The two slots persist because `isInitial` is a *positional*
+  // property — if an earlier message is later prepended, the
+  // previously-first message must produce a new, non-initial section
+  // (covered by the "re-derives a cached user message…" test).
   if (isInitial) {
-    if (slots.initial) return slots.initial
+    if (entry.initial) return entry.initial
     const section: InitialUserSection = { ...common, isInitial: true }
-    slots.initial = section
+    entry.initial = section
     return section
   }
-  if (slots.nonInitial) return slots.nonInitial
+  if (entry.nonInitial) return entry.nonInitial
   const section: NonInitialUserSection = { ...common, isInitial: false }
-  slots.nonInitial = section
+  entry.nonInitial = section
   return section
 }
 
 function buildAgentSection(run: IncludesRun): AgentResponseSection {
-  const isTerminal = run.status === `completed` || run.status === `failed`
-  if (isTerminal) {
-    const cached = agentSectionCache.get(run)
-    if (cached) return cached
+  const fingerprint = fingerprintRun(run)
+  const cached = agentSectionCache.get(run.key)
+  if (cached && cached.fingerprint === fingerprint) {
+    return cached.section
   }
 
   // Interleave texts and tool calls by their timeline order.
@@ -172,7 +310,12 @@ function buildAgentSection(run: IncludesRun): AgentResponseSection {
     ...(run.status === `completed` && { done: true as const }),
     ...(errorText && { error: errorText }),
   }
-  if (isTerminal) agentSectionCache.set(run, section)
+  // Always cache (terminal or in-flight). Fingerprint check above
+  // guarantees we never serve a stale streaming section — text growth
+  // and status flips both invalidate the cache entry — so caching mid-
+  // stream is safe and lets settled rows above the streaming tail bail
+  // out of re-rendering on every chunk.
+  agentSectionCache.set(run.key, { fingerprint, section })
   return section
 }
 
@@ -219,6 +362,11 @@ export function buildTimelineEntries(
       })
     }
   }
+
+  // Drop cache entries for runs / messages that are no longer in the
+  // current timeline. Bounds memory across entity navigation so the
+  // module-level caches don't accumulate every row ever observed.
+  pruneSectionCaches(runs, inbox)
 
   return entries
 }

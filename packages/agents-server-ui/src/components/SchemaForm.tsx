@@ -1,13 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Dialog, Flex, Text } from '@radix-ui/themes'
-import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
+import { Button, Field, Input, Select, Stack, Text, Textarea } from '../ui'
+import styles from './SchemaForm.module.css'
 
-interface SpawnArgsDialogProps {
-  entityType: ElectricEntityType
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSpawn: (args: Record<string, unknown>) => void
-}
+// Sentinel value the optional "—" item submits. We can't use the empty
+// string because Base UI's Select treats `value=""` as "no item", so an
+// item with that value would be unselectable; using a unique string and
+// converting in the change handler keeps the UX (clearable enum) intact.
+const EMPTY_VALUE = `__none__`
 
 interface SchemaProperty {
   type?: string
@@ -61,7 +60,6 @@ function isStringArrayType(prop: SchemaProperty): boolean {
 function parseStringArray(text: string): Array<string> {
   const trimmed = text.trim()
   if (trimmed === ``) return []
-  // Try JSON parse first (handles ["a","b"] syntax)
   if (trimmed.startsWith(`[`)) {
     try {
       const parsed: unknown = JSON.parse(trimmed)
@@ -72,14 +70,12 @@ function parseStringArray(text: string): Array<string> {
       // Fall through to comma-separated parsing
     }
   }
-  // Comma-separated fallback
   return trimmed
     .split(`,`)
     .map((s) => s.trim())
     .filter(Boolean)
 }
 
-/** Display a string array as comma-separated text for editing. */
 function stringArrayToDisplay(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map(String).join(`, `)
@@ -88,40 +84,51 @@ function stringArrayToDisplay(value: unknown): string {
   return ``
 }
 
-export function SpawnArgsDialog({
-  entityType,
-  open,
-  onOpenChange,
-  onSpawn,
-}: SpawnArgsDialogProps): React.ReactElement {
-  const schema = entityType.creation_schema
-  const objSchema = isObjectSchema(schema) ? schema : null
-
+/**
+ * Renders a JSON-Schema `properties` object as a stack of form fields,
+ * with a single submit button. Used by the new-session page to spawn
+ * any entity type whose `creation_schema` is a flat object.
+ */
+export function SchemaForm({
+  schema,
+  submitLabel = `Create`,
+  onSubmit,
+  onCancel,
+}: {
+  schema: unknown
+  submitLabel?: string
+  onSubmit: (args: Record<string, unknown>) => void
+  onCancel?: () => void
+}): React.ReactElement {
+  if (isObjectSchema(schema)) {
+    return (
+      <ObjectSchemaForm
+        schema={schema}
+        submitLabel={submitLabel}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+      />
+    )
+  }
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth="480px">
-        <Dialog.Title>New {entityType.name}</Dialog.Title>
-        {entityType.description && (
-          <Dialog.Description size="2" color="gray" mb="4">
-            {entityType.description}
-          </Dialog.Description>
-        )}
-        {objSchema ? (
-          <ObjectSchemaForm schema={objSchema} onSpawn={onSpawn} />
-        ) : (
-          <RawJsonForm onSpawn={onSpawn} />
-        )}
-      </Dialog.Content>
-    </Dialog.Root>
+    <RawJsonForm
+      submitLabel={submitLabel}
+      onSubmit={onSubmit}
+      onCancel={onCancel}
+    />
   )
 }
 
 function ObjectSchemaForm({
   schema,
-  onSpawn,
+  submitLabel,
+  onSubmit,
+  onCancel,
 }: {
   schema: ObjectSchema
-  onSpawn: (args: Record<string, unknown>) => void
+  submitLabel: string
+  onSubmit: (args: Record<string, unknown>) => void
+  onCancel?: () => void
 }): React.ReactElement {
   const properties = schema.properties
   const requiredSet = useMemo(
@@ -155,7 +162,6 @@ function ObjectSchemaForm({
       const v = values[key]
       if (v === undefined || v === null || v === ``) return false
       if (Array.isArray(v) && v.length === 0) return false
-      // String-array fields are stored as a display string while editing
       const prop = properties[key] as SchemaProperty | undefined
       if (prop && isStringArrayType(prop) && typeof v === `string`) {
         if (parseStringArray(v).length === 0) return false
@@ -167,12 +173,10 @@ function ObjectSchemaForm({
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
-      // Strip undefined/empty optional values
       const args: Record<string, unknown> = {}
       for (const [key, val] of Object.entries(values)) {
         if (val !== undefined && val !== ``) {
           const prop = properties[key] as SchemaProperty | undefined
-          // Convert string-array fields from display string to actual array
           if (prop && isStringArrayType(prop) && typeof val === `string`) {
             const arr = parseStringArray(val)
             if (arr.length > 0) {
@@ -183,14 +187,14 @@ function ObjectSchemaForm({
           }
         }
       }
-      onSpawn(args)
+      onSubmit(args)
     },
-    [values, properties, onSpawn]
+    [values, properties, onSubmit]
   )
 
   return (
     <form onSubmit={handleSubmit}>
-      <Flex direction="column" gap="3">
+      <Stack direction="column" gap={3}>
         {Object.entries(properties).map(([key, prop], i) => (
           <SchemaField
             key={key}
@@ -202,17 +206,22 @@ function ObjectSchemaForm({
             autoFocus={i === 0}
           />
         ))}
-      </Flex>
-      <Flex gap="3" mt="4" justify="end">
-        <Dialog.Close>
-          <Button variant="soft" color="gray">
+      </Stack>
+      <Stack gap={3} justify="end" className={styles.actions}>
+        {onCancel && (
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={onCancel}
+            type="button"
+          >
             Cancel
           </Button>
-        </Dialog.Close>
+        )}
         <Button type="submit" disabled={!canSubmit}>
-          Create
+          {submitLabel}
         </Button>
-      </Flex>
+      </Stack>
     </form>
   )
 }
@@ -234,39 +243,27 @@ function SchemaField({
 }): React.ReactElement {
   const label = prop.title ?? name
 
-  // String array: render comma-separated text input.
-  // We store the raw text as a string while editing and convert
-  // to a proper array at submit time (see handleSubmit).
   if (isStringArrayType(prop)) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
-        <input
+      <Field label={label} required={required} description={prop.description}>
+        <Input
           type="text"
           value={stringArrayToDisplay(value)}
           onChange={(e) => onChange(e.target.value)}
           autoFocus={autoFocus}
           placeholder={prop.description ?? `Comma-separated values`}
-          style={inputStyle}
         />
-        <Text size="1" color="gray">
+        <Text size={1} tone="muted">
           Separate multiple values with commas
         </Text>
-      </FieldWrapper>
+      </Field>
     )
   }
 
   if (!isSimpleType(prop)) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
-        <textarea
+      <Field label={label} required={required} description={prop.description}>
+        <Textarea
           value={
             typeof value === `string`
               ? value
@@ -284,75 +281,71 @@ function SchemaField({
           placeholder="JSON value"
           rows={3}
           autoFocus={autoFocus}
-          style={textareaStyle}
+          mono
         />
-      </FieldWrapper>
+      </Field>
     )
   }
 
   if (prop.enum) {
+    const enumValues = prop.enum
+    const currentString =
+      value === undefined || value === null || value === ``
+        ? required
+          ? null
+          : EMPTY_VALUE
+        : String(value)
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
-        <select
-          value={String(value ?? ``)}
-          onChange={(e) => {
-            const selected = e.target.value
-            const original = prop.enum!.find((v) => String(v) === selected)
-            onChange(original ?? selected)
+      <Field label={label} required={required} description={prop.description}>
+        <Select.Root<string>
+          value={currentString}
+          onValueChange={(next) => {
+            if (next === null || next === EMPTY_VALUE) {
+              onChange(``)
+              return
+            }
+            const original = enumValues.find((v) => String(v) === next)
+            onChange(original ?? next)
           }}
-          autoFocus={autoFocus}
-          style={inputStyle}
         >
-          {!required && <option value="">—</option>}
-          {prop.enum.map((v) => (
-            <option key={String(v)} value={String(v)}>
-              {String(v)}
-            </option>
-          ))}
-        </select>
-      </FieldWrapper>
+          <Select.Trigger
+            placeholder="Select…"
+            className={styles.selectTrigger}
+            autoFocus={autoFocus}
+          />
+          <Select.Content>
+            {!required && <Select.Item value={EMPTY_VALUE}>—</Select.Item>}
+            {enumValues.map((v) => (
+              <Select.Item key={String(v)} value={String(v)}>
+                {String(v)}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
+      </Field>
     )
   }
 
   if (prop.type === `boolean`) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
-        <label
-          style={{
-            display: `flex`,
-            alignItems: `center`,
-            gap: 8,
-            cursor: `pointer`,
-          }}
-        >
+      <Field label={label} required={required} description={prop.description}>
+        <label className={styles.checkboxLabel}>
           <input
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => onChange(e.target.checked)}
             autoFocus={autoFocus}
           />
-          <Text size="2">{label}</Text>
+          <Text size={2}>{label}</Text>
         </label>
-      </FieldWrapper>
+      </Field>
     )
   }
 
   if (prop.type === `number` || prop.type === `integer`) {
     return (
-      <FieldWrapper
-        label={label}
-        required={required}
-        description={prop.description}
-      >
-        <input
+      <Field label={label} required={required} description={prop.description}>
+        <Input
           type="number"
           value={value !== undefined && value !== null ? String(value) : ``}
           autoFocus={autoFocus}
@@ -368,64 +361,32 @@ function SchemaField({
           }}
           step={prop.type === `integer` ? 1 : `any`}
           placeholder={prop.description ?? name}
-          style={inputStyle}
         />
-      </FieldWrapper>
+      </Field>
     )
   }
 
-  // Default: string
   return (
-    <FieldWrapper
-      label={label}
-      required={required}
-      description={prop.description}
-    >
-      <input
+    <Field label={label} required={required} description={prop.description}>
+      <Input
         type="text"
         value={String(value ?? ``)}
         onChange={(e) => onChange(e.target.value)}
         autoFocus={autoFocus}
         placeholder={prop.description ?? name}
-        style={inputStyle}
       />
-    </FieldWrapper>
-  )
-}
-
-function FieldWrapper({
-  label,
-  required,
-  description,
-  children,
-}: {
-  label: string
-  required: boolean
-  description?: string
-  children: React.ReactNode
-}): React.ReactElement {
-  return (
-    <Flex direction="column" gap="1">
-      <Text size="2" weight="medium">
-        {label}
-        {required && (
-          <span style={{ color: `var(--red-9)`, marginLeft: 2 }}>*</span>
-        )}
-      </Text>
-      {children}
-      {description && (
-        <Text size="1" color="gray">
-          {description}
-        </Text>
-      )}
-    </Flex>
+    </Field>
   )
 }
 
 function RawJsonForm({
-  onSpawn,
+  submitLabel,
+  onSubmit,
+  onCancel,
 }: {
-  onSpawn: (args: Record<string, unknown>) => void
+  submitLabel: string
+  onSubmit: (args: Record<string, unknown>) => void
+  onCancel?: () => void
 }): React.ReactElement {
   const [raw, setRaw] = useState(`{}`)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -444,21 +405,19 @@ function RawJsonForm({
           return
         }
         setParseError(null)
-        onSpawn(parsed as Record<string, unknown>)
+        onSubmit(parsed as Record<string, unknown>)
       } catch {
         setParseError(`Invalid JSON`)
       }
     },
-    [raw, onSpawn]
+    [raw, onSubmit]
   )
 
   return (
     <form onSubmit={handleSubmit}>
-      <Flex direction="column" gap="2">
-        <Text size="2" weight="medium">
-          Arguments (JSON)
-        </Text>
-        <textarea
+      <Stack direction="column" gap={2}>
+        <Text size={2}>Arguments (JSON)</Text>
+        <Textarea
           value={raw}
           onChange={(e) => {
             setRaw(e.target.value)
@@ -466,41 +425,27 @@ function RawJsonForm({
           }}
           rows={6}
           autoFocus
-          style={textareaStyle}
+          mono
         />
         {parseError && (
-          <Text size="1" color="red">
+          <Text size={1} tone="danger">
             {parseError}
           </Text>
         )}
-      </Flex>
-      <Flex gap="3" mt="4" justify="end">
-        <Dialog.Close>
-          <Button variant="soft" color="gray">
+      </Stack>
+      <Stack gap={3} justify="end" className={styles.actions}>
+        {onCancel && (
+          <Button
+            variant="soft"
+            tone="neutral"
+            onClick={onCancel}
+            type="button"
+          >
             Cancel
           </Button>
-        </Dialog.Close>
-        <Button type="submit">Create</Button>
-      </Flex>
+        )}
+        <Button type="submit">{submitLabel}</Button>
+      </Stack>
     </form>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  width: `100%`,
-  padding: `6px 10px`,
-  borderRadius: `var(--radius-2)`,
-  border: `1px solid var(--gray-a4)`,
-  background: `var(--gray-a2)`,
-  fontSize: `var(--font-size-2)`,
-  fontFamily: `var(--default-font-family)`,
-  color: `var(--gray-12)`,
-  outline: `none`,
-}
-
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  resize: `vertical`,
-  fontFamily: `monospace`,
-  fontSize: `var(--font-size-1)`,
 }

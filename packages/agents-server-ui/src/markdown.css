@@ -1,0 +1,640 @@
+/* ==========================================================================
+ * Markdown styles
+ *
+ * Targets the `.agent-ui-markdown` wrapper added by AgentResponse and
+ * CodingSessionTimeline. Streamdown ships its components with Tailwind
+ * utility class strings baked into the rendered HTML; Tailwind itself
+ * is NOT loaded in this app, so those classes are inert. The visual
+ * rules below own all formatting and reference only stable hooks:
+ *
+ *   1. Element selectors (`.agent-ui-markdown p`, `… h2`, `… ul`,
+ *      etc.) — for the standard Markdown tags Streamdown renders
+ *      with no attribute decoration.
+ *
+ *   2. `data-md-*` attribute selectors — for the structural blocks
+ *      we render ourselves (code blocks via `MarkdownCodeBlock.tsx`
+ *      and tables via `MarkdownTable.tsx`). These bypass Streamdown's
+ *      Tailwind-laden wrappers entirely and give us a clean DOM
+ *      whose only styling contract is the data attributes here.
+ *
+ *   3. A handful of `[data-streamdown="…"]` selectors — for the
+ *      remaining structural pieces Streamdown still owns (table
+ *      header / body / cells, list markers, etc.) where the data
+ *      attribute is the stable contract.
+ *
+ * Capsize-style pseudo-element line-height trimming has been
+ * intentionally removed in favour of a flat type scale; vertical
+ * rhythm is provided by the wrapper's `gap`.
+ *
+ * Goals (chat-style markdown output):
+ *   - Compact vertical rhythm — markdown should read as part of the
+ *     conversation, not as a long-form article.
+ *   - Smaller, lower-contrast headers than typical doc styling.
+ *   - Single-container code blocks (no nested borders) with a
+ *     working copy/download toolbar.
+ *   - Tables that match prose font-size and have working fullscreen
+ *     toggles.
+ * ========================================================================== */
+
+@import 'streamdown/styles.css';
+
+/* KaTeX glyph fonts + layout for inline (`$x$` / `$$x$$`) math
+   handled by `@streamdown/math` and for fenced ```` ```math ```` blocks
+   rendered ourselves in `MarkdownCodeBlock.tsx`. Imported once
+   here so every consumer of the markdown stylesheet picks it up. */
+@import 'katex/dist/katex.min.css';
+
+/* --- Vertical rhythm ------------------------------------------------ */
+
+.agent-ui-markdown > div {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Cancel any auto-margins on direct children — the parent flex `gap`
+   is the single source of truth for inter-block spacing. */
+.agent-ui-markdown > div > *,
+.agent-ui-markdown > div > * + * {
+  margin: 0;
+}
+
+/* --- Body copy ------------------------------------------------------ */
+
+.agent-ui-markdown p,
+.agent-ui-markdown li {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+}
+
+.agent-ui-markdown strong {
+  font-weight: 600;
+}
+.agent-ui-markdown em {
+  font-style: italic;
+}
+
+/* --- Headings ------------------------------------------------------- *
+ *
+ * Chat headings should feel one notch larger than the body, not the
+ * doc-style 22px / 18px / 16px scale we used previously. Top margin
+ * gives a little extra breathing room above each heading; the parent
+ * gap handles the rest.
+ */
+
+.agent-ui-markdown h1,
+.agent-ui-markdown h2,
+.agent-ui-markdown h3,
+.agent-ui-markdown h4,
+.agent-ui-markdown h5,
+.agent-ui-markdown h6 {
+  font-family: var(--ds-font-heading);
+  color: var(--ds-text-1);
+  letter-spacing: -0.005em;
+}
+
+.agent-ui-markdown h1 {
+  font-size: var(--ds-text-lg); /* 16px */
+  line-height: 1.35;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.agent-ui-markdown h2 {
+  font-size: var(--ds-text-base); /* 14px */
+  line-height: 1.4;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.agent-ui-markdown h3 {
+  font-size: var(--ds-text-sm); /* 13px */
+  line-height: 1.45;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.agent-ui-markdown h4,
+.agent-ui-markdown h5,
+.agent-ui-markdown h6 {
+  font-size: var(--ds-text-sm);
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--ds-text-2);
+}
+
+/* First heading in the message has no extra top margin. */
+.agent-ui-markdown > div > :first-child:is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 0;
+}
+
+/* --- Lists ---------------------------------------------------------- */
+
+.agent-ui-markdown ul,
+.agent-ui-markdown ol {
+  list-style-position: outside;
+  padding-left: 1.5em;
+}
+.agent-ui-markdown ul {
+  list-style: disc;
+}
+.agent-ui-markdown ol {
+  list-style: decimal;
+}
+.agent-ui-markdown li + li {
+  margin-top: 4px;
+}
+/* Streamdown wraps each list item's text in a paragraph; collapse it
+   so list items render on a single line by default, and only break
+   into multiple lines when the source markdown has explicit newlines. */
+.agent-ui-markdown li > p {
+  display: contents;
+}
+.agent-ui-markdown li::marker {
+  color: var(--ds-text-3);
+  font-size: 0.95em;
+}
+
+/* --- Inline code ---------------------------------------------------- */
+
+.agent-ui-markdown [data-md-inline-code] {
+  font-family: var(--ds-font-mono);
+  font-size: 0.92em;
+  background: var(--ds-gray-a3);
+  padding: 0.1em 0.4em;
+  border-radius: var(--ds-radius-1);
+  color: var(--ds-text-1);
+}
+
+/* --- Block quotes --------------------------------------------------- *
+ * Streamdown emits nested quotes as literal `<blockquote>` ancestors,
+ * so each level naturally compounds whatever indent the rule below
+ * applies. Keep the outer step modest (8px gap + 3px border) and
+ * suppress the chrome on every nested level so they read as "quoted
+ * inside a quote" rather than escalating block-level indents.
+ */
+
+.agent-ui-markdown blockquote {
+  border-left: 3px solid var(--ds-gray-a5);
+  padding: 2px 0 2px 8px;
+  color: var(--ds-text-2);
+}
+
+/* Nested quotes share the parent's left rule; collapse padding to a
+   small gap and drop the extra border so the indent stays linear
+   and shallow rather than ladder-stepping by ~15px per level. */
+.agent-ui-markdown blockquote blockquote {
+  margin-top: 4px;
+  padding: 0 0 0 8px;
+  border-left-color: var(--ds-gray-a4);
+}
+
+/* Tighten paragraph stacking inside quotes so multi-paragraph quotes
+   don't inherit the chat-level 12px gap (set on `> div`). */
+.agent-ui-markdown blockquote p + p {
+  margin-top: 4px;
+}
+
+/* --- Links ---------------------------------------------------------- */
+
+.agent-ui-markdown a {
+  color: var(--ds-accent-11);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-accent-a5);
+  text-underline-offset: calc(0.025em + 2px);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.agent-ui-markdown a:hover {
+  text-decoration-color: inherit;
+}
+
+/* --- Misc ----------------------------------------------------------- */
+
+/* Faint divider — `--ds-gray-a3` (10–11% gray) instead of the
+   `--ds-border-2` (~18%) we use for component chrome. Markdown HRs
+   are pacing devices, not structural separators, so they should
+   barely catch the eye. */
+.agent-ui-markdown hr {
+  border: none;
+  border-top: 1px solid var(--ds-gray-a3);
+}
+
+/* Markdown images render at their intrinsic size by default and only
+   shrink to fit when they're wider than the available column.
+   `max-width: 100%` does the clamp; `height: auto` keeps the aspect
+   ratio when that clamp kicks in.
+
+   The `align-self: flex-start` matters because the markdown body is
+   a `display: flex; flex-direction: column` container (see top of
+   this file) — without it, an `<img>` that ends up as a direct flex
+   child (CommonMark hoists a paragraph-only image out of its `<p>`)
+   would inherit `align-items: stretch` and balloon to the column
+   width regardless of its natural dimensions. */
+.agent-ui-markdown img {
+  max-width: 100%;
+  height: auto;
+  align-self: flex-start;
+  border-radius: var(--ds-radius-3);
+}
+
+/* --- Disclosure (details/summary) ---------------------------------- *
+ *
+ * Native HTML `<details>` doesn't go through any Streamdown override
+ * (it's not in the registered components map), so we style it
+ * straight from CSS. Chevron + colour intentionally mirror the
+ * tool-call header's `.toggleArrow` so disclosure widgets in chat
+ * markdown read as the same affordance as expanding a tool call.
+ */
+
+.agent-ui-markdown details {
+  border-radius: var(--ds-radius-2);
+}
+
+.agent-ui-markdown summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--ds-radius-2);
+  list-style: none;
+}
+.agent-ui-markdown summary::-webkit-details-marker {
+  display: none;
+}
+.agent-ui-markdown summary:hover {
+  background: var(--ds-gray-a3);
+}
+
+/* Chevron — SVG mask of lucide's `chevron-right` so the colour
+   tracks `currentColor` (and therefore swaps with theme). Rotates
+   90° when the disclosure is open, matching the tool-call expand
+   animation. */
+.agent-ui-markdown summary::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  background-color: var(--ds-text-3);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  transition: transform 0.12s ease;
+}
+.agent-ui-markdown details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+/* Body of an open disclosure — small left-aligned column under the
+   summary, separated by a subtle vertical gap so it reads as
+   "details for the heading above". */
+.agent-ui-markdown details[open] > :not(summary) {
+  margin-top: 6px;
+}
+
+/* ==========================================================================
+ * Code blocks
+ *
+ *   <div data-md-code-block data-md-code-block-language="…">  ← MarkdownCodeBlock.tsx
+ *     <div data-md-code-block-row>                            ← header + actions row
+ *       <div data-md-code-block-header><span>…lang…</span></div>
+ *       <div data-md-code-block-actions>
+ *         <button>copy</button><button>download</button>
+ *       </div>
+ *     </div>
+ *     <div data-md-code-block-body>
+ *       <pre><code>…<span data-md-code-block-line>…</span>…</code></pre>
+ *     </div>
+ *   </div>
+ *
+ * Layout — language label + action toolbar OUTSIDE the bordered
+ * code area, sitting on a single row above it:
+ *
+ *     http                                  [copy] [download]
+ *     ┌──────────────────────────────────────────────────────┐
+ *     │ PUT /v1/stream/...                                   │
+ *     │ Stream-Forked-From: ...                              │
+ *     └──────────────────────────────────────────────────────┘
+ *
+ * Streamdown's built-in code-block chain (with its inert Tailwind
+ * utility class strings on every wrapper) is fully replaced by
+ * `MarkdownCodeBlock.tsx`, which emits the clean DOM above and
+ * does its own Shiki highlighting via `lib/codeHighlighter`. All
+ * the selectors below key off our own stable `data-md-*` attrs.
+ * ========================================================================== */
+
+.agent-ui-markdown [data-md-code-block] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Header + action toolbar share a single row above the bordered
+   code area. Both children sit on the same baseline so the language
+   label visually tucks against the code-area's left edge while the
+   buttons hug its right. */
+.agent-ui-markdown [data-md-code-block-row] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 18px;
+  padding: 0 2px;
+  gap: 8px;
+}
+
+/* Language label — plain muted text. */
+.agent-ui-markdown [data-md-code-block-header] {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ds-text-3);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  line-height: 1;
+  min-width: 0;
+}
+.agent-ui-markdown [data-md-code-block-header] span {
+  font-family: var(--ds-font-mono);
+  text-transform: lowercase;
+}
+
+.agent-ui-markdown [data-md-code-block-actions] {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* The code area itself — the only part that carries chrome.
+   `--ds-gray-a2` reads as a faint surface tint over the chat
+   background; the 1px hairline + 6px corner radius mirror the
+   inline-code chip and the table wrapper so all three feel like
+   variants of the same surface. */
+.agent-ui-markdown [data-md-code-block-body] {
+  background: var(--ds-gray-a2);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-3);
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.agent-ui-markdown [data-md-code-block-body] pre {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.agent-ui-markdown [data-md-code-block-body] code {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+  line-height: 1.55;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: var(--ds-text-1);
+}
+
+/* Each highlighted line is a `<span data-md-code-block-line>` so
+   wrapping / scrolling behaves like a real `<pre>`. Block-display
+   them so they take a full line and pre-wrap so embedded `\n` from
+   the source don't collapse. */
+.agent-ui-markdown [data-md-code-block-line] {
+  display: block;
+  white-space: pre;
+}
+
+/* Shiki returns each token with an inline `style` containing both
+   `--shiki-light` and `--shiki-dark` CSS variables plus
+   `color: var(--shiki-light)`. The default already lights up
+   correctly in light mode; for dark mode swap to the dark variable
+   on every token span inside a code block body. */
+[data-theme='dark']
+  .agent-ui-markdown
+  [data-md-code-block-line]
+  span[style*='--shiki'] {
+  color: var(--shiki-dark, inherit);
+}
+
+/* ==========================================================================
+ * Math
+ *
+ *   <div data-md-math-block>            ← MarkdownCodeBlock.tsx (math branch)
+ *     <span class="katex-display">…</span>   ← KaTeX HTML output
+ *   </div>
+ *
+ *   $inline$ / $$display$$ inside body copy are produced by
+ *   `@streamdown/math` (remark-math + rehype-katex) and KaTeX
+ *   styles them via the `.katex` / `.katex-display` classes from
+ *   the imported stylesheet. Our overrides here only need to:
+ *     - give the fenced block a clean panel (no code chrome)
+ *     - keep horizontal overflow scrollable for very wide equations
+ *     - degrade gracefully while the fence is still streaming
+ * ----------------------------------------------------------------------- */
+
+.agent-ui-markdown [data-md-math-block] {
+  margin: 0.75em 0;
+  padding: 12px 16px;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 8px;
+  background: var(--ds-background);
+  overflow-x: auto;
+  font-size: 1.05em;
+  line-height: 1.4;
+}
+
+/* KaTeX wraps display math in `.katex-display` which adds its own
+   1em vertical margin and centres the equation. The wrapper above
+   already provides the spacing/padding, so collapse the inner
+   margins. */
+.agent-ui-markdown [data-md-math-block] .katex-display {
+  margin: 0;
+  padding: 0;
+}
+
+/* While the fence is still streaming we render the raw source as
+   monospace text instead of KaTeX. Match the inline-code chip so it
+   still reads as code-in-progress, not a parse error. */
+.agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] {
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--ds-gray-a3);
+}
+
+.agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+ * Mermaid diagrams
+ *
+ *   <div data-md-mermaid-block>          ← MarkdownCodeBlock.tsx (mermaid branch)
+ *     <svg …>…</svg>                     ← mermaid.render output
+ *   </div>
+ *
+ *   While the fence is still streaming or mermaid is still loading
+ *   we render the source as a pre/code placeholder
+ *   (`[data-md-mermaid-block-pending]`); on a parse failure we show
+ *   the error message above the source
+ *   (`[data-md-mermaid-block-error]`).
+ * ----------------------------------------------------------------------- */
+
+.agent-ui-markdown [data-md-mermaid-block] {
+  margin: 0.75em 0;
+  padding: 16px;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 8px;
+  background: var(--ds-background);
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+/* Mermaid sets an inline `width` on the SVG (its computed pixel
+   width) which prevents responsive shrink. Override so the diagram
+   fits its container; height stays proportional via viewBox. */
+.agent-ui-markdown [data-md-mermaid-block] > svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Pending / streaming → render the source as monospace code chip,
+   matching the math block placeholder for visual consistency. */
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-pending] {
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--ds-gray-a3);
+  display: block;
+}
+
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-pending] pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Error → keep the panel chrome but stack a red message above the
+   raw source so authors can fix syntax without losing context. */
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-error] {
+  display: block;
+  padding: 12px 14px;
+  background: var(--ds-red-a3, var(--ds-gray-a3));
+  border-color: var(--ds-red-a6, var(--ds-gray-a4));
+}
+
+.agent-ui-markdown
+  [data-md-mermaid-block][data-md-mermaid-block-error]
+  [data-md-mermaid-block-error-message] {
+  font-size: 12px;
+  color: var(--ds-red-11, var(--ds-foreground-muted));
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+}
+
+.agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-error] pre {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+ * Tables
+ *
+ *   <div data-streamdown="table-wrapper">                  ← MarkdownTable.tsx
+ *     <div data-md-table-scroll>                           ← scroll container
+ *       <table data-streamdown="table">
+ *         <thead data-streamdown="table-header">…</thead>  ← Streamdown still
+ *         <tbody data-streamdown="table-body">…</tbody>      provides these
+ *       </table>
+ *     </div>
+ *     <div class="…toolbar">                               ← Base UI toolbar
+ *        Copy / Download / Fullscreen                        (direct child)
+ *     </div>
+ *   </div>
+ *
+ * Streamdown's built-in table chrome is fully replaced. We disable
+ * its toolbar at the call site via `controls={{ table: false }}` and
+ * override `components.table` with `MarkdownTable.tsx`, which emits
+ * the wrapper structure shown above and renders our own Base UI
+ * toolbar. Overriding `components.table` bypasses Streamdown's own
+ * `MarkdownTable` wrapper, so without the manual `data-streamdown`
+ * attributes here the selectors below would no longer match — see
+ * the long-form comment in `MarkdownTable.tsx` for the rationale.
+ * ========================================================================== */
+
+.agent-ui-markdown [data-streamdown='table-wrapper'] {
+  /* Anchor for the absolutely-positioned toolbar that
+     `MarkdownTable.tsx` portals in. */
+  position: relative;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  overflow: visible;
+}
+
+/* Inner scroll container — the real bordered surface; owns
+   scrolling so cell content clips inside while the toolbar can sit
+   at the wrapper's top-right corner above the border. */
+.agent-ui-markdown [data-streamdown='table-wrapper'] > [data-md-table-scroll] {
+  border: 1px solid var(--ds-gray-a4);
+  background: none;
+  border-radius: var(--ds-radius-3);
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.agent-ui-markdown [data-streamdown='table'] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+}
+
+.agent-ui-markdown [data-streamdown='table-header'] {
+  background: var(--ds-gray-a2);
+}
+
+.agent-ui-markdown [data-streamdown='table-header-cell'] {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ds-text-1);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ds-gray-a3);
+}
+
+.agent-ui-markdown
+  [data-streamdown='table-row']
+  + [data-streamdown='table-row'] {
+  border-top: 1px solid var(--ds-gray-a3);
+}
+
+.agent-ui-markdown [data-streamdown='table-cell'] {
+  padding: 8px 12px;
+  vertical-align: top;
+  color: var(--ds-text-1);
+}
+
+/* Inline code inside a table cell is small enough already — drop the
+   chip background so it doesn't visually clash with the cell stripe. */
+.agent-ui-markdown [data-streamdown='table-cell'] code:not(pre code),
+.agent-ui-markdown [data-streamdown='table-header-cell'] code:not(pre code) {
+  background: transparent;
+  padding: 0;
+}

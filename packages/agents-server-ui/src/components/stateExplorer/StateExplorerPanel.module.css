@@ -1,0 +1,39 @@
+.root {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.header {
+  border-bottom: 1px solid var(--ds-gray-a5);
+  flex-shrink: 0;
+}
+
+.headerLabel {
+  text-transform: uppercase;
+}
+
+.trigger {
+  min-width: 190px;
+  max-width: 100%;
+}
+
+.row {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.splitter {
+  height: 4px;
+  cursor: row-resize;
+  flex-shrink: 0;
+  background: var(--ds-gray-a5);
+}
+
+.splitter:hover {
+  background: var(--ds-accent-a6);
+}
+
+.empty {
+  padding: var(--ds-space-8) 0;
+}

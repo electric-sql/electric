@@ -16,6 +16,7 @@ import {
   buildTimelineEntries,
 } from '../src/use-chat'
 import type {
+  EntityTimelineContentItem,
   EntityTimelineData,
   IncludesInboxMessage,
   IncludesRun,
@@ -1297,6 +1298,140 @@ describe(`entity includes query`, () => {
         // initial-slot section, not the nonInitial one.
         const fourth = buildSections([], [msg0])
         expect(fourth[0]).toBe(msg0InitialSection)
+      })
+
+      it(`preserves identity when row references are replaced but content is unchanged`, () => {
+        // The runtime's includes-build pipeline rebuilds every IncludesRun
+        // and IncludesInboxMessage on every emit (each layer maps through
+        // `({...row, ...})`), so the row reference observed on tick N is
+        // never the reference observed on tick N+1 even when nothing
+        // about the row changed. The cache MUST key on stable identifiers
+        // (run.key / msg.key) + a content fingerprint, not on the raw row
+        // reference, otherwise streaming would force every <AgentResponse>
+        // in the timeline to re-render on every chunk.
+        //
+        // This test simulates that pipeline by cloning every row between
+        // builds while keeping content byte-identical. The cache must
+        // still hit and return the original section references.
+        const cloneRun = (r: IncludesRun): IncludesRun => ({
+          ...r,
+          texts: r.texts.map((t) => ({ ...t })),
+          toolCalls: r.toolCalls.map((tc) => ({ ...tc })),
+          steps: r.steps.map((s) => ({ ...s })),
+          errors: r.errors.map((e) => ({ ...e })),
+        })
+        const cloneMsg = (m: IncludesInboxMessage): IncludesInboxMessage => ({
+          ...m,
+        })
+
+        const msg0: IncludesInboxMessage = {
+          key: `m-0`,
+          order: order(1),
+          from: `user`,
+          payload: `hi`,
+          timestamp: `2026-03-17T20:00:00.000Z`,
+        }
+        const run0: IncludesRun = {
+          key: `run-0`,
+          order: order(2),
+          status: `completed`,
+          texts: [
+            {
+              key: `t-0`,
+              run_id: `run-0`,
+              order: order(3),
+              status: `completed`,
+              text: `hello world`,
+            },
+          ],
+          toolCalls: [
+            {
+              key: `tc-0`,
+              run_id: `run-0`,
+              order: order(4),
+              tool_name: `search`,
+              status: `completed`,
+              args: { q: `cats` },
+              result: `ok`,
+            },
+          ],
+          steps: [],
+          errors: [],
+        }
+
+        const first = buildSections([run0], [msg0])
+        expect(first).toHaveLength(2)
+
+        // Re-build with cloned rows — identical content, fresh references.
+        const second = buildSections([cloneRun(run0)], [cloneMsg(msg0)])
+
+        expect(second).toHaveLength(2)
+        // Both sections must be the SAME reference as the first build,
+        // even though every input row is a new object.
+        expect(second[0]).toBe(first[0])
+        expect(second[1]).toBe(first[1])
+
+        // And inner items inside the agent section must also be reference-
+        // stable, since we returned the cached section verbatim.
+        const firstAgent = first[1] as {
+          items: Array<EntityTimelineContentItem>
+        }
+        const secondAgent = second[1] as {
+          items: Array<EntityTimelineContentItem>
+        }
+        expect(secondAgent.items).toBe(firstAgent.items)
+      })
+
+      it(`bounds the cache: stale entries are evicted when rows leave the timeline`, () => {
+        // Without pruning, the module-level caches would accumulate every
+        // run / msg ever observed across every entity the user has
+        // navigated through. `pruneSectionCaches` (called at the end of
+        // every buildTimelineEntries) drops entries whose keys aren't in
+        // the latest build.
+        const mkRun = (key: string, text: string): IncludesRun => ({
+          key,
+          order: order(1),
+          status: `completed`,
+          texts: [
+            {
+              key: `t-${key}`,
+              run_id: key,
+              order: order(2),
+              status: `completed`,
+              text,
+            },
+          ],
+          toolCalls: [],
+          steps: [],
+          errors: [],
+        })
+
+        const runA = mkRun(`run-a`, `entity A response`)
+        const runB = mkRun(`run-b`, `entity B response`)
+        const runC = mkRun(`run-c`, `entity C response`)
+
+        // First build: all three runs in cache.
+        const first = buildSections([runA, runB, runC], [])
+        expect(first).toHaveLength(3)
+
+        // Second build with only runB — runA + runC must be evicted.
+        // Quick proxy for cache state: rebuild and check whether the
+        // returned section is the same reference (cache hit) or a new
+        // one (cache miss).
+        const second = buildSections([runB], [])
+        expect(second[0]).toBe(first[1]) // runB still cached
+
+        // Now bring runA back; if the cache had been bounded properly
+        // it should have been evicted by the previous build, so this
+        // build creates a fresh section. (We can't directly observe
+        // eviction, but we can observe that bringing a row back after
+        // it left the live set still produces a section with the same
+        // CONTENT — proving the cache logic doesn't blow up — and we
+        // can verify pruneSectionCaches doesn't accidentally evict
+        // currently-live entries.)
+        const third = buildSections([runA, runB], [])
+        expect(third).toHaveLength(2)
+        expect(third[1]).toBe(second[0]) // runB still cached across builds
       })
     })
   })

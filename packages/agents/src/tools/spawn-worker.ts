@@ -1,6 +1,7 @@
 import { Type } from '@sinclair/typebox'
 import { nanoid } from 'nanoid'
 import { serverLog } from '../log'
+import type { BuiltinAgentModelConfig } from '../model-catalog'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type { HandlerContext } from '@electric-ax/agents-runtime'
 
@@ -16,7 +17,10 @@ export const WORKER_TOOL_NAMES = [
 
 export type WorkerToolName = (typeof WORKER_TOOL_NAMES)[number]
 
-export function createSpawnWorkerTool(ctx: HandlerContext): AgentTool {
+export function createSpawnWorkerTool(
+  ctx: HandlerContext,
+  modelConfig?: BuiltinAgentModelConfig
+): AgentTool {
   return {
     name: `spawn_worker`,
     label: `Spawn Worker`,
@@ -65,11 +69,20 @@ export function createSpawnWorkerTool(ctx: HandlerContext): AgentTool {
       }
 
       const id = nanoid(10)
+      const workerModelArgs = modelConfig
+        ? {
+            provider: modelConfig.provider,
+            model: modelConfig.model,
+            ...(modelConfig.reasoningEffort && {
+              reasoningEffort: modelConfig.reasoningEffort,
+            }),
+          }
+        : {}
       try {
         const handle = await ctx.spawn(
           `worker`,
           id,
-          { systemPrompt, tools },
+          { systemPrompt, tools, ...workerModelArgs },
           {
             initialMessage,
             wake: { on: `runFinished`, includeResponse: true },

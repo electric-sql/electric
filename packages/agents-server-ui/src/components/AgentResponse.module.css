@@ -1,0 +1,20 @@
+/* Agent text column — narrower than the user-bubble surface by the
+ * 12px corner radius on each side, and centered so the composer's
+ * flat edges visually run flush with the text column. */
+.root {
+  max-width: var(--chat-col-width);
+  margin-inline: auto;
+  width: 100%;
+}
+
+.markdown {
+  padding: 4px 0;
+}
+
+.doneText {
+  opacity: 0.5;
+}
+
+.timeText {
+  opacity: 0.4;
+}

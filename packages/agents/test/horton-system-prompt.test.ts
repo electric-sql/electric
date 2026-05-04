@@ -36,4 +36,15 @@ describe(`buildHortonSystemPrompt`, () => {
     expect(prompt).toContain(`/quickstart`)
     expect(prompt).not.toContain(`/tutorial`)
   })
+
+  it(`includes runtime model identity when provided`, () => {
+    const prompt = buildHortonSystemPrompt(`/tmp/test`, {
+      modelProvider: `openai`,
+      modelId: `gpt-4.1`,
+    })
+
+    expect(prompt).toContain(`# Runtime model`)
+    expect(prompt).toContain(`provider "openai"`)
+    expect(prompt).toContain(`model "gpt-4.1"`)
+  })
 })

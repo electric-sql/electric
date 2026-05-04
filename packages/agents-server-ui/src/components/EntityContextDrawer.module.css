@@ -1,0 +1,158 @@
+/* Drawer sits ABOVE the chat composer in `<MessageInput>`.
+ *
+ * Width: insets horizontally by 12px on each side so it visually
+ * lives *inside* the composer's border-radius (the composer is
+ * 12px-radius too — the drawer's edges align with where the
+ * composer's corners curve away).
+ *
+ * Stacking: composer is z-indexed (1) and the drawer's bottom edge
+ * extends UNDERNEATH it via `margin-bottom: -20px` + matching
+ * `padding-bottom: 24px`, giving the visual effect that the composer
+ * is a tray pulled forward over the drawer.
+ *
+ * Corner geometry: drawer outer radius is 12px and uniform inner
+ * padding is 4px, so the inner content area's effective radius is
+ * 12 - 4 = 8px. Rows pick up `border-radius: 8px` (see `.row`) so
+ * their hover background curves CONCENTRICALLY with the drawer edge —
+ * the gap between row and drawer is the same uniform 4px around all
+ * four corners and along all four sides. This is the "constant space
+ * around the radius" the design calls for.
+ */
+.drawer {
+  /* Page background (not the raised surface used by the composer) so
+     the drawer reads as part of the chat surface tucked behind the
+     composer rather than a second raised card stacked under it. */
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 12px;
+  padding: 4px;
+  /* Bottom padding = composer overlap (20px) + 1px drawer bottom
+     border (covered by the composer) + 4px breathing room so the
+     visible gap below the last row matches the 4px gap on the top
+     and sides exactly. With `box-sizing: content-box` (the default),
+     the bottom border + padding both sit above the negative-margin
+     overlap, so we have to pay the border in `padding-bottom` to
+     keep the visible gap symmetric. */
+  padding-bottom: 23px;
+  /* Horizontal inset so the drawer reads as nested inside the
+     composer's border radius. -20px bottom is the composer overlap. */
+  margin: 0 12px -20px;
+  position: relative;
+  z-index: 0;
+
+  display: flex;
+  flex-direction: column;
+  /* No gap between rows — rows are their own rounded pills and look
+     contiguous when stacked because the row hover background only
+     paints on hover. The natural visual rhythm comes from row
+     padding, not inter-row gap. */
+  gap: 0;
+}
+
+/* `.section` exists as a wrapper so a section's header + child rows
+   stay grouped (and so future section types — pending messages,
+   tool-call alerts — can opt into per-section behaviour later). */
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Universal row treatment used by every interactive row in the
+   drawer: parent row, sub-agents toggle, and each sub-agent entry.
+   Every row is full-width and clickable end to end so the hover
+   target matches what the user expects. */
+.row {
+  display: flex;
+  align-items: center;
+  /* Match `Menu.item`: gap 6px, vertical padding 3px, 1.3 line
+     height, 7px border-radius. Without these overrides the drawer
+     rows ended up ~5px taller than dropdown menu items because
+     `<Text size={2}>` sets `line-height: 1.5` (--ds-text-sm-lh)
+     and the row carried 4px vertical padding. The line-height on
+     `.row` is inherited by inner text via `font: inherit` (with
+     the explicit overrides on `.rowTitle` / `.rowMeta` /
+     `.headerLabel` for cases where Text re-applies its own). */
+  gap: 6px;
+  padding: 3px 6px;
+  line-height: 1.3;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  /* Concentric with drawer corner: 1px border + 4px drawer padding
+     + 7px row radius = 12px outer drawer radius. */
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ds-text-1);
+  text-align: left;
+  min-width: 0;
+  transition: background-color 0.12s ease;
+}
+.row:hover {
+  background: var(--ds-gray-a3);
+}
+.row:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: -2px;
+}
+
+/* Fixed-width slot for the row's leading glyph. Both the chevron in
+   the sub-agents header and the status dot in each child row sit
+   inside the same slot, so the dots column-align with the chevron
+   regardless of which icon a given row uses. */
+.iconSlot {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chevron {
+  color: var(--ds-text-3);
+  transition: color 0.12s ease;
+}
+.row:hover .chevron {
+  color: var(--ds-text-1);
+}
+
+.parentIcon {
+  color: var(--ds-text-3);
+}
+
+.headerLabel {
+  /* Header text takes whatever space is left (no meta column on the
+     header row), so let it grow without pushing other rows around. */
+  min-width: 0;
+  /* Override `<Text size={2}>`'s 1.5 line-height to keep the row at
+     the same compact height as `Menu.item`. */
+  line-height: 1.3;
+}
+
+/* Body of an entity row: title on the left, type/id meta on the
+   right. Title shrinks to fit and ellipses; meta keeps its full
+   width. */
+.rowMain {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rowTitle {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  /* See `.headerLabel` — match Menu.item's 1.3 line-height. */
+  line-height: 1.3;
+}
+
+.rowMeta {
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 1.3;
+}

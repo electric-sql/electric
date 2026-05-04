@@ -1,4 +1,3 @@
-import { Theme } from '@radix-ui/themes'
 import { RouterProvider } from '@tanstack/react-router'
 import {
   ServerConnectionProvider,
@@ -7,6 +6,7 @@ import {
 import { PinnedEntitiesProvider } from './hooks/usePinnedEntities'
 import { ElectricAgentsProvider } from './lib/ElectricAgentsProvider'
 import { DarkModeProvider, useDarkModeContext } from './hooks/useDarkMode'
+import { ThemeProvider } from './ui'
 import { router } from './router'
 
 function AppInner(): React.ReactElement {
@@ -23,18 +23,16 @@ function AppInner(): React.ReactElement {
 
 function ThemedApp(): React.ReactElement {
   const { darkMode } = useDarkModeContext()
+  const appearance = darkMode ? `dark` : `light`
 
   return (
-    <Theme
-      appearance={darkMode ? `dark` : `light`}
-      grayColor="slate"
-      radius="medium"
-      panelBackground="solid"
-    >
-      <ServerConnectionProvider>
-        <AppInner />
-      </ServerConnectionProvider>
-    </Theme>
+    <ThemeProvider appearance={appearance}>
+      <div className="app-root">
+        <ServerConnectionProvider>
+          <AppInner />
+        </ServerConnectionProvider>
+      </div>
+    </ThemeProvider>
   )
 }
 

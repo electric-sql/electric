@@ -1,0 +1,101 @@
+.text {
+  margin: 0;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  /* min-width:0 prevents shrink-overflow inside flex containers */
+  min-width: 0;
+}
+
+/* ── Sizes ────────────────────────────────────────────────────── */
+.size1 {
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+}
+.size2 {
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+}
+.size3 {
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-text-base-lh);
+}
+.size4 {
+  font-size: var(--ds-text-lg);
+  line-height: var(--ds-text-lg-lh);
+}
+.size5 {
+  font-size: var(--ds-text-xl);
+  line-height: var(--ds-text-xl-lh);
+}
+.size6 {
+  font-size: var(--ds-text-2xl);
+  line-height: var(--ds-text-2xl-lh);
+}
+.size7 {
+  font-size: var(--ds-text-3xl);
+  line-height: var(--ds-text-3xl-lh);
+}
+
+/* ── Weights ──────────────────────────────────────────────────── */
+.weight-regular {
+  font-weight: 400;
+}
+.weight-medium {
+  font-weight: 500;
+}
+.weight-bold {
+  font-weight: 600;
+}
+
+/* ── Tones ────────────────────────────────────────────────────── */
+.tone-default {
+  color: var(--ds-text-1);
+}
+.tone-muted {
+  color: var(--ds-text-2);
+}
+.tone-subtle {
+  color: var(--ds-text-3);
+}
+.tone-accent {
+  color: var(--ds-accent-11);
+}
+.tone-danger {
+  color: var(--ds-red-11);
+}
+.tone-success {
+  color: var(--ds-green-11);
+}
+.tone-warning {
+  color: var(--ds-amber-11);
+}
+.tone-info {
+  color: var(--ds-blue-11);
+}
+
+/* ── Family ───────────────────────────────────────────────────── */
+.family-mono {
+  font-family: var(--ds-font-mono);
+}
+.family-heading {
+  font-family: var(--ds-font-heading);
+}
+
+/* ── Alignment ────────────────────────────────────────────────── */
+.align-start {
+  text-align: start;
+}
+.align-center {
+  text-align: center;
+}
+.align-end {
+  text-align: end;
+}
+
+/* ── Truncate ─────────────────────────────────────────────────── */
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}

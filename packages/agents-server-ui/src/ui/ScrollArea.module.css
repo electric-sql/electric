@@ -1,0 +1,66 @@
+.root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.viewport {
+  width: 100%;
+  height: 100%;
+  outline: none;
+  overscroll-behavior: contain;
+  /* Hide native scrollbars (Base UI provides custom Scrollbar elements). */
+  scrollbar-width: none;
+}
+.viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar {
+  display: flex;
+  position: absolute;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  z-index: var(--ds-z-sticky);
+  user-select: none;
+  touch-action: none;
+}
+
+/* Scrollbar geometry — sized to fit inside the smallest gutter that
+ * a scrolling consumer carries. The Sidebar's `.treeRow` has 8px of
+ * right padding, so a scrollbar wider than 8px overlapped its items.
+ * 8px width + 1.5px inner padding = 5px thumb, which is slim enough
+ * to read as overlay-style chrome while staying grabbable. */
+.scrollbar[data-orientation='vertical'] {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  padding: 1.5px;
+}
+
+.scrollbar[data-orientation='horizontal'] {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  padding: 1.5px;
+}
+
+.scrollbar[data-hovering],
+.scrollbar[data-scrolling] {
+  opacity: 1;
+}
+
+.thumb {
+  background: var(--ds-gray-a6);
+  border-radius: var(--ds-radius-full);
+  flex: 1;
+  transition: background 120ms ease;
+}
+
+.thumb:hover {
+  background: var(--ds-gray-a8);
+}

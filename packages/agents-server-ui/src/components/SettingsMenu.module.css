@@ -1,0 +1,7 @@
+/* "Currently selected" mark next to the active theme option. Kept
+   neutral (not accent-tinted) so the menu reads uniformly grey-on-
+   grey — selection is communicated by the check glyph itself. */
+.activeMark {
+  margin-left: auto;
+  color: var(--ds-text-2);
+}

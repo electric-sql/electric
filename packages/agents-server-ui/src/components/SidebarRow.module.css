@@ -1,0 +1,355 @@
+/* Sidebar row layout
+   ----------------------------------------------------------------
+   Geometry is dictated by a single 22px icon column at the left.
+   The status dot, pin button, new-session pencil and the toggle
+   icons in the SidebarHeader all sit centered inside the same
+   22px slot so every glyph in the sidebar lines up vertically.
+
+   Concentric-halo rule (matches Menu.Item / Select.Item):
+
+     row-height (28px) - inner-button (22px) = 6px → 3px halo top/bottom
+     padding on the side an inner button is on  = 3px
+     row border-radius                          = 7px (= 4px + 3px)
+
+   So the pin button (left, radius 4px) and the expand chevron
+   (right, radius 4px) each sit inside a uniform 3px halo on every
+   free side, and the row's own corner is exactly 3px outside the
+   inner button's corner — same center point, no visual mismatch
+   between the two highlights.
+*/
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ds-row-height-md);
+  padding-right: 3px;
+  border-radius: 7px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--ds-text-1);
+  background: transparent;
+  transition: background 0.08s ease;
+}
+.row:hover {
+  background: var(--ds-gray-a3);
+}
+.selected {
+  background: var(--ds-accent-a3);
+}
+.selected:hover {
+  background: var(--ds-accent-a3);
+}
+.stopped {
+  opacity: 0.55;
+}
+
+/* Icon column (left) -------------------------------------------- */
+.iconSlot {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.statusDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.1s ease;
+}
+.pinBtn {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--ds-radius-2);
+  color: var(--ds-text-2);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.1s ease;
+}
+.pinBtn:hover {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+/* Pin button is hover-only — even for already-pinned rows. The
+   status dot stays visible at rest so the user can still see the
+   live status of pinned entities; only on hover do we swap the dot
+   for the unpin affordance.
+   The dot fade is gated on `:has(.pinBtn)` so child / subagent rows
+   (which never render a pin button — pinning is restricted to
+   roots in `SidebarTree.tsx`) keep their status dot on hover too,
+   instead of fading out into an empty icon slot. */
+.row:hover:has(.pinBtn) .statusDot {
+  opacity: 0;
+}
+.row:hover .pinBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Title --------------------------------------------------------- */
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--ds-text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+}
+
+/* Type label (e.g. "horton") — same size as title, just muted.
+   When the row has subagents the count is concatenated inline as
+   plain text (e.g. "horton +2") so it sits naturally next to the
+   type label. The expand chevron then overlays the right edge on
+   hover; see `.expandOverlay` below.
+
+   Default `padding-right: 5px` is the *text* gutter to the row's
+   right edge — combined with the row's 3px padding-right (which is
+   sized for an inner button's concentric halo, not for plain text)
+   it gives a comfortable 8px between the trailing label and the
+   row corner. Without this padding the label crowds the edge in
+   the very common leaf-row case. */
+.type {
+  flex-shrink: 0;
+  padding-right: 5px;
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-3);
+  text-transform: lowercase;
+  line-height: 1;
+  /* Animate the mask in/out as the row is hovered. */
+  transition:
+    color 0.1s ease,
+    -webkit-mask-position 0.1s ease,
+    mask-position 0.1s ease;
+}
+/* When the row has an inline expand button following the type label
+   (i.e. expanded subtree state), *that* button is the rightmost
+   element and the row's 3px padding-right is its concentric halo —
+   the type label's extra gutter would just push the button further
+   inward, so drop it in that case. */
+.type:has(+ .expandBtnVisible) {
+  padding-right: 0;
+}
+.row:hover .type {
+  color: var(--ds-text-2);
+}
+/* On hover, fade the right edge of the type+count text so the
+   chevron icon (positioned absolutely on top of the same area) has
+   clean space around its glyph. The 22px transparent zone matches
+   the chevron button's hit area; the 2px gradient before it is the
+   "fades out 2px before the button" effect. */
+.row:hover .typeWithCount {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 24px),
+    transparent calc(100% - 22px)
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 24px),
+    transparent calc(100% - 22px)
+  );
+}
+
+/* Right cluster ------------------------------------------------- */
+
+/* Hover-only chevron, absolutely positioned over the right edge of
+   the row. Same width as the row's icon column so it lines up with
+   the status dot / pin button on the left visually. */
+.expandOverlay {
+  position: absolute;
+  /* 3px halo to the right edge of the row, matching the 3px vertical
+     halo above & below the 22px button (concentric with the row's
+     7px border-radius). */
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--ds-radius-2);
+  color: var(--ds-text-2);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.1s ease;
+}
+.expandOverlay:hover {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+.row:hover .expandOverlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Always-visible chevron when the subtree is already expanded. The
+   children render in indented rows below so we drop the inline +N
+   count and just leave a permanent down-chevron the user can click
+   to collapse. */
+.expandBtnVisible {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: var(--ds-radius-2);
+  color: var(--ds-text-3);
+  cursor: pointer;
+  padding: 0;
+}
+.expandBtnVisible:hover {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+
+/* Tree connector lines under expanded subtrees -------------------
+ *
+ * DOM (from SidebarTree.tsx):
+ *
+ *   <div .treeNode>                         ← parent
+ *     <div .row>parent</div>
+ *     <div .subtree style="--tree-trunk-x:14px">
+ *       <div .treeNode>
+ *         <div .row>child 1</div>
+ *         <div .subtree>…grandchildren…</div>?
+ *       </div>
+ *       <div .treeNode>
+ *         <div .row>child 2</div>            ← non-last
+ *       </div>
+ *       <div .treeNode>                      ← :last-child
+ *         <div .row>child 3</div>            ← last child
+ *       </div>
+ *     </div>
+ *   </div>
+ *
+ * Each child row paints its own piece of the connector:
+ *   - All children get a vertical trunk through the row (`::after`).
+ *   - All children get a small horizontal stub at vertical-mid
+ *     branching to the row's icon column (`::before`).
+ *   - The :last-child swaps the straight trunk for an L-shaped
+ *     `::after` (vertical → curve → horizontal) and hides `::before`,
+ *     so the line terminates with a rounded corner instead of
+ *     trailing off below the row.
+ *
+ * Drawing per-row keeps the line continuous across the gap-free row
+ * stack without depending on parent box geometry; `--tree-trunk-x`
+ * is provided by `.subtree` and re-computed per nesting depth in
+ * `SidebarTree.tsx` so the trunk always sits under the *parent*
+ * row's icon column.
+ */
+
+.treeNode {
+  /* No layout impact — purely a structural wrapper for the
+     `:last-child` selector below. Rows still inherit the .treeRow
+     flow geometry. */
+}
+
+.subtree {
+  /* Children render in normal block flow inside this container.
+     Connector lines are drawn by the .row pseudo-elements below
+     (which read `--tree-trunk-x` set on this element). */
+  --tree-line-color: var(--ds-border-2);
+  --tree-stub-w: 9px;
+  --tree-corner-radius: 6px;
+}
+
+/* Continuous vertical trunk through every child row. */
+.subtree > .treeNode > .row::after {
+  content: '';
+  position: absolute;
+  /* Centre the 1px stroke on the trunk x. */
+  left: calc(var(--tree-trunk-x) - 0.5px);
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--tree-line-color);
+  pointer-events: none;
+}
+
+/* Short horizontal stub branching out to the row's icon column at
+   vertical mid. Position the box so the stub sits exactly at the
+   row centre regardless of row height. */
+.subtree > .treeNode > .row::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--tree-trunk-x) - 0.5px);
+  top: calc(50% - 0.5px);
+  width: var(--tree-stub-w);
+  border-top: 1px solid var(--tree-line-color);
+  pointer-events: none;
+}
+
+/* Last child: trunk ends at the row centre with a curved corner.
+   `::after` becomes an L-shape (left + bottom borders + radius);
+   `::before` is dropped so the horizontal arm isn't doubled. */
+.subtree > .treeNode:last-child > .row::after {
+  bottom: auto;
+  height: 50%;
+  width: var(--tree-stub-w);
+  border-bottom: 1px solid var(--tree-line-color);
+  border-bottom-left-radius: var(--tree-corner-radius);
+}
+
+.subtree > .treeNode:last-child > .row::before {
+  display: none;
+}
+
+/* HoverCard info popout ----------------------------------------- */
+.infoCard {
+  min-width: 200px;
+  max-width: 320px;
+}
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.infoTitle {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.infoMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Spawn / last-active block — separated from the meta lines above by
+   a hairline divider so the two timestamp rows read as a small
+   key/value group rather than free-floating muted text. */
+.infoTimes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ds-divider);
+}
+.infoTimeRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}

@@ -10,22 +10,69 @@ import {
 } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
-import { Flex, Text } from '@radix-ui/themes'
 import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
+import type { ElectricEntity } from './lib/ElectricAgentsProvider'
 import { useEntityTimeline } from './hooks/useEntityTimeline'
+import {
+  SidebarCollapsedProvider,
+  useSidebarCollapsed,
+} from './hooks/useSidebarCollapsed'
+import { useHotkey } from './hooks/useHotkey'
+import {
+  SearchPaletteProvider,
+  useSearchPalette,
+} from './hooks/useSearchPalette'
 import { Sidebar } from './components/Sidebar'
+import { SearchPalette } from './components/SearchPalette'
 import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
+import { EntityContextDrawer } from './components/EntityContextDrawer'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { CodingSessionView } from './components/CodingSessionView'
+import { NewSessionPage } from './components/NewSessionPage'
+import { Stack } from './ui'
+import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
-  const { pinnedUrls } = usePinnedEntities()
+  return (
+    <SidebarCollapsedProvider>
+      <SearchPaletteProvider>
+        <RootShell />
+      </SearchPaletteProvider>
+    </SidebarCollapsedProvider>
+  )
+}
+
+function RootShell(): React.ReactElement {
+  const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
+  const { collapsed, toggle } = useSidebarCollapsed()
+  const search = useSearchPalette()
+
+  useHotkey(`mod+b`, toggle)
+  useHotkey(`mod+k`, (e) => {
+    e.preventDefault()
+    search.toggle()
+  })
+  // New session: bind both ⌘N / Ctrl+N (works in Electron) and
+  // ⌘⇧O / Ctrl+Shift+O (works in browsers — `⌘N` is reserved by
+  // browsers for opening a new window and can't be intercepted, so
+  // we fall back to a combo that isn't claimed by the chrome).
+  // The displayed shortcut hint switches per environment via
+  // `NewSessionKey` / `newSessionLabel`.
+  const openNewSession = useCallback(
+    (e: KeyboardEvent) => {
+      e.preventDefault()
+      navigate({ to: `/` })
+    },
+    [navigate]
+  )
+  useHotkey(`mod+n`, openNewSession)
+  useHotkey(`mod+shift+o`, openNewSession)
 
   const navigateToEntity = useCallback(
     (entityUrl: string) => {
@@ -42,24 +89,18 @@ function RootLayout(): React.ReactElement {
   const selectedEntityUrl = splat ? `/${splat}` : null
 
   return (
-    <Flex style={{ height: `100vh` }}>
-      <Sidebar
-        selectedEntityUrl={selectedEntityUrl}
-        onSelectEntity={navigateToEntity}
-        pinnedUrls={pinnedUrls}
-      />
+    <div className={styles.appShell}>
+      {!collapsed && (
+        <Sidebar
+          selectedEntityUrl={selectedEntityUrl}
+          onSelectEntity={navigateToEntity}
+          pinnedUrls={pinnedUrls}
+          onTogglePin={togglePin}
+        />
+      )}
       <Outlet />
-    </Flex>
-  )
-}
-
-function IndexPage(): React.ReactElement {
-  return (
-    <Flex align="center" justify="center" flexGrow="1">
-      <Text color="gray" size="2">
-        Select an entity from the sidebar
-      </Text>
-    </Flex>
+      <SearchPalette />
+    </div>
   )
 }
 
@@ -121,20 +162,22 @@ function EntityPage(): React.ReactElement {
 
   if (!selectedEntity) {
     return (
-      <Flex align="center" justify="center" flexGrow="1">
-        <Text color="gray" size="2">
-          Loading entity...
-        </Text>
-      </Flex>
+      <Stack
+        align="center"
+        justify="center"
+        grow
+        className={styles.entityShell}
+      >
+        <span>Loading entity...</span>
+      </Stack>
     )
   }
 
   const baseUrl = activeServer?.url ?? ``
-  // Hide the body while spawning — server streams don't exist yet.
   const connectUrl = isSpawning ? null : entityUrl
 
   return (
-    <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
+    <Stack direction="column" className={styles.entityShell}>
       <EntityHeader
         entity={selectedEntity}
         pinned={pinnedUrls.includes(entityUrl)}
@@ -147,14 +190,8 @@ function EntityPage(): React.ReactElement {
         stateExplorerOpen={stateExplorerOpen}
         onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
       />
-      <Flex
-        ref={containerRef}
-        style={{ flex: 1, minHeight: 0, overflow: `hidden` }}
-      >
-        <Flex
-          direction="column"
-          style={{ flex: 1, minWidth: 0, overflow: `hidden` }}
-        >
+      <Stack ref={containerRef} className={styles.entityBody}>
+        <Stack direction="column" className={styles.entityMain}>
           {selectedEntity.type === CODING_SESSION_ENTITY_TYPE && connectUrl ? (
             <CodingSessionView
               baseUrl={baseUrl}
@@ -165,20 +202,16 @@ function EntityPage(): React.ReactElement {
             <GenericEntityBody
               baseUrl={baseUrl}
               entityUrl={connectUrl}
+              entity={selectedEntity}
               entityStopped={entityStopped}
               isSpawning={isSpawning}
             />
           )}
-        </Flex>
+        </Stack>
         {stateExplorerOpen && (
           <>
             <div
-              style={{
-                width: 4,
-                cursor: `col-resize`,
-                flexShrink: 0,
-                background: `var(--gray-a5)`,
-              }}
+              className={styles.splitter}
               onMouseDown={(e) => {
                 e.preventDefault()
                 const container = containerRef.current
@@ -206,31 +239,30 @@ function EntityPage(): React.ReactElement {
                 document.addEventListener(`mouseup`, onMouseUp)
               }}
             />
-            <Flex
+            <Stack
               direction="column"
-              style={{
-                flex: `0 0 ${statePanelWidth * 100}%`,
-                minWidth: 0,
-                overflow: `hidden`,
-              }}
+              className={styles.statePanel}
+              style={{ flex: `0 0 ${statePanelWidth * 100}%` }}
             >
               <StateExplorerPanel baseUrl={baseUrl} entityUrl={entityUrl} />
-            </Flex>
+            </Stack>
           </>
         )}
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 }
 
 function GenericEntityBody({
   baseUrl,
   entityUrl,
+  entity,
   entityStopped,
   isSpawning,
 }: {
   baseUrl: string
   entityUrl: string | null
+  entity: ElectricEntity
   entityStopped: boolean
   isSpawning: boolean
 }): React.ReactElement {
@@ -260,6 +292,7 @@ function GenericEntityBody({
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
+        drawer={<EntityContextDrawer entity={entity} />}
       />
     </>
   )
@@ -270,7 +303,7 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/`,
-  component: IndexPage,
+  component: NewSessionPage,
 })
 
 const entityRoute = createRoute({

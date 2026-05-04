@@ -1,0 +1,51 @@
+/**
+ * The header strip at the top of the main content column (entity page,
+ * new-session page, etc.). It is **not** a separate top bar — it sits
+ * inside its column with the same background as the column body, so the
+ * chrome reads as part of the section rather than a global frame.
+ *
+ * Padding-left matches the SidebarHeader gutter (10px) so when the
+ * sidebar is collapsed the chrome buttons (toggle + search) land at
+ * the exact same screen-x as the toggle in the open sidebar — the
+ * 24x24 IconButton's glyph centers at x=22 (10 + 12), which is the
+ * same column the sidebar row icons sit in.
+ *
+ * No border-bottom by design — the divider effect, when wanted, comes
+ * from a sibling element (e.g. the chat scroll area's own background).
+ */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  height: 44px;
+  padding: 0 10px;
+  background: var(--ds-bg);
+  -webkit-app-region: drag;
+}
+
+.header > * {
+  -webkit-app-region: no-drag;
+}
+
+.chrome {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--ds-space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}

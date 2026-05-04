@@ -1,0 +1,81 @@
+.tile {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: var(--ds-row-height-md);
+  padding: 0 8px;
+  border-radius: var(--ds-radius-2);
+  cursor: pointer;
+  color: var(--ds-text-1);
+  transition: background 0.08s ease;
+}
+.tile:hover {
+  background: var(--ds-gray-a3);
+}
+
+.tileLabel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ds-text-sm);
+}
+
+.tileName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.dot[data-state='ok'] {
+  background: var(--ds-green-9);
+}
+.dot[data-state='down'] {
+  background: var(--ds-red-9);
+}
+.dot[data-state='unset'] {
+  background: var(--ds-gray-8);
+}
+
+.menuRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.menuRowName {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.removeBtn {
+  margin-left: auto;
+}
+
+/*
+ * "Add server" form lives in a centered Dialog; spacing rules just
+ * separate the field group from the action row.
+ */
+.addForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+
+.addFormActions {
+  margin-top: var(--ds-space-2);
+}

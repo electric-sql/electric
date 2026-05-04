@@ -1,12 +1,3 @@
-import {
-  Badge,
-  Code,
-  DataList,
-  Flex,
-  HoverCard,
-  Link,
-  Text,
-} from '@radix-ui/themes'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createColumnHelper,
@@ -16,13 +7,10 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { Badge, Code, DataList, HoverCard, Link, Stack, Text } from '../../ui'
 import styles from './StateTable.module.css'
 import type { ColumnResizeMode, SortingState } from '@tanstack/react-table'
 import type { MaterializedState } from '@durable-streams/state'
-
-// ============================================================================
-// FK column detection
-// ============================================================================
 
 /** Match `something_id` or `somethingId` → extract `something` */
 function extractFkType(columnName: string): string | null {
@@ -51,18 +39,10 @@ function detectFkColumns(
   return fkMap
 }
 
-// ============================================================================
-// Row type
-// ============================================================================
-
 type StateRow = { _key: string } & Record<string, unknown>
 
 const ROW_HEIGHT = 32
 const columnHelper = createColumnHelper<StateRow>()
-
-// ============================================================================
-// StateTable
-// ============================================================================
 
 export function StateTable({
   state,
@@ -122,7 +102,7 @@ export function StateTable({
           const value = info.getValue()
           if (col === `_key`) {
             return (
-              <Code size="1" variant="ghost" color="green">
+              <Code size={1} variant="ghost" tone="success">
                 {String(value)}
               </Code>
             )
@@ -163,7 +143,6 @@ export function StateTable({
     overscan: 20,
   })
 
-  // Scroll highlighted row into view
   useEffect(() => {
     if (highlightKey === null) return
     const idx = tableRows.findIndex((r) => r.original._key === highlightKey)
@@ -172,55 +151,50 @@ export function StateTable({
     }
   }, [highlightKey, tableRows, virtualizer])
 
-  // Reset sorting when type changes
   useEffect(() => {
     setSorting([])
   }, [selectedType])
 
   if (!selectedType) {
     return (
-      <Flex align="center" justify="center" style={{ flex: 1, minHeight: 0 }}>
-        <Text size="2" color="gray">
+      <Stack align="center" justify="center" className={styles.fillPanel}>
+        <Text size={2} tone="muted">
           Select a type to view its state
         </Text>
-      </Flex>
+      </Stack>
     )
   }
 
   const headerGroups = table.getHeaderGroups()
 
   return (
-    <Flex
-      direction="column"
-      style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: `hidden` }}
-    >
-      <Flex align="center" gap="2" px="3" py="1" className={styles.header}>
+    <Stack direction="column" className={styles.tableRoot}>
+      <Stack align="center" gap={2} px={3} py={1} className={styles.header}>
         <Text
-          size="1"
-          color="gray"
+          size={1}
+          tone="muted"
           weight="medium"
-          style={{ textTransform: `uppercase` }}
+          className={styles.headerLabel}
         >
           Records
         </Text>
-        <Badge size="1" variant="soft" color="gray">
+        <Badge size={1} variant="soft" tone="neutral">
           {rows.length}
         </Badge>
-      </Flex>
+      </Stack>
 
       {rows.length === 0 ? (
-        <Flex align="center" justify="center" py="8">
-          <Text size="2" color="gray">
+        <Stack align="center" justify="center" py={8}>
+          <Text size={2} tone="muted">
             No rows at this point in time
           </Text>
-        </Flex>
+        </Stack>
       ) : (
         <div ref={scrollContainerRef} className={styles.scrollContainer}>
           <div
             className={styles.gridTable}
             style={{ width: table.getTotalSize() }}
           >
-            {/* Header */}
             <div className={styles.gridHead}>
               {headerGroups.map((headerGroup) => (
                 <div key={headerGroup.id} className={styles.gridRow}>
@@ -231,19 +205,19 @@ export function StateTable({
                       style={{ width: header.getSize() }}
                       onClick={header.column.getToggleSortingHandler()}
                     >
-                      <Flex align="center" gap="1" px="2" py="1">
-                        <Text size="1" color="gray" weight="medium">
+                      <Stack align="center" gap={1} px={2} py={1}>
+                        <Text size={1} tone="muted" weight="medium">
                           {flexRender(
                             header.column.columnDef.header,
                             header.getContext()
                           )}
                         </Text>
-                        <Text size="1" color="gray">
+                        <Text size={1} tone="muted">
                           {{ asc: ` ↑`, desc: ` ↓` }[
                             header.column.getIsSorted() as string
                           ] ?? ``}
                         </Text>
-                      </Flex>
+                      </Stack>
                       {header.column.getCanResize() && (
                         <div
                           onMouseDown={header.getResizeHandler()}
@@ -260,7 +234,6 @@ export function StateTable({
               ))}
             </div>
 
-            {/* Body */}
             <div
               className={styles.gridBody}
               style={{ height: virtualizer.getTotalSize() }}
@@ -296,13 +269,10 @@ export function StateTable({
           </div>
         </div>
       )}
-    </Flex>
+    </Stack>
   )
 }
 
-// ============================================================================
-// Foreign Key Cell
-// ============================================================================
 function ForeignKeyCell({
   value,
   refType,
@@ -323,75 +293,74 @@ function ForeignKeyCell({
 
   return (
     <HoverCard.Root>
-      <HoverCard.Trigger>
-        <Link
-          size="1"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault()
-            onNavigate(refType, key)
-          }}
-          style={{ fontFamily: `var(--code-font-family)` }}
-        >
-          {key}
-        </Link>
-      </HoverCard.Trigger>
-      <HoverCard.Content size="1" maxWidth="360px">
-        <Flex direction="column" gap="2">
-          <Text size="1" weight="medium">
+      <HoverCard.Trigger
+        render={
+          <Link
+            size={1}
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              onNavigate(refType, key)
+            }}
+            className={styles.fkLink}
+          >
+            {key}
+          </Link>
+        }
+      />
+      <HoverCard.Content side="top" className={styles.fkHover}>
+        <Stack direction="column" gap={2}>
+          <Text size={1} weight="medium">
             {refType}:{key}
           </Text>
-          <DataList.Root size="1">
+          <DataList.Root size={1}>
             {Object.entries(refRow).map(([field, val]) => (
-              <DataList.Item key={field}>
-                <DataList.Label>
-                  <Text size="1" color="gray">
+              <DataList.Item
+                key={field}
+                label={
+                  <Text size={1} tone="muted">
                     {field}
                   </Text>
-                </DataList.Label>
-                <DataList.Value>
-                  <Code size="1" variant="ghost">
-                    {typeof val === `object` && val !== null
-                      ? JSON.stringify(val)
-                      : String(val ?? `null`)}
-                  </Code>
-                </DataList.Value>
+                }
+              >
+                <Code size={1} variant="ghost">
+                  {typeof val === `object` && val !== null
+                    ? JSON.stringify(val)
+                    : String(val ?? `null`)}
+                </Code>
               </DataList.Item>
             ))}
           </DataList.Root>
-        </Flex>
+        </Stack>
       </HoverCard.Content>
     </HoverCard.Root>
   )
 }
 
-// ============================================================================
-// Cell Value Renderer
-// ============================================================================
 function CellValue({ value }: { value: unknown }) {
   if (value === null || value === undefined) {
     return (
-      <Text size="1" color="gray">
+      <Text size={1} tone="muted">
         null
       </Text>
     )
   }
   if (typeof value === `object`) {
     return (
-      <Code size="1" variant="ghost" style={{ whiteSpace: `nowrap` }}>
+      <Code size={1} variant="ghost" className={styles.cellWrap}>
         {JSON.stringify(value)}
       </Code>
     )
   }
   if (typeof value === `boolean`) {
     return (
-      <Text size="1" color={value ? `green` : `red`}>
+      <Text size={1} tone={value ? `success` : `danger`}>
         {String(value)}
       </Text>
     )
   }
   return (
-    <Text size="1" style={{ whiteSpace: `nowrap` }}>
+    <Text size={1} className={styles.cellWrap}>
       {String(value)}
     </Text>
   )

@@ -1,0 +1,72 @@
+/* "Thinking" label with a moving highlight sweep.
+ *
+ * The trick is `background-clip: text` + `color: transparent`: the
+ * element's text becomes a window onto its own background, and we
+ * animate a horizontally-positioned linear gradient so a brighter
+ * band scrolls across the letters. Resting colour is `--ds-text-3`
+ * (the muted meta-row tone), highlight is `--ds-text-1` (default
+ * body text). Both tokens flip with the theme so the effect reads
+ * the same in light and dark mode.
+ *
+ * `background-size: 200%` widens the gradient to twice the text
+ * width so the highlight has a long off-screen path to travel
+ * before looping; the keyframes shift the position from `100%` to
+ * `-100%` end-to-end. Linear easing keeps the motion uniform —
+ * easing curves make the highlight visibly stutter at the edges. */
+
+.thinking {
+  font-size: var(--ds-text-sm);
+  font-family: var(--ds-font-body);
+  /* Need enough leading for descenders (`g`, `p`, `y`, …) since the
+     gradient text-clip pipeline doesn't render glyph parts that
+     fall outside the line box. `1.4` matches the body line-height
+     used elsewhere in the meta row. */
+  line-height: 1.4;
+  /* Belt-and-braces against any ancestor that sets `overflow: hidden`
+     and would otherwise clip the descender of the `g` if the line
+     box happened to be tight. */
+  display: inline-block;
+  padding-bottom: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--ds-text-3) 0%,
+    var(--ds-text-3) 40%,
+    var(--ds-text-1) 50%,
+    var(--ds-text-3) 60%,
+    var(--ds-text-3) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% 0%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinkingShimmer 2s infinite linear;
+}
+
+@keyframes thinkingShimmer {
+  0% {
+    background-position: 100% 0%;
+  }
+  100% {
+    background-position: -100% 0%;
+  }
+}
+
+/* Reduced-motion: drop the sweep and just hold the muted tone with
+   a slow opacity pulse so the indicator still reads as "active". */
+@media (prefers-reduced-motion: reduce) {
+  .thinking {
+    background: none;
+    color: var(--ds-text-3);
+    animation: thinkingPulse 1.6s infinite ease-in-out both;
+  }
+  @keyframes thinkingPulse {
+    0%,
+    100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}

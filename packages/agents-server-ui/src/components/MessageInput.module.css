@@ -1,0 +1,108 @@
+/* Composer column.
+ *
+ * Negative top margin (-20px) lifts the whole composer slab into the
+ * bottom edge of the EntityTimeline above so the composer visually
+ * SITS ON TOP of the chat surface. Combined with the inner
+ * .composer's rounded corners + opaque fill, this lets the chat
+ * content peek through at the rounded top corners (where the
+ * background curves away from the bounding box) for a docked
+ * composer feel.
+ *
+ * `position: relative; z-index: 1` is the safety belt that keeps the
+ * composer painting on top of the EntityTimeline regardless of
+ * stacking-context fighting elsewhere. (Sibling document order would
+ * already place us on top, but explicit > implicit.)
+ *
+ * Outer max-width / horizontal padding match `EntityTimeline .content`
+ * so the composer sits directly under the user-bubble column above it.
+ */
+.root {
+  padding: 0 40px 16px;
+  max-width: calc(var(--chat-surface-width) + 80px);
+  margin: -20px auto 0;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+}
+
+.composer {
+  /* Use the raised-surface token (solid in both themes) rather than
+     `--ds-input-bg`. The latter is translucent in dark mode by
+     design — a deliberate choice for inline form inputs that sit on
+     popovers / panels. The composer is different: it docks at the
+     bottom of a scrolling chat surface and chat content must NOT
+     bleed through it. Solid raised surface is the right semantic. */
+  background: var(--ds-surface-raised);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: 12px;
+  /* 12px on all sides — same as the user-message bubble (`Stack p={3}`
+     in UserMessage.tsx, where `--ds-space-3 = 12px`). Keeping the
+     two surfaces on the same padding makes the textarea text column
+     line up with the user-bubble text column directly above it. */
+  padding: 12px;
+  width: 100%;
+  transition: border-color 0.15s ease;
+  /* Stack on top of `<EntityContextDrawer>` (when present). The drawer
+     extends 20px UNDER the composer via `margin-bottom: -20px`; this
+     z-index ensures the composer paints over the drawer's hidden
+     bottom edge so the drawer reads as a tray tucked behind the
+     composer. Also keeps the composer above the timeline above it
+     (the existing `-20px` lift on `.root`). */
+  position: relative;
+  z-index: 1;
+}
+.composer:focus-within {
+  border-color: var(--ds-accent-a6);
+}
+.disabled {
+  opacity: 0.5;
+}
+
+/* Spacing for the inline error row above the composer. The Stack gap
+   is 0 so the drawer's negative margin can fully overlap the
+   composer; this margin restores breathing room around an error
+   message when one appears (rare). */
+.errorText {
+  margin: 4px 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--ds-text-sm);
+  line-height: 1.5;
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+  /* Auto-grow is driven by inline `height = scrollHeight` from
+     MessageInput.tsx. `min-height` floors the resting state at ~2
+     lines so the empty composer reads as a multi-line input rather
+     than a single-line field; `max-height` + `overflow: auto` make
+     it start scrolling internally once content passes ~10 lines.
+     The browser clamps the inline height against both bounds, so
+     the JS auto-resize stays a one-liner. `resize: none` hides the
+     native handle since the auto-resize already does the right
+     thing. */
+  resize: none;
+  overflow: auto;
+  min-height: 40px;
+  max-height: 200px;
+}
+.textarea::placeholder {
+  color: var(--ds-text-3);
+}
+
+.sendIcon {
+  color: var(--ds-gray-8);
+  cursor: default;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+.sendIcon.active {
+  color: var(--ds-accent-9);
+  cursor: pointer;
+}

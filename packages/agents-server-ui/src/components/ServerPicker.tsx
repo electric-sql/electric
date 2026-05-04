@@ -1,8 +1,31 @@
-import { Button, DropdownMenu, Flex, IconButton, Text } from '@radix-ui/themes'
-import { ChevronDown, Circle, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
+import { ChevronsUpDown, Plus, Trash2 } from 'lucide-react'
 import { useServerConnection } from '../hooks/useServerConnection'
+import {
+  Button,
+  Dialog,
+  Field,
+  IconButton,
+  Input,
+  Menu,
+  Stack,
+  Text,
+  Tooltip,
+} from '../ui'
+import styles from './ServerPicker.module.css'
 
+type ServerStatus = `ok` | `down` | `unset`
+
+/**
+ * Footer-anchored server picker tile.
+ *
+ * Renders a single-line tile showing `[● status] [server name] [chevron]`
+ * that opens a menu listing the saved servers + an "Add server" entry.
+ * Picking "Add server" launches a centered modal dialog with the
+ * connection form (instead of an absolute-positioned popover above the
+ * tile) so the form has the breathing room it needs even when the
+ * sidebar is narrow.
+ */
 export function ServerPicker(): React.ReactElement {
   const {
     servers,
@@ -14,146 +37,166 @@ export function ServerPicker(): React.ReactElement {
   } = useServerConnection()
   const [adding, setAdding] = useState(false)
 
-  let dotColor = `var(--gray-8)`
-  if (activeServer && connected) dotColor = `#22c55e`
-  else if (activeServer) dotColor = `#ef4444`
+  const status: ServerStatus = !activeServer
+    ? `unset`
+    : connected
+      ? `ok`
+      : `down`
+
+  // Dismissing the dialog when there is no configured server would leave
+  // the app in an unusable state — block it until at least one entry has
+  // been added. (`useServerConnection` seeds a fallback "This Server"
+  // entry on first load, so this is a defensive guard rather than a
+  // common path.)
+  const canDismissAdd = servers.length > 0
+
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open && !canDismissAdd) return
+      setAdding(open)
+    },
+    [canDismissAdd]
+  )
 
   return (
-    <Flex
-      p="3"
-      align="center"
-      gap="2"
-      style={{ borderBottom: `1px solid var(--gray-a5)`, position: `relative` }}
-    >
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          <Button
-            variant="ghost"
-            size="2"
-            style={{ flex: 1, justifyContent: `flex-start` }}
-          >
-            <Flex align="center" gap="2" style={{ flex: 1 }}>
-              <Circle size={8} fill={dotColor} stroke="none" />
-              <Text size="2" weight="bold" truncate>
-                {activeServer?.name ?? `No server`}
-              </Text>
-            </Flex>
-            <ChevronDown size={14} />
-          </Button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content>
-          {servers.map((server, i) => (
-            <DropdownMenu.Item
-              key={`${server.url}-${i}`}
-              onSelect={() => setActiveServer(server)}
+    <>
+      <Menu.Root>
+        <Menu.Trigger
+          render={
+            <button
+              type="button"
+              className={styles.tile}
+              aria-label="Switch server"
             >
-              <Flex align="center" gap="2">
-                <Circle
-                  size={8}
-                  fill={
-                    server.url === activeServer?.url
-                      ? dotColor
-                      : `var(--gray-8)`
-                  }
-                  stroke="none"
-                />
-                <Text size="2">{server.name}</Text>
-                <IconButton
-                  size="1"
-                  variant="ghost"
-                  color="red"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeServer(server.url)
-                  }}
-                  aria-label={`Remove ${server.name}`}
-                >
-                  <Trash2 size={12} />
-                </IconButton>
-              </Flex>
-            </DropdownMenu.Item>
-          ))}
-          {servers.length > 0 && <DropdownMenu.Separator />}
-          <DropdownMenu.Item onSelect={() => setAdding(true)}>
-            <Flex align="center" gap="2">
-              <Plus size={14} />
-              <Text size="2">Add server</Text>
-            </Flex>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-
-      {adding && (
-        <AddServerDialog
-          onAdd={(name, url) => {
-            addServer({ name, url })
-            setAdding(false)
-          }}
-          onCancel={() => {
-            if (servers.length > 0) setAdding(false)
-          }}
+              <span className={styles.tileLabel}>
+                <span className={styles.dot} data-state={status} />
+                <span className={styles.tileName}>
+                  {activeServer?.name ?? `No server`}
+                </span>
+              </span>
+              <ChevronsUpDown size={12} />
+            </button>
+          }
         />
-      )}
-    </Flex>
+        <Menu.Content side="top" align="start">
+          {servers.map((server, i) => {
+            const itemStatus: ServerStatus =
+              server.url === activeServer?.url ? status : `unset`
+            return (
+              <Menu.Item
+                key={`${server.url}-${i}`}
+                onSelect={() => setActiveServer(server)}
+              >
+                <span className={styles.menuRow}>
+                  <span className={styles.dot} data-state={itemStatus} />
+                  <Text size={2} className={styles.menuRowName}>
+                    {server.name}
+                  </Text>
+                  <Tooltip content={`Remove ${server.name}`} side="right">
+                    <IconButton
+                      size={1}
+                      variant="ghost"
+                      tone="neutral"
+                      className={styles.removeBtn}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeServer(server.url)
+                      }}
+                      aria-label={`Remove ${server.name}`}
+                    >
+                      <Trash2 size={12} />
+                    </IconButton>
+                  </Tooltip>
+                </span>
+              </Menu.Item>
+            )
+          })}
+          {servers.length > 0 && <Menu.Separator />}
+          <Menu.Item onSelect={() => setAdding(true)}>
+            <Plus size={14} />
+            <Text size={2}>Add server</Text>
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Root>
+
+      <Dialog.Root open={adding} onOpenChange={handleOpenChange}>
+        <Dialog.Content maxWidth={440}>
+          <Dialog.Title>Add server</Dialog.Title>
+          <Dialog.Description>
+            Connect to an Electric Agents server by giving it a label and its
+            base URL.
+          </Dialog.Description>
+          <AddServerForm
+            onAdd={(name, url) => {
+              addServer({ name, url })
+              setAdding(false)
+            }}
+            canCancel={canDismissAdd}
+            onCancel={() => setAdding(false)}
+          />
+        </Dialog.Content>
+      </Dialog.Root>
+    </>
   )
 }
 
-function AddServerDialog({
+function AddServerForm({
   onAdd,
   onCancel,
+  canCancel,
 }: {
   onAdd: (name: string, url: string) => void
   onCancel: () => void
+  canCancel: boolean
 }): React.ReactElement {
   const [name, setName] = useState(``)
   const [url, setUrl] = useState(``)
+  const trimmedName = name.trim()
+  const trimmedUrl = url.trim()
+  const canSubmit = trimmedName.length > 0 && trimmedUrl.length > 0
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canSubmit) return
+    onAdd(trimmedName, trimmedUrl)
+  }
 
   return (
-    <Flex
-      direction="column"
-      gap="2"
-      p="3"
-      style={{
-        position: `absolute`,
-        top: 48,
-        left: 0,
-        right: 0,
-        zIndex: 10,
-        background: `var(--color-background)`,
-        borderBottom: `1px solid var(--gray-a5)`,
-        boxShadow: `var(--shadow-3)`,
-      }}
-    >
-      <input
-        placeholder="Name (e.g. Local Dev)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        style={{
-          padding: `6px 10px`,
-          borderRadius: 6,
-          border: `1px solid var(--gray-a5)`,
-          fontSize: 13,
-        }}
-      />
-      <input
-        placeholder="URL (e.g. http://localhost:4437)"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        style={{
-          padding: `6px 10px`,
-          borderRadius: 6,
-          border: `1px solid var(--gray-a5)`,
-          fontSize: 13,
-        }}
-      />
-      <Flex gap="2">
-        <Button size="1" onClick={() => name && url && onAdd(name, url)}>
-          Add
-        </Button>
-        <Button size="1" variant="soft" color="gray" onClick={onCancel}>
+    <form onSubmit={handleSubmit} className={styles.addForm}>
+      <Stack direction="column" gap={3}>
+        <Field label="Name">
+          <Input
+            placeholder="e.g. Local Dev"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            size={2}
+            autoFocus
+          />
+        </Field>
+        <Field label="URL">
+          <Input
+            placeholder="e.g. http://localhost:4437"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            type="url"
+            size={2}
+          />
+        </Field>
+      </Stack>
+      <Stack gap={2} justify="end" className={styles.addFormActions}>
+        <Button
+          type="button"
+          variant="soft"
+          tone="neutral"
+          onClick={onCancel}
+          disabled={!canCancel}
+        >
           Cancel
         </Button>
-      </Flex>
-    </Flex>
+        <Button type="submit" disabled={!canSubmit}>
+          Add server
+        </Button>
+      </Stack>
+    </form>
   )
 }

@@ -1,0 +1,12 @@
+/* Padding-x matches SidebarHeader (11px) so the ServerPicker tile
+   and the SettingsMenu icon button line up with the icon column
+   running through the sidebar. */
+.footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 11px;
+  border-top: 1px solid var(--ds-divider);
+  flex-shrink: 0;
+}

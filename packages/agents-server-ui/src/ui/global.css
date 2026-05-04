@@ -1,0 +1,28 @@
+/* ==========================================================================
+ * Global app shell styles
+ *
+ * - body reset (margin + min-height; positioning needed for iOS 26 Safari
+ *   so portaled overlays anchor correctly to the visual viewport).
+ * - .app-root creates a dedicated stacking context so Base UI portaled
+ *   popups (Dialog/Popover/Menu/Tooltip) always render above sibling
+ *   content regardless of z-index inside the tree.
+ *
+ * Keep this file small and free of component-specific rules.
+ * ========================================================================== */
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* iOS 26+ Safari: ensures backdrops using position:absolute cover the
+     full visual viewport even after the page is scrolled. */
+  position: relative;
+  background: var(--ds-bg);
+  color: var(--ds-text-1);
+  font-family: var(--ds-font-body);
+}
+
+.app-root {
+  isolation: isolate;
+  height: 100%;
+  min-height: 100vh;
+}

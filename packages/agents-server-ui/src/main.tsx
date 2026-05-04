@@ -1,7 +1,20 @@
+// React Scan — dev-only. Dynamically imported (and awaited) BEFORE
+// the React imports below so it can monkey-patch React's reconciler
+// before any component mounts; gated on `import.meta.env.DEV` so the
+// production bundle never sees the dependency. Toggle the on-screen
+// toolbar off via the floating widget if it gets in the way; the
+// instrumentation keeps running so the in-DOM render highlights
+// still work.
+if (import.meta.env.DEV) {
+  // eslint-disable-next-line quotes -- dynamic `import()` requires a plain string literal
+  const { scan } = await import('react-scan')
+  scan({ enabled: true })
+}
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@radix-ui/themes/styles.css'
-import './styles.css'
+import './ui'
+import './markdown.css'
 import { App } from './App'
 
 // ngrok's free tier intercepts browser requests with an HTML warning page

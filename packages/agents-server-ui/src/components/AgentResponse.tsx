@@ -1,7 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Flex, Text } from '@radix-ui/themes'
 import { Streamdown } from 'streamdown'
-import { createCodePlugin } from '../lib/codeHighlighter'
 import {
   getCachedMarkdownRender,
   hashMarkdownContent,
@@ -9,7 +7,16 @@ import {
   setCachedMarkdownRender,
   warmMarkdownRenderCache,
 } from '../lib/markdownRenderCache'
+import {
+  streamdownComponents,
+  streamdownControls,
+  streamdownPlugins,
+} from '../lib/streamdownConfig'
+import { Stack, Text } from '../ui'
 import { ToolCallView } from './ToolCallView'
+import { TimeText } from './TimeText'
+import { ThinkingIndicator } from './ThinkingIndicator'
+import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
   EntityTimelineSection,
@@ -21,16 +28,6 @@ type AgentResponseSection = Extract<
 >
 
 const SHIKI_SETTLE_MS = 80
-
-const markdownContainerStyle = {
-  borderLeft: `3px solid var(--accent-7)`,
-  paddingLeft: 20,
-  paddingTop: 4,
-  paddingBottom: 4,
-} as const
-
-const codePluginSingleton = createCodePlugin()
-const streamdownPlugins = { code: codePluginSingleton }
 
 const MarkdownSegment = memo(function MarkdownSegment({
   text,
@@ -46,15 +43,29 @@ const MarkdownSegment = memo(function MarkdownSegment({
   canCache: boolean
 }): React.ReactElement {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
-  const [cachedHtml, setCachedHtml] = useState<string | null>(() => {
+  // Tracks the content hash that the currently-displayed `cachedHtml`
+  // belongs to, so we can distinguish "the underlying text changed and our
+  // cached HTML is now stale" from "only the column width changed and our
+  // cached HTML is still semantically correct, just laid out for a
+  // different width".
+  const cachedHtmlHashRef = useRef<number | null>(null)
+  const [cachedHtml, setCachedHtmlState] = useState<string | null>(() => {
     if (!canCache || !isMarkdownRenderCacheReady() || renderWidth <= 0)
       return null
-    return getCachedMarkdownRender(contentHash, renderWidth, text)?.html ?? null
+    const hit = getCachedMarkdownRender(contentHash, renderWidth, text)
+    if (!hit) return null
+    cachedHtmlHashRef.current = contentHash
+    return hit.html
   })
+
+  const setCachedHtml = (next: string | null, hash: number | null) => {
+    cachedHtmlHashRef.current = next === null ? null : hash
+    setCachedHtmlState(next)
+  }
 
   useEffect(() => {
     if (!canCache) {
-      setCachedHtml(null)
+      setCachedHtml(null, null)
       return
     }
 
@@ -63,14 +74,25 @@ const MarkdownSegment = memo(function MarkdownSegment({
         ? getCachedMarkdownRender(contentHash, renderWidth, text)
         : null
     if (cached) {
-      setCachedHtml(cached.html)
+      setCachedHtml(cached.html, contentHash)
       return
     }
 
-    // Width changed and we do not have a matching cached render. Drop back to
-    // the live Streamdown path so the DOM can reflow honestly and be captured
-    // again at the new width.
-    setCachedHtml(null)
+    // Cache miss at the requested width.
+    //
+    // - If the displayed `cachedHtml` belongs to a DIFFERENT content hash
+    //   (e.g. the agent message text was replaced after streaming ended,
+    //   or this row was reused for a different segment), drop it
+    //   immediately so we render the new content via Streamdown.
+    //
+    // - If it belongs to the SAME content hash, KEEP showing it: the
+    //   cached HTML is just static markup and reflows correctly at any
+    //   width. Dropping back to a live Streamdown render here would
+    //   briefly clear the row and produce a visible flicker plus a
+    //   row-height jump that the virtualizer has to chase.
+    if (cachedHtmlHashRef.current !== contentHash) {
+      setCachedHtml(null, null)
+    }
 
     let cancelled = false
     void warmMarkdownRenderCache().then(() => {
@@ -81,15 +103,13 @@ const MarkdownSegment = memo(function MarkdownSegment({
           : Math.round(wrapperRef.current?.getBoundingClientRect().width ?? 0)
       if (resolvedWidth <= 0) return
       const hit = getCachedMarkdownRender(contentHash, resolvedWidth, text)
-      if (hit) {
-        setCachedHtml(hit.html)
-      }
+      if (hit) setCachedHtml(hit.html, contentHash)
     })
 
     return () => {
       cancelled = true
     }
-  }, [canCache, contentHash, renderWidth])
+  }, [canCache, contentHash, renderWidth, text])
 
   useLayoutEffect(() => {
     if (!canCache || cachedHtml !== null) return
@@ -141,27 +161,50 @@ const MarkdownSegment = memo(function MarkdownSegment({
     }
   }, [cachedHtml, canCache, contentHash, text])
 
+  // When we are displaying previously cached HTML at a width that itself
+  // has no cache entry yet (e.g. the column resized after we cached at
+  // an earlier width), re-persist the same HTML keyed by the new
+  // measured width so subsequent lookups at this width hit immediately
+  // and we never have to drop back to a live Streamdown re-render.
+  useLayoutEffect(() => {
+    if (!canCache) return
+    if (cachedHtml === null) return
+
+    const element = wrapperRef.current
+    if (!element) return
+
+    const rect = element.getBoundingClientRect()
+    const width = Math.round(rect.width)
+    const height = Math.round(rect.height)
+    if (width <= 0 || height <= 0) return
+
+    if (getCachedMarkdownRender(contentHash, width, text)) return
+    setCachedMarkdownRender(contentHash, {
+      html: cachedHtml,
+      width,
+      height,
+      sourceText: text,
+    })
+  }, [cachedHtml, canCache, contentHash, renderWidth, text])
+
   if (cachedHtml !== null) {
     return (
       <div
         ref={wrapperRef}
-        className="agent-ui-markdown"
-        style={markdownContainerStyle}
+        className={`agent-ui-markdown ${styles.markdown}`}
         dangerouslySetInnerHTML={{ __html: cachedHtml }}
       />
     )
   }
 
   return (
-    <div
-      ref={wrapperRef}
-      className="agent-ui-markdown"
-      style={markdownContainerStyle}
-    >
+    <div ref={wrapperRef} className={`agent-ui-markdown ${styles.markdown}`}>
       <Streamdown
         isAnimating={isStreaming}
         plugins={streamdownPlugins}
         linkSafety={{ enabled: false }}
+        controls={streamdownControls}
+        components={streamdownComponents}
       >
         {text}
       </Streamdown>
@@ -180,17 +223,23 @@ export const AgentResponse = memo(function AgentResponse({
   timestamp?: number | null
   renderWidth?: number
 }): React.ReactElement {
-  const time = timestamp
-    ? new Date(timestamp).toLocaleTimeString([], {
-        hour: `2-digit`,
-        minute: `2-digit`,
-      })
-    : null
-
   const canCache = !isStreaming && section.done === true
 
+  // "Thinking" indicator visibility:
+  //   show while the response is mid-stream and there's nothing
+  //   visibly being typed right now — i.e. before the first item
+  //   appears, between a tool call and the next text chunk, or
+  //   while a tool call is executing. We hide it as soon as the
+  //   last item is a text chunk with actual content (the streaming
+  //   text itself is the "still working" signal in that case).
+  const lastItem = section.items[section.items.length - 1]
+  const lastTextHasContent =
+    lastItem?.kind === `text` && lastItem.text.trim().length > 0
+  const showThinking =
+    isStreaming && !section.done && !section.error && !lastTextHasContent
+
   return (
-    <Flex direction="column" gap="2" style={{ maxWidth: `68ch` }}>
+    <Stack direction="column" gap={2} className={styles.root}>
       {section.items.map((item: EntityTimelineContentItem, i: number) => {
         if (item.kind === `text`) {
           const isLastText = isStreaming && i === section.items.length - 1
@@ -210,23 +259,26 @@ export const AgentResponse = memo(function AgentResponse({
         return <ToolCallView key={item.toolCallId} item={item} />
       })}
 
-      <Flex align="center" gap="3">
+      <Stack align="center" gap={3}>
+        {showThinking && <ThinkingIndicator />}
         {section.done && (
-          <Text size="1" color="gray" style={{ opacity: 0.5 }}>
+          <Text size={1} tone="muted" className={styles.doneText}>
             ✓ done
           </Text>
         )}
         {section.error && (
-          <Text size="1" color="red">
+          <Text size={1} tone="danger">
             ✗ {section.error}
           </Text>
         )}
-        {time && (
-          <Text size="1" color="gray" style={{ opacity: 0.4 }}>
-            {time}
-          </Text>
+        {/* Timestamp only on a settled response — while the agent is
+            still streaming we let `ThinkingIndicator` (or the
+            streaming text itself) own the meta row so it doesn't sit
+            inline with a timestamp that hasn't really happened yet. */}
+        {timestamp != null && !isStreaming && (
+          <TimeText ts={timestamp} className={styles.timeText} />
         )}
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 })

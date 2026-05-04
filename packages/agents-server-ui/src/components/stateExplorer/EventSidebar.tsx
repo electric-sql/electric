@@ -1,4 +1,3 @@
-import { Badge, Code, Flex, IconButton, Text, Tooltip } from '@radix-ui/themes'
 import {
   Crosshair,
   ListCollapse,
@@ -9,36 +8,36 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isControlEvent } from '@durable-streams/state'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { Badge, Code, IconButton, Stack, Text, Tooltip } from '../../ui'
+import type { BadgeTone } from '../../ui'
 import styles from './EventSidebar.module.css'
 import type { ChangeEvent, StateEvent } from '@durable-streams/state'
 
-type BadgeColor = `green` | `yellow` | `red` | `blue` | `gray`
-
-function opBadge(op: string): { label: string; color: BadgeColor } {
+function opBadge(op: string): { label: string; tone: BadgeTone } {
   switch (op) {
     case `insert`:
-      return { label: `INS`, color: `green` }
+      return { label: `INS`, tone: `success` }
     case `update`:
-      return { label: `UPD`, color: `yellow` }
+      return { label: `UPD`, tone: `yellow` }
     case `delete`:
-      return { label: `DEL`, color: `red` }
+      return { label: `DEL`, tone: `danger` }
     case `upsert`:
-      return { label: `UPS`, color: `blue` }
+      return { label: `UPS`, tone: `info` }
     default:
-      return { label: op.toUpperCase().slice(0, 3), color: `gray` }
+      return { label: op.toUpperCase().slice(0, 3), tone: `neutral` }
   }
 }
 
-function controlBadge(control: string): { label: string; color: BadgeColor } {
+function controlBadge(control: string): { label: string; tone: BadgeTone } {
   switch (control) {
     case `snapshot-start`:
-      return { label: `SNAP▸`, color: `gray` }
+      return { label: `SNAP▸`, tone: `neutral` }
     case `snapshot-end`:
-      return { label: `◂SNAP`, color: `gray` }
+      return { label: `◂SNAP`, tone: `neutral` }
     case `reset`:
-      return { label: `RESET`, color: `gray` }
+      return { label: `RESET`, tone: `neutral` }
     default:
-      return { label: control.toUpperCase().slice(0, 5), color: `gray` }
+      return { label: control.toUpperCase().slice(0, 5), tone: `neutral` }
   }
 }
 
@@ -92,7 +91,6 @@ export function EventSidebar({
     overscan: 15,
   })
 
-  // Scroll to selected event
   useEffect(() => {
     if (cursorIndex !== null) {
       virtualizer.scrollToIndex(cursorIndex, { align: `center` })
@@ -102,59 +100,63 @@ export function EventSidebar({
   const padWidth = String(events.length).length
 
   return (
-    <Flex direction="column" className={styles.sidebar} style={style}>
-      {/* Header */}
-      <Flex align="center" gap="2" px="3" py="1" className={styles.header}>
+    <Stack direction="column" className={styles.sidebar} style={style}>
+      <Stack align="center" gap={2} px={3} py={1} className={styles.header}>
         <Text
-          size="1"
-          color="gray"
+          size={1}
+          tone="muted"
           weight="medium"
           className={styles.headerLabel}
         >
           Events
         </Text>
-        <Badge size="1" variant="soft" color="gray">
+        <Badge size={1} variant="soft" tone="neutral">
           {events.length}
         </Badge>
-        <Flex align="center" gap="1" ml="auto">
-          <IconButton
-            size="1"
-            variant="ghost"
-            color="gray"
-            title={cursorIndex === null ? `Already live` : `Go to live`}
-            onClick={onGoLive}
-            disabled={cursorIndex === null}
+        <Stack align="center" gap={1} className={styles.headerActions}>
+          <Tooltip
+            content={cursorIndex === null ? `Already live` : `Go to live`}
           >
-            <SkipForward size={ICON_SIZE} />
-          </IconButton>
-          <IconButton
-            size="1"
-            variant="ghost"
-            color="gray"
-            title="Expand all events"
-            onClick={handleExpandAll}
-          >
-            <ListTree size={ICON_SIZE} />
-          </IconButton>
-          <IconButton
-            size="1"
-            variant="ghost"
-            color="gray"
-            title="Collapse all events"
-            onClick={handleCollapseAll}
-          >
-            <ListCollapse size={ICON_SIZE} />
-          </IconButton>
-        </Flex>
-      </Flex>
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              onClick={onGoLive}
+              disabled={cursorIndex === null}
+              aria-label="Go to live"
+            >
+              <SkipForward size={ICON_SIZE} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Expand all events">
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              onClick={handleExpandAll}
+              aria-label="Expand all events"
+            >
+              <ListTree size={ICON_SIZE} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Collapse all events">
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              onClick={handleCollapseAll}
+              aria-label="Collapse all events"
+            >
+              <ListCollapse size={ICON_SIZE} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </Stack>
 
-      {/* Virtualized event list */}
       <div ref={scrollContainerRef} className={styles.eventListScroll}>
         <div
-          style={{
-            height: virtualizer.getTotalSize(),
-            position: `relative`,
-          }}
+          className={styles.virtualWindow}
+          style={{ height: virtualizer.getTotalSize() }}
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
             const index = virtualItem.index
@@ -172,13 +174,7 @@ export function EventSidebar({
                 data-selected={isSelected}
                 data-dimmed={isDimmed}
                 className={styles.eventRow}
-                style={{
-                  position: `absolute`,
-                  top: 0,
-                  left: 0,
-                  width: `100%`,
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
+                style={{ transform: `translateY(${virtualItem.start}px)` }}
                 onClick={() => onSelectEvent(index)}
               >
                 {isControlEvent(event) ? (
@@ -213,21 +209,14 @@ export function EventSidebar({
           })}
         </div>
       </div>
-    </Flex>
+    </Stack>
   )
 }
 
-// ============================================================================
-// Control Event Content
-// ============================================================================
 function EventIndex({ index, padWidth }: { index: number; padWidth: number }) {
   const padded = String(index + 1).padStart(padWidth, `0`)
   return (
-    <Text
-      size="1"
-      color="gray"
-      style={{ fontFamily: `var(--code-font-family)`, flexShrink: 0 }}
-    >
+    <Text size={1} tone="muted" family="mono" className={styles.shrink0}>
       {padded}
     </Text>
   )
@@ -246,36 +235,33 @@ function ControlEventContent({
   padWidth: number
   onToggle: (e: React.MouseEvent) => void
 }) {
-  const { label, color } = controlBadge(event.headers.control)
+  const { label, tone } = controlBadge(event.headers.control)
   return (
     <>
-      <Flex align="center" gap="2" className={styles.eventRowHeader}>
+      <Stack align="center" gap={2} className={styles.eventRowHeader}>
         <EventIndex index={index} padWidth={padWidth} />
-        <Badge
-          size="1"
-          variant="soft"
-          color={color}
-          style={{ fontFamily: `var(--code-font-family)` }}
-        >
+        <Badge size={1} variant="soft" tone={tone} className={styles.monoBadge}>
           {label}
         </Badge>
-        <Code size="1" variant="ghost" className={styles.eventKey}>
+        <Code size={1} variant="ghost" className={styles.eventKey}>
           control
         </Code>
-        <IconButton
-          size="1"
-          variant="ghost"
-          color="gray"
-          title={isOpen ? `Collapse event` : `Expand event`}
-          onClick={onToggle}
-          className={styles.expandButton}
-          data-open={isOpen}
-        >
-          <Plus size={ICON_SIZE} />
-        </IconButton>
-      </Flex>
+        <Tooltip content={isOpen ? `Collapse event` : `Expand event`}>
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            onClick={onToggle}
+            className={styles.expandButton}
+            data-open={isOpen}
+            aria-label={isOpen ? `Collapse event` : `Expand event`}
+          >
+            <Plus size={ICON_SIZE} />
+          </IconButton>
+        </Tooltip>
+      </Stack>
       {isOpen && (
-        <Code size="1" variant="ghost" className={styles.eventValue}>
+        <Code size={1} variant="ghost" className={styles.eventValue}>
           {JSON.stringify(event, null, 2)}
         </Code>
       )}
@@ -283,9 +269,6 @@ function ControlEventContent({
   )
 }
 
-// ============================================================================
-// Change Event Content
-// ============================================================================
 function ChangeEventContent({
   event,
   isOpen,
@@ -301,47 +284,45 @@ function ChangeEventContent({
   onToggle: (e: React.MouseEvent) => void
   onNavigate: (e: React.MouseEvent) => void
 }) {
-  const { label, color } = opBadge(event.headers.operation)
+  const { label, tone } = opBadge(event.headers.operation)
   return (
     <>
-      <Flex align="center" gap="2" className={styles.eventRowHeader}>
+      <Stack align="center" gap={2} className={styles.eventRowHeader}>
         <EventIndex index={index} padWidth={padWidth} />
-        <Badge
-          size="1"
-          variant="soft"
-          color={color}
-          style={{ fontFamily: `var(--code-font-family)` }}
-        >
+        <Badge size={1} variant="soft" tone={tone} className={styles.monoBadge}>
           {label}
         </Badge>
-        <Code size="1" variant="ghost" truncate className={styles.eventKey}>
+        <Code size={1} variant="ghost" truncate className={styles.eventKey}>
           {event.type}:{event.key}
         </Code>
-        <IconButton
-          size="1"
-          variant="ghost"
-          color="gray"
-          title={isOpen ? `Collapse event` : `Expand event`}
-          onClick={onToggle}
-          className={styles.expandButton}
-          data-open={isOpen}
-        >
-          <Plus size={ICON_SIZE} />
-        </IconButton>
+        <Tooltip content={isOpen ? `Collapse event` : `Expand event`}>
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            onClick={onToggle}
+            className={styles.expandButton}
+            data-open={isOpen}
+            aria-label={isOpen ? `Collapse event` : `Expand event`}
+          >
+            <Plus size={ICON_SIZE} />
+          </IconButton>
+        </Tooltip>
         <Tooltip content={`Focus ${event.type}:${event.key}`}>
           <IconButton
-            size="1"
+            size={1}
             variant="ghost"
-            color="gray"
+            tone="neutral"
             onClick={onNavigate}
-            style={{ flexShrink: 0 }}
+            className={styles.shrink0}
+            aria-label={`Focus ${event.type}:${event.key}`}
           >
             <Crosshair size={ICON_SIZE} />
           </IconButton>
         </Tooltip>
-      </Flex>
+      </Stack>
       {isOpen && (
-        <Code size="1" variant="ghost" className={styles.eventValue}>
+        <Code size={1} variant="ghost" className={styles.eventValue}>
           {JSON.stringify(event, null, 2)}
         </Code>
       )}

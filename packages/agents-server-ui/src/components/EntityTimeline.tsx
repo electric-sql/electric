@@ -11,69 +11,100 @@ import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
 } from '@tanstack/react-virtual'
-import { Flex, IconButton, ScrollArea, Text } from '@radix-ui/themes'
 import { ArrowDown } from 'lucide-react'
 import {
   loadTimelineRowHeights,
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
+import { ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
+import {
+  formatAbsoluteDateTimeVerbose,
+  formatShortTime,
+} from '../lib/formatTime'
+import styles from './EntityTimeline.module.css'
 import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
 
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], {
-    hour: `2-digit`,
-    minute: `2-digit`,
-  })
-}
-
-function estimateRowHeight(row: EntityTimelineEntry | undefined): number {
+/**
+ * Width-aware row-height estimate used as the initial size hint for the
+ * virtualizer (before the real DOM has been measured). Producing an estimate
+ * that's close to the eventual measured height matters because the
+ * virtualizer absolutely-positions rows based on these values: when the
+ * estimate is wildly off, rows visually overlap or leave gaps for a frame
+ * before `ResizeObserver` catches up.
+ *
+ * The previous heuristic ignored the column width and used a flat
+ * ~0.12 px/char ratio, which only happened to be roughly right at one
+ * specific column width and was noticeably wrong on resize / chat swap.
+ * We now derive an approximate chars-per-line from the actual column
+ * width and multiply by the body line height.
+ */
+function estimateRowHeight(
+  row: EntityTimelineEntry | undefined,
+  contentWidth: number
+): number {
   if (!row) return 120
+
+  // Inter at 14px averages ~7px per character; clamp to keep narrow
+  // viewports / a yet-unknown contentWidth from producing nonsense values.
+  const usableWidth = contentWidth > 0 ? contentWidth : 720
+  const charsPerLine = Math.max(40, Math.floor(usableWidth / 7))
+  const lineHeight = 22 // 14px font * ~1.55 leading
+
   if (row.section.kind === `user_message`) {
-    return Math.max(84, 44 + row.section.text.length * 0.18)
+    const lines = Math.max(1, Math.ceil(row.section.text.length / charsPerLine))
+    // bubble padding (24) + meta row (~24) + content
+    return Math.max(64, 48 + lines * lineHeight)
   }
 
   const textLength = row.section.items.reduce((total: number, item) => {
     if (item.kind === `text`) return total + item.text.length
-    return total + 48
+    // Tool calls render as a compact block; assume ~3 lines.
+    return total + charsPerLine * 3
   }, 0)
-
-  return Math.max(140, 72 + textLength * 0.12)
+  const lines = Math.max(2, Math.ceil(textLength / charsPerLine))
+  // status row (~24) + content + a little breathing room
+  return Math.max(120, 32 + lines * lineHeight)
 }
 
 const SCROLL_THRESHOLD = 80
 const ROW_GAP = 24
 const ROW_SETTLE_MS = 500
 
-const statusPillStyle = {
-  padding: `4px 14px`,
-  borderRadius: 12,
-  opacity: 0.5,
-  letterSpacing: `0.02em`,
-} as const
-
+// `section` and `responseTimestamp` are pulled out of the parent
+// `EntityTimelineEntry` so React.memo's shallow compare can hit on
+// the *section* identity. `buildTimelineEntries` returns a fresh
+// `entries` array (and fresh entry objects) on every chunk during
+// streaming, but the runtime caches finished agent sections in a
+// WeakMap keyed by the underlying run row — so unchanged rows
+// receive the identical `section` reference each render. With the
+// previous `row` prop, that hit was masked by the always-new wrapper
+// object; splitting the props lets memo skip every settled row and
+// only re-render the streaming row + the row that just settled.
 const TimelineRow = memo(function TimelineRow({
-  row,
+  section,
+  responseTimestamp,
   entityStopped,
   isStreaming,
   renderWidth,
 }: {
-  row: EntityTimelineEntry
+  section: EntityTimelineEntry[`section`]
+  responseTimestamp: EntityTimelineEntry[`responseTimestamp`]
   entityStopped: boolean
   isStreaming: boolean
   renderWidth: number
 }): React.ReactElement {
-  if (row.section.kind === `user_message`) {
-    return <UserMessage section={row.section} />
+  if (section.kind === `user_message`) {
+    return <UserMessage section={section} />
   }
 
   return (
     <AgentResponse
-      section={row.section}
+      section={section}
       isStreaming={!entityStopped && isStreaming}
-      timestamp={row.responseTimestamp}
+      timestamp={responseTimestamp}
       renderWidth={renderWidth}
     />
   )
@@ -167,31 +198,23 @@ export function EntityTimeline({
   >(
     (element, entry, instance) => {
       const itemKey = element.getAttribute(`data-item-key`)
-
-      if (entry === undefined) {
-        if (itemKey !== null) {
-          const cached = cachedSizeMapRef.current.get(itemKey)
-          if (cached !== undefined && cached > 0) {
-            return cached
-          }
-        }
-
-        const initialDomSize = defaultMeasureElement(element, entry, instance)
-        if (itemKey !== null && initialDomSize > 0) {
-          cachedSizeMapRef.current.set(itemKey, initialDomSize)
-          lastMeasureAtRef.current.set(itemKey, Date.now())
-          settledKeysRef.current.delete(itemKey)
-          scheduleSettleCheck()
-        }
-        return initialDomSize
-      }
-
       const domSize = defaultMeasureElement(element, entry, instance)
+
+      // A real, non-zero measurement is the source of truth: cache it and
+      // surface it to the virtualizer. A zero (e.g. element detached, not
+      // yet laid out) must not poison the cache or replace a known good
+      // size — fall back to whatever we already had.
       if (itemKey !== null && domSize > 0) {
         cachedSizeMapRef.current.set(itemKey, domSize)
         lastMeasureAtRef.current.set(itemKey, Date.now())
         settledKeysRef.current.delete(itemKey)
         scheduleSettleCheck()
+        return domSize
+      }
+
+      if (itemKey !== null) {
+        const cached = cachedSizeMapRef.current.get(itemKey)
+        if (cached !== undefined && cached > 0) return cached
       }
       return domSize
     },
@@ -203,7 +226,7 @@ export function EntityTimeline({
     getScrollElement: () => viewport,
     estimateSize: (index) =>
       cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
-      estimateRowHeight(rows[index]),
+      estimateRowHeight(rows[index], contentWidth),
     getItemKey: (index) => rows[index]?.key ?? index,
     gap: ROW_GAP,
     overscan: 6,
@@ -234,10 +257,13 @@ export function EntityTimeline({
       const w = Math.round(viewport.clientWidth)
       setViewportWidth((prev) => {
         if (prev !== w && prev > 0) {
-          // Container resized (e.g. state explorer toggled) — clear settled
-          // cache so virtualizer re-measures all rows at the new width.
+          // Container resized (e.g. state explorer toggled, window resize) —
+          // mark all rows as un-settled so we'll persist new heights once
+          // ResizeObserver remeasures them at the new width. Crucially we
+          // KEEP the prior heights as estimates so the virtualizer's
+          // initial layout at the new width stays close to truth; rows
+          // would otherwise visually overlap while they remeasure.
           settledKeysRef.current = new Set()
-          cachedSizeMapRef.current = new Map()
         }
         return w
       })
@@ -262,19 +288,59 @@ export function EntityTimeline({
     return () => observer.disconnect()
   }, [contentElement])
 
+  // Track cacheKey/viewportWidth across renders so the effect below can tell
+  // a chat swap apart from a width change. They have very different reset
+  // semantics: a chat swap throws away all known row sizes (different
+  // entries with different keys), while a width change wants to PRESERVE
+  // the old heights as estimates so the layout stays put while
+  // ResizeObserver remeasures at the new width.
+  const prevCacheKeyRef = useRef<string | null | undefined>(undefined)
+  const prevViewportWidthRef = useRef(0)
+
   useEffect(() => {
+    const isChatSwap = prevCacheKeyRef.current !== cacheKey
+    const widthChanged = prevViewportWidthRef.current !== viewportWidth
+    prevCacheKeyRef.current = cacheKey
+    prevViewportWidthRef.current = viewportWidth
+
     if (!cacheKey || viewportWidth <= 0) {
-      cachedSizeMapRef.current = new Map()
-      settledKeysRef.current = new Set()
+      if (isChatSwap) {
+        cachedSizeMapRef.current = new Map()
+        settledKeysRef.current = new Set()
+        lastMeasureAtRef.current = new Map()
+        rowVirtualizer.measure()
+      }
+      return
+    }
+
+    if (isChatSwap) {
+      // Different chat → different row keys. Reload heights from
+      // localStorage and invalidate the virtualizer's internal item-size
+      // cache so it consults `estimateSize` for every new key.
+      const restored = loadTimelineRowHeights(cacheKey, viewportWidth)
+      cachedSizeMapRef.current = restored
+      settledKeysRef.current = new Set(restored.keys())
+      lastMeasureAtRef.current = new Map()
       rowVirtualizer.measure()
       return
     }
 
-    const restored = loadTimelineRowHeights(cacheKey, viewportWidth)
-    cachedSizeMapRef.current = restored
-    settledKeysRef.current = new Set(restored.keys())
-    lastMeasureAtRef.current = new Map()
-    rowVirtualizer.measure()
+    if (widthChanged) {
+      // Same chat, new viewport width. Pull in any heights we previously
+      // persisted at this width as updated estimates, but DO NOT call
+      // `rowVirtualizer.measure()` here: the existing rows are still
+      // mounted and ResizeObserver will deliver fresh measurements as
+      // they reflow. Calling `measure()` would throw away the
+      // virtualizer's internal cache between ResizeObserver firing and
+      // our re-render, producing the visible row-overlap glitch.
+      const restored = loadTimelineRowHeights(cacheKey, viewportWidth)
+      if (restored.size > 0) {
+        for (const [key, size] of restored) {
+          cachedSizeMapRef.current.set(key, size)
+        }
+        for (const key of restored.keys()) settledKeysRef.current.add(key)
+      }
+    }
   }, [cacheKey, rowVirtualizer, viewportWidth])
 
   useEffect(() => {
@@ -321,82 +387,85 @@ export function EntityTimeline({
 
   if (loading) {
     return (
-      <Flex align="center" justify="center" flexGrow="1">
-        <Text color="gray" size="2">
+      <Stack align="center" justify="center" grow>
+        <Text tone="muted" size={2}>
           Connecting to stream...
         </Text>
-      </Flex>
+      </Stack>
     )
   }
 
   if (error) {
     return (
-      <Flex align="center" justify="center" flexGrow="1">
-        <Text color="red" size="2">
+      <Stack align="center" justify="center" grow>
+        <Text tone="danger" size={2}>
           {error}
         </Text>
-      </Flex>
+      </Stack>
     )
   }
 
   return (
-    <div style={{ position: `relative`, flex: 1, overflow: `hidden` }}>
+    <div className={styles.root}>
       <ScrollArea
-        ref={scrollAreaRef}
-        style={{ height: `100%`, overflow: `hidden` }}
+        viewportRef={scrollAreaRef}
+        className={styles.scroll}
+        viewportClassName={styles.scrollViewport}
         scrollbars="vertical"
       >
-        <div
-          ref={contentRef}
-          style={{
-            padding: `32px 40px`,
-            maxWidth: `72ch`,
-            margin: `0 auto`,
-            overflowAnchor: `none`,
-            boxSizing: `border-box`,
-            width: `100%`,
-          }}
-        >
-          <Flex justify="center">
-            <Text size="1" color="gray" style={statusPillStyle}>
-              spawned{spawnTime ? ` · ${formatTime(spawnTime)}` : ``}
-            </Text>
-          </Flex>
+        <div ref={contentRef} className={styles.content}>
+          <Stack justify="center">
+            {spawnTime ? (
+              <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
+                <Text size={1} tone="muted" className={styles.statusPill}>
+                  {`spawned · ${formatShortTime(spawnTime)}`}
+                </Text>
+              </Tooltip>
+            ) : (
+              <Text size={1} tone="muted" className={styles.statusPill}>
+                spawned
+              </Text>
+            )}
+          </Stack>
 
           {rows.length === 0 ? (
-            <Flex justify="center" py="6">
-              <Text color="gray" size="2" style={{ opacity: 0.5 }}>
+            <Stack justify="center" py={6}>
+              <Text tone="muted" size={2} className={styles.emptyState}>
                 Waiting for events...
               </Text>
-            </Flex>
+            </Stack>
           ) : (
             <div
+              className={styles.virtualList}
               style={{
                 height: rowVirtualizer.getTotalSize(),
-                position: `relative`,
                 marginTop: ROW_GAP,
-                overflowAnchor: `none`,
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const row = rows[virtualRow.index]
 
+                // Stable row key. The previous implementation appended
+                // `:${contentWidth}` to force remount on every column-width
+                // change, which paid for the workaround with a full
+                // unmount/remount of every row (including a wasted Streamdown
+                // render on initial mount when contentWidth went from 0 to
+                // its real value). The new measurement-cache logic above
+                // preserves prior heights as estimates and lets
+                // ResizeObserver deliver new heights, so a remount is no
+                // longer needed.
                 return (
                   <div
                     key={virtualRow.key}
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
                     data-item-key={row.key}
-                    style={{
-                      position: `absolute`,
-                      top: 0,
-                      left: 0,
-                      width: `100%`,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
+                    className={styles.virtualRow}
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
                     <TimelineRow
-                      row={row}
+                      section={row.section}
+                      responseTimestamp={row.responseTimestamp}
                       entityStopped={entityStopped}
                       isStreaming={row.key === lastStreamingAgentKey}
                       renderWidth={contentWidth}
@@ -408,33 +477,24 @@ export function EntityTimeline({
           )}
 
           {entityStopped && (
-            <Flex justify="center" style={{ marginTop: ROW_GAP }}>
-              <Text size="1" color="gray" style={statusPillStyle}>
+            <Stack justify="center" style={{ marginTop: ROW_GAP }}>
+              <Text size={1} tone="muted" className={styles.statusPill}>
                 stopped
               </Text>
-            </Flex>
+            </Stack>
           )}
         </div>
       </ScrollArea>
 
       {showJumpToBottom && (
-        <IconButton
-          size="2"
-          color="gray"
-          variant="solid"
-          radius="full"
+        <button
+          type="button"
+          className={styles.jumpToBottom}
           onClick={jumpToBottom}
-          style={{
-            position: `absolute`,
-            bottom: 24,
-            left: `50%`,
-            transform: `translateX(-50%)`,
-            cursor: `pointer`,
-            zIndex: 10,
-          }}
+          aria-label="Jump to latest"
         >
           <ArrowDown size={16} />
-        </IconButton>
+        </button>
       )}
     </div>
   )

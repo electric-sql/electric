@@ -1,22 +1,46 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Flex, Text } from '@radix-ui/themes'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { createOptimisticAction } from '@tanstack/db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+import { Stack, Text } from '../ui'
+import styles from './MessageInput.module.css'
 
 export function MessageInput({
   db,
   baseUrl,
   entityUrl,
   disabled,
+  drawer,
 }: {
   db: EntityStreamDBWithActions | null
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  /**
+   * Optional content rendered above the composer, sharing its docked
+   * width and lift into the timeline above. The composer is z-indexed
+   * over whatever the drawer renders so the drawer can extend its
+   * bottom edge underneath the composer for a "tray" effect (see
+   * `EntityContextDrawer`).
+   */
+  drawer?: React.ReactNode
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [error, setError] = useState<string | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow the composer as the user types. We reset to `auto`
+  // first so `scrollHeight` reports the natural content height (not
+  // the previous explicit height), then assign that back as inline
+  // height. The CSS `max-height` caps it; `overflow: auto` then
+  // takes over for anything past the cap. Runs in layout effect so
+  // the resize lands before paint and there's no one-frame flicker.
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = `auto`
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
 
   const sendAction = useMemo(() => {
     if (!db) return null
@@ -62,40 +86,25 @@ export function MessageInput({
     })
   }, [value, sendAction, disabled])
 
+  const isActive = Boolean(value.trim() && !disabled)
+
   return (
-    <Flex
-      direction="column"
-      gap="1"
-      style={{
-        borderTop: `1px solid var(--gray-a3)`,
-        padding: `16px 0`,
-        maxWidth: `72ch`,
-        margin: `0 auto`,
-        width: `100%`,
-        boxSizing: `border-box`,
-        paddingLeft: 40,
-        paddingRight: 40,
-      }}
-    >
+    <Stack direction="column" gap={0} className={styles.root}>
+      {drawer}
       {error && (
-        <Text size="1" color="red">
+        <Text size={1} tone="danger" className={styles.errorText}>
           {error}
         </Text>
       )}
-      <Flex
+      <Stack
         align="end"
-        gap="2"
-        style={{
-          background: `var(--gray-a2)`,
-          border: `1px solid var(--gray-a4)`,
-          borderRadius: 12,
-          padding: `12px 16px`,
-          width: `100%`,
-          opacity: disabled ? 0.5 : 1,
-          transition: `border-color 0.15s`,
-        }}
+        gap={2}
+        className={[styles.composer, disabled ? styles.disabled : null]
+          .filter(Boolean)
+          .join(` `)}
       >
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
@@ -106,32 +115,17 @@ export function MessageInput({
           }}
           placeholder={disabled ? `Entity stopped` : `Send a message...`}
           disabled={disabled}
-          rows={3}
-          style={{
-            flex: 1,
-            border: `none`,
-            outline: `none`,
-            background: `transparent`,
-            fontSize: `var(--font-size-2)`,
-            color: `var(--gray-12)`,
-            resize: `none`,
-            overflow: `auto`,
-            lineHeight: 1.5,
-            maxHeight: 200,
-            fontFamily: `var(--default-font-family)`,
-          }}
+          rows={1}
+          className={styles.textarea}
         />
         <ArrowUp
           size={18}
-          style={{
-            color:
-              value.trim() && !disabled ? `var(--accent-9)` : `var(--gray-8)`,
-            cursor: value.trim() && !disabled ? `pointer` : `default`,
-            transition: `color 0.15s`,
-          }}
+          className={[styles.sendIcon, isActive ? styles.active : null]
+            .filter(Boolean)
+            .join(` `)}
           onClick={handleSubmit}
         />
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 }

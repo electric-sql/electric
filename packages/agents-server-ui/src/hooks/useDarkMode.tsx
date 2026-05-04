@@ -14,7 +14,7 @@ export type ThemePreference = `light` | `dark` | `system`
 type DarkModeContextValue = {
   darkMode: boolean
   preference: ThemePreference
-  cyclePreference: () => void
+  setPreference: (next: ThemePreference) => void
 }
 
 const DarkModeContext = createContext<DarkModeContextValue | null>(null)
@@ -31,12 +31,6 @@ function readInitialPreference(): ThemePreference {
 function systemPrefersDark(): boolean {
   if (typeof window === `undefined`) return false
   return window.matchMedia?.(`(prefers-color-scheme: dark)`).matches ?? false
-}
-
-const cycleOrder: Record<ThemePreference, ThemePreference> = {
-  light: `dark`,
-  dark: `system`,
-  system: `light`,
 }
 
 export function DarkModeProvider({
@@ -59,21 +53,21 @@ export function DarkModeProvider({
 
   const darkMode = preference === `system` ? systemDark : preference === `dark`
 
-  useEffect(() => {
-    document.documentElement.classList.toggle(`dark`, darkMode)
-  }, [darkMode])
+  // Note: applying the resolved theme to <html> is owned by the
+  // design-system <ThemeProvider> (it sets `data-theme="dark|light"`).
 
-  const cyclePreference = useCallback(() => {
-    setPreference((current) => {
-      const next = cycleOrder[current]
-      window.localStorage.setItem(STORAGE_KEY, next)
-      return next
-    })
+  const setExplicit = useCallback((next: ThemePreference) => {
+    setPreference(next)
+    window.localStorage.setItem(STORAGE_KEY, next)
   }, [])
 
   const value = useMemo(
-    () => ({ darkMode, preference, cyclePreference }),
-    [darkMode, preference, cyclePreference]
+    () => ({
+      darkMode,
+      preference,
+      setPreference: setExplicit,
+    }),
+    [darkMode, preference, setExplicit]
   )
 
   return (

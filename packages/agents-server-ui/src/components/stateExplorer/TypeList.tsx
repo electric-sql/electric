@@ -1,5 +1,6 @@
-import { Badge, Box, Flex, Text } from '@radix-ui/themes'
 import type { MaterializedState } from '@durable-streams/state'
+import { Badge, Box, Stack, Text } from '../../ui'
+import styles from './TypeList.module.css'
 
 export function TypeList({
   state,
@@ -13,46 +14,24 @@ export function TypeList({
   const types = state.types
 
   return (
-    <Flex
-      direction="column"
-      style={{
-        minWidth: `fit-content`,
-        borderRight: `1px solid var(--gray-a5)`,
-      }}
-    >
-      {/* Header — matches Events header */}
-      <Flex
-        align="center"
-        gap="2"
-        px="3"
-        py="1"
-        style={{ borderBottom: `1px solid var(--gray-a5)` }}
-      >
+    <Stack direction="column" className={styles.root}>
+      <Stack align="center" gap={2} px={3} py={1} className={styles.header}>
         <Text
-          size="1"
-          color="gray"
+          size={1}
+          tone="muted"
           weight="medium"
-          style={{ textTransform: `uppercase` }}
+          className={styles.headerLabel}
         >
           Types
         </Text>
-        <Badge size="1" variant="soft" color="gray">
+        <Badge size={1} variant="soft" tone="neutral">
           {types.length}
         </Badge>
-      </Flex>
+      </Stack>
 
-      {/* Scrollable list */}
-      <Flex
-        direction="column"
-        gap="1"
-        style={{
-          flex: 1,
-          overflow: `auto`,
-          padding: `var(--space-2)`,
-        }}
-      >
+      <Stack direction="column" gap={1} className={styles.list}>
         {types.length === 0 ? (
-          <Text size="1" color="gray">
+          <Text size={1} tone="muted">
             No types yet
           </Text>
         ) : (
@@ -63,27 +42,21 @@ export function TypeList({
               <Box
                 key={type}
                 onClick={() => onSelectType(type)}
-                style={{
-                  padding: `var(--space-1) var(--space-2)`,
-                  borderRadius: `var(--radius-2)`,
-                  cursor: `pointer`,
-                  background: isSelected ? `var(--accent-a3)` : `transparent`,
-                  color: isSelected ? `var(--accent-11)` : `var(--gray-11)`,
-                }}
+                className={`${styles.item} ${isSelected ? styles.itemSelected : ``}`}
               >
-                <Flex justify="between" align="center" gap="3">
-                  <Text size="1" weight={isSelected ? `medium` : `regular`}>
+                <Stack justify="between" align="center" gap={3}>
+                  <Text size={1} weight={isSelected ? `medium` : `regular`}>
                     {type}
                   </Text>
-                  <Text size="1" color="gray">
+                  <Text size={1} tone="muted">
                     {count}
                   </Text>
-                </Flex>
+                </Stack>
               </Box>
             )
           })
         )}
-      </Flex>
-    </Flex>
+      </Stack>
+    </Stack>
   )
 }

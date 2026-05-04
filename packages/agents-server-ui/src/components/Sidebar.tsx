@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Flex, IconButton, Popover, ScrollArea, Text } from '@radix-ui/themes'
-import { ChevronDown, Monitor, Moon, Sun } from 'lucide-react'
+import { SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
-import { eq, not } from '@tanstack/db'
-import { nanoid } from 'nanoid'
-import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
+import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { ServerPicker } from './ServerPicker'
-import { EntityListItem, getEntityDisplayTitle } from './EntityListItem'
-import { SpawnArgsDialog, hasSchemaProperties } from './SpawnArgsDialog'
-import { CodingSessionSpawnDialog } from './CodingSessionSpawnDialog'
-import { useDarkModeContext, type ThemePreference } from '../hooks/useDarkMode'
+import { HoverCard, ScrollArea, Stack, Text } from '../ui'
+import { NewSessionKey } from '../lib/keyLabels'
+import { SidebarHeader } from './SidebarHeader'
+import { SidebarRowInfo } from './SidebarRow'
+import type { SidebarRowInfoPayload } from './SidebarRow'
+import sidebarRowStyles from './SidebarRow.module.css'
+import { SidebarTree } from './SidebarTree'
+import { SidebarFooter } from './SidebarFooter'
+import { bucketEntities } from '../lib/sessionGroups'
+import styles from './Sidebar.module.css'
+import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -37,31 +40,29 @@ function useSidebarWidth(): readonly [number, (w: number) => void] {
   }, [width])
   return [width, setWidth] as const
 }
-import type {
-  ElectricEntity,
-  ElectricEntityType,
-} from '../lib/ElectricAgentsProvider'
 
 export function Sidebar({
   selectedEntityUrl,
   onSelectEntity,
   pinnedUrls,
+  onTogglePin,
 }: {
   selectedEntityUrl: string | null
   onSelectEntity: (url: string) => void
   pinnedUrls: Array<string>
+  onTogglePin: (url: string) => void
 }): React.ReactElement {
-  const { entitiesCollection, entityTypesCollection, spawnEntity } =
-    useElectricAgents()
-  const { preference, cyclePreference } = useDarkModeContext()
-  const [filter, setFilter] = useState(``)
-  const [spawnError, setSpawnError] = useState<string | null>(null)
-  const [spawnDialogType, setSpawnDialogType] =
-    useState<ElectricEntityType | null>(null)
-  const [codingDialogOpen, setCodingDialogOpen] = useState(false)
+  const { entitiesCollection } = useElectricAgents()
+  const navigate = useNavigate()
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
+
+  // One shared HoverCard handle for every row in this sidebar. The
+  // single Root rendered below switches its content based on which
+  // trigger is currently active, so the popup follows the pointer
+  // between rows without the open delay re-firing.
+  const hoverHandle = HoverCard.useHandle<SidebarRowInfoPayload>()
 
   const startResize = useCallback(
     (e: React.MouseEvent) => {
@@ -100,80 +101,38 @@ export function Sidebar({
     },
     [entitiesCollection]
   )
-  const { data: entityTypes = [] } = useLiveQuery(
-    (query) => {
-      if (!entityTypesCollection) return undefined
-      return query
-        .from({ t: entityTypesCollection })
-        .where(({ t }) => not(eq(t.name, `worker`)))
-        .orderBy(({ t }) => t.name, `asc`)
-    },
-    [entityTypesCollection]
-  )
-  const pinnedEntities = entities.filter((e) => pinnedUrls.includes(e.url))
+  const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
+  const pinnedEntities = entities.filter((e) => pinnedSet.has(e.url))
 
   const { roots, childrenByParent } = useMemo(
     () => buildEntityTree(entities),
     [entities]
   )
 
-  const visibleUrls = useMemo(
-    () => urlsMatchingFilter(entities, filter),
-    [entities, filter]
+  // Pinned roots are listed once at the top in the Pinned section; we
+  // don't want them to show up again in their original time bucket.
+  // We only strip *roots* — children of an unpinned parent that happen
+  // to be pinned simply disappear from the parent's expanded subtree
+  // (handled by SidebarTree's pinned-skip below).
+  const unpinnedRoots = useMemo(
+    () => roots.filter((r) => !pinnedSet.has(r.url)),
+    [roots, pinnedSet]
   )
 
-  const doSpawn = useCallback(
-    (typeName: string, args?: Record<string, unknown>) => {
-      if (!spawnEntity) return
-      setSpawnError(null)
-      const name = nanoid(10)
-      // Coder entities need a fresh-input event on the first wake to
-      // actually invoke the handler — `entity_created` alone is a
-      // management event and the runtime skips the initial handler
-      // pass when only management events are present. A sentinel inbox
-      // message delivers that fresh input; the coder handler ignores
-      // non-prompt payloads. Covers create, attach, and import modes.
-      const initialMessage =
-        typeName === CODING_SESSION_ENTITY_TYPE
-          ? { __bootstrap: true }
-          : undefined
-      const tx = spawnEntity({ type: typeName, name, args, initialMessage })
-      onSelectEntity(`/${typeName}/${name}`)
-      tx.isPersisted.promise.catch((err: Error) => {
-        setSpawnError(
-          `Could not start session: ${err.message}. The server may be missing ANTHROPIC_API_KEY.`
-        )
-      })
-    },
-    [onSelectEntity, spawnEntity]
+  const sessionGroups = useMemo(
+    () => bucketEntities(unpinnedRoots),
+    [unpinnedRoots]
   )
 
-  const handleNewSession = useCallback(
-    (entityType: ElectricEntityType) => {
-      if (entityType.name === CODING_SESSION_ENTITY_TYPE) {
-        setCodingDialogOpen(true)
-        return
-      }
-      if (hasSchemaProperties(entityType.creation_schema)) {
-        setSpawnDialogType(entityType)
-      } else {
-        doSpawn(entityType.name)
-      }
-    },
-    [doSpawn]
-  )
+  const handleNewSession = useCallback(() => {
+    navigate({ to: `/` })
+  }, [navigate])
 
   return (
-    <Flex
+    <Stack
       direction="column"
-      style={{
-        width,
-        minWidth: SIDEBAR_MIN_WIDTH,
-        flexShrink: 0,
-        borderRight: `1px solid var(--gray-a5)`,
-        background: `var(--gray-a2)`,
-        position: `relative`,
-      }}
+      className={styles.root}
+      style={{ width, minWidth: SIDEBAR_MIN_WIDTH }}
     >
       <div
         role="separator"
@@ -182,266 +141,99 @@ export function Sidebar({
         onMouseDown={startResize}
         onMouseEnter={() => setResizeHandleHover(true)}
         onMouseLeave={() => setResizeHandleHover(false)}
-        style={{
-          position: `absolute`,
-          top: 0,
-          bottom: 0,
-          right: -3,
-          width: 6,
-          cursor: `col-resize`,
-          zIndex: 20,
-          background:
-            resizing || resizeHandleHover ? `var(--accent-a6)` : `transparent`,
-          transition: `background 0.15s`,
-        }}
+        className={`${styles.resizeHandle} ${
+          resizing || resizeHandleHover ? styles.resizeHandleActive : ``
+        }`}
       />
-      <ServerPicker />
+      <SidebarHeader />
 
-      {spawnError && (
-        <Flex px="3" pt="3">
-          <Text size="1" color="red" role="alert">
-            {spawnError}
-          </Text>
-        </Flex>
-      )}
-
-      <Flex px="3" pt="3" pb="1">
-        <Popover.Root>
-          <Popover.Trigger>
-            <button
-              type="button"
-              disabled={!spawnEntity || entityTypes.length === 0}
-              style={{
-                all: `unset`,
-                display: `flex`,
-                alignItems: `center`,
-                justifyContent: `space-between`,
-                width: `100%`,
-                gap: 6,
-                padding: `6px 10px`,
-                cursor: `pointer`,
-                fontSize: `var(--font-size-2)`,
-                fontWeight: 500,
-                color: `var(--accent-contrast)`,
-                background: `var(--accent-9)`,
-                borderRadius: `var(--radius-2)`,
-                opacity: !spawnEntity || entityTypes.length === 0 ? 0.4 : 1,
-              }}
-            >
-              New session
-              <ChevronDown size={14} />
-            </button>
-          </Popover.Trigger>
-          <Popover.Content
-            side="right"
-            align="start"
-            style={{ padding: 0, width: 320, maxHeight: 400 }}
+      <ScrollArea className={styles.scrollFlex}>
+        <Stack direction="column" className={styles.treeRow}>
+          <button
+            type="button"
+            onClick={handleNewSession}
+            className={styles.newSessionRow}
           >
-            <Flex
-              px="3"
-              pt="3"
-              pb="2"
-              style={{ borderBottom: `1px solid var(--gray-a4)` }}
-            >
-              <Text size="2" weight="bold">
-                New session
-              </Text>
-            </Flex>
-            <div style={{ maxHeight: 340, overflowY: `auto` }}>
-              <Flex direction="column" gap="0">
-                {entityTypes.map((t, i) => (
-                  <Popover.Close key={t.name}>
-                    <button
-                      type="button"
-                      onClick={() => handleNewSession(t)}
-                      style={{
-                        all: `unset`,
-                        display: `flex`,
-                        flexDirection: `column`,
-                        alignItems: `flex-start`,
-                        gap: 4,
-                        width: `100%`,
-                        boxSizing: `border-box`,
-                        padding: `12px 16px`,
-                        cursor: `pointer`,
-                        ...(i < entityTypes.length - 1
-                          ? { borderBottom: `1px solid var(--gray-a3)` }
-                          : {}),
-                      }}
-                      className="entity-list-item"
-                    >
-                      <Text size="2" weight="medium">
-                        {t.name}
-                      </Text>
-                      {t.description && (
-                        <Text size="1" color="gray" style={{ lineHeight: 1.4 }}>
-                          {t.description}
-                        </Text>
-                      )}
-                    </button>
-                  </Popover.Close>
-                ))}
-                {entityTypes.length === 0 && (
-                  <Text
-                    size="1"
-                    color="gray"
-                    align="center"
-                    style={{ padding: 12 }}
-                  >
-                    No entity types registered
-                  </Text>
-                )}
-              </Flex>
+            <span className={styles.newSessionIconSlot}>
+              <SquarePen size={16} />
+            </span>
+            <span className={styles.newSessionLabel}>New session</span>
+            <span className={styles.newSessionKbd} aria-hidden="true">
+              <NewSessionKey />
+            </span>
+          </button>
+
+          {pinnedEntities.length > 0 && (
+            <>
+              <SectionLabel>Pinned</SectionLabel>
+              {pinnedEntities.map((entity) => (
+                // Pinned parents render as a full SidebarTree so they
+                // can be expanded in place to reveal their children
+                // (children themselves aren't pinnable — gated inside
+                // SidebarTree to depth=0).
+                <SidebarTree
+                  key={`pinned:${entity.url}`}
+                  entity={entity}
+                  childrenByParent={childrenByParent}
+                  selectedEntityUrl={selectedEntityUrl}
+                  onSelectEntity={onSelectEntity}
+                  pinnedUrls={pinnedUrls}
+                  onTogglePin={onTogglePin}
+                  hoverHandle={hoverHandle}
+                />
+              ))}
+            </>
+          )}
+          {sessionGroups.map((group) => (
+            <div key={group.id}>
+              <SectionLabel>{group.label}</SectionLabel>
+              {group.items.map((root) => (
+                <SidebarTree
+                  key={root.url}
+                  entity={root}
+                  childrenByParent={childrenByParent}
+                  selectedEntityUrl={selectedEntityUrl}
+                  onSelectEntity={onSelectEntity}
+                  pinnedUrls={pinnedUrls}
+                  onTogglePin={onTogglePin}
+                  hoverHandle={hoverHandle}
+                />
+              ))}
             </div>
-          </Popover.Content>
-        </Popover.Root>
-      </Flex>
-
-      {pinnedEntities.length > 0 && (
-        <>
-          <SectionLabel>Pinned</SectionLabel>
-          <Flex direction="column" px="2" gap="1">
-            {pinnedEntities.map((entity) => (
-              <EntityListItem
-                key={entity.url}
-                entity={entity}
-                selected={entity.url === selectedEntityUrl}
-                onSelect={() => onSelectEntity(entity.url)}
-              />
-            ))}
-          </Flex>
-        </>
-      )}
-
-      <Flex px="3" pb="1" pt="1">
-        <input
-          placeholder="Filter by type or name..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="agent-ui-input"
-          style={{
-            width: `100%`,
-            padding: `6px 10px`,
-            borderRadius: `var(--radius-2)`,
-            border: `1px solid var(--gray-a4)`,
-            background: `var(--gray-a2)`,
-            fontSize: `var(--font-size-1)`,
-            fontFamily: `var(--default-font-family)`,
-            color: `var(--gray-12)`,
-            outline: `none`,
-          }}
-        />
-      </Flex>
-
-      <ScrollArea style={{ flex: 1 }}>
-        <Flex direction="column" px="2" pb="2">
-          {roots.map((root) => (
-            <EntityTreeNode
-              key={root.url}
-              entity={root}
-              hasMoreAtDepth={[]}
-              childrenByParent={childrenByParent}
-              visibleUrls={visibleUrls}
-              selectedEntityUrl={selectedEntityUrl}
-              onSelectEntity={onSelectEntity}
-            />
           ))}
-          {roots.length === 0 && (
+          {entities.length === 0 && (
             <Text
-              size="1"
-              color="gray"
+              size={1}
+              tone="muted"
               align="center"
-              style={{ paddingTop: 20 }}
+              className={styles.emptyTreeText}
             >
-              {entities.length === 0 ? `No sessions` : `No matches`}
+              No sessions
             </Text>
           )}
-        </Flex>
+        </Stack>
       </ScrollArea>
 
-      <Flex
-        align="center"
-        justify="end"
-        px="3"
-        py="2"
-        style={{
-          borderTop: `1px solid var(--gray-a5)`,
-          flexShrink: 0,
-        }}
-      >
-        <IconButton
-          variant="ghost"
-          size="2"
-          onClick={cyclePreference}
-          aria-label={themeButtonAriaLabel(preference)}
-        >
-          {themeButtonIcon(preference)}
-        </IconButton>
-      </Flex>
+      <SidebarFooter />
 
-      {spawnDialogType && (
-        <SpawnArgsDialog
-          entityType={spawnDialogType}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) setSpawnDialogType(null)
-          }}
-          onSpawn={(args) => {
-            doSpawn(spawnDialogType.name, args)
-            setSpawnDialogType(null)
-          }}
-        />
-      )}
-      <CodingSessionSpawnDialog
-        open={codingDialogOpen}
-        onOpenChange={setCodingDialogOpen}
-        onSpawn={(args) => {
-          doSpawn(CODING_SESSION_ENTITY_TYPE, args)
-          setCodingDialogOpen(false)
-        }}
-      />
-    </Flex>
-  )
-}
-
-function EntityTreeNode({
-  entity,
-  hasMoreAtDepth,
-  childrenByParent,
-  visibleUrls,
-  selectedEntityUrl,
-  onSelectEntity,
-}: {
-  entity: ElectricEntity
-  hasMoreAtDepth: ReadonlyArray<boolean>
-  childrenByParent: Map<string, Array<ElectricEntity>>
-  visibleUrls: Set<string> | null
-  selectedEntityUrl: string | null
-  onSelectEntity: (url: string) => void
-}): React.ReactElement | null {
-  if (visibleUrls && !visibleUrls.has(entity.url)) return null
-  const children = childrenByParent.get(entity.url) ?? []
-  const lastIndex = children.length - 1
-  return (
-    <>
-      <EntityListItem
-        entity={entity}
-        selected={entity.url === selectedEntityUrl}
-        onSelect={() => onSelectEntity(entity.url)}
-        hasMoreAtDepth={hasMoreAtDepth}
-      />
-      {children.map((child, i) => (
-        <EntityTreeNode
-          key={child.url}
-          entity={child}
-          hasMoreAtDepth={[...hasMoreAtDepth, i < lastIndex]}
-          childrenByParent={childrenByParent}
-          visibleUrls={visibleUrls}
-          selectedEntityUrl={selectedEntityUrl}
-          onSelectEntity={onSelectEntity}
-        />
-      ))}
-    </>
+      {/* Shared HoverCard for every <SidebarRow> trigger above. One
+          Root means: the open delay applies only to the *first* hover;
+          once the popup is on screen, moving to another row swaps the
+          payload and follows the pointer immediately. */}
+      <HoverCard.Root handle={hoverHandle}>
+        {({ payload }: { payload: SidebarRowInfoPayload | undefined }) => (
+          <HoverCard.Content
+            side="right"
+            align="start"
+            sideOffset={8}
+            padded={false}
+            className={sidebarRowStyles.infoCard}
+          >
+            {payload ? <SidebarRowInfo {...payload} /> : null}
+          </HoverCard.Content>
+        )}
+      </HoverCard.Root>
+    </Stack>
   )
 }
 
@@ -465,63 +257,14 @@ function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
   return { roots, childrenByParent }
 }
 
-function urlsMatchingFilter(
-  entities: ReadonlyArray<ElectricEntity>,
-  filter: string
-): Set<string> | null {
-  if (!filter) return null
-  const needle = filter.toLowerCase()
-  const byUrl = new Map(entities.map((e) => [e.url, e]))
-  const visible = new Set<string>()
-  for (const entity of entities) {
-    const name = entity.url.split(`/`).pop() ?? ``
-    const { title } = getEntityDisplayTitle(entity)
-    const hit =
-      name.toLowerCase().includes(needle) ||
-      entity.type.toLowerCase().includes(needle) ||
-      title.toLowerCase().includes(needle)
-    if (!hit) continue
-    visible.add(entity.url)
-    let cursor: string | null = entity.parent
-    while (cursor && byUrl.has(cursor) && !visible.has(cursor)) {
-      visible.add(cursor)
-      cursor = byUrl.get(cursor)?.parent ?? null
-    }
-  }
-  return visible
-}
-
 function SectionLabel({
   children,
 }: {
   children: React.ReactNode
 }): React.ReactElement {
   return (
-    <Text
-      size="1"
-      weight="medium"
-      color="gray"
-      style={{
-        textTransform: `uppercase`,
-        letterSpacing: `0.1em`,
-        fontSize: 10,
-        padding: `12px 16px 4px`,
-        opacity: 0.6,
-      }}
-    >
+    <Text size={1} tone="muted" className={styles.sectionLabel}>
       {children}
     </Text>
   )
-}
-
-function themeButtonIcon(preference: ThemePreference): React.ReactElement {
-  if (preference === `light`) return <Sun size={14} />
-  if (preference === `dark`) return <Moon size={14} />
-  return <Monitor size={14} />
-}
-
-function themeButtonAriaLabel(preference: ThemePreference): string {
-  if (preference === `light`) return `Theme: light. Click to switch to dark.`
-  if (preference === `dark`) return `Theme: dark. Click to follow system.`
-  return `Theme: system. Click to switch to light.`
 }

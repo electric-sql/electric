@@ -1,0 +1,66 @@
+/* 3px popup padding = the same halo as `.item` carries above/below
+   the inner row content. Together with the 7px item radius it forms
+   the concentric-halo rule documented on `.item` below. */
+.popup {
+  padding: 3px;
+  min-width: 180px;
+}
+
+/* Padding asymmetric: 8px on the left so labels read as a single
+   indented column, 3px on the right so any trailing inner button
+   (e.g. the trash IconButton in ServerPicker's server list) gets a
+   uniform 3px halo on top, bottom and right.
+   Item radius (7px) = inner-button radius (4px) + 3px halo, so the
+   item highlight and the inner button highlight share a center
+   point and look like one nested rounded rectangle. */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 8px;
+  border-radius: 7px;
+  font-size: var(--ds-text-sm);
+  line-height: 1.3;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  text-align: start;
+  text-decoration: none;
+  /* Items are typically <div> with role="menuitem" — give them block
+     layout so width:100% works in popups. */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.item[data-highlighted] {
+  background: var(--ds-gray-a3);
+}
+
+.item[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.item[data-tone='danger'] {
+  color: var(--ds-red-11);
+}
+.item[data-tone='danger'][data-highlighted] {
+  background: var(--ds-red-a3);
+}
+
+.separator {
+  height: 1px;
+  background: var(--ds-divider);
+  margin: 3px -3px;
+}
+
+.label {
+  padding: 4px 8px 2px;
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  color: var(--ds-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

@@ -1,0 +1,116 @@
+.title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--ds-space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.titleName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* Wraps the id button + the trailing copy/check icon so the icon
+   only reveals when the user is hovering the id specifically (not
+   the whole title row). */
+.idGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.subtitle {
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-3);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  transition: color 0.1s ease;
+}
+.idGroup:hover .subtitle {
+  color: var(--ds-text-2);
+}
+
+/* Copy icon — hidden by default, fades in when the id group is
+   hovered. Also stays visible briefly after a click via
+   `[data-copied]` so the user can see the check-mark feedback. */
+.copyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.1s ease,
+    color 0.1s ease;
+}
+.idGroup:hover .copyIcon,
+.idGroup[data-copied] .copyIcon {
+  opacity: 1;
+}
+.copyIcon:hover {
+  color: var(--ds-text-1);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Native Badge size=2 height (24px) matches the IconButton size=1
+   triggers next to it exactly — no overrides needed; just stop the
+   pill from shrinking when the title row gets tight. */
+.statusBadge {
+  flex-shrink: 0;
+}
+
+/* Toggled-on state for icon-only buttons (e.g. state-explorer
+   toggle). Neutral grey so it reads as "active" without colouring
+   the icon — matches the rest of the chrome. */
+.activeBg {
+  background: var(--ds-gray-a4);
+}
+
+.errorBar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px var(--ds-space-3);
+  background: var(--ds-red-a2);
+}
+
+.inspectPre {
+  background: var(--ds-gray-a3);
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 12px;
+  max-height: 400px;
+  font-family: var(--ds-font-mono);
+}
+
+.dialogActions {
+  margin-top: var(--ds-space-3);
+}
+
+.killActions {
+  margin-top: var(--ds-space-4);
+}
