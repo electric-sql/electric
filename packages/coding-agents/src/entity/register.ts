@@ -82,6 +82,54 @@ const creationArgsSchema = z.object({
   fromWorkspaceMode: z.enum([`share`, `clone`, `fresh`]).optional(),
 })
 
+/**
+ * Default per-turn env supplier. Forwards each adapter's
+ * `defaultEnvVars` from process.env, with one important claude-specific
+ * promotion:
+ *
+ * Claude Code distinguishes plain API keys (ANTHROPIC_API_KEY) from
+ * OAuth subscription tokens (CLAUDE_CODE_OAUTH_TOKEN). The token shapes
+ * are recognisable: `sk-ant-oat...` is OAuth, `sk-ant-api...` is a
+ * plain API key.
+ *
+ * Claude prefers ANTHROPIC_API_KEY when present and treats the value
+ * verbatim as an API key — passing an OAuth token via that var produces
+ * `apiKeySource:"ANTHROPIC_API_KEY"` and a 401 "Invalid API key" inside
+ * the sandbox. (Host runs work because claude there reads the macOS
+ * keychain instead, which holds the live access token.)
+ *
+ * So when the host's ANTHROPIC_API_KEY contains an OAuth-shaped token,
+ * promote it to CLAUDE_CODE_OAUTH_TOKEN AND strip ANTHROPIC_API_KEY so
+ * claude takes the OAuth path. Without this, both vars get forwarded,
+ * claude picks the wrong one, and every turn in a fresh sandbox fails.
+ */
+export function defaultEnvSupplier(
+  kind: CodingAgentKind,
+  source: NodeJS.ProcessEnv = process.env
+): Record<string, string> {
+  const adapter = getAdapter(kind)
+  const out: Record<string, string> = {}
+  for (const k of adapter.defaultEnvVars) {
+    const v = source[k]
+    if (v) out[k] = v
+  }
+  if (kind === `claude`) {
+    const anth = source.ANTHROPIC_API_KEY
+    const oat = source.CLAUDE_CODE_OAUTH_TOKEN
+    if (oat) {
+      out.CLAUDE_CODE_OAUTH_TOKEN = oat
+    }
+    if (anth && anth.startsWith(`sk-ant-oat`)) {
+      // Promote: forward as OAuth token only.
+      if (!out.CLAUDE_CODE_OAUTH_TOKEN) {
+        out.CLAUDE_CODE_OAUTH_TOKEN = anth
+      }
+      delete out.ANTHROPIC_API_KEY
+    }
+  }
+  return out
+}
+
 export function registerCodingAgent(
   registry: EntityRegistry,
   deps: RegisterCodingAgentDeps
@@ -98,34 +146,7 @@ export function registerCodingAgent(
       deps.defaults?.coldBootBudgetMs ?? SLICE_A_DEFAULTS.coldBootBudgetMs,
     runTimeoutMs: deps.defaults?.runTimeoutMs ?? SLICE_A_DEFAULTS.runTimeoutMs,
   }
-  const env =
-    deps.env ??
-    ((kind: CodingAgentKind) => {
-      const adapter = getAdapter(kind)
-      const out: Record<string, string> = {}
-      for (const k of adapter.defaultEnvVars) {
-        const v = process.env[k]
-        if (v) out[k] = v
-      }
-      // Claude Code distinguishes plain API keys (ANTHROPIC_API_KEY) from
-      // OAuth subscription tokens (CLAUDE_CODE_OAUTH_TOKEN). The token
-      // shapes are recognisable: `sk-ant-oat...` is OAuth, `sk-ant-api...`
-      // is a plain API key. If the user only set ANTHROPIC_API_KEY and the
-      // value is an OAuth token, mirror it into CLAUDE_CODE_OAUTH_TOKEN so
-      // the CLI authenticates correctly. Without this, sprites' default
-      // ubuntu image with no preexisting `claude /login` credentials
-      // reports apiKeySource:"none" and exits with "Not logged in".
-      if (kind === `claude`) {
-        const anth = process.env.ANTHROPIC_API_KEY
-        const oat = process.env.CLAUDE_CODE_OAUTH_TOKEN
-        if (!oat && anth && anth.startsWith(`sk-ant-oat`)) {
-          out.CLAUDE_CODE_OAUTH_TOKEN = anth
-        } else if (oat) {
-          out.CLAUDE_CODE_OAUTH_TOKEN = oat
-        }
-      }
-      return out
-    })
+  const env = deps.env ?? defaultEnvSupplier
 
   registry.define(`coding-agent`, {
     description: `Runs a Claude Code CLI session via Docker (target='sandbox') or directly on the host (target='host'). Manages lifecycle (cold/idle/running) and workspace lease.`,
