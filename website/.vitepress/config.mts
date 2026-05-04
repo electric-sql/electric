@@ -341,10 +341,6 @@ const agentsDocsSidebar = [
             text: 'Worker',
             link: '/docs/agents/entities/agents/worker',
           },
-          {
-            text: 'Coder',
-            link: '/docs/agents/entities/agents/coder',
-          },
         ],
         collapsed: false,
       },

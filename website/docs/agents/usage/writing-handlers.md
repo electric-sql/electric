@@ -57,10 +57,6 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
     id: string,
     schema: T
   ) => SharedStateHandle<T>
-  useCodingAgent: (
-    sessionId: string,
-    opts: UseCodingAgentOptions
-  ) => Promise<CodingSessionHandle>
   send: (
     entityUrl: string,
     payload: unknown,
@@ -98,7 +94,6 @@ interface HandlerContext<TState extends StateProxy = StateProxy> {
 | `spawn`            | Creates a child entity. See [Spawning and coordinating](./spawning-and-coordinating).                                                                   |
 | `observe`          | Connects to another entity's stream or shared db. See [Reactive observers](../entities/patterns/reactive-observers) and [Shared state](./shared-state). |
 | `mkdb`             | Creates a new shared state stream. See [Shared state](./shared-state).                                                                                  |
-| `useCodingAgent`   | Spawns or attaches to a built-in `coder` entity backed by Claude Code or Codex.                                                                          |
 | `send`             | Sends a message to another entity's inbox. Supports delayed delivery via `afterMs`.                                                                     |
 | `recordRun`        | Records non-LLM work in the built-in `runs` collection so `runFinished` observers are woken.                                                            |
 | `setTag`           | Sets a tag on this entity.                                                                                                                              |

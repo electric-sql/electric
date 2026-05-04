@@ -8,7 +8,7 @@ outline: [2, 3]
 
 # Horton agent
 
-The built-in assistant registered by the Electric Agents dev server. Horton can chat conversationally, search the web, read and edit files, run shell commands, dispatch workers for isolated subtasks, and spawn long-lived coders for code changes.
+The built-in assistant registered by the Electric Agents dev server. Horton can chat conversationally, search the web, read and edit files, run shell commands, and dispatch workers for isolated subtasks.
 
 **Source:** [`packages/agents/src/agents/horton.ts`](https://github.com/electric-sql/electric/blob/main/packages/agents/src/agents/horton.ts)
 
@@ -35,8 +35,6 @@ Horton is configured with `ctx.electricTools` plus the base Horton tool set:
 | `brave_search` | Web search via the Brave Search API.                     |
 | `fetch_url`    | Fetch a URL and return it as markdown.                   |
 | `spawn_worker` | Dispatch a subagent for an isolated subtask.             |
-| `spawn_coder`  | Spawn a long-lived `coder` entity backed by Claude Code or Codex. |
-| `prompt_coder` | Send a follow-up prompt to an existing coder.            |
 
 `brave_search` requires `BRAVE_SEARCH_API_KEY` in the environment; without it the tool errors at call time.
 
@@ -53,7 +51,7 @@ After the first agent run completes, Horton calls `generateTitle()` (Haiku) to s
 | Type name         | `horton`                                          |
 | Model             | `HORTON_MODEL` (`claude-sonnet-4-5-20250929`)     |
 | Title model       | `claude-haiku-4-5-20251001`                       |
-| Tools             | `ctx.electricTools` + base Horton tool set, coder tools, plus docs/skill tools when configured |
+| Tools             | `ctx.electricTools` + base Horton tool set, plus docs/skill tools when configured |
 | Working directory | Passed at bootstrap (defaults to `process.cwd()`) |
 | Title generation  | Yes, after the first run if no title tag exists   |
 
@@ -89,4 +87,3 @@ registry.define("my-assistant", {
 ## Related
 
 - [Worker](./worker) — the subagent type Horton dispatches via `spawn_worker`.
-- [Coder](./coder) — the coding-session entity Horton dispatches via `spawn_coder`.

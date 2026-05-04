@@ -2,18 +2,18 @@
 title: Embedded built-ins
 titleTemplate: "... - Electric Agents"
 description: >-
-  Embed the built-in Horton, worker, and coder runtime in your own process using
+  Embed the built-in Horton and worker runtime in your own process using
   @electric-ax/agents, BuiltinAgentsServer, or the entrypoint helpers.
 outline: [2, 3]
 ---
 
 # Embedded built-ins
 
-The CLI commands `electric agents start-builtin` and `electric agents quickstart` run the built-in Horton, worker, and coder runtime for you. If you need to host those built-ins inside your own process, use the exported APIs from `@electric-ax/agents`.
+The CLI commands `electric agents start-builtin` and `electric agents quickstart` run the built-in Horton and worker runtime for you. If you need to host those built-ins inside your own process, use the exported APIs from `@electric-ax/agents`.
 
 ## BuiltinAgentsServer
 
-`BuiltinAgentsServer` starts an HTTP webhook server, registers `horton`, `worker`, and `coder`, and forwards Electric Agents webhook wakes to the built-in handler.
+`BuiltinAgentsServer` starts an HTTP webhook server, registers `horton` and `worker`, and forwards Electric Agents webhook wakes to the built-in handler.
 
 ```ts
 import { BuiltinAgentsServer } from "@electric-ax/agents"
@@ -58,7 +58,7 @@ interface BuiltinAgentsServerOptions {
 | `baseUrl`             | Public base URL used when registering the webhook. Defaults to local URL.   |
 | `port`                | Local webhook server port.                                                  |
 | `host`                | Bind host. Defaults to `127.0.0.1`.                                         |
-| `workingDirectory`    | Directory used by Horton, worker file tools, and the default coder cwd. Defaults to `process.cwd()`. |
+| `workingDirectory`    | Directory used by Horton and worker file tools. Defaults to `process.cwd()`. |
 | `mockStreamFn`        | Optional test stream function. Lets you run without `ANTHROPIC_API_KEY`.    |
 | `webhookPath`         | Webhook path. Defaults to `/_electric/builtin-agent-handler`.               |
 | `createElectricTools` | Optional factory for extra tools injected into built-in agent handlers.     |
@@ -160,7 +160,7 @@ Environment variables:
 | `ELECTRIC_AGENTS_BUILTIN_BASE_URL` | Public webhook base URL for the built-in server.   |
 | `ELECTRIC_AGENTS_BUILTIN_HOST`   | Bind host.                                            |
 | `ELECTRIC_AGENTS_BUILTIN_PORT`   | Built-in server port. Defaults to `4448`.             |
-| `ELECTRIC_AGENTS_WORKING_DIRECTORY` | Working directory for file tools and default coder sessions. |
+| `ELECTRIC_AGENTS_WORKING_DIRECTORY` | Working directory for file tools. |
 
 ## Built-in Agent APIs
 
@@ -170,7 +170,6 @@ The built-in agent exports are also available if you want to compose your own ru
 | ------------------------- | --------------------------------------------------- |
 | `registerHorton()`        | Register the `horton` type on an `EntityRegistry`.  |
 | `registerWorker()`        | Register the `worker` type on an `EntityRegistry`.  |
-| `registerCodingSession()` | Register the `coder` type on an `EntityRegistry`.   |
 | `HORTON_MODEL`            | Default model id used by Horton and worker.         |
 | `buildHortonSystemPrompt()` | Build Horton's system prompt for a working directory. |
 | `createHortonTools()`     | Create Horton's base shell/file/search/worker tools. |
@@ -178,4 +177,4 @@ The built-in agent exports are also available if you want to compose your own ru
 | `WORKER_TOOL_NAMES`       | Valid primitive tool names for workers.             |
 | `createHortonDocsSupport()` | Create Horton's docs knowledge-base support.       |
 
-For the behavior of `horton`, `worker`, and `coder`, see [Horton](../entities/agents/horton), [Worker](../entities/agents/worker), and [Coder](../entities/agents/coder).
+For the behavior of `horton` and `worker`, see [Horton](../entities/agents/horton) and [Worker](../entities/agents/worker).

@@ -22,7 +22,7 @@ Every step — runs, tool calls, text deltas, state changes — is appended to t
 
 <EntityOverviewDiagram />
 
-Start with the [Quickstart](/docs/agents/quickstart) to run the built-in `horton`, `worker`, and `coder` entities and connect your own app in a few minutes. The [Usage overview](/docs/agents/usage/overview) summarises the full developer surface in a single page.
+Start with the [Quickstart](/docs/agents/quickstart) to run the built-in `horton` and `worker` entities and connect your own app in a few minutes. The [Usage overview](/docs/agents/usage/overview) summarises the full developer surface in a single page.
 
 ## How it works
 
@@ -198,7 +198,7 @@ console.log(db.collections.texts.toArray)
 
 ## Next steps
 
-- [Quickstart](/docs/agents/quickstart) — run the built-in `horton`, `worker`, and `coder` entities and connect your own app.
+- [Quickstart](/docs/agents/quickstart) — run the built-in `horton` and `worker` entities and connect your own app.
 - [Usage overview](/docs/agents/usage/overview) — the full developer surface on one page.
 - [Defining entities](/docs/agents/usage/defining-entities) — entity types, schemas, and configuration.
 - [Writing handlers](/docs/agents/usage/writing-handlers) — handler lifecycle and the `ctx` API.

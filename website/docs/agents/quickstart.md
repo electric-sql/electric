@@ -49,7 +49,7 @@ npx electric-ax agents quickstart
 This:
 
 1. Starts Postgres, Electric, and the Electric Agents runtime server in Docker (the runtime serves both the API and the web UI on `http://localhost:4437`).
-2. Starts a built-in **Horton** runtime in the foreground that registers the `horton`, `worker`, and `coder` entity types.
+2. Starts a built-in **Horton** runtime in the foreground that registers the `horton` and `worker` entity types.
 3. Prints onboarding commands you can copy into a second terminal.
 
 Leave this terminal running. Press `Ctrl-C` to stop the built-in Horton runtime — the runtime server containers keep running in the background until you call [`electric agents stop`](#stop-the-dev-environment).
@@ -186,7 +186,7 @@ npx electric-ax agents stop --remove-volumes # stop containers and wipe data
 
 ```sh
 npx electric-ax agents start          # runtime server + UI (background, Docker)
-npx electric-ax agents start-builtin  # built-in Horton, worker, and coder (foreground)
+npx electric-ax agents start-builtin  # built-in Horton and worker (foreground)
 ```
 
 See the [CLI reference](./reference/cli#start) for the full set of commands.
