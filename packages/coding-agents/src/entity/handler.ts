@@ -885,13 +885,21 @@ async function processPrompt(
         d.status = `starting`
       },
     })
-    ctx.db.actions.lifecycle_insert({
-      row: {
-        key: lifecycleKey(`boot`),
-        ts: Date.now(),
-        event: `sandbox.starting`,
-      } satisfies LifecycleRow,
-    })
+    // Suppress sandbox.starting for host — there's no sandbox to boot,
+    // attach is effectively a stat() on the workspace dir. Emitting the
+    // row anyway makes the UI timeline read "Sandbox starting" for an
+    // agent the user knows is running on the host. The status
+    // transition through 'starting' is preserved (state-machine
+    // consistency); only the user-visible lifecycle row is skipped.
+    if (meta.target !== `host`) {
+      ctx.db.actions.lifecycle_insert({
+        row: {
+          key: lifecycleKey(`boot`),
+          ts: Date.now(),
+          event: `sandbox.starting`,
+        } satisfies LifecycleRow,
+      })
+    }
   }
 
   if (wasCold && meta.target === `sprites`) {
@@ -962,13 +970,16 @@ async function processPrompt(
         d.instanceId = sandbox.instanceId
       },
     })
-    ctx.db.actions.lifecycle_insert({
-      row: {
-        key: lifecycleKey(`boot`),
-        ts: Date.now(),
-        event: `sandbox.started`,
-      } satisfies LifecycleRow,
-    })
+    // Mirror the suppression above for host (see sandbox.starting comment).
+    if (meta.target !== `host`) {
+      ctx.db.actions.lifecycle_insert({
+        row: {
+          key: lifecycleKey(`boot`),
+          ts: Date.now(),
+          event: `sandbox.started`,
+        } satisfies LifecycleRow,
+      })
+    }
     if (meta.target === `sprites`) {
       ctx.db.actions.lifecycle_insert({
         row: {
