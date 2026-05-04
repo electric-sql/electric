@@ -1,0 +1,49 @@
+.shortcut {
+  margin-left: auto;
+  color: var(--ds-gray-11);
+  font-size: var(--ds-font-size-1, 12px);
+  padding-left: 16px;
+}
+
+.subTrigger {
+  /* The submenu trigger renders a div without an explicit "▸" marker by
+   * default — supply one ourselves so it matches macOS / VS Code menu
+   * convention. Aligned to the right via margin-left:auto on the chevron
+   * span so the gap is consistent across submenu items. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+  width: 100%;
+}
+
+.subChevron {
+  margin-left: auto;
+  color: var(--ds-gray-11);
+  font-size: var(--ds-font-size-1, 12px);
+}
+
+.viewMenuRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.inspectPre {
+  background: var(--ds-gray-a3);
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 12px;
+  max-height: 400px;
+  font-family: var(--ds-font-mono);
+}
+
+.dialogActions {
+  margin-top: var(--ds-space-3);
+}
+
+.killActions {
+  margin-top: var(--ds-space-4);
+}

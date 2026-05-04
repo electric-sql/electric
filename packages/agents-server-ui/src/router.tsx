@@ -20,6 +20,7 @@ import {
   useSearchPalette,
 } from './hooks/useSearchPalette'
 import { WorkspaceProvider } from './hooks/useWorkspace'
+import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { NewSessionPage } from './components/NewSessionPage'
@@ -64,6 +65,8 @@ function RootShell(): React.ReactElement {
   )
   useHotkey(`mod+n`, openNewSession)
   useHotkey(`mod+shift+o`, openNewSession)
+
+  useWorkspaceHotkeys()
 
   const navigateToEntity = useCallback(
     (entityUrl: string) => {

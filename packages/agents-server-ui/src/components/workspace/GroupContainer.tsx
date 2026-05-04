@@ -1,15 +1,14 @@
 import { useCallback, useEffect } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
-import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
-import { usePinnedEntities } from '../../hooks/usePinnedEntities'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { getView } from '../../lib/workspace/viewRegistry'
 import { EntityHeader } from '../EntityHeader'
 import { Stack } from '../../ui'
 import { TabStrip } from './TabStrip'
+import { SplitMenu } from './SplitMenu'
 import type { Group, Tile } from '../../lib/workspace/types'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
 import styles from './GroupContainer.module.css'
@@ -58,10 +57,8 @@ function ActiveTileBody({
   tile: Tile
 }): React.ReactElement {
   const { activeServer } = useServerConnection()
-  const { pinnedUrls, togglePin } = usePinnedEntities()
-  const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
+  const { entitiesCollection } = useElectricAgents()
   const { helpers } = useWorkspace()
-  const navigate = useNavigate()
 
   const { data: matches = [] } = useLiveQuery(
     (q) => {
@@ -75,31 +72,6 @@ function ActiveTileBody({
   const entity = matches.at(0) ?? null
   const isSpawning = entity?.status === `spawning`
   const entityStopped = entity?.status === `stopped`
-
-  // Kill / fork are tile-local actions; the errors shown are the
-  // tile's own concern, so they live as state inside the tile body
-  // rather than at workspace level.
-  const handleKill = useCallback(() => {
-    if (!killEntity) return
-    const tx = killEntity(tile.entityUrl)
-    tx.isPersisted.promise.catch(() => {
-      // Errors surface in EntityHeader's error bar via prop wiring,
-      // but Stage 2 omits the error-passing for brevity since the kill
-      // surface is unchanged from before; revisit if it regresses.
-    })
-  }, [killEntity, tile.entityUrl])
-
-  const handleFork = useCallback(() => {
-    if (!forkEntity) return
-    forkEntity(tile.entityUrl)
-      .then((root) => {
-        navigate({
-          to: `/entity/$`,
-          params: { _splat: root.url.replace(/^\//, ``) },
-        })
-      })
-      .catch(() => {})
-  }, [forkEntity, tile.entityUrl, navigate])
 
   const setView = useCallback(
     (viewId: ViewId) => helpers.setTileView(tile.id, viewId),
@@ -133,12 +105,9 @@ function ActiveTileBody({
     <Stack direction="column" className={styles.body} data-group-id={groupId}>
       <EntityHeader
         entity={entity}
-        pinned={pinnedUrls.includes(tile.entityUrl)}
-        onTogglePin={() => togglePin(tile.entityUrl)}
-        onKill={handleKill}
-        onFork={forkEntity && !entity.parent ? handleFork : undefined}
         currentViewId={tile.viewId}
         onSetView={setView}
+        menu={<SplitMenu tile={tile} groupId={groupId} entity={entity} />}
       />
       {View ? (
         <View
