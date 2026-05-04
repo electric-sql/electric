@@ -43,6 +43,7 @@ type PersistedModelConfig = Pick<AgentConfig, `model` | `provider`> & {
 
 const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
+const DEFAULT_CODEX_MODEL = `gpt-5.4`
 
 function hasEnv(name: string): boolean {
   return (process.env[name]?.trim().length ?? 0) > 0
@@ -77,7 +78,9 @@ function modelValue(provider: BuiltinModelProvider, id: string): string {
 }
 
 function providerLabel(provider: BuiltinModelProvider): string {
-  return provider === `anthropic` ? `Anthropic` : `OpenAI`
+  if (provider === `anthropic`) return `Anthropic`
+  if (provider === `openai-codex`) return `OpenAI Codex`
+  return `OpenAI`
 }
 
 function configuredProviders(): Array<BuiltinModelProvider> {
@@ -139,6 +142,17 @@ async function choicesForProvider(
   provider: BuiltinModelProvider
 ): Promise<Array<BuiltinModelChoice>> {
   const knownModels = getModels(provider)
+
+  if (provider === `openai-codex`) {
+    return knownModels.map((model) => ({
+      provider,
+      id: model.id,
+      label: `${providerLabel(provider)} ${model.name}`,
+      value: modelValue(provider, model.id),
+      reasoning: model.reasoning,
+    }))
+  }
+
   const availableIds = await fetchAvailableModelIds(provider)
   const models =
     availableIds === null
@@ -220,6 +234,10 @@ export async function createBuiltinModelCatalog(
     choices.find(
       (choice) =>
         choice.provider === `openai` && choice.id === DEFAULT_OPENAI_MODEL
+    ) ??
+    choices.find(
+      (choice) =>
+        choice.provider === `openai-codex` && choice.id === DEFAULT_CODEX_MODEL
     ) ??
     choices[0]!
 
