@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { SquarePen } from 'lucide-react'
+import { ChevronDown, ChevronRight, FolderOpen, SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import { useProjects } from '../hooks/useProjects'
+import { bucketEntities } from '../lib/sessionGroups'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
 import { SidebarHeader } from './SidebarHeader'
@@ -11,9 +13,9 @@ import type { SidebarRowInfoPayload } from './SidebarRow'
 import sidebarRowStyles from './SidebarRow.module.css'
 import { SidebarTree } from './SidebarTree'
 import { SidebarFooter } from './SidebarFooter'
-import { bucketEntities } from '../lib/sessionGroups'
 import styles from './Sidebar.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
+import type { Project } from '../hooks/useProjects'
 
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -53,15 +55,15 @@ export function Sidebar({
   onTogglePin: (url: string) => void
 }): React.ReactElement {
   const { entitiesCollection } = useElectricAgents()
+  const { projects } = useProjects()
   const navigate = useNavigate()
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
+    () => new Set()
+  )
 
-  // One shared HoverCard handle for every row in this sidebar. The
-  // single Root rendered below switches its content based on which
-  // trigger is currently active, so the popup follows the pointer
-  // between rows without the open delay re-firing.
   const hoverHandle = HoverCard.useHandle<SidebarRowInfoPayload>()
 
   const startResize = useCallback(
@@ -109,24 +111,42 @@ export function Sidebar({
     [entities]
   )
 
-  // Pinned roots are listed once at the top in the Pinned section; we
-  // don't want them to show up again in their original time bucket.
-  // We only strip *roots* — children of an unpinned parent that happen
-  // to be pinned simply disappear from the parent's expanded subtree
-  // (handled by SidebarTree's pinned-skip below).
   const unpinnedRoots = useMemo(
     () => roots.filter((r) => !pinnedSet.has(r.url)),
     [roots, pinnedSet]
   )
 
-  const sessionGroups = useMemo(
-    () => bucketEntities(unpinnedRoots),
-    [unpinnedRoots]
+  const { projectSections, ungrouped } = useMemo(
+    () => groupByProject(unpinnedRoots, projects),
+    [unpinnedRoots, projects]
   )
+
+  const ungroupedBuckets = useMemo(() => bucketEntities(ungrouped), [ungrouped])
+
+  const toggleProjectCollapsed = useCallback((projectId: string) => {
+    setCollapsedProjects((prev) => {
+      const next = new Set(prev)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }, [])
 
   const handleNewSession = useCallback(() => {
     navigate({ to: `/` })
   }, [navigate])
+
+  const treeProps = {
+    childrenByParent,
+    selectedEntityUrl,
+    onSelectEntity,
+    pinnedUrls,
+    onTogglePin,
+    hoverHandle,
+  }
 
   return (
     <Stack
@@ -167,40 +187,54 @@ export function Sidebar({
             <>
               <SectionLabel>Pinned</SectionLabel>
               {pinnedEntities.map((entity) => (
-                // Pinned parents render as a full SidebarTree so they
-                // can be expanded in place to reveal their children
-                // (children themselves aren't pinnable — gated inside
-                // SidebarTree to depth=0).
                 <SidebarTree
                   key={`pinned:${entity.url}`}
                   entity={entity}
-                  childrenByParent={childrenByParent}
-                  selectedEntityUrl={selectedEntityUrl}
-                  onSelectEntity={onSelectEntity}
-                  pinnedUrls={pinnedUrls}
-                  onTogglePin={onTogglePin}
-                  hoverHandle={hoverHandle}
+                  {...treeProps}
                 />
               ))}
             </>
           )}
-          {sessionGroups.map((group) => (
+
+          {projectSections.map((section) => {
+            const collapsed = collapsedProjects.has(section.id)
+            return (
+              <div key={section.id}>
+                <button
+                  type="button"
+                  className={styles.projectHeader}
+                  onClick={() => toggleProjectCollapsed(section.id)}
+                >
+                  <FolderOpen size={12} className={styles.projectHeaderIcon} />
+                  <span className={styles.projectHeaderLabel}>
+                    {section.name}
+                  </span>
+                  <span className={styles.projectHeaderCount}>
+                    {section.items.length}
+                  </span>
+                  {collapsed ? (
+                    <ChevronRight size={12} />
+                  ) : (
+                    <ChevronDown size={12} />
+                  )}
+                </button>
+                {!collapsed &&
+                  section.items.map((root) => (
+                    <SidebarTree key={root.url} entity={root} {...treeProps} />
+                  ))}
+              </div>
+            )
+          })}
+
+          {ungroupedBuckets.map((group) => (
             <div key={group.id}>
               <SectionLabel>{group.label}</SectionLabel>
               {group.items.map((root) => (
-                <SidebarTree
-                  key={root.url}
-                  entity={root}
-                  childrenByParent={childrenByParent}
-                  selectedEntityUrl={selectedEntityUrl}
-                  onSelectEntity={onSelectEntity}
-                  pinnedUrls={pinnedUrls}
-                  onTogglePin={onTogglePin}
-                  hoverHandle={hoverHandle}
-                />
+                <SidebarTree key={root.url} entity={root} {...treeProps} />
               ))}
             </div>
           ))}
+
           {entities.length === 0 && (
             <Text
               size={1}
@@ -216,10 +250,6 @@ export function Sidebar({
 
       <SidebarFooter />
 
-      {/* Shared HoverCard for every <SidebarRow> trigger above. One
-          Root means: the open delay applies only to the *first* hover;
-          once the popup is on screen, moving to another row swaps the
-          payload and follows the pointer immediately. */}
       <HoverCard.Root handle={hoverHandle}>
         {({ payload }: { payload: SidebarRowInfoPayload | undefined }) => (
           <HoverCard.Content
@@ -235,6 +265,49 @@ export function Sidebar({
       </HoverCard.Root>
     </Stack>
   )
+}
+
+interface ProjectSection {
+  id: string
+  name: string
+  items: Array<ElectricEntity>
+}
+
+function groupByProject(
+  roots: ReadonlyArray<ElectricEntity>,
+  projects: ReadonlyArray<Project>
+): {
+  projectSections: Array<ProjectSection>
+  ungrouped: Array<ElectricEntity>
+} {
+  const projectMap = new Map(projects.map((p) => [p.id, p]))
+  const byProject = new Map<string, Array<ElectricEntity>>()
+  const ungrouped: Array<ElectricEntity> = []
+
+  for (const entity of roots) {
+    const projectId = entity.tags?.project
+    if (projectId && projectMap.has(projectId)) {
+      const list = byProject.get(projectId) ?? []
+      list.push(entity)
+      byProject.set(projectId, list)
+    } else {
+      ungrouped.push(entity)
+    }
+  }
+
+  const projectSections: Array<ProjectSection> = []
+  for (const [id, items] of byProject) {
+    const project = projectMap.get(id)!
+    projectSections.push({ id, name: project.name, items })
+  }
+
+  projectSections.sort((a, b) => {
+    const aMax = Math.max(...a.items.map((e) => e.updated_at))
+    const bMax = Math.max(...b.items.map((e) => e.updated_at))
+    return bMax - aMax
+  })
+
+  return { projectSections, ungrouped }
 }
 
 function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {

@@ -4,6 +4,7 @@ import {
   useServerConnection,
 } from './hooks/useServerConnection'
 import { PinnedEntitiesProvider } from './hooks/usePinnedEntities'
+import { ProjectsProvider } from './hooks/useProjects'
 import { ElectricAgentsProvider } from './lib/ElectricAgentsProvider'
 import { DarkModeProvider, useDarkModeContext } from './hooks/useDarkMode'
 import { ThemeProvider } from './ui'
@@ -15,7 +16,9 @@ function AppInner(): React.ReactElement {
   return (
     <ElectricAgentsProvider baseUrl={activeServer?.url ?? null}>
       <PinnedEntitiesProvider>
-        <RouterProvider router={router} />
+        <ProjectsProvider>
+          <RouterProvider router={router} />
+        </ProjectsProvider>
       </PinnedEntitiesProvider>
     </ElectricAgentsProvider>
   )
