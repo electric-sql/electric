@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
@@ -9,6 +9,7 @@ import { EntityHeader } from '../EntityHeader'
 import { Stack } from '../../ui'
 import { TabStrip } from './TabStrip'
 import { SplitMenu } from './SplitMenu'
+import { DropOverlay } from './DropOverlay'
 import type { Group, Tile } from '../../lib/workspace/types'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
 import styles from './GroupContainer.module.css'
@@ -27,6 +28,7 @@ export function GroupContainer({
 }): React.ReactElement {
   const { helpers, workspace } = useWorkspace()
   const isActiveGroup = workspace.activeGroupId === group.id
+  const groupRef = useRef<HTMLDivElement>(null)
 
   // Click anywhere inside the group's chrome to make it the active
   // group. Wired on the outer wrapper rather than just the tab strip so
@@ -39,14 +41,34 @@ export function GroupContainer({
   const activeTile =
     group.tiles.find((t) => t.id === group.activeTileId) ?? group.tiles[0]
 
+  // Active-group ring is only shown when there's more than one group —
+  // otherwise the ring is just visual noise (every solo tile would be
+  // ringed always). Matches VS Code's behaviour for single-group
+  // workbenches.
+  const groupCount = countGroups(workspace.root)
+  const showActiveRing = isActiveGroup && groupCount > 1
+
   return (
-    <div className={styles.group} onMouseDownCapture={onActivate}>
+    <div
+      ref={groupRef}
+      className={`${styles.group} ${showActiveRing ? styles.activeGroup : ``}`}
+      onMouseDownCapture={onActivate}
+    >
       <TabStrip group={group} />
       {activeTile ? (
         <ActiveTileBody groupId={group.id} tile={activeTile} />
       ) : null}
+      <DropOverlay groupId={group.id} containerRef={groupRef} />
     </div>
   )
+}
+
+function countGroups(
+  node: import(`../../lib/workspace/types`).WorkspaceNode | null
+): number {
+  if (!node) return 0
+  if (node.kind === `group`) return 1
+  return node.children.reduce((acc, c) => acc + countGroups(c.node), 0)
 }
 
 function ActiveTileBody({

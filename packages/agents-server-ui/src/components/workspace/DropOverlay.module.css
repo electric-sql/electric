@@ -1,0 +1,66 @@
+/* The overlay is always mounted on every group but pointer-events:none
+ * by default — only the active drag turns events on. Without that
+ * toggle, splitter drags in adjacent panes get hijacked. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.armed {
+  pointer-events: auto;
+}
+
+.zone {
+  position: absolute;
+  background: var(--ds-accent-a4);
+  border: 1px solid var(--ds-accent-a8);
+  opacity: 0;
+  transition:
+    opacity 0.08s ease-out,
+    background 0.08s ease-out;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.zoneActive {
+  opacity: 1;
+  background: var(--ds-accent-a6);
+}
+
+/* Five named zones — geometry computed in JS so the same component
+ * works for any group size. The visual rectangles mirror Cursor's chat
+ * pane drop targets: a centre square that "appends as new tab" plus
+ * four edge slabs that create new splits. */
+.center {
+  inset: 25%;
+}
+
+.north {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 25%;
+}
+
+.east {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 25%;
+}
+
+.south {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 25%;
+}
+
+.west {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 25%;
+}

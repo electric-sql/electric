@@ -6,6 +6,17 @@
   min-height: 0;
   overflow: hidden;
   background: var(--ds-bg);
+  /* Required for `<DropOverlay>` (position: absolute; inset: 0) to
+   * cover only this group and not bleed into adjacent groups. */
+  position: relative;
+}
+
+.activeGroup {
+  /* Subtle outline on the active group so the user knows where new
+   * tiles will land when they click a sidebar entity. Inset to avoid
+   * pushing surrounding splitters around (border would change layout
+   * by 1px). */
+  box-shadow: inset 0 0 0 1px var(--ds-accent-a6);
 }
 
 .body {

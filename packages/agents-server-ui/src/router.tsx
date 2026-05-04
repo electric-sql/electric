@@ -19,7 +19,7 @@ import {
   SearchPaletteProvider,
   useSearchPalette,
 } from './hooks/useSearchPalette'
-import { WorkspaceProvider } from './hooks/useWorkspace'
+import { WorkspaceProvider, useWorkspace } from './hooks/useWorkspace'
 import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
@@ -44,6 +44,7 @@ function RootShell(): React.ReactElement {
   const navigate = useNavigate()
   const { collapsed, toggle } = useSidebarCollapsed()
   const search = useSearchPalette()
+  const { helpers } = useWorkspace()
 
   useHotkey(`mod+b`, toggle)
   useHotkey(`mod+k`, (e) => {
@@ -78,6 +79,24 @@ function RootShell(): React.ReactElement {
     [navigate]
   )
 
+  // ⌘/Ctrl-click + middle-click on a sidebar row → open the entity in
+  // a new split to the right of the active group, rather than replacing
+  // the active tile (matches VS Code's "open to side" gesture).
+  const openEntityInSplit = useCallback(
+    (entityUrl: string) => {
+      const groupId = helpers.activeGroupId
+      if (!groupId) {
+        // Empty workspace — fall through to plain navigation.
+        navigateToEntity(entityUrl)
+        return
+      }
+      helpers.openEntity(entityUrl, {
+        target: { groupId, position: `split-right` },
+      })
+    },
+    [helpers, navigateToEntity]
+  )
+
   const params = useParams({ strict: false })
   const splat = (params as Record<string, string | undefined>)._splat
   const selectedEntityUrl = splat ? `/${splat}` : null
@@ -88,6 +107,7 @@ function RootShell(): React.ReactElement {
         <Sidebar
           selectedEntityUrl={selectedEntityUrl}
           onSelectEntity={navigateToEntity}
+          onOpenEntityInSplit={openEntityInSplit}
           pinnedUrls={pinnedUrls}
           onTogglePin={togglePin}
         />

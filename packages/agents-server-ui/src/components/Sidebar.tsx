@@ -44,11 +44,18 @@ function useSidebarWidth(): readonly [number, (w: number) => void] {
 export function Sidebar({
   selectedEntityUrl,
   onSelectEntity,
+  onOpenEntityInSplit,
   pinnedUrls,
   onTogglePin,
 }: {
   selectedEntityUrl: string | null
   onSelectEntity: (url: string) => void
+  /**
+   * Optional ⌘/Ctrl-click + middle-click handler — opens an entity in
+   * a new split rather than replacing the active tile. Routed through
+   * the workspace helpers in `RootShell`.
+   */
+  onOpenEntityInSplit?: (url: string) => void
   pinnedUrls: Array<string>
   onTogglePin: (url: string) => void
 }): React.ReactElement {
@@ -177,6 +184,7 @@ export function Sidebar({
                   childrenByParent={childrenByParent}
                   selectedEntityUrl={selectedEntityUrl}
                   onSelectEntity={onSelectEntity}
+                  onOpenEntityInSplit={onOpenEntityInSplit}
                   pinnedUrls={pinnedUrls}
                   onTogglePin={onTogglePin}
                   hoverHandle={hoverHandle}
@@ -194,6 +202,7 @@ export function Sidebar({
                   childrenByParent={childrenByParent}
                   selectedEntityUrl={selectedEntityUrl}
                   onSelectEntity={onSelectEntity}
+                  onOpenEntityInSplit={onOpenEntityInSplit}
                   pinnedUrls={pinnedUrls}
                   onTogglePin={onTogglePin}
                   hoverHandle={hoverHandle}

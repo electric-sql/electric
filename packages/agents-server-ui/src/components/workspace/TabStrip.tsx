@@ -5,6 +5,7 @@ import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { getView } from '../../lib/workspace/viewRegistry'
 import { getEntityDisplayTitle } from '../../lib/entityDisplay'
+import { setDragPayload } from '../../lib/workspace/dragPayload'
 import type { Group, Tile } from '../../lib/workspace/types'
 import styles from './TabStrip.module.css'
 
@@ -47,6 +48,14 @@ export function TabStrip({
             role="tab"
             aria-selected={active}
             className={`${styles.tab} ${active ? styles.activeTab : ``}`}
+            draggable
+            onDragStart={(e) =>
+              setDragPayload(e, {
+                kind: `tile`,
+                tileId: tile.id,
+                sourceGroupId: group.id,
+              })
+            }
             onClick={() => helpers.setActiveTile(tile.id)}
             onMouseDown={(e) => onMiddleClickClose(e, tile.id)}
           >
