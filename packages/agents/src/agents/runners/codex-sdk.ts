@@ -44,7 +44,6 @@ export const codexSdkRunner: CodingSessionCliRunner = {
       ? codex.resumeThread(opts.sessionId, threadOptions)
       : codex.startThread(threadOptions)
 
-    const startedItems = new Set<string>()
     let turnFailed: { message: string } | null = null
     let assistantText = ``
     let capturedSessionId: string | null = opts.sessionId ?? null
@@ -76,7 +75,6 @@ export const codexSdkRunner: CodingSessionCliRunner = {
           case `item.started`: {
             const startEvents = threadItemStartedToEvents(ev.item)
             for (const e of startEvents) opts.onEvent?.(e)
-            startedItems.add(ev.item.id)
             break
           }
           case `item.completed`: {
