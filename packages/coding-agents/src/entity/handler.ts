@@ -25,6 +25,17 @@ import {
 } from './messages'
 import { convertNativeJsonl } from './conversion'
 
+/**
+ * "In-flight" — the agent is mid-cold-boot, mid-turn, or mid-teardown.
+ * Control-plane operations (stop, convert-kind, convert-target, fork)
+ * reject during these states because they'd race the bridge's runTurn,
+ * truncate transcripts, or tear down a sandbox the bridge is still
+ * talking to.
+ */
+function isInFlight(status: SessionMetaRow[`status`]): boolean {
+  return status === `running` || status === `starting` || status === `stopping`
+}
+
 export interface CodingAgentHandlerOptions {
   defaults: {
     idleTimeoutMs: number
@@ -506,11 +517,7 @@ export function makeCodingAgentHandler(
             | SessionMetaRow
             | undefined
           const sourceStatus = sourceMeta?.status
-          if (
-            sourceStatus === `running` ||
-            sourceStatus === `starting` ||
-            sourceStatus === `stopping`
-          ) {
+          if (sourceStatus && isInFlight(sourceStatus)) {
             ctx.db.actions.lifecycle_insert({
               row: {
                 key: lifecycleKey(`fork`),
@@ -1264,11 +1271,7 @@ async function processStop(ctx: any, lm: LifecycleManager): Promise<void> {
   // here surfaces the same 404/connection-reset that the idle-timer
   // race produced. Convert-target has the same guard for the same
   // reason — keep behaviour symmetric.
-  if (
-    meta.status === `running` ||
-    meta.status === `starting` ||
-    meta.status === `stopping`
-  ) {
+  if (isInFlight(meta.status)) {
     ctx.db.actions.sessionMeta_update({
       key: `current`,
       updater: (d: SessionMetaRow) => {
@@ -1386,11 +1389,7 @@ async function processConvertTarget(
   }
 
   // Reject in-flight transitions
-  if (
-    meta.status === `running` ||
-    meta.status === `starting` ||
-    meta.status === `stopping`
-  ) {
+  if (isInFlight(meta.status)) {
     ctx.db.actions.sessionMeta_update({
       key: `current`,
       updater: (d: SessionMetaRow) => {
@@ -1445,11 +1444,7 @@ async function processConvertKind(ctx: any, inboxMsg: InboxRow): Promise<void> {
   // producing a truncated transcript. The next prompt would then
   // resume from a session id pointing at incomplete history.
   // Convert-target has the same guard.
-  if (
-    meta.status === `running` ||
-    meta.status === `starting` ||
-    meta.status === `stopping`
-  ) {
+  if (isInFlight(meta.status)) {
     ctx.db.actions.sessionMeta_update({
       key: `current`,
       updater: (d: SessionMetaRow) => {

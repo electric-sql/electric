@@ -1,5 +1,6 @@
 import type { CodingAgentAdapter } from './registry'
 import { registerAdapter } from './registry'
+import { shellQuote } from './shell-quote'
 
 /**
  * Codex stores transcripts at:
@@ -13,10 +14,6 @@ import { registerAdapter } from './registry'
  *     looks up by sessionId via a scan, so the date subdir only has
  *     to exist on disk — it doesn't have to match the original.
  */
-
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`
-}
 
 // Codex model identifiers. Examples seen in the wild: "gpt-4",
 // "gpt-5-codex-latest", "openai/gpt-5", "anthropic/claude-sonnet-4-6:fp8".

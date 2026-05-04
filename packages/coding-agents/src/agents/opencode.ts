@@ -1,9 +1,6 @@
 import type { CodingAgentAdapter } from './registry'
 import { registerAdapter } from './registry'
-
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`
-}
+import { shellQuote } from './shell-quote'
 
 /**
  * opencode (sst/opencode-ai) — third coding-agent kind.

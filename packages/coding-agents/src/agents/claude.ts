@@ -1,12 +1,9 @@
 import type { CodingAgentAdapter } from './registry'
 import { registerAdapter } from './registry'
+import { shellQuote } from './shell-quote'
 
 function sanitiseCwd(cwd: string): string {
   return cwd.replace(/\//g, `-`)
-}
-
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`
 }
 
 export const ClaudeAdapter: CodingAgentAdapter = {
