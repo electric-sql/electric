@@ -5,7 +5,19 @@
    The pill background + hairline border make the toolbar visually
    pop above the table header text on wide tables, where the buttons
    would otherwise sit on top of the rightmost column header and
-   become hard to read. */
+   become hard to read.
+
+   Hidden by default, fades in only when the table is hovered, has
+   focus inside (keyboard nav), or one of its dropdown menus is open
+   so we don't dump three icon-button pills on top of every table in
+   a long chat at rest. The `aria-expanded="true"` selector keeps the
+   toolbar visible while a Copy/Download menu is open — without it,
+   moving the cursor off the table to reach the menu in the portal
+   would hide the trigger pill mid-click.
+
+   `pointer-events: none` while hidden lets the user click through
+   the corner of the table without the invisible buttons swallowing
+   the click. */
 .toolbar {
   position: absolute;
   top: 4px;
@@ -19,6 +31,22 @@
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-3);
   box-shadow: var(--ds-shadow-1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+[data-streamdown='table-wrapper']:hover > .toolbar,
+[data-streamdown='table-wrapper']:focus-within > .toolbar,
+[data-streamdown='table-wrapper']:has(button[aria-expanded='true']) > .toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar {
+    transition: none;
+  }
 }
 
 /* --- Fullscreen dialog ------------------------------------------------ */
