@@ -36,7 +36,7 @@
   background: var(--ds-gray-a3);
 }
 .selected {
-  background: var(--ds-accent-a3);
+  background: var(--ds-accent-a2);
 }
 .selected:hover {
   background: var(--ds-accent-a3);

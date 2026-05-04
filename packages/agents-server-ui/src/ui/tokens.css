@@ -74,8 +74,8 @@
    * is solid white so inputs read clearly against the off-white page;
    * in dark mode it stays a translucent grey so inputs blend with
    * raised surfaces (panels, popovers) wherever they're used.         */
-  --ds-bg: #f7f7f5;
-  --ds-bg-subtle: #f0efed;
+  --ds-bg: #f9f8f6;
+  --ds-bg-subtle: #efeeeb;
   --ds-surface: #ffffff;
   --ds-surface-raised: #ffffff;
   --ds-input-bg: #ffffff;

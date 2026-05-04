@@ -55,7 +55,7 @@
  * CSS variables so EntityTimeline + MessageInput can stay perfectly
  * aligned without duplicating constants. */
 .content {
-  padding: 32px 40px;
+  padding: 36px 40px;
   max-width: calc(var(--chat-surface-width) + 80px);
   margin: 0 auto;
   overflow-anchor: none;
@@ -65,8 +65,8 @@
 
 .statusPill {
   padding: 4px 14px;
-  border-radius: 12px;
-  opacity: 0.5;
+  border-radius: 9999px;
+  opacity: 0.45;
   letter-spacing: 0.02em;
 }
 

@@ -34,8 +34,11 @@
      bottom of a scrolling chat surface and chat content must NOT
      bleed through it. Solid raised surface is the right semantic. */
   background: var(--ds-surface-raised);
-  border: 1px solid var(--ds-gray-a4);
+  border: 1px solid var(--ds-gray-a3);
   border-radius: 12px;
+  box-shadow:
+    0 1px 3px rgba(15, 15, 30, 0.04),
+    0 1px 1px rgba(15, 15, 30, 0.02);
   /* 12px on all sides — same as the user-message bubble (`Stack p={3}`
      in UserMessage.tsx, where `--ds-space-3 = 12px`). Keeping the
      two surfaces on the same padding makes the textarea text column
@@ -97,7 +100,7 @@
 }
 
 .sendIcon {
-  color: var(--ds-gray-8);
+  color: var(--ds-gray-7);
   cursor: default;
   transition: color 0.15s ease;
   flex-shrink: 0;

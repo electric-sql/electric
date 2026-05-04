@@ -125,12 +125,13 @@
 
 .projectHeader {
   all: unset;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 5px;
   width: 100%;
   height: var(--ds-row-height-md);
-  padding: 14px 4px 4px 8px;
+  padding: 14px 8px 4px 8px;
   cursor: pointer;
   color: var(--ds-text-2);
   font-size: 10px;
@@ -164,8 +165,9 @@
 .sectionLabel {
   display: block;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   font-size: 10px;
+  font-weight: 500;
   padding: 14px 4px 4px 8px;
   color: var(--ds-text-3);
 }

@@ -7,6 +7,6 @@
   align-items: center;
   gap: 4px;
   padding: 6px 11px;
-  border-top: 1px solid var(--ds-divider);
+  border-top: 1px solid var(--ds-gray-a3);
   flex-shrink: 0;
 }
