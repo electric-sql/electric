@@ -1,5 +1,5 @@
 ---
-'@electric-ax/agents-server-ui': minor
+'@electric-ax/agents-server-ui': patch
 ---
 
 Redesign.
