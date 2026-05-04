@@ -1,5 +1,5 @@
 ---
-title: "Introducing Electric Agents — the agent platfom built\u00A0on\u00A0sync"
+title: "Introducing Electric Agents — the agent platform built\u00A0on\u00A0sync"
 description: >-
   Introducing Electric Agents, the agent platform built on sync. Use it to build scalable, collaborative multi-agent systems that integrate into your online systems.
 excerpt: >-
@@ -62,7 +62,7 @@ You start an agent. It runs for ten minutes. You close your laptop to go to a me
 
 These feel like missing features, but they're all symptoms of the same thing. The agent's state isn't *live* and *online*. It's dumped into a hidden file on your computer somewhere. Or if the agent is online, like in a Durable Object, access is guarded by the interface it's exposed behind.
 
-The agent session, the session log, is not accessible. You can't share it, you can't observe it or subscribe to it. You can't fork it. It's not *addressable*. These aren't seperate problems. They're all the same problem. Agents are treated as compute and access to the session log is prohibited or guarded by predefined interfaces.
+The agent session, the session log, is not accessible. You can't share it, you can't observe it or subscribe to it. You can't fork it. It's not *addressable*. These aren't separate problems. They're all the same problem. Agents are treated as compute and access to the session log is prohibited or guarded by predefined interfaces.
 
 ### Inverting the paradigm
 
@@ -106,7 +106,7 @@ Agents running locally and/or bolted onto apps are early wave transitional state
 
 The end state is every organization running millions of persistent, addressable, online agents reacting to their environment. Agents will be the basis of all software. With apps and systems built around them, not the other way around.
 
-That's a different kind of infrastructure problem. It means envisaging a very different kind of substrate for agents. One that's addresible, reactive and multi-agent.
+That's a different kind of infrastructure problem. It means envisaging a very different kind of substrate for agents. One that's addressable, reactive and multi-agent.
 
 ### Multi-player by default
 
