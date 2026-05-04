@@ -28,7 +28,7 @@ type TimeTextProps = {
  * exposing the full date / time on hover.
  *
  * Used by chat surfaces (user + assistant message metadata, spawn
- * pill, coding-session timeline) so every short timestamp in the UI
+ * pill) so every short timestamp in the UI
  * has a consistent way to surface the absolute time without taking
  * up extra horizontal space at rest.
  *

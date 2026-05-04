@@ -1,6 +1,5 @@
-/* Shared collapsed-card styling used by both ToolCallView (Worker /
- * Horton tool calls) and CodingSessionTimeline (Claude / Codex tool
- * invocations). The two timelines render the same visual structure:
+/* Shared collapsed-card styling used by ToolCallView (Worker /
+ * Horton tool calls). The visual structure:
  *
  *   ┌──────────────────────────────────────────────────┐
  *   │ › tool_name  summary…              [status badge]│  .header (.headerToggle when interactive)

@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "start": "cross-env ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 tsx --watch src/entrypoint.ts",
     "docs:sync": "node scripts/sync-docs.mjs",
     "docs:clean": "node scripts/sync-docs.mjs --clean",
     "prepack": "node scripts/sync-docs.mjs",
@@ -46,7 +47,6 @@
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@mariozechner/pi-ai": "^0.70.2",
     "@sinclair/typebox": "^0.34.48",
-    "agent-session-protocol": "^0.0.2",
     "better-sqlite3": "^11.10.0",
     "nanoid": "^3.3.11",
     "pino": "^10.3.1",
@@ -58,7 +58,9 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.19.15",
     "@vitest/coverage-v8": "^4.1.0",
+    "cross-env": "^10.1.0",
     "tsdown": "^0.9.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.0"
   },

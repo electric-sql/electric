@@ -1,6 +1,0 @@
-/* The Stack here needs `min-height: 0` so the inner timeline scroll area
- * can shrink inside its flex parent. Without this, nested overflow
- * containers expand to content height instead of scrolling. */
-.root {
-  min-height: 0;
-}

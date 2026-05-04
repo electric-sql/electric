@@ -13,10 +13,6 @@ import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
-import {
-  CODING_SESSION_ENTITY_TYPE,
-  codingSessionEntityUrl,
-} from './observation-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -24,10 +20,6 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
-  CodingSessionEventRow,
-  CodingSessionHandle,
-  CodingSessionMeta,
-  CodingSessionStatus,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
@@ -39,7 +31,6 @@ import type {
   SharedStateSchemaMap,
   StateProxy,
   TimelineProjectionOpts,
-  UseCodingAgentOptions,
   UseContextConfig,
   Wake,
   WakeEvent,
@@ -557,75 +548,6 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       schema: TSchema
     ): SharedStateHandle<TSchema> {
       return config.doMkdb(id, schema)
-    },
-    async useCodingAgent(
-      sessionId: string,
-      opts: UseCodingAgentOptions
-    ): Promise<CodingSessionHandle> {
-      const spawnArgs: Record<string, unknown> = { agent: opts.agent }
-      if (opts.cwd !== undefined) spawnArgs.cwd = opts.cwd
-      if (opts.nativeSessionId !== undefined) {
-        spawnArgs.nativeSessionId = opts.nativeSessionId
-      }
-      if (opts.importFrom !== undefined) {
-        spawnArgs.importFrom = opts.importFrom
-      }
-
-      const spawnOpts: {
-        observe: true
-        wake: Wake
-        initialMessage?: unknown
-      } = {
-        observe: true,
-        wake: opts.wake ?? `runFinished`,
-      }
-
-      const entityHandle = await config.doSpawn(
-        CODING_SESSION_ENTITY_TYPE,
-        sessionId,
-        spawnArgs,
-        spawnOpts
-      )
-
-      const entityUrl = codingSessionEntityUrl(sessionId)
-      const readEvents = (): Array<CodingSessionEventRow> => {
-        const collection = entityHandle.db?.collections.events
-        if (!collection) return []
-        const rows = (collection as { toArray?: unknown }).toArray
-        return (Array.isArray(rows) ? rows : []) as Array<CodingSessionEventRow>
-      }
-      const readMeta = (): CodingSessionMeta | undefined => {
-        const collection = entityHandle.db?.collections.sessionMeta
-        if (!collection) return undefined
-        const row = (collection as { get?: (k: string) => unknown }).get?.(
-          `current`
-        )
-        return row as CodingSessionMeta | undefined
-      }
-      const MESSAGE_TYPES = new Set([`user_message`, `assistant_message`])
-
-      const handle: CodingSessionHandle = {
-        entityUrl,
-        sessionId,
-        agent: opts.agent,
-        run: entityHandle.run,
-        meta: readMeta,
-        status: (): CodingSessionStatus | undefined => readMeta()?.status,
-        send: (prompt: string): void => {
-          config.executeSend({
-            targetUrl: entityUrl,
-            payload: { text: prompt },
-            type: `prompt`,
-          })
-        },
-        get events(): ReadonlyArray<CodingSessionEventRow> {
-          return readEvents()
-        },
-        get messages(): ReadonlyArray<CodingSessionEventRow> {
-          return readEvents().filter((e) => MESSAGE_TYPES.has(e.type))
-        },
-      }
-      return handle
     },
     send(
       entityUrl: string,
