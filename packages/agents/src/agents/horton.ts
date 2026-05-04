@@ -307,7 +307,12 @@ function readAgentsMd(workingDirectory: string): string | null {
   const path = `${workingDirectory}/AGENTS.md`
   try {
     if (!fs.existsSync(path) || !fs.statSync(path).isFile()) return null
-    return fs.readFileSync(path, `utf8`)
+    const content = fs.readFileSync(path, `utf8`)
+    return [
+      `<context_file kind="instructions" path="${path}">`,
+      content,
+      `</context_file>`,
+    ].join(`\n`)
   } catch {
     return null
   }
