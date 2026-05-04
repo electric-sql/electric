@@ -54,16 +54,20 @@ The `creation_schema` for horton should add `workingDirectory` as an optional st
 
 ### NewSessionPage
 
-The existing `ProjectPicker` component is replaced to:
+Centered hero layout inspired by Codex:
 
-- Fetch projects from `GET /_electric/projects` (instead of localStorage)
-- Show a dropdown with "No project", existing projects, and "+ New project..."
-- "+ New project..." opens an inline form with:
-  - Name text input
-  - Path text input (with server-side validation via `POST /_electric/validate-path`)
-  - Create button
+```
+        Let's build
+    durable-streams  ^
+```
 
-The active project selection is still stored in localStorage (it's a UI preference for "which project am I working in right now").
+- The project name is displayed as an inline dropdown trigger below the heading text.
+- If no project is selected, shows "Select a project ^" (or similar placeholder).
+- Clicking opens a popover with:
+  - "Select your project" header
+  - List of existing projects (folder icon + name, checkmark on active)
+  - "Add new project" row at the bottom (opens inline form with name + path inputs)
+- The chat composer sits below, same as today.
 
 ### Sidebar
 
