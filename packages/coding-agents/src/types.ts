@@ -103,6 +103,13 @@ export interface RunTurnArgs {
   prompt: string
   /** Model to pass to the CLI (e.g. 'claude-haiku-4-5-20251001'). */
   model?: string
+  /**
+   * Where the agent runs. Forwarded to the adapter's buildCliInvocation
+   * so adapters whose CLI has its own inner sandbox (e.g. codex / bwrap)
+   * can disable that inner layer when the outer environment already
+   * provides isolation.
+   */
+  target?: `sandbox` | `host` | `sprites`
   /** Sink for normalized events as parsed off CLI stdout. */
   onEvent: (e: NormalizedEvent) => void
   /** Sink for raw native JSONL lines (tee'd to a sidecar collection). */

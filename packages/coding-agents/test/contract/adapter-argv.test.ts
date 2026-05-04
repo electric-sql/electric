@@ -54,3 +54,32 @@ describe(`adapter argv stability — ${listAdapters()
     }
   }
 })
+
+describe(`codex sandbox-bypass per target`, () => {
+  // Codex's inner bwrap sandbox is redundant when the agent already runs
+  // inside a Docker sandbox/sprite. Without bypass, every shell tool call
+  // fails with "bwrap: No permissions to create a new namespace" on
+  // macOS Docker Desktop. For target=host we leave codex's normal
+  // sandbox engaged.
+  const codex = listAdapters().find((a) => a.kind === `codex`)!
+
+  it(`adds --dangerously-bypass-approvals-and-sandbox for target=sandbox`, () => {
+    const inv = codex.buildCliInvocation({ prompt: `P`, target: `sandbox` })
+    expect(inv.args).toContain(`--dangerously-bypass-approvals-and-sandbox`)
+  })
+
+  it(`adds --dangerously-bypass-approvals-and-sandbox for target=sprites`, () => {
+    const inv = codex.buildCliInvocation({ prompt: `P`, target: `sprites` })
+    expect(inv.args).toContain(`--dangerously-bypass-approvals-and-sandbox`)
+  })
+
+  it(`omits the bypass flag for target=host`, () => {
+    const inv = codex.buildCliInvocation({ prompt: `P`, target: `host` })
+    expect(inv.args).not.toContain(`--dangerously-bypass-approvals-and-sandbox`)
+  })
+
+  it(`omits the bypass flag when target is undefined`, () => {
+    const inv = codex.buildCliInvocation({ prompt: `P` })
+    expect(inv.args).not.toContain(`--dangerously-bypass-approvals-and-sandbox`)
+  })
+})

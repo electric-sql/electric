@@ -1085,6 +1085,7 @@ async function processPrompt(
           prompt: promptText,
           nativeSessionId: meta.nativeSessionId,
           model: meta.model,
+          target: meta.target,
           onEvent: (e: NormalizedEvent) => {
             ctx.db.actions.events_insert({
               row: {

@@ -91,7 +91,7 @@ export const CodexAdapter: CodingAgentAdapter = {
   cliBinary: `sh`,
   defaultEnvVars: [`OPENAI_API_KEY`],
 
-  buildCliInvocation({ prompt: _prompt, nativeSessionId, model }) {
+  buildCliInvocation({ prompt: _prompt, nativeSessionId, model, target }) {
     // Global `-c model="..."` override goes BEFORE the `exec` subcommand
     // because codex's clap parser scopes `-c` flags at the top-level.
     // Codex 0.128.0 does NOT read OPENAI_MODEL — the only ways to pin a
@@ -116,6 +116,16 @@ export const CodexAdapter: CodingAgentAdapter = {
       `--skip-git-repo-check`,
       `--json`,
     ]
+    // For target=sandbox/sprites the agent already runs inside a Docker
+    // container or sprite — codex's inner bwrap-based command sandbox is
+    // (a) redundant, (b) broken on macOS Docker Desktop where the kernel
+    // disallows non-privileged user namespaces. Without this flag every
+    // shell tool call dies with "bwrap: No permissions to create a new
+    // namespace" and the agent silently produces no useful output.
+    // For target=host we leave codex's normal sandbox engaged.
+    if (target === `sandbox` || target === `sprites`) {
+      codexArgs.push(`--dangerously-bypass-approvals-and-sandbox`)
+    }
     if (nativeSessionId) codexArgs.push(`resume`, nativeSessionId)
     // Use `-` as the positional prompt to tell codex to read the prompt
     // from stdin. From `codex exec --help`: "If not provided as an

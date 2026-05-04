@@ -34,6 +34,7 @@ export class StdioBridge implements Bridge {
       prompt: args.prompt,
       nativeSessionId: args.nativeSessionId,
       model: args.model,
+      target: args.target,
     })
 
     const handle = await args.sandbox.exec({

@@ -16,6 +16,15 @@ export interface CodingAgentAdapter {
     prompt: string
     nativeSessionId?: string
     model?: string
+    /**
+     * Where the agent runs. Adapters that wrap a CLI which has its own
+     * inner sandbox (e.g. codex's bwrap) use this to decide whether to
+     * disable that inner layer — `sandbox` and `sprites` already give
+     * OS-level isolation, so codex's bwrap-based command sandbox is
+     * redundant and broken on macOS Docker Desktop. `host` keeps codex's
+     * normal sandbox active.
+     */
+    target?: `sandbox` | `host` | `sprites`
   }): { args: ReadonlyArray<string>; promptDelivery: `stdin` | `argv` }
 
   /** Argv whose exit code reports whether the resume transcript exists. */
