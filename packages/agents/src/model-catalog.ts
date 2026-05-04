@@ -177,7 +177,11 @@ function withProviderPayloadDefaults(
   )
     return config
 
-  const effort = reasoningEffort ?? `minimal`
+  const defaultEffort = choice.provider === `openai-codex` ? `low` : `minimal`
+  const effort =
+    reasoningEffort === `minimal` && choice.provider === `openai-codex`
+      ? `low`
+      : (reasoningEffort ?? defaultEffort)
 
   return {
     ...config,
