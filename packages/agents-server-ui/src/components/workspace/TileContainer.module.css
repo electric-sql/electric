@@ -1,4 +1,4 @@
-.group {
+.tile {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -7,16 +7,8 @@
   overflow: hidden;
   background: var(--ds-bg);
   /* Required for `<DropOverlay>` (position: absolute; inset: 0) to
-   * cover only this group and not bleed into adjacent groups. */
+   * cover only this tile and not bleed into adjacent tiles. */
   position: relative;
-}
-
-.activeGroup {
-  /* Subtle outline on the active group so the user knows where new
-   * tiles will land when they click a sidebar entity. Inset to avoid
-   * pushing surrounding splitters around (border would change layout
-   * by 1px). */
-  box-shadow: inset 0 0 0 1px var(--ds-accent-a6);
 }
 
 .body {
@@ -28,8 +20,8 @@
   overflow: hidden;
 
   /* Shared chat-column geometry — kept in sync with router.module.css's
-   * .entityMain so chat tiles render the same regardless of which
-   * group they're in. */
+   * .entityMain so chat tiles render the same regardless of where they
+   * sit in the workspace. */
   --chat-col-width: 68ch;
   --chat-surface-width: calc(var(--chat-col-width) + 24px);
 }
@@ -38,4 +30,13 @@
   .body {
     --chat-col-width: 80ch;
   }
+}
+
+/* Title slot for a standalone (entity-less) tile — icon + label, sized
+ * to match how `<EntityHeader>` lays out an entity title. */
+.standaloneTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ds-text-1);
 }

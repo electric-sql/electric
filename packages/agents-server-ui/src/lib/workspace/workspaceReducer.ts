@@ -1,41 +1,36 @@
 import { nanoid } from 'nanoid'
-import type {
-  DropTarget,
-  Group,
-  Split,
-  Tile,
-  Workspace,
-  WorkspaceNode,
-} from './types'
+import { NEW_SESSION_VIEW_ID } from './types'
+import type { DropTarget, Split, Tile, Workspace, WorkspaceNode } from './types'
 import type { ViewId } from './viewRegistry'
 
 // ---------------------------------------------------------------------------
 // Pure reducer for the workspace tree. Every operation returns a *new*
 // `Workspace` value — no in-place mutation — so `useReducer` can drive
 // React updates by reference identity. The shape of the tree
-// (Split → Group → Tile) is enforced by the reducer's invariants:
+// (Split → Tile, no groups) is enforced by the reducer's invariants:
 //
 // 1. A `Split` always has ≥2 children. After any mutation that could
 //    leave it with 1 child, the split is unwrapped — its single child
 //    takes the split's place in the parent.
-// 2. A `Group` always has ≥1 tile. After any mutation that could leave
-//    it empty, the group is removed; its parent split unwraps too if
-//    that drops it to 1 child.
-// 3. `activeGroupId` always references a group present in the tree, or
+// 2. `activeTileId` always references a tile present in the tree, or
 //    `null` iff `root === null`.
-// 4. Sibling sizes inside a `Split` are normalised so they sum to ~1.
+// 3. Sibling sizes inside a `Split` are normalised so they sum to ~1.
+// 4. Nested same-direction splits flatten: H(a, H(b, c)) → H(a, b, c).
 // ---------------------------------------------------------------------------
 
 export type WorkspaceAction =
   | {
       type: `open-tile`
-      tile: { entityUrl: string; viewId: ViewId }
+      tile: { entityUrl: string | null; viewId: ViewId }
+      target?: DropTarget
+    }
+  | {
+      type: `open-new-session-tile`
       target?: DropTarget
     }
   | { type: `close-tile`; tileId: string }
   | { type: `move-tile`; tileId: string; target: DropTarget }
   | { type: `set-active-tile`; tileId: string }
-  | { type: `set-active-group`; groupId: string }
   | { type: `set-tile-view`; tileId: string; viewId: ViewId }
   | {
       type: `split-tile-with-view`
@@ -57,16 +52,18 @@ export function workspaceReducer(
   switch (action.type) {
     case `open-tile`:
       return openTile(state, action.tile, action.target)
+    case `open-new-session-tile`:
+      return openTile(
+        state,
+        { entityUrl: null, viewId: NEW_SESSION_VIEW_ID },
+        action.target
+      )
     case `close-tile`:
       return closeTile(state, action.tileId)
     case `move-tile`:
       return moveTile(state, action.tileId, action.target)
     case `set-active-tile`:
       return setActiveTile(state, action.tileId)
-    case `set-active-group`:
-      return state.activeGroupId === action.groupId
-        ? state
-        : { ...state, activeGroupId: action.groupId }
     case `set-tile-view`:
       return setTileView(state, action.tileId, action.viewId)
     case `split-tile-with-view`:
@@ -91,15 +88,17 @@ export function workspaceReducer(
 export function makeTileId(): string {
   return `tile_${nanoid(10)}`
 }
-export function makeGroupId(): string {
-  return `grp_${nanoid(8)}`
-}
 export function makeSplitId(): string {
   return `spl_${nanoid(8)}`
 }
 
-export function makeTile(entityUrl: string, viewId: ViewId): Tile {
-  return { id: makeTileId(), entityUrl, viewId }
+export function makeTile(entityUrl: string | null, viewId: ViewId): Tile {
+  return { kind: `tile`, id: makeTileId(), entityUrl, viewId }
+}
+
+/** Returns true iff the tile is a standalone (no entity attached). */
+export function isStandaloneTile(tile: Tile): boolean {
+  return tile.entityUrl === null
 }
 
 // ---------------------------------------------------------------------------
@@ -107,46 +106,23 @@ export function makeTile(entityUrl: string, viewId: ViewId): Tile {
 // safe to call inside reducer cases for lookups.
 // ---------------------------------------------------------------------------
 
-export function findGroup(
-  node: WorkspaceNode | null,
-  groupId: string
-): Group | null {
-  if (node === null) return null
-  if (node.kind === `group`) return node.id === groupId ? node : null
-  for (const child of node.children) {
-    const found = findGroup(child.node, groupId)
-    if (found) return found
-  }
-  return null
-}
-
-export function findGroupContainingTile(
-  node: WorkspaceNode | null,
-  tileId: string
-): Group | null {
-  if (node === null) return null
-  if (node.kind === `group`) {
-    return node.tiles.some((t) => t.id === tileId) ? node : null
-  }
-  for (const child of node.children) {
-    const found = findGroupContainingTile(child.node, tileId)
-    if (found) return found
-  }
-  return null
-}
-
 export function findTile(
   node: WorkspaceNode | null,
   tileId: string
 ): Tile | null {
-  const group = findGroupContainingTile(node, tileId)
-  return group?.tiles.find((t) => t.id === tileId) ?? null
+  if (node === null) return null
+  if (node.kind === `tile`) return node.id === tileId ? node : null
+  for (const child of node.children) {
+    const found = findTile(child.node, tileId)
+    if (found) return found
+  }
+  return null
 }
 
-export function listGroups(node: WorkspaceNode | null): Array<Group> {
+export function listTiles(node: WorkspaceNode | null): Array<Tile> {
   if (node === null) return []
-  if (node.kind === `group`) return [node]
-  return node.children.flatMap((c) => listGroups(c.node))
+  if (node.kind === `tile`) return [node]
+  return node.children.flatMap((c) => listTiles(c.node))
 }
 
 // ---------------------------------------------------------------------------
@@ -155,68 +131,69 @@ export function listGroups(node: WorkspaceNode | null): Array<Group> {
 
 function openTile(
   state: Workspace,
-  tile: { entityUrl: string; viewId: ViewId },
+  tile: { entityUrl: string | null; viewId: ViewId },
   target?: DropTarget
 ): Workspace {
   const newTile = makeTile(tile.entityUrl, tile.viewId)
 
-  // Empty workspace → bootstrap a single group with the new tile.
+  // Empty workspace → bootstrap with the new tile as the root.
   if (state.root === null) {
-    const group: Group = {
-      kind: `group`,
-      id: makeGroupId(),
-      tiles: [newTile],
-      activeTileId: newTile.id,
-    }
-    return { root: group, activeGroupId: group.id }
+    return { root: newTile, activeTileId: newTile.id }
   }
 
-  // No explicit target → default to the active group. Fall back to the
-  // first group in the tree if `activeGroupId` is somehow stale.
-  const targetGroupId =
-    target?.groupId ??
-    state.activeGroupId ??
-    listGroups(state.root)[0]?.id ??
-    null
-  if (targetGroupId === null) return state
+  // No explicit target → default to replacing the active tile (URL
+  // navigation / sidebar click semantics: "show this here").
+  const targetTileId =
+    target?.tileId ?? state.activeTileId ?? listTiles(state.root)[0]?.id ?? null
+  if (targetTileId === null) return state
 
   const position = target?.position ?? `replace`
-  return applyToGroup(state, targetGroupId, (group) =>
-    insertTileIntoGroup(group, newTile, position)
+  const next = applyToTile(state, targetTileId, (existing) =>
+    insertTileAt(existing, newTile, position)
   )
+  // Focus follows opening: the freshly-created tile becomes active so
+  // both replace ("show this here") and split ("drop into a quadrant")
+  // give immediate visual + URL feedback. Mirrors VS Code's
+  // drop-to-side behaviour. Guard against pathological inserts that
+  // dropped the tile (e.g. target gone) by checking it actually
+  // landed in the tree.
+  if (findTile(next.root, newTile.id)) {
+    return { ...next, activeTileId: newTile.id }
+  }
+  return next
 }
 
 /**
- * Apply a transformation to a target group inside the tree. The
- * transformation receives the existing group and returns a replacement
- * subtree (Group, Split, or `null` to delete the group entirely).
+ * Apply a transformation to a target tile inside the tree. The
+ * transformation receives the existing tile and returns a replacement
+ * subtree (Tile, Split, or `null` to delete the tile entirely).
  *
  * Walks back up the tree normalising splits (collapse single-child,
  * keep sibling sizes summing to ~1).
  */
-function applyToGroup(
+function applyToTile(
   state: Workspace,
-  groupId: string,
-  fn: (group: Group) => WorkspaceNode | null
+  tileId: string,
+  fn: (tile: Tile) => WorkspaceNode | null
 ): Workspace {
   if (state.root === null) return state
-  const replaced = replaceGroupInTree(state.root, groupId, fn)
+  const replaced = replaceTileInTree(state.root, tileId, fn)
   return finaliseWorkspace(state, replaced)
 }
 
-function replaceGroupInTree(
+function replaceTileInTree(
   node: WorkspaceNode,
-  groupId: string,
-  fn: (group: Group) => WorkspaceNode | null
+  tileId: string,
+  fn: (tile: Tile) => WorkspaceNode | null
 ): WorkspaceNode | null {
-  if (node.kind === `group`) {
-    if (node.id !== groupId) return node
+  if (node.kind === `tile`) {
+    if (node.id !== tileId) return node
     return fn(node)
   }
   const newChildren: Split[`children`] = []
   let changed = false
   for (const child of node.children) {
-    const replacement = replaceGroupInTree(child.node, groupId, fn)
+    const replacement = replaceTileInTree(child.node, tileId, fn)
     if (replacement !== child.node) changed = true
     if (replacement !== null) {
       newChildren.push({ node: replacement, size: child.size })
@@ -229,49 +206,18 @@ function replaceGroupInTree(
 }
 
 /**
- * Insert / replace / split. Returns the new subtree that should sit in
- * the parent's slot — either the same group (mutated tiles), the same
- * group + a sibling under a new split, or just a different group.
+ * Place `incoming` at the named position relative to the existing
+ * `target` tile. Returns the subtree that should sit in the parent's
+ * slot — either the incoming tile alone (replace) or a fresh split
+ * wrapping both.
  */
-function insertTileIntoGroup(
-  group: Group,
-  tile: Tile,
+function insertTileAt(
+  target: Tile,
+  incoming: Tile,
   position: DropTarget[`position`]
 ): WorkspaceNode {
-  switch (position) {
-    case `append`: {
-      // Add as a new tab in the strip; activate it.
-      return {
-        ...group,
-        tiles: [...group.tiles, tile],
-        activeTileId: tile.id,
-      }
-    }
-    case `replace`: {
-      // Replace the active tile in place. If there's only one tile this
-      // is the same as `append` semantically.
-      const newTiles = group.tiles.map((t) =>
-        t.id === group.activeTileId ? tile : t
-      )
-      return {
-        ...group,
-        tiles: newTiles,
-        activeTileId: tile.id,
-      }
-    }
-    case `split-right`:
-    case `split-down`:
-    case `split-left`:
-    case `split-up`: {
-      const newGroup: Group = {
-        kind: `group`,
-        id: makeGroupId(),
-        tiles: [tile],
-        activeTileId: tile.id,
-      }
-      return wrapInSplit(group, newGroup, position)
-    }
-  }
+  if (position === `replace`) return incoming
+  return wrapInSplit(target, incoming, position)
 }
 
 function wrapInSplit(
@@ -307,24 +253,11 @@ function wrapInSplit(
 
 function closeTile(state: Workspace, tileId: string): Workspace {
   if (state.root === null) return state
-  const group = findGroupContainingTile(state.root, tileId)
-  if (!group) return state
-  if (group.tiles.length === 1) {
-    // Closing the last tile removes the group entirely.
-    return applyToGroup(state, group.id, () => null)
+  // Sole tile → workspace becomes empty.
+  if (state.root.kind === `tile` && state.root.id === tileId) {
+    return { root: null, activeTileId: null }
   }
-  // Otherwise drop the tile and pick the next-best active.
-  const tileIndex = group.tiles.findIndex((t) => t.id === tileId)
-  const newTiles = group.tiles.filter((t) => t.id !== tileId)
-  const wasActive = group.activeTileId === tileId
-  const nextActiveId = wasActive
-    ? (newTiles[Math.max(0, tileIndex - 1)] ?? newTiles[0]).id
-    : group.activeTileId
-  return applyToGroup(state, group.id, (g) => ({
-    ...g,
-    tiles: newTiles,
-    activeTileId: nextActiveId,
-  }))
+  return applyToTile(state, tileId, () => null)
 }
 
 // ---------------------------------------------------------------------------
@@ -337,60 +270,35 @@ function moveTile(
   target: DropTarget
 ): Workspace {
   if (state.root === null) return state
-  const sourceGroup = findGroupContainingTile(state.root, tileId)
-  if (!sourceGroup) return state
-  const tile = sourceGroup.tiles.find((t) => t.id === tileId)
+  if (tileId === target.tileId) return state // dropping on self
+  const tile = findTile(state.root, tileId)
   if (!tile) return state
-
-  // No-op self-move (drop on the same group with the same tile and
-  // position 'append' or 'replace' on the active tile).
-  if (
-    sourceGroup.id === target.groupId &&
-    sourceGroup.tiles.length === 1 &&
-    (target.position === `append` || target.position === `replace`)
-  ) {
-    return state
-  }
 
   // Detach the tile from its source first.
   const detached = closeTile(state, tileId)
-  // Re-find the target group in the post-detach tree (the source group
-  // may have collapsed if `tileId` was its last tile).
-  const targetGroupExists = findGroup(detached.root, target.groupId) !== null
-  if (!targetGroupExists) {
-    // Target collapsed during detach — re-insert as a fresh single-tile
-    // group at the root to avoid losing the tile.
+  // The target tile may have collapsed into a different parent during
+  // detach, but its id is stable so we can still find it.
+  if (!findTile(detached.root, target.tileId)) {
+    // Target gone — fall back to inserting at the root so we never
+    // silently drop a tile.
     if (detached.root === null) {
-      const group: Group = {
-        kind: `group`,
-        id: makeGroupId(),
-        tiles: [tile],
-        activeTileId: tile.id,
-      }
-      return { root: group, activeGroupId: group.id }
+      return { root: tile, activeTileId: tile.id }
     }
     return detached
   }
-  return applyToGroup(detached, target.groupId, (group) =>
-    insertTileIntoGroup(group, tile, target.position)
+  return applyToTile(detached, target.tileId, (existing) =>
+    insertTileAt(existing, tile, target.position)
   )
 }
 
 // ---------------------------------------------------------------------------
-// Set active tile / group / view
+// Set active tile / view
 // ---------------------------------------------------------------------------
 
 function setActiveTile(state: Workspace, tileId: string): Workspace {
-  if (state.root === null) return state
-  const group = findGroupContainingTile(state.root, tileId)
-  if (!group) return state
-  if (group.activeTileId === tileId && state.activeGroupId === group.id) {
-    return state
-  }
-  return applyToGroup({ ...state, activeGroupId: group.id }, group.id, (g) => ({
-    ...g,
-    activeTileId: tileId,
-  }))
+  if (state.activeTileId === tileId) return state
+  if (!findTile(state.root, tileId)) return state
+  return { ...state, activeTileId: tileId }
 }
 
 function setTileView(
@@ -398,13 +306,9 @@ function setTileView(
   tileId: string,
   viewId: ViewId
 ): Workspace {
-  if (state.root === null) return state
-  const group = findGroupContainingTile(state.root, tileId)
-  if (!group) return state
-  return applyToGroup(state, group.id, (g) => ({
-    ...g,
-    tiles: g.tiles.map((t) => (t.id === tileId ? { ...t, viewId } : t)),
-  }))
+  return applyToTile(state, tileId, (tile) =>
+    tile.viewId === viewId ? tile : { ...tile, viewId }
+  )
 }
 
 function splitTileWithView(
@@ -415,15 +319,12 @@ function splitTileWithView(
 ): Workspace {
   const tile = findTile(state.root, tileId)
   if (!tile) return state
-  const group = findGroupContainingTile(state.root, tileId)
-  if (!group) return state
   const newTile = makeTile(tile.entityUrl, viewId)
-  const next = applyToGroup(state, group.id, (g) =>
-    insertTileIntoGroup(g, newTile, `split-${direction}`)
+  const next = applyToTile(state, tileId, (existing) =>
+    wrapInSplit(existing, newTile, `split-${direction}`)
   )
-  // The new tile's group is whatever the latest open created.
-  const newGroup = findGroupContainingTile(next.root, newTile.id)
-  return newGroup ? { ...next, activeGroupId: newGroup.id } : next
+  // Focus follows split.
+  return { ...next, activeTileId: newTile.id }
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +346,7 @@ function updateSplitInTree(
   splitId: string,
   sizes: Array<number>
 ): WorkspaceNode {
-  if (node.kind === `group`) return node
+  if (node.kind === `tile`) return node
   if (node.id === splitId) {
     if (node.children.length !== sizes.length) return node
     const total = sizes.reduce((a, b) => a + b, 0)
@@ -495,7 +396,6 @@ function collapseSplit(split: Split): WorkspaceNode | null {
       child.node.kind === `split` &&
       child.node.direction === split.direction
     ) {
-      // Distribute this child's `size` across its grandchildren proportionally.
       const inner = child.node
       const innerTotal = inner.children.reduce((a, c) => a + c.size, 0)
       for (const grand of inner.children) {
@@ -518,23 +418,22 @@ function collapseSplit(split: Split): WorkspaceNode | null {
 }
 
 /**
- * After a structural mutation, fix up `activeGroupId` to ensure it
- * points at a group that still exists. Picks the first remaining group
- * if the previous active was removed.
+ * After a structural mutation, fix up `activeTileId` to ensure it
+ * points at a tile that still exists. Picks the first remaining tile
+ * (tree order) if the previous active was removed.
  */
 function finaliseWorkspace(
   prev: Workspace,
   newRoot: WorkspaceNode | null
 ): Workspace {
   if (newRoot === null) {
-    return { root: null, activeGroupId: null }
+    return { root: null, activeTileId: null }
   }
-  const groups = listGroups(newRoot)
+  const tiles = listTiles(newRoot)
   const stillThere =
-    prev.activeGroupId !== null &&
-    groups.some((g) => g.id === prev.activeGroupId)
+    prev.activeTileId !== null && tiles.some((t) => t.id === prev.activeTileId)
   return {
     root: newRoot,
-    activeGroupId: stillThere ? prev.activeGroupId : groups[0].id,
+    activeTileId: stillThere ? prev.activeTileId : tiles[0].id,
   }
 }

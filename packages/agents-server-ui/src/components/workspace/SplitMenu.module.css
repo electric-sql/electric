@@ -5,29 +5,74 @@
   padding-left: 16px;
 }
 
-.subTrigger {
-  /* The submenu trigger renders a div without an explicit "▸" marker by
-   * default — supply one ourselves so it matches macOS / VS Code menu
-   * convention. Aligned to the right via margin-left:auto on the chevron
-   * span so the gap is consistent across submenu items. */
+/* Section label inside Menu.Content. Plain styled span (not Base UI's
+ * Menu.GroupLabel, which crashes when used outside a Menu.Group). */
+.sectionLabel {
+  padding: 6px 8px 2px;
+  font-size: var(--ds-font-size-1, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ds-gray-11);
+  user-select: none;
+}
+
+/* ---- ViewRow ----------------------------------------------------- */
+/* Layout inside the Menu.Item:
+ *   [icon] Label [✓?] (spacer) [→][↓]
+ * We rely on the parent Menu.Item's padding + hover styles, and just
+ * lay out our children with flex. The trailing buttons claim a small
+ * fixed width and stop click propagation so the row's onSelect (open
+ * here) doesn't fire when they're targeted. */
+
+.viewRow {
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: default;
-  width: 100%;
 }
 
-.subChevron {
-  margin-left: auto;
+.viewActiveTick {
   color: var(--ds-gray-11);
   font-size: var(--ds-font-size-1, 12px);
 }
 
-.viewMenuRow {
-  display: flex;
+.viewRowSpacer {
+  flex: 1 1 auto;
+  /* Min-width so there's always at least a small visual gap between
+   * the label/checkmark and the trailing action buttons even on a
+   * narrow popup. */
+  min-width: 12px;
+}
+
+.viewRowAction {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-gray-11);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* The row uses `gap: 8px` to separate label/icon/checkmark, but the
+ * two trailing action buttons should sit right next to each other —
+ * counter the row gap with a negative margin so they end up touching
+ * (a single 22px button width worth of pairing, not gapped). */
+.viewRowAction + .viewRowAction {
+  margin-left: -8px;
+}
+
+.viewRowAction:hover {
+  background: var(--ds-gray-a5);
+  color: var(--ds-gray-12);
+}
+
+.viewRowAction:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: -1px;
 }
 
 .inspectPre {

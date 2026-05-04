@@ -1,21 +1,59 @@
+/* Pane divider — matches the sidebar resize handle:
+ *
+ *   - The element itself renders as a single 1px line in `--ds-border-1`,
+ *     so the resting visual is identical to the sidebar's right border.
+ *   - A `::before` pseudo-element extends 3px past the line on each side
+ *     to form a 7px hit-target (1px line + 3px overflow each side).
+ *     It's transparent by default so it doesn't visually thicken the
+ *     line; on hover or while dragging it fills with `--ds-accent-a6`
+ *     and overlays the line so the user sees a 7px accent strip — same
+ *     dimensions and colour as the sidebar's `.resizeHandleActive`.
+ *
+ * The parent `.split` has `overflow: hidden`, but the ::before only
+ * extends 3px into adjacent panes (still inside `.split`'s box) so
+ * nothing is clipped. Adjacent panes also have `overflow: hidden` but
+ * the ::before isn't a descendant of theirs, so it paints over them
+ * cleanly via z-index. */
+
 .splitter {
   flex-shrink: 0;
-  background: var(--ds-gray-a5);
+  background: var(--ds-border-1);
   position: relative;
-  z-index: 1;
 }
 
 .horizontal {
-  width: 4px;
+  width: 1px;
   cursor: col-resize;
 }
 
 .vertical {
-  height: 4px;
+  height: 1px;
   cursor: row-resize;
 }
 
-.splitter:hover,
-.active {
+.splitter::before {
+  content: '';
+  position: absolute;
+  background: transparent;
+  transition: background 0.15s ease;
+  z-index: 1;
+}
+
+.horizontal::before {
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.vertical::before {
+  left: 0;
+  right: 0;
+  top: -3px;
+  bottom: -3px;
+}
+
+.splitter:hover::before,
+.active::before {
   background: var(--ds-accent-a6);
 }

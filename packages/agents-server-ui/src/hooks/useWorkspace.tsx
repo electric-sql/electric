@@ -8,9 +8,8 @@ import {
 import type { Dispatch, ReactNode } from 'react'
 import {
   workspaceReducer,
-  findGroupContainingTile,
   findTile,
-  listGroups,
+  listTiles,
 } from '../lib/workspace/workspaceReducer'
 import { EMPTY_WORKSPACE, dropPositionFromSplit } from '../lib/workspace/types'
 import type {
@@ -25,43 +24,45 @@ import type { WorkspaceAction } from '../lib/workspace/workspaceReducer'
 type WorkspaceContextValue = {
   workspace: Workspace
   dispatch: Dispatch<WorkspaceAction>
-  /** Memoised helper API — wraps `dispatch` for ergonomics in components. */
   helpers: WorkspaceHelpers
 }
 
 export type WorkspaceHelpers = {
-  /** Open `entityUrl` (with `viewId`) — defaults to active group, replace. */
+  /** Open `entityUrl` (with `viewId`) — defaults to replacing the active tile. */
   openEntity: (
     entityUrl: string,
     options?: { viewId?: ViewId; target?: DropTarget }
   ) => void
-  /** Close a tile by id — collapses empty groups / splits. */
+  /**
+   * Open a standalone "new session" tile — defaults to replacing the
+   * active tile. Used by the index route, the `⌘N` hotkey and the
+   * sidebar's "New session" button. Pass an explicit `target` to put
+   * the new-session tile in a split instead.
+   */
+  openNewSession: (options?: { target?: DropTarget }) => void
+  /** Close a tile by id — collapses parent splits if needed. */
   closeTile: (tileId: string) => void
   /** Move a tile to a different position (drag-and-drop primitive). */
   moveTile: (tileId: string, target: DropTarget) => void
-  /** Set a tile as active inside its group, plus mark its group active. */
+  /** Mark a tile as the active tile (drives URL sync + ⌘W target). */
   setActiveTile: (tileId: string) => void
-  setActiveGroup: (groupId: string) => void
-  /** Swap a tile's view in place — no layout change. */
+  /** Swap a tile's view in place — preserves tile id (and per-tile state). */
   setTileView: (tileId: string, viewId: ViewId) => void
-  /** Split the active tile and put the named view in the new group. */
+  /** Split a tile and put a different view in the new tile. */
   splitTileWithView: (
     tileId: string,
     viewId: ViewId,
     direction: SplitDirection
   ) => void
-  /** Convenience: split the active tile, keeping the same view. */
+  /** Convenience: split a tile, copying its current view into the new one. */
   splitTile: (tileId: string, direction: SplitDirection) => void
-  /** Resize a split's children. */
   resizeSplit: (splitId: string, sizes: Array<number>) => void
-  /** Replace the entire workspace (used by URL/persistence hydration). */
   replaceWorkspace: (workspace: Workspace) => void
 
   // ---- Read-side conveniences (computed from the latest workspace). ----
-  /** Active tile in the active group, or `null` for an empty workspace. */
+  /** The active tile, or `null` for an empty workspace. */
   activeTile: Tile | null
-  /** Active group, or `null` for an empty workspace. */
-  activeGroupId: string | null
+  activeTileId: string | null
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
@@ -86,6 +87,13 @@ export function WorkspaceProvider({
     []
   )
 
+  const openNewSession = useCallback<WorkspaceHelpers[`openNewSession`]>(
+    (options) => {
+      dispatch({ type: `open-new-session-tile`, target: options?.target })
+    },
+    []
+  )
+
   const closeTile = useCallback<WorkspaceHelpers[`closeTile`]>((tileId) => {
     dispatch({ type: `close-tile`, tileId })
   }, [])
@@ -100,13 +108,6 @@ export function WorkspaceProvider({
   const setActiveTile = useCallback<WorkspaceHelpers[`setActiveTile`]>(
     (tileId) => {
       dispatch({ type: `set-active-tile`, tileId })
-    },
-    []
-  )
-
-  const setActiveGroup = useCallback<WorkspaceHelpers[`setActiveGroup`]>(
-    (groupId) => {
-      dispatch({ type: `set-active-group`, groupId })
     },
     []
   )
@@ -154,32 +155,32 @@ export function WorkspaceProvider({
   )
 
   const helpers = useMemo<WorkspaceHelpers>(() => {
-    const groups = listGroups(workspace.root)
-    const activeGroup =
-      groups.find((g) => g.id === workspace.activeGroupId) ?? groups[0] ?? null
     const activeTile =
-      activeGroup?.tiles.find((t) => t.id === activeGroup.activeTileId) ?? null
+      (workspace.activeTileId &&
+        findTile(workspace.root, workspace.activeTileId)) ||
+      listTiles(workspace.root)[0] ||
+      null
     return {
       openEntity,
+      openNewSession,
       closeTile,
       moveTile,
       setActiveTile,
-      setActiveGroup,
       setTileView,
       splitTileWithView,
       splitTile,
       resizeSplit,
       replaceWorkspace,
       activeTile,
-      activeGroupId: workspace.activeGroupId,
+      activeTileId: workspace.activeTileId,
     }
   }, [
     workspace,
     openEntity,
+    openNewSession,
     closeTile,
     moveTile,
     setActiveTile,
-    setActiveGroup,
     setTileView,
     splitTileWithView,
     splitTile,
@@ -207,8 +208,5 @@ export function useWorkspace(): WorkspaceContextValue {
   return ctx
 }
 
-// Re-export tree walkers for convenience (some components call them
-// against the snapshot returned from `useWorkspace`).
-export { findGroupContainingTile, findTile, listGroups }
-// Re-export the position helper so component-level imports stay shallow.
+export { findTile, listTiles }
 export { dropPositionFromSplit }

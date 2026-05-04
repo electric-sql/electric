@@ -24,7 +24,6 @@ import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
-import { NewSessionPage } from './components/NewSessionPage'
 import { Workspace } from './components/workspace/Workspace'
 import styles from './router.module.css'
 
@@ -58,6 +57,11 @@ function RootShell(): React.ReactElement {
   // we fall back to a combo that isn't claimed by the chrome).
   // The displayed shortcut hint switches per environment via
   // `NewSessionKey` / `newSessionLabel`.
+  //
+  // Navigating to `/` is the simplest trigger: the URL → workspace
+  // effect in `<Workspace>` then focuses an existing new-session
+  // tile or replaces the active tile with a fresh one. Going through
+  // the URL means the persistence layer sees the change too.
   const openNewSession = useCallback(
     (e: KeyboardEvent) => {
       e.preventDefault()
@@ -81,19 +85,20 @@ function RootShell(): React.ReactElement {
     [navigate]
   )
 
-  // ⌘/Ctrl-click + middle-click on a sidebar row → open the entity in
-  // a new split to the right of the active group, rather than replacing
-  // the active tile (matches VS Code's "open to side" gesture).
+  // ⌘/Ctrl-click + middle-click on a sidebar row → open the entity to
+  // the right of the active tile, rather than replacing it (matches
+  // VS Code's "open to side" gesture).
   const openEntityInSplit = useCallback(
     (entityUrl: string) => {
-      const groupId = helpers.activeGroupId
-      if (!groupId) {
-        // Empty workspace — fall through to plain navigation.
+      const tileId = helpers.activeTileId
+      if (!tileId) {
+        // Empty workspace — fall through to plain navigation, which
+        // will bootstrap the workspace's first tile.
         navigateToEntity(entityUrl)
         return
       }
       helpers.openEntity(entityUrl, {
-        target: { groupId, position: `split-right` },
+        target: { tileId, position: `split-right` },
       })
     },
     [helpers, navigateToEntity]
@@ -121,7 +126,7 @@ function RootShell(): React.ReactElement {
 }
 
 /**
- * Search-param schema for the entity route.
+ * Search-param schema for the workspace routes.
  *
  * - `view`   optional view id (e.g. `state-explorer`). Omitted from
  *            the URL when it matches the default view (`chat`) so
@@ -130,8 +135,12 @@ function RootShell(): React.ReactElement {
  *            hydrate the workspace from it and *strip the param*
  *            (see `<Workspace>`'s ?layout effect) so the address bar
  *            settles back to "active tile only".
+ *
+ * Both index (`/`) and entity routes share this schema because both
+ * accept `?layout=` (a layout link can land on either route — the
+ * decoder restores the full tree regardless).
  */
-const entitySearchSchema = z.object({
+const workspaceSearchSchema = z.object({
   view: z.string().optional(),
   layout: z.string().optional(),
 })
@@ -141,11 +150,11 @@ const entitySearchSchema = z.object({
  * `<Workspace>`, which reads the route params (entity splat + ?view)
  * via TanStack Router hooks and reflects them into the workspace
  * tree. Keeping the route handler this small means the component tree
- * underneath stays the same regardless of which entity is selected,
- * which lets per-tile state (scroll, selection, etc.) survive
- * navigation between entities.
+ * underneath stays the same regardless of which entity is selected
+ * (or whether the new-session tile is active), which lets per-tile
+ * state (scroll, selection, etc.) survive navigation between tiles.
  */
-function EntityPage(): React.ReactElement {
+function WorkspacePage(): React.ReactElement {
   return <Workspace />
 }
 
@@ -154,14 +163,15 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/`,
-  component: NewSessionPage,
+  component: WorkspacePage,
+  validateSearch: workspaceSearchSchema,
 })
 
 const entityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/entity/$`,
-  component: EntityPage,
-  validateSearch: entitySearchSchema,
+  component: WorkspacePage,
+  validateSearch: workspaceSearchSchema,
 })
 
 const routeTree = rootRoute.addChildren([indexRoute, entityRoute])

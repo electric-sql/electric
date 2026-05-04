@@ -8,27 +8,26 @@ import type { DropPosition } from '../../lib/workspace/types'
 import styles from './DropOverlay.module.css'
 
 /**
- * Visualises and resolves the 5-zone drop target on top of a Group.
+ * Visualises and resolves the 4-edge drop target on top of a Tile.
  *
  * Wraps a containing relative element. When a workspace drag starts
  * anywhere in the document we "arm" — pointer-events flip on so this
  * element can intercept `dragover`/`drop` events. While armed, we
- * compute which of the 5 zones the cursor is in (using the group's
- * client rect + a 25% inset for the centre square) and highlight that
- * zone. On `drop` we either:
+ * compute which of the 4 edges the cursor is closest to and highlight
+ * that zone. On `drop` we either:
  *
- * - move an existing tile into this group (`tile` payload), or
- * - open a sidebar entity into this group (`sidebar-entity` payload).
+ * - move an existing tile (`tile` payload) to that side of this tile, or
+ * - open a sidebar entity (`sidebar-entity` payload) as a new split.
  *
- * The overlay is the only DnD-aware element per group — keeping the
- * pointer-events toggle here means splitter drags / text selection in
- * the body aren't affected when no drag is in progress.
+ * There is intentionally no centre zone: drops always create a new
+ * split. To swap the contents of an existing tile in place, switch the
+ * view from the tile menu or click the entity in the sidebar.
  */
 export function DropOverlay({
-  groupId,
+  tileId,
   containerRef,
 }: {
-  groupId: string
+  tileId: string
   containerRef: React.RefObject<HTMLDivElement | null>
 }): React.ReactElement {
   const { helpers } = useWorkspace()
@@ -68,11 +67,10 @@ export function DropOverlay({
       const y = (e.clientY - rect.top) / rect.height
       // Outside (e.g. cursor wandered off): no zone.
       if (x < 0 || x > 1 || y < 0 || y > 1) return null
-      // Centre square (matches CSS .center inset:25%)
-      if (x >= 0.25 && x <= 0.75 && y >= 0.25 && y <= 0.75) return `center`
       // Pick the dominant edge by relative distance from the centre.
-      // We compare normalised |x-.5| vs |y-.5| so square groups map
-      // cleanly into 4 triangle slabs joined at the centre.
+      // Comparing |x-.5| vs |y-.5| splits the tile into four triangles
+      // joined at the centre point — there's no neutral middle, so any
+      // drop inside the tile falls into exactly one edge zone.
       const dx = Math.abs(x - 0.5)
       const dy = Math.abs(y - 0.5)
       if (dx > dy) return x < 0.5 ? `west` : `east`
@@ -111,24 +109,24 @@ export function DropOverlay({
       const position = ZONE_TO_POSITION[z]
 
       if (payload.kind === `tile`) {
-        // No-op when dropping a tile back onto its source group's
-        // centre — the reducer's same-group append handles this, but
-        // skipping the dispatch saves a render.
-        if (
-          payload.sourceGroupId === groupId &&
-          (position === `append` || position === `replace`)
-        ) {
-          return
-        }
-        helpers.moveTile(payload.tileId, { groupId, position })
+        // Drop-on-self: no-op (the reducer also guards this, but a
+        // local check saves a dispatch + render).
+        if (payload.tileId === tileId) return
+        helpers.moveTile(payload.tileId, { tileId, position })
+      } else if (payload.kind === `sidebar-new-session`) {
+        // Always create a *fresh* standalone tile — the click flow on
+        // the same button focuses an existing new-session tile, this
+        // drag flow is the user's explicit "give me another one"
+        // gesture.
+        helpers.openNewSession({ target: { tileId, position } })
       } else {
         helpers.openEntity(payload.entityUrl, {
           viewId: payload.viewId,
-          target: { groupId, position },
+          target: { tileId, position },
         })
       }
     },
-    [computeZone, helpers, groupId]
+    [computeZone, helpers, tileId]
   )
 
   const cls = [styles.overlay, armed ? styles.armed : null]
@@ -142,9 +140,9 @@ export function DropOverlay({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      data-group-id={groupId}
+      data-tile-id={tileId}
     >
-      {([`center`, `north`, `east`, `south`, `west`] as const).map((z) => (
+      {([`north`, `east`, `south`, `west`] as const).map((z) => (
         <div
           key={z}
           className={`${styles.zone} ${styles[z]} ${
@@ -156,10 +154,9 @@ export function DropOverlay({
   )
 }
 
-type Zone = `center` | `north` | `east` | `south` | `west`
+type Zone = `north` | `east` | `south` | `west`
 
 const ZONE_TO_POSITION: Record<Zone, DropPosition> = {
-  center: `append`,
   north: `split-up`,
   east: `split-right`,
   south: `split-down`,

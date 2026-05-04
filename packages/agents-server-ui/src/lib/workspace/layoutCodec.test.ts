@@ -1,23 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { decodeLayout, encodeLayout } from './layoutCodec'
-import type { Group, Split, Workspace, WorkspaceNode } from './types'
+import type { Split, Tile, Workspace, WorkspaceNode } from './types'
 
 /**
- * Round-trips through the codec strip generated ids (split / group /
- * tile ids are minted fresh on decode), so we compare on the
- * structural projection that's part of the wire format.
+ * Round-trips through the codec strip generated ids (split / tile ids
+ * are minted fresh on decode), so we compare on the structural
+ * projection that's part of the wire format.
  */
 function structureOf(ws: Workspace): unknown {
   if (!ws.root) return null
   const visit = (node: WorkspaceNode): unknown => {
-    if (node.kind === `group`) {
+    if (node.kind === `tile`) {
       return {
-        kind: `group`,
-        tiles: node.tiles.map((t) => ({
-          entityUrl: t.entityUrl,
-          viewId: t.viewId,
-        })),
-        activeIdx: node.tiles.findIndex((t) => t.id === node.activeTileId),
+        kind: `tile`,
+        entityUrl: node.entityUrl,
+        viewId: node.viewId,
       }
     }
     return {
@@ -39,25 +36,9 @@ describe(`layoutCodec`, () => {
     expect(decoded.kind).toBe(`ok`)
     if (decoded.kind !== `ok`) return
     expect(structureOf(decoded.workspace)).toEqual({
-      kind: `group`,
-      tiles: [{ entityUrl: `/horton/foo`, viewId: `chat` }],
-      activeIdx: 0,
-    })
-    expect(encodeLayout(decoded.workspace)).toBe(encoded)
-  })
-
-  it(`encodes the active tile index when not 0`, () => {
-    const encoded = `horton%2Ffoo.chat;horton%2Ffoo.state-explorer@1`
-    const decoded = decodeLayout(encoded)
-    expect(decoded.kind).toBe(`ok`)
-    if (decoded.kind !== `ok`) return
-    expect(structureOf(decoded.workspace)).toEqual({
-      kind: `group`,
-      tiles: [
-        { entityUrl: `/horton/foo`, viewId: `chat` },
-        { entityUrl: `/horton/foo`, viewId: `state-explorer` },
-      ],
-      activeIdx: 1,
+      kind: `tile`,
+      entityUrl: `/horton/foo`,
+      viewId: `chat`,
     })
     expect(encodeLayout(decoded.workspace)).toBe(encoded)
   })
@@ -73,17 +54,17 @@ describe(`layoutCodec`, () => {
       children: [
         {
           node: {
-            kind: `group`,
-            tiles: [{ entityUrl: `/horton/foo`, viewId: `chat` }],
-            activeIdx: 0,
+            kind: `tile`,
+            entityUrl: `/horton/foo`,
+            viewId: `chat`,
           },
           size: 0.6,
         },
         {
           node: {
-            kind: `group`,
-            tiles: [{ entityUrl: `/horton/foo`, viewId: `state-explorer` }],
-            activeIdx: 0,
+            kind: `tile`,
+            entityUrl: `/horton/foo`,
+            viewId: `state-explorer`,
           },
           size: 0.4,
         },
@@ -112,9 +93,9 @@ describe(`layoutCodec`, () => {
       children: [
         {
           node: {
-            kind: `group`,
-            tiles: [{ entityUrl: `/horton/foo`, viewId: `chat` }],
-            activeIdx: 0,
+            kind: `tile`,
+            entityUrl: `/horton/foo`,
+            viewId: `chat`,
           },
           size: 0.5,
         },
@@ -125,17 +106,17 @@ describe(`layoutCodec`, () => {
             children: [
               {
                 node: {
-                  kind: `group`,
-                  tiles: [{ entityUrl: `/horton/bar`, viewId: `chat` }],
-                  activeIdx: 0,
+                  kind: `tile`,
+                  entityUrl: `/horton/bar`,
+                  viewId: `chat`,
                 },
                 size: 0.5,
               },
               {
                 node: {
-                  kind: `group`,
-                  tiles: [{ entityUrl: `/horton/baz`, viewId: `chat` }],
-                  activeIdx: 0,
+                  kind: `tile`,
+                  entityUrl: `/horton/baz`,
+                  viewId: `chat`,
                 },
                 size: 0.5,
               },
@@ -169,15 +150,14 @@ describe(`layoutCodec`, () => {
     expect(a.kind).toBe(`ok`)
     expect(b.kind).toBe(`ok`)
     if (a.kind !== `ok` || b.kind !== `ok`) return
-    const ag = a.workspace.root as Group
-    const bg = b.workspace.root as Group
-    expect(ag.id).not.toBe(bg.id)
-    expect(ag.tiles[0].id).not.toBe(bg.tiles[0].id)
+    const at = a.workspace.root as Tile
+    const bt = b.workspace.root as Tile
+    expect(at.id).not.toBe(bt.id)
   })
 
   it(`round-trips a layout produced by encodeLayout()`, () => {
     const original = decodeLayout(
-      `H(horton%2Ffoo.chat:70,V(horton%2Fbar.state-explorer,horton%2Fbaz.chat;horton%2Fqux.chat@1):30)`
+      `H(horton%2Ffoo.chat:70,V(horton%2Fbar.state-explorer,horton%2Fbaz.chat):30)`
     )
     expect(original.kind).toBe(`ok`)
     if (original.kind !== `ok`) return
@@ -197,5 +177,56 @@ describe(`layoutCodec`, () => {
     const split = decoded.workspace.root as Split
     const sum = split.children.reduce((acc: number, c) => acc + c.size, 0)
     expect(sum).toBeCloseTo(1)
+  })
+
+  it(`active tile after decode is the first leaf in tree order`, () => {
+    const decoded = decodeLayout(
+      `H(horton%2Ffoo.chat,V(horton%2Fbar.chat,horton%2Fbaz.chat))`
+    )
+    expect(decoded.kind).toBe(`ok`)
+    if (decoded.kind !== `ok`) return
+    const split = decoded.workspace.root as Split
+    const firstTile = split.children[0].node as Tile
+    expect(decoded.workspace.activeTileId).toBe(firstTile.id)
+  })
+
+  it(`encodes a standalone tile (null entityUrl) with empty path segment`, () => {
+    const decoded = decodeLayout(`.new-session`)
+    expect(decoded.kind).toBe(`ok`)
+    if (decoded.kind !== `ok`) return
+    const tile = decoded.workspace.root as Tile
+    expect(tile.entityUrl).toBeNull()
+    expect(tile.viewId).toBe(`new-session`)
+    expect(encodeLayout(decoded.workspace)).toBe(`.new-session`)
+  })
+
+  it(`mixes standalone and entity tiles in the same split`, () => {
+    const encoded = `H(.new-session,horton%2Fbar.chat)`
+    const decoded = decodeLayout(encoded)
+    expect(decoded.kind).toBe(`ok`)
+    if (decoded.kind !== `ok`) return
+    expect(structureOf(decoded.workspace)).toEqual({
+      kind: `split`,
+      direction: `horizontal`,
+      children: [
+        {
+          node: {
+            kind: `tile`,
+            entityUrl: null,
+            viewId: `new-session`,
+          },
+          size: 0.5,
+        },
+        {
+          node: {
+            kind: `tile`,
+            entityUrl: `/horton/bar`,
+            viewId: `chat`,
+          },
+          size: 0.5,
+        },
+      ],
+    })
+    expect(encodeLayout(decoded.workspace)).toBe(encoded)
   })
 })

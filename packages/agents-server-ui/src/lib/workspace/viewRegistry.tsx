@@ -13,12 +13,12 @@ import type { ElectricEntity } from '../ElectricAgentsProvider'
 export type ViewId = string
 
 /**
- * Props every view receives. The `tileId` is included so views can scope
+ * Props an *entity* view receives. The `tileId` is included so views can scope
  * local state (scroll position, selected row, etc.) per-tile rather than
  * per-entity, matching VS Code's behaviour where two splits of the same file
  * scroll independently.
  */
-export type ViewProps = {
+export type EntityViewProps = {
   baseUrl: string
   entityUrl: string
   entity: ElectricEntity
@@ -27,15 +27,25 @@ export type ViewProps = {
   tileId: string
 }
 
-export type ViewDefinition = {
+/**
+ * Props a *standalone* view receives. No entity bound to the tile —
+ * just a baseUrl (for any server-relative API calls) and the tile id.
+ */
+export type StandaloneViewProps = {
+  baseUrl: string
+  tileId: string
+}
+
+/** Discriminated union — `kind` distinguishes which props shape applies. */
+export type ViewProps = EntityViewProps
+
+export type EntityViewDefinition = {
+  kind: `entity`
   id: ViewId
-  /** Human label shown in the View ▸ submenu and on tabs. */
+  /** Human label shown in the menu and on the inline view-strip. */
   label: string
-  /** Tab/menu icon. */
   icon: LucideIcon
-  /** Optional shorter label for narrow tabs (defaults to `label`). */
   shortLabel?: string
-  /** Optional helper text rendered as a hint in the View ▸ menu. */
   description?: string
   /**
    * Per-entity availability gate. Used to hide views that don't apply to
@@ -43,15 +53,20 @@ export type ViewDefinition = {
    * omitted the view is considered available for every entity.
    */
   isAvailable?: (entity: ElectricEntity) => boolean
-  /**
-   * Default split direction when the user clicks the parent `View ▸ X`
-   * menu row directly (rather than picking a sub-action). `'right'` matches
-   * the muscle-memory of "drawer pops out to the right" for the State
-   * Explorer; `undefined` falls back to `'open here'`.
-   */
-  defaultSplit?: `right` | `down`
-  Component: ComponentType<ViewProps>
+  Component: ComponentType<EntityViewProps>
 }
+
+export type StandaloneViewDefinition = {
+  kind: `standalone`
+  id: ViewId
+  label: string
+  icon: LucideIcon
+  shortLabel?: string
+  description?: string
+  Component: ComponentType<StandaloneViewProps>
+}
+
+export type ViewDefinition = EntityViewDefinition | StandaloneViewDefinition
 
 const registry = new Map<ViewId, ViewDefinition>()
 
@@ -64,13 +79,34 @@ export function getView(id: ViewId): ViewDefinition | undefined {
 }
 
 /**
- * List every registered view, optionally filtered by per-entity availability.
- * Stable order = insertion order, matching `Map`'s iteration semantics, so
- * registration order in `registerViews.ts` controls the menu ordering.
+ * List registered views.
+ *
+ * - `listViews(entity)`     entity views available for that entity, in
+ *                           registration order. Standalone views are
+ *                           excluded — they don't belong in an entity
+ *                           tile's view-switcher.
+ * - `listViews()`           every entity view (for entity-less callers
+ *                           like the Workspace bootstrap that just need
+ *                           a default view id).
+ * - `listStandaloneViews()` standalone views (currently just
+ *                           "new-session"); used to render their tile
+ *                           chrome / placeholder UI.
  */
-export function listViews(entity?: ElectricEntity): Array<ViewDefinition> {
-  const all = Array.from(registry.values())
-  return entity ? all.filter((v) => v.isAvailable?.(entity) ?? true) : all
+export function listViews(
+  entity?: ElectricEntity
+): Array<EntityViewDefinition> {
+  const entityViews = Array.from(registry.values()).filter(
+    (v): v is EntityViewDefinition => v.kind === `entity`
+  )
+  return entity
+    ? entityViews.filter((v) => v.isAvailable?.(entity) ?? true)
+    : entityViews
+}
+
+export function listStandaloneViews(): Array<StandaloneViewDefinition> {
+  return Array.from(registry.values()).filter(
+    (v): v is StandaloneViewDefinition => v.kind === `standalone`
+  )
 }
 
 /**

@@ -1,5 +1,5 @@
-import type { Group, Split, Tile, Workspace, WorkspaceNode } from './types'
-import { makeGroupId, makeSplitId, makeTileId } from './workspaceReducer'
+import type { Split, Tile, Workspace, WorkspaceNode } from './types'
+import { makeSplitId, makeTileId } from './workspaceReducer'
 import type { ViewId } from './viewRegistry'
 
 // ---------------------------------------------------------------------------
@@ -7,33 +7,35 @@ import type { ViewId } from './viewRegistry'
 // TILE_LAYOUT_PLAN.md).
 //
 // Grammar:
-//   node    := group | hsplit | vsplit
+//   node    := tile | hsplit | vsplit
 //   hsplit  := 'H' '(' sized (',' sized)+ ')'    // horizontal = side-by-side
 //   vsplit  := 'V' '(' sized (',' sized)+ ')'    // vertical   = stacked
 //   sized   := node (':' int)?                    // size as percentage; default = even
-//   group   := tile (';' tile)* ('@' int)?        // @int = active tile index, default 0
-//   tile    := <entityPath> '.' viewId            // entityPath is urlEncoded,
+//   tile    := <entityPath>? '.' viewId           // entityPath is urlEncoded,
 //                                                  with the conventional
-//                                                  leading '/' stripped
-//
-// `,` is reserved for split-siblings and `;` for group-tabs so the
-// grammar is unambiguous to a single-character lookahead — without
-// that distinction, parsing `H(a,V(b,c,d@1):30)` is ambiguous (does
-// the second `,` start a new sibling at the H, or another tab inside
-// the V's group?). Both `,` and `;` are URL-safe sub-delims so neither
-// needs percent-encoding in a query value.
+//                                                  leading '/' stripped.
+//                                                  Empty entityPath ('.viewId')
+//                                                  encodes a standalone tile —
+//                                                  e.g. the new-session tile.
 //
 // Examples (canonical forms produced by `encodeLayout`):
 //   horton%2Ffoo.chat
-//   horton%2Ffoo.chat;horton%2Ffoo.state-explorer@1
+//   .new-session
 //   H(horton%2Ffoo.chat:60,horton%2Ffoo.state-explorer:40)
+//   H(.new-session,horton%2Fbar.chat)
 //   H(horton%2Ffoo.chat,V(horton%2Fbar.chat,horton%2Fbaz.logs))
 //
-// Tile ids / group ids / split ids are *not* part of the wire format —
-// the decoder mints fresh ones via the same factories the reducer uses.
-// IDs being ephemeral is the right thing here: a layout link should
-// always paste cleanly into another window without colliding with that
-// window's existing IDs.
+// Every leaf is a tile (no groups, no tabs). Tile / split ids are *not*
+// part of the wire format — the decoder mints fresh ones via the same
+// factories the reducer uses. IDs being ephemeral is the right thing
+// here: a layout link should always paste cleanly into another window
+// without colliding with that window's existing IDs.
+//
+// The active tile is *not* encoded either. The receiving window picks
+// the first tile (tree order) as active during decode, then the
+// workspace ↔ URL effect immediately overrides it with whatever
+// (entity, view) the URL also carries — which is the typical "share
+// link" workflow.
 //
 // Entity URLs always start with `/` everywhere else in the codebase
 // (see `Tile.entityUrl`). The codec strips the leading slash on
@@ -47,7 +49,7 @@ export function encodeLayout(workspace: Workspace): string {
 }
 
 function encodeNode(node: WorkspaceNode): string {
-  return node.kind === `split` ? encodeSplit(node) : encodeGroup(node)
+  return node.kind === `split` ? encodeSplit(node) : encodeTile(node)
 }
 
 function encodeSplit(split: Split): string {
@@ -67,14 +69,10 @@ function encodeSplit(split: Split): string {
   return `${split.direction === `horizontal` ? `H` : `V`}(${inner})`
 }
 
-function encodeGroup(group: Group): string {
-  const tilesPart = group.tiles.map(encodeTile).join(`;`)
-  const activeIdx = group.tiles.findIndex((t) => t.id === group.activeTileId)
-  const activePart = activeIdx > 0 ? `@${activeIdx}` : ``
-  return `${tilesPart}${activePart}`
-}
-
 function encodeTile(tile: Tile): string {
+  // Standalone tile (e.g. new-session) → empty entityPath segment, so
+  // the canonical form is `.new-session`.
+  if (tile.entityUrl === null) return `.${tile.viewId}`
   // Strip the conventional leading `/` so the canonical form is
   // `horton%2Ffoo.chat` instead of `%2Fhorton%2Ffoo.chat`. Decoder
   // adds it back. If for some reason an entityUrl doesn't start with
@@ -95,18 +93,15 @@ export type DecodeResult = { kind: `ok`; workspace: Workspace } | DecodeError
 
 export function decodeLayout(input: string): DecodeResult {
   if (input.length === 0)
-    return { kind: `ok`, workspace: { root: null, activeGroupId: null } }
+    return { kind: `ok`, workspace: { root: null, activeTileId: null } }
   const p = new Parser(input)
   try {
     const node = p.parseNode()
     p.expectEnd()
-    // Pick the first group as active by default. Future: encode the
-    // active group too, e.g. with a leading marker like `*` on the
-    // group; deferred until we have a use-case.
-    const firstGroup = findFirstGroup(node)
+    const firstTile = findFirstTile(node)
     return {
       kind: `ok`,
-      workspace: { root: node, activeGroupId: firstGroup?.id ?? null },
+      workspace: { root: node, activeTileId: firstTile?.id ?? null },
     }
   } catch (e) {
     return e instanceof ParseError
@@ -140,7 +135,7 @@ class Parser {
     if (this.peek() === `V` && this.src[this.pos + 1] === `(`) {
       return this.parseSplit(`vertical`)
     }
-    return this.parseGroup()
+    return this.parseTile()
   }
 
   parseSplit(direction: `horizontal` | `vertical`): Split {
@@ -185,7 +180,7 @@ class Parser {
     }
     // Normalise so all sizes sum to 1 (handles the user-error case
     // where a `?layout=` URL declares >100% total).
-    const total = children.reduce((a, c) => a + c.size, 0)
+    const total = children.reduce((a: number, c) => a + c.size, 0)
     if (total > 0) {
       for (const c of children) c.size = c.size / total
     } else {
@@ -200,39 +195,16 @@ class Parser {
     }
   }
 
-  parseGroup(): Group {
-    const tiles: Array<Tile> = []
-    while (true) {
-      tiles.push(this.parseTile())
-      // Group tab separator is `;` (split-sibling separator is `,`)
-      // — the two-symbol grammar removes the lookahead ambiguity that
-      // a single shared `,` would create. See header comment.
-      if (this.peek() === `;`) {
-        this.pos += 1
-        continue
-      }
-      break
-    }
-    let activeIdx = 0
-    if (this.peek() === `@`) {
-      this.pos += 1
-      activeIdx = this.parseInt()
-      if (activeIdx >= tiles.length) activeIdx = 0
-    }
-    return {
-      kind: `group`,
-      id: makeGroupId(),
-      tiles,
-      activeTileId: tiles[activeIdx].id,
-    }
-  }
-
   parseTile(): Tile {
-    // Tile = <urlEncodedEntityPath> '.' <viewId>
+    // Tile = <urlEncodedEntityPath>? '.' <viewId>
     // We grab everything up to the LAST '.' before a control char as
     // the entity url; the suffix is the viewId. Control chars are
-    // ',' ';' '(' ')' '@' ':'. Both halves accept alphanumerics +
-    // url-encoded escapes (decoded via `decodeURIComponent`).
+    // ',' '(' ')' ':'. Both halves accept alphanumerics + url-encoded
+    // escapes (decoded via `decodeURIComponent`).
+    //
+    // An empty entity path ('.viewId') is the wire form for a
+    // standalone tile (no entity attached) — currently the new-session
+    // tile.
     const start = this.pos
     while (this.pos < this.src.length && !isControlChar(this.src[this.pos])) {
       this.pos++
@@ -245,16 +217,23 @@ class Parser {
         start
       )
     }
-    const decoded = decodeURIComponent(raw.slice(0, dot))
-    // Re-add the conventional leading `/` if the wire form omitted it
-    // (canonical encoded form does — see encodeTile() comment). If
-    // the wire form already includes one we don't double up.
-    const entityUrl = decoded.startsWith(`/`) ? decoded : `/${decoded}`
+    const rawPath = raw.slice(0, dot)
     const viewId: ViewId = raw.slice(dot + 1)
     if (!viewId) {
       throw new ParseError(`empty viewId in tile spec '${raw}'`, start)
     }
-    return { id: makeTileId(), entityUrl, viewId }
+    let entityUrl: string | null
+    if (rawPath.length === 0) {
+      // Standalone tile.
+      entityUrl = null
+    } else {
+      const decoded = decodeURIComponent(rawPath)
+      // Re-add the conventional leading `/` if the wire form omitted it
+      // (canonical encoded form does — see encodeTile() comment). If
+      // the wire form already includes one we don't double up.
+      entityUrl = decoded.startsWith(`/`) ? decoded : `/${decoded}`
+    }
+    return { kind: `tile`, id: makeTileId(), entityUrl, viewId }
   }
 
   parseInt(): number {
@@ -283,19 +262,17 @@ class Parser {
 }
 
 function isControlChar(c: string): boolean {
-  return (
-    c === `,` || c === `;` || c === `(` || c === `)` || c === `@` || c === `:`
-  )
+  return c === `,` || c === `(` || c === `)` || c === `:`
 }
 
 function describeChar(c: string): string {
   return c.length === 0 ? `<end of input>` : `'${c}'`
 }
 
-function findFirstGroup(node: WorkspaceNode): Group | null {
-  if (node.kind === `group`) return node
+function findFirstTile(node: WorkspaceNode): Tile | null {
+  if (node.kind === `tile`) return node
   for (const c of node.children) {
-    const found = findFirstGroup(c.node)
+    const found = findFirstTile(c.node)
     if (found) return found
   }
   return null

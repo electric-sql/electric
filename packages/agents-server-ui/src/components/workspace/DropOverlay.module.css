@@ -29,38 +29,42 @@
   background: var(--ds-accent-a6);
 }
 
-/* Five named zones — geometry computed in JS so the same component
- * works for any group size. The visual rectangles mirror Cursor's chat
- * pane drop targets: a centre square that "appends as new tab" plus
- * four edge slabs that create new splits. */
-.center {
-  inset: 25%;
-}
-
+/* Four edge zones — geometry computed in JS via diagonals so each
+ * point in the tile maps to exactly one zone (no neutral middle).
+ * The visual rectangles are sized at 50% so the highlight matches
+ * the half of the tile the drop will actually occupy. Adjacent
+ * zones overlap in the corners (e.g. top-right is in both .north's
+ * top-half and .east's right-half) but only one zone is highlighted
+ * at any moment — the JS picks via diagonal — so the user always
+ * sees a single, half-tile preview of where the new split will land.
+ *
+ * Drops always create a new split; there is intentionally no centre
+ * zone. To swap the contents of an existing tile in place, switch
+ * the view from the tile menu or click the entity in the sidebar. */
 .north {
   top: 0;
   left: 0;
   right: 0;
-  height: 25%;
+  height: 50%;
 }
 
 .east {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 25%;
+  width: 50%;
 }
 
 .south {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 25%;
+  height: 50%;
 }
 
 .west {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 25%;
+  width: 50%;
 }

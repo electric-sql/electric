@@ -5,13 +5,20 @@ import type { ViewId } from './viewRegistry'
  * into the `dataTransfer` slot under our custom MIME type so the browser
  * doesn't try to interpret it as text/plain or a URL.
  *
- * Two kinds today:
- * - `sidebar-entity` — the user dragged an entity row out of the sidebar.
- *   No `viewId` is carried because the receiving group decides how to
- *   render it (defaults to `chat`).
- * - `tile` — the user dragged an existing tile (from a tab or a tile
- *   header). Carries the source group id so the reducer can detect a
- *   no-op (drop-on-self) and skip the round-trip.
+ * Three kinds today:
+ * - `sidebar-entity`      — the user dragged an entity row out of the
+ *                           sidebar. No `viewId` is carried because the
+ *                           receiver decides how to render it (defaults
+ *                           to `chat`).
+ * - `sidebar-new-session` — the user dragged the "New session" button
+ *                           out of the sidebar. Drops always create a
+ *                           fresh standalone new-session tile in the
+ *                           target quadrant (so the workspace can hold
+ *                           multiple new-session tiles at once, e.g.
+ *                           one per agent type the user is comparing).
+ * - `tile`                — the user dragged an existing tile by its
+ *                           header. The reducer detects drop-on-self
+ *                           via tile id directly.
  */
 export type WorkspaceDragPayload =
   | {
@@ -20,9 +27,11 @@ export type WorkspaceDragPayload =
       viewId?: ViewId
     }
   | {
+      kind: `sidebar-new-session`
+    }
+  | {
       kind: `tile`
       tileId: string
-      sourceGroupId: string
     }
 
 /**
@@ -63,11 +72,10 @@ export function readDragPayload(
     ) {
       return parsed
     }
-    if (
-      parsed.kind === `tile` &&
-      typeof parsed.tileId === `string` &&
-      typeof parsed.sourceGroupId === `string`
-    ) {
+    if (parsed.kind === `sidebar-new-session`) {
+      return parsed
+    }
+    if (parsed.kind === `tile` && typeof parsed.tileId === `string`) {
       return parsed
     }
   } catch {
@@ -93,7 +101,12 @@ export function isWorkspaceDrag(e: DragEvent | React.DragEvent): boolean {
 }
 
 function describePayload(p: WorkspaceDragPayload): string {
-  return p.kind === `sidebar-entity`
-    ? `entity: ${p.entityUrl}`
-    : `tile: ${p.tileId}`
+  switch (p.kind) {
+    case `sidebar-entity`:
+      return `entity: ${p.entityUrl}`
+    case `sidebar-new-session`:
+      return `new session`
+    case `tile`:
+      return `tile: ${p.tileId}`
+  }
 }

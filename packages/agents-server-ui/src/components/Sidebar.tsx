@@ -5,6 +5,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
+import { setDragPayload } from '../lib/workspace/dragPayload'
 import { SidebarHeader } from './SidebarHeader'
 import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
@@ -159,6 +160,15 @@ export function Sidebar({
           <button
             type="button"
             onClick={handleNewSession}
+            // Draggable so the user can drop a fresh new-session tile
+            // into any quadrant of an existing tile (creating a split)
+            // — gives them multiple new-session tiles at once. The
+            // browser only fires `dragstart` after the cursor moves,
+            // so a click that doesn't drag still triggers `onClick`.
+            draggable
+            onDragStart={(e) =>
+              setDragPayload(e, { kind: `sidebar-new-session` })
+            }
             className={styles.newSessionRow}
           >
             <span className={styles.newSessionIconSlot}>

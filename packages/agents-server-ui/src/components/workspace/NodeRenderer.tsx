@@ -1,5 +1,5 @@
-import { GroupContainer } from './GroupContainer'
 import { SplitContainer } from './SplitContainer'
+import { TileContainer } from './TileContainer'
 import type { WorkspaceNode } from '../../lib/workspace/types'
 
 /**
@@ -15,6 +15,6 @@ export function NodeRenderer({
   return node.kind === `split` ? (
     <SplitContainer split={node} />
   ) : (
-    <GroupContainer group={node} />
+    <TileContainer tile={node} />
   )
 }

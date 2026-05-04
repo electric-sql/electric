@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useWorkspace, listGroups } from './useWorkspace'
+import { useWorkspace, listTiles } from './useWorkspace'
 import { useServerConnection } from './useServerConnection'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { useLiveQuery } from '@tanstack/react-db'
@@ -12,8 +12,11 @@ import type { Workspace, WorkspaceNode } from '../lib/workspace/types'
  * Storage shape (envelope so future revisions can migrate or fall
  * back without crashing the UI):
  *
- *   key:   `electric-agents-ui.workspace.<serverId>.v1`
- *   value: { v: 1, workspace: <Workspace> }
+ *   key:   `electric-agents-ui.workspace.<serverId>.v2`
+ *   value: { v: 2, workspace: <Workspace> }
+ *
+ * Schema bumped from v1 → v2 when the data model dropped the Group
+ * concept; v1 envelopes are silently ignored on hydration.
  *
  * Server-keyed because two different Electric servers each remember
  * their own layout — switching servers shouldn't drag the previous
@@ -29,7 +32,7 @@ import type { Workspace, WorkspaceNode } from '../lib/workspace/types'
  * Persistence write: debounced 250ms after every workspace change so
  * we don't beat localStorage with one write per splitter pixel.
  */
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const DEBOUNCE_MS = 250
 
 type Envelope = {
@@ -93,7 +96,7 @@ export function useWorkspacePersistence(): void {
       if (!env || env.v !== SCHEMA_VERSION || !env.workspace) return
       // Prune entities that are no longer alive on the server. We do
       // this against `liveUrls` *as of first hydration*; subsequent
-      // entity disappearances are handled by `<GroupContainer>`'s
+      // entity disappearances are handled by `<TileContainer>`'s
       // close-on-disappear effect. If the entities collection hasn't
       // populated yet we skip the prune (the close-on-disappear
       // effect will handle it on next render).
@@ -140,10 +143,11 @@ export function useWorkspacePersistence(): void {
 
 /**
  * Drop tiles whose entity URL isn't present in `liveUrls`. Empty
- * groups cascade-collapse; empty splits collapse to their lone child;
- * the root collapses to `null` if every tile is dead.
+ * splits cascade-collapse to `null` (or to their sole survivor when
+ * one child remains); the root collapses to `null` if every tile is
+ * dead.
  *
- * activeGroupId is reset to whichever group survives the prune (first
+ * activeTileId is reset to whichever tile survives the prune (first
  * one in tree order) when the previous active is gone.
  */
 function pruneWorkspace(
@@ -151,16 +155,14 @@ function pruneWorkspace(
   liveUrls: Set<string>
 ): Workspace {
   const root = pruneNode(workspace.root, liveUrls)
-  if (!root) return { root: null, activeGroupId: null }
-  const groups = listGroups(root)
+  if (!root) return { root: null, activeTileId: null }
+  const tiles = listTiles(root)
   const stillThere =
-    workspace.activeGroupId !== null &&
-    groups.some((g) => g.id === workspace.activeGroupId)
+    workspace.activeTileId !== null &&
+    tiles.some((t) => t.id === workspace.activeTileId)
   return {
     root,
-    activeGroupId: stillThere
-      ? workspace.activeGroupId
-      : (groups[0]?.id ?? null),
+    activeTileId: stillThere ? workspace.activeTileId : (tiles[0]?.id ?? null),
   }
 }
 
@@ -169,15 +171,11 @@ function pruneNode(
   liveUrls: Set<string>
 ): WorkspaceNode | null {
   if (!node) return null
-  if (node.kind === `group`) {
-    const tiles = node.tiles.filter((t) => liveUrls.has(t.entityUrl))
-    if (tiles.length === 0) return null
-    const activeStillThere = tiles.some((t) => t.id === node.activeTileId)
-    return {
-      ...node,
-      tiles,
-      activeTileId: activeStillThere ? node.activeTileId : tiles[0].id,
-    }
+  if (node.kind === `tile`) {
+    // Standalone tiles (e.g. new-session) have no entity to validate
+    // against — they always survive the prune.
+    if (node.entityUrl === null) return node
+    return liveUrls.has(node.entityUrl) ? node : null
   }
   const newChildren: typeof node.children = []
   for (const child of node.children) {
@@ -187,7 +185,7 @@ function pruneNode(
   if (newChildren.length === 0) return null
   if (newChildren.length === 1) return newChildren[0].node
   // Re-normalise sizes so they sum to 1 again after dropping siblings.
-  const total = newChildren.reduce((a, c) => a + c.size, 0)
+  const total = newChildren.reduce((a: number, c) => a + c.size, 0)
   const normalised = newChildren.map((c) => ({
     ...c,
     size: total > 0 ? c.size / total : 1 / newChildren.length,
