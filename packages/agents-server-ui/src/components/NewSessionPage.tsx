@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   ArrowUp,
   Check,
@@ -21,6 +28,30 @@ import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
 import type { Project } from '../hooks/useProjects'
 
 const DEFAULT_AGENT_NAME = `horton`
+
+const HERO_VERBS = [
+  `Let’s ship`,
+  `Let’s create`,
+  `Let’s build`,
+  `Let’s explore`,
+  `Let’s debug`,
+  `Let’s design`,
+  `Let’s hack on`,
+  `Let’s improve`,
+]
+
+function useRotatingVerb(): string {
+  const [index, setIndex] = useState(() =>
+    Math.floor(Math.random() * (HERO_VERBS.length - 1))
+  )
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIndex((prev) => (prev + 1) % HERO_VERBS.length)
+    }, 4_000)
+    return () => clearInterval(id)
+  }, [])
+  return HERO_VERBS[index]
+}
 
 interface SchemaProperty {
   type?: string
@@ -201,12 +232,13 @@ function Picker({
   ) => Promise<{ valid: boolean; resolved: string }>
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
+  const verb = useRotatingVerb()
 
   return (
     <Stack direction="column" gap={5} style={{ width: `100%` }}>
       <div className={styles.heading}>
-        <Text size={5} as="h1" className={styles.headingTitle}>
-          Let&rsquo;s build
+        <Text size={7} as="h1" className={styles.headingTitle}>
+          {verb}
         </Text>
         <ProjectPicker
           projects={projects}
