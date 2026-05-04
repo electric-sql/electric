@@ -1,10 +1,17 @@
-import { createContext, useCallback, useContext, useState } from 'react'
-import { nanoid } from 'nanoid'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
+import { useServerConnection } from './useServerConnection'
 import type { ReactNode } from 'react'
 
 export interface Project {
   id: string
   name: string
+  path: string
   createdAt: number
 }
 
@@ -12,81 +19,128 @@ interface ProjectsState {
   projects: Array<Project>
   activeProjectId: string | null
   setActiveProjectId: (id: string | null) => void
-  createProject: (name: string) => Project
-  deleteProject: (id: string) => void
-  renameProject: (id: string, name: string) => void
+  createProject: (name: string, path: string) => Promise<Project>
+  deleteProject: (id: string) => Promise<void>
+  renameProject: (id: string, name: string) => Promise<void>
+  validatePath: (path: string) => Promise<{ valid: boolean; resolved: string }>
+  loading: boolean
 }
 
 const ProjectsContext = createContext<ProjectsState | null>(null)
 
-const STORAGE_KEY = `electric-agents-projects`
 const ACTIVE_PROJECT_KEY = `electric-agents-active-project`
-
-function loadProjects(): Array<Project> {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? `[]`)
-  } catch {
-    return []
-  }
-}
-
-function persistProjects(projects: Array<Project>): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
-  } catch {
-    // Ignore quota errors
-  }
-}
 
 export function ProjectsProvider({
   children,
 }: {
   children: ReactNode
 }): React.ReactElement {
-  const [projects, setProjects] = useState<Array<Project>>(loadProjects)
+  const { activeServer } = useServerConnection()
+  const baseUrl = activeServer?.url ?? null
+
+  const [projects, setProjects] = useState<Array<Project>>([])
+  const [loading, setLoading] = useState(false)
   const [activeProjectId, setActiveProjectIdRaw] = useState<string | null>(
     () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? null
   )
 
   const setActiveProjectId = useCallback((id: string | null) => {
     setActiveProjectIdRaw(id)
-    try {
-      if (id) {
-        localStorage.setItem(ACTIVE_PROJECT_KEY, id)
-      } else {
-        localStorage.removeItem(ACTIVE_PROJECT_KEY)
-      }
-    } catch {
-      // Ignore
+    if (id) {
+      localStorage.setItem(ACTIVE_PROJECT_KEY, id)
+    } else {
+      localStorage.removeItem(ACTIVE_PROJECT_KEY)
     }
   }, [])
 
-  const createProject = useCallback((name: string): Project => {
-    const project: Project = { id: nanoid(8), name, createdAt: Date.now() }
-    setProjects((prev) => {
-      const next = [...prev, project]
-      persistProjects(next)
-      return next
-    })
-    return project
-  }, [])
+  const fetchProjects = useCallback(async () => {
+    if (!baseUrl) return
+    setLoading(true)
+    try {
+      const res = await fetch(`${baseUrl}/_electric/projects`)
+      if (res.ok) {
+        const data = (await res.json()) as Array<Project>
+        setProjects(data)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [baseUrl])
 
-  const deleteProject = useCallback((id: string) => {
-    setProjects((prev) => {
-      const next = prev.filter((p) => p.id !== id)
-      persistProjects(next)
-      return next
-    })
-    setActiveProjectIdRaw((prev) => (prev === id ? null : prev))
-  }, [])
+  useEffect(() => {
+    void fetchProjects()
+  }, [fetchProjects])
 
-  const renameProject = useCallback((id: string, name: string) => {
-    setProjects((prev) => {
-      const next = prev.map((p) => (p.id === id ? { ...p, name } : p))
-      persistProjects(next)
-      return next
-    })
-  }, [])
+  const createProject = useCallback(
+    async (name: string, projectPath: string): Promise<Project> => {
+      if (!baseUrl) throw new Error(`No server connected`)
+      const res = await fetch(`${baseUrl}/_electric/projects`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ name, path: projectPath }),
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => ``)
+        let message = `Create failed (${res.status})`
+        try {
+          const data = JSON.parse(text) as { error?: { message?: string } }
+          if (data.error?.message) message = data.error.message
+        } catch {
+          if (text) message = text
+        }
+        throw new Error(message)
+      }
+      const project = (await res.json()) as Project
+      setProjects((prev) => [...prev, project])
+      return project
+    },
+    [baseUrl]
+  )
+
+  const deleteProject = useCallback(
+    async (id: string): Promise<void> => {
+      if (!baseUrl) return
+      const res = await fetch(`${baseUrl}/_electric/projects/${id}`, {
+        method: `DELETE`,
+      })
+      if (res.ok || res.status === 204) {
+        setProjects((prev) => prev.filter((p) => p.id !== id))
+        setActiveProjectIdRaw((prev) => (prev === id ? null : prev))
+      }
+    },
+    [baseUrl]
+  )
+
+  const renameProject = useCallback(
+    async (id: string, name: string): Promise<void> => {
+      if (!baseUrl) return
+      const res = await fetch(`${baseUrl}/_electric/projects/${id}`, {
+        method: `PATCH`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ name }),
+      })
+      if (res.ok) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, name } : p))
+        )
+      }
+    },
+    [baseUrl]
+  )
+
+  const validatePathFn = useCallback(
+    async (dirPath: string): Promise<{ valid: boolean; resolved: string }> => {
+      if (!baseUrl) return { valid: false, resolved: dirPath }
+      const res = await fetch(`${baseUrl}/_electric/validate-path`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ path: dirPath }),
+      })
+      if (!res.ok) return { valid: false, resolved: dirPath }
+      return (await res.json()) as { valid: boolean; resolved: string }
+    },
+    [baseUrl]
+  )
 
   return (
     <ProjectsContext.Provider
@@ -97,6 +151,8 @@ export function ProjectsProvider({
         createProject,
         deleteProject,
         renameProject,
+        validatePath: validatePathFn,
+        loading,
       }}
     >
       {children}
