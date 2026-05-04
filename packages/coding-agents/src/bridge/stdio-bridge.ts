@@ -2,6 +2,7 @@ import { normalize } from 'agent-session-protocol'
 import type { NormalizedEvent } from 'agent-session-protocol'
 import { getAdapter } from '../agents/registry'
 import { normalizeOpencode } from '../agents/opencode-normalize'
+import { expandCodexCommandExecutions } from '../agents/codex-command-shim'
 import { log } from '../log'
 import type { Bridge, RunTurnArgs, RunTurnResult } from '../types'
 
@@ -91,10 +92,17 @@ export class StdioBridge implements Bridge {
 
     let events: Array<NormalizedEvent> = []
     try {
+      // Codex stream-json emits shell tool calls as `command_execution`
+      // items, which asp doesn't normalise. Expand to function_call +
+      // function_call_output (asp already handles those) before normalize.
+      const inputLines =
+        args.kind === `codex`
+          ? expandCodexCommandExecutions(rawLines)
+          : rawLines
       events =
         args.kind === `opencode`
           ? normalizeOpencode(rawLines)
-          : normalize(rawLines, args.kind as `claude` | `codex`)
+          : normalize(inputLines, args.kind as `claude` | `codex`)
     } catch (err) {
       log.error({ err, sample: rawLines.slice(0, 3) }, `normalize failed`)
       throw err

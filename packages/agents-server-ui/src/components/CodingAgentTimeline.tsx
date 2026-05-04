@@ -284,7 +284,10 @@ const AssistantMessageRow = memo(function AssistantMessageRow({
       <Text size="1" color="gray" weight="medium">
         Assistant
       </Text>
-      <div style={{ fontSize: `var(--font-size-2)` }}>
+      <div
+        className="agent-ui-markdown"
+        style={{ fontSize: `var(--font-size-2)` }}
+      >
         <Streamdown plugins={streamdownPlugins}>{text}</Streamdown>
       </div>
     </Flex>
