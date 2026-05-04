@@ -8,6 +8,7 @@
     "dev": "vite dev",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test",
     "coverage": "pnpm exec vitest run --coverage --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
@@ -15,12 +16,13 @@
     "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.1",
     "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.1",
     "@electric-ax/agents-runtime": "workspace:*",
+    "@electric-ax/coding-agents": "workspace:*",
     "@radix-ui/themes": "^3.3.0",
-    "@tanstack/react-table": "^8.21.3",
     "@tanstack/db": "^0.6.4",
     "@tanstack/electric-db-collection": "^0.3.2",
     "@tanstack/react-db": "^0.1.82",
     "@tanstack/react-router": "^1.167.4",
+    "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.23",
     "lucide-react": "^0.561.0",
     "nanoid": "^3.3.11",
@@ -31,10 +33,11 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.0",
+    "@playwright/test": "^1.52.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^4.1.0",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
     "vitest": "^4.1.0"

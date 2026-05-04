@@ -39,7 +39,8 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "@microsoft/fetch-event-source": "patches/@microsoft__fetch-event-source.patch"
+      "@microsoft/fetch-event-source": "patches/@microsoft__fetch-event-source.patch",
+      "agent-session-protocol@0.0.2": "patches/agent-session-protocol@0.0.2.patch"
     }
   }
 }

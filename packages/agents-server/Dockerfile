@@ -26,6 +26,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 COPY packages/typescript-client/package.json ./packages/typescript-client/package.json
 COPY packages/agents-runtime/package.json ./packages/agents-runtime/package.json
+COPY packages/coding-agents/package.json ./packages/coding-agents/package.json
 COPY packages/agents/package.json ./packages/agents/package.json
 COPY packages/agents-server-conformance-tests/package.json ./packages/agents-server-conformance-tests/package.json
 COPY packages/agents-server-ui/package.json ./packages/agents-server-ui/package.json
@@ -39,6 +40,9 @@ RUN pnpm --filter @electric-sql/client build
 
 COPY packages/agents-runtime ./packages/agents-runtime
 RUN pnpm --filter @electric-ax/agents-runtime build
+
+COPY packages/coding-agents ./packages/coding-agents
+RUN pnpm --filter @electric-ax/coding-agents build
 
 COPY packages/agents-server-ui ./packages/agents-server-ui
 RUN pnpm --filter @electric-ax/agents-server-ui build

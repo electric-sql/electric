@@ -7,9 +7,16 @@ import { fileURLToPath } from 'node:url'
 import {
   createEntityRegistry,
   createRuntimeHandler,
+  createRuntimeServerClient,
 } from '@electric-ax/agents-runtime'
 import { serverLog } from './log'
-import { registerCodingSession } from './agents/coding-session'
+import {
+  LocalDockerProvider,
+  HostProvider,
+  StdioBridge,
+  createSpritesProviderIfConfigured,
+  registerCodingAgent,
+} from '@electric-ax/coding-agents'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
 import { createSkillsRegistry } from './skills/registry'
@@ -116,8 +123,43 @@ export async function createBuiltinAgentHandler(
   registerWorker(registry, { workingDirectory: cwd, streamFn })
   typeNames.push(`worker`)
 
-  registerCodingSession(registry, { defaultWorkingDirectory: cwd })
-  typeNames.push(`coder`)
+  // NEW for Slice A: built-in coding-agent entity (Docker sandbox + lifecycle).
+  // The wakeEntity callback (Slice C₁) re-enters the handler after the idle
+  // timer destroys the container, so reconcile flips status idle→cold.
+  // We use the same RuntimeServerClient HTTP path that user-initiated
+  // Pin/Release/Stop traverse — no temporal coupling with createRuntimeHandler.
+  const codingAgentClient = createRuntimeServerClient({
+    baseUrl: agentServerUrl,
+  })
+  const spritesProvider = createSpritesProviderIfConfigured()
+  if (spritesProvider) {
+    serverLog.info(
+      `[coding-agent] FlySpriteProvider registered (SPRITES_TOKEN found)`
+    )
+  }
+  registerCodingAgent(registry, {
+    providers: {
+      sandbox: new LocalDockerProvider(),
+      host: new HostProvider(),
+      ...(spritesProvider ? { sprites: spritesProvider } : {}),
+    },
+    bridge: new StdioBridge(),
+    wakeEntity: (agentId: string) => {
+      void codingAgentClient
+        .sendEntityMessage({
+          targetUrl: agentId,
+          from: `system`,
+          type: `lifecycle/idle-eviction-fired`,
+          payload: {},
+        })
+        .catch((err) =>
+          serverLog.warn(
+            `[coding-agent] wakeEntity(${agentId}) failed: ${err instanceof Error ? err.message : String(err)}`
+          )
+        )
+    },
+  })
+  typeNames.push(`coding-agent`)
 
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,

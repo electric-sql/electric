@@ -4,6 +4,32 @@ import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime'
 
 type ToolCallItem = Extract<EntityTimelineContentItem, { kind: `tool_call` }>
 
+/**
+ * Generic tool-call shape accepted by ToolCallView.
+ * Both native tool-call items (source A, via outbound-bridge) and coding-agent
+ * tool-call event pairs (source B, via agent-session-protocol normalizeClaude)
+ * can be normalised to this shape before rendering.
+ */
+export interface GenericToolCall {
+  callId?: string
+  toolName: string
+  args: Record<string, unknown>
+  status: `started` | `args_complete` | `executing` | `completed` | `failed`
+  result?: string
+  isError: boolean
+}
+
+function toGenericToolCall(item: ToolCallItem): GenericToolCall {
+  return {
+    callId: item.toolCallId,
+    toolName: item.toolName,
+    args: item.args,
+    status: item.status,
+    result: item.result,
+    isError: item.isError,
+  }
+}
+
 const codeBlockStyle: React.CSSProperties = {
   margin: 0,
   padding: 8,
@@ -67,6 +93,9 @@ function getSummary(toolName: string, args: Record<string, unknown>): string {
     case `spawn_coder`:
     case `prompt_coder`:
       return truncate((args.prompt as string) ?? ``, 60)
+    case `spawn_coding_agent`:
+    case `prompt_coding_agent`:
+      return truncate((args.prompt as string) ?? ``, 60)
     default:
       for (const field of [
         `command`,
@@ -84,7 +113,7 @@ function getSummary(toolName: string, args: Record<string, unknown>): string {
   }
 }
 
-function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
+function ToolBody({ item }: { item: GenericToolCall }): React.ReactElement {
   const args = item.args
   const r = parseResult(item.result)
 
@@ -204,16 +233,24 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
   }
 }
 
+/**
+ * ToolCallView renders a tool call in a unified visual style.
+ *
+ * Accepts either a native ToolCallItem (source A — outbound-bridge / pi-agent-core)
+ * or a GenericToolCall (source B — coding-agent events normalised from
+ * agent-session-protocol's tool_call / tool_result event pairs).
+ */
 export function ToolCallView({
   item,
 }: {
-  item: ToolCallItem
+  item: ToolCallItem | GenericToolCall
 }): React.ReactElement {
+  const tc: GenericToolCall = `kind` in item ? toGenericToolCall(item) : item
   // send_message: same container style but always expanded with the message text
-  if (item.toolName === `send_message` && typeof item.args.text === `string`) {
-    const isComplete = item.status === `completed` || item.status === `failed`
-    const statusColor = !isComplete ? `gray` : item.isError ? `red` : `green`
-    const statusLabel = !isComplete ? `pending` : item.isError ? `error` : `ok`
+  if (tc.toolName === `send_message` && typeof tc.args.text === `string`) {
+    const isComplete = tc.status === `completed` || tc.status === `failed`
+    const statusColor = !isComplete ? `gray` : tc.isError ? `red` : `green`
+    const statusLabel = !isComplete ? `pending` : tc.isError ? `error` : `ok`
 
     return (
       <Flex
@@ -251,7 +288,7 @@ export function ToolCallView({
           }}
         >
           <Text size="2" style={{ whiteSpace: `pre-wrap` }}>
-            {item.args.text}
+            {tc.args.text as string}
           </Text>
         </Box>
       </Flex>
@@ -259,14 +296,14 @@ export function ToolCallView({
   }
 
   const [expanded, setExpanded] = useState(false)
-  const summary = getSummary(item.toolName, item.args)
-  const isComplete = item.status === `completed` || item.status === `failed`
-  const statusColor = !isComplete ? `gray` : item.isError ? `red` : `green`
+  const summary = getSummary(tc.toolName, tc.args)
+  const isComplete = tc.status === `completed` || tc.status === `failed`
+  const statusColor = !isComplete ? `gray` : tc.isError ? `red` : `green`
   const statusLabel = !isComplete
-    ? item.status === `executing`
+    ? tc.status === `executing`
       ? `running`
       : `pending`
-    : item.isError
+    : tc.isError
       ? `error`
       : `ok`
 
@@ -296,7 +333,7 @@ export function ToolCallView({
         }}
       >
         <span style={{ opacity: 0.5 }}>{expanded ? `▼` : `▶`}</span>
-        <span style={{ fontWeight: 500 }}>{item.toolName}</span>
+        <span style={{ fontWeight: 500 }}>{tc.toolName}</span>
         {summary && (
           <span
             style={{
@@ -326,7 +363,7 @@ export function ToolCallView({
             background: `var(--gray-a1)`,
           }}
         >
-          <ToolBody item={item} />
+          <ToolBody item={tc} />
         </Box>
       )}
     </Flex>

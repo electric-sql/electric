@@ -731,90 +731,78 @@ export type AgentModel = string | Model<any>
  */
 export type CodingAgentType = `claude` | `codex`
 
-export type CodingSessionStatus = `initializing` | `idle` | `running` | `error`
+// ─── Coding Agent (Slice A) ───────────────────────────────────────────────
 
-/**
- * One row in a coding-session entity's `events` collection — the mirror
- * of an `agent-session-protocol` NormalizedEvent. `payload` holds the
- * original event as returned by `loadSession` / `tailSession`.
- */
-export interface CodingSessionEventRow {
-  key: string
-  ts: number
-  type: string
-  callId?: string
-  payload: Record<string, unknown>
-}
+export type CodingAgentSliceAStatus =
+  | `cold`
+  | `starting`
+  | `idle`
+  | `running`
+  | `stopping`
+  | `error`
+  | `destroyed`
 
-export interface CodingSessionMeta {
-  /** Electric-side session id (matches the spawn id passed to useCodingAgent). */
-  electricSessionId: string
-  /** Native session id assigned by the CLI. Populated after the first CLI invocation. */
-  nativeSessionId?: string
-  agent: CodingAgentType
-  cwd?: string
-  status: CodingSessionStatus
-  error?: string
-  /** Inbox key of the prompt currently running, when status === `running`. */
-  currentPromptInboxKey?: string
-}
+export type CodingAgentKind = `claude` | `codex`
 
-/**
- * One row in a coding-session entity's `sessionMeta` collection. Same
- * shape as `CodingSessionMeta` plus the table primary key. Exported so
- * consumers (e.g. the agents-server-ui hook) don't have to redeclare
- * the row type and risk drifting on optionality (`cwd`, etc.).
- */
-export interface CodingSessionMetaRow extends CodingSessionMeta {
-  key: string
-}
-
-export interface UseCodingAgentOptions {
-  agent: CodingAgentType
+export interface SpawnCodingAgentOptions {
+  id: string
+  kind: CodingAgentKind
   /**
-   * Attach to an existing local session by native id (as written to
-   * `~/.claude/projects/...` or `~/.codex/sessions/...`). When omitted,
-   * a fresh session is created on the first prompt.
+   * Optional model selection passed through to the CLI invocation.
+   * For opencode this is required by the adapter (e.g.
+   * 'opencode/anthropic/claude-sonnet-4-5'); for claude/codex it
+   * overrides the CLI's default model when set.
    */
-  nativeSessionId?: string
+  model?: string
+  workspace:
+    | { type: `volume`; name?: string }
+    | { type: `bindMount`; hostPath: string }
+  initialPrompt?: string
+  wake?: { on: `runFinished`; includeResponse?: boolean }
+  lifecycle?: { idleTimeoutMs?: number; keepWarm?: boolean }
   /**
-   * Import an existing local session into a fresh session of `agent`.
-   * Same-agent imports are lossless (native rewrite); cross-agent
-   * imports round-trip through the normalized event stream.
+   * Optional source agent to fork from. The new agent's events history
+   * starts as denormalize(source.events, this.kind, ...). Workspace
+   * inheritance is controlled by `workspaceMode`:
+   *   - 'share': inherit source's workspace identity (lease-serialised).
+   *   - 'clone': copy source's workspace into a fresh volume (provider must support cloneWorkspace).
+   *   - 'fresh': new empty workspace (no file context).
+   * Default policy: 'share' for bindMount sources; 'clone' for volume
+   * sources (errors at spawn-time if the provider can't clone).
    */
-  importFrom?: {
-    agent: CodingAgentType
-    sessionId: string
+  from?: {
+    agentId: string
+    workspaceMode?: `share` | `clone` | `fresh`
   }
-  /** Working directory the CLI runs in. Defaults to the runtime's cwd. */
-  cwd?: string
-  /**
-   * Wake policy for the caller observing this session. Defaults to
-   * `"runFinished"` — the caller wakes each time the session entity
-   * finishes a prompt. Pass a `{ on: "change", ... }` wake to stream
-   * per-event updates.
-   */
-  wake?: Wake
 }
 
-export interface CodingSessionHandle {
-  /** Electric entity URL backing this session (e.g. `/coding-session/<id>`). */
-  readonly entityUrl: string
-  /** Electric-side session id (the id passed to `ctx.useCodingAgent`). */
-  readonly sessionId: string
-  readonly agent: CodingAgentType
-  /** Current metadata, or undefined until the session entity has initialized. */
-  meta: () => CodingSessionMeta | undefined
-  /** Shortcut for `meta()?.status`. */
-  status: () => CodingSessionStatus | undefined
-  /** Resolves when the session entity finishes its current run. */
-  run: Promise<void>
-  /** Queue a prompt. Prompts run serially on the session. */
-  send: (prompt: string) => void
-  /** Live view of normalized session events as rows. */
-  readonly events: ReadonlyArray<CodingSessionEventRow>
-  /** Live filtered view — only `user_message` and `assistant_message` rows. */
-  readonly messages: ReadonlyArray<CodingSessionEventRow>
+export interface CodingAgentRunSummary {
+  runId: string
+  startedAt: number
+  endedAt?: number
+  status: `running` | `completed` | `failed`
+  promptInboxKey: string
+  responseText?: string
+}
+
+export interface CodingAgentState {
+  status: CodingAgentSliceAStatus
+  pinned: boolean
+  workspace: { identity: string; sharedRefs: number }
+  lastError?: string
+  runs: ReadonlyArray<CodingAgentRunSummary>
+}
+
+export interface CodingAgentHandle {
+  readonly url: string
+  readonly kind: CodingAgentKind
+  send(prompt: string): Promise<void>
+  events(opts?: { since?: `start` | `now` }): AsyncIterable<unknown>
+  state(): CodingAgentState
+  pin(): Promise<void>
+  release(): Promise<void>
+  stop(): Promise<void>
+  destroy(): Promise<void>
 }
 
 export interface AgentConfig {
@@ -942,16 +930,15 @@ export interface HandlerContext<
     schema: T
   ) => SharedStateHandle<T>
   /**
-   * Spawn-or-attach a `coding-session` entity that runs a Claude Code or
-   * Codex CLI session, and return a typed handle for prompting it and
-   * observing its normalized event stream. Requires
-   * `registerCodingSession` to have been called on the runtime's
-   * registry.
+   * Spawn (or attach to) a `coding-agent` entity that runs a CLI inside a
+   * Docker sandbox with managed lifecycle (cold/idle/running, idle hibernation,
+   * pin/release, workspace lease). Requires `registerCodingAgent` to have been
+   * called on the runtime's registry.
    */
-  useCodingAgent: (
-    sessionId: string,
-    opts: UseCodingAgentOptions
-  ) => Promise<CodingSessionHandle>
+  spawnCodingAgent: (
+    opts: SpawnCodingAgentOptions
+  ) => Promise<CodingAgentHandle>
+  observeCodingAgent: (id: string) => Promise<CodingAgentHandle>
   send: (
     entityUrl: string,
     payload: unknown,

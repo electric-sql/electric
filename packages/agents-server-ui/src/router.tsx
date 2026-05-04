@@ -11,17 +11,19 @@ import {
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { Flex, Text } from '@radix-ui/themes'
-import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
+import { nanoid } from 'nanoid'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
 import { useEntityTimeline } from './hooks/useEntityTimeline'
+import { useCodingAgent } from './hooks/useCodingAgent'
 import { Sidebar } from './components/Sidebar'
 import { EntityHeader } from './components/EntityHeader'
+import type { CodingAgentWorkspaceSpec } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
-import { CodingSessionView } from './components/CodingSessionView'
+import { CodingAgentView } from './components/CodingAgentView'
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
@@ -68,7 +70,8 @@ function EntityPage(): React.ReactElement {
   const entityUrl = `/${_splat}`
   const { activeServer } = useServerConnection()
   const { pinnedUrls, togglePin } = usePinnedEntities()
-  const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
+  const { entitiesCollection, forkEntity, killEntity, spawnEntity } =
+    useElectricAgents()
   const navigate = useNavigate()
 
   const { data: matchingEntities = [] } = useLiveQuery(
@@ -119,6 +122,78 @@ function EntityPage(): React.ReactElement {
       })
   }, [entityUrl, forkEntity, forking, navigate])
 
+  // Hooks must run unconditionally on every render — call useCodingAgent
+  // BEFORE any early-return so its position in the hooks order is stable.
+  const baseUrl = activeServer?.url ?? ``
+  const connectUrl = isSpawning ? null : entityUrl
+  const isCodingAgent = selectedEntity?.type === `coding-agent`
+  const codingAgentHook = useCodingAgent(
+    isCodingAgent ? baseUrl : null,
+    isCodingAgent ? connectUrl : null
+  )
+
+  const codingAgentMeta = codingAgentHook.meta
+  const handleForkToKind = useCallback(
+    (pickedKind: `claude` | `codex` | `opencode`) => {
+      if (forking) return
+      // Both same-kind and cross-kind forks go through the fromAgentId
+      // path so the new agent inherits the source's denormalized event
+      // history. The runtime's generic /fork (subtree clone) does not
+      // carry forward the kind-specific transcript, so a "Fork to claude"
+      // on a claude agent without fromAgentId would produce a fresh
+      // session with no conversation context. Treating same- and
+      // cross-kind identically gives users one mental model.
+      if (!spawnEntity) return
+      const sourceWorkspace = codingAgentMeta?.workspaceSpec
+      const sourceTarget = codingAgentMeta?.target ?? `sandbox`
+      if (!sourceWorkspace) {
+        setForkError(`Cannot fork: source workspace unknown`)
+        return
+      }
+      const args: Record<string, unknown> = {
+        kind: pickedKind,
+        workspaceType: sourceWorkspace.type,
+        target: sourceTarget,
+        fromAgentId: entityUrl,
+      }
+      if (sourceWorkspace.type === `bindMount`) {
+        // bind-mount source → share mode (default policy). Same hostPath
+        // is the share semantics; the runtime serialises access via the
+        // workspace lease.
+        args.workspaceHostPath = sourceWorkspace.hostPath
+      }
+      // Volume source: deliberately OMIT workspaceName so the runtime
+      // auto-derives a fresh volume name from the new agent's id. The
+      // default policy for volume sources is `clone`, and the fork branch
+      // reads the source's volume from its sessionMeta and copies it into
+      // the new agent's freshly-named volume. Passing the source's name
+      // here would cause cloneWorkspace to copy a volume into itself
+      // ("cp: '/from/.' and '/to/.' are the same file").
+      const newName = nanoid(10)
+      setForkError(null)
+      setForking(true)
+      const tx = spawnEntity({
+        type: `coding-agent`,
+        name: newName,
+        args,
+      })
+      tx.isPersisted.promise
+        .then(() => {
+          navigate({
+            to: `/entity/$`,
+            params: { _splat: `coding-agent/${newName}` },
+          })
+        })
+        .catch((err: Error) => {
+          setForkError(err.message)
+        })
+        .finally(() => {
+          setForking(false)
+        })
+    },
+    [codingAgentMeta, entityUrl, forking, navigate, spawnEntity]
+  )
+
   if (!selectedEntity) {
     return (
       <Flex align="center" justify="center" flexGrow="1">
@@ -129,10 +204,6 @@ function EntityPage(): React.ReactElement {
     )
   }
 
-  const baseUrl = activeServer?.url ?? ``
-  // Hide the body while spawning — server streams don't exist yet.
-  const connectUrl = isSpawning ? null : entityUrl
-
   return (
     <Flex direction="column" flexGrow="1" style={{ minWidth: 0 }}>
       <EntityHeader
@@ -142,10 +213,33 @@ function EntityPage(): React.ReactElement {
         onKill={handleKill}
         killError={killError}
         onFork={forkEntity && !selectedEntity.parent ? handleFork : undefined}
+        onForkToKind={
+          isCodingAgent && !selectedEntity.parent && (forkEntity || spawnEntity)
+            ? handleForkToKind
+            : undefined
+        }
         forkError={forkError}
         forking={forking}
         stateExplorerOpen={stateExplorerOpen}
         onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
+        baseUrl={isCodingAgent ? baseUrl : undefined}
+        codingAgentTarget={
+          isCodingAgent ? codingAgentHook.meta?.target : undefined
+        }
+        codingAgentWorkspaceSpec={
+          isCodingAgent
+            ? (codingAgentHook.meta?.workspaceSpec as
+                | CodingAgentWorkspaceSpec
+                | undefined)
+            : undefined
+        }
+        codingAgentStatus={
+          isCodingAgent ? codingAgentHook.meta?.status : undefined
+        }
+        codingAgentLastError={
+          isCodingAgent ? codingAgentHook.meta?.lastError : undefined
+        }
+        codingAgentKind={isCodingAgent ? codingAgentHook.meta?.kind : undefined}
       />
       <Flex
         ref={containerRef}
@@ -155,11 +249,12 @@ function EntityPage(): React.ReactElement {
           direction="column"
           style={{ flex: 1, minWidth: 0, overflow: `hidden` }}
         >
-          {selectedEntity.type === CODING_SESSION_ENTITY_TYPE && connectUrl ? (
-            <CodingSessionView
+          {isCodingAgent && connectUrl ? (
+            <CodingAgentView
               baseUrl={baseUrl}
               entityUrl={connectUrl}
               entityStopped={entityStopped}
+              agent={codingAgentHook}
             />
           ) : (
             <GenericEntityBody

@@ -345,6 +345,37 @@ const agentsDocsSidebar = [
             text: 'Coder',
             link: '/docs/agents/entities/agents/coder',
           },
+          {
+            text: 'Coding Agent',
+            link: '/docs/agents/entities/coding-agent/',
+            collapsed: true,
+            items: [
+              {
+                text: 'Architecture',
+                link: '/docs/agents/entities/coding-agent/architecture',
+              },
+              {
+                text: 'Lifecycle',
+                link: '/docs/agents/entities/coding-agent/lifecycle',
+              },
+              {
+                text: 'Native API',
+                link: '/docs/agents/entities/coding-agent/api',
+              },
+              {
+                text: 'Targets and kinds',
+                link: '/docs/agents/entities/coding-agent/targets-and-kinds',
+              },
+              {
+                text: 'Integrating new providers and kinds',
+                link: '/docs/agents/entities/coding-agent/integrating',
+              },
+              {
+                text: 'Operations',
+                link: '/docs/agents/entities/coding-agent/operations',
+              },
+            ],
+          },
         ],
         collapsed: false,
       },

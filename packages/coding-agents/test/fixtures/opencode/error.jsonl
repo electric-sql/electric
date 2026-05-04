@@ -1,0 +1,22 @@
+ProviderModelNotFoundError: ProviderModelNotFoundError
+ data: {
+  providerID: "bogus",
+  modelID: "this-model-does-not-exist",
+  suggestions: [],
+},
+
+      at <anonymous> (/$bunfs/root/chunk-7kndgn7w.js:771:53969)
+      at ~effect/Effect/successCont (/$bunfs/root/chunk-2jj9v4nh.js:25:7738)
+      at runLoop (/$bunfs/root/chunk-2jj9v4nh.js:25:2045)
+      at evaluate (/$bunfs/root/chunk-2jj9v4nh.js:25:1435)
+      at <anonymous> (/$bunfs/root/chunk-2jj9v4nh.js:25:5589)
+      at o7 (/$bunfs/root/chunk-2jj9v4nh.js:25:38715)
+      at <anonymous> (/$bunfs/root/chunk-9t71vdrj.js:4:78979)
+      at ~effect/Effect/successCont (/$bunfs/root/chunk-2jj9v4nh.js:25:17713)
+      at runLoop (/$bunfs/root/chunk-2jj9v4nh.js:25:2045)
+      at evaluate (/$bunfs/root/chunk-2jj9v4nh.js:25:1435)
+      at <anonymous> (/$bunfs/root/chunk-2jj9v4nh.js:25:5589)
+      at <anonymous> (/$bunfs/root/chunk-7hz99h2n.js:709:8864)
+      at <anonymous> (node:fs:225:13)
+
+{"type":"error","timestamp":1777718095824,"sessionID":"ses_217be9135ffeuNV8xqXAclfau4","error":{"name":"UnknownError","data":{"message":"Model not found: bogus/this-model-does-not-exist."}}}

@@ -107,11 +107,19 @@ await client.sendEntityMessage({
 interface SendEntityMessageOptions {
   targetUrl: string
   payload: unknown
-  from?: string
+  /** Required by the server. Identifies the sender. Use 'user' for UI sends,
+   *  the spawning entity's URL when sent by ctx.send(), or any stable identifier. */
+  from: string
   type?: string
   afterMs?: number
 }
 ```
+
+`from` is required by the server and must be a non-empty string. The server returns HTTP 400
+`"Missing required field: from"` if it is absent. Common values:
+- `'user'` — message originates from a human via the UI
+- `'spawn'` — initial message delivered at spawn time
+- the parent entity URL (e.g. `'/horton/main'`) — when sent by `ctx.send()` inside a handler
 
 `afterMs` asks the server to deliver the message later.
 

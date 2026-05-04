@@ -141,6 +141,11 @@ export function EntityListItem({
   const isStopped = entity.status === `stopped`
   const guide = hasMoreAtDepth ?? []
 
+  const codingAgentKind =
+    entity.type === `coding-agent`
+      ? ((entity.spawn_args.kind as string | undefined) ?? undefined)
+      : undefined
+
   return (
     <Flex
       align="center"
@@ -148,6 +153,9 @@ export function EntityListItem({
       py="2"
       px="2"
       className="entity-list-item"
+      data-entity-type={entity.type}
+      data-entity-url={entity.url}
+      data-kind={codingAgentKind}
       style={{
         borderRadius: 6,
         cursor: `pointer`,

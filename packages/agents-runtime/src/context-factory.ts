@@ -13,10 +13,7 @@ import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
-import {
-  CODING_SESSION_ENTITY_TYPE,
-  codingSessionEntityUrl,
-} from './observation-sources'
+import { entity as entityObservationSource } from './observation-sources'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -24,10 +21,10 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
-  CodingSessionEventRow,
-  CodingSessionHandle,
-  CodingSessionMeta,
-  CodingSessionStatus,
+  CodingAgentHandle,
+  CodingAgentKind,
+  CodingAgentRunSummary,
+  CodingAgentState,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
@@ -37,9 +34,9 @@ import type {
   RunHandle,
   SharedStateHandle,
   SharedStateSchemaMap,
+  SpawnCodingAgentOptions,
   StateProxy,
   TimelineProjectionOpts,
-  UseCodingAgentOptions,
   UseContextConfig,
   Wake,
   WakeEvent,
@@ -558,74 +555,73 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     ): SharedStateHandle<TSchema> {
       return config.doMkdb(id, schema)
     },
-    async useCodingAgent(
-      sessionId: string,
-      opts: UseCodingAgentOptions
-    ): Promise<CodingSessionHandle> {
-      const spawnArgs: Record<string, unknown> = { agent: opts.agent }
-      if (opts.cwd !== undefined) spawnArgs.cwd = opts.cwd
-      if (opts.nativeSessionId !== undefined) {
-        spawnArgs.nativeSessionId = opts.nativeSessionId
+    async spawnCodingAgent(
+      opts: SpawnCodingAgentOptions
+    ): Promise<CodingAgentHandle> {
+      // The coding-agent entity's creationSchema is FLAT (the agents-server-ui
+      // SpawnArgsDialog only renders simple types). Translate the nested
+      // SpawnCodingAgentOptions.workspace into the flat workspaceType/Name/HostPath
+      // fields that the handler reconstructs on first-wake init.
+      const spawnArgs: Record<string, unknown> = { kind: opts.kind }
+      if (opts.model !== undefined) {
+        spawnArgs.model = opts.model
       }
-      if (opts.importFrom !== undefined) {
-        spawnArgs.importFrom = opts.importFrom
+      if (opts.workspace.type === `volume`) {
+        spawnArgs.workspaceType = `volume`
+        if (opts.workspace.name !== undefined) {
+          spawnArgs.workspaceName = opts.workspace.name
+        }
+      } else {
+        spawnArgs.workspaceType = `bindMount`
+        spawnArgs.workspaceHostPath = opts.workspace.hostPath
+      }
+      if (opts.lifecycle?.idleTimeoutMs !== undefined) {
+        spawnArgs.idleTimeoutMs = opts.lifecycle.idleTimeoutMs
+      }
+      if (opts.lifecycle?.keepWarm !== undefined) {
+        spawnArgs.keepWarm = opts.lifecycle.keepWarm
+      }
+      if (opts.from !== undefined) {
+        spawnArgs.fromAgentId = opts.from.agentId
+        if (opts.from.workspaceMode !== undefined) {
+          spawnArgs.fromWorkspaceMode = opts.from.workspaceMode
+        }
       }
 
-      const spawnOpts: {
-        observe: true
-        wake: Wake
-        initialMessage?: unknown
-      } = {
-        observe: true,
-        wake: opts.wake ?? `runFinished`,
-      }
+      // initialMessage is stored verbatim as the inbox row's payload (no message_type
+      // extraction in the spawn path). Match the entity's promptMessageSchema shape:
+      // flat { text } object, NOT { type: 'prompt', payload: { text } }.
+      const initialMessage =
+        opts.initialPrompt !== undefined
+          ? { text: opts.initialPrompt }
+          : undefined
+
+      // Honour opts.wake when supplied (the public type allows
+      // includeResponse). Default to bare `runFinished` so existing
+      // callers see no behavioural change.
+      const wake: Wake = opts.wake ?? `runFinished`
 
       const entityHandle = await config.doSpawn(
-        CODING_SESSION_ENTITY_TYPE,
-        sessionId,
+        `coding-agent`,
+        opts.id,
         spawnArgs,
-        spawnOpts
+        {
+          observe: true,
+          wake,
+          ...(initialMessage ? { initialMessage } : {}),
+        }
       )
 
-      const entityUrl = codingSessionEntityUrl(sessionId)
-      const readEvents = (): Array<CodingSessionEventRow> => {
-        const collection = entityHandle.db?.collections.events
-        if (!collection) return []
-        const rows = (collection as { toArray?: unknown }).toArray
-        return (Array.isArray(rows) ? rows : []) as Array<CodingSessionEventRow>
-      }
-      const readMeta = (): CodingSessionMeta | undefined => {
-        const collection = entityHandle.db?.collections.sessionMeta
-        if (!collection) return undefined
-        const row = (collection as { get?: (k: string) => unknown }).get?.(
-          `current`
-        )
-        return row as CodingSessionMeta | undefined
-      }
-      const MESSAGE_TYPES = new Set([`user_message`, `assistant_message`])
-
-      const handle: CodingSessionHandle = {
-        entityUrl,
-        sessionId,
-        agent: opts.agent,
-        run: entityHandle.run,
-        meta: readMeta,
-        status: (): CodingSessionStatus | undefined => readMeta()?.status,
-        send: (prompt: string): void => {
-          config.executeSend({
-            targetUrl: entityUrl,
-            payload: { text: prompt },
-            type: `prompt`,
-          })
-        },
-        get events(): ReadonlyArray<CodingSessionEventRow> {
-          return readEvents()
-        },
-        get messages(): ReadonlyArray<CodingSessionEventRow> {
-          return readEvents().filter((e) => MESSAGE_TYPES.has(e.type))
-        },
-      }
-      return handle
+      const agentUrl = `/coding-agent/${opts.id}`
+      return makeCodingAgentHandle(config, agentUrl, entityHandle, opts.kind)
+    },
+    async observeCodingAgent(id: string): Promise<CodingAgentHandle> {
+      const url = `/coding-agent/${id}`
+      const entityHandle = await config.doObserve(
+        entityObservationSource(url),
+        `runFinished`
+      )
+      return makeCodingAgentHandle(config, url, entityHandle)
     },
     send(
       entityUrl: string,
@@ -690,4 +686,89 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   }
 
   return { ctx, getSleepRequested: () => sleepRequested }
+}
+
+function makeCodingAgentHandle(
+  config: HandlerContextConfig,
+  url: string,
+  entityHandle: { db?: { collections?: any } },
+  defaultKind: CodingAgentKind = `claude`
+): CodingAgentHandle {
+  const readMeta = (): any => {
+    const c = entityHandle.db?.collections?.sessionMeta
+    return c?.get?.(`current`)
+  }
+  const readRuns = (): Array<CodingAgentRunSummary> => {
+    const c = entityHandle.db?.collections?.runs
+    if (!c) return []
+    const rows = (c as { toArray?: unknown }).toArray
+    if (!Array.isArray(rows)) return []
+    return rows.map((r: any) => ({
+      runId: r.key,
+      startedAt: r.startedAt,
+      endedAt: r.endedAt,
+      status: r.status,
+      promptInboxKey: r.promptInboxKey,
+      responseText: r.responseText,
+    }))
+  }
+
+  return {
+    url,
+    // Live getter so the handle reflects the entity's actual kind once
+    // sessionMeta is loaded (covers observeCodingAgent which doesn't
+    // know the kind upfront). Falls back to defaultKind if meta hasn't
+    // arrived yet (e.g. immediately after spawn).
+    get kind(): CodingAgentKind {
+      const meta = readMeta()
+      return (meta?.kind as CodingAgentKind | undefined) ?? defaultKind
+    },
+    send: (text: string) => {
+      config.executeSend({
+        targetUrl: url,
+        payload: { text },
+        type: `prompt`,
+      })
+      return Promise.resolve()
+    },
+    pin: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `pin` })
+      return Promise.resolve()
+    },
+    release: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `release` })
+      return Promise.resolve()
+    },
+    stop: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `stop` })
+      return Promise.resolve()
+    },
+    destroy: () => {
+      config.executeSend({ targetUrl: url, payload: {}, type: `destroy` })
+      return Promise.resolve()
+    },
+    state(): CodingAgentState {
+      const meta = readMeta()
+      return {
+        status: meta?.status ?? `cold`,
+        pinned: meta?.pinned ?? false,
+        workspace: {
+          identity: meta?.workspaceIdentity ?? ``,
+          sharedRefs: 1, // Server-only state; Slice A clients see 1.
+        },
+        lastError: meta?.lastError,
+        runs: readRuns(),
+      }
+    },
+    events(opts?: { since?: `start` | `now` }) {
+      const since = opts?.since ?? `now`
+      const c = entityHandle.db?.collections?.events
+      const rows: Array<{ payload: unknown }> =
+        c && Array.isArray((c as any).toArray) ? (c as any).toArray : []
+      const initial = since === `start` ? rows.slice() : []
+      return (async function* () {
+        for (const r of initial) yield r.payload
+      })()
+    },
+  }
 }
