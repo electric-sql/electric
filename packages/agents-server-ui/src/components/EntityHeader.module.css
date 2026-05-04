@@ -75,7 +75,7 @@
   gap: 2px;
 }
 
-/* Native Badge size=2 height (22px) matches the IconButton size=1
+/* Native Badge size=2 height (24px) matches the IconButton size=1
    triggers next to it exactly — no overrides needed; just stop the
    pill from shrinking when the title row gets tight. */
 .statusBadge {
