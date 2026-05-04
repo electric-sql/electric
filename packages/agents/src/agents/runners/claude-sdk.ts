@@ -23,6 +23,12 @@ export const claudeSdkRunner: CodingSessionCliRunner = {
       options: {
         cwd: opts.cwd,
         ...(opts.sessionId ? { resume: opts.sessionId } : {}),
+        // The Claude SDK requires *both* of these to skip approvals:
+        // `permissionMode: 'bypassPermissions'` selects the bypass
+        // policy and `allowDangerouslySkipPermissions: true` is the
+        // explicit acknowledgement gate (the SDK throws unless that
+        // boolean is set when the bypass mode is used). They are not
+        // redundant despite the name overlap.
         permissionMode: `bypassPermissions`,
         allowDangerouslySkipPermissions: true,
       },
