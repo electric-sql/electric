@@ -14,6 +14,7 @@ Coding-agent runtime + sandbox providers for the agents-server platform. A codin
 - [opencode (third agent kind)](#opencode-third-agent-kind)
 - [Fly Sprites provider](#fly-sprites-provider)
 - [Cleanup utilities](#cleanup-utilities)
+- [Claude Code skills](#claude-code-skills)
 - [Tracked limitations](#tracked-limitations)
 - [Internals](#internals)
 
@@ -327,6 +328,24 @@ pnpm -C packages/coding-agents cleanup:volumes --in-use                    # als
 `cleanup:volumes` lists `coding-agent-workspace-*` Docker volumes (kept by `LocalDockerProvider.destroy()` for resume safety, orphaned after entity DELETE). Default skips still-mounted volumes; `--in-use` widens the listing.
 
 Both scripts run via Node 24's native TS strip — no `tsx` dependency.
+
+---
+
+## Claude Code skills
+
+The package ships [Claude Code skills](./claude-skills/) that wrap the CLIs for in-session use. Currently:
+
+- [`electric-import`](./claude-skills/electric-import/SKILL.md) — import the active Claude Code session into a running electric-agents server. Trigger phrase: "import this session into electric".
+
+Install one with:
+
+```bash
+cp -R packages/coding-agents/claude-skills/electric-import ~/.claude/skills/
+```
+
+After copying, restart Claude Code — skills load at session start. See [`claude-skills/README.md`](./claude-skills/README.md) for the full list and authoring notes.
+
+A note on what's possible: the skill makes the session **observable** from the agents-server-ui (events, transcript, fork-source). It does **not** give remote users a way to push prompts back into the running CLI — Claude Code has no supported third-party message-injection API. To accept remote prompts, fork the imported agent into a sandboxed sibling and prompt that.
 
 ---
 
