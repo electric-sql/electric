@@ -169,7 +169,12 @@ function threadItemCompletedToEvents(item: ThreadItem): Array<NormalizedEvent> {
     case `mcp_tool_call`:
       return [mcpToolCallToToolResult(item, ts)]
     case `web_search`:
-      return []
+      // Codex's WebSearchItem doesn't expose the search results to the
+      // SDK consumer (only `query`), so we can't produce a meaningful
+      // tool_result payload. Emit an empty one anyway to honor the
+      // tool_call→tool_result contract — without it any UI rendering
+      // tool lifecycles would show a perpetually-pending web search.
+      return [webSearchToToolResult(item, ts)]
     case `todo_list`:
       return []
     case `error`:
@@ -314,6 +319,20 @@ function webSearchToToolCall(item: WebSearchItem, ts: number): NormalizedEvent {
     originalTool: `web_search`,
     originalAgent: `codex`,
     input: { query: item.query },
+  }
+}
+
+function webSearchToToolResult(
+  item: WebSearchItem,
+  ts: number
+): NormalizedEvent {
+  return {
+    v: 1,
+    ts,
+    type: `tool_result`,
+    callId: item.id,
+    output: ``,
+    isError: false,
   }
 }
 
