@@ -481,7 +481,8 @@ shape.subscribe((data) => {
 })
 ```
 
-**Column Mapping**
+
+##### Column Mapping
 
 For transforming column names between database format (e.g., snake_case) and application format (e.g., camelCase), use the `columnMapper` option. This provides bidirectional transformation, automatically encoding column names in WHERE clauses and decoding them in query results.
 
@@ -531,7 +532,7 @@ const stream = new ShapeStream<CustomRow>({
 })
 ```
 
-**Transformer**
+##### Transformer
 
 While the parser operates on individual fields and columnMapper renames columns, the transformer allows you to modify the entire record for value transformations like client-side decryption of end-to-end encrypted data, computing derived fields, or other data processing.
 
