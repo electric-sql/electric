@@ -17,7 +17,7 @@ import styles from './ServerPicker.module.css'
 type ServerStatus = `ok` | `down` | `unset`
 
 /**
- * Footer-anchored server picker tile (Cursor-style "user" slot).
+ * Footer-anchored server picker tile.
  *
  * Renders a single-line tile showing `[● status] [server name] [chevron]`
  * that opens a menu listing the saved servers + an "Add server" entry.

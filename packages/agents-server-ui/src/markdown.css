@@ -26,7 +26,7 @@
  * intentionally removed in favour of a flat type scale; vertical
  * rhythm is provided by the wrapper's `gap`.
  *
- * Goals (matching Cursor / Codex chat output):
+ * Goals (chat-style markdown output):
  *   - Compact vertical rhythm — markdown should read as part of the
  *     conversation, not as a long-form article.
  *   - Smaller, lower-contrast headers than typical doc styling.

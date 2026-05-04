@@ -76,9 +76,9 @@
   min-width: 0;
 }
 
-/* Keycap hint at the right of the row, mirroring Cursor / VS Code's
-   command-palette rows. Faded at rest and only fully opaque while the
-   row is hovered/focused so it never competes with the label.
+/* Keycap hint at the right of the row, command-palette style. Faded
+   at rest and only fully opaque while the row is hovered/focused so
+   it never competes with the label.
 
    `margin-right: 5px` gives the badge breathing room from the row's
    right edge — without it the keycap sits flush against the row

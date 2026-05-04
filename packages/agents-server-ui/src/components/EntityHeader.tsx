@@ -52,8 +52,8 @@ type EntityHeaderProps = {
  * name + id on the left and an actions cluster on the right, plus a
  * thin error strip below when kill / fork surface errors.
  *
- * No border-bottom — the strip shares the chat background, matching
- * Cursor / Codex chrome.
+ * No border-bottom — the strip shares the chat background so the
+ * header reads as part of the same surface as the conversation below.
  */
 export function EntityHeader(
   props: EntityHeaderProps

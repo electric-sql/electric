@@ -17,7 +17,7 @@ import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
 /**
  * The "default agent" — when an entity type with this name is registered
  * we surface a chat-input quick-start at the top of the new-session page
- * (Cursor / Codex-style) so the most common flow is one keystroke away.
+ * so the most common flow is one keystroke away.
  *
  * TODO: replace this with a server-side flag (e.g. tags.default) once
  * the entity_types schema gets one.
@@ -33,7 +33,7 @@ interface SchemaProperty {
 }
 
 /**
- * Cursor / Codex-style "new session" page. Shown at `/`.
+ * "New session" page shown at `/`.
  *
  * If a `horton` entity type is available we render a chat-style
  * composer at the top of the page so the user can just type and hit

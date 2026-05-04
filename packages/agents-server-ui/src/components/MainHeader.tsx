@@ -21,7 +21,7 @@ type MainHeaderProps = {
  * the strip starts directly with the title.
  *
  * No border / divider — the strip shares a background with the column
- * body, matching Cursor / Codex chrome.
+ * body so the header reads as part of the same surface.
  */
 export function MainHeader({
   title,

@@ -57,9 +57,9 @@ function RootShell(): React.ReactElement {
     search.toggle()
   })
   // New session: bind both ⌘N / Ctrl+N (works in Electron) and
-  // ⌘⇧O / Ctrl+Shift+O (works in browsers — matches the convention
-  // ChatGPT / Claude.ai use for "new chat", since `⌘N` is reserved
-  // by browsers for opening a new window and can't be intercepted).
+  // ⌘⇧O / Ctrl+Shift+O (works in browsers — `⌘N` is reserved by
+  // browsers for opening a new window and can't be intercepted, so
+  // we fall back to a combo that isn't claimed by the chrome).
   // The displayed shortcut hint switches per environment via
   // `NewSessionKey` / `newSessionLabel`.
   const openNewSession = useCallback(

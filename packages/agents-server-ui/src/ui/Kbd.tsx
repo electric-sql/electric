@@ -12,8 +12,8 @@ type KbdProps = {
  *
  * Multiple keys can be rendered as siblings inside a single `<Kbd>` —
  * each child becomes its own keycap and they are laid out in a tight row
- * separated by a 2px gap, matching the Cursor-style hint rows used in
- * top-bar buttons and the search palette footer.
+ * separated by a 2px gap, for keycap-hint rows used in top-bar buttons
+ * and the search palette footer.
  *
  *   <Kbd>⌘K</Kbd>
  *   <Kbd>⌘ K</Kbd>           -> single key, literal text

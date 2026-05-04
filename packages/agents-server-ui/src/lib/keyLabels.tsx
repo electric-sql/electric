@@ -74,8 +74,8 @@ export function modKeyLabel(spec: ModSpec): string {
  *   fine inside Electron. We display it as `⌘N` there.
  * - In a **browser**, `⌘N` opens a new browser window — there's no way
  *   to override that with `preventDefault`. We fall back to
- *   `⌘⇧O` / `Ctrl+Shift+O` (matching ChatGPT & Claude.ai's "new chat")
- *   and display that hint instead.
+ *   `⌘⇧O` / `Ctrl+Shift+O` (a common "new chat" combo that browsers
+ *   don't reserve) and display that hint instead.
  *
  * The `useHotkey` binding registers **both** combinations regardless,
  * so users can press whichever they remember.

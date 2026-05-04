@@ -24,7 +24,7 @@ type ResultGroup = { label: string; items: Array<ElectricEntity> }
 /**
  * ⌘K session-search palette.
  *
- * VS Code / Cursor-style overlay anchored 12vh from the top of the
+ * Command-palette-style overlay anchored 12vh from the top of the
  * viewport. Searches sessions only — a future command palette will
  * land on a separate shortcut for actions (kill / fork / etc.).
  *

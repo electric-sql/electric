@@ -1,9 +1,9 @@
-# Cursor / Codex UI refactor plan
+# UI refactor plan
 
-> Goal: reshape the agents-server-ui to feel like Cursor / Codex — a modern
-> desktop-app aesthetic with a tighter sidebar, a single-line content header,
-> a command-palette search, and a footer-anchored server + settings tile.
-> Built on the existing Base UI + `--ds-*` design tokens. **No new component
+> Goal: reshape the agents-server-ui into a modern desktop-app aesthetic
+> with a tighter sidebar, a single-line content header, a command-palette
+> search, and a footer-anchored server + settings tile. Built on the
+> existing Base UI + `--ds-*` design tokens. **No new component
 > library.** Restructure layout, restyle, and add a few primitives.
 
 ## North-star (from the reference screenshot)
@@ -32,8 +32,7 @@ Key visual deltas vs. today:
 - **Top bar** runs the full width; sidebar toggle + search live on the left,
   the entity title (left-aligned) + actions live on the right.
 - **Sidebar** has new-session at top, **time-grouped** sessions in the middle,
-  **server picker + settings** anchored to the bottom (replacing the avatar
-  tile in Cursor).
+  **server picker + settings** anchored to the bottom.
 - **Sessions** are single-line. Children collapsed by default — caret expands
   the subtree (instead of always-on tree guides).
 - **Search** is a ⌘K overlay (sessions only), not a sidebar input. A
@@ -49,7 +48,7 @@ Key visual deltas vs. today:
 Small additions to the design system that the rest of the plan leans on.
 
 - `src/ui/Kbd.tsx` (+ `.module.css`) — keycap primitive (`<Kbd>⌘K</Kbd>`).
-  Cursor-style: 11px, mono, `--ds-gray-a3` background, 1px bottom shadow.
+  11px, mono, `--ds-gray-a3` background, 1px bottom shadow.
 - `src/ui/TopBar.tsx` (+ `.module.css`) — new layout primitive:
   - 36–40px height, `border-bottom: 1px solid var(--ds-divider)`.
   - Three slots: `start`, `title` (centered/truncated), `end`.
@@ -78,8 +77,8 @@ Small additions to the design system that the rest of the plan leans on.
   - Drop default body size from 16 → 14 (`--ds-text-base: 14px`), keep
     `--ds-text-sm` at 13 for chrome (sidebar rows, top bar). Status / meta
     text drops to `--ds-text-xs` (11–12px).
-  - Tighten neutral surfaces: `--ds-bg` slightly cooler / closer to
-    Cursor's off-white; `--ds-bg-subtle` becomes the sidebar surface
+  - Tighten neutral surfaces: `--ds-bg` slightly cooler / closer to a
+    soft off-white; `--ds-bg-subtle` becomes the sidebar surface
     (currently `--ds-gray-a2`).
   - Add `--ds-row-height-sm: 24px` and `--ds-row-height-md: 28px` for
     sidebar/menu/topbar rows.
@@ -97,13 +96,13 @@ top bar so the sidebar toggle and search live in a stable place.
     **search** trigger button (`Search` icon + label "Search…" + `<Kbd>⌘K</Kbd>`).
     Search button is the visible affordance for the palette (Phase 4).
   - Title slot: route-supplied title, **left-aligned** immediately after
-    the search button (Codex-style, not centered).
+    the search button (not centered).
   - Right slot: route-supplied actions (status badge, panel toggle, 3-dot menu).
 - `RootLayout` in `src/router.tsx`:
   - Wraps everything in a column: `<AppTopBar />` above the
     `Sidebar` + `<Outlet />` row.
   - Manages sidebar collapsed state (`useSidebarCollapsed()` hook, persisted
-    to `localStorage`). Toggle hotkey: `mod+b` (Cursor parity).
+    to `localStorage`). Toggle hotkey: `mod+b`.
   - **Collapsed = fully hidden** (sidebar element unmounts / `display: none`,
     main content takes full width). No icon rail. Re-open via the top-bar
     toggle button or `mod+b`.
@@ -120,7 +119,7 @@ top bar so the sidebar toggle and search live in a stable place.
     Pin and Fork move **into** the 3-dot menu (per north-star).
   - Drop the standalone Pin button + standalone Fork button from the bar.
 - `IndexPage` also renders `<AppTopBar title="" actions={null}/>` so the
-  bar is always visible (Cursor never hides chrome on empty states).
+  bar is always visible (we don't hide chrome on empty states).
 
 ### Phase 2 — Sidebar restructure (rows + grouping)
 
@@ -154,7 +153,8 @@ top bar so the sidebar toggle and search live in a stable place.
 
 ### Phase 3 — Bottom-anchored server + settings tile
 
-Replace today's footer (just a theme button) with a Cursor-style "user tile".
+Replace today's footer (just a theme button) with a bottom user-tile slot
+hosting the server picker + settings cog.
 
 - New `src/components/SidebarFooter.tsx` mounted at the bottom of `Sidebar`:
   - Left: **server tile** — clickable, opens server menu.
@@ -165,8 +165,8 @@ Replace today's footer (just a theme button) with a Cursor-style "user tile".
   - Right: **settings button** (`Settings` icon, ghost) opens a menu.
 - `src/components/ServerPicker.tsx`:
   - Keep the menu, drop the `bar` wrapping (now lives in `SidebarFooter`).
-  - Server-list items get a Cursor-like single-row form (icon + name +
-    trash on hover, instead of always-visible).
+  - Server-list items get a single-row form (icon + name + trash on hover,
+    instead of always-visible).
   - "Add server" stays as a menu entry; the inline `AddServerPanel` still
     appears anchored to the footer when triggered.
 - New `src/components/SettingsMenu.tsx` (uses `Menu` primitive):
@@ -183,7 +183,7 @@ gains the server tile + settings cog.
 
 ### Phase 4 — Search palette (⌘K)
 
-VS Code / Cursor style **search**, scoped to finding sessions. A future
+Command-palette-style **search**, scoped to finding sessions. A future
 phase will introduce a separate **command** palette (likely `⌘P` or
 `⌘⇧P`) for actions (kill / fork / open state explorer / etc.); that work
 is out of scope here.
@@ -217,7 +217,7 @@ is out of scope here.
 - Reserve `mod+p` / `mod+shift+p` (do not bind yet) for the future command
   palette so we don't accidentally claim the shortcut for something else.
 
-### Phase 5 — Visual polish (Cursor-y feel)
+### Phase 5 — Visual polish
 
 Mostly CSS / token tuning, no behaviour changes.
 
@@ -234,10 +234,10 @@ Mostly CSS / token tuning, no behaviour changes.
   `--ds-radius-2` to `--ds-radius-3` on rows, tighten popover padding
   (`Menu` content `padding: 4px`, item `padding: 4px 8px`).
 - **Status dot**: keep current 7px circle but desaturate slightly to
-  match Cursor's quieter palette (e.g. `running` → `--ds-blue-a9` mix).
+  match the quieter palette (e.g. `running` → `--ds-blue-a9` mix).
 - **Icon sizing**: standardise to 14px in chrome, 16px in toolbars.
 - **Resizer**: hover affordance becomes a 1px accent line instead of a
-  full-width tint (subtler, Cursor-style).
+  full-width tint (subtler).
 
 ### Phase 6 — Cleanup + verification
 
@@ -304,8 +304,7 @@ Mostly CSS / token tuning, no behaviour changes.
 
 ## Resolved
 
-- **Title placement**: left-aligned (Codex-style) immediately after the
-  search button.
+- **Title placement**: left-aligned immediately after the search button.
 - **Sidebar collapsed**: fully hidden — re-open via top-bar toggle or `⌘B`.
   No icon rail.
 - **Time buckets**: rolling 7 / 30 days (not ISO week).
@@ -322,8 +321,8 @@ Mostly CSS / token tuning, no behaviour changes.
 
 ## Non-goals (explicitly out of scope)
 
-- Touching the entity timeline / chat rendering. The brief says "match
-  cursor" for chat; treat as Phase 7+ once layout is settled.
+- Touching the entity timeline / chat rendering. Treat as Phase 7+ once
+  layout is settled.
 - Replacing Base UI or revisiting the design-token structure beyond the
   small Phase 0 tweaks.
 - Dropping HashRouter / changing routing semantics.

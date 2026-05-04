@@ -7,9 +7,9 @@ interface TooltipProps {
   content: ReactNode
   /**
    * Optional keyboard shortcut hint (e.g. `⌘B`, `Ctrl+K`). Rendered
-   * as slightly muted text after the label, separated by a space —
-   * not in brackets — matching the convention used by Cursor / VS
-   * Code tooltips.
+   * as slightly muted text after the label, separated by a space (no
+   * surrounding brackets) so the keycap reads as part of the same
+   * line as the label.
    */
   shortcut?: ReactNode
   /** The element that triggers the tooltip on hover/focus. */

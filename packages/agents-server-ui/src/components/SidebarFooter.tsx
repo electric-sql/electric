@@ -3,7 +3,7 @@ import { SettingsMenu } from './SettingsMenu'
 import styles from './SidebarFooter.module.css'
 
 /**
- * Bottom-anchored row in the sidebar — Cursor's "user tile" slot.
+ * Bottom-anchored row in the sidebar.
  *
  * Hosts the active-server picker on the left and the settings cog on
  * the right. Settings dropdown currently exposes the theme toggle;

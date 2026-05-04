@@ -234,9 +234,9 @@
   --ds-z-toast: 700;
 
   /* ---- Density (chrome row heights, used by sidebar/menu/topbar) ----- *
-   * Cursor-style chrome leans on a small set of fixed row heights so
-   * sidebar items, menu items and top-bar buttons all share the same
-   * vertical rhythm regardless of which primitive renders them.        */
+   * Chrome leans on a small set of fixed row heights so sidebar items,
+   * menu items and top-bar buttons all share the same vertical rhythm
+   * regardless of which primitive renders them.                        */
   --ds-row-height-sm: 24px;
   --ds-row-height-md: 28px;
   --ds-row-height-lg: 36px;

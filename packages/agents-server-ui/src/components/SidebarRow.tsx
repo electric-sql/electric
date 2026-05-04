@@ -68,7 +68,7 @@ type SidebarRowProps = {
  * dropped (since the children are visible right below).
  *
  * Wrapped in a HoverCard that pops out a small info card to the right
- * with the full title and session id (Cursor-style preview).
+ * with the full title and session id.
  */
 // Memoised so re-renders triggered higher up the tree (sidebar
 // re-renders on selection / pin changes) don't cascade into every
