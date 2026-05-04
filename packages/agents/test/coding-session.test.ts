@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createEntityRegistry } from '@electric-ax/agents-runtime'
 import { registerCodingSession } from '../src/agents/coding-session'
+import type { NormalizedEvent } from 'agent-session-protocol'
 
 function makeFakeCtx(opts: {
   firstWake: boolean
@@ -81,6 +82,7 @@ function makeFakeCtx(opts: {
         sessionMeta: { get: (k: string) => state.sessionMeta!.get(k) },
         cursorState: { get: (k: string) => state.cursorState!.get(k) },
         events: {
+          get: (k: string) => state.events!.get(k),
           get toArray() {
             return Array.from(state.events!.values())
           },
@@ -178,16 +180,26 @@ describe(`registerCodingSession`, () => {
   })
 
   it(`invokes the injected cliRunner for a queued prompt and mirrors normalized events`, async () => {
-    // Inject a fake runner + fake agent-session-protocol pullEvents path
-    // by pre-populating the cursorState (so pullNewEvents takes the tail
-    // branch) and attaching to an existing nativeSessionId (so the
-    // lazy-create path that hits the filesystem is bypassed).
-    //
-    // This still exercises the handler's queue-drain logic without
-    // touching ~/.claude or ~/.codex.
+    // Pre-populate the cursorState with a non-empty seeded marker so
+    // the initial-mirror path is skipped (no filesystem touch). The
+    // injected runner streams events and the orchestrator should
+    // append them to the events collection and complete cleanly.
 
     const runner = {
-      run: vi.fn(async () => ({ exitCode: 0, stdout: ``, stderr: `` })),
+      run: vi.fn(
+        async (callArgs: {
+          onEvent?: (ev: NormalizedEvent) => void
+          onSessionId?: (id: string) => void
+        }) => {
+          callArgs.onEvent?.({
+            v: 1,
+            ts: 1714000000000,
+            type: `assistant_message`,
+            text: `hi back`,
+          })
+          return { exitCode: 0, stdout: `hi back`, stderr: `` }
+        }
+      ),
     }
     const registry = createEntityRegistry()
     registerCodingSession(registry, {
@@ -196,7 +208,7 @@ describe(`registerCodingSession`, () => {
     })
     const def = registry.get(`coder`)!
 
-    const { ctx, state, calls } = makeFakeCtx({
+    const { ctx, state } = makeFakeCtx({
       firstWake: false,
       args: { agent: `claude`, nativeSessionId: `existing-uuid` },
       inbox: [
@@ -217,22 +229,20 @@ describe(`registerCodingSession`, () => {
           cwd: `/tmp/x`,
           status: `idle`,
         },
-        cursorState: { key: `current`, cursor: ``, eventCounter: 0 },
+        cursorState: {
+          key: `current`,
+          cursor: `sdk-stream`,
+          eventCounter: 0,
+        },
       },
     })
 
-    // The handler will call resolveSession + loadSession under the hood,
-    // which hit the filesystem. Expect this call to throw — we're
-    // asserting the error surfaces cleanly as a failed prompt rather
-    // than a hang.
-    await expect(
-      def.definition.handler(
-        ctx as unknown as Parameters<typeof def.definition.handler>[0],
-        { type: `message_received` } as unknown as Parameters<
-          typeof def.definition.handler
-        >[1]
-      )
-    ).rejects.toThrow()
+    await def.definition.handler(
+      ctx as unknown as Parameters<typeof def.definition.handler>[0],
+      { type: `message_received` } as unknown as Parameters<
+        typeof def.definition.handler
+      >[1]
+    )
 
     // Runner was invoked with the prompt
     expect(runner.run).toHaveBeenCalledTimes(1)
@@ -247,14 +257,16 @@ describe(`registerCodingSession`, () => {
     expect(call.prompt).toBe(`say hi`)
     expect(call.sessionId).toBe(`existing-uuid`)
 
-    // Meta was flipped to error with a diagnostic message
+    // Streamed event made it into the events collection
+    expect(state.events!.size).toBe(1)
+    const event = Array.from(state.events!.values())[0]!
+    expect(event.type).toBe(`assistant_message`)
+
+    // Meta is back to idle and the inbox key is marked processed
     const meta = state.sessionMeta!.get(`current`)!
-    expect(meta.status).toBe(`error`)
-    expect(typeof meta.error).toBe(`string`)
-    // The prompt is marked as processed so it won't be retried on the next wake
+    expect(meta.status).toBe(`idle`)
     const cursor = state.cursorState!.get(`current`)!
     expect(cursor.lastProcessedInboxKey).toBe(`m-001`)
-    void calls // reserved for future assertions
   })
 
   it(`accepts inbox messages without message_type (bare /send from generic UI)`, async () => {
@@ -289,18 +301,20 @@ describe(`registerCodingSession`, () => {
           cwd: `/tmp/x`,
           status: `idle`,
         },
-        cursorState: { key: `current`, cursor: ``, eventCounter: 0 },
+        cursorState: {
+          key: `current`,
+          cursor: `sdk-stream`,
+          eventCounter: 0,
+        },
       },
     })
 
-    await expect(
-      def.definition.handler(
-        ctx as unknown as Parameters<typeof def.definition.handler>[0],
-        { type: `message_received` } as unknown as Parameters<
-          typeof def.definition.handler
-        >[1]
-      )
-    ).rejects.toThrow() // resolveSession fails for a synthetic id — same as the other test
+    await def.definition.handler(
+      ctx as unknown as Parameters<typeof def.definition.handler>[0],
+      { type: `message_received` } as unknown as Parameters<
+        typeof def.definition.handler
+      >[1]
+    )
 
     expect(runner.run).toHaveBeenCalledTimes(1)
     const call = (
