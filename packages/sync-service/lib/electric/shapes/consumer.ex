@@ -358,7 +358,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:materializer_shape_invalidated, shape_handle}, state) do
-    Logger.warning("Materializer shape invalidated for #{shape_handle}")
+    Logger.warning("Materializer shape invalidated for shape", shape_handle: shape_handle)
     stop_and_clean(state)
   end
 
@@ -1122,7 +1122,9 @@ defmodule Electric.Shapes.Consumer do
       else
         _ ->
           Logger.warning(
-            "Materializer for #{shape_handle} is not alive, invalidating shape #{state.shape_handle}"
+            "Materializer for shape is not alive, invalidating shape",
+            shape_handle: shape_handle,
+            state_shape_handle: state.shape_handle
           )
 
           false

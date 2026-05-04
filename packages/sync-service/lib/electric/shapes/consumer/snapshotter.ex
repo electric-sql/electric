@@ -99,7 +99,9 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           {:stop, :normal, state}
 
         nil ->
-          Logger.error("Unable to start snapshot - consumer not found for shape #{shape_handle}")
+          Logger.error("Unable to start snapshot - consumer not found for shape",
+            shape_handle: shape_handle
+          )
 
           {:stop, {:error, "consumer not found"}, state}
       end

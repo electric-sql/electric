@@ -154,7 +154,10 @@ defmodule Electric.ShapeCache do
             # Please note that :await_snapshot_start can also return a timeout error as well
             # as the call timing out and being handled here. A timeout error will be returned
             # by :await_snapshot_start if the PublicationManager queries take longer than 5 seconds.
-            Logger.error("Failed to await snapshot start for shape #{shape_handle}: timeout")
+            Logger.error("Failed to await snapshot start for shape: timeout",
+              shape_handle: shape_handle
+            )
+
             {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
 
           :exit, {:noproc, _} ->
@@ -212,7 +215,8 @@ defmodule Electric.ShapeCache do
                 # clients that all want to fetch this shape.
 
                 Logger.warning(
-                  "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
+                  "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for shape",
+                  shape_handle: shape_handle
                 )
 
                 {:error, Electric.SnapshotError.slow_snapshot_start()}
@@ -432,7 +436,7 @@ defmodule Electric.ShapeCache do
         {:ok, consumer_pid}
 
       {:error, _reason} = error ->
-        Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
+        Logger.error("Failed to start shape: #{inspect(error)}", shape_handle: shape_handle)
         # purge because we know the consumer isn't running
         clean_shape(shape_handle, stack_id)
         :error
@@ -468,7 +472,9 @@ defmodule Electric.ShapeCache do
       {:error, failed_handle} ->
         if failed_handle != shape_handle do
           Logger.warning(
-            "Failed to start consumer for handle #{shape_handle}: error starting consumer for inner shape #{failed_handle}"
+            "Failed to start consumer for shape: error starting consumer for inner shape",
+            shape_handle: shape_handle,
+            failed_handle: failed_handle
           )
 
           # If we got an error starting any of the dependent shapes then we
