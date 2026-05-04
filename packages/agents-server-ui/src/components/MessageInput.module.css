@@ -27,7 +27,13 @@
 }
 
 .composer {
-  background: var(--ds-input-bg);
+  /* Use the raised-surface token (solid in both themes) rather than
+     `--ds-input-bg`. The latter is translucent in dark mode by
+     design — a deliberate choice for inline form inputs that sit on
+     popovers / panels. The composer is different: it docks at the
+     bottom of a scrolling chat surface and chat content must NOT
+     bleed through it. Solid raised surface is the right semantic. */
+  background: var(--ds-surface-raised);
   border: 1px solid var(--ds-gray-a4);
   border-radius: 12px;
   /* 12px on all sides — same as the user-message bubble (`Stack p={3}`
@@ -54,6 +60,11 @@
   line-height: 1.5;
   color: var(--ds-text-1);
   font-family: var(--ds-font-body);
+  /* Auto-grow is driven by inline `height = scrollHeight` from
+     MessageInput.tsx; the cap below + `overflow: auto` together
+     make the input scroll once it hits the limit (~10 lines at the
+     current 13px/1.5 type size). `resize: none` hides the native
+     handle since the auto-resize already does the right thing. */
   resize: none;
   overflow: auto;
   max-height: 200px;

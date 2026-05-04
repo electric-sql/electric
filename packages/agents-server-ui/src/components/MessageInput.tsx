@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { createOptimisticAction } from '@tanstack/db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
@@ -18,6 +18,20 @@ export function MessageInput({
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [error, setError] = useState<string | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow the composer as the user types. We reset to `auto`
+  // first so `scrollHeight` reports the natural content height (not
+  // the previous explicit height), then assign that back as inline
+  // height. The CSS `max-height` caps it; `overflow: auto` then
+  // takes over for anything past the cap. Runs in layout effect so
+  // the resize lands before paint and there's no one-frame flicker.
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = `auto`
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
 
   const sendAction = useMemo(() => {
     if (!db) return null
@@ -80,6 +94,7 @@ export function MessageInput({
           .join(` `)}
       >
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
@@ -90,7 +105,7 @@ export function MessageInput({
           }}
           placeholder={disabled ? `Entity stopped` : `Send a message...`}
           disabled={disabled}
-          rows={3}
+          rows={1}
           className={styles.textarea}
         />
         <ArrowUp

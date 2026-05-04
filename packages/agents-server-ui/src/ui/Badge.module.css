@@ -8,6 +8,10 @@
   white-space: nowrap;
   flex-shrink: 0;
   line-height: 1;
+  /* Border-box so the declared `.size*` height is the actual rendered
+     height — keeps badges flush with neighbouring 22/28/36px buttons
+     instead of growing by their vertical padding. */
+  box-sizing: border-box;
 }
 
 /* ── Sizes ────────────────────────────────────────────────────── */
