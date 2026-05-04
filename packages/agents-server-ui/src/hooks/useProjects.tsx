@@ -30,6 +30,20 @@ const ProjectsContext = createContext<ProjectsState | null>(null)
 
 const ACTIVE_PROJECT_KEY = `electric-agents-active-project`
 
+async function parseErrorMessage(
+  res: Response,
+  fallback: string
+): Promise<string> {
+  const text = await res.text().catch(() => ``)
+  try {
+    const data = JSON.parse(text) as { error?: { message?: string } }
+    if (data.error?.message) return data.error.message
+  } catch {
+    if (text) return text
+  }
+  return `${fallback} (${res.status})`
+}
+
 export function ProjectsProvider({
   children,
 }: {
@@ -71,6 +85,16 @@ export function ProjectsProvider({
     void fetchProjects()
   }, [fetchProjects])
 
+  useEffect(() => {
+    if (
+      activeProjectId &&
+      projects.length > 0 &&
+      !projects.some((p) => p.id === activeProjectId)
+    ) {
+      setActiveProjectId(null)
+    }
+  }, [projects, activeProjectId, setActiveProjectId])
+
   const createProject = useCallback(
     async (name: string, projectPath: string): Promise<Project> => {
       if (!baseUrl) throw new Error(`No server connected`)
@@ -80,14 +104,7 @@ export function ProjectsProvider({
         body: JSON.stringify({ name, path: projectPath }),
       })
       if (!res.ok) {
-        const text = await res.text().catch(() => ``)
-        let message = `Create failed (${res.status})`
-        try {
-          const data = JSON.parse(text) as { error?: { message?: string } }
-          if (data.error?.message) message = data.error.message
-        } catch {
-          if (text) message = text
-        }
+        const message = await parseErrorMessage(res, `Create failed`)
         throw new Error(message)
       }
       const project = (await res.json()) as Project
@@ -103,7 +120,7 @@ export function ProjectsProvider({
       const res = await fetch(`${baseUrl}/_electric/projects/${id}`, {
         method: `DELETE`,
       })
-      if (res.ok || res.status === 204) {
+      if (res.ok) {
         setProjects((prev) => prev.filter((p) => p.id !== id))
         setActiveProjectIdRaw((prev) => (prev === id ? null : prev))
       }
@@ -128,7 +145,7 @@ export function ProjectsProvider({
     [baseUrl]
   )
 
-  const validatePathFn = useCallback(
+  const validatePath = useCallback(
     async (dirPath: string): Promise<{ valid: boolean; resolved: string }> => {
       if (!baseUrl) return { valid: false, resolved: dirPath }
       const res = await fetch(`${baseUrl}/_electric/validate-path`, {
@@ -151,7 +168,7 @@ export function ProjectsProvider({
         createProject,
         deleteProject,
         renameProject,
-        validatePath: validatePathFn,
+        validatePath,
         loading,
       }}
     >

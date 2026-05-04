@@ -20,7 +20,7 @@ import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../hooks/useServerConnection'
 import { useProjects } from '../hooks/useProjects'
-import { Popover, Select, Stack, Text } from '../ui'
+import { Button, Popover, Select, Stack, Text } from '../ui'
 import { MainHeader } from './MainHeader'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from './SchemaForm'
 import styles from './NewSessionPage.module.css'
@@ -36,13 +36,13 @@ const HERO_VERBS = [
   `Let’s explore`,
   `Let’s debug`,
   `Let’s design`,
-  `Let’s hack on`,
+  `Let’s hack`,
   `Let’s improve`,
 ]
 
 function useRotatingVerb(): string {
   const [index, setIndex] = useState(() =>
-    Math.floor(Math.random() * (HERO_VERBS.length - 1))
+    Math.floor(Math.random() * HERO_VERBS.length)
   )
   useEffect(() => {
     const id = setInterval(() => {
@@ -338,7 +338,6 @@ function ProjectPicker({
       const validation = await onValidatePath(trimmedPath)
       if (!validation.valid) {
         setPathError(`Not a valid directory`)
-        setSubmitting(false)
         return
       }
       const project = await onCreateProject(trimmedName, trimmedPath)
@@ -451,13 +450,13 @@ function ProjectPicker({
                   if (e.key === `Escape`) resetForm()
                 }}
               />
-              <button
+              <Button
                 type="submit"
+                size={1}
                 disabled={!newName.trim() || !newPath.trim() || submitting}
-                className={styles.projectCreateBtn}
               >
                 {submitting ? `…` : `Create`}
-              </button>
+              </Button>
             </div>
             {pathError && (
               <span className={styles.projectPathError}>{pathError}</span>

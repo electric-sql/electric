@@ -36,7 +36,7 @@
    * so existing `size="1"`..`size="6"` migrations are visually 1:1.   */
   --ds-text-xs: 11px;
   --ds-text-xs-lh: 1.45;
-  --ds-text-sm: 13px;
+  --ds-text-sm: 14px;
   --ds-text-sm-lh: 1.5;
   --ds-text-base: 14px;
   --ds-text-base-lh: 1.55;
@@ -51,8 +51,8 @@
 
   /* ---- Font families ------------------------------------------------- */
   --ds-font-body:
-    Figtree, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    'Figtree Variable', ui-sans-serif, system-ui, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --ds-font-heading: var(--ds-font-body);
   --ds-font-mono:
     SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono',

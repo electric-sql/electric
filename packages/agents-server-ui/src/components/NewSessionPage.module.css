@@ -373,22 +373,6 @@
   font-size: var(--ds-text-xs);
   color: var(--ds-red-11);
 }
-.projectCreateBtn {
-  all: unset;
-  cursor: pointer;
-  font-size: var(--ds-text-sm);
-  color: var(--ds-accent-9);
-  padding: 4px 8px;
-  border-radius: var(--ds-radius-2);
-  flex-shrink: 0;
-}
-.projectCreateBtn:hover {
-  background: var(--ds-accent-a2);
-}
-.projectCreateBtn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
 
 /* Other-agents section under the composer ----------------------- */
 

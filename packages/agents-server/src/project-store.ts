@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import envPaths from 'env-paths'
 import { nanoid } from 'nanoid'
@@ -21,14 +22,8 @@ async function readProjects(): Promise<Array<Project>> {
   try {
     const raw = await fs.readFile(PROJECTS_FILE, `utf-8`)
     return JSON.parse(raw) as Array<Project>
-  } catch (err: unknown) {
-    if (
-      err instanceof Error &&
-      `code` in err &&
-      (err as NodeJS.ErrnoException).code === `ENOENT`
-    ) {
-      return []
-    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === `ENOENT`) return []
     throw err
   }
 }
@@ -63,12 +58,12 @@ export async function updateProject(
   updates: { name?: string; path?: string }
 ): Promise<Project | null> {
   const projects = await readProjects()
-  const idx = projects.findIndex((p) => p.id === id)
-  if (idx === -1) return null
-  if (updates.name !== undefined) projects[idx].name = updates.name
-  if (updates.path !== undefined) projects[idx].path = updates.path
+  const project = projects.find((p) => p.id === id)
+  if (!project) return null
+  if (updates.name !== undefined) project.name = updates.name
+  if (updates.path !== undefined) project.path = updates.path
   await writeProjects(projects)
-  return projects[idx]
+  return project
 }
 
 export async function deleteProject(id: string): Promise<boolean> {
@@ -79,11 +74,19 @@ export async function deleteProject(id: string): Promise<boolean> {
   return true
 }
 
+function expandHome(p: string): string {
+  if (p === `~` || p.startsWith(`~/`)) {
+    return path.join(os.homedir(), p.slice(1))
+  }
+  return p
+}
+
 export async function validatePath(
   dirPath: string
 ): Promise<{ valid: boolean; resolved: string }> {
   try {
-    const resolved = await fs.realpath(dirPath)
+    const expanded = expandHome(dirPath)
+    const resolved = await fs.realpath(expanded)
     const stat = await fs.stat(resolved)
     return { valid: stat.isDirectory(), resolved }
   } catch {

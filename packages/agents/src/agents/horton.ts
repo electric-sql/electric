@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { serverLog } from '../log'
@@ -331,6 +332,20 @@ function createAssistantHandler(options: {
       typeof ctx.args.workingDirectory === `string`
         ? ctx.args.workingDirectory
         : workingDirectory
+
+    if (
+      typeof ctx.args.workingDirectory === `string` &&
+      (!fs.existsSync(effectiveCwd) || !fs.statSync(effectiveCwd).isDirectory())
+    ) {
+      ctx.useAgent({
+        systemPrompt: `Tell the user that the working directory "${effectiveCwd}" does not exist or is not a directory. Ask them to check the project path and try again.`,
+        ...resolveBuiltinModelConfig(modelCatalog, ctx.args),
+        tools: [...ctx.electricTools],
+      })
+      await ctx.agent.run()
+      return
+    }
+
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const tools = [
       ...ctx.electricTools,
