@@ -89,8 +89,10 @@ export const claudeSdkRunner: CodingSessionCliRunner = {
  *
  * Returns null for SDK-only message types (status pings, retries, hook
  * lifecycle, etc.) that have no JSONL counterpart.
+ *
+ * Exported for unit testing — the runner is the only production caller.
  */
-function sdkMessageToClaudeEntry(msg: SDKMessage): ClaudeEntry | null {
+export function sdkMessageToClaudeEntry(msg: SDKMessage): ClaudeEntry | null {
   const ts =
     (msg as { timestamp?: string }).timestamp ?? new Date().toISOString()
   const sessionId = (msg as { session_id?: string }).session_id

@@ -137,7 +137,10 @@ export const codexSdkRunner: CodingSessionCliRunner = {
   },
 }
 
-function threadItemStartedToEvents(item: ThreadItem): Array<NormalizedEvent> {
+/** Exported for unit testing — the runner is the only production caller. */
+export function threadItemStartedToEvents(
+  item: ThreadItem
+): Array<NormalizedEvent> {
   const ts = Date.now()
   switch (item.type) {
     case `command_execution`:
@@ -155,7 +158,10 @@ function threadItemStartedToEvents(item: ThreadItem): Array<NormalizedEvent> {
   }
 }
 
-function threadItemCompletedToEvents(item: ThreadItem): Array<NormalizedEvent> {
+/** Exported for unit testing — the runner is the only production caller. */
+export function threadItemCompletedToEvents(
+  item: ThreadItem
+): Array<NormalizedEvent> {
   const ts = Date.now()
   switch (item.type) {
     case `agent_message`:
