@@ -1,7 +1,10 @@
 import { getModels } from '@mariozechner/pi-ai'
 import type { AgentConfig } from '@electric-ax/agents-runtime'
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
-export type BuiltinModelProvider = `anthropic` | `openai`
+export type BuiltinModelProvider = `anthropic` | `openai` | `openai-codex`
 
 export interface BuiltinModelChoice {
   provider: BuiltinModelProvider
@@ -29,7 +32,7 @@ type ExplicitReasoningEffort = Exclude<BuiltinReasoningEffort, `auto`>
 
 export type BuiltinAgentModelConfig = Pick<
   AgentConfig,
-  `model` | `provider` | `onPayload`
+  `model` | `provider` | `onPayload` | `getApiKey`
 > & {
   reasoningEffort?: ExplicitReasoningEffort
 }
@@ -40,9 +43,32 @@ type PersistedModelConfig = Pick<AgentConfig, `model` | `provider`> & {
 
 const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
+const DEFAULT_CODEX_MODEL = `gpt-5.4`
 
 function hasEnv(name: string): boolean {
   return (process.env[name]?.trim().length ?? 0) > 0
+}
+
+function codexAuthPath(): string {
+  return process.env.CODEX_AUTH_PATH ?? join(homedir(), `.codex`, `auth.json`)
+}
+
+function readCodexAccessToken(): string | undefined {
+  try {
+    const raw = readFileSync(codexAuthPath(), `utf-8`)
+    const data = JSON.parse(raw) as {
+      auth_mode?: string
+      tokens?: { access_token?: string }
+    }
+    if (data.auth_mode !== `chatgpt`) return undefined
+    return data.tokens?.access_token?.trim() || undefined
+  } catch {
+    return undefined
+  }
+}
+
+function hasCodexAuth(): boolean {
+  return readCodexAccessToken() !== undefined
 }
 
 function modelValue(provider: BuiltinModelProvider, id: string): string {
@@ -50,13 +76,16 @@ function modelValue(provider: BuiltinModelProvider, id: string): string {
 }
 
 function providerLabel(provider: BuiltinModelProvider): string {
-  return provider === `anthropic` ? `Anthropic` : `OpenAI`
+  if (provider === `anthropic`) return `Anthropic`
+  if (provider === `openai-codex`) return `OpenAI Codex`
+  return `OpenAI`
 }
 
 function configuredProviders(): Array<BuiltinModelProvider> {
   const providers: Array<BuiltinModelProvider> = []
   if (hasEnv(`ANTHROPIC_API_KEY`)) providers.push(`anthropic`)
   if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
+  if (hasCodexAuth()) providers.push(`openai-codex`)
   return providers
 }
 
@@ -111,6 +140,17 @@ async function choicesForProvider(
   provider: BuiltinModelProvider
 ): Promise<Array<BuiltinModelChoice>> {
   const knownModels = getModels(provider)
+
+  if (provider === `openai-codex`) {
+    return knownModels.map((model) => ({
+      provider,
+      id: model.id,
+      label: `${providerLabel(provider)} ${model.name}`,
+      value: modelValue(provider, model.id),
+      reasoning: model.reasoning,
+    }))
+  }
+
   const availableIds = await fetchAvailableModelIds(provider)
   const models =
     availableIds === null
@@ -127,13 +167,21 @@ async function choicesForProvider(
 }
 
 function withProviderPayloadDefaults(
-  config: PersistedModelConfig,
+  config: PersistedModelConfig & { getApiKey?: AgentConfig[`getApiKey`] },
   choice: BuiltinModelChoice,
   reasoningEffort: ExplicitReasoningEffort | null
 ): BuiltinAgentModelConfig {
-  if (choice.provider !== `openai` || !choice.reasoning) return config
+  if (
+    (choice.provider !== `openai` && choice.provider !== `openai-codex`) ||
+    !choice.reasoning
+  )
+    return config
 
-  const effort = reasoningEffort ?? `minimal`
+  const defaultEffort = choice.provider === `openai-codex` ? `low` : `minimal`
+  const effort =
+    reasoningEffort === `minimal` && choice.provider === `openai-codex`
+      ? `low`
+      : (reasoningEffort ?? defaultEffort)
 
   return {
     ...config,
@@ -193,6 +241,10 @@ export async function createBuiltinModelCatalog(
       (choice) =>
         choice.provider === `openai` && choice.id === DEFAULT_OPENAI_MODEL
     ) ??
+    choices.find(
+      (choice) =>
+        choice.provider === `openai-codex` && choice.id === DEFAULT_CODEX_MODEL
+    ) ??
     choices[0]!
 
   return { choices, defaultChoice }
@@ -219,6 +271,9 @@ export function resolveBuiltinModelConfig(
     provider: choice.provider,
     model: choice.id,
     ...(reasoningEffort && { reasoningEffort }),
+    ...(choice.provider === `openai-codex` && {
+      getApiKey: () => readCodexAccessToken(),
+    }),
   }
 
   return withProviderPayloadDefaults(config, choice, reasoningEffort)
