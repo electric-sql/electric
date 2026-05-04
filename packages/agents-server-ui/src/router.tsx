@@ -32,7 +32,7 @@ import { EntityContextDrawer } from './components/EntityContextDrawer'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { NewSessionPage } from './components/NewSessionPage'
-import { Stack } from './ui'
+import { Link, Stack, Text } from './ui'
 import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
@@ -158,7 +158,17 @@ function EntityPage(): React.ReactElement {
       })
   }, [entityUrl, forkEntity, forking, navigate])
 
+  const [waitedLong, setWaitedLong] = useState(false)
+  useEffect(() => {
+    if (selectedEntity) return
+    const timer = setTimeout(() => setWaitedLong(true), 2_000)
+    return () => clearTimeout(timer)
+  }, [selectedEntity])
+
   if (!selectedEntity) {
+    if (entitiesCollection && waitedLong) {
+      return <NotFoundPage message={`Session ${_splat} not found`} />
+    }
     return (
       <Stack
         align="center"
@@ -166,7 +176,7 @@ function EntityPage(): React.ReactElement {
         grow
         className={styles.entityShell}
       >
-        <span>Loading entity...</span>
+        <span>Loading entity…</span>
       </Stack>
     )
   }
@@ -195,7 +205,6 @@ function EntityPage(): React.ReactElement {
             entityUrl={connectUrl}
             entity={selectedEntity}
             entityStopped={entityStopped}
-            isSpawning={isSpawning}
           />
         </Stack>
         {stateExplorerOpen && (
@@ -248,25 +257,16 @@ function GenericEntityBody({
   entityUrl,
   entity,
   entityStopped,
-  isSpawning,
 }: {
   baseUrl: string
   entityUrl: string | null
   entity: ElectricEntity
   entityStopped: boolean
-  isSpawning: boolean
 }): React.ReactElement {
   const { entries, db, loading, error } = useEntityTimeline(
     baseUrl || null,
     entityUrl
   )
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (error && !isSpawning) {
-      navigate({ to: `/` })
-    }
-  }, [error, navigate, isSpawning])
 
   return (
     <>
@@ -288,7 +288,33 @@ function GenericEntityBody({
   )
 }
 
-const rootRoute = createRootRoute({ component: RootLayout })
+function NotFoundPage({ message }: { message?: string }): React.ReactElement {
+  return (
+    <Stack
+      align="center"
+      justify="center"
+      grow
+      direction="column"
+      gap={3}
+      className={styles.entityShell}
+    >
+      <Text size={5} weight="medium">
+        Not found
+      </Text>
+      <Text size={2} tone="muted">
+        {message ?? `The page you're looking for doesn't exist.`}
+      </Text>
+      <Link href="#/" size={2}>
+        Go home
+      </Link>
+    </Stack>
+  )
+}
+
+const rootRoute = createRootRoute({
+  component: RootLayout,
+  notFoundComponent: () => <NotFoundPage />,
+})
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
