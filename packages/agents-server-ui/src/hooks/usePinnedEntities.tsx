@@ -23,16 +23,25 @@ export function PinnedEntitiesProvider({
     }
   })
 
-  const togglePin = useCallback(
-    (url: string) => {
-      const next = pinnedUrls.includes(url)
-        ? pinnedUrls.filter((u) => u !== url)
-        : [...pinnedUrls, url]
-      setPinnedUrls(next)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    },
-    [pinnedUrls]
-  )
+  // Functional updater keeps `togglePin`'s identity stable across
+  // renders. The previous implementation closed over `pinnedUrls`,
+  // so its reference changed every time *any* pin flipped — that
+  // ripped through memoised SidebarTree/Row props and re-rendered
+  // the whole sidebar on each toggle.
+  const togglePin = useCallback((url: string) => {
+    setPinnedUrls((prev) => {
+      const next = prev.includes(url)
+        ? prev.filter((u) => u !== url)
+        : [...prev, url]
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // Ignore quota / private-mode errors — pin state is
+        // recoverable, throwing here would leave the UI inconsistent.
+      }
+      return next
+    })
+  }, [])
 
   return (
     <PinnedEntitiesContext.Provider value={{ pinnedUrls, togglePin }}>

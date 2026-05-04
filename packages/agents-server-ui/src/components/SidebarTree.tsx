@@ -1,5 +1,7 @@
+import { memo } from 'react'
 import { SidebarRow } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
+import { toggleExpanded, useIsExpanded } from '../hooks/useExpandedTreeNodes'
 import type { HoverCard } from '../ui'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 import sidebarRowStyles from './SidebarRow.module.css'
@@ -9,8 +11,6 @@ type SidebarTreeProps = {
   childrenByParent: Map<string, Array<ElectricEntity>>
   selectedEntityUrl: string | null
   onSelectEntity: (url: string) => void
-  isExpanded: (url: string) => boolean
-  toggleExpanded: (url: string) => void
   pinnedUrls: ReadonlyArray<string>
   onTogglePin: (url: string) => void
   depth?: number
@@ -37,6 +37,13 @@ const ICON_SLOT_HALF = 11
 /**
  * Recursive subtree renderer.
  *
+ * Memoised on its props so a sibling subtree expanding/collapsing
+ * (or a different row being selected) doesn't cascade-rerender every
+ * tree in the sidebar. Expansion state itself is read via
+ * `useIsExpanded` from the external store in
+ * `useExpandedTreeNodes`, so toggling row A's caret only re-renders
+ * A — not its siblings, parent, or ancestors.
+ *
  * Layout pieces:
  *   - Each tree node (row + optional subtree of children) is wrapped
  *     in a `.treeNode` so `:last-child` selectors in CSS can find
@@ -53,13 +60,11 @@ const ICON_SLOT_HALF = 11
  *     affordance, since pinning a child wouldn't make sense in the
  *     "Pinned" section above (we want the whole subtree, not a leaf).
  */
-export function SidebarTree({
+export const SidebarTree = memo(function SidebarTree({
   entity,
   childrenByParent,
   selectedEntityUrl,
   onSelectEntity,
-  isExpanded,
-  toggleExpanded,
   pinnedUrls,
   onTogglePin,
   depth = 0,
@@ -70,7 +75,7 @@ export function SidebarTree({
   // url survives in localStorage from before this gating landed.
   const allChildren = childrenByParent.get(entity.url) ?? []
   const children = allChildren.filter((c) => !pinnedUrls.includes(c.url))
-  const expanded = isExpanded(entity.url)
+  const expanded = useIsExpanded(entity.url)
   const isRoot = depth === 0
 
   // CSS custom property is forwarded into the subtree so the connector
@@ -102,8 +107,6 @@ export function SidebarTree({
               childrenByParent={childrenByParent}
               selectedEntityUrl={selectedEntityUrl}
               onSelectEntity={onSelectEntity}
-              isExpanded={isExpanded}
-              toggleExpanded={toggleExpanded}
               pinnedUrls={pinnedUrls}
               onTogglePin={onTogglePin}
               depth={depth + 1}
@@ -114,4 +117,4 @@ export function SidebarTree({
       )}
     </div>
   )
-}
+})

@@ -73,26 +73,38 @@ const SCROLL_THRESHOLD = 80
 const ROW_GAP = 24
 const ROW_SETTLE_MS = 500
 
+// `section` and `responseTimestamp` are pulled out of the parent
+// `EntityTimelineEntry` so React.memo's shallow compare can hit on
+// the *section* identity. `buildTimelineEntries` returns a fresh
+// `entries` array (and fresh entry objects) on every chunk during
+// streaming, but the runtime caches finished agent sections in a
+// WeakMap keyed by the underlying run row — so unchanged rows
+// receive the identical `section` reference each render. With the
+// previous `row` prop, that hit was masked by the always-new wrapper
+// object; splitting the props lets memo skip every settled row and
+// only re-render the streaming row + the row that just settled.
 const TimelineRow = memo(function TimelineRow({
-  row,
+  section,
+  responseTimestamp,
   entityStopped,
   isStreaming,
   renderWidth,
 }: {
-  row: EntityTimelineEntry
+  section: EntityTimelineEntry[`section`]
+  responseTimestamp: EntityTimelineEntry[`responseTimestamp`]
   entityStopped: boolean
   isStreaming: boolean
   renderWidth: number
 }): React.ReactElement {
-  if (row.section.kind === `user_message`) {
-    return <UserMessage section={row.section} />
+  if (section.kind === `user_message`) {
+    return <UserMessage section={section} />
   }
 
   return (
     <AgentResponse
-      section={row.section}
+      section={section}
       isStreaming={!entityStopped && isStreaming}
-      timestamp={row.responseTimestamp}
+      timestamp={responseTimestamp}
       renderWidth={renderWidth}
     />
   )
@@ -451,7 +463,8 @@ export function EntityTimeline({
                     style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
                     <TimelineRow
-                      row={row}
+                      section={row.section}
+                      responseTimestamp={row.responseTimestamp}
                       entityStopped={entityStopped}
                       isStreaming={row.key === lastStreamingAgentKey}
                       renderWidth={contentWidth}

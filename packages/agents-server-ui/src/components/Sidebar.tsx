@@ -11,7 +11,6 @@ import type { SidebarRowInfoPayload } from './SidebarRow'
 import sidebarRowStyles from './SidebarRow.module.css'
 import { SidebarTree } from './SidebarTree'
 import { SidebarFooter } from './SidebarFooter'
-import { useExpandedTreeNodes } from '../hooks/useExpandedTreeNodes'
 import { bucketEntities } from '../lib/sessionGroups'
 import styles from './Sidebar.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
@@ -54,7 +53,6 @@ export function Sidebar({
   onTogglePin: (url: string) => void
 }): React.ReactElement {
   const { entitiesCollection } = useElectricAgents()
-  const expanded = useExpandedTreeNodes()
   const navigate = useNavigate()
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
@@ -179,8 +177,6 @@ export function Sidebar({
                   childrenByParent={childrenByParent}
                   selectedEntityUrl={selectedEntityUrl}
                   onSelectEntity={onSelectEntity}
-                  isExpanded={expanded.isExpanded}
-                  toggleExpanded={expanded.toggle}
                   pinnedUrls={pinnedUrls}
                   onTogglePin={onTogglePin}
                   hoverHandle={hoverHandle}
@@ -198,8 +194,6 @@ export function Sidebar({
                   childrenByParent={childrenByParent}
                   selectedEntityUrl={selectedEntityUrl}
                   onSelectEntity={onSelectEntity}
-                  isExpanded={expanded.isExpanded}
-                  toggleExpanded={expanded.toggle}
                   pinnedUrls={pinnedUrls}
                   onTogglePin={onTogglePin}
                   hoverHandle={hoverHandle}

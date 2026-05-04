@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
 import { StatusDot } from './StatusDot'
 import { HoverCard, Text } from '../ui'
@@ -69,7 +70,12 @@ type SidebarRowProps = {
  * Wrapped in a HoverCard that pops out a small info card to the right
  * with the full title and session id (Cursor-style preview).
  */
-export function SidebarRow({
+// Memoised so re-renders triggered higher up the tree (sidebar
+// re-renders on selection / pin changes) don't cascade into every
+// row. Identity-stable callbacks (selection / pin / expand) are the
+// caller's responsibility — see `SidebarTree.tsx` for how
+// per-row functional state is sourced from external stores.
+export const SidebarRow = memo(function SidebarRow({
   entity,
   selected,
   onSelect,
@@ -192,7 +198,7 @@ export function SidebarRow({
       }
     />
   )
-}
+})
 
 /**
  * Body of the shared sidebar info popout. Rendered once by
