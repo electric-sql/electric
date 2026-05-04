@@ -84,8 +84,12 @@
 /* Pin button is hover-only — even for already-pinned rows. The
    status dot stays visible at rest so the user can still see the
    live status of pinned entities; only on hover do we swap the dot
-   for the unpin affordance. */
-.row:hover .statusDot {
+   for the unpin affordance.
+   The dot fade is gated on `:has(.pinBtn)` so child / subagent rows
+   (which never render a pin button — pinning is restricted to
+   roots in `SidebarTree.tsx`) keep their status dot on hover too,
+   instead of fading out into an empty icon slot. */
+.row:hover:has(.pinBtn) .statusDot {
   opacity: 0;
 }
 .row:hover .pinBtn {
@@ -218,6 +222,97 @@
 .expandBtnVisible:hover {
   background: var(--ds-gray-a4);
   color: var(--ds-text-1);
+}
+
+/* Tree connector lines under expanded subtrees -------------------
+ *
+ * DOM (from SidebarTree.tsx):
+ *
+ *   <div .treeNode>                         ← parent
+ *     <div .row>parent</div>
+ *     <div .subtree style="--tree-trunk-x:14px">
+ *       <div .treeNode>
+ *         <div .row>child 1</div>
+ *         <div .subtree>…grandchildren…</div>?
+ *       </div>
+ *       <div .treeNode>
+ *         <div .row>child 2</div>            ← non-last
+ *       </div>
+ *       <div .treeNode>                      ← :last-child
+ *         <div .row>child 3</div>            ← last child
+ *       </div>
+ *     </div>
+ *   </div>
+ *
+ * Each child row paints its own piece of the connector:
+ *   - All children get a vertical trunk through the row (`::after`).
+ *   - All children get a small horizontal stub at vertical-mid
+ *     branching to the row's icon column (`::before`).
+ *   - The :last-child swaps the straight trunk for an L-shaped
+ *     `::after` (vertical → curve → horizontal) and hides `::before`,
+ *     so the line terminates with a rounded corner instead of
+ *     trailing off below the row.
+ *
+ * Drawing per-row keeps the line continuous across the gap-free row
+ * stack without depending on parent box geometry; `--tree-trunk-x`
+ * is provided by `.subtree` and re-computed per nesting depth in
+ * `SidebarTree.tsx` so the trunk always sits under the *parent*
+ * row's icon column.
+ */
+
+.treeNode {
+  /* No layout impact — purely a structural wrapper for the
+     `:last-child` selector below. Rows still inherit the .treeRow
+     flow geometry. */
+}
+
+.subtree {
+  /* Children render in normal block flow inside this container.
+     Connector lines are drawn by the .row pseudo-elements below
+     (which read `--tree-trunk-x` set on this element). */
+  --tree-line-color: var(--ds-border-2);
+  --tree-stub-w: 9px;
+  --tree-corner-radius: 6px;
+}
+
+/* Continuous vertical trunk through every child row. */
+.subtree > .treeNode > .row::after {
+  content: '';
+  position: absolute;
+  /* Centre the 1px stroke on the trunk x. */
+  left: calc(var(--tree-trunk-x) - 0.5px);
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--tree-line-color);
+  pointer-events: none;
+}
+
+/* Short horizontal stub branching out to the row's icon column at
+   vertical mid. Position the box so the stub sits exactly at the
+   row centre regardless of row height. */
+.subtree > .treeNode > .row::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--tree-trunk-x) - 0.5px);
+  top: calc(50% - 0.5px);
+  width: var(--tree-stub-w);
+  border-top: 1px solid var(--tree-line-color);
+  pointer-events: none;
+}
+
+/* Last child: trunk ends at the row centre with a curved corner.
+   `::after` becomes an L-shape (left + bottom borders + radius);
+   `::before` is dropped so the horizontal arm isn't doubled. */
+.subtree > .treeNode:last-child > .row::after {
+  bottom: auto;
+  height: 50%;
+  width: var(--tree-stub-w);
+  border-bottom: 1px solid var(--tree-line-color);
+  border-bottom-left-radius: var(--tree-corner-radius);
+}
+
+.subtree > .treeNode:last-child > .row::before {
+  display: none;
 }
 
 /* HoverCard info popout ----------------------------------------- */

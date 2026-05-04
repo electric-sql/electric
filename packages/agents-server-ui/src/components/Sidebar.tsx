@@ -6,7 +6,7 @@ import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
 import { SidebarHeader } from './SidebarHeader'
-import { SidebarRow, SidebarRowInfo } from './SidebarRow'
+import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
 import sidebarRowStyles from './SidebarRow.module.css'
 import { SidebarTree } from './SidebarTree'
@@ -169,13 +169,20 @@ export function Sidebar({
             <>
               <SectionLabel>Pinned</SectionLabel>
               {pinnedEntities.map((entity) => (
-                <SidebarRow
+                // Pinned parents render as a full SidebarTree so they
+                // can be expanded in place to reveal their children
+                // (children themselves aren't pinnable — gated inside
+                // SidebarTree to depth=0).
+                <SidebarTree
                   key={`pinned:${entity.url}`}
                   entity={entity}
-                  selected={entity.url === selectedEntityUrl}
-                  onSelect={() => onSelectEntity(entity.url)}
-                  pinned
-                  onTogglePin={() => onTogglePin(entity.url)}
+                  childrenByParent={childrenByParent}
+                  selectedEntityUrl={selectedEntityUrl}
+                  onSelectEntity={onSelectEntity}
+                  isExpanded={expanded.isExpanded}
+                  toggleExpanded={expanded.toggle}
+                  pinnedUrls={pinnedUrls}
+                  onTogglePin={onTogglePin}
                   hoverHandle={hoverHandle}
                 />
               ))}
