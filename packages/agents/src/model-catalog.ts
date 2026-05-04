@@ -50,7 +50,7 @@ function hasEnv(name: string): boolean {
 }
 
 function codexAuthPath(): string {
-  return join(homedir(), `.codex`, `auth.json`)
+  return process.env.CODEX_AUTH_PATH ?? join(homedir(), `.codex`, `auth.json`)
 }
 
 function readCodexAccessToken(): string | undefined {
