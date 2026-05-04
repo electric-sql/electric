@@ -489,6 +489,126 @@ describe(`entity handler — processPrompt happy path`, () => {
     expect((eventRows[0] as any).type).toBe(`user_message`)
     expect((eventRows[0] as any).payload.text).toBe(`hi`)
   })
+
+  // Regression: see commit b26d41ea8. target='host' is a literal attach to
+  // the developer's workstation (no sandbox to boot); emitting
+  // sandbox.starting / sandbox.started lifecycle rows makes the UI timeline
+  // read "Sandbox starting" for an agent the user knows is on the host.
+  // The fix in processPrompt's cold-boot path skips the inserts when
+  // meta.target === 'host' while preserving the cold→starting→idle
+  // sessionMeta status transition. This test pins that behaviour.
+  it(`target='host' cold-boot does not emit sandbox.starting/started lifecycle rows`, async () => {
+    const events: Array<any> = [
+      { type: `session_init`, sessionId: `abc`, ts: 1 },
+      { type: `assistant_message`, text: `ok`, ts: 2 },
+    ]
+    const bridge: Bridge = {
+      async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
+        for (const e of events) args.onEvent(e as any)
+        return { exitCode: 0, finalText: `ok` }
+      },
+    }
+    const lm = new LifecycleManager({
+      providers: {
+        sandbox: makeFakeProvider(`stopped`),
+        host: makeFakeProvider(`stopped`),
+      },
+      bridge,
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: (_kind) => ({ ANTHROPIC_API_KEY: `sk-test` }),
+    })
+    const meta = {
+      key: `current`,
+      status: `cold`,
+      kind: `claude`,
+      target: `host` as const,
+      pinned: false,
+      workspaceIdentity: `bindMount:/tmp/ws`,
+      workspaceSpec: { type: `bindMount`, hostPath: `/tmp/ws` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/host-no-sandbox-rows`,
+      meta,
+      inbox: [{ key: `i1`, message_type: `prompt`, payload: { text: `hi` } }],
+    })
+
+    await handler(ctx, { type: `message_received` } as any)
+
+    // Status transition through 'starting' is a state-machine invariant;
+    // only the user-visible lifecycle rows are suppressed.
+    expect(ctx.db.collections.sessionMeta.get(`current`).status).toBe(`idle`)
+
+    const lifecycleEvents = ctx.db.collections.lifecycle.toArray.map(
+      (r: any) => r.event as string
+    )
+    expect(lifecycleEvents).not.toContain(`sandbox.starting`)
+    expect(lifecycleEvents).not.toContain(`sandbox.started`)
+  })
+
+  // Same regression, but exercises the error → cold fall-through. A prior
+  // failed turn leaves meta.status='error'; processPrompt resets to 'cold'
+  // and re-runs the cold-boot block. The host suppression must hold there
+  // too — otherwise re-prompting an errored host agent leaks the
+  // misleading rows on every retry.
+  it(`target='host' re-prompt after error also suppresses sandbox.* rows`, async () => {
+    const bridge: Bridge = {
+      async runTurn() {
+        return { exitCode: 0, finalText: `recovered` }
+      },
+    }
+    const lm = new LifecycleManager({
+      providers: {
+        sandbox: makeFakeProvider(`stopped`),
+        host: makeFakeProvider(`stopped`),
+      },
+      bridge,
+    })
+    const wr = new WorkspaceRegistry()
+    const handler = makeCodingAgentHandler(lm, wr, {
+      defaults: {
+        idleTimeoutMs: 1000,
+        coldBootBudgetMs: 5000,
+        runTimeoutMs: 5000,
+      },
+      env: (_kind) => ({ ANTHROPIC_API_KEY: `sk-test` }),
+    })
+    const meta = {
+      key: `current`,
+      status: `error`,
+      kind: `claude`,
+      target: `host` as const,
+      pinned: false,
+      workspaceIdentity: `bindMount:/tmp/ws`,
+      workspaceSpec: { type: `bindMount`, hostPath: `/tmp/ws` },
+      idleTimeoutMs: 1000,
+      keepWarm: false,
+      lastError: `prior cli exit`,
+    }
+    const { ctx } = makeFakeCtx({
+      entityUrl: `/t/coding-agent/host-error-reprompt`,
+      meta,
+      inbox: [
+        { key: `i1`, message_type: `prompt`, payload: { text: `retry` } },
+      ],
+    })
+
+    await handler(ctx, { type: `message_received` } as any)
+
+    const lifecycleEvents = ctx.db.collections.lifecycle.toArray.map(
+      (r: any) => r.event as string
+    )
+    expect(lifecycleEvents).not.toContain(`sandbox.starting`)
+    expect(lifecycleEvents).not.toContain(`sandbox.started`)
+  })
 })
 
 describe(`entity handler — idle timer wakes entity`, () => {
