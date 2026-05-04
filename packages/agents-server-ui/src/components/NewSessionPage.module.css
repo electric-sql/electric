@@ -22,12 +22,15 @@
   display: flex;
   flex-direction: column;
   gap: var(--ds-space-5);
+  align-items: center;
 }
 
 .heading {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-1);
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding-top: var(--ds-space-9);
 }
 
 .headingTitle {
@@ -273,30 +276,80 @@
   color: var(--ds-accent-10);
 }
 
-/* Project picker -------------------------------------------------- */
+/* Hero project picker ---------------------------------------------- */
 
-.projectPicker {
-  display: flex;
-  flex-direction: column;
+.projectTrigger {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
   gap: var(--ds-space-1);
+  cursor: pointer;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-2xl);
+  font-weight: 400;
+  font-family: var(--ds-font-body);
+  transition: color 0.12s ease;
 }
-.projectPickerLabel {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 10px;
+.projectTrigger:hover {
+  color: var(--ds-text-2);
 }
-.projectPickerRow {
+.projectTriggerChevron {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.projectTriggerChevron[data-open='true'] {
+  transform: rotate(180deg);
+}
+
+.projectPopover {
+  min-width: 240px;
+}
+.projectPopoverHeader {
+  padding: var(--ds-space-2) var(--ds-space-3);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-3);
+}
+.projectItem {
+  all: unset;
   display: flex;
   align-items: center;
   gap: var(--ds-space-2);
-  flex-wrap: wrap;
+  width: 100%;
+  padding: var(--ds-space-2) var(--ds-space-3);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-1);
+  box-sizing: border-box;
+  transition: background 0.1s ease;
 }
-.projectCreateForm {
+.projectItem:hover {
+  background: var(--ds-gray-a2);
+}
+.projectItemIcon {
+  color: var(--ds-text-3);
+  flex-shrink: 0;
+}
+.projectItemCheck {
+  margin-left: auto;
+  color: var(--ds-text-3);
+  flex-shrink: 0;
+}
+
+.projectCreateInline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-2) var(--ds-space-3);
+}
+.projectCreateRow {
   display: flex;
   align-items: center;
   gap: var(--ds-space-2);
 }
 .projectCreateInput {
+  flex: 1;
+  min-width: 0;
   border: 1px solid var(--ds-border-1);
   border-radius: var(--ds-radius-2);
   padding: 4px 8px;
@@ -310,6 +363,15 @@
 .projectCreateInput:focus {
   border-color: var(--ds-accent-a6);
 }
+.projectPathInput {
+  composes: projectCreateInput;
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-xs);
+}
+.projectPathError {
+  font-size: var(--ds-text-xs);
+  color: var(--ds-red-11);
+}
 .projectCreateBtn {
   all: unset;
   cursor: pointer;
@@ -317,6 +379,7 @@
   color: var(--ds-accent-9);
   padding: 4px 8px;
   border-radius: var(--ds-radius-2);
+  flex-shrink: 0;
 }
 .projectCreateBtn:hover {
   background: var(--ds-accent-a2);

@@ -1,5 +1,11 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp } from 'lucide-react'
+import {
+  ArrowUp,
+  Check,
+  ChevronDown,
+  FolderOpen,
+  FolderPlus,
+} from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { useNavigate } from '@tanstack/react-router'
@@ -7,20 +13,13 @@ import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../hooks/useServerConnection'
 import { useProjects } from '../hooks/useProjects'
-import { Select, Stack, Text } from '../ui'
+import { Popover, Select, Stack, Text } from '../ui'
 import { MainHeader } from './MainHeader'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from './SchemaForm'
 import styles from './NewSessionPage.module.css'
 import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
+import type { Project } from '../hooks/useProjects'
 
-/**
- * The "default agent" — when an entity type with this name is registered
- * we surface a chat-input quick-start at the top of the new-session page
- * so the most common flow is one keystroke away.
- *
- * TODO: replace this with a server-side flag (e.g. tags.default) once
- * the entity_types schema gets one.
- */
 const DEFAULT_AGENT_NAME = `horton`
 
 interface SchemaProperty {
@@ -31,23 +30,24 @@ interface SchemaProperty {
   description?: string
 }
 
-/**
- * "New session" page shown at `/`.
- *
- * If a `horton` entity type is available we render a chat-style
- * composer at the top of the page so the user can just type and hit
- * Enter to start a new conversation. Other agent types are listed
- * below as cards. Picking one of those either spawns immediately
- * (no schema) or transitions to an inline form.
- */
 export function NewSessionPage(): React.ReactElement {
   const navigate = useNavigate()
   const { entityTypesCollection, spawnEntity } = useElectricAgents()
   const { activeServer } = useServerConnection()
-  const { projects, activeProjectId, setActiveProjectId, createProject } =
-    useProjects()
+  const {
+    projects,
+    activeProjectId,
+    setActiveProjectId,
+    createProject,
+    validatePath,
+  } = useProjects()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  )
 
   const { data: entityTypes = [] } = useLiveQuery(
     (query) => {
@@ -71,12 +71,6 @@ export function NewSessionPage(): React.ReactElement {
 
   const baseUrl = activeServer?.url ?? null
 
-  /**
-   * Spawn an entity, optionally followed by a `/send` of an initial
-   * user message. We prefer this two-step over `initialMessage` on
-   * spawn so the message goes through the same path as the regular
-   * MessageInput (which is the proven path that wakes horton).
-   */
   const doSpawn = useCallback(
     async (
       typeName: string,
@@ -89,7 +83,15 @@ export function NewSessionPage(): React.ReactElement {
       const tags: Record<string, string> | undefined = activeProjectId
         ? { project: activeProjectId }
         : undefined
-      const tx = spawnEntity({ type: typeName, name, args, tags })
+      const spawnArgs = activeProject?.path
+        ? { ...args, workingDirectory: activeProject.path }
+        : args
+      const tx = spawnEntity({
+        type: typeName,
+        name,
+        args: spawnArgs,
+        tags,
+      })
       navigate({
         to: `/entity/$`,
         params: { _splat: `${typeName}/${name}` },
@@ -116,7 +118,7 @@ export function NewSessionPage(): React.ReactElement {
         )
       }
     },
-    [navigate, spawnEntity, baseUrl, activeProjectId]
+    [navigate, spawnEntity, baseUrl, activeProjectId, activeProject]
   )
 
   const handleSelectType = useCallback(
@@ -159,9 +161,10 @@ export function NewSessionPage(): React.ReactElement {
               spawnReady={Boolean(spawnEntity)}
               error={error}
               projects={projects}
-              activeProjectId={activeProjectId}
+              activeProject={activeProject}
               onChangeProject={setActiveProjectId}
               onCreateProject={createProject}
+              onValidatePath={validatePath}
             />
           )}
         </div>
@@ -178,9 +181,10 @@ function Picker({
   spawnReady,
   error,
   projects,
-  activeProjectId,
+  activeProject,
   onChangeProject,
   onCreateProject,
+  onValidatePath,
 }: {
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
@@ -188,32 +192,30 @@ function Picker({
   onStartDefault: (text: string, args: Record<string, unknown>) => void
   spawnReady: boolean
   error: string | null
-  projects: Array<{ id: string; name: string }>
-  activeProjectId: string | null
+  projects: Array<Project>
+  activeProject: Project | null
   onChangeProject: (id: string | null) => void
-  onCreateProject: (name: string) => { id: string }
+  onCreateProject: (name: string, path: string) => Promise<Project>
+  onValidatePath: (
+    path: string
+  ) => Promise<{ valid: boolean; resolved: string }>
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
 
   return (
-    <Stack direction="column" gap={5}>
+    <Stack direction="column" gap={5} style={{ width: `100%` }}>
       <div className={styles.heading}>
         <Text size={5} as="h1" className={styles.headingTitle}>
-          Start a new session
+          Let&rsquo;s build
         </Text>
-        <span className={styles.headingSubtitle}>
-          {defaultAgent
-            ? `Type a message to start a new ${defaultAgent.name} chat, or pick another agent below.`
-            : `Pick the kind of agent you want to spawn.`}
-        </span>
+        <ProjectPicker
+          projects={projects}
+          activeProject={activeProject}
+          onChangeProject={onChangeProject}
+          onCreateProject={onCreateProject}
+          onValidatePath={onValidatePath}
+        />
       </div>
-
-      <ProjectPicker
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onChangeProject={onChangeProject}
-        onCreateProject={onCreateProject}
-      />
 
       {error && <div className={styles.error}>{error}</div>}
 
@@ -263,6 +265,178 @@ function Picker({
   )
 }
 
+function ProjectPicker({
+  projects,
+  activeProject,
+  onChangeProject,
+  onCreateProject,
+  onValidatePath,
+}: {
+  projects: Array<Project>
+  activeProject: Project | null
+  onChangeProject: (id: string | null) => void
+  onCreateProject: (name: string, path: string) => Promise<Project>
+  onValidatePath: (
+    path: string
+  ) => Promise<{ valid: boolean; resolved: string }>
+}): React.ReactElement {
+  const [open, setOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState(``)
+  const [newPath, setNewPath] = useState(``)
+  const [pathError, setPathError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  const resetForm = useCallback(() => {
+    setCreating(false)
+    setNewName(``)
+    setNewPath(``)
+    setPathError(null)
+  }, [])
+
+  const handleCreate = useCallback(async () => {
+    const trimmedName = newName.trim()
+    const trimmedPath = newPath.trim()
+    if (!trimmedName || !trimmedPath) return
+
+    setSubmitting(true)
+    setPathError(null)
+    try {
+      const validation = await onValidatePath(trimmedPath)
+      if (!validation.valid) {
+        setPathError(`Not a valid directory`)
+        setSubmitting(false)
+        return
+      }
+      const project = await onCreateProject(trimmedName, trimmedPath)
+      onChangeProject(project.id)
+      resetForm()
+      setOpen(false)
+    } catch (err) {
+      setPathError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }, [
+    newName,
+    newPath,
+    onValidatePath,
+    onCreateProject,
+    onChangeProject,
+    resetForm,
+  ])
+
+  return (
+    <Popover.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (!nextOpen) resetForm()
+      }}
+    >
+      <Popover.Trigger
+        render={
+          <button type="button" className={styles.projectTrigger}>
+            {activeProject?.name ?? `Select a project`}
+            <ChevronDown
+              size={20}
+              className={styles.projectTriggerChevron}
+              data-open={open}
+            />
+          </button>
+        }
+      />
+      <Popover.Content
+        side="bottom"
+        align="center"
+        sideOffset={4}
+        padded={false}
+        className={styles.projectPopover}
+      >
+        <div className={styles.projectPopoverHeader}>Select your project</div>
+
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={styles.projectItem}
+            onClick={() => {
+              onChangeProject(p.id)
+              setOpen(false)
+            }}
+          >
+            <FolderOpen size={14} className={styles.projectItemIcon} />
+            {p.name}
+            {p.id === activeProject?.id && (
+              <Check size={14} className={styles.projectItemCheck} />
+            )}
+          </button>
+        ))}
+
+        {!creating ? (
+          <button
+            type="button"
+            className={styles.projectItem}
+            onClick={() => {
+              setCreating(true)
+              setTimeout(() => nameRef.current?.focus(), 0)
+            }}
+          >
+            <FolderPlus size={14} className={styles.projectItemIcon} />
+            Add new project
+          </button>
+        ) : (
+          <form
+            className={styles.projectCreateInline}
+            onSubmit={(e) => {
+              e.preventDefault()
+              void handleCreate()
+            }}
+          >
+            <input
+              ref={nameRef}
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Project name"
+              className={styles.projectCreateInput}
+              onKeyDown={(e) => {
+                if (e.key === `Escape`) resetForm()
+              }}
+            />
+            <div className={styles.projectCreateRow}>
+              <input
+                type="text"
+                value={newPath}
+                onChange={(e) => {
+                  setNewPath(e.target.value)
+                  setPathError(null)
+                }}
+                placeholder="/path/to/project"
+                className={styles.projectPathInput}
+                onKeyDown={(e) => {
+                  if (e.key === `Escape`) resetForm()
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!newName.trim() || !newPath.trim() || submitting}
+                className={styles.projectCreateBtn}
+              >
+                {submitting ? `…` : `Create`}
+              </button>
+            </div>
+            {pathError && (
+              <span className={styles.projectPathError}>{pathError}</span>
+            )}
+          </form>
+        )}
+      </Popover.Content>
+    </Popover.Root>
+  )
+}
+
 function SelectedAgentForm({
   entityType,
   onCancel,
@@ -309,12 +483,6 @@ function SelectedAgentForm({
   )
 }
 
-/**
- * Walk the agent's `creation_schema` and pull out the keys we know how
- * to render inline as compact controls (enums and booleans). Other
- * fields fall through to schema defaults; if they're required without
- * a default, the user can switch to the full form via "Other agents".
- */
 function inlineSchemaProperties(
   schema: unknown
 ): Array<{ key: string; prop: SchemaProperty }> {
@@ -322,6 +490,7 @@ function inlineSchemaProperties(
   const out: Array<{ key: string; prop: SchemaProperty }> = []
   for (const [key, raw] of Object.entries(schema.properties)) {
     const prop = raw as SchemaProperty
+    if (key === `workingDirectory`) continue
     if (prop.enum && prop.enum.length > 0) {
       out.push({ key, prop })
     } else if (prop.type === `boolean`) {
@@ -344,18 +513,13 @@ function DefaultAgentComposer({
   const [submitting, setSubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-grow the textarea up to the CSS `max-height` cap as the
-  // user types (matches the chat composer in `MessageInput.tsx`).
-  // Reset to `auto` first so `scrollHeight` reports the natural
-  // content height, then assign that back as the inline height; the
-  // CSS bounds clamp it. Layout effect ensures the resize lands
-  // before paint so there's no one-frame flicker.
   useLayoutEffect(() => {
     const el = textareaRef.current
     if (!el) return
     el.style.height = `auto`
     el.style.height = `${el.scrollHeight}px`
   }, [value])
+
   const inlineProps = useMemo(
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
@@ -378,8 +542,6 @@ function DefaultAgentComposer({
     const trimmed = value.trim()
     if (!trimmed || disabled || submitting) return
     setSubmitting(true)
-    // Strip undefined/empty values so the server can fall back to schema
-    // defaults instead of receiving an explicit empty/null.
     const cleaned: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
@@ -462,13 +624,6 @@ function DefaultAgentComposer({
   )
 }
 
-/**
- * Tiny dropdown rendered as a borderless pill so it sits cleanly
- * in the composer footer without competing visually with the textarea.
- * Backed by the Base UI `Select` so we get a custom popover with proper
- * keyboard semantics (instead of the OS-native picker, which doesn't
- * blend with the rest of the surface).
- */
 function PillSelect({
   label,
   value,
@@ -529,94 +684,5 @@ function PillToggle({
     >
       {label}
     </button>
-  )
-}
-
-function ProjectPicker({
-  projects,
-  activeProjectId,
-  onChangeProject,
-  onCreateProject,
-}: {
-  projects: Array<{ id: string; name: string }>
-  activeProjectId: string | null
-  onChangeProject: (id: string | null) => void
-  onCreateProject: (name: string) => { id: string }
-}): React.ReactElement {
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState(``)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleCreate = useCallback(() => {
-    const trimmed = newName.trim()
-    if (!trimmed) return
-    const project = onCreateProject(trimmed)
-    onChangeProject(project.id)
-    setNewName(``)
-    setCreating(false)
-  }, [newName, onCreateProject, onChangeProject])
-
-  return (
-    <div className={styles.projectPicker}>
-      <Text size={1} tone="muted" className={styles.projectPickerLabel}>
-        Project
-      </Text>
-      <div className={styles.projectPickerRow}>
-        <Select.Root<string>
-          value={activeProjectId ?? `__none__`}
-          onValueChange={(v) => {
-            if (v === `__new__`) {
-              setCreating(true)
-              setTimeout(() => inputRef.current?.focus(), 0)
-            } else {
-              onChangeProject(v === `__none__` ? null : v)
-            }
-          }}
-        >
-          <Select.Trigger size="pill" aria-label="Project" title="Project" />
-          <Select.Content>
-            <Select.Item value="__none__">No project</Select.Item>
-            {projects.map((p) => (
-              <Select.Item key={p.id} value={p.id}>
-                {p.name}
-              </Select.Item>
-            ))}
-            <Select.Item value="__new__">+ New project…</Select.Item>
-          </Select.Content>
-        </Select.Root>
-
-        {creating && (
-          <form
-            className={styles.projectCreateForm}
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleCreate()
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Project name"
-              className={styles.projectCreateInput}
-              onKeyDown={(e) => {
-                if (e.key === `Escape`) {
-                  setCreating(false)
-                  setNewName(``)
-                }
-              }}
-            />
-            <button
-              type="submit"
-              disabled={!newName.trim()}
-              className={styles.projectCreateBtn}
-            >
-              Create
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
   )
 }
