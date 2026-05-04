@@ -303,6 +303,16 @@ export function extractFirstUserMessage(
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
 
+function readAgentsMd(workingDirectory: string): string | null {
+  const path = `${workingDirectory}/AGENTS.md`
+  try {
+    if (!fs.existsSync(path) || !fs.statSync(path).isFile()) return null
+    return fs.readFileSync(path, `utf8`)
+  } catch {
+    return null
+  }
+}
+
 function createAssistantHandler(options: {
   workingDirectory: string
   streamFn?: StreamFn
@@ -347,6 +357,7 @@ function createAssistantHandler(options: {
     }
 
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
+    const agentsMd = readAgentsMd(effectiveCwd)
     const tools = [
       ...ctx.electricTools,
       ...createHortonTools(effectiveCwd, ctx, readSet, {
@@ -381,6 +392,15 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...(agentsMd
+            ? {
+                agents_md: {
+                  content: () => agentsMd,
+                  max: 20_000,
+                  cache: `stable` as const,
+                },
+              }
+            : {}),
           ...(skillsRegistry && skillsRegistry.catalog.size > 0
             ? {
                 skills_catalog: {
@@ -404,6 +424,30 @@ function createAssistantHandler(options: {
           conversation: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
+          },
+          ...(agentsMd
+            ? {
+                agents_md: {
+                  content: () => agentsMd,
+                  max: 20_000,
+                  cache: `stable` as const,
+                },
+              }
+            : {}),
+        },
+      })
+    } else if (agentsMd) {
+      ctx.useContext({
+        sourceBudget: 100_000,
+        sources: {
+          conversation: {
+            content: () => ctx.timelineMessages(),
+            cache: `volatile`,
+          },
+          agents_md: {
+            content: () => agentsMd,
+            max: 20_000,
+            cache: `stable` as const,
           },
         },
       })
