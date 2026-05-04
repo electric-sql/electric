@@ -11,6 +11,7 @@ if (import.meta.env.DEV) {
   scan({ enabled: true })
 }
 
+import '@fontsource-variable/figtree'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './ui'
