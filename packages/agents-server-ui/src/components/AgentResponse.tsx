@@ -1,6 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Streamdown } from 'streamdown'
-import { createCodePlugin } from '../lib/codeHighlighter'
 import {
   getCachedMarkdownRender,
   hashMarkdownContent,
@@ -8,8 +7,12 @@ import {
   setCachedMarkdownRender,
   warmMarkdownRenderCache,
 } from '../lib/markdownRenderCache'
+import {
+  streamdownComponents,
+  streamdownControls,
+  streamdownPlugins,
+} from '../lib/streamdownConfig'
 import { Stack, Text } from '../ui'
-import { MarkdownTable } from './MarkdownTable'
 import { ToolCallView } from './ToolCallView'
 import styles from './AgentResponse.module.css'
 import type {
@@ -23,20 +26,6 @@ type AgentResponseSection = Extract<
 >
 
 const SHIKI_SETTLE_MS = 80
-
-const codePluginSingleton = createCodePlugin()
-const streamdownPlugins = { code: codePluginSingleton }
-
-// Disable streamdown's built-in table toolbar — we render our own
-// from Base UI primitives via the `components.table` override below
-// (`MarkdownTable`). Code controls stay enabled because that toolbar
-// is functional with our CSS overrides.
-const streamdownControls = { table: false } as const
-
-// Component overrides — `<table>` is replaced by our Base UI–powered
-// renderer that supplies the format dropdowns, fullscreen dialog,
-// and tooltips on the action buttons.
-const streamdownComponents = { table: MarkdownTable } as const
 
 const MarkdownSegment = memo(function MarkdownSegment({
   text,

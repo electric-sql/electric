@@ -61,12 +61,12 @@ function serializeTable(
  * Because overriding `components.table` bypasses Streamdown's own
  * `MarkdownTable` wrapper component, we have to re-emit the full
  * wrapper structure here — `[data-streamdown="table-wrapper"]`
- * outer, `.border-collapse` scroll container, `[data-streamdown=
- * "table"]` on the table itself — so the existing CSS in
- * `markdown.css` (which targets those attributes) keeps applying.
- * The toolbar then sits as a direct child of the wrapper rather
- * than being portaled, which is simpler and survives streaming
- * re-renders cleanly.
+ * outer, `[data-md-table-scroll]` scroll container,
+ * `[data-streamdown="table"]` on the table itself — so the existing
+ * CSS in `markdown.css` (which targets those attributes) keeps
+ * applying. The toolbar then sits as a direct child of the wrapper
+ * rather than being portaled, which is simpler and survives
+ * streaming re-renders cleanly.
  *
  * Pair with `controls={{ table: false }}` on the Streamdown root
  * to suppress streamdown's own toolbar markup.
@@ -183,16 +183,15 @@ export function MarkdownTable({
 
   return (
     <>
-      {/* Mirror Streamdown's `MarkdownTable` wrapper structure exactly
-          so the selectors in `markdown.css`
-          (`[data-streamdown="table-wrapper"]`,
-          `[data-streamdown="table"]`, the `> div.border-collapse`
-          scroll container) all apply. Only the toolbar slot differs:
-          we render our Base UI version as a direct sibling of the
-          scroll container, with `position: absolute` from the
-          stylesheet pinning it to the wrapper's top-right corner. */}
+      {/* Mirror Streamdown's `MarkdownTable` wrapper structure so the
+          selectors in `markdown.css` (`[data-streamdown="table-wrapper"]`,
+          `[data-streamdown="table"]`, `[data-md-table-scroll]` scroll
+          container) all apply. Only the toolbar slot differs: we
+          render our Base UI version as a direct sibling of the scroll
+          container, with `position: absolute` from the stylesheet
+          pinning it to the wrapper's top-right corner. */}
       <div data-streamdown="table-wrapper">
-        <div className="border-collapse">
+        <div data-md-table-scroll="">
           <table ref={tableRef} data-streamdown="table" {...props}>
             {children}
           </table>

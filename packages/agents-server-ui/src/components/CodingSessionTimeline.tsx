@@ -1,6 +1,10 @@
 import { memo, useMemo, useState } from 'react'
 import { Streamdown } from 'streamdown'
-import { createCodePlugin } from '../lib/codeHighlighter'
+import {
+  streamdownComponents,
+  streamdownControls,
+  streamdownPlugins,
+} from '../lib/streamdownConfig'
 import { Badge, Code, ScrollArea, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
 import toolBlock from './toolBlock.module.css'
@@ -10,9 +14,6 @@ import type {
   CodingSessionMetaRow,
   CodingSessionStatus,
 } from '../hooks/useCodingSession'
-
-const codePluginSingleton = createCodePlugin()
-const streamdownPlugins = { code: codePluginSingleton }
 
 export function CodingSessionTimeline({
   events,
@@ -238,7 +239,12 @@ const AssistantMessageRow = memo(function AssistantMessageRow({
         </Text>
       </Stack>
       <div className={`agent-ui-markdown ${styles.assistantMarkdown}`}>
-        <Streamdown plugins={streamdownPlugins} linkSafety={{ enabled: false }}>
+        <Streamdown
+          plugins={streamdownPlugins}
+          linkSafety={{ enabled: false }}
+          controls={streamdownControls}
+          components={streamdownComponents}
+        >
           {text}
         </Streamdown>
       </div>
