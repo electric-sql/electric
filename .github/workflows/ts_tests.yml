@@ -40,7 +40,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.tool-versions'
-          cache: pnpm
 
       - name: Detect affected workspaces
         id: detect
