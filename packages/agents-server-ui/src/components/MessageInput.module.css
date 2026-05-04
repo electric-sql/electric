@@ -1,14 +1,17 @@
+/* Composer column. No top border — the chat content above visually
+ * slides underneath the composer. Outer max-width / horizontal
+ * padding match `EntityTimeline .content` so the composer sits
+ * directly under the user-bubble column above it. */
 .root {
-  border-top: 1px solid var(--ds-gray-a3);
-  padding: 16px 40px;
-  max-width: 72ch;
+  padding: 0 40px 16px;
+  max-width: calc(var(--chat-surface-width) + 80px);
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
 }
 
 .composer {
-  background: var(--ds-gray-a2);
+  background: var(--ds-input-bg);
   border: 1px solid var(--ds-gray-a4);
   border-radius: 12px;
   padding: 12px 16px;

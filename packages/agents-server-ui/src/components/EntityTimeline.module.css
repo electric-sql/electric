@@ -9,9 +9,13 @@
   overflow: hidden;
 }
 
+/* Outer chat column: cap at the surface width plus 40px breathing on
+ * each side. The actual text/surface widths live on `.entityMain` as
+ * CSS variables so EntityTimeline + MessageInput can stay perfectly
+ * aligned without duplicating constants. */
 .content {
   padding: 32px 40px;
-  max-width: 72ch;
+  max-width: calc(var(--chat-surface-width) + 80px);
   margin: 0 auto;
   overflow-anchor: none;
   box-sizing: border-box;
