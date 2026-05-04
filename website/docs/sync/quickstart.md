@@ -31,7 +31,7 @@ You'll need [Node](https://nodejs.org/en), [pnpm](https://pnpm.io) and [Caddy](h
 caddy trust # may require sudo
 ```
 
-<small><em>Why Caddy? Electric [uses HTTP/2](/docs/sync/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development). Caddy enables HTTP/2 in local development.</em></small>
+<small><em>Why Caddy? Electric [uses HTTP/2](/docs/sync/guides/troubleshooting#slow-shapes-slow-hmr-slow-dev-server-mdash-why-is-my-local-development-slow). Caddy enables HTTP/2 in local development.</em></small>
 
 ## Get started
 
