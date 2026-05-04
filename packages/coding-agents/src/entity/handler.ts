@@ -1059,16 +1059,6 @@ async function processPrompt(
     seq++
 
     let finalText: string | undefined
-    // AbortController signals the bridge to SIGTERM the CLI child when
-    // the per-turn timeout fires, so a hung CLI no longer leaves a
-    // zombie behind raceTimeout's wrapper. raceTimeout still owns the
-    // promise-level rejection semantics; the signal just ensures the
-    // child is reaped.
-    const turnAbort = new AbortController()
-    const turnTimer = setTimeout(
-      () => turnAbort.abort(),
-      options.defaults.runTimeoutMs
-    )
     try {
       const result = await raceTimeout(
         lm.bridge.runTurn({
@@ -1077,7 +1067,6 @@ async function processPrompt(
           prompt: promptText,
           nativeSessionId: meta.nativeSessionId,
           model: meta.model,
-          signal: turnAbort.signal,
           onEvent: (e: NormalizedEvent) => {
             ctx.db.actions.events_insert({
               row: {
@@ -1183,8 +1172,6 @@ async function processPrompt(
       })
       recordedRun.end({ status: `failed` })
       return
-    } finally {
-      clearTimeout(turnTimer)
     }
 
     ctx.db.actions.sessionMeta_update({

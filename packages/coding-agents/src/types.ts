@@ -107,13 +107,6 @@ export interface RunTurnArgs {
   onEvent: (e: NormalizedEvent) => void
   /** Sink for raw native JSONL lines (tee'd to a sidecar collection). */
   onNativeLine?: (line: string) => void
-  /**
-   * Aborting this signal SIGTERMs the CLI child and causes runTurn to
-   * reject. Used by the handler to enforce per-turn `runTimeoutMs`
-   * cleanly, so a hung CLI no longer leaves an orphan process behind
-   * the host's `raceTimeout` wrapper.
-   */
-  signal?: AbortSignal
 }
 
 export interface RunTurnResult {
