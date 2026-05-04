@@ -33,6 +33,7 @@ import { SchemaValidator } from './electric-agents-schema-validator.js'
 import { ElectricAgentsManager } from './electric-agents-manager.js'
 import { ElectricAgentsRoutes } from './electric-agents-routes.js'
 import { ElectricAgentsEntityTypeRoutes } from './electric-agents-entity-type-routes.js'
+import { ProjectRoutes } from './project-routes.js'
 import { Scheduler, isPermanentElectricAgentsError } from './scheduler.js'
 import { StreamClient } from './stream-client.js'
 import { serverLog } from './log.js'
@@ -179,6 +180,7 @@ export class ElectricAgentsServer {
   private electricAgentsRoutes: ElectricAgentsRoutes | null = null
   private electricAgentsEntityTypeRoutes: ElectricAgentsEntityTypeRoutes | null =
     null
+  private projectRoutes: ProjectRoutes | null = null
   private registry: PostgresRegistry | null = null
   private pgDb: DrizzleDB | null = null
   private pgClient: PgClient | null = null
@@ -422,6 +424,7 @@ export class ElectricAgentsServer {
           )
           this.electricAgentsEntityTypeRoutes =
             new ElectricAgentsEntityTypeRoutes(this.electricAgentsManager)
+          this.projectRoutes = new ProjectRoutes()
 
           if (this.options.mockStreamFn) {
             this.mockAgentBootstrap = createMockAgentBootstrap({
@@ -484,6 +487,7 @@ export class ElectricAgentsServer {
       this.electricAgentsManager = null
       this.electricAgentsRoutes = null
       this.electricAgentsEntityTypeRoutes = null
+      this.projectRoutes = null
       this.registry = null
     }
 
@@ -709,6 +713,21 @@ export class ElectricAgentsServer {
     ) {
       await this.handleElectricProxy(req, res)
       return
+    }
+
+    if (
+      this.projectRoutes &&
+      method &&
+      (path.startsWith(`/_electric/projects`) ||
+        path === `/_electric/validate-path`)
+    ) {
+      const handled = await this.projectRoutes.handleRequest(
+        method,
+        path,
+        req,
+        res
+      )
+      if (handled) return
     }
 
     if (
