@@ -1,20 +1,20 @@
 import { z } from 'zod'
-import {
-  importLocalSession,
-  loadSession,
-  serializeCursor,
-} from 'agent-session-protocol'
+import { importLocalSession, loadSession } from 'agent-session-protocol'
 import type { NormalizedEvent } from 'agent-session-protocol'
 import {
-  CODING_SESSION_CURSOR_COLLECTION_TYPE,
-  CODING_SESSION_EVENT_COLLECTION_TYPE,
-  CODING_SESSION_META_COLLECTION_TYPE,
+  CODER_RESOURCE_TAG,
+  codingSessionResourceId,
+  codingSessionResourceSchema,
+  db,
 } from '@electric-ax/agents-runtime'
 import type {
   CodingAgentType,
-  CodingSessionEventRow,
+  CodingSessionInfoRow,
+  CodingSessionTranscriptRow,
+  CodingSessionResourceSchema,
   EntityRegistry,
   HandlerContext,
+  SharedStateHandle,
   WakeEvent,
 } from '@electric-ax/agents-runtime'
 
@@ -22,18 +22,10 @@ import { claudeSdkRunner } from './runners/claude-sdk.js'
 import { codexSdkRunner } from './runners/codex-sdk.js'
 
 /**
- * Abstraction over a coding-agent runner. The default implementations
- * drive `@anthropic-ai/claude-agent-sdk` and `@openai/codex-sdk`
- * directly; tests can inject a fake.
- *
- * Runners stream `NormalizedEvent`s via `onEvent` as the agent makes
- * progress, and call `onSessionId` once with the new (or resumed)
- * session id so the orchestrator can persist it on the entity.
- *
- * `sessionId` is undefined for the first prompt on a fresh session —
- * the runner should then let the SDK generate its own id and emit it
- * via `onSessionId`. For every subsequent prompt, pass the id so the
- * SDK resumes that conversation.
+ * Abstraction over a coding-agent runner. Defaults dispatch to the
+ * Claude / Codex SDKs; tests can inject a fake. Runners stream
+ * `NormalizedEvent`s via `onEvent` and call `onSessionId` once with
+ * the new (or resumed) native session id.
  */
 export interface CodingSessionCliRunner {
   run(opts: {
@@ -53,40 +45,28 @@ const defaultCliRunner: CodingSessionCliRunner = {
   },
 }
 
-const sessionMetaRowSchema = z.object({
+// ── Entity-local state schemas ─────────────────────────────────────
+//
+// The coder entity is now a thin wrapper around the coding-session
+// resource (see coding-session-resource.ts in agents-runtime). It
+// owns only the bookkeeping that's tied to *this* entity instance:
+// the run lifecycle status and the inbox processing cursor. Anything
+// portable (event history, session metadata) lives on the resource.
+
+const RUN_STATUS_COLLECTION_TYPE = `coder_run_status`
+const INBOX_CURSOR_COLLECTION_TYPE = `coder_inbox_cursor`
+
+const runStatusRowSchema = z.object({
   key: z.literal(`current`),
-  electricSessionId: z.string(),
-  nativeSessionId: z.string().optional(),
-  agent: z.enum([`claude`, `codex`]),
-  cwd: z.string(),
   status: z.enum([`initializing`, `idle`, `running`, `error`]),
   error: z.string().optional(),
+  /** Inbox key of the prompt currently running, when status === `running`. */
   currentPromptInboxKey: z.string().optional(),
 })
 
-const cursorStateRowSchema = z.object({
+const inboxCursorRowSchema = z.object({
   key: z.literal(`current`),
-  /**
-   * JSON-serialized SerializedSessionCursor or empty string. Used as a
-   * "have I seeded the events collection from the JSONL yet?" marker for
-   * imported / attached sessions — once non-empty, we don't reseed.
-   * The SDK runners stream events live, so this is no longer used for
-   * tail/cursor state past first wake.
-   */
-  cursor: z.string(),
   lastProcessedInboxKey: z.string().optional(),
-})
-
-const eventRowSchema = z.object({
-  key: z.string(),
-  ts: z.number(),
-  type: z.string(),
-  callId: z.string().optional(),
-  // `z.record(z.string(), z.unknown())` would emit JSON-Schema `propertyNames`,
-  // which the agents-server schema validator rejects. `looseObject` emits a
-  // plain `{ type: "object", additionalProperties: {} }` that's allowed and
-  // still captures "any JSON object".
-  payload: z.looseObject({}),
 })
 
 const creationArgsSchema = z.object({
@@ -105,8 +85,8 @@ const promptMessageSchema = z.object({
   text: z.string(),
 })
 
-type SessionMetaRow = z.infer<typeof sessionMetaRowSchema>
-type CursorStateRow = z.infer<typeof cursorStateRowSchema>
+type RunStatusRow = z.infer<typeof runStatusRowSchema>
+type InboxCursorRow = z.infer<typeof inboxCursorRowSchema>
 
 interface InboxRow {
   key: string
@@ -124,10 +104,8 @@ export interface RegisterCodingSessionOptions {
 }
 
 /**
- * Stable key for an events-collection row, derived from the event's content.
- * Lets us re-insert the same event without producing duplicates — the caller
- * (or the collection's uniqueness guard) uses this to de-dup across retries,
- * replays, and crash recovery. Sorts chronologically by ts, then by type.
+ * Stable key for an event row, derived from content. Lets the same
+ * event re-arrive (e.g. on retry) without producing duplicates.
  */
 function eventKey(event: NormalizedEvent): string {
   const tsPart = String(event.ts).padStart(16, `0`)
@@ -144,7 +122,9 @@ function contentHashHex(event: NormalizedEvent): string {
   return h.toString(16).padStart(8, `0`)
 }
 
-function buildEventRow(event: NormalizedEvent): CodingSessionEventRow {
+function buildTranscriptRow(
+  event: NormalizedEvent
+): CodingSessionTranscriptRow {
   const callId =
     `callId` in event && typeof event.callId === `string`
       ? event.callId
@@ -158,19 +138,15 @@ function buildEventRow(event: NormalizedEvent): CodingSessionEventRow {
   }
 }
 
-interface LiveMirrorCtx {
-  events: {
-    get: (k: string) => unknown
-  }
-  actions: {
-    events_insert: (arg: { row: CodingSessionEventRow }) => unknown
-  }
-}
+type CodingSessionResource = SharedStateHandle<CodingSessionResourceSchema>
 
-function appendIfNew(ctx: LiveMirrorCtx, event: NormalizedEvent): void {
-  const row = buildEventRow(event)
-  if (ctx.events.get(row.key) !== undefined) return
-  ctx.actions.events_insert({ row })
+function appendIfNew(
+  resource: CodingSessionResource,
+  event: NormalizedEvent
+): void {
+  const row = buildTranscriptRow(event)
+  if (resource.transcript.get(row.key) !== undefined) return
+  resource.transcript.insert(row)
 }
 
 export function registerCodingSession(
@@ -181,40 +157,47 @@ export function registerCodingSession(
   const defaultCwd = options.defaultWorkingDirectory ?? process.cwd()
 
   registry.define(`coder`, {
-    description: `Runs a Claude Code / Codex SDK session and mirrors its normalized event stream into a durable store. Prompts arrive via message_received (type: "prompt") and are executed serially.`,
+    description: `Wraps a Claude Code / Codex SDK session. The session's history (events + sessionInfo) lives on a coding-session resource (shared-state DB) the entity creates on first wake; the entity itself just queues prompts and drives the SDK runner. Prompts arrive via message_received (type: "prompt") and run serially.`,
     creationSchema: creationArgsSchema,
     inboxSchemas: {
       prompt: promptMessageSchema,
     },
     state: {
-      sessionMeta: {
-        schema: sessionMetaRowSchema,
-        type: CODING_SESSION_META_COLLECTION_TYPE,
+      runStatus: {
+        schema: runStatusRowSchema,
+        type: RUN_STATUS_COLLECTION_TYPE,
         primaryKey: `key`,
       },
-      cursorState: {
-        schema: cursorStateRowSchema,
-        type: CODING_SESSION_CURSOR_COLLECTION_TYPE,
-        primaryKey: `key`,
-      },
-      events: {
-        schema: eventRowSchema,
-        type: CODING_SESSION_EVENT_COLLECTION_TYPE,
+      inboxCursor: {
+        schema: inboxCursorRowSchema,
+        type: INBOX_CURSOR_COLLECTION_TYPE,
         primaryKey: `key`,
       },
     },
     async handler(ctx: HandlerContext, _wake: WakeEvent) {
-      // Seed sessionMeta / cursorState on the very first wake, once and
-      // only once. `ctx.firstWake` is derived from "manifest is empty" —
-      // this entity never writes a manifest entry (no mkdb/observe/spawn/
-      // effect), so firstWake stays true on every wake. Guard by reading
-      // state instead, per the define-entity review checklist.
-      const existingMeta = ctx.db.collections.sessionMeta.get(`current`)
-      if (!existingMeta) {
+      const entityId = ctx.entityUrl.split(`/`).pop() ?? ctx.entityUrl
+      const resourceId = codingSessionResourceId(entityId)
+
+      // First wake: register the resource via mkdb so subsequent
+      // wakes can observe it (and any third party can attach by id).
+      // mkdb throws if called more than once for the same id, so the
+      // firstWake guard is mandatory. After this wake commits the
+      // manifest entry, ctx.firstWake will correctly be false next
+      // time round.
+      if (ctx.firstWake) {
+        ctx.mkdb(resourceId, codingSessionResourceSchema)
+      }
+
+      const resource = (await ctx.observe(
+        db(resourceId, codingSessionResourceSchema)
+      )) as unknown as CodingSessionResource
+
+      // First-wake initialisation: parse args, run the optional
+      // cross-agent import, seed sessionInfo + entity-local state,
+      // and tag the entity so the UI can find the resource.
+      if (ctx.firstWake) {
         const args = creationArgsSchema.parse(ctx.args)
         const cwd = args.cwd ?? defaultCwd
-        const electricSessionId =
-          ctx.entityUrl.split(`/`).pop() ?? ctx.entityUrl
 
         let resolvedNativeId = args.nativeSessionId
         if (args.importFrom) {
@@ -228,95 +211,91 @@ export function registerCodingSession(
           resolvedNativeId = result.sessionId
         }
 
-        const hasNative = resolvedNativeId !== undefined
-        ctx.db.actions.sessionMeta_insert({
+        resource.sessionInfo.insert({
+          key: `current`,
+          agent: args.agent,
+          cwd,
+          electricSessionId: entityId,
+          ...(resolvedNativeId ? { nativeSessionId: resolvedNativeId } : {}),
+          createdAt: Date.now(),
+        })
+
+        ctx.db.actions.runStatus_insert({
           row: {
             key: `current`,
-            electricSessionId,
-            ...(hasNative ? { nativeSessionId: resolvedNativeId } : {}),
-            agent: args.agent,
-            cwd,
-            status: hasNative ? `idle` : `initializing`,
-          } satisfies SessionMetaRow,
+            status: resolvedNativeId ? `idle` : `initializing`,
+          } satisfies RunStatusRow,
         })
-      }
-      if (!ctx.db.collections.cursorState.get(`current`)) {
-        ctx.db.actions.cursorState_insert({
-          row: {
-            key: `current`,
-            cursor: ``,
-          } satisfies CursorStateRow,
+        ctx.db.actions.inboxCursor_insert({
+          row: { key: `current` } satisfies InboxCursorRow,
         })
+        void ctx.setTag(CODER_RESOURCE_TAG, resourceId)
       }
 
-      const metaRow = ctx.db.collections.sessionMeta.get(`current`) as
-        | SessionMetaRow
+      const sessionInfo = resource.sessionInfo.get(`current`) as
+        | CodingSessionInfoRow
         | undefined
-      const cursorRow = ctx.db.collections.cursorState.get(`current`) as
-        | CursorStateRow
-        | undefined
-      if (!metaRow || !cursorRow) {
+      if (!sessionInfo) {
         throw new Error(
-          `[coding-session] expected sessionMeta and cursorState rows to exist after init`
+          `[coding-session] sessionInfo missing on resource ${resourceId}`
         )
       }
 
-      // Initial mirror. When the session already exists on disk (imported
-      // or attached) but the cursor is still empty, pull every existing
-      // event into the durable stream so the viewer shows the full history
-      // without waiting for a first prompt.
-      if (metaRow.nativeSessionId && !cursorRow.cursor) {
-        const mirrorCtx: LiveMirrorCtx = {
-          events: {
-            get: (k) => ctx.db.collections.events.get(k),
-          },
-          actions: {
-            events_insert: ctx.db.actions.events_insert,
-          },
-        }
+      // Initial event mirror. When the session already exists on
+      // disk (imported or attached) but the resource's events
+      // collection is still empty, pull every existing event from
+      // the JSONL into the resource so the viewer has the full
+      // history without waiting for a first prompt.
+      if (
+        sessionInfo.nativeSessionId !== undefined &&
+        resource.transcript.toArray.length === 0
+      ) {
         try {
           const initial = await loadSession({
-            sessionId: metaRow.nativeSessionId,
-            agent: metaRow.agent,
+            sessionId: sessionInfo.nativeSessionId,
+            agent: sessionInfo.agent,
           })
-          for (const ev of initial.events) appendIfNew(mirrorCtx, ev)
-          const serialized = serializeCursor(initial.cursor)
-          ctx.db.actions.cursorState_update({
-            key: `current`,
-            updater: (d: CursorStateRow) => {
-              d.cursor = JSON.stringify(serialized)
-            },
-          })
+          for (const ev of initial.events) appendIfNew(resource, ev)
         } catch (e) {
-          // Non-fatal: the session will still work on the next prompt,
-          // we just won't have the pre-prompt history mirrored.
           const message = e instanceof Error ? e.message : String(e)
-          ctx.db.actions.sessionMeta_update({
+          ctx.db.actions.runStatus_update({
             key: `current`,
-            updater: (d: SessionMetaRow) => {
+            updater: (d: RunStatusRow) => {
               d.error = `initial mirror failed: ${message}`
             },
           })
         }
       }
 
+      const cursorRow = ctx.db.collections.inboxCursor.get(`current`) as
+        | InboxCursorRow
+        | undefined
+      if (!cursorRow) {
+        throw new Error(
+          `[coding-session] inboxCursor missing — first-wake init never completed`
+        )
+      }
+
       // Every inbox entry is treated as a prompt. `message_type === "prompt"`
-      // is the preferred tag (see inboxSchemas) but is not required — a bare
-      // `/send` with `{ payload: { text } }` from the generic UI MessageInput
-      // arrives with no message_type and should still be processed.
-      // Entries whose payload is not a `{ text }` object are ignored
-      // (tracked via lastProcessedInboxKey so they don't re-trigger).
+      // is preferred but not required — bare `/send { payload: { text } }`
+      // from the generic UI MessageInput arrives without a type. Entries
+      // whose payload isn't a `{ text }` object are skipped (and tracked
+      // via lastProcessedInboxKey so they don't re-trigger).
       const inboxRows = (ctx.db.collections.inbox.toArray as Array<InboxRow>)
         .slice()
         .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
       const lastKey = cursorRow.lastProcessedInboxKey ?? ``
       const pending = inboxRows.filter((m) => m.key > lastKey)
 
+      const runStatus = ctx.db.collections.runStatus.get(`current`) as
+        | RunStatusRow
+        | undefined
+
       if (pending.length === 0) {
-        if (metaRow.status === `running` || metaRow.status === `error`) {
-          ctx.db.actions.sessionMeta_update({
+        if (runStatus?.status === `running` || runStatus?.status === `error`) {
+          ctx.db.actions.runStatus_update({
             key: `current`,
-            updater: (d: SessionMetaRow) => {
+            updater: (d: RunStatusRow) => {
               d.status = `idle`
               delete d.currentPromptInboxKey
               delete d.error
@@ -326,123 +305,91 @@ export function registerCodingSession(
         return
       }
 
-      let runningMeta = metaRow
-      let runningCursor = cursorRow
+      let currentInfo = sessionInfo
 
       for (const inboxMsg of pending) {
         const parsed = promptMessageSchema.safeParse(inboxMsg.payload)
         if (!parsed.success) {
-          ctx.db.actions.cursorState_update({
+          ctx.db.actions.inboxCursor_update({
             key: `current`,
-            updater: (d: CursorStateRow) => {
+            updater: (d: InboxCursorRow) => {
               d.lastProcessedInboxKey = inboxMsg.key
             },
           })
-          runningCursor = {
-            ...runningCursor,
-            lastProcessedInboxKey: inboxMsg.key,
-          }
           continue
         }
         const prompt = parsed.data.text
 
-        // Adopt the first prompt as the entity's display title (truncated)
-        // so the sidebar surfaces something meaningful for coders that
-        // would otherwise fall back to a random slug. Only set it if no
-        // title is already present — preserves explicit titles supplied
-        // by spawners (e.g. a future deep-survey-style use of `tags.title`).
+        // Adopt the first prompt as the entity's display title so the
+        // sidebar shows something meaningful instead of a random slug.
+        // Only set if no title is already present.
         const existingTitle = ctx.tags.title
         if (typeof existingTitle !== `string` || existingTitle.length === 0) {
           void ctx.setTag(`title`, prompt.slice(0, 80))
         }
 
-        ctx.db.actions.sessionMeta_update({
+        ctx.db.actions.runStatus_update({
           key: `current`,
-          updater: (d: SessionMetaRow) => {
+          updater: (d: RunStatusRow) => {
             d.status = `running`
             d.currentPromptInboxKey = inboxMsg.key
             delete d.error
           },
         })
 
-        // Record the run as a `runs` collection event so observers
-        // waking on `runFinished` are notified when the turn ends.
-        // Without this the parent (e.g. Horton via spawn_coder) would
-        // never be woken because the coder bypasses useAgent.
+        // Record the run so observers waking on `runFinished` are
+        // notified. Without this the parent (e.g. Horton via
+        // spawn_coder) would never be woken because the coder bypasses
+        // useAgent.
         const recordedRun = ctx.recordRun()
-        // Snapshot the existing event keys so we can identify which
-        // events are appended during this run and surface their
-        // assistant text as the run's response payload.
+        // Snapshot existing event keys so we can later pick out the
+        // assistant_message rows produced by *this* run for
+        // attachResponse.
         const eventKeysBefore = new Set(
           (
-            ctx.db.collections.events.toArray as unknown as Array<{
-              key: string
-            }>
+            resource.transcript
+              .toArray as unknown as Array<CodingSessionTranscriptRow>
           ).map((e) => e.key)
         )
 
         try {
-          const mirrorCtx: LiveMirrorCtx = {
-            events: {
-              get: (k) => ctx.db.collections.events.get(k),
-            },
-            actions: {
-              events_insert: ctx.db.actions.events_insert,
-            },
-          }
-
           const cliResult = await runner.run({
-            agent: runningMeta.agent,
-            ...(runningMeta.nativeSessionId
-              ? { sessionId: runningMeta.nativeSessionId }
+            agent: currentInfo.agent,
+            ...(currentInfo.nativeSessionId
+              ? { sessionId: currentInfo.nativeSessionId }
               : {}),
-            cwd: runningMeta.cwd,
+            cwd: currentInfo.cwd,
             prompt,
-            onEvent: (ev) => appendIfNew(mirrorCtx, ev),
+            onEvent: (ev) => appendIfNew(resource, ev),
             onSessionId: (id) => {
-              if (runningMeta.nativeSessionId === id) return
-              ctx.db.actions.sessionMeta_update({
-                key: `current`,
-                updater: (d: SessionMetaRow) => {
-                  d.nativeSessionId = id
-                },
+              if (currentInfo.nativeSessionId === id) return
+              resource.sessionInfo.update(`current`, (d) => {
+                d.nativeSessionId = id
               })
-              runningMeta = { ...runningMeta, nativeSessionId: id }
+              currentInfo = { ...currentInfo, nativeSessionId: id }
             },
           })
 
           if (cliResult.exitCode !== 0) {
             throw new Error(
-              `[coding-session] ${runningMeta.agent} runner exited ${cliResult.exitCode}. stderr=${cliResult.stderr.slice(0, 800) || `<empty>`} stdout=${cliResult.stdout.slice(0, 800) || `<empty>`}`
+              `[coding-session] ${currentInfo.agent} runner exited ${cliResult.exitCode}. stderr=${cliResult.stderr.slice(0, 800) || `<empty>`} stdout=${cliResult.stdout.slice(0, 800) || `<empty>`}`
             )
           }
 
-          ctx.db.actions.cursorState_update({
+          ctx.db.actions.inboxCursor_update({
             key: `current`,
-            updater: (d: CursorStateRow) => {
-              // Cursor is now just a "have we seeded?" marker — set to
-              // any non-empty string after the first successful run.
-              if (!d.cursor) d.cursor = `sdk-stream`
+            updater: (d: InboxCursorRow) => {
               d.lastProcessedInboxKey = inboxMsg.key
             },
           })
-          runningCursor = {
-            ...runningCursor,
-            cursor: runningCursor.cursor || `sdk-stream`,
-            lastProcessedInboxKey: inboxMsg.key,
-          }
           // Pipe assistant_message text from this run into recordedRun
           // so the runFinished wake's `includeResponse` payload carries
           // the coder's reply.
-          for (const row of ctx.db.collections.events
-            .toArray as unknown as Array<{
-            key: string
-            type: string
-            payload: { text?: unknown }
-          }>) {
+          for (const row of resource.transcript
+            .toArray as unknown as Array<CodingSessionTranscriptRow>) {
             if (eventKeysBefore.has(row.key)) continue
             if (row.type !== `assistant_message`) continue
-            const text = row.payload?.text
+            const text = (row.payload as { text?: unknown }).text
             if (typeof text === `string` && text.length > 0) {
               recordedRun.attachResponse(text)
             }
@@ -451,33 +398,29 @@ export function registerCodingSession(
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
           recordedRun.end({ status: `failed`, finishReason: `error` })
-          ctx.db.actions.sessionMeta_update({
+          ctx.db.actions.runStatus_update({
             key: `current`,
-            updater: (d: SessionMetaRow) => {
+            updater: (d: RunStatusRow) => {
               d.status = `error`
               d.error = message
             },
           })
-          ctx.db.actions.cursorState_update({
+          ctx.db.actions.inboxCursor_update({
             key: `current`,
-            updater: (d: CursorStateRow) => {
+            updater: (d: InboxCursorRow) => {
               d.lastProcessedInboxKey = inboxMsg.key
             },
           })
           // Re-throw so the agent-runtime entity bridge surfaces the
           // failure to observers (Horton wakes on `runFinished` with
-          // status=failed, the UI flips the badge to error). The
-          // failed prompt's inbox key was advanced above, so on the
-          // next wake the for-loop resumes from the *next* queued
-          // prompt — remaining inbox messages aren't dropped, just
-          // deferred until the framework re-wakes us.
+          // status=failed, the UI flips the badge to error).
           throw e
         }
       }
 
-      ctx.db.actions.sessionMeta_update({
+      ctx.db.actions.runStatus_update({
         key: `current`,
-        updater: (d: SessionMetaRow) => {
+        updater: (d: RunStatusRow) => {
           d.status = `idle`
           delete d.currentPromptInboxKey
           delete d.error

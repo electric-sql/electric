@@ -197,9 +197,6 @@ export {
 
 export {
   CODING_SESSION_ENTITY_TYPE,
-  CODING_SESSION_META_COLLECTION_TYPE,
-  CODING_SESSION_CURSOR_COLLECTION_TYPE,
-  CODING_SESSION_EVENT_COLLECTION_TYPE,
   codingSession,
   codingSessionEntityUrl,
   entity,
@@ -208,6 +205,20 @@ export {
   tagged,
   db,
 } from './observation-sources'
+export {
+  CODER_RESOURCE_TAG,
+  CODING_SESSION_RESOURCE_INFO_TYPE,
+  CODING_SESSION_RESOURCE_TRANSCRIPT_TYPE,
+  codingSessionInfoRowSchema,
+  codingSessionResourceId,
+  codingSessionResourceSchema,
+  codingSessionTranscriptRowSchema,
+} from './coding-session-resource'
+export type {
+  CodingSessionInfoRow,
+  CodingSessionResourceSchema,
+  CodingSessionTranscriptRow,
+} from './coding-session-resource'
 export type {
   EntityObservationSource,
   CronObservationSource,

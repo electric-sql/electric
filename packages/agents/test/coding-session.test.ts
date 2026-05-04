@@ -1,8 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createEntityRegistry } from '@electric-ax/agents-runtime'
+import {
+  createEntityRegistry,
+  codingSessionResourceId,
+} from '@electric-ax/agents-runtime'
 import { registerCodingSession } from '../src/agents/coding-session'
 import type { NormalizedEvent } from 'agent-session-protocol'
 
+/**
+ * Build a fake HandlerContext rich enough to drive the coder entity
+ * end-to-end without a real runtime. The fake provides:
+ *   - entity-local state collections (`runStatus`, `inboxCursor`)
+ *   - a fake `mkdb` + `observe` pair that returns a SharedStateHandle
+ *     wired to in-memory Maps (one per resource id)
+ *   - a `setTag` capture so tests can assert on the resource pointer
+ *
+ * Tests exercise this via `state.entity.runStatus` /
+ * `state.resource.events` / `state.tags.coderResource` etc.
+ */
 function makeFakeCtx(opts: {
   firstWake: boolean
   args: Record<string, unknown>
@@ -15,31 +29,44 @@ function makeFakeCtx(opts: {
     message_type?: string
   }>
   existing?: {
-    sessionMeta?: Record<string, unknown>
-    cursorState?: Record<string, unknown>
+    runStatus?: Record<string, unknown>
+    inboxCursor?: Record<string, unknown>
+    sessionInfo?: Record<string, unknown>
+    transcript?: Array<Record<string, unknown>>
   }
 }) {
-  const state: Record<string, Map<string, Record<string, unknown>>> = {
-    sessionMeta: new Map(),
-    cursorState: new Map(),
-    events: new Map(),
+  const entityState: Record<string, Map<string, Record<string, unknown>>> = {
+    runStatus: new Map(),
+    inboxCursor: new Map(),
   }
-  if (opts.existing?.sessionMeta) {
-    state.sessionMeta!.set(`current`, { ...opts.existing.sessionMeta })
+  if (opts.existing?.runStatus) {
+    entityState.runStatus!.set(`current`, { ...opts.existing.runStatus })
   }
-  if (opts.existing?.cursorState) {
-    state.cursorState!.set(`current`, { ...opts.existing.cursorState })
+  if (opts.existing?.inboxCursor) {
+    entityState.inboxCursor!.set(`current`, { ...opts.existing.inboxCursor })
+  }
+
+  const resourceStores: Record<
+    string,
+    Record<string, Map<string, Record<string, unknown>>>
+  > = {}
+  const ensureResource = (id: string) => {
+    if (!resourceStores[id]) {
+      resourceStores[id] = {
+        sessionInfo: new Map(),
+        transcript: new Map(),
+      }
+    }
+    return resourceStores[id]!
   }
 
   const inbox = opts.inbox ?? []
-  const calls: Array<{ action: string; args: unknown }> = []
+  const tags: Record<string, string> = {}
 
-  const makeActions = () => {
+  const makeEntityActions = () => {
     const mk = (name: string) => ({
       insert: ({ row }: { row: Record<string, unknown> }) => {
-        calls.push({ action: `${name}_insert`, args: { row } })
-        const key = String(row.key)
-        state[name]!.set(key, { ...row })
+        entityState[name]!.set(String(row.key), { ...row })
       },
       update: ({
         key,
@@ -48,54 +75,93 @@ function makeFakeCtx(opts: {
         key: string
         updater: (d: Record<string, unknown>) => void
       }) => {
-        const existing = state[name]!.get(key)
+        const existing = entityState[name]!.get(key)
         if (!existing) return
         updater(existing)
-        calls.push({ action: `${name}_update`, args: { key } })
       },
     })
-    const sm = mk(`sessionMeta`)
-    const cs = mk(`cursorState`)
-    const ev = mk(`events`)
+    const rs = mk(`runStatus`)
+    const ic = mk(`inboxCursor`)
     return {
-      sessionMeta_insert: sm.insert,
-      sessionMeta_update: sm.update,
-      cursorState_insert: cs.insert,
-      cursorState_update: cs.update,
-      events_insert: ev.insert,
+      runStatus_insert: rs.insert,
+      runStatus_update: rs.update,
+      inboxCursor_insert: ic.insert,
+      inboxCursor_update: ic.update,
+    }
+  }
+
+  const buildCollectionProxy = (map: Map<string, Record<string, unknown>>) => ({
+    insert: (row: Record<string, unknown>) => {
+      map.set(String(row.key), { ...row })
+      return undefined
+    },
+    update: (key: string, updater: (d: Record<string, unknown>) => void) => {
+      const existing = map.get(key)
+      if (!existing) return undefined
+      updater(existing)
+      return undefined
+    },
+    get: (key: string) => map.get(key),
+    delete: (key: string) => {
+      map.delete(key)
+      return undefined
+    },
+    get toArray() {
+      return Array.from(map.values())
+    },
+  })
+
+  const buildResourceHandle = (id: string) => {
+    const store = ensureResource(id)
+    return {
+      id,
+      sessionInfo: buildCollectionProxy(store.sessionInfo!),
+      transcript: buildCollectionProxy(store.transcript!),
+    }
+  }
+
+  if (opts.existing?.sessionInfo) {
+    const id = codingSessionResourceId(
+      (opts.entityUrl ?? `/coder/test-1`).split(`/`).pop() ?? ``
+    )
+    ensureResource(id).sessionInfo.set(`current`, {
+      ...opts.existing.sessionInfo,
+    })
+  }
+  if (opts.existing?.transcript) {
+    const id = codingSessionResourceId(
+      (opts.entityUrl ?? `/coder/test-1`).split(`/`).pop() ?? ``
+    )
+    const map = ensureResource(id).transcript
+    for (const ev of opts.existing.transcript) {
+      map.set(String(ev.key), { ...ev })
     }
   }
 
   const ctx = {
     firstWake: opts.firstWake,
     args: opts.args,
-    entityUrl: opts.entityUrl ?? `/coding-session/test-1`,
-    // The handler reads `ctx.tags.title` and calls `ctx.setTag(...)`
-    // when adopting the first prompt as the entity's display title.
-    // Provide an empty tags map and a no-op setTag so neither call
-    // throws before the CLI runner is exercised.
-    tags: {} as Record<string, string>,
-    setTag: () => Promise.resolve(),
+    entityUrl: opts.entityUrl ?? `/coder/test-1`,
+    tags,
+    setTag: (key: string, value: string) => {
+      tags[key] = value
+      return Promise.resolve()
+    },
     db: {
-      actions: makeActions(),
+      actions: makeEntityActions(),
       collections: {
-        sessionMeta: { get: (k: string) => state.sessionMeta!.get(k) },
-        cursorState: { get: (k: string) => state.cursorState!.get(k) },
-        events: {
-          get: (k: string) => state.events!.get(k),
-          get toArray() {
-            return Array.from(state.events!.values())
-          },
-        },
+        runStatus: { get: (k: string) => entityState.runStatus!.get(k) },
+        inboxCursor: { get: (k: string) => entityState.inboxCursor!.get(k) },
         inbox: { toArray: inbox },
         // recordRun() reads `runs.toArray` to seed its counter; an
         // empty array is fine for tests that don't otherwise care.
         runs: { toArray: [] as Array<{ key: string }> },
       },
     },
-    // The handler calls ctx.recordRun() around each CLI invocation;
-    // give the mock a no-op handle so it doesn't blow up before the
-    // CLI runner is exercised.
+    mkdb: (id: string) => buildResourceHandle(id),
+    observe: vi.fn(async (source: { sourceRef: string }) => {
+      return buildResourceHandle(source.sourceRef)
+    }),
     recordRun: () => ({
       key: `run-0`,
       end: () => {},
@@ -103,30 +169,32 @@ function makeFakeCtx(opts: {
     }),
   }
 
-  return { ctx, state, calls }
+  return { ctx, entityState, resourceStores, tags }
 }
 
 describe(`registerCodingSession`, () => {
-  it(`registers the coding-session entity type`, () => {
+  it(`registers the coder entity type with runStatus + inboxCursor state`, () => {
     const registry = createEntityRegistry()
     registerCodingSession(registry)
     const def = registry.get(`coder`)
     expect(def).toBeDefined()
     expect(def!.definition.state).toBeDefined()
-    expect(def!.definition.state!.sessionMeta).toBeDefined()
-    expect(def!.definition.state!.cursorState).toBeDefined()
-    expect(def!.definition.state!.events).toBeDefined()
+    expect(def!.definition.state!.runStatus).toBeDefined()
+    expect(def!.definition.state!.inboxCursor).toBeDefined()
+    // sessionMeta / cursorState / events are gone — they live on the resource
+    expect(def!.definition.state!.sessionMeta).toBeUndefined()
+    expect(def!.definition.state!.transcript).toBeUndefined()
   })
 
-  it(`seeds sessionMeta and cursorState on firstWake with no prompts`, async () => {
+  it(`creates a resource and tags the entity on first wake`, async () => {
     const registry = createEntityRegistry()
     registerCodingSession(registry, { defaultWorkingDirectory: `/tmp/x` })
     const def = registry.get(`coder`)!
 
-    const { ctx, state } = makeFakeCtx({
+    const { ctx, entityState, resourceStores, tags } = makeFakeCtx({
       firstWake: true,
       args: { agent: `claude` },
-      entityUrl: `/coding-session/my-task`,
+      entityUrl: `/coder/my-task`,
     })
 
     await def.definition.handler(
@@ -136,16 +204,21 @@ describe(`registerCodingSession`, () => {
       >[1]
     )
 
-    const meta = state.sessionMeta!.get(`current`)
-    expect(meta).toMatchObject({
-      electricSessionId: `my-task`,
+    const expectedResourceId = `coder-session/my-task`
+    expect(tags.coderResource).toBe(expectedResourceId)
+
+    const resource = resourceStores[expectedResourceId]!
+    const sessionInfo = resource.sessionInfo!.get(`current`)!
+    expect(sessionInfo).toMatchObject({
       agent: `claude`,
       cwd: `/tmp/x`,
-      status: `initializing`,
+      electricSessionId: `my-task`,
     })
-    expect(meta!.nativeSessionId).toBeUndefined()
-    const cursor = state.cursorState!.get(`current`)
-    expect(cursor).toMatchObject({ cursor: `` })
+    expect(sessionInfo.nativeSessionId).toBeUndefined()
+
+    const runStatus = entityState.runStatus!.get(`current`)!
+    expect(runStatus.status).toBe(`initializing`)
+    expect(entityState.inboxCursor!.get(`current`)).toBeDefined()
   })
 
   it(`starts as idle when attaching to an existing nativeSessionId`, async () => {
@@ -153,38 +226,32 @@ describe(`registerCodingSession`, () => {
     registerCodingSession(registry, { defaultWorkingDirectory: `/tmp/x` })
     const def = registry.get(`coder`)!
 
-    const { state } = makeFakeCtx({
+    const { ctx, entityState, resourceStores } = makeFakeCtx({
       firstWake: true,
       args: { agent: `codex`, nativeSessionId: `pre-existing-uuid` },
-    })
-    const { ctx } = makeFakeCtx({
-      firstWake: true,
-      args: { agent: `codex`, nativeSessionId: `pre-existing-uuid` },
+      entityUrl: `/coder/attached-1`,
     })
 
+    // The attach path calls loadSession internally, which would touch
+    // the filesystem. The resource starts empty so `events.length === 0`
+    // would trigger the initial mirror — but since we're not actually
+    // configuring loadSession to succeed here, the catch handler logs
+    // an error on runStatus and continues. We just verify the seed.
     await def.definition.handler(
       ctx as unknown as Parameters<typeof def.definition.handler>[0],
       { type: `entity_created` } as unknown as Parameters<
         typeof def.definition.handler
       >[1]
     )
-    void state // silence unused binding
 
-    // Re-read from the ctx's own state via its collection
-    const meta = (ctx.db.collections.sessionMeta.get(`current`) as
-      | Record<string, unknown>
-      | undefined)!
-    expect(meta.agent).toBe(`codex`)
-    expect(meta.nativeSessionId).toBe(`pre-existing-uuid`)
-    expect(meta.status).toBe(`idle`)
+    const sessionInfo =
+      resourceStores[`coder-session/attached-1`]!.sessionInfo!.get(`current`)!
+    expect(sessionInfo.agent).toBe(`codex`)
+    expect(sessionInfo.nativeSessionId).toBe(`pre-existing-uuid`)
+    expect(entityState.runStatus!.get(`current`)!.status).toBe(`idle`)
   })
 
-  it(`invokes the injected cliRunner for a queued prompt and mirrors normalized events`, async () => {
-    // Pre-populate the cursorState with a non-empty seeded marker so
-    // the initial-mirror path is skipped (no filesystem touch). The
-    // injected runner streams events and the orchestrator should
-    // append them to the events collection and complete cleanly.
-
+  it(`runs a queued prompt and writes events into the resource`, async () => {
     const runner = {
       run: vi.fn(
         async (callArgs: {
@@ -208,9 +275,10 @@ describe(`registerCodingSession`, () => {
     })
     const def = registry.get(`coder`)!
 
-    const { ctx, state } = makeFakeCtx({
+    const { ctx, entityState, resourceStores } = makeFakeCtx({
       firstWake: false,
       args: { agent: `claude`, nativeSessionId: `existing-uuid` },
+      entityUrl: `/coder/run-1`,
       inbox: [
         {
           key: `m-001`,
@@ -221,19 +289,27 @@ describe(`registerCodingSession`, () => {
         },
       ],
       existing: {
-        sessionMeta: {
+        runStatus: { key: `current`, status: `idle` },
+        inboxCursor: { key: `current` },
+        sessionInfo: {
           key: `current`,
-          electricSessionId: `test-1`,
-          nativeSessionId: `existing-uuid`,
           agent: `claude`,
           cwd: `/tmp/x`,
-          status: `idle`,
+          electricSessionId: `run-1`,
+          nativeSessionId: `existing-uuid`,
+          createdAt: 1714000000000,
         },
-        cursorState: {
-          key: `current`,
-          cursor: `sdk-stream`,
-          eventCounter: 0,
-        },
+        // Pre-seed at least one transcript row so the initial-mirror
+        // branch is skipped (otherwise loadSession would be invoked
+        // against the filesystem).
+        transcript: [
+          {
+            key: `0000000000000000_seed_aaaa`,
+            ts: 0,
+            type: `seed`,
+            payload: {},
+          },
+        ],
       },
     })
 
@@ -244,29 +320,26 @@ describe(`registerCodingSession`, () => {
       >[1]
     )
 
-    // Runner was invoked with the prompt
     expect(runner.run).toHaveBeenCalledTimes(1)
     const call = (
       runner.run.mock.calls as unknown as Array<Array<unknown>>
-    )[0]![0] as {
-      agent: string
-      prompt: string
-      sessionId?: string
-    }
+    )[0]![0] as { agent: string; prompt: string; sessionId?: string }
     expect(call.agent).toBe(`claude`)
     expect(call.prompt).toBe(`say hi`)
     expect(call.sessionId).toBe(`existing-uuid`)
 
-    // Streamed event made it into the events collection
-    expect(state.events!.size).toBe(1)
-    const event = Array.from(state.events!.values())[0]!
-    expect(event.type).toBe(`assistant_message`)
+    // Streamed event landed in the resource transcript (not the entity)
+    const transcript = resourceStores[`coder-session/run-1`]!.transcript!
+    expect(transcript.size).toBe(2) // seed + assistant_message
+    const types = Array.from(transcript.values()).map((e) => e.type)
+    expect(types).toContain(`assistant_message`)
 
-    // Meta is back to idle and the inbox key is marked processed
-    const meta = state.sessionMeta!.get(`current`)!
-    expect(meta.status).toBe(`idle`)
-    const cursor = state.cursorState!.get(`current`)!
-    expect(cursor.lastProcessedInboxKey).toBe(`m-001`)
+    // Run state cleaned up
+    const runStatus = entityState.runStatus!.get(`current`)!
+    expect(runStatus.status).toBe(`idle`)
+    expect(entityState.inboxCursor!.get(`current`)!.lastProcessedInboxKey).toBe(
+      `m-001`
+    )
   })
 
   it(`accepts inbox messages without message_type (bare /send from generic UI)`, async () => {
@@ -283,29 +356,34 @@ describe(`registerCodingSession`, () => {
     const { ctx } = makeFakeCtx({
       firstWake: false,
       args: { agent: `claude`, nativeSessionId: `existing-uuid` },
+      entityUrl: `/coder/bare-1`,
       inbox: [
         {
           key: `m-001`,
           from: `user`,
           timestamp: `2026-04-23T00:00:00Z`,
-          // No message_type — mimics the existing UI MessageInput
           payload: { text: `hello` },
         },
       ],
       existing: {
-        sessionMeta: {
+        runStatus: { key: `current`, status: `idle` },
+        inboxCursor: { key: `current` },
+        sessionInfo: {
           key: `current`,
-          electricSessionId: `test-1`,
-          nativeSessionId: `existing-uuid`,
           agent: `claude`,
           cwd: `/tmp/x`,
-          status: `idle`,
+          electricSessionId: `bare-1`,
+          nativeSessionId: `existing-uuid`,
+          createdAt: 1714000000000,
         },
-        cursorState: {
-          key: `current`,
-          cursor: `sdk-stream`,
-          eventCounter: 0,
-        },
+        transcript: [
+          {
+            key: `0000000000000000_seed_aaaa`,
+            ts: 0,
+            type: `seed`,
+            payload: {},
+          },
+        ],
       },
     })
 

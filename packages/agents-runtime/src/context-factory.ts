@@ -16,7 +16,16 @@ import { CACHE_TIERS } from './types'
 import {
   CODING_SESSION_ENTITY_TYPE,
   codingSessionEntityUrl,
+  db,
 } from './observation-sources'
+import {
+  codingSessionResourceId,
+  codingSessionResourceSchema,
+} from './coding-session-resource'
+import type {
+  CodingSessionInfoRow,
+  CodingSessionResourceSchema,
+} from './coding-session-resource'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -588,19 +597,62 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       )
 
       const entityUrl = codingSessionEntityUrl(sessionId)
+      // The session's history (events) and static facts (agent, cwd,
+      // nativeSessionId) live on a coding-session resource, not on
+      // the entity. Attach to it so the handle can surface the same
+      // `events` / `meta` shape the caller used to get from the
+      // entity's collections directly.
+      const resourceId = codingSessionResourceId(sessionId)
+      const resourceHandle = (await config.doObserve(
+        db(resourceId, codingSessionResourceSchema)
+      )) as unknown as SharedStateHandle<CodingSessionResourceSchema>
+
       const readEvents = (): Array<CodingSessionEventRow> => {
-        const collection = entityHandle.db?.collections.events
-        if (!collection) return []
-        const rows = (collection as { toArray?: unknown }).toArray
+        const rows = resourceHandle.transcript.toArray
         return (Array.isArray(rows) ? rows : []) as Array<CodingSessionEventRow>
       }
-      const readMeta = (): CodingSessionMeta | undefined => {
-        const collection = entityHandle.db?.collections.sessionMeta
+      const readSessionInfo = (): CodingSessionInfoRow | undefined => {
+        return resourceHandle.sessionInfo.get(`current`) as
+          | CodingSessionInfoRow
+          | undefined
+      }
+      const readRunStatus = ():
+        | {
+            status: CodingSessionStatus
+            error?: string
+            currentPromptInboxKey?: string
+          }
+        | undefined => {
+        const collection = entityHandle.db?.collections.runStatus
         if (!collection) return undefined
         const row = (collection as { get?: (k: string) => unknown }).get?.(
           `current`
         )
-        return row as CodingSessionMeta | undefined
+        return row as
+          | {
+              status: CodingSessionStatus
+              error?: string
+              currentPromptInboxKey?: string
+            }
+          | undefined
+      }
+      const readMeta = (): CodingSessionMeta | undefined => {
+        const info = readSessionInfo()
+        if (!info) return undefined
+        const runStatus = readRunStatus()
+        return {
+          electricSessionId: info.electricSessionId,
+          ...(info.nativeSessionId !== undefined
+            ? { nativeSessionId: info.nativeSessionId }
+            : {}),
+          agent: info.agent,
+          cwd: info.cwd,
+          status: runStatus?.status ?? `initializing`,
+          ...(runStatus?.error !== undefined ? { error: runStatus.error } : {}),
+          ...(runStatus?.currentPromptInboxKey !== undefined
+            ? { currentPromptInboxKey: runStatus.currentPromptInboxKey }
+            : {}),
+        }
       }
       const MESSAGE_TYPES = new Set([`user_message`, `assistant_message`])
 
