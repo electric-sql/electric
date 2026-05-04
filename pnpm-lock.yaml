@@ -1699,6 +1699,9 @@ importers:
       lmdb:
         specifier: ^3.5.1
         version: 3.5.4
+      nanoid:
+        specifier: ^3.3.11
+        version: 3.3.11
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -14896,11 +14899,6 @@ packages:
 
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
-    hasBin: true
-
-  nanoid@3.3.7:
-    resolution: {integrity: sha512-eSRppjcPIatRIMC1U6UngP8XFcz8MQWGQdt1MTBQ7NaAmvXDfvNxbvWV3x2y6CdEUciCSsDHDQZbhYaB8QEo2g==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -28672,7 +28670,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.8.1))
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.8.1))
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -34762,8 +34760,6 @@ snapshots:
 
   nanoid@3.3.11: {}
 
-  nanoid@3.3.7: {}
-
   nanostores@1.0.1: {}
 
   napi-build-utils@2.0.0: {}
@@ -35669,7 +35665,7 @@ snapshots:
 
   postcss@8.4.47:
     dependencies:
-      nanoid: 3.3.7
+      nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
