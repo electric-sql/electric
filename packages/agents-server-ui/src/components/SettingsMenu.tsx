@@ -28,6 +28,7 @@ export function SettingsMenu(): React.ReactElement {
             tone="neutral"
             size={1}
             aria-label="Settings"
+            title="Settings"
           >
             <Settings size={14} />
           </IconButton>

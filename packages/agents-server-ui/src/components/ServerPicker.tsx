@@ -10,6 +10,7 @@ import {
   Menu,
   Stack,
   Text,
+  Tooltip,
 } from '../ui'
 import styles from './ServerPicker.module.css'
 
@@ -91,19 +92,21 @@ export function ServerPicker(): React.ReactElement {
                   <Text size={2} className={styles.menuRowName}>
                     {server.name}
                   </Text>
-                  <IconButton
-                    size={1}
-                    variant="ghost"
-                    tone="danger"
-                    className={styles.removeBtn}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeServer(server.url)
-                    }}
-                    aria-label={`Remove ${server.name}`}
-                  >
-                    <Trash2 size={12} />
-                  </IconButton>
+                  <Tooltip content={`Remove ${server.name}`} side="right">
+                    <IconButton
+                      size={1}
+                      variant="ghost"
+                      tone="danger"
+                      className={styles.removeBtn}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeServer(server.url)
+                      }}
+                      aria-label={`Remove ${server.name}`}
+                    >
+                      <Trash2 size={12} />
+                    </IconButton>
+                  </Tooltip>
                 </span>
               </Menu.Item>
             )

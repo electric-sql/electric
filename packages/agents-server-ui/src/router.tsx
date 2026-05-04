@@ -46,7 +46,7 @@ function RootLayout(): React.ReactElement {
 }
 
 function RootShell(): React.ReactElement {
-  const { pinnedUrls } = usePinnedEntities()
+  const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
   const { collapsed, toggle } = useSidebarCollapsed()
   const search = useSearchPalette()
@@ -56,6 +56,21 @@ function RootShell(): React.ReactElement {
     e.preventDefault()
     search.toggle()
   })
+  // New session: bind both ⌘N / Ctrl+N (works in Electron) and
+  // ⌘⇧O / Ctrl+Shift+O (works in browsers — matches the convention
+  // ChatGPT / Claude.ai use for "new chat", since `⌘N` is reserved
+  // by browsers for opening a new window and can't be intercepted).
+  // The displayed shortcut hint switches per environment via
+  // `NewSessionKey` / `newSessionLabel`.
+  const openNewSession = useCallback(
+    (e: KeyboardEvent) => {
+      e.preventDefault()
+      navigate({ to: `/` })
+    },
+    [navigate]
+  )
+  useHotkey(`mod+n`, openNewSession)
+  useHotkey(`mod+shift+o`, openNewSession)
 
   const navigateToEntity = useCallback(
     (entityUrl: string) => {
@@ -78,6 +93,7 @@ function RootShell(): React.ReactElement {
           selectedEntityUrl={selectedEntityUrl}
           onSelectEntity={navigateToEntity}
           pinnedUrls={pinnedUrls}
+          onTogglePin={togglePin}
         />
       )}
       <Outlet />

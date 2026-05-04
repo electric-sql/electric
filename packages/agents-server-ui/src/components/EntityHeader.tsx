@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
+  Check,
   Copy,
   Database,
   Eye,
@@ -10,7 +11,16 @@ import {
   Trash2,
 } from 'lucide-react'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
-import { Badge, Button, Dialog, IconButton, Menu, Stack, Text } from '../ui'
+import {
+  Badge,
+  Button,
+  Dialog,
+  IconButton,
+  Menu,
+  Stack,
+  Text,
+  Tooltip,
+} from '../ui'
 import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
 import styles from './EntityHeader.module.css'
@@ -82,21 +92,40 @@ function EntityTitle({
   // so a separate type pill would be redundant.
   const sessionId = entity.url.replace(/^\//, ``)
   const decoded = decodeURIComponent(entity.url)
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    }
+  }, [])
+
+  const copy = () => {
+    void navigator.clipboard.writeText(sessionId)
+    setCopied(true)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1200)
+  }
+
   return (
     <span className={styles.title}>
       <Text size={2} className={styles.titleName} title={decoded}>
         {title}
       </Text>
-      <button
-        type="button"
-        className={styles.subtitle}
-        title={`${decoded} — click to copy`}
-        onClick={() => {
-          void navigator.clipboard.writeText(entity.url)
-        }}
-      >
-        {sessionId}
-      </button>
+      <span className={styles.idGroup} data-copied={copied ? `` : undefined}>
+        <button
+          type="button"
+          className={styles.subtitle}
+          title={copied ? `Copied` : `${decoded} — click to copy`}
+          onClick={copy}
+        >
+          {sessionId}
+        </button>
+        <span className={styles.copyIcon} aria-hidden="true" onClick={copy}>
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+        </span>
+      </span>
     </span>
   )
 }
@@ -126,18 +155,24 @@ function EntityActions({
       </Badge>
 
       {onToggleStateExplorer && (
-        <IconButton
-          variant="ghost"
-          tone="neutral"
-          size={1}
-          onClick={onToggleStateExplorer}
-          aria-label={
+        <Tooltip
+          content={
             stateExplorerOpen ? `Hide state explorer` : `Show state explorer`
           }
-          className={stateExplorerOpen ? styles.activeBg : undefined}
         >
-          <Database size={14} />
-        </IconButton>
+          <IconButton
+            variant="ghost"
+            tone="neutral"
+            size={1}
+            onClick={onToggleStateExplorer}
+            aria-label={
+              stateExplorerOpen ? `Hide state explorer` : `Show state explorer`
+            }
+            className={stateExplorerOpen ? styles.activeBg : undefined}
+          >
+            <Database size={14} />
+          </IconButton>
+        </Tooltip>
       )}
 
       <Menu.Root>
@@ -148,6 +183,7 @@ function EntityActions({
               tone="neutral"
               size={1}
               aria-label="More actions"
+              title="More actions"
             >
               <MoreHorizontal size={16} />
             </IconButton>

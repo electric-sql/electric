@@ -114,37 +114,42 @@ export function EventSidebar({
           {events.length}
         </Badge>
         <Stack align="center" gap={1} className={styles.headerActions}>
-          <IconButton
-            size={1}
-            variant="ghost"
-            tone="neutral"
-            title={cursorIndex === null ? `Already live` : `Go to live`}
-            onClick={onGoLive}
-            disabled={cursorIndex === null}
-            aria-label="Go to live"
+          <Tooltip
+            content={cursorIndex === null ? `Already live` : `Go to live`}
           >
-            <SkipForward size={ICON_SIZE} />
-          </IconButton>
-          <IconButton
-            size={1}
-            variant="ghost"
-            tone="neutral"
-            title="Expand all events"
-            onClick={handleExpandAll}
-            aria-label="Expand all events"
-          >
-            <ListTree size={ICON_SIZE} />
-          </IconButton>
-          <IconButton
-            size={1}
-            variant="ghost"
-            tone="neutral"
-            title="Collapse all events"
-            onClick={handleCollapseAll}
-            aria-label="Collapse all events"
-          >
-            <ListCollapse size={ICON_SIZE} />
-          </IconButton>
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              onClick={onGoLive}
+              disabled={cursorIndex === null}
+              aria-label="Go to live"
+            >
+              <SkipForward size={ICON_SIZE} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Expand all events">
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              onClick={handleExpandAll}
+              aria-label="Expand all events"
+            >
+              <ListTree size={ICON_SIZE} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Collapse all events">
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              onClick={handleCollapseAll}
+              aria-label="Collapse all events"
+            >
+              <ListCollapse size={ICON_SIZE} />
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Stack>
 
@@ -241,18 +246,19 @@ function ControlEventContent({
         <Code size={1} variant="ghost" className={styles.eventKey}>
           control
         </Code>
-        <IconButton
-          size={1}
-          variant="ghost"
-          tone="neutral"
-          title={isOpen ? `Collapse event` : `Expand event`}
-          onClick={onToggle}
-          className={styles.expandButton}
-          data-open={isOpen}
-          aria-label={isOpen ? `Collapse event` : `Expand event`}
-        >
-          <Plus size={ICON_SIZE} />
-        </IconButton>
+        <Tooltip content={isOpen ? `Collapse event` : `Expand event`}>
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            onClick={onToggle}
+            className={styles.expandButton}
+            data-open={isOpen}
+            aria-label={isOpen ? `Collapse event` : `Expand event`}
+          >
+            <Plus size={ICON_SIZE} />
+          </IconButton>
+        </Tooltip>
       </Stack>
       {isOpen && (
         <Code size={1} variant="ghost" className={styles.eventValue}>
@@ -289,18 +295,19 @@ function ChangeEventContent({
         <Code size={1} variant="ghost" truncate className={styles.eventKey}>
           {event.type}:{event.key}
         </Code>
-        <IconButton
-          size={1}
-          variant="ghost"
-          tone="neutral"
-          title={isOpen ? `Collapse event` : `Expand event`}
-          onClick={onToggle}
-          className={styles.expandButton}
-          data-open={isOpen}
-          aria-label={isOpen ? `Collapse event` : `Expand event`}
-        >
-          <Plus size={ICON_SIZE} />
-        </IconButton>
+        <Tooltip content={isOpen ? `Collapse event` : `Expand event`}>
+          <IconButton
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            onClick={onToggle}
+            className={styles.expandButton}
+            data-open={isOpen}
+            aria-label={isOpen ? `Collapse event` : `Expand event`}
+          >
+            <Plus size={ICON_SIZE} />
+          </IconButton>
+        </Tooltip>
         <Tooltip content={`Focus ${event.type}:${event.key}`}>
           <IconButton
             size={1}

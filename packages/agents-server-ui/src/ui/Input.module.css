@@ -2,7 +2,7 @@
   width: 100%;
   box-sizing: border-box;
   font-family: var(--ds-font-body);
-  background: var(--ds-gray-a2);
+  background: var(--ds-input-bg);
   color: var(--ds-text-1);
   border: 1px solid var(--ds-border-1);
   border-radius: var(--ds-radius-2);

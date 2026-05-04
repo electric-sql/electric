@@ -3,9 +3,12 @@ import { SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { ScrollArea, Stack, Text } from '../ui'
+import { HoverCard, ScrollArea, Stack, Text } from '../ui'
+import { NewSessionKey } from '../lib/keyLabels'
 import { SidebarHeader } from './SidebarHeader'
-import { SidebarRow } from './SidebarRow'
+import { SidebarRow, SidebarRowInfo } from './SidebarRow'
+import type { SidebarRowInfoPayload } from './SidebarRow'
+import sidebarRowStyles from './SidebarRow.module.css'
 import { SidebarTree } from './SidebarTree'
 import { SidebarFooter } from './SidebarFooter'
 import { useExpandedTreeNodes } from '../hooks/useExpandedTreeNodes'
@@ -43,10 +46,12 @@ export function Sidebar({
   selectedEntityUrl,
   onSelectEntity,
   pinnedUrls,
+  onTogglePin,
 }: {
   selectedEntityUrl: string | null
   onSelectEntity: (url: string) => void
   pinnedUrls: Array<string>
+  onTogglePin: (url: string) => void
 }): React.ReactElement {
   const { entitiesCollection } = useElectricAgents()
   const expanded = useExpandedTreeNodes()
@@ -54,6 +59,12 @@ export function Sidebar({
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
+
+  // One shared HoverCard handle for every row in this sidebar. The
+  // single Root rendered below switches its content based on which
+  // trigger is currently active, so the popup follows the pointer
+  // between rows without the open delay re-firing.
+  const hoverHandle = HoverCard.useHandle<SidebarRowInfoPayload>()
 
   const startResize = useCallback(
     (e: React.MouseEvent) => {
@@ -92,14 +103,28 @@ export function Sidebar({
     },
     [entitiesCollection]
   )
-  const pinnedEntities = entities.filter((e) => pinnedUrls.includes(e.url))
+  const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
+  const pinnedEntities = entities.filter((e) => pinnedSet.has(e.url))
 
   const { roots, childrenByParent } = useMemo(
     () => buildEntityTree(entities),
     [entities]
   )
 
-  const sessionGroups = useMemo(() => bucketEntities(roots), [roots])
+  // Pinned roots are listed once at the top in the Pinned section; we
+  // don't want them to show up again in their original time bucket.
+  // We only strip *roots* — children of an unpinned parent that happen
+  // to be pinned simply disappear from the parent's expanded subtree
+  // (handled by SidebarTree's pinned-skip below).
+  const unpinnedRoots = useMemo(
+    () => roots.filter((r) => !pinnedSet.has(r.url)),
+    [roots, pinnedSet]
+  )
+
+  const sessionGroups = useMemo(
+    () => bucketEntities(unpinnedRoots),
+    [unpinnedRoots]
+  )
 
   const handleNewSession = useCallback(() => {
     navigate({ to: `/` })
@@ -125,14 +150,19 @@ export function Sidebar({
       <SidebarHeader />
 
       <ScrollArea className={styles.scrollFlex}>
-        <Stack direction="column" px={2} className={styles.treeRow}>
+        <Stack direction="column" className={styles.treeRow}>
           <button
             type="button"
             onClick={handleNewSession}
             className={styles.newSessionRow}
           >
-            <SquarePen size={14} className={styles.newSessionIcon} />
+            <span className={styles.newSessionIconSlot}>
+              <SquarePen size={16} />
+            </span>
             <span className={styles.newSessionLabel}>New session</span>
+            <span className={styles.newSessionKbd} aria-hidden="true">
+              <NewSessionKey />
+            </span>
           </button>
 
           {pinnedEntities.length > 0 && (
@@ -144,6 +174,9 @@ export function Sidebar({
                   entity={entity}
                   selected={entity.url === selectedEntityUrl}
                   onSelect={() => onSelectEntity(entity.url)}
+                  pinned
+                  onTogglePin={() => onTogglePin(entity.url)}
+                  hoverHandle={hoverHandle}
                 />
               ))}
             </>
@@ -160,6 +193,9 @@ export function Sidebar({
                   onSelectEntity={onSelectEntity}
                   isExpanded={expanded.isExpanded}
                   toggleExpanded={expanded.toggle}
+                  pinnedUrls={pinnedUrls}
+                  onTogglePin={onTogglePin}
+                  hoverHandle={hoverHandle}
                 />
               ))}
             </div>
@@ -178,6 +214,24 @@ export function Sidebar({
       </ScrollArea>
 
       <SidebarFooter />
+
+      {/* Shared HoverCard for every <SidebarRow> trigger above. One
+          Root means: the open delay applies only to the *first* hover;
+          once the popup is on screen, moving to another row swaps the
+          payload and follows the pointer immediately. */}
+      <HoverCard.Root handle={hoverHandle}>
+        {({ payload }: { payload: SidebarRowInfoPayload | undefined }) => (
+          <HoverCard.Content
+            side="right"
+            align="start"
+            sideOffset={8}
+            padded={false}
+            className={sidebarRowStyles.infoCard}
+          >
+            {payload ? <SidebarRowInfo {...payload} /> : null}
+          </HoverCard.Content>
+        )}
+      </HoverCard.Root>
     </Stack>
   )
 }

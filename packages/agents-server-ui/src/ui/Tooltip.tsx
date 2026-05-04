@@ -3,8 +3,15 @@ import type { ReactElement, ReactNode } from 'react'
 import styles from './Tooltip.module.css'
 
 interface TooltipProps {
-  /** The content shown in the tooltip popup. */
+  /** The primary label shown in the tooltip popup. */
   content: ReactNode
+  /**
+   * Optional keyboard shortcut hint (e.g. `⌘B`, `Ctrl+K`). Rendered
+   * as slightly muted text after the label, separated by a space —
+   * not in brackets — matching the convention used by Cursor / VS
+   * Code tooltips.
+   */
+  shortcut?: ReactNode
   /** The element that triggers the tooltip on hover/focus. */
   children: ReactElement
   /** Side relative to the trigger. Default `top`. */
@@ -18,6 +25,7 @@ interface TooltipProps {
  *
  * Single-shot API:
  *   <Tooltip content="Copy URL"><IconButton>…</IconButton></Tooltip>
+ *   <Tooltip content="Hide sidebar" shortcut="⌘B"><IconButton/></Tooltip>
  *
  * Wrap your app in <TooltipProvider delay={…}> (re-exported below) to
  * configure the open delay shared across all tooltips. Per-tooltip
@@ -26,6 +34,7 @@ interface TooltipProps {
  */
 export function Tooltip({
   content,
+  shortcut,
   children,
   side = `top`,
   align = `center`,
@@ -42,6 +51,9 @@ export function Tooltip({
         >
           <BaseTooltip.Popup className={styles.popup}>
             {content}
+            {shortcut !== undefined && shortcut !== null && (
+              <span className={styles.shortcut}>{shortcut}</span>
+            )}
           </BaseTooltip.Popup>
         </BaseTooltip.Positioner>
       </BaseTooltip.Portal>

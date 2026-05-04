@@ -1,9 +1,18 @@
+/* Sidebar row layout
+   ----------------------------------------------------------------
+   Geometry is dictated by a single 22px icon column at the left.
+   The status dot, pin button, new-session pencil and the toggle
+   icons in the SidebarHeader all sit centered inside the same
+   22px slot so every glyph in the sidebar lines up vertically.
+*/
+
 .row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   height: var(--ds-row-height-md);
-  padding: 0 8px;
+  padding-right: 6px;
   border-radius: var(--ds-radius-2);
   cursor: pointer;
   user-select: none;
@@ -24,27 +33,55 @@
   opacity: 0.55;
 }
 
-.caret {
-  all: unset;
+/* Icon column (left) -------------------------------------------- */
+.iconSlot {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  border-radius: 3px;
-  color: var(--ds-text-3);
-  cursor: pointer;
 }
-.caret:hover {
+.statusDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.1s ease;
+}
+.pinBtn {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--ds-radius-2);
+  color: var(--ds-text-2);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.1s ease;
+}
+.pinBtn:hover {
   background: var(--ds-gray-a4);
   color: var(--ds-text-1);
 }
-.caretSpacer {
-  width: 14px;
-  flex-shrink: 0;
+/* Pin button is hover-only — even for already-pinned rows. The
+   status dot stays visible at rest so the user can still see the
+   live status of pinned entities; only on hover do we swap the dot
+   for the unpin affordance. */
+.row:hover .statusDot {
+  opacity: 0;
+}
+.row:hover .pinBtn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
+/* Title --------------------------------------------------------- */
 .title {
   flex: 1;
   min-width: 0;
@@ -55,13 +92,138 @@
   line-height: 1;
 }
 
-.typePill {
+/* Type label (e.g. "horton") — same size as title, just muted.
+   When the row has subagents the count is concatenated inline as
+   plain text (e.g. "horton +2") so it sits naturally next to the
+   type label. The expand chevron then overlays the right edge on
+   hover; see `.expandOverlay` below. */
+.type {
   flex-shrink: 0;
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: var(--ds-text-sm);
   color: var(--ds-text-3);
   text-transform: lowercase;
+  line-height: 1;
+  /* Animate the mask in/out as the row is hovered. */
+  transition:
+    color 0.1s ease,
+    -webkit-mask-position 0.1s ease,
+    mask-position 0.1s ease;
 }
-.row:hover .typePill {
+.row:hover .type {
   color: var(--ds-text-2);
+}
+/* On hover, fade the right edge of the type+count text so the
+   chevron icon (positioned absolutely on top of the same area) has
+   clean space around its glyph. The 22px transparent zone matches
+   the chevron button's hit area; the 2px gradient before it is the
+   "fades out 2px before the button" effect. */
+.row:hover .typeWithCount {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 24px),
+    transparent calc(100% - 22px)
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 24px),
+    transparent calc(100% - 22px)
+  );
+}
+
+/* Right cluster ------------------------------------------------- */
+
+/* Hover-only chevron, absolutely positioned over the right edge of
+   the row. Same width as the row's icon column so it lines up with
+   the status dot / pin button on the left visually. */
+.expandOverlay {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--ds-radius-2);
+  color: var(--ds-text-2);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.1s ease;
+}
+.expandOverlay:hover {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+.row:hover .expandOverlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Always-visible chevron when the subtree is already expanded. The
+   children render in indented rows below so we drop the inline +N
+   count and just leave a permanent down-chevron the user can click
+   to collapse. */
+.expandBtnVisible {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: var(--ds-radius-2);
+  color: var(--ds-text-3);
+  cursor: pointer;
+  padding: 0;
+}
+.expandBtnVisible:hover {
+  background: var(--ds-gray-a4);
+  color: var(--ds-text-1);
+}
+
+/* HoverCard info popout ----------------------------------------- */
+.infoCard {
+  min-width: 200px;
+  max-width: 320px;
+}
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.infoTitle {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.infoMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Spawn / last-active block — separated from the meta lines above by
+   a hairline divider so the two timestamp rows read as a small
+   key/value group rather than free-floating muted text. */
+.infoTimes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ds-divider);
+}
+.infoTimeRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }

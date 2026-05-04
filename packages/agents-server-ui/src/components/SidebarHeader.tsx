@@ -1,7 +1,8 @@
 import { PanelLeftClose, Search } from 'lucide-react'
-import { IconButton } from '../ui'
+import { IconButton, Tooltip } from '../ui'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useSearchPalette } from '../hooks/useSearchPalette'
+import { modKeyLabel } from '../lib/keyLabels'
 import styles from './SidebarHeader.module.css'
 
 /**
@@ -15,24 +16,28 @@ export function SidebarHeader(): React.ReactElement {
   const search = useSearchPalette()
   return (
     <div className={styles.header}>
-      <IconButton
-        variant="ghost"
-        tone="neutral"
-        size={1}
-        onClick={toggleSidebar}
-        aria-label="Hide sidebar"
-      >
-        <PanelLeftClose size={16} />
-      </IconButton>
-      <IconButton
-        variant="ghost"
-        tone="neutral"
-        size={1}
-        onClick={search.open}
-        aria-label="Search sessions"
-      >
-        <Search size={16} />
-      </IconButton>
+      <Tooltip content="Hide sidebar" shortcut={modKeyLabel(`b`)}>
+        <IconButton
+          variant="ghost"
+          tone="neutral"
+          size={1}
+          onClick={toggleSidebar}
+          aria-label="Hide sidebar"
+        >
+          <PanelLeftClose size={16} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip content="Search sessions" shortcut={modKeyLabel(`k`)}>
+        <IconButton
+          variant="ghost"
+          tone="neutral"
+          size={1}
+          onClick={search.open}
+          aria-label="Search sessions"
+        >
+          <Search size={16} />
+        </IconButton>
+      </Tooltip>
     </div>
   )
 }

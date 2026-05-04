@@ -68,11 +68,17 @@
     0 16px 40px rgba(15, 15, 30, 0.14), 0 4px 12px rgba(15, 15, 30, 0.08);
 
   /* ---- Surfaces ------------------------------------------------------ *
-   * `bg` is the page; `surface` sits on top (cards, popovers).         */
+   * `bg` is the page; `surface` sits on top (cards, popovers); `input-bg`
+   * is the dedicated background for editable controls (text inputs,
+   * textareas, native selects, composer wrappers). In light mode this
+   * is solid white so inputs read clearly against the off-white page;
+   * in dark mode it stays a translucent grey so inputs blend with
+   * raised surfaces (panels, popovers) wherever they're used.         */
   --ds-bg: #f7f7f5;
   --ds-bg-subtle: #f0efed;
   --ds-surface: #ffffff;
   --ds-surface-raised: #ffffff;
+  --ds-input-bg: #ffffff;
   --ds-overlay: rgba(15, 15, 30, 0.45);
 
   /* ---- Gray scale (slate-flavoured neutral) -------------------------- *
@@ -220,6 +226,7 @@
   --ds-bg-subtle: #16181f;
   --ds-surface: #1a1d27;
   --ds-surface-raised: #22252f;
+  --ds-input-bg: color-mix(in oklab, #ffffff 6%, transparent);
   --ds-overlay: rgba(0, 0, 0, 0.55);
 
   --ds-gray-1: #111113;

@@ -2,6 +2,7 @@
   flex-shrink: 0;
   background: var(--ds-bg-subtle);
   position: relative;
+  border-right: 1px solid var(--ds-border-1);
 }
 
 .resizeHandle {
@@ -20,17 +21,29 @@
   background: var(--ds-accent-a6);
 }
 
+/* Inner column wrapping the new-session row + session list.
+   Each child handles its own left padding (4px) so all icons
+   line up at a single column inside the sidebar. */
 .treeRow {
-  padding-bottom: 8px;
+  padding: 0 8px 8px;
 }
 
+/* New session row — sized to match SidebarRow geometry exactly so
+   its pencil icon sits in the same 22px column as the status dots
+   below and the chrome icons in SidebarHeader above.
+
+   `padding-left: 4px` mirrors the inline paddingLeft applied to
+   each SidebarRow at depth 0, so on top of the 8px .treeRow gutter
+   the 22px icon slot starts at x=12 and the 16px glyph centers at
+   x=23 — exactly where the status dots live. */
 .newSessionRow {
   all: unset;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   height: var(--ds-row-height-md);
-  padding: 0 8px;
+  padding-left: 4px;
+  padding-right: 8px;
   border-radius: var(--ds-radius-2);
   cursor: pointer;
   color: var(--ds-text-1);
@@ -39,14 +52,36 @@
 .newSessionRow:hover {
   background: var(--ds-gray-a3);
 }
-.newSessionIcon {
+.newSessionIconSlot {
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ds-text-2);
 }
 .newSessionLabel {
   font-size: var(--ds-text-sm);
   flex: 1;
   min-width: 0;
+}
+
+/* Keycap hint at the right of the row, mirroring Cursor / VS Code's
+   command-palette rows. Faded at rest and only fully opaque while the
+   row is hovered/focused so it never competes with the label. */
+.newSessionKbd {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0.55;
+  transition: opacity 0.1s ease;
+}
+.newSessionRow:hover .newSessionKbd,
+.newSessionRow:focus-visible .newSessionKbd {
+  opacity: 1;
 }
 
 .scrollFlex {
@@ -58,11 +93,14 @@
   padding-top: 20px;
 }
 
+/* Section label ("Pinned", "Today", "Last 7 days", …) — text
+   aligns with the icon column above so the column reads cleanly
+   from top to bottom. */
 .sectionLabel {
   display: block;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 10px;
-  padding: 14px 12px 4px;
+  padding: 14px 4px 4px 8px;
   color: var(--ds-text-3);
 }

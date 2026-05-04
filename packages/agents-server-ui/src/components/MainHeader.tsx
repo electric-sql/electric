@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { PanelLeft, Search } from 'lucide-react'
-import { IconButton } from '../ui'
+import { IconButton, Tooltip } from '../ui'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useSearchPalette } from '../hooks/useSearchPalette'
+import { modKeyLabel } from '../lib/keyLabels'
 import styles from './MainHeader.module.css'
 
 type MainHeaderProps = {
@@ -33,24 +34,28 @@ export function MainHeader({
     <header className={styles.header}>
       {collapsed && (
         <span className={styles.chrome}>
-          <IconButton
-            variant="ghost"
-            tone="neutral"
-            size={1}
-            onClick={toggleSidebar}
-            aria-label="Show sidebar"
-          >
-            <PanelLeft size={16} />
-          </IconButton>
-          <IconButton
-            variant="ghost"
-            tone="neutral"
-            size={1}
-            onClick={search.open}
-            aria-label="Search sessions"
-          >
-            <Search size={16} />
-          </IconButton>
+          <Tooltip content="Show sidebar" shortcut={modKeyLabel(`b`)}>
+            <IconButton
+              variant="ghost"
+              tone="neutral"
+              size={1}
+              onClick={toggleSidebar}
+              aria-label="Show sidebar"
+            >
+              <PanelLeft size={16} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Search sessions" shortcut={modKeyLabel(`k`)}>
+            <IconButton
+              variant="ghost"
+              tone="neutral"
+              size={1}
+              onClick={search.open}
+              aria-label="Search sessions"
+            >
+              <Search size={16} />
+            </IconButton>
+          </Tooltip>
         </span>
       )}
       <div className={styles.title}>{title}</div>
