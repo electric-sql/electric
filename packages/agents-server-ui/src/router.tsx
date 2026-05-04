@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   Outlet,
   createHashHistory,
@@ -7,15 +7,14 @@ import {
   createRouter,
   useNavigate,
   useParams,
+  useSearch,
 } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
-import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
+import { z } from 'zod'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
-import type { ElectricEntity } from './lib/ElectricAgentsProvider'
-import { useEntityTimeline } from './hooks/useEntityTimeline'
 import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
@@ -28,12 +27,8 @@ import {
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { EntityHeader } from './components/EntityHeader'
-import { EntityTimeline } from './components/EntityTimeline'
-import { EntityContextDrawer } from './components/EntityContextDrawer'
-import { MessageInput } from './components/MessageInput'
-import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
-import { CodingSessionView } from './components/CodingSessionView'
 import { NewSessionPage } from './components/NewSessionPage'
+import { getView, listViews, type ViewId } from './lib/workspace/viewRegistry'
 import { Stack } from './ui'
 import styles from './router.module.css'
 
@@ -104,6 +99,17 @@ function RootShell(): React.ReactElement {
   )
 }
 
+/**
+ * Search-param schema for the entity route. `view` is optional and
+ * defaults to the first registered view (`chat`) when absent — that way
+ * the URL stays clean (`/entity/foo`) for the common case and only
+ * surfaces the param when the user is on a non-default view
+ * (`/entity/foo?view=state-explorer`).
+ */
+const entitySearchSchema = z.object({
+  view: z.string().optional(),
+})
+
 function EntityPage(): React.ReactElement {
   const { _splat } = useParams({ from: `/entity/$` })
   const entityUrl = `/${_splat}`
@@ -111,6 +117,7 @@ function EntityPage(): React.ReactElement {
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
   const navigate = useNavigate()
+  const search = useSearch({ from: `/entity/$` })
 
   const { data: matchingEntities = [] } = useLiveQuery(
     (query) => {
@@ -125,9 +132,31 @@ function EntityPage(): React.ReactElement {
   const isSpawning = selectedEntity?.status === `spawning`
   const entityStopped = selectedEntity?.status === `stopped`
 
-  const [stateExplorerOpen, setStateExplorerOpen] = useState(false)
-  const [statePanelWidth, setStatePanelWidth] = useState(0.5)
-  const containerRef = useRef<HTMLDivElement>(null)
+  // Resolve the active view from the URL. The first registered view
+  // (`chat`) is the implicit default when the param is absent or
+  // points at an unknown id — we never fail closed.
+  const requestedViewId = search.view as ViewId | undefined
+  const availableViews = selectedEntity ? listViews(selectedEntity) : []
+  const defaultViewId = availableViews[0]?.id ?? `chat`
+  const activeViewId: ViewId =
+    requestedViewId && availableViews.some((v) => v.id === requestedViewId)
+      ? requestedViewId
+      : defaultViewId
+
+  const setActiveView = useCallback(
+    (viewId: ViewId) => {
+      // Omit the param from the URL when it matches the default view —
+      // keeps `/entity/foo` clean for the chat case rather than always
+      // showing `?view=chat`.
+      void navigate({
+        to: `/entity/$`,
+        params: { _splat },
+        search: viewId === defaultViewId ? {} : { view: viewId },
+      })
+    },
+    [navigate, _splat, defaultViewId]
+  )
+
   const [killError, setKillError] = useState<string | null>(null)
   const [forkError, setForkError] = useState<string | null>(null)
   const [forking, setForking] = useState(false)
@@ -174,7 +203,7 @@ function EntityPage(): React.ReactElement {
   }
 
   const baseUrl = activeServer?.url ?? ``
-  const connectUrl = isSpawning ? null : entityUrl
+  const ViewComponent = getView(activeViewId)?.Component
 
   return (
     <Stack direction="column" className={styles.entityShell}>
@@ -187,114 +216,37 @@ function EntityPage(): React.ReactElement {
         onFork={forkEntity && !selectedEntity.parent ? handleFork : undefined}
         forkError={forkError}
         forking={forking}
-        stateExplorerOpen={stateExplorerOpen}
-        onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
+        currentViewId={activeViewId}
+        onSetView={setActiveView}
       />
-      <Stack ref={containerRef} className={styles.entityBody}>
+      <Stack className={styles.entityBody}>
         <Stack direction="column" className={styles.entityMain}>
-          {selectedEntity.type === CODING_SESSION_ENTITY_TYPE && connectUrl ? (
-            <CodingSessionView
+          {ViewComponent ? (
+            <ViewComponent
               baseUrl={baseUrl}
-              entityUrl={connectUrl}
-              entityStopped={entityStopped}
-            />
-          ) : (
-            <GenericEntityBody
-              baseUrl={baseUrl}
-              entityUrl={connectUrl}
+              entityUrl={entityUrl}
               entity={selectedEntity}
               entityStopped={entityStopped}
               isSpawning={isSpawning}
+              // Stage 1 has no tile concept yet — synthesise a stable id
+              // from the entity URL + view so per-tile state hooks behave
+              // (a single-tile workspace effectively has one tile per
+              // (entity, view) pair).
+              tileId={`${entityUrl}::${activeViewId}`}
             />
+          ) : (
+            <Stack
+              align="center"
+              justify="center"
+              grow
+              className={styles.entityShell}
+            >
+              <span>Unknown view: {activeViewId}</span>
+            </Stack>
           )}
         </Stack>
-        {stateExplorerOpen && (
-          <>
-            <div
-              className={styles.splitter}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                const container = containerRef.current
-                if (!container) return
-                const startX = e.clientX
-                const startWidth = statePanelWidth
-                const rect = container.getBoundingClientRect()
-                const onMouseMove = (ev: MouseEvent) => {
-                  const dx = startX - ev.clientX
-                  const newWidth = Math.min(
-                    0.7,
-                    Math.max(0.2, startWidth + dx / rect.width)
-                  )
-                  setStatePanelWidth(newWidth)
-                }
-                const onMouseUp = () => {
-                  document.removeEventListener(`mousemove`, onMouseMove)
-                  document.removeEventListener(`mouseup`, onMouseUp)
-                  document.body.style.cursor = ``
-                  document.body.style.userSelect = ``
-                }
-                document.body.style.cursor = `col-resize`
-                document.body.style.userSelect = `none`
-                document.addEventListener(`mousemove`, onMouseMove)
-                document.addEventListener(`mouseup`, onMouseUp)
-              }}
-            />
-            <Stack
-              direction="column"
-              className={styles.statePanel}
-              style={{ flex: `0 0 ${statePanelWidth * 100}%` }}
-            >
-              <StateExplorerPanel baseUrl={baseUrl} entityUrl={entityUrl} />
-            </Stack>
-          </>
-        )}
       </Stack>
     </Stack>
-  )
-}
-
-function GenericEntityBody({
-  baseUrl,
-  entityUrl,
-  entity,
-  entityStopped,
-  isSpawning,
-}: {
-  baseUrl: string
-  entityUrl: string | null
-  entity: ElectricEntity
-  entityStopped: boolean
-  isSpawning: boolean
-}): React.ReactElement {
-  const { entries, db, loading, error } = useEntityTimeline(
-    baseUrl || null,
-    entityUrl
-  )
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (error && !isSpawning) {
-      navigate({ to: `/` })
-    }
-  }, [error, navigate, isSpawning])
-
-  return (
-    <>
-      <EntityTimeline
-        entries={entries}
-        loading={loading}
-        error={error}
-        entityStopped={entityStopped}
-        cacheKey={`${baseUrl}${entityUrl ?? ``}`}
-      />
-      <MessageInput
-        db={db}
-        baseUrl={baseUrl}
-        entityUrl={entityUrl ?? ``}
-        disabled={entityStopped || !db}
-        drawer={<EntityContextDrawer entity={entity} />}
-      />
-    </>
   )
 }
 
@@ -310,6 +262,7 @@ const entityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/entity/$`,
   component: EntityPage,
+  validateSearch: entitySearchSchema,
 })
 
 const routeTree = rootRoute.addChildren([indexRoute, entityRoute])

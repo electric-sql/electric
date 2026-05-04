@@ -15,6 +15,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './ui'
 import './markdown.css'
+// Side-effect import: registers all built-in views (chat, state explorer,
+// …) into the view registry before the app mounts. Adding a new view is
+// a single new `registerView({…})` call inside this module.
+import './lib/workspace/registerViews'
 import { App } from './App'
 
 // ngrok's free tier intercepts browser requests with an HTML warning page

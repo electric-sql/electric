@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Check,
   Copy,
-  Database,
   Eye,
   GitFork,
   MoreHorizontal,
@@ -23,6 +22,7 @@ import {
 } from '../ui'
 import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
+import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
@@ -43,8 +43,10 @@ type EntityHeaderProps = {
   killError?: string | null
   forkError?: string | null
   forking?: boolean
-  stateExplorerOpen?: boolean
-  onToggleStateExplorer?: () => void
+  /** ID of the currently-rendered view for this entity. */
+  currentViewId?: ViewId
+  /** Switch the rendered view in-place (no layout change). */
+  onSetView?: (viewId: ViewId) => void
 }
 
 /**
@@ -137,12 +139,21 @@ function EntityActions({
   onFork,
   onKill,
   forking,
-  stateExplorerOpen,
-  onToggleStateExplorer,
+  currentViewId,
+  onSetView,
 }: EntityHeaderProps): React.ReactElement {
   const [showInspect, setShowInspect] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
   const { title: instanceName } = getEntityDisplayTitle(entity)
+  // The view registry is the source of truth for which view buttons /
+  // menu items appear. `defaultViewId` is the first registered view
+  // (`chat`) and is treated as implicit when no current view is set.
+  const availableViews = onSetView ? listViews(entity) : []
+  const defaultViewId = availableViews[0]?.id
+  const activeViewId = currentViewId ?? defaultViewId
+  // Only show the inline view-switcher buttons when there's more than
+  // one view available — otherwise the strip is just visual noise.
+  const showViewStrip = onSetView && availableViews.length > 1
 
   return (
     <span className={styles.actions}>
@@ -154,26 +165,26 @@ function EntityActions({
         {entity.status}
       </Badge>
 
-      {onToggleStateExplorer && (
-        <Tooltip
-          content={
-            stateExplorerOpen ? `Hide state explorer` : `Show state explorer`
-          }
-        >
-          <IconButton
-            variant="ghost"
-            tone="neutral"
-            size={1}
-            onClick={onToggleStateExplorer}
-            aria-label={
-              stateExplorerOpen ? `Hide state explorer` : `Show state explorer`
-            }
-            className={stateExplorerOpen ? styles.activeBg : undefined}
-          >
-            <Database size={14} />
-          </IconButton>
-        </Tooltip>
-      )}
+      {showViewStrip &&
+        availableViews.map((view) => {
+          const Icon = view.icon
+          const active = view.id === activeViewId
+          return (
+            <Tooltip key={view.id} content={view.label}>
+              <IconButton
+                variant="ghost"
+                tone="neutral"
+                size={1}
+                onClick={() => onSetView!(view.id)}
+                aria-label={view.label}
+                aria-pressed={active}
+                className={active ? styles.activeBg : undefined}
+              >
+                <Icon size={14} />
+              </IconButton>
+            </Tooltip>
+          )
+        })}
 
       <Menu.Root>
         <Menu.Trigger
@@ -194,14 +205,18 @@ function EntityActions({
             <Eye size={14} />
             <Text size={2}>Inspect</Text>
           </Menu.Item>
-          {onToggleStateExplorer && (
-            <Menu.Item onSelect={onToggleStateExplorer}>
-              <Database size={14} />
-              <Text size={2}>
-                {stateExplorerOpen ? `Hide state explorer` : `State explorer`}
-              </Text>
-            </Menu.Item>
-          )}
+          {onSetView &&
+            availableViews
+              .filter((v) => v.id !== activeViewId)
+              .map((view) => {
+                const Icon = view.icon
+                return (
+                  <Menu.Item key={view.id} onSelect={() => onSetView(view.id)}>
+                    <Icon size={14} />
+                    <Text size={2}>{view.label}</Text>
+                  </Menu.Item>
+                )
+              })}
           <Menu.Item
             onSelect={() => {
               void navigator.clipboard.writeText(entity.url)
