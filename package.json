@@ -22,6 +22,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@changesets/parse": "^0.4.3",
     "@typescript-eslint/eslint-plugin": "^8.46.0",
     "@typescript-eslint/parser": "^8.46.0",
     "eslint": "^9.37.0",
