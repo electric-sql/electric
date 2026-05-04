@@ -4,6 +4,7 @@ import { normalizeClaudeEvent } from 'agent-session-protocol'
 import type { ClaudeEntry } from 'agent-session-protocol'
 
 import type { CodingSessionCliRunner } from '../coding-session.js'
+import { subprocessEnvWithoutKey } from './env.js'
 
 /**
  * SDK-backed runner for Claude. Drives `query()` from
@@ -22,6 +23,13 @@ export const claudeSdkRunner: CodingSessionCliRunner = {
       prompt: opts.prompt,
       options: {
         cwd: opts.cwd,
+        // Hide ANTHROPIC_API_KEY from the spawned `claude` subprocess
+        // so it falls back to whatever auth the user has configured
+        // (typically OAuth tokens written by `claude login`). Horton
+        // still needs the key in its own process.env to talk to the
+        // Anthropic API directly, so we strip it here rather than
+        // leaving it unset everywhere.
+        env: subprocessEnvWithoutKey(`ANTHROPIC_API_KEY`),
         ...(opts.sessionId ? { resume: opts.sessionId } : {}),
         // The Claude SDK requires *both* of these to skip approvals:
         // `permissionMode: 'bypassPermissions'` selects the bypass

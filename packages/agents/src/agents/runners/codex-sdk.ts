@@ -13,6 +13,7 @@ import { normalizeToolName } from 'agent-session-protocol'
 import type { NormalizedEvent } from 'agent-session-protocol'
 
 import type { CodingSessionCliRunner } from '../coding-session.js'
+import { subprocessEnvWithoutKey } from './env.js'
 
 /**
  * SDK-backed runner for Codex. Codex's SDK exposes ThreadEvents that
@@ -29,7 +30,13 @@ import type { CodingSessionCliRunner } from '../coding-session.js'
  */
 export const codexSdkRunner: CodingSessionCliRunner = {
   async run(opts) {
-    const codex = new Codex()
+    // Hide OPENAI_API_KEY from the spawned `codex` subprocess so it
+    // falls back to user-configured credentials (`codex login` writes
+    // tokens to `~/.codex/auth.json`). Symmetric with the Claude
+    // runner — neither coder runner consumes the parent process's API
+    // keys so a Horton+coder co-tenant can keep the keys in scope for
+    // direct API calls without leaking them into the CLI subprocesses.
+    const codex = new Codex({ env: subprocessEnvWithoutKey(`OPENAI_API_KEY`) })
     // Mirror what the CLI runner did: write access in the cwd and no
     // interactive approval prompts. Without these the SDK defaults to
     // `read-only` + `on-request` and the agent fails the moment it
