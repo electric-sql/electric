@@ -32,7 +32,7 @@ type ExplicitReasoningEffort = Exclude<BuiltinReasoningEffort, `auto`>
 
 export type BuiltinAgentModelConfig = Pick<
   AgentConfig,
-  `model` | `provider` | `onPayload`
+  `model` | `provider` | `onPayload` | `getApiKey`
 > & {
   reasoningEffort?: ExplicitReasoningEffort
 }
@@ -169,7 +169,7 @@ async function choicesForProvider(
 }
 
 function withProviderPayloadDefaults(
-  config: PersistedModelConfig,
+  config: PersistedModelConfig & { getApiKey?: AgentConfig[`getApiKey`] },
   choice: BuiltinModelChoice,
   reasoningEffort: ExplicitReasoningEffort | null
 ): BuiltinAgentModelConfig {
@@ -265,6 +265,12 @@ export function resolveBuiltinModelConfig(
     provider: choice.provider,
     model: choice.id,
     ...(reasoningEffort && { reasoningEffort }),
+    ...(choice.provider === `openai-codex` && {
+      getApiKey: (provider: string) => {
+        if (provider !== `openai-codex`) return undefined
+        return readCodexAccessToken()
+      },
+    }),
   }
 
   return withProviderPayloadDefaults(config, choice, reasoningEffort)
