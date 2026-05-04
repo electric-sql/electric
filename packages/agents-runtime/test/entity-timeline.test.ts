@@ -16,6 +16,7 @@ import {
   buildTimelineEntries,
 } from '../src/use-chat'
 import type {
+  EntityTimelineContentItem,
   EntityTimelineData,
   IncludesInboxMessage,
   IncludesRun,
