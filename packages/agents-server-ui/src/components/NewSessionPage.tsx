@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
@@ -336,6 +336,20 @@ function DefaultAgentComposer({
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow the textarea up to the CSS `max-height` cap as the
+  // user types (matches the chat composer in `MessageInput.tsx`).
+  // Reset to `auto` first so `scrollHeight` reports the natural
+  // content height, then assign that back as the inline height; the
+  // CSS bounds clamp it. Layout effect ensures the resize lands
+  // before paint so there's no one-frame flicker.
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = `auto`
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
   const inlineProps = useMemo(
     () => inlineSchemaProperties(agent.creation_schema),
     [agent.creation_schema]
@@ -377,6 +391,7 @@ function DefaultAgentComposer({
         .join(` `)}
     >
       <textarea
+        ref={textareaRef}
         autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -388,7 +403,7 @@ function DefaultAgentComposer({
         }}
         placeholder={placeholder}
         disabled={disabled || submitting}
-        rows={4}
+        rows={1}
         className={styles.composerTextarea}
       />
       <div className={styles.composerFooter}>
@@ -420,11 +435,7 @@ function DefaultAgentComposer({
           )}
         </div>
         <div className={styles.composerSendCluster}>
-          <span className={styles.composerHint}>
-            {submitting
-              ? `Starting…`
-              : `Enter to send · Shift + Enter for newline`}
-          </span>
+          {submitting && <span className={styles.composerHint}>Starting…</span>}
           <button
             type="button"
             aria-label={`Start ${agent.name} session`}

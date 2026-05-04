@@ -40,10 +40,16 @@
   font-size: var(--ds-text-sm);
 }
 
+/* Negative horizontal margin equal to the inner padding extends the
+   grid (and its agent cards) outward by `--ds-space-4` on each side
+   so that the *content* inside each card lines up with the page
+   title above. The grid still sits inside `.container`'s outer
+   padding, so the cards never reach the body edge. */
 .typeGrid {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--ds-space-2);
+  margin: 0 calc(-1 * var(--ds-space-4));
 }
 
 .typeCard {
@@ -125,7 +131,11 @@
   border-radius: var(--ds-radius-3);
 }
 
-/* Default-agent quick-start composer ----------------------------- */
+/* Default-agent quick-start composer -----------------------------
+ *
+ * Same trick as `.typeGrid` above: the composer extends outward by
+ * its inner horizontal padding so the textarea content (placeholder,
+ * typed text) lines up with the page title and subtitle above. */
 
 .composer {
   display: flex;
@@ -136,6 +146,7 @@
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-4);
   transition: border-color 0.15s ease;
+  margin: 0 calc(-1 * var(--ds-space-4));
 }
 .composer:focus-within {
   border-color: var(--ds-accent-a6);
@@ -144,6 +155,13 @@
   opacity: 0.6;
 }
 
+/* Auto-grow is driven by inline `height = scrollHeight` from
+   NewSessionPage.tsx (mirrors `MessageInput.tsx`). `min-height`
+   floors the resting state at ~3 lines so the empty composer reads
+   as a generous "tell me what to do" input rather than a single
+   line. `max-height` caps growth and `overflow: auto` then takes
+   over for very long prompts. The browser clamps the inline height
+   against both bounds so the JS auto-resize stays a one-liner. */
 .composerTextarea {
   border: none;
   outline: none;
@@ -154,6 +172,7 @@
   font-family: var(--ds-font-body);
   resize: none;
   overflow: auto;
+  min-height: 72px;
   max-height: 280px;
   width: 100%;
   padding: 0;
