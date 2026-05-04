@@ -539,3 +539,48 @@ See the [HTTP API documentation](/docs/sync/api/http#subset-snapshots) for more 
 :::info Future change
 In Electric 2.0, GET requests for subset snapshots will be deprecated. Only POST will be supported. We recommend migrating to POST now to avoid future breaking changes.
 :::
+
+## Data & Types
+
+### Validation errors &mdash; why are my collection/schema validations failing?
+
+If you're getting validation errors when using Electric with a schema validator like Zod or TypeScript types, the issue is often a mismatch between **column naming conventions**.
+
+For example, if your Postgres database uses `snake_case` columns (e.g., `created_at`, `user_id`) but your TypeScript types expect `camelCase` (e.g., `createdAt`, `userId`), validation will fail because the data from Electric uses the database column names.
+
+##### Solution &mdash; use consistent naming or column mapping
+
+You have two options:
+
+1. **Use snake_case throughout** (simplest) &mdash; define your TypeScript types and Zod schemas with snake_case properties to match your database:
+
+   ```ts
+   // Match your database column names
+   type Todo = {
+     id: number
+     created_at: Date  // matches database
+     user_id: string   // matches database
+   }
+   ```
+
+2. **Use column mapping** &mdash; if you prefer camelCase in your app code, use [`snakeCamelMapper()`](/docs/sync/api/clients/typescript#column-mapping) to automatically transform column names:
+
+   ```ts
+   import { ShapeStream, snakeCamelMapper } from '@electric-sql/client'
+
+   type Todo = {
+     id: number
+     createdAt: Date   // camelCase in your app
+     userId: string
+   }
+
+   const stream = new ShapeStream<Todo>({
+     url: 'http://localhost:3000/v1/shape',
+     params: { table: 'todos' },
+     columnMapper: snakeCamelMapper(), // created_at → createdAt
+   })
+   ```
+
+The column mapper also handles where clauses, so `where: "userId = $1"` is automatically transformed to `user_id = $1` when sent to Electric.
+
+See the [TypeScript client docs](/docs/sync/api/clients/typescript#column-mapping) for more details.
