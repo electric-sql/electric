@@ -10,7 +10,7 @@ import { Stack } from '../../ui'
 import { TabStrip } from './TabStrip'
 import { SplitMenu } from './SplitMenu'
 import { DropOverlay } from './DropOverlay'
-import type { Group, Tile } from '../../lib/workspace/types'
+import type { Group, Tile, WorkspaceNode } from '../../lib/workspace/types'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
 import styles from './GroupContainer.module.css'
 
@@ -63,12 +63,10 @@ export function GroupContainer({
   )
 }
 
-function countGroups(
-  node: import(`../../lib/workspace/types`).WorkspaceNode | null
-): number {
+function countGroups(node: WorkspaceNode | null): number {
   if (!node) return 0
   if (node.kind === `group`) return 1
-  return node.children.reduce((acc, c) => acc + countGroups(c.node), 0)
+  return node.children.reduce((acc: number, c) => acc + countGroups(c.node), 0)
 }
 
 function ActiveTileBody({
