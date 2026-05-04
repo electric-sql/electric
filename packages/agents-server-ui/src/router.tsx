@@ -21,6 +21,7 @@ import {
 } from './hooks/useSearchPalette'
 import { WorkspaceProvider, useWorkspace } from './hooks/useWorkspace'
 import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
+import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { NewSessionPage } from './components/NewSessionPage'
@@ -68,6 +69,7 @@ function RootShell(): React.ReactElement {
   useHotkey(`mod+shift+o`, openNewSession)
 
   useWorkspaceHotkeys()
+  useWorkspacePersistence()
 
   const navigateToEntity = useCallback(
     (entityUrl: string) => {
@@ -119,14 +121,19 @@ function RootShell(): React.ReactElement {
 }
 
 /**
- * Search-param schema for the entity route. `view` is optional and
- * defaults to the first registered view (`chat`) when absent — that way
- * the URL stays clean (`/entity/foo`) for the common case and only
- * surfaces the param when the user is on a non-default view
- * (`/entity/foo?view=state-explorer`).
+ * Search-param schema for the entity route.
+ *
+ * - `view`   optional view id (e.g. `state-explorer`). Omitted from
+ *            the URL when it matches the default view (`chat`) so
+ *            `/entity/foo` stays clean for the common case.
+ * - `layout` optional shareable layout payload. When present we
+ *            hydrate the workspace from it and *strip the param*
+ *            (see `<Workspace>`'s ?layout effect) so the address bar
+ *            settles back to "active tile only".
  */
 const entitySearchSchema = z.object({
   view: z.string().optional(),
+  layout: z.string().optional(),
 })
 
 /**

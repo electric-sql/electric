@@ -5,6 +5,7 @@ import { listViews } from '../../lib/workspace/viewRegistry'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
+import { decodeLayout } from '../../lib/workspace/layoutCodec'
 import { NodeRenderer } from './NodeRenderer'
 import styles from './Workspace.module.css'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
@@ -25,11 +26,38 @@ import type { ViewId } from '../../lib/workspace/viewRegistry'
 export function Workspace(): React.ReactElement {
   const { workspace, helpers } = useWorkspace()
   const params = useParams({ strict: false })
-  const search = useSearch({ strict: false }) as { view?: string }
+  const search = useSearch({ strict: false }) as {
+    view?: string
+    layout?: string
+  }
   const navigate = useNavigate()
   const splat = (params as Record<string, string | undefined>)._splat
   const entityUrl = splat ? `/${splat}` : null
   const requestedViewId = (search.view as ViewId | undefined) ?? null
+  const layoutParam = (search.layout as string | undefined) ?? null
+
+  // ---- ?layout=<DSL> import -------------------------------------------
+  // Highest-priority hydration source: pasting a `?layout=…` URL
+  // replaces the workspace then strips the param so the address bar
+  // settles to the active tile (per §3.4 of the plan). Only fires once
+  // per param value — guarded by `lastLayoutParam.current`.
+  const lastLayoutParam = useRef<string | null>(null)
+  useEffect(() => {
+    if (!layoutParam || layoutParam === lastLayoutParam.current) return
+    lastLayoutParam.current = layoutParam
+    const decoded = decodeLayout(layoutParam)
+    if (decoded.kind === `ok` && decoded.workspace.root) {
+      helpers.replaceWorkspace(decoded.workspace)
+    }
+    // Strip the ?layout= param regardless of decode success — a bad
+    // payload shouldn't sit in the address bar nagging the user.
+    void navigate({
+      to: `/entity/$`,
+      params: { _splat: splat ?? `` },
+      search: requestedViewId ? { view: requestedViewId } : {},
+      replace: true,
+    })
+  }, [layoutParam, helpers, navigate, splat, requestedViewId])
 
   const { entitiesCollection } = useElectricAgents()
   const { data: entityMatches = [] } = useLiveQuery(

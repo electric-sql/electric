@@ -4,6 +4,7 @@ import {
   Copy,
   Eye,
   GitFork,
+  Link2,
   MoreHorizontal,
   Pin,
   PinOff,
@@ -17,6 +18,7 @@ import { useWorkspace } from '../../hooks/useWorkspace'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../../hooks/usePinnedEntities'
 import { listViews } from '../../lib/workspace/viewRegistry'
+import { encodeLayout } from '../../lib/workspace/layoutCodec'
 import { Button, Dialog, IconButton, Menu, Stack, Text } from '../../ui'
 import { modKeyLabel } from '../../lib/keyLabels'
 import { getEntityDisplayTitle } from '../../lib/entityDisplay'
@@ -115,6 +117,23 @@ export function SplitMenu({
     if (!killEntity) return
     const tx = killEntity(tile.entityUrl)
     tx.isPersisted.promise.catch(() => {})
+  }
+
+  const handleCopyLayoutLink = () => {
+    // Encode the workspace into the DSL and append it as `?layout=…`
+    // to the current URL. The receiving window's <Workspace> picks it
+    // up, hydrates, and strips the param so its address bar settles
+    // back to "active tile only" — see §3.4 of the plan.
+    const encoded = encodeLayout(workspace)
+    const url = new URL(window.location.href)
+    const hash = url.hash.replace(/^#/, ``)
+    const [path, query = ``] = hash.split(`?`)
+    const params = new URLSearchParams(query)
+    if (encoded) params.set(`layout`, encoded)
+    else params.delete(`layout`)
+    const newQuery = params.toString()
+    url.hash = `#` + path + (newQuery ? `?` + newQuery : ``)
+    void navigator.clipboard.writeText(url.toString())
   }
 
   return (
@@ -224,6 +243,10 @@ export function SplitMenu({
         >
           <Copy size={14} />
           <Text size={2}>Copy URL</Text>
+        </Menu.Item>
+        <Menu.Item onSelect={handleCopyLayoutLink}>
+          <Link2 size={14} />
+          <Text size={2}>Copy layout link</Text>
         </Menu.Item>
         <Menu.Item onSelect={() => togglePin(tile.entityUrl)}>
           {pinned ? <PinOff size={14} /> : <Pin size={14} />}
