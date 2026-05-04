@@ -1,7 +1,10 @@
 import { getModels } from '@mariozechner/pi-ai'
 import type { AgentConfig } from '@electric-ax/agents-runtime'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
-export type BuiltinModelProvider = `anthropic` | `openai`
+export type BuiltinModelProvider = `anthropic` | `openai` | `openai-codex`
 
 export interface BuiltinModelChoice {
   provider: BuiltinModelProvider
@@ -45,6 +48,30 @@ function hasEnv(name: string): boolean {
   return (process.env[name]?.trim().length ?? 0) > 0
 }
 
+function codexAuthPath(): string {
+  return join(homedir(), `.codex`, `auth.json`)
+}
+
+function readCodexAccessToken(): string | undefined {
+  try {
+    const raw = readFileSync(codexAuthPath(), `utf-8`)
+    const data = JSON.parse(raw) as {
+      auth_mode?: string
+      tokens?: { access_token?: string }
+    }
+    if (data.auth_mode !== `chatgpt`) return undefined
+    const token = data.tokens?.access_token?.trim()
+    return token && token.length > 0 ? token : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function hasCodexAuth(): boolean {
+  if (!existsSync(codexAuthPath())) return false
+  return readCodexAccessToken() !== undefined
+}
+
 function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
 }
@@ -57,6 +84,7 @@ function configuredProviders(): Array<BuiltinModelProvider> {
   const providers: Array<BuiltinModelProvider> = []
   if (hasEnv(`ANTHROPIC_API_KEY`)) providers.push(`anthropic`)
   if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
+  if (hasCodexAuth()) providers.push(`openai-codex`)
   return providers
 }
 
