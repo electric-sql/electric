@@ -15,6 +15,7 @@ import {
 import { Stack, Text } from '../ui'
 import { ToolCallView } from './ToolCallView'
 import { TimeText } from './TimeText'
+import { ThinkingIndicator } from './ThinkingIndicator'
 import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
@@ -224,6 +225,19 @@ export const AgentResponse = memo(function AgentResponse({
 }): React.ReactElement {
   const canCache = !isStreaming && section.done === true
 
+  // "Thinking" indicator visibility:
+  //   show while the response is mid-stream and there's nothing
+  //   visibly being typed right now — i.e. before the first item
+  //   appears, between a tool call and the next text chunk, or
+  //   while a tool call is executing. We hide it as soon as the
+  //   last item is a text chunk with actual content (the streaming
+  //   text itself is the "still working" signal in that case).
+  const lastItem = section.items[section.items.length - 1]
+  const lastTextHasContent =
+    lastItem?.kind === `text` && lastItem.text.trim().length > 0
+  const showThinking =
+    isStreaming && !section.done && !section.error && !lastTextHasContent
+
   return (
     <Stack direction="column" gap={2} className={styles.root}>
       {section.items.map((item: EntityTimelineContentItem, i: number) => {
@@ -246,6 +260,7 @@ export const AgentResponse = memo(function AgentResponse({
       })}
 
       <Stack align="center" gap={3}>
+        {showThinking && <ThinkingIndicator />}
         {section.done && (
           <Text size={1} tone="muted" className={styles.doneText}>
             ✓ done
@@ -256,7 +271,11 @@ export const AgentResponse = memo(function AgentResponse({
             ✗ {section.error}
           </Text>
         )}
-        {timestamp != null && (
+        {/* Timestamp only on a settled response — while the agent is
+            still streaming we let `ThinkingIndicator` (or the
+            streaming text itself) own the meta row so it doesn't sit
+            inline with a timestamp that hasn't really happened yet. */}
+        {timestamp != null && !isStreaming && (
           <TimeText ts={timestamp} className={styles.timeText} />
         )}
       </Stack>
