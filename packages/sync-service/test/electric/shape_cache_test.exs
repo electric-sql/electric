@@ -1168,7 +1168,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert String.contains?(
                log,
-               "[warning] Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
+               "shape_handle=#{shape_handle} [warning] Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for shape"
              )
     end
 
