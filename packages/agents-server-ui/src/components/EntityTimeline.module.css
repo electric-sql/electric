@@ -9,6 +9,47 @@
   overflow: hidden;
 }
 
+/* Fade the bottom of the scrolling viewport so chat content
+ * dissolves into the page bg as it approaches the docked
+ * drawer + composer below.
+ *
+ * Why: the drawer is narrower than the timeline (it has a 12px
+ * horizontal inset to sit "inside" the composer's radius), so
+ * in the side gutters around the drawer the chat content was
+ * showing through and getting sharply clipped where the drawer's
+ * left / right borders start.
+ *
+ * Fade range is exactly the docked overlap distance (20px,
+ * matching `margin-top: -20px` on `.root` in
+ * `MessageInput.module.css`). That means the fade lives ENTIRELY
+ * inside the zone that the drawer / composer overlaps — above
+ * the drawer's / composer's top edge the chat is fully opaque,
+ * and the only place opacity decays is in the gutters next to
+ * the drawer card where the chat would otherwise be sharply
+ * clipped. Wider fade ranges let the haze drift visibly above
+ * the drawer top, drawing the eye to a transition that has no
+ * underlying visual cause.
+ *
+ * Applied to the *viewport* (not the ScrollArea root) so the
+ * scrollbar — which paints inside the root but outside the
+ * viewport — isn't dimmed alongside the content. The
+ * jump-to-bottom button is a sibling of the ScrollArea, so it
+ * sits outside this mask too. */
+.scrollViewport {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+}
+
 /* Outer chat column: cap at the surface width plus 40px breathing on
  * each side. The actual text/surface widths live on `.entityMain` as
  * CSS variables so EntityTimeline + MessageInput can stay perfectly

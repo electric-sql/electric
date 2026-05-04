@@ -14,6 +14,7 @@ import { CODING_SESSION_ENTITY_TYPE } from '@electric-ax/agents-runtime'
 import { useServerConnection } from './hooks/useServerConnection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import { useElectricAgents } from './lib/ElectricAgentsProvider'
+import type { ElectricEntity } from './lib/ElectricAgentsProvider'
 import { useEntityTimeline } from './hooks/useEntityTimeline'
 import {
   SidebarCollapsedProvider,
@@ -28,6 +29,7 @@ import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
+import { EntityContextDrawer } from './components/EntityContextDrawer'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { CodingSessionView } from './components/CodingSessionView'
@@ -200,6 +202,7 @@ function EntityPage(): React.ReactElement {
             <GenericEntityBody
               baseUrl={baseUrl}
               entityUrl={connectUrl}
+              entity={selectedEntity}
               entityStopped={entityStopped}
               isSpawning={isSpawning}
             />
@@ -253,11 +256,13 @@ function EntityPage(): React.ReactElement {
 function GenericEntityBody({
   baseUrl,
   entityUrl,
+  entity,
   entityStopped,
   isSpawning,
 }: {
   baseUrl: string
   entityUrl: string | null
+  entity: ElectricEntity
   entityStopped: boolean
   isSpawning: boolean
 }): React.ReactElement {
@@ -287,6 +292,7 @@ function GenericEntityBody({
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
+        drawer={<EntityContextDrawer entity={entity} />}
       />
     </>
   )

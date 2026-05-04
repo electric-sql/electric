@@ -10,11 +10,20 @@ export function MessageInput({
   baseUrl,
   entityUrl,
   disabled,
+  drawer,
 }: {
   db: EntityStreamDBWithActions | null
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  /**
+   * Optional content rendered above the composer, sharing its docked
+   * width and lift into the timeline above. The composer is z-indexed
+   * over whatever the drawer renders so the drawer can extend its
+   * bottom edge underneath the composer for a "tray" effect (see
+   * `EntityContextDrawer`).
+   */
+  drawer?: React.ReactNode
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [error, setError] = useState<string | null>(null)
@@ -80,9 +89,10 @@ export function MessageInput({
   const isActive = Boolean(value.trim() && !disabled)
 
   return (
-    <Stack direction="column" gap={1} className={styles.root}>
+    <Stack direction="column" gap={0} className={styles.root}>
+      {drawer}
       {error && (
-        <Text size={1} tone="danger">
+        <Text size={1} tone="danger" className={styles.errorText}>
           {error}
         </Text>
       )}

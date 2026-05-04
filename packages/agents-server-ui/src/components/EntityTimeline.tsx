@@ -410,6 +410,7 @@ export function EntityTimeline({
       <ScrollArea
         viewportRef={scrollAreaRef}
         className={styles.scroll}
+        viewportClassName={styles.scrollViewport}
         scrollbars="vertical"
       >
         <div ref={contentRef} className={styles.content}>

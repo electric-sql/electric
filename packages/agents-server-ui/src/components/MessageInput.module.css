@@ -43,12 +43,30 @@
   padding: 12px;
   width: 100%;
   transition: border-color 0.15s ease;
+  /* Stack on top of `<EntityContextDrawer>` (when present). The drawer
+     extends 20px UNDER the composer via `margin-bottom: -20px`; this
+     z-index ensures the composer paints over the drawer's hidden
+     bottom edge so the drawer reads as a tray tucked behind the
+     composer. Also keeps the composer above the timeline above it
+     (the existing `-20px` lift on `.root`). */
+  position: relative;
+  z-index: 1;
 }
 .composer:focus-within {
   border-color: var(--ds-accent-a6);
 }
 .disabled {
   opacity: 0.5;
+}
+
+/* Spacing for the inline error row above the composer. The Stack gap
+   is 0 so the drawer's negative margin can fully overlap the
+   composer; this margin restores breathing room around an error
+   message when one appears (rare). */
+.errorText {
+  margin: 4px 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .textarea {
