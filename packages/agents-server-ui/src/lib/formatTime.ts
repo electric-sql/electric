@@ -54,3 +54,31 @@ export function formatAbsoluteDateTime(ts: number): string {
     minute: `2-digit`,
   })
 }
+
+/**
+ * Verbose absolute timestamp used as tooltip content on short
+ * `HH:MM` chat metadata. Includes weekday + seconds so the user can
+ * disambiguate identical-minute events, e.g.
+ * `Monday, 4 May 2026 at 14:18:05`.
+ */
+export function formatAbsoluteDateTimeVerbose(ts: number): string {
+  const d = new Date(toMillis(ts))
+  return d.toLocaleString(undefined, {
+    weekday: `long`,
+    day: `numeric`,
+    month: `long`,
+    year: `numeric`,
+    hour: `2-digit`,
+    minute: `2-digit`,
+    second: `2-digit`,
+  })
+}
+
+/** Short clock-style label, e.g. `14:18`. Locale chooses 24h vs am/pm. */
+export function formatShortTime(ts: number): string {
+  const d = new Date(toMillis(ts))
+  return d.toLocaleTimeString([], {
+    hour: `2-digit`,
+    minute: `2-digit`,
+  })
+}

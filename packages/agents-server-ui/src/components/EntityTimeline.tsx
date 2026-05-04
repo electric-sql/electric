@@ -17,18 +17,15 @@ import {
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
-import { ScrollArea, Stack, Text } from '../ui'
+import { ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
+import {
+  formatAbsoluteDateTimeVerbose,
+  formatShortTime,
+} from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
 import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], {
-    hour: `2-digit`,
-    minute: `2-digit`,
-  })
-}
 
 /**
  * Width-aware row-height estimate used as the initial size hint for the
@@ -405,9 +402,17 @@ export function EntityTimeline({
       >
         <div ref={contentRef} className={styles.content}>
           <Stack justify="center">
-            <Text size={1} tone="muted" className={styles.statusPill}>
-              spawned{spawnTime ? ` · ${formatTime(spawnTime)}` : ``}
-            </Text>
+            {spawnTime ? (
+              <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
+                <Text size={1} tone="muted" className={styles.statusPill}>
+                  {`spawned · ${formatShortTime(spawnTime)}`}
+                </Text>
+              </Tooltip>
+            ) : (
+              <Text size={1} tone="muted" className={styles.statusPill}>
+                spawned
+              </Text>
+            )}
           </Stack>
 
           {rows.length === 0 ? (

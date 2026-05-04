@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime'
 import { Stack, Text } from '../ui'
+import { TimeText } from './TimeText'
 import styles from './UserMessage.module.css'
 
 type UserMessageSection = Extract<
@@ -13,13 +14,6 @@ export const UserMessage = memo(function UserMessage({
 }: {
   section: UserMessageSection
 }): React.ReactElement {
-  const time = section.timestamp
-    ? new Date(section.timestamp).toLocaleTimeString([], {
-        hour: `2-digit`,
-        minute: `2-digit`,
-      })
-    : ``
-
   const sender = section.from ?? `user`
 
   return (
@@ -33,14 +27,12 @@ export const UserMessage = memo(function UserMessage({
         <Text size={1} tone="muted">
           {sender}
         </Text>
-        {time && (
+        {section.timestamp && (
           <>
             <Text size={1} tone="muted">
               ·
             </Text>
-            <Text size={1} tone="muted">
-              {time}
-            </Text>
+            <TimeText ts={section.timestamp} />
           </>
         )}
       </Stack>

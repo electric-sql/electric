@@ -14,6 +14,7 @@ import {
 } from '../lib/streamdownConfig'
 import { Stack, Text } from '../ui'
 import { ToolCallView } from './ToolCallView'
+import { TimeText } from './TimeText'
 import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
@@ -221,13 +222,6 @@ export const AgentResponse = memo(function AgentResponse({
   timestamp?: number | null
   renderWidth?: number
 }): React.ReactElement {
-  const time = timestamp
-    ? new Date(timestamp).toLocaleTimeString([], {
-        hour: `2-digit`,
-        minute: `2-digit`,
-      })
-    : null
-
   const canCache = !isStreaming && section.done === true
 
   return (
@@ -262,10 +256,8 @@ export const AgentResponse = memo(function AgentResponse({
             ✗ {section.error}
           </Text>
         )}
-        {time && (
-          <Text size={1} tone="muted" className={styles.timeText}>
-            {time}
-          </Text>
+        {timestamp != null && (
+          <TimeText ts={timestamp} className={styles.timeText} />
         )}
       </Stack>
     </Stack>

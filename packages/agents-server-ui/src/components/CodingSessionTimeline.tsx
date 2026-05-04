@@ -7,6 +7,7 @@ import {
 } from '../lib/streamdownConfig'
 import { Badge, Code, ScrollArea, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
+import { TimeText } from './TimeText'
 import toolBlock from './toolBlock.module.css'
 import styles from './CodingSessionTimeline.module.css'
 import type {
@@ -210,9 +211,13 @@ const UserMessageRow = memo(function UserMessageRow({
         <Text size={1} tone="muted">
           ·
         </Text>
-        <Text size={1} tone="muted">
-          {pending ? `queued` : formatTime(event.ts)}
-        </Text>
+        {pending ? (
+          <Text size={1} tone="muted">
+            queued
+          </Text>
+        ) : (
+          <TimeText ts={event.ts} />
+        )}
       </Stack>
     </Stack>
   )
@@ -234,9 +239,7 @@ const AssistantMessageRow = memo(function AssistantMessageRow({
         <Text size={1} tone="muted">
           ·
         </Text>
-        <Text size={1} tone="muted">
-          {formatTime(event.ts)}
-        </Text>
+        <TimeText ts={event.ts} />
       </Stack>
       <div className={`agent-ui-markdown ${styles.assistantMarkdown}`}>
         <Streamdown
@@ -451,11 +454,4 @@ function UnknownRow({
       [{event.type}]
     </Text>
   )
-}
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], {
-    hour: `2-digit`,
-    minute: `2-digit`,
-  })
 }
