@@ -35,3 +35,5 @@ response.tmp
 _artifacts
 **/logs/*
 **/.env
+.opentrace/
+.opentrace-index.log
