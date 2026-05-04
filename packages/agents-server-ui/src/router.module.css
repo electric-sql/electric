@@ -34,13 +34,13 @@
    * line up with the text column so the column visually slides
    * underneath the composer at the bottom of the chat.
    */
-  --chat-col-width: 68ch;
+  --chat-col-width: 72ch;
   --chat-surface-width: calc(var(--chat-col-width) + 24px);
 }
 
 @media (min-width: 1100px) {
   .entityMain {
-    --chat-col-width: 80ch;
+    --chat-col-width: 88ch;
   }
 }
 

@@ -135,8 +135,9 @@
   cursor: pointer;
   color: var(--ds-text-2);
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   transition: color 0.1s ease;
 }
 .projectHeader:hover {
