@@ -1,6 +1,6 @@
 import { getModels } from '@mariozechner/pi-ai'
 import type { AgentConfig } from '@electric-ax/agents-runtime'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -61,15 +61,13 @@ function readCodexAccessToken(): string | undefined {
       tokens?: { access_token?: string }
     }
     if (data.auth_mode !== `chatgpt`) return undefined
-    const token = data.tokens?.access_token?.trim()
-    return token && token.length > 0 ? token : undefined
+    return data.tokens?.access_token?.trim() || undefined
   } catch {
     return undefined
   }
 }
 
 function hasCodexAuth(): boolean {
-  if (!existsSync(codexAuthPath())) return false
   return readCodexAccessToken() !== undefined
 }
 
@@ -173,7 +171,11 @@ function withProviderPayloadDefaults(
   choice: BuiltinModelChoice,
   reasoningEffort: ExplicitReasoningEffort | null
 ): BuiltinAgentModelConfig {
-  if (choice.provider !== `openai` || !choice.reasoning) return config
+  if (
+    (choice.provider !== `openai` && choice.provider !== `openai-codex`) ||
+    !choice.reasoning
+  )
+    return config
 
   const effort = reasoningEffort ?? `minimal`
 
@@ -266,10 +268,7 @@ export function resolveBuiltinModelConfig(
     model: choice.id,
     ...(reasoningEffort && { reasoningEffort }),
     ...(choice.provider === `openai-codex` && {
-      getApiKey: (provider: string) => {
-        if (provider !== `openai-codex`) return undefined
-        return readCodexAccessToken()
-      },
+      getApiKey: () => readCodexAccessToken(),
     }),
   }
 
