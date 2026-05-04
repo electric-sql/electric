@@ -1,20 +1,40 @@
-/* Composer column. No top border — the chat content above visually
- * slides underneath the composer. Outer max-width / horizontal
- * padding match `EntityTimeline .content` so the composer sits
- * directly under the user-bubble column above it. */
+/* Composer column.
+ *
+ * Negative top margin (-20px) lifts the whole composer slab into the
+ * bottom edge of the EntityTimeline above so the composer visually
+ * SITS ON TOP of the chat surface. Combined with the inner
+ * .composer's rounded corners + opaque fill, this lets the chat
+ * content peek through at the rounded top corners (where the
+ * background curves away from the bounding box) — matching how
+ * Cursor / ChatGPT compose their input docks.
+ *
+ * `position: relative; z-index: 1` is the safety belt that keeps the
+ * composer painting on top of the EntityTimeline regardless of
+ * stacking-context fighting elsewhere. (Sibling document order would
+ * already place us on top, but explicit > implicit.)
+ *
+ * Outer max-width / horizontal padding match `EntityTimeline .content`
+ * so the composer sits directly under the user-bubble column above it.
+ */
 .root {
   padding: 0 40px 16px;
   max-width: calc(var(--chat-surface-width) + 80px);
-  margin: 0 auto;
+  margin: -20px auto 0;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+  z-index: 1;
 }
 
 .composer {
   background: var(--ds-input-bg);
   border: 1px solid var(--ds-gray-a4);
   border-radius: 12px;
-  padding: 12px 16px;
+  /* 12px on all sides — same as the user-message bubble (`Stack p={3}`
+     in UserMessage.tsx, where `--ds-space-3 = 12px`). Keeping the
+     two surfaces on the same padding makes the textarea text column
+     line up with the user-bubble text column directly above it. */
+  padding: 12px;
   width: 100%;
   transition: border-color 0.15s ease;
 }

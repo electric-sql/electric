@@ -7,7 +7,10 @@ import styles from './SidebarRow.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
 const INDENT_PX = 12
-const BASE_PADDING_LEFT = 4
+// 3px so the pin button (filling the 22px iconSlot via inset:0) sits
+// inside a uniform 3px halo on top, bottom and left, concentric with
+// the row's 7px border-radius. See `.row` in SidebarRow.module.css.
+const BASE_PADDING_LEFT = 3
 
 /**
  * Payload sent into the shared `<HoverCard.Root>` rendered by

@@ -4,6 +4,18 @@
    The status dot, pin button, new-session pencil and the toggle
    icons in the SidebarHeader all sit centered inside the same
    22px slot so every glyph in the sidebar lines up vertically.
+
+   Concentric-halo rule (matches Menu.Item / Select.Item):
+
+     row-height (28px) - inner-button (22px) = 6px → 3px halo top/bottom
+     padding on the side an inner button is on  = 3px
+     row border-radius                          = 7px (= 4px + 3px)
+
+   So the pin button (left, radius 4px) and the expand chevron
+   (right, radius 4px) each sit inside a uniform 3px halo on every
+   free side, and the row's own corner is exactly 3px outside the
+   inner button's corner — same center point, no visual mismatch
+   between the two highlights.
 */
 
 .row {
@@ -12,8 +24,8 @@
   align-items: center;
   gap: 6px;
   height: var(--ds-row-height-md);
-  padding-right: 6px;
-  border-radius: var(--ds-radius-2);
+  padding-right: 3px;
+  border-radius: 7px;
   cursor: pointer;
   user-select: none;
   color: var(--ds-text-1);
@@ -96,9 +108,17 @@
    When the row has subagents the count is concatenated inline as
    plain text (e.g. "horton +2") so it sits naturally next to the
    type label. The expand chevron then overlays the right edge on
-   hover; see `.expandOverlay` below. */
+   hover; see `.expandOverlay` below.
+
+   Default `padding-right: 5px` is the *text* gutter to the row's
+   right edge — combined with the row's 3px padding-right (which is
+   sized for an inner button's concentric halo, not for plain text)
+   it gives a comfortable 8px between the trailing label and the
+   row corner. Without this padding the label crowds the edge in
+   the very common leaf-row case. */
 .type {
   flex-shrink: 0;
+  padding-right: 5px;
   font-size: var(--ds-text-sm);
   color: var(--ds-text-3);
   text-transform: lowercase;
@@ -108,6 +128,14 @@
     color 0.1s ease,
     -webkit-mask-position 0.1s ease,
     mask-position 0.1s ease;
+}
+/* When the row has an inline expand button following the type label
+   (i.e. expanded subtree state), *that* button is the rightmost
+   element and the row's 3px padding-right is its concentric halo —
+   the type label's extra gutter would just push the button further
+   inward, so drop it in that case. */
+.type:has(+ .expandBtnVisible) {
+  padding-right: 0;
 }
 .row:hover .type {
   color: var(--ds-text-2);
@@ -139,7 +167,10 @@
    the status dot / pin button on the left visually. */
 .expandOverlay {
   position: absolute;
-  right: 6px;
+  /* 3px halo to the right edge of the row, matching the 3px vertical
+     halo above & below the 22px button (concentric with the row's
+     7px border-radius). */
+  right: 3px;
   top: 50%;
   transform: translateY(-50%);
   width: 22px;

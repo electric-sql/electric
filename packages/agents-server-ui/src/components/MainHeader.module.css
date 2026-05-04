@@ -4,7 +4,7 @@
  * inside its column with the same background as the column body, so the
  * chrome reads as part of the section rather than a global frame.
  *
- * Padding-left matches the SidebarHeader gutter (12px) so when the
+ * Padding-left matches the SidebarHeader gutter (11px) so when the
  * sidebar is collapsed the chrome buttons (toggle + search) land at
  * the exact same screen-x as the toggle in the open sidebar.
  *
@@ -17,7 +17,7 @@
   align-items: center;
   gap: var(--ds-space-2);
   height: 44px;
-  padding: 0 12px;
+  padding: 0 11px;
   background: var(--ds-bg);
   -webkit-app-region: drag;
 }

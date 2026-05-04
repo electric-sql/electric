@@ -1,0 +1,58 @@
+/* Toolbar rendered as a direct child of the
+   `[data-streamdown="table-wrapper"]` element that `MarkdownTable.tsx`
+   emits. Positioned absolute at top-right of the bordered table
+   surface (the wrapper is `position: relative` per `markdown.css`);
+   pointer-events scoped per button so the table content underneath
+   stays clickable / selectable in the gap between buttons. */
+.toolbar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.toolbar > * {
+  pointer-events: auto;
+}
+
+/* --- Fullscreen dialog ------------------------------------------------ */
+
+.fullscreenContent {
+  /* Override the standard Dialog padding/max-height so the table
+     fills as much viewport as possible. */
+  width: calc(100vw - 48px);
+  max-width: calc(100vw - 48px);
+  height: calc(100vh - 48px);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  padding: var(--ds-space-4);
+  gap: var(--ds-space-3);
+}
+
+.fullscreenTitle {
+  margin: 0;
+}
+
+.fullscreenScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-3);
+}
+
+/* The cloned table inside the fullscreen scroll inherits its cell /
+   row styling from `markdown.css` via the same `data-streamdown`
+   attributes. Just ensure it stretches to fill the scroll area. */
+.fullscreenScroll > table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+}

@@ -2,73 +2,126 @@
  * Streamdown markdown styles
  *
  * Targets the `.agent-ui-markdown` wrapper added by AgentResponse and
- * CodingSessionTimeline. Streamdown's Tailwind utility classes are inert
- * (Tailwind is not loaded), so all visual styling lives here.
+ * CodingSessionTimeline. Streamdown's own classes are Tailwind utility
+ * strings; Tailwind itself is NOT loaded here, so every visual rule
+ * has to come from this stylesheet — including selectors against the
+ * literal Tailwind class names that Streamdown emits.
  *
- * Uses the `--ds-*` design tokens defined in `src/ui/tokens.css`.
- * Capsize-style pseudo-element line-height trimming has been intentionally
- * removed in favour of a flat type scale; vertical rhythm is provided by
- * the parent flex container's `gap`.
+ * Two parallel selector strategies are used:
+ *
+ *   1. Element selectors (`.agent-ui-markdown p`, `… h2`, `… code`,
+ *      `… table`) — for the standard Markdown tags.
+ *
+ *   2. `[data-streamdown="…"]` attribute selectors — for Streamdown's
+ *      structural blocks (code blocks, tables, copy/download buttons,
+ *      etc.) where the classnames are unstable Tailwind utilities and
+ *      the data attributes are the stable contract.
+ *
+ * Capsize-style pseudo-element line-height trimming has been
+ * intentionally removed in favour of a flat type scale; vertical
+ * rhythm is provided by the wrapper's `gap`.
+ *
+ * Goals (matching Cursor / Codex chat output):
+ *   - Compact vertical rhythm — markdown should read as part of the
+ *     conversation, not as a long-form article.
+ *   - Smaller, lower-contrast headers than typical doc styling.
+ *   - Single-container code blocks (no nested borders) with a
+ *     working copy/download toolbar.
+ *   - Tables that match prose font-size and have working fullscreen
+ *     toggles.
  * ========================================================================== */
 
 @import 'streamdown/styles.css';
 
+/* --- Vertical rhythm ------------------------------------------------ */
+
 .agent-ui-markdown > div {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-5);
+  gap: 12px;
 }
+
+/* Cancel any auto-margins on direct children — the parent flex `gap`
+   is the single source of truth for inter-block spacing. */
+.agent-ui-markdown > div > *,
 .agent-ui-markdown > div > * + * {
-  margin-top: var(--ds-space-5);
+  margin: 0;
 }
+
+/* --- Body copy ------------------------------------------------------ */
 
 .agent-ui-markdown p,
 .agent-ui-markdown li {
   font-size: var(--ds-text-sm);
   line-height: var(--ds-text-sm-lh);
   font-family: var(--ds-font-body);
-  margin: 0;
+  color: var(--ds-text-1);
 }
 
-.agent-ui-markdown h1 {
-  font-size: var(--ds-text-2xl);
-  line-height: var(--ds-text-2xl-lh);
-  font-family: var(--ds-font-heading);
+.agent-ui-markdown strong {
   font-weight: 600;
-  margin: 0;
+}
+.agent-ui-markdown em {
+  font-style: italic;
 }
 
-.agent-ui-markdown h2 {
-  font-size: var(--ds-text-xl);
-  line-height: var(--ds-text-xl-lh);
-  font-family: var(--ds-font-heading);
-  font-weight: 600;
-  margin: 0;
-}
+/* --- Headings ------------------------------------------------------- *
+ *
+ * Chat headings should feel one notch larger than the body, not the
+ * doc-style 22px / 18px / 16px scale we used previously. Top margin
+ * gives a little extra breathing room above each heading; the parent
+ * gap handles the rest.
+ */
 
-.agent-ui-markdown h3 {
-  font-size: var(--ds-text-lg);
-  line-height: var(--ds-text-lg-lh);
-  font-family: var(--ds-font-heading);
-  font-weight: 500;
-  margin: 0;
-}
-
+.agent-ui-markdown h1,
+.agent-ui-markdown h2,
+.agent-ui-markdown h3,
 .agent-ui-markdown h4,
 .agent-ui-markdown h5,
 .agent-ui-markdown h6 {
-  font-size: var(--ds-text-base);
-  line-height: var(--ds-text-base-lh);
   font-family: var(--ds-font-heading);
-  font-weight: 500;
-  margin: 0;
+  color: var(--ds-text-1);
+  letter-spacing: -0.005em;
 }
+
+.agent-ui-markdown h1 {
+  font-size: var(--ds-text-lg); /* 16px */
+  line-height: 1.35;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.agent-ui-markdown h2 {
+  font-size: var(--ds-text-base); /* 14px */
+  line-height: 1.4;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.agent-ui-markdown h3 {
+  font-size: var(--ds-text-sm); /* 13px */
+  line-height: 1.45;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.agent-ui-markdown h4,
+.agent-ui-markdown h5,
+.agent-ui-markdown h6 {
+  font-size: var(--ds-text-sm);
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--ds-text-2);
+}
+
+/* First heading in the message has no extra top margin. */
+.agent-ui-markdown > div > :first-child:is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 0;
+}
+
+/* --- Lists ---------------------------------------------------------- */
 
 .agent-ui-markdown ul,
 .agent-ui-markdown ol {
   list-style-position: outside;
   padding-left: 1.5em;
-  margin: 0;
 }
 .agent-ui-markdown ul {
   list-style: disc;
@@ -76,47 +129,41 @@
 .agent-ui-markdown ol {
   list-style: decimal;
 }
-.agent-ui-markdown li {
-  padding: 0;
+.agent-ui-markdown li + li {
+  margin-top: 4px;
 }
+/* Streamdown wraps each list item's text in a paragraph; collapse it
+   so list items render on a single line by default, and only break
+   into multiple lines when the source markdown has explicit newlines. */
 .agent-ui-markdown li > p {
   display: contents;
 }
 .agent-ui-markdown li::marker {
-  font-size: var(--ds-text-sm);
+  color: var(--ds-text-3);
+  font-size: 0.95em;
 }
 
-.agent-ui-markdown pre {
-  border-radius: var(--ds-radius-3);
-  background: var(--ds-gray-a3);
-  padding: var(--ds-space-3);
-  overflow-x: auto;
-  margin: 0;
-}
-.agent-ui-markdown pre code {
-  font-family: var(--ds-font-mono);
-  font-size: var(--ds-text-xs);
-  line-height: 1.6;
-  background: none;
-  padding: 0;
-  border-radius: 0;
-}
+/* --- Inline code ---------------------------------------------------- */
 
-.agent-ui-markdown code:not(pre code) {
+.agent-ui-markdown code:not(pre code),
+.agent-ui-markdown [data-streamdown='inline-code'] {
   font-family: var(--ds-font-mono);
-  font-size: 0.9em;
+  font-size: 0.92em;
   background: var(--ds-gray-a3);
   padding: 0.1em 0.4em;
   border-radius: var(--ds-radius-1);
+  color: var(--ds-text-1);
 }
 
+/* --- Block quotes --------------------------------------------------- */
+
 .agent-ui-markdown blockquote {
-  border-left: 4px solid var(--ds-gray-a6);
-  padding-left: var(--ds-space-4);
+  border-left: 3px solid var(--ds-gray-a5);
+  padding: 2px 0 2px 12px;
   color: var(--ds-text-2);
-  font-style: italic;
-  margin: 0;
 }
+
+/* --- Links ---------------------------------------------------------- */
 
 .agent-ui-markdown a {
   color: var(--ds-accent-11);
@@ -130,14 +177,15 @@
   text-decoration-color: inherit;
 }
 
-.agent-ui-markdown strong {
-  font-weight: 600;
-}
+/* --- Misc ----------------------------------------------------------- */
 
+/* Faint divider — `--ds-gray-a3` (10–11% gray) instead of the
+   `--ds-border-2` (~18%) we use for component chrome. Markdown HRs
+   are pacing devices, not structural separators, so they should
+   barely catch the eye. */
 .agent-ui-markdown hr {
   border: none;
-  border-top: 1px solid var(--ds-border-2);
-  margin: 0;
+  border-top: 1px solid var(--ds-gray-a3);
 }
 
 .agent-ui-markdown img {
@@ -145,98 +193,154 @@
   border-radius: var(--ds-radius-3);
 }
 
-/* --- Streamdown-specific structural rules --------------------------- */
-
-.agent-ui-markdown
-  div.my-4.flex.w-full.flex-col.gap-2.rounded-xl.border.border-border.bg-sidebar.p-2 {
-  margin: 0;
-}
+/* ==========================================================================
+ * Code blocks
+ *
+ * Streamdown renders something like:
+ *
+ *   <div data-streamdown="code-block" class="…flex flex-col gap-2 rounded-xl
+ *        border border-border bg-sidebar p-2">
+ *     <div data-streamdown="code-block-header">…lang…</div>
+ *     <div class="pointer-events-none sticky top-2 z-10 -mt-10 flex h-8
+ *          items-center justify-end">
+ *       <div data-streamdown="code-block-actions"
+ *            class="pointer-events-auto …">
+ *         <button data-streamdown="code-block-copy-button">…</button>
+ *         <button data-streamdown="code-block-download-button">…</button>
+ *       </div>
+ *     </div>
+ *     <div data-streamdown="code-block-body" class="…border …bg-background">
+ *       <pre><code>…</code></pre>
+ *     </div>
+ *   </div>
+ *
+ * Layout we want — language label + action toolbar OUTSIDE the
+ * bordered code area, sitting on a single row above it:
+ *
+ *     http                                  [copy] [download]
+ *     ┌──────────────────────────────────────────────────────┐
+ *     │ PUT /v1/stream/...                                   │
+ *     │ Stream-Forked-From: ...                              │
+ *     └──────────────────────────────────────────────────────┘
+ *
+ * So:
+ *   - The outer `[data-streamdown='code-block']` is just an unstyled
+ *     positioning context (relative, flex column, small gap); no
+ *     border / no background — those move down to the body.
+ *   - The header line and the absolute-positioned action toolbar
+ *     overlap on the same row at the top of the wrapper.
+ *   - Only `[data-streamdown='code-block-body']` carries the bg +
+ *     border + corner radius.
+ *
+ * The action toolbar is wrapped in a `pointer-events-none` sticky
+ * positioner that re-enables pointer-events on its inner actions
+ * div via `pointer-events-auto`. Because Tailwind is not loaded both
+ * classes are inert at runtime, so we explicitly enforce both rules
+ * here — otherwise the copy / download buttons can't be clicked.
+ * ========================================================================== */
 
 .agent-ui-markdown [data-streamdown='code-block'] {
+  position: relative;
   display: flex;
   flex-direction: column;
-  border-radius: var(--ds-radius-3);
-  background: var(--ds-gray-a3);
-  padding: 4px;
-  gap: 2px;
-  margin: 0;
-  position: relative;
+  /* Vertical breathing room between the lang label / action toolbar
+     row above and the bordered code area below. The toolbar buttons
+     have an 18px hover background that sits flush against this gap,
+     so anything tighter than ~8px makes the hover state read as
+     "touching" the code-area border. */
+  gap: 8px;
+  border: none;
+  background: none;
+  border-radius: 0;
+  overflow: visible;
 }
 
+/* Language label — plain muted text sitting above the bordered code
+   area. No background / no border / no separator — its visual job
+   is just "label this code with a language". */
 .agent-ui-markdown [data-streamdown='code-block-header'] {
   display: flex;
   align-items: center;
-  height: 22px;
-  padding: 0 40px 0 4px;
-  color: var(--ds-text-2);
-}
-
-.agent-ui-markdown [data-streamdown='code-block-header'] span {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  font-family: var(--ds-font-mono);
-  font-size: 11px;
+  height: 18px;
+  padding: 0 2px;
+  background: none;
+  border: none;
+  color: var(--ds-text-3);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
   line-height: 1;
+}
+.agent-ui-markdown [data-streamdown='code-block-header'] span {
+  font-family: var(--ds-font-mono);
   text-transform: lowercase;
-  margin-left: 0;
 }
 
+/* Streamdown's sticky positioner for the action toolbar. Anchored
+   to the top-right of the wrapper so the buttons sit on the same
+   line as the language label, *outside* the bordered code area. */
 .agent-ui-markdown
   [data-streamdown='code-block']
-  > .pointer-events-none.sticky.top-2.z-10.flex.h-8.items-center.justify-end {
+  > div:has(> [data-streamdown='code-block-actions']) {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  margin-top: 0;
-  height: 22px;
+  top: 0;
+  right: 0;
+  margin: 0;
+  height: 18px;
+  z-index: 1;
   pointer-events: none;
 }
 
 .agent-ui-markdown [data-streamdown='code-block-actions'] {
-  position: static;
-  display: flex;
+  pointer-events: auto;
+  display: inline-flex;
   align-items: center;
-  gap: 1px;
-  background: var(--ds-gray-a3);
-  border-radius: 5px;
-  padding: 2px;
+  gap: 2px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
 }
 
 .agent-ui-markdown [data-streamdown='code-block-copy-button'],
 .agent-ui-markdown [data-streamdown='code-block-download-button'] {
-  display: flex;
+  pointer-events: auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
   border: none;
   background: transparent;
-  color: var(--ds-text-2);
+  color: var(--ds-text-3);
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--ds-radius-1);
   transition:
-    color 0.15s,
-    background 0.15s;
+    color 0.1s ease,
+    background 0.1s ease;
 }
-
-.agent-ui-markdown [data-streamdown='code-block-copy-button'] svg,
-.agent-ui-markdown [data-streamdown='code-block-download-button'] svg {
-  width: 14px;
-  height: 14px;
-}
-
 .agent-ui-markdown [data-streamdown='code-block-copy-button']:hover,
 .agent-ui-markdown [data-streamdown='code-block-download-button']:hover {
   color: var(--ds-text-1);
-  background: var(--ds-border-2);
+  background: var(--ds-gray-a3);
+}
+.agent-ui-markdown [data-streamdown='code-block-copy-button'] svg,
+.agent-ui-markdown [data-streamdown='code-block-download-button'] svg {
+  width: 12px;
+  height: 12px;
 }
 
+/* The code area itself — the only part that carries chrome.
+   `--ds-gray-a2` reads as a faint surface tint over the chat
+   background; the 1px hairline + 6px corner radius mirror the
+   inline-code chip and the table wrapper so all three feel like
+   variants of the same surface. */
 .agent-ui-markdown [data-streamdown='code-block-body'] {
+  background: var(--ds-gray-a2);
+  border: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-3);
+  padding: 10px 12px;
   overflow-x: auto;
-  border-radius: 6px;
-  background: var(--ds-bg);
-  border: 1px solid var(--ds-border-2);
-  padding: var(--ds-space-3) var(--ds-space-4);
 }
 
 .agent-ui-markdown [data-streamdown='code-block-body'] pre {
@@ -249,20 +353,26 @@
 .agent-ui-markdown [data-streamdown='code-block-body'] code {
   font-family: var(--ds-font-mono);
   font-size: var(--ds-text-xs);
-  line-height: 1.6;
+  line-height: 1.55;
+  background: none;
+  padding: 0;
+  border-radius: 0;
 }
 
-/* Streamdown renders each code line as a <span>; make them block-level */
+/* Streamdown renders each highlighted line as a <span>; promote them
+   to block-level so wrapping/scrolling behaves like a real `pre`. */
 .agent-ui-markdown [data-streamdown='code-block-body'] code > span {
   display: block;
 }
 
-/* Streamdown sets --sdm-c via inline style; Tailwind's text-[var(--sdm-c)] is inert */
+/* Shiki applies syntax colours via the inline `--sdm-c` style on each
+   token span. Tailwind's `text-[var(--sdm-c)]` would normally pull
+   that into the colour, but Tailwind is not loaded. Read the var
+   directly so colours land. */
 .agent-ui-markdown [data-streamdown='code-block-body'] code span[style] {
   color: var(--sdm-c, inherit);
   background-color: var(--sdm-tbg, transparent);
 }
-
 [data-theme='dark']
   .agent-ui-markdown
   [data-streamdown='code-block-body']
@@ -272,43 +382,106 @@
   background-color: var(--shiki-dark-bg, var(--sdm-tbg, transparent));
 }
 
-.agent-ui-markdown [data-streamdown='table-wrapper'] {
-  position: relative;
-  overflow-x: auto;
-}
-
-.agent-ui-markdown [data-streamdown='table-wrapper'] > div:first-child {
-  position: absolute;
-  top: var(--ds-space-2);
-  right: var(--ds-space-2);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: var(--ds-bg);
-  border-radius: 6px;
-  padding: 2px;
-  z-index: 1;
-}
-
-.agent-ui-markdown [data-streamdown='table-wrapper'] > div:first-child button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
+/* Streamdown also wraps fenced code blocks in an unstyled outer
+   container with the same `my-4 flex w-full flex-col gap-2 rounded-xl
+   border border-border bg-sidebar p-2` Tailwind classes used by other
+   blocks (mermaid, table). Strip the visual decoration of that outer
+   wrapper everywhere — our `[data-streamdown='code-block']` rule
+   already provides the single bordered container. */
+.agent-ui-markdown
+  div.my-4.flex.w-full.flex-col.gap-2.rounded-xl.border.border-border.bg-sidebar.p-2 {
+  margin: 0;
+  padding: 0;
+  background: none;
   border: none;
-  background: transparent;
-  color: var(--ds-text-2);
-  cursor: pointer;
-  border-radius: 4px;
-  transition:
-    color 0.15s,
-    background 0.15s;
+  border-radius: 0;
+  gap: 0;
+}
+
+/* ==========================================================================
+ * Tables
+ *
+ *   <div data-streamdown="table-wrapper">                  ← MarkdownTable.tsx
+ *     <div class="border-collapse">                        ← scroll container
+ *       <table data-streamdown="table">
+ *         <thead data-streamdown="table-header">…</thead>  ← Streamdown still
+ *         <tbody data-streamdown="table-body">…</tbody>      provides these
+ *       </table>
+ *     </div>
+ *     <div class="…toolbar">                               ← Base UI toolbar
+ *        Copy / Download / Fullscreen                        (direct child)
+ *     </div>
+ *   </div>
+ *
+ * Streamdown's built-in table chrome is fully replaced. We disable
+ * its toolbar at the call site via `controls={{ table: false }}` and
+ * override `components.table` with `MarkdownTable.tsx`, which emits
+ * the wrapper structure shown above and renders our own Base UI
+ * toolbar. Overriding `components.table` bypasses Streamdown's own
+ * `MarkdownTable` wrapper, so without the manual `data-streamdown`
+ * attributes here the selectors below would no longer match — see
+ * the long-form comment in `MarkdownTable.tsx` for the rationale.
+ * ========================================================================== */
+
+.agent-ui-markdown [data-streamdown='table-wrapper'] {
+  /* Anchor for the absolutely-positioned toolbar that
+     `MarkdownTable.tsx` portals in. */
+  position: relative;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  overflow: visible;
+}
+
+/* Inner scroll container Streamdown emits with the `.border-collapse`
+   class. This is the real bordered surface — owns scrolling so cell
+   content clips inside while the toolbar can sit at the wrapper's
+   top-right corner. */
+.agent-ui-markdown [data-streamdown='table-wrapper'] > div.border-collapse {
+  border: 1px solid var(--ds-gray-a4);
+  background: none;
+  border-radius: var(--ds-radius-3);
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.agent-ui-markdown [data-streamdown='table'] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-text-sm-lh);
+  font-family: var(--ds-font-body);
+}
+
+.agent-ui-markdown [data-streamdown='table-header'] {
+  background: var(--ds-gray-a2);
+}
+
+.agent-ui-markdown [data-streamdown='table-header-cell'] {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ds-text-1);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ds-gray-a3);
 }
 
 .agent-ui-markdown
-  [data-streamdown='table-wrapper']
-  > div:first-child
-  button:hover {
+  [data-streamdown='table-row']
+  + [data-streamdown='table-row'] {
+  border-top: 1px solid var(--ds-gray-a3);
+}
+
+.agent-ui-markdown [data-streamdown='table-cell'] {
+  padding: 8px 12px;
+  vertical-align: top;
   color: var(--ds-text-1);
-  background: var(--ds-border-2);
+}
+
+/* Inline code inside a table cell is small enough already — drop the
+   chip background so it doesn't visually clash with the cell stripe. */
+.agent-ui-markdown [data-streamdown='table-cell'] code:not(pre code),
+.agent-ui-markdown [data-streamdown='table-header-cell'] code:not(pre code) {
+  background: transparent;
+  padding: 0;
 }

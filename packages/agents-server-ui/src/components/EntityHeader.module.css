@@ -75,12 +75,25 @@
   gap: 2px;
 }
 
+/* Balance the soft-pill height against the 22px IconButton size=1
+   triggers next to it. The default Badge size=2 is 22px tall but
+   contains only 12px of text, leaving ~5px of vertical padding on
+   each side — visually airier than the 14px icons (4px padding)
+   that share the row. Trim the badge to 20px so the inner padding
+   reads as the same density as the icons; line-height 1 keeps the
+   text optically centred without re-introducing extra space. */
 .statusBadge {
   flex-shrink: 0;
+  height: 20px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
+/* Toggled-on state for icon-only buttons (e.g. state-explorer
+   toggle). Neutral grey so it reads as "active" without colouring
+   the icon — matches the rest of the chrome. */
 .activeBg {
-  background: var(--ds-accent-a4);
+  background: var(--ds-gray-a4);
 }
 
 .errorBar {

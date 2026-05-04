@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime'
 import { Badge, Box, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
@@ -73,10 +74,17 @@ function getSummary(toolName: string, args: Record<string, unknown>): string {
   }
 }
 
-function statusToTone(item: ToolCallItem): {
-  tone: BadgeTone
-  label: string
-} {
+type StatusBadge = { tone: BadgeTone; label: string } | null
+
+/**
+ * Decide which (if any) status badge to show next to a tool call.
+ *
+ * Successful completions are the common case — showing an "ok" pill
+ * for every one of them is just visual noise. We only render a badge
+ * for states the user actually needs to notice: pending, running,
+ * or error.
+ */
+function statusBadge(item: ToolCallItem): StatusBadge {
   const isComplete = item.status === `completed` || item.status === `failed`
   if (!isComplete) {
     return {
@@ -84,9 +92,8 @@ function statusToTone(item: ToolCallItem): {
       label: item.status === `executing` ? `running` : `pending`,
     }
   }
-  return item.isError
-    ? { tone: `danger`, label: `error` }
-    : { tone: `success`, label: `ok` }
+  if (item.isError) return { tone: `danger`, label: `error` }
+  return null
 }
 
 function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
@@ -224,15 +231,21 @@ export function ToolCallView({
 }): React.ReactElement {
   // send_message: same container style but always expanded with the message text
   if (item.toolName === `send_message` && typeof item.args.text === `string`) {
-    const { tone, label } = statusToTone(item)
+    const badge = statusBadge(item)
 
     return (
       <Stack direction="column" className={toolBlock.card}>
         <Stack align="center" gap={2} className={toolBlock.header}>
           <span className={toolBlock.toolName}>send_message</span>
-          <Badge tone={tone} variant="soft" className={toolBlock.statusBadge}>
-            {label}
-          </Badge>
+          {badge && (
+            <Badge
+              tone={badge.tone}
+              variant="soft"
+              className={toolBlock.statusBadge}
+            >
+              {badge.label}
+            </Badge>
+          )}
         </Stack>
         <Box className={styles.sentMessage}>
           <Text size={2} className={styles.sentMessageBody}>
@@ -245,7 +258,7 @@ export function ToolCallView({
 
   const [expanded, setExpanded] = useState(false)
   const summary = getSummary(item.toolName, item.args)
-  const { tone, label } = statusToTone(item)
+  const badge = statusBadge(item)
 
   return (
     <Stack direction="column" className={toolBlock.card}>
@@ -255,12 +268,20 @@ export function ToolCallView({
         aria-expanded={expanded}
         className={`${toolBlock.header} ${toolBlock.headerToggle}`}
       >
-        <span className={toolBlock.toggleArrow}>{expanded ? `▼` : `▶`}</span>
+        <span className={toolBlock.toggleArrow} aria-hidden="true">
+          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </span>
         <span className={toolBlock.toolName}>{item.toolName}</span>
         {summary && <span className={toolBlock.summary}>{summary}</span>}
-        <Badge tone={tone} variant="soft" className={toolBlock.statusBadge}>
-          {label}
-        </Badge>
+        {badge && (
+          <Badge
+            tone={badge.tone}
+            variant="soft"
+            className={toolBlock.statusBadge}
+          >
+            {badge.label}
+          </Badge>
+        )}
       </button>
       {expanded && (
         <Box className={toolBlock.body}>

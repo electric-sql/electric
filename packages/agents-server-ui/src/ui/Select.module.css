@@ -93,12 +93,16 @@
   max-height: inherit;
 }
 
+/* Same concentric-halo geometry as Menu.Item — see Menu.module.css.
+   Select items don't carry a trailing inner button so the right
+   padding can stay symmetric (8px), but the radius is bumped to 7px
+   so the highlight radius matches the rest of the system. */
 .item {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 3px 8px;
-  border-radius: var(--ds-radius-2);
+  border-radius: 7px;
   font-size: var(--ds-text-sm);
   line-height: var(--ds-text-sm-lh);
   font-family: var(--ds-font-body);

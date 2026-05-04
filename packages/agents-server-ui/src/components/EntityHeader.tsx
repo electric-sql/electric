@@ -226,10 +226,10 @@ function EntityActions({
           {entity.status !== `stopped` && (
             <>
               <Menu.Separator />
-              <Menu.Item
-                tone="danger"
-                onSelect={() => setShowKillConfirm(true)}
-              >
+              {/* Destructive intent is communicated by the verb ("Kill")
+                  + the confirm dialog that follows — not by tinting the
+                  icon red. Keeps the menu uniformly neutral. */}
+              <Menu.Item onSelect={() => setShowKillConfirm(true)}>
                 <Trash2 size={14} />
                 <Text size={2}>Kill</Text>
               </Menu.Item>
@@ -272,7 +272,6 @@ function EntityActions({
               }
             />
             <Button
-              tone="danger"
               onClick={() => {
                 onKill()
                 setShowKillConfirm(false)

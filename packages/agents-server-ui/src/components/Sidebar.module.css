@@ -32,19 +32,24 @@
    its pencil icon sits in the same 22px column as the status dots
    below and the chrome icons in SidebarHeader above.
 
-   `padding-left: 4px` mirrors the inline paddingLeft applied to
+   `padding-left: 3px` mirrors the inline paddingLeft applied to
    each SidebarRow at depth 0, so on top of the 8px .treeRow gutter
-   the 22px icon slot starts at x=12 and the 16px glyph centers at
-   x=23 — exactly where the status dots live. */
+   the 22px icon slot starts at x=11 and the 16px glyph centers at
+   x=22 — exactly where the SidebarHeader chrome icons (padding-left
+   11px) and the SidebarRow status dots (BASE_PADDING_LEFT 3px) live.
+
+   `padding-right: 3px` and `border-radius: 7px` follow the same
+   concentric-halo rule as `.row` in SidebarRow.module.css, so the
+   New session row rounds identically to the entity rows below it. */
 .newSessionRow {
   all: unset;
   display: flex;
   align-items: center;
   gap: 6px;
   height: var(--ds-row-height-md);
-  padding-left: 4px;
-  padding-right: 8px;
-  border-radius: var(--ds-radius-2);
+  padding-left: 3px;
+  padding-right: 3px;
+  border-radius: 7px;
   cursor: pointer;
   color: var(--ds-text-1);
   transition: background 0.08s ease;
@@ -52,6 +57,10 @@
 .newSessionRow:hover {
   background: var(--ds-gray-a3);
 }
+/* Same 22px slot, same 16px glyph and the SAME `--ds-text-1` colour
+   as the sidebar/search IconButtons in SidebarHeader so the three
+   icons stacked in the column read as one family rather than three
+   slightly different greys. */
 .newSessionIconSlot {
   width: 22px;
   height: 22px;
@@ -59,7 +68,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ds-text-2);
+  color: var(--ds-text-1);
 }
 .newSessionLabel {
   font-size: var(--ds-text-sm);
@@ -69,13 +78,19 @@
 
 /* Keycap hint at the right of the row, mirroring Cursor / VS Code's
    command-palette rows. Faded at rest and only fully opaque while the
-   row is hovered/focused so it never competes with the label. */
+   row is hovered/focused so it never competes with the label.
+
+   `margin-right: 5px` gives the badge breathing room from the row's
+   right edge — without it the keycap sits flush against the row
+   padding (3px, sized for the concentric halo of inline buttons in
+   sibling SidebarRow items) and visually crowds the rounded corner. */
 .newSessionKbd {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 2px;
   margin-left: auto;
+  margin-right: 5px;
   opacity: 0.55;
   transition: opacity 0.1s ease;
 }

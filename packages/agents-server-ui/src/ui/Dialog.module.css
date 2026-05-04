@@ -22,8 +22,12 @@
   background: var(--ds-surface-raised);
   color: var(--ds-text-1);
   border-radius: var(--ds-radius-4);
-  box-shadow: var(--ds-shadow-3);
-  border: 1px solid var(--ds-border-2);
+  /* Same overlay border + shadow pair as Popover/Menu/Select —
+     keeps all floating surfaces in one visual family. The shadow's
+     tight 1px ring layer is what gives the modal a sharp defined
+     edge against the dimmed backdrop in light mode. */
+  border: 1px solid var(--ds-overlay-border);
+  box-shadow: var(--ds-overlay-shadow);
   padding: var(--ds-space-4);
   width: calc(100vw - var(--ds-space-5) * 2);
   max-width: 480px;

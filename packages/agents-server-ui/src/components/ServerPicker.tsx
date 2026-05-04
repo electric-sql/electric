@@ -96,7 +96,7 @@ export function ServerPicker(): React.ReactElement {
                     <IconButton
                       size={1}
                       variant="ghost"
-                      tone="danger"
+                      tone="neutral"
                       className={styles.removeBtn}
                       onClick={(e) => {
                         e.stopPropagation()

@@ -3,72 +3,118 @@
  * invocations). The two timelines render the same visual structure:
  *
  *   ┌──────────────────────────────────────────────────┐
- *   │ ▶ tool_name  summary…              [status badge]│  .header (.headerToggle when interactive)
+ *   │ › tool_name  summary…              [status badge]│  .header (.headerToggle when interactive)
  *   ├──────────────────────────────────────────────────┤
  *   │ Input                                            │  .body
  *   │ <pre>…</pre>                                     │
  *   └──────────────────────────────────────────────────┘
+ *
+ * Geometry intentionally subtle — a tool call is metadata about how
+ * the model arrived at its answer, not the answer itself, so the
+ * card sits quietly in the flow rather than competing with prose.
+ * Status badges are only rendered for non-success states (see
+ * `statusBadge` in ToolCallView.tsx) — successful calls just show
+ * tool name + summary, removing the visual noise of an "ok" pill on
+ * every row.
  */
 
 .card {
-  border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-2);
+  border: 1px solid var(--ds-gray-a3);
+  border-radius: var(--ds-radius-3);
   overflow: hidden;
+  background: var(--ds-gray-a1);
 }
 
+/* The header is metadata about the tool call, not part of the
+   conversation prose, so it should sit one notch quieter than the
+   body text rather than competing with it. We size it explicitly
+   in pixels (12px) — half a step below `--ds-text-sm` (13px) — so
+   the mono `.toolName` optically lands close to body weight and
+   the proportional `.summary` reads as a small label. */
 .header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: var(--ds-gray-a2);
-  font-size: var(--ds-text-sm);
-  font-family: var(--ds-font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
 }
 
+/* Strip `<button>`'s built-in chrome (background, border, UA
+   padding). Font properties are intentionally NOT reset here —
+   `.header` is also on this element and supplies the explicit
+   font-size / family / line-height; using `font: inherit` (or
+   `all: unset`) on this class would walk up to the chat container
+   and re-inflate the button to its parent's font size (~16px),
+   visibly larger than the surrounding markdown body text. The
+   card already provides `overflow: hidden` + `border-radius`, so
+   the hover bg can stay a plain rectangle here; rounded corners
+   on this layer would otherwise create a visible gap between the
+   highlight's bottom edge and the body separator when the row is
+   expanded. */
 .headerToggle {
-  all: unset;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  background: none;
+  border: none;
+  margin: 0;
   cursor: pointer;
   width: 100%;
   box-sizing: border-box;
+  border-radius: 0;
+  transition: background 0.08s ease;
+}
+.headerToggle:hover {
+  background: var(--ds-gray-a2);
 }
 
+/* Chevron lives in a fixed-size 16px slot so the row height doesn't
+   jiggle when expand/collapse swaps glyphs. */
 .toggleArrow {
-  opacity: 0.5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--ds-text-3);
 }
 
+/* Tool name is the only mono token in the row — it's an identifier,
+   so reading it as code helps. Summary + everything else stays in the
+   body font for legibility at small sizes. */
 .toolName {
+  font-family: var(--ds-font-mono);
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .summary {
-  color: var(--ds-text-2);
+  color: var(--ds-text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 36ch;
+  min-width: 0;
 }
 
 .statusBadge {
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .body {
-  padding: 8px 12px;
-  border-top: 1px solid var(--ds-gray-a4);
-  background: var(--ds-gray-a1);
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--ds-gray-a3);
+  background: var(--ds-bg);
 }
 
 .codeBlock {
   margin: 0;
-  padding: 8px;
+  padding: 8px 10px;
   background: var(--ds-gray-a2);
-  border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-2);
   font-size: var(--ds-text-xs);
+  line-height: 1.55;
   font-family: var(--ds-font-mono);
   white-space: pre-wrap;
   word-break: break-word;

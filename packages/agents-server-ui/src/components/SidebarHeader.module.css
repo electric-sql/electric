@@ -3,10 +3,11 @@
 
    The icon column is aligned with the status dot of every row in
    the list below. Rows live inside `.treeRow` (8px gutter) and
-   themselves carry a 4px paddingLeft, putting their 22px icon slot
-   at x=12 from the sidebar edge — center 23px. We mirror that here
-   with padding-left 12px so the IconButton (size=1, 22x22) puts its
-   16px glyph centered at the exact same x-coordinate.
+   themselves carry a 3px paddingLeft (BASE_PADDING_LEFT in
+   SidebarRow.tsx), putting their 22px icon slot at x=11 from the
+   sidebar edge — center 22px. We mirror that here with padding-left
+   11px so the IconButton (size=1, 22x22) puts its 16px glyph
+   centered at the exact same x-coordinate.
 
    No border-bottom, same background as the rest of the sidebar — the
    row reads as part of the sidebar surface, not a separate top bar. */
@@ -16,5 +17,5 @@
   align-items: center;
   gap: 2px;
   height: 44px;
-  padding: 0 12px;
+  padding: 0 11px;
 }

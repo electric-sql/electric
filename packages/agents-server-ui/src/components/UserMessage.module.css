@@ -8,8 +8,13 @@
   width: 100%;
 }
 
+/* Match the composer (.composer in MessageInput.module.css): same
+   white surface + 1px hairline + 12px corner radius. Lines the user
+   bubble up visually with the input box below — they read as the
+   user's "voice" turn. */
 .bubble {
   background: var(--ds-input-bg);
+  border: 1px solid var(--ds-gray-a4);
   border-radius: 12px;
 }
 
