@@ -41,6 +41,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /intro                                       /docs/sync
 /examples                                    /sync/demos
 /docs/guides/troubleshooting/missing-headers /docs/sync/guides/troubleshooting#missing-headers-mdash-why-is-the-client-complaining-about-missing-headers
+/r/electric-http2                            /docs/sync/guides/troubleshooting#slow-shapes-slow-hmr-slow-dev-server-mdash-why-is-my-local-development-slow
 
 # More links from legacy site
 
