@@ -28,20 +28,25 @@
   touch-action: none;
 }
 
+/* Scrollbar geometry — sized to fit inside the smallest gutter that
+ * a scrolling consumer carries. The Sidebar's `.treeRow` has 8px of
+ * right padding, so a scrollbar wider than 8px overlapped its items.
+ * 8px width + 1.5px inner padding = 5px thumb, which is slim enough
+ * to read as overlay-style chrome while staying grabbable. */
 .scrollbar[data-orientation='vertical'] {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 10px;
-  padding: 2px;
+  width: 8px;
+  padding: 1.5px;
 }
 
 .scrollbar[data-orientation='horizontal'] {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 10px;
-  padding: 2px;
+  height: 8px;
+  padding: 1.5px;
 }
 
 .scrollbar[data-hovering],

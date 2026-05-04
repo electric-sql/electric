@@ -104,6 +104,21 @@
   min-height: 0;
 }
 
+/* Sidebar-specific scrollbar override — narrower than the shared
+ * `<ScrollArea>` default (8px → 6px) because the sidebar is
+ * lower-density auxiliary nav and its 8px gutter still leaves room
+ * to spare. Targets Base UI's `<Scrollbar>` via its `data-orientation`
+ * attribute (the inner class name is module-hashed and not reachable
+ * from here). `!important` because the ScrollArea module's
+ * `.scrollbar[data-orientation=...]` rule is the same specificity —
+ * cascade order between sibling CSS modules isn't guaranteed across
+ * builds, so we make the intent explicit. The 1px inner padding
+ * keeps the thumb at 4px, in proportion with the narrower track. */
+.scrollFlex [data-orientation='vertical'] {
+  width: 6px !important;
+  padding: 1px !important;
+}
+
 .emptyTreeText {
   padding-top: 20px;
 }
