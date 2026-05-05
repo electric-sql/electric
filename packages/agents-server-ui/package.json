@@ -6,8 +6,10 @@
   "scripts": {
     "build": "vite build",
     "build:desktop": "vite build --mode desktop",
+    "build:mobile-embed": "vite build --mode mobile-embed && node scripts/emit-mobile-embed.mjs",
     "dev": "vite dev",
     "dev:desktop": "vite dev --mode desktop --port 5183 --strictPort",
+    "dev:mobile-embed": "vite dev --mode mobile-embed --port 5184 --strictPort",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "coverage": "pnpm exec vitest run --coverage --passWithNoTests",
@@ -44,6 +46,7 @@
     "react-scan": "^0.5.6",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^4.1.0"
   }
 }
