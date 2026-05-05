@@ -339,6 +339,28 @@ export async function assembleContext(
     volatileBudgetUsed += nextTokens
     accepted.push(message)
   }
+
+  const acceptedCallIds = new Set<string>()
+  const acceptedResultIds = new Set<string>()
+  for (const m of accepted) {
+    const id = (m as VolatileMessage & { toolCallId?: string }).toolCallId
+    if (!id) continue
+    if (m.role === `tool_call`) acceptedCallIds.add(id)
+    else if (m.role === `tool_result`) acceptedResultIds.add(id)
+  }
+  for (let i = accepted.length - 1; i >= 0; i--) {
+    const m = accepted[i]!
+    const id = (m as VolatileMessage & { toolCallId?: string }).toolCallId
+    if (!id) continue
+    if (
+      (m.role === `tool_call` && !acceptedResultIds.has(id)) ||
+      (m.role === `tool_result` && !acceptedCallIds.has(id))
+    ) {
+      droppedOffsets.push(m.at)
+      accepted.splice(i, 1)
+    }
+  }
+
   accepted.reverse()
 
   if (droppedOffsets.length > 0) {
