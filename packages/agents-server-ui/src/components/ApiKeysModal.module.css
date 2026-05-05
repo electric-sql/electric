@@ -1,0 +1,24 @@
+/*
+ * Mirrors the spacing of the "Add server" form in `ServerPicker.module.css`
+ * so both first-run dialogs feel like part of the same setup flow.
+ */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--ds-radius-2);
+  background: var(--ds-bg-subtle);
+  border: 1px solid var(--ds-border-1);
+  color: var(--ds-text-2);
+}
+
+.actions {
+  margin-top: var(--ds-space-2);
+}
