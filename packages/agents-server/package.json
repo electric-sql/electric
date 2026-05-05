@@ -35,7 +35,7 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "start": "cross-env DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents ELECTRIC_URL=http://localhost:3060 ELECTRIC_AGENTS_STREAMS_DATA_DIR=.streams-data tsx --watch src/entrypoint.ts",
+    "start": "cross-env DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents ELECTRIC_URL=http://localhost:3060 ELECTRIC_AGENTS_STREAMS_DATA_DIR=.streams-data tsx src/entrypoint.ts",
     "test": "vitest run",
     "coverage": "ELECTRIC_AGENTS_KEEP_BACKEND=1 pnpm exec vitest run --coverage $(find test -name '*.test.ts' ! -name 'conformance.test.ts' | sort) && pnpm exec vitest run test/conformance.test.ts",
     "typecheck": "tsc --noEmit",
