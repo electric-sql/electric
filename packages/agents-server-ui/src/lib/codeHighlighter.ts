@@ -127,6 +127,15 @@ function doHighlight(
   const result = h.codeToTokens(code, {
     lang: lang as any,
     themes: { light: LIGHT_THEME, dark: DARK_THEME },
+    // Emit BOTH themes as CSS variables (`--shiki-light` and
+    // `--shiki-dark`) instead of stamping the default theme's hex
+    // directly on the `color` property. Without this, Shiki's
+    // default (`defaultColor: 'light'`) means tokens come back with
+    // `color: '#xxxLight'` and only `--shiki-dark` set as a
+    // variable — which would leave our `var(--shiki-light, inherit)`
+    // CSS rule in `markdown.css` falling back to `inherit` (i.e.
+    // unhighlighted) in light mode.
+    defaultColor: false,
   })
 
   const bg = typeof result.bg === `string` ? result.bg.split(`;`)[0] : undefined
