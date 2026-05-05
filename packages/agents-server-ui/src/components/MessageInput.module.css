@@ -34,7 +34,7 @@
      bottom of a scrolling chat surface and chat content must NOT
      bleed through it. Solid raised surface is the right semantic. */
   background: var(--ds-surface-raised);
-  border: 1px solid var(--ds-gray-a3);
+  border: 1px solid var(--ds-border-1);
   border-radius: 12px;
   box-shadow:
     0 1px 3px rgba(15, 15, 30, 0.04),

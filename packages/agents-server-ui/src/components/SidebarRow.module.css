@@ -124,7 +124,7 @@
   flex-shrink: 0;
   padding-right: 5px;
   font-size: var(--ds-text-xs);
-  color: var(--ds-text-3);
+  color: var(--ds-text-4, var(--ds-text-3));
   text-transform: lowercase;
   line-height: 1;
   /* Animate the mask in/out as the row is hovered. */
@@ -142,7 +142,7 @@
   padding-right: 0;
 }
 .row:hover .type {
-  color: var(--ds-text-2);
+  color: var(--ds-text-3);
 }
 /* On hover, fade the right edge of the type+count text so the
    chevron icon (positioned absolutely on top of the same area) has

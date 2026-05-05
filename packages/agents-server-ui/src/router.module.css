@@ -14,6 +14,12 @@
   background: var(--ds-bg);
 }
 
+:root[data-theme='dark'] .entityShell {
+  background:
+    radial-gradient(ellipse at top, rgba(110, 168, 255, 0.04), transparent 40%),
+    var(--ds-bg);
+}
+
 .entityBody {
   flex: 1;
   min-height: 0;

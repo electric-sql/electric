@@ -66,7 +66,7 @@
 .statusPill {
   padding: 2px 0 2px 10px;
   border-left: 2px solid var(--ds-gray-a3);
-  opacity: 0.5;
+  color: var(--ds-text-4, var(--ds-text-3));
   letter-spacing: 0.02em;
 }
 
