@@ -5,7 +5,13 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { loadServers, saveServers } from '../lib/server-connection'
+import {
+  loadDesktopState,
+  loadServers,
+  onDesktopStateChanged,
+  saveActiveServer,
+  saveServers,
+} from '../lib/server-connection'
 import type { ReactNode } from 'react'
 import type { ServerConfig } from '../lib/types'
 
@@ -21,7 +27,7 @@ interface ServerConnectionState {
   servers: Array<ServerConfig>
   activeServer: ServerConfig | null
   connected: boolean
-  setActiveServer: (server: ServerConfig) => void
+  setActiveServer: (server: ServerConfig | null) => void
   addServer: (server: ServerConfig) => void
   removeServer: (url: string) => void
 }
@@ -42,21 +48,43 @@ export function ServerConnectionProvider({
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
-    loadServers()
-      .then((loaded) => {
-        const next = loaded.length > 0 ? loaded : [currentServer()]
+    Promise.all([loadServers(), loadDesktopState()])
+      .then(([loaded, desktopState]) => {
+        const next =
+          loaded.length > 0
+            ? loaded
+            : window.electronAPI
+              ? []
+              : [currentServer()]
+        const active =
+          desktopState?.activeServer &&
+          next.some((server) => server.url === desktopState.activeServer?.url)
+            ? desktopState.activeServer
+            : (next[0] ?? null)
         setServers(next)
-        setActiveServerState(next[0] ?? null)
+        setActiveServerState(active)
         if (loaded.length === 0) {
           void saveServers(next)
+        }
+        if (active) {
+          void saveActiveServer(active)
         }
       })
       .catch((err) => {
         console.error(`Failed to load saved servers:`, err)
-        const next = [currentServer()]
+        const next = window.electronAPI ? [] : [currentServer()]
         setServers(next)
         setActiveServerState(next[0] ?? null)
       })
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onDesktopStateChanged((state) => {
+      setActiveServerState(state.activeServer)
+    })
+    return () => {
+      unsubscribe?.()
+    }
   }, [])
 
   useEffect(() => {
@@ -86,13 +114,18 @@ export function ServerConnectionProvider({
     }
   }, [activeServer])
 
+  const setActiveServer = useCallback((server: ServerConfig | null) => {
+    setActiveServerState(server)
+    void saveActiveServer(server)
+  }, [])
+
   const addServer = useCallback(
     (server: ServerConfig) => {
       if (servers.some((s) => s.url === server.url)) return
       const next = [...servers, server]
       setServers(next)
-      saveServers(next)
       setActiveServerState(server)
+      void saveServers(next).then(() => saveActiveServer(server))
     },
     [servers]
   )
@@ -101,12 +134,12 @@ export function ServerConnectionProvider({
     (url: string) => {
       const next = servers.filter((s) => s.url !== url)
       setServers(next)
-      saveServers(next)
+      void saveServers(next)
       if (activeServer?.url === url) {
-        setActiveServerState(next[0] ?? null)
+        setActiveServer(next[0] ?? null)
       }
     },
-    [servers, activeServer]
+    [servers, activeServer, setActiveServer]
   )
 
   return (
@@ -115,7 +148,7 @@ export function ServerConnectionProvider({
         servers,
         activeServer,
         connected,
-        setActiveServer: setActiveServerState,
+        setActiveServer,
         addServer,
         removeServer,
       }}

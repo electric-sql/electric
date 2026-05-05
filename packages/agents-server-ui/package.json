@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:desktop": "vite build --mode desktop",
     "dev": "vite dev",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",

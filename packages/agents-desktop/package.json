@@ -1,0 +1,24 @@
+{
+  "name": "@electric-ax/agents-desktop",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && tsdown",
+    "dev": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && tsdown && pnpm run ensure:electron && electron .",
+    "ensure:electron": "node ./node_modules/electron/install.js",
+    "start": "pnpm run ensure:electron && electron .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-ax/agents": "workspace:*",
+    "@electric-ax/agents-server-ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "electron": "^41.5.0",
+    "tsdown": "^0.9.9",
+    "typescript": "^5.8.3"
+  }
+}

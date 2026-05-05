@@ -115,7 +115,12 @@ function EntityTitle({
         >
           {sessionId}
         </button>
-        <span className={styles.copyIcon} aria-hidden="true" onClick={copy}>
+        <span
+          className={styles.copyIcon}
+          aria-hidden="true"
+          onClick={copy}
+          data-no-drag
+        >
           {copied ? <Check size={12} /> : <Copy size={12} />}
         </span>
       </span>
