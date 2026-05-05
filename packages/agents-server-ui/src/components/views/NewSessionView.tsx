@@ -32,6 +32,36 @@ const HERO_TITLES = [
   `Let’s improve`,
 ] as const
 
+const LAST_PICKED_MODEL_STORAGE_KEY = `electric-agents-ui.new-session.last-picked-model`
+
+function isModelProperty(key: string): boolean {
+  const normalized = key.toLowerCase()
+  return (
+    normalized === `model` ||
+    normalized === `modelid` ||
+    normalized === `model_id`
+  )
+}
+
+function readLastPickedModel(options: Array<string>): string | null {
+  if (typeof window === `undefined`) return null
+  try {
+    const value = window.localStorage.getItem(LAST_PICKED_MODEL_STORAGE_KEY)
+    return value && options.includes(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+function persistLastPickedModel(value: string): void {
+  if (typeof window === `undefined`) return
+  try {
+    window.localStorage.setItem(LAST_PICKED_MODEL_STORAGE_KEY, value)
+  } catch {
+    // Quota / private mode — silent. This is only a picker convenience.
+  }
+}
+
 interface SchemaProperty {
   type?: string
   enum?: Array<unknown>
@@ -376,6 +406,15 @@ function DefaultAgentComposer({
   const [args, setArgs] = useState<Record<string, unknown>>(() => {
     const init: Record<string, unknown> = {}
     for (const { key, prop } of inlineProps) {
+      if (prop.enum && prop.enum.length > 0 && isModelProperty(key)) {
+        const options = prop.enum.map((v) => String(v))
+        const lastPicked = readLastPickedModel(options)
+        if (lastPicked !== null) {
+          init[key] =
+            prop.enum.find((v) => String(v) === lastPicked) ?? lastPicked
+          continue
+        }
+      }
       if (prop.default !== undefined) {
         init[key] = prop.default
       } else if (prop.enum && prop.enum.length > 0) {
@@ -434,6 +473,7 @@ function DefaultAgentComposer({
                 options={prop.enum.map((v) => String(v))}
                 onChange={(next) => {
                   const original = prop.enum!.find((v) => String(v) === next)
+                  if (isModelProperty(key)) persistLastPickedModel(next)
                   setArgs((prev) => ({ ...prev, [key]: original ?? next }))
                 }}
                 disabled={submitting || disabled}
