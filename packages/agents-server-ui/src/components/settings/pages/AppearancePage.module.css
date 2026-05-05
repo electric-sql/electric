@@ -1,0 +1,84 @@
+/* Three-up theme selector — visual analogue of the macOS System
+   Settings appearance picker. Each tile shows an icon + label/hint
+   and surfaces its selection state with an accent border + check
+   mark in the corner. */
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.tile {
+  all: unset;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--ds-radius-3);
+  border: 1px solid var(--ds-border-1);
+  background: var(--ds-bg);
+  cursor: pointer;
+  transition:
+    border-color 0.1s ease,
+    background 0.1s ease;
+}
+.tile:hover {
+  background: var(--ds-bg-subtle);
+}
+.tile:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: 1px;
+}
+
+.tileActive {
+  border-color: var(--ds-accent-a8);
+  background: var(--ds-accent-a3);
+}
+.tileActive:hover {
+  background: var(--ds-accent-a3);
+}
+
+.tileIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--ds-bg-subtle);
+  color: var(--ds-text-1);
+  flex-shrink: 0;
+}
+.tileActive .tileIcon {
+  background: var(--ds-accent-a4);
+  color: var(--ds-text-1);
+}
+
+.tileBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tileMark {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--ds-accent-a8);
+  color: var(--ds-bg);
+}
+
+@media (max-width: 600px) {
+  .themeGrid {
+    grid-template-columns: 1fr;
+  }
+}

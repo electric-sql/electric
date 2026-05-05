@@ -5,6 +5,8 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  redirect,
+  useLocation,
   useNavigate,
   useParams,
 } from '@tanstack/react-router'
@@ -31,7 +33,20 @@ import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
 import { ApiKeysModal } from './components/ApiKeysModal'
+import {
+  SettingsSidebar,
+  type SettingsCategoryId,
+} from './components/settings/SettingsSidebar'
+import { GeneralPage } from './components/settings/pages/GeneralPage'
+import { AppearancePage } from './components/settings/pages/AppearancePage'
+import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
 import styles from './router.module.css'
+
+const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
+  `general`,
+  `appearance`,
+  `local-runtime`,
+]
 
 function RootLayout(): React.ReactElement {
   return (
@@ -163,22 +178,52 @@ function RootShell(): React.ReactElement {
   const splat = (params as Record<string, string | undefined>)._splat
   const selectedEntityUrl = splat ? `/${splat}` : null
 
+  // Settings is its own sidebar — when the user navigates into
+  // `/settings/*` we swap the workspace sidebar (sessions list) for
+  // a settings-categories sidebar so the settings experience reads
+  // as part of the same shell rather than a modal overlay. The
+  // `<Outlet>` component rendered to the right comes from whichever
+  // route matched, so the right column behaves the same way for
+  // both the workspace and settings routes.
+  const location = useLocation()
+  const settingsCategory = parseSettingsCategory(location.pathname)
+  const inSettings = settingsCategory !== null
+
   return (
     <div className={styles.appShell}>
-      {!collapsed && (
-        <Sidebar
-          selectedEntityUrl={selectedEntityUrl}
-          onSelectEntity={navigateToEntity}
-          onOpenEntityInSplit={openEntityInSplit}
-          pinnedUrls={pinnedUrls}
-          onTogglePin={togglePin}
-        />
+      {inSettings ? (
+        <SettingsSidebar activeCategory={settingsCategory} />
+      ) : (
+        !collapsed && (
+          <Sidebar
+            selectedEntityUrl={selectedEntityUrl}
+            onSelectEntity={navigateToEntity}
+            onOpenEntityInSplit={openEntityInSplit}
+            pinnedUrls={pinnedUrls}
+            onTogglePin={togglePin}
+          />
+        )
       )}
       <Outlet />
       <SearchPalette />
       <ApiKeysModal />
     </div>
   )
+}
+
+/**
+ * Read the active settings category off the URL.
+ *
+ * Returns the category id when the user is on `/settings/<category>`,
+ * `null` otherwise. We hand-parse instead of using `useParams` because
+ * `RootShell` lives above the routes and doesn't have a strict route
+ * context to type-narrow against.
+ */
+function parseSettingsCategory(pathname: string): SettingsCategoryId | null {
+  const match = pathname.match(/^\/settings\/([^/?]+)/)
+  if (!match) return null
+  const id = match[1] as SettingsCategoryId
+  return SETTINGS_CATEGORY_IDS.includes(id) ? id : null
 }
 
 /**
@@ -230,7 +275,52 @@ const entityRoute = createRoute({
   validateSearch: workspaceSearchSchema,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, entityRoute])
+/**
+ * Settings shell — `/settings` redirects to the default category so
+ * the user always lands inside a populated panel rather than an empty
+ * shell. Each child route renders one category's screen on the right
+ * while `RootShell` swaps in the settings sidebar on the left.
+ */
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: `/settings`,
+  beforeLoad: () => {
+    throw redirect({
+      to: `/settings/$category`,
+      params: { category: `general` },
+    })
+  },
+  component: () => null,
+})
+
+const settingsCategoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: `/settings/$category`,
+  component: SettingsCategoryPage,
+})
+
+function SettingsCategoryPage(): React.ReactElement {
+  const params = useParams({ strict: false }) as Record<
+    string,
+    string | undefined
+  >
+  switch (params.category as SettingsCategoryId | undefined) {
+    case `appearance`:
+      return <AppearancePage />
+    case `local-runtime`:
+      return <LocalRuntimePage />
+    case `general`:
+    default:
+      return <GeneralPage />
+  }
+}
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  entityRoute,
+  settingsIndexRoute,
+  settingsCategoryRoute,
+])
 
 export const router = createRouter({
   routeTree,

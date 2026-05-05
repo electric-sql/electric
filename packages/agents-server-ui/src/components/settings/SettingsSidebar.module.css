@@ -1,0 +1,114 @@
+/* Settings sidebar — same surface treatment as `<Sidebar>` so the
+   transition between "app sidebar" and "settings sidebar" feels like
+   the contents of the column changed, not the column itself. */
+.root {
+  flex-shrink: 0;
+  width: 240px;
+  min-width: 240px;
+  background: var(--ds-bg-subtle);
+  border-right: 1px solid var(--ds-border-1);
+  position: relative;
+}
+
+/* Top header row mirrors the geometry of `SidebarHeader` (44px tall,
+   10px gutter) so the in-app titlebar height stays consistent across
+   the two sidebars. The button itself opts out of the drag region via
+   `data-no-drag` so it remains clickable on Electron. */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 10px;
+}
+
+:global(html[data-electric-desktop='true']) .header {
+  padding-left: 84px;
+  -webkit-app-region: drag;
+}
+
+:global(html[data-electric-desktop='true']) .header [data-no-drag] {
+  -webkit-app-region: no-drag;
+}
+
+.backButton {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--ds-radius-2);
+  cursor: pointer;
+  color: var(--ds-text-2);
+  transition:
+    background 0.08s ease,
+    color 0.08s ease;
+}
+.backButton:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+.backButton:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: 1px;
+}
+
+.scrollFlex {
+  flex: 1;
+  min-height: 0;
+}
+
+.list {
+  padding: 4px 8px 8px;
+  gap: 1px;
+}
+
+/* Category rows — match the geometry of `<SidebarRow>` so the column
+   reads as one consistent stack of selectable items. The active state
+   uses the standard accent surface, similar to the "selected entity"
+   row in the main sidebar. */
+.row {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--ds-row-height-md);
+  padding: 0 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--ds-text-1);
+  transition: background 0.08s ease;
+}
+.row:hover {
+  background: var(--ds-bg-hover);
+}
+.row:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: -2px;
+}
+.rowActive,
+.rowActive:hover {
+  background: var(--ds-accent-a3);
+  color: var(--ds-text-1);
+}
+
+.iconSlot {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-2);
+}
+.rowActive .iconSlot {
+  color: var(--ds-text-1);
+}
+
+.label {
+  font-size: var(--ds-text-sm);
+  line-height: 1;
+  flex: 1;
+  min-width: 0;
+}

@@ -5,3 +5,33 @@
   margin-left: auto;
   color: var(--ds-text-2);
 }
+
+/* Submenu trigger rows match `Menu.Item` geometry but the trigger
+   itself is rendered by Base UI's `MenuSubmenuTrigger` rather than
+   `MenuItem`, so we don't pick up the shared `styles.item` class
+   from the Menu primitive. Recreate the relevant bits inline so the
+   row looks identical to its siblings, and float the chevron right. */
+.submenuTrigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 8px;
+  border-radius: 7px;
+  font-size: var(--ds-text-sm);
+  line-height: 1.3;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  text-align: start;
+  width: 100%;
+  box-sizing: border-box;
+}
+.submenuTrigger[data-highlighted] {
+  background: var(--ds-bg-hover);
+}
+.submenuChevron {
+  margin-left: auto;
+  color: var(--ds-text-3);
+}

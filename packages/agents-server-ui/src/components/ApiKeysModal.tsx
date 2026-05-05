@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import {
   loadApiKeysStatus,
   saveApiKeys as persistApiKeys,
   type ApiKeysStatus,
 } from '../lib/server-connection'
-import { Button, Dialog, Field, Input, Stack, Text } from '../ui'
-import styles from './ApiKeysModal.module.css'
+import { Dialog } from '../ui'
+import { ApiKeysForm } from './ApiKeysForm'
 
 /**
  * First-launch dialog that captures provider API keys for the
@@ -23,8 +22,11 @@ import styles from './ApiKeysModal.module.css'
  *    `settings.json`, mirrors the values into `process.env`, and
  *    restarts the runtime so Horton picks them up on its next start.
  *  - Skip just closes the dialog — nothing is persisted, so the
- *    prompt reappears on next launch (intentional until a settings
- *    UI exists for editing keys later).
+ *    prompt reappears on next launch (the user can also revisit
+ *    Settings → General to set keys at any time).
+ *
+ * The form itself lives in `ApiKeysForm` so the same component is
+ * reused by Settings → General with a different secondary action.
  */
 export function ApiKeysModal(): React.ReactElement | null {
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
@@ -50,8 +52,8 @@ export function ApiKeysModal(): React.ReactElement | null {
     <Dialog.Root
       open={open}
       onOpenChange={(next) => {
-        // Skipping is allowed (we re-prompt next launch); use the
-        // controlled `open` state so the close-on-Escape /
+        // Skipping is allowed (Settings → General can fix keys later);
+        // use the controlled `open` state so close-on-Escape /
         // backdrop-click paths feed back into our own setter rather
         // than orphaning the dialog.
         setOpen(next)
@@ -77,6 +79,7 @@ export function ApiKeysModal(): React.ReactElement | null {
               status.suggested.openai ||
               status.suggested.brave
           )}
+          autoFocus
           onSave={async ({ anthropic, openai, brave }) => {
             await persistApiKeys({
               anthropic: anthropic.trim() || null,
@@ -84,122 +87,13 @@ export function ApiKeysModal(): React.ReactElement | null {
               brave: brave.trim() || null,
             })
             setOpen(false)
-            // Refresh local status so subsequent sessions in this
-            // window won't re-prompt even though the dialog is
-            // already closed.
             const next = await loadApiKeysStatus()
             if (next) setStatus(next)
           }}
-          onSkip={() => setOpen(false)}
+          onSecondary={() => setOpen(false)}
+          secondaryLabel="Skip for now"
         />
       </Dialog.Content>
     </Dialog.Root>
-  )
-}
-
-type FormValues = { anthropic: string; openai: string; brave: string }
-
-function ApiKeysForm({
-  initial,
-  showSuggestionHint,
-  onSave,
-  onSkip,
-}: {
-  initial: FormValues
-  showSuggestionHint: boolean
-  onSave: (keys: FormValues) => Promise<void>
-  onSkip: () => void
-}): React.ReactElement {
-  const [anthropic, setAnthropic] = useState(initial.anthropic)
-  const [openai, setOpenai] = useState(initial.openai)
-  const [brave, setBrave] = useState(initial.brave)
-  const [saving, setSaving] = useState(false)
-  // Save is enabled as long as the user has typed something — Brave
-  // alone is allowed (e.g. they already have an LLM key in `.env`
-  // and just want to add web-search support), but typing nothing
-  // would be a no-op so we keep the button disabled.
-  const canSave =
-    anthropic.trim().length > 0 ||
-    openai.trim().length > 0 ||
-    brave.trim().length > 0
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault()
-      if (!canSave || saving) return
-      setSaving(true)
-      try {
-        await onSave({ anthropic, openai, brave })
-      } finally {
-        setSaving(false)
-      }
-    },
-    [anthropic, openai, brave, canSave, saving, onSave]
-  )
-
-  return (
-    <form onSubmit={handleSubmit} className={styles.form}>
-      {showSuggestionHint && (
-        <div className={styles.hint}>
-          <Sparkles size={14} />
-          <Text size={1} tone="muted">
-            Pre-filled from your environment. Click save to persist them.
-          </Text>
-        </div>
-      )}
-      <Stack direction="column" gap={3}>
-        <Field
-          label="Anthropic API key"
-          description="Used for Claude models. Looks like sk-ant-…"
-        >
-          <Input
-            type="password"
-            placeholder="sk-ant-…"
-            value={anthropic}
-            onChange={(e) => setAnthropic(e.target.value)}
-            size={2}
-            autoFocus
-          />
-        </Field>
-        <Field
-          label="OpenAI API key"
-          description="Used for GPT models. Looks like sk-…"
-        >
-          <Input
-            type="password"
-            placeholder="sk-…"
-            value={openai}
-            onChange={(e) => setOpenai(e.target.value)}
-            size={2}
-          />
-        </Field>
-        <Field
-          label="Brave Search API key (optional)"
-          description="Powers the web-search tool. Without it, search falls back to Anthropic's built-in search."
-        >
-          <Input
-            type="password"
-            placeholder="BSA…"
-            value={brave}
-            onChange={(e) => setBrave(e.target.value)}
-            size={2}
-          />
-        </Field>
-      </Stack>
-      <Stack gap={2} justify="end" className={styles.actions}>
-        <Button
-          type="button"
-          variant="soft"
-          tone="neutral"
-          onClick={onSkip}
-          disabled={saving}
-        >
-          Skip for now
-        </Button>
-        <Button type="submit" disabled={!canSave || saving}>
-          {saving ? `Saving…` : `Save`}
-        </Button>
-      </Stack>
-    </form>
   )
 }
