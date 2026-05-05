@@ -8,7 +8,7 @@ import { getView } from '../../lib/workspace/viewRegistry'
 import { setDragPayload } from '../../lib/workspace/dragPayload'
 import { EntityHeader } from '../EntityHeader'
 import { MainHeader } from '../MainHeader'
-import { Stack, Text } from '../../ui'
+import { Stack } from '../../ui'
 import { SplitMenu } from './SplitMenu'
 import { DropOverlay } from './DropOverlay'
 import type { Tile } from '../../lib/workspace/types'
@@ -155,7 +155,6 @@ function EntityTileBody({
 function StandaloneTileBody({ tile }: { tile: Tile }): React.ReactElement {
   const { activeServer } = useServerConnection()
   const viewDef = getView(tile.viewId)
-  const Icon = viewDef?.icon
   const baseUrl = activeServer?.url ?? ``
 
   // Same drag-by-header trick as the entity tile body — the whole
@@ -184,15 +183,7 @@ function StandaloneTileBody({ tile }: { tile: Tile }): React.ReactElement {
       draggable
       onDragStart={onHeaderDragStart}
     >
-      <MainHeader
-        title={
-          <span className={styles.standaloneTitle}>
-            {Icon && <Icon size={14} />}
-            <Text size={2}>{viewDef.label}</Text>
-          </span>
-        }
-        actions={<SplitMenu tile={tile} entity={null} />}
-      />
+      <MainHeader actions={<SplitMenu tile={tile} entity={null} />} />
       <View baseUrl={baseUrl} tileId={tile.id} />
     </Stack>
   )

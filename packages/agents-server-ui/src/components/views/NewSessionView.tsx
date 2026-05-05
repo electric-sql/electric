@@ -210,8 +210,8 @@ function Picker({
   return (
     <Stack direction="column" gap={5}>
       <div className={styles.heading}>
-        <Text size={5} as="h1" className={styles.headingTitle}>
-          Start a new session
+        <Text size={7} as="h1" className={styles.headingTitle}>
+          Let’s ship
         </Text>
         <span className={styles.headingSubtitle}>
           {defaultAgent

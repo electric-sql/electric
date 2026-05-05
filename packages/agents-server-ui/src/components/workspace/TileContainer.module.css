@@ -31,12 +31,3 @@
     --chat-col-width: 80ch;
   }
 }
-
-/* Title slot for a standalone (entity-less) tile — icon + label, sized
- * to match how `<EntityHeader>` lays out an entity title. */
-.standaloneTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ds-text-1);
-}
