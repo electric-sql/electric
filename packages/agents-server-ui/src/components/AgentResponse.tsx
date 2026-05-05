@@ -1,4 +1,12 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Check, Copy } from 'lucide-react'
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Streamdown } from 'streamdown'
 import {
   getCachedMarkdownRender,
@@ -212,6 +220,16 @@ const MarkdownSegment = memo(function MarkdownSegment({
   )
 })
 
+function toolItemToCopyText(item: EntityTimelineContentItem): string {
+  if (item.kind === `text`) return item.text
+
+  const parts = [`[tool: ${item.toolName}]`]
+  const argsText = JSON.stringify(item.args, null, 2)
+  if (argsText && argsText !== `{}`) parts.push(argsText)
+  if (item.result) parts.push(item.result)
+  return parts.join(`\n`)
+}
+
 export const AgentResponse = memo(function AgentResponse({
   section,
   isStreaming,
@@ -224,6 +242,30 @@ export const AgentResponse = memo(function AgentResponse({
   renderWidth?: number
 }): React.ReactElement {
   const canCache = !isStreaming && section.done === true
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const copyText = useMemo(
+    () =>
+      section.items
+        .map(toolItemToCopyText)
+        .filter((text) => text.trim().length > 0)
+        .join(`\n\n`),
+    [section.items]
+  )
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    }
+  }, [])
+
+  const copyResponseText = async () => {
+    if (!copyText) return
+    await navigator.clipboard.writeText(copyText)
+    setCopied(true)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1200)
+  }
 
   // "Thinking" indicator visibility:
   //   show while the response is mid-stream and there's nothing
@@ -277,6 +319,18 @@ export const AgentResponse = memo(function AgentResponse({
             inline with a timestamp that hasn't really happened yet. */}
         {timestamp != null && !isStreaming && (
           <TimeText ts={timestamp} className={styles.timeText} />
+        )}
+        {copyText && (
+          <button
+            type="button"
+            className={styles.copyButton}
+            onClick={() => void copyResponseText()}
+            aria-label="Copy response text"
+            title={copied ? `Copied` : `Copy all response text`}
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            <span>{copied ? `Copied` : `Copy`}</span>
+          </button>
         )}
       </Stack>
     </Stack>
