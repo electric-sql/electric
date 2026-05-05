@@ -6,52 +6,50 @@
 
 ## Summary
 
-Add Model Context Protocol (MCP) support to Electric Agents so agents can call tools and read data from external MCP servers — both locally-spawned stdio servers and remote HTTP servers — with credentials and OAuth managed durably by the runtime.
-
-Three things differentiate this from existing coding agents' MCP support:
-
-1. A real **Connected Services catalog** in the agents-server-ui that surfaces auth status, last refresh, and per-server actions. No popular agent has this; several have open issues caused by its absence.
-2. **Durable pause-on-reauth.** When a tool call hits an expired credential that can't be silently refreshed, the runtime pauses the tool call (no compute consumed), surfaces a reauthorization prompt, and resumes the tool call with the new token when authorization completes. The agent never sees a 401.
-3. **Runtime-owned credentials.** The runtime serializes refresh-token use across concurrent wakes, avoiding the single-use-refresh-token race that bites Claude Code and other multi-session agents.
+Add Model Context Protocol (MCP) support to Electric Agents so agents can call tools and read data from external MCP servers — both locally-spawned stdio servers and remote HTTP servers — with credentials managed by the runtime.
 
 ## Goals
 
 - Agents can call MCP tools from servers declared in runtime config.
 - Both stdio (local subprocess) and Streamable HTTP transports.
 - All three credential modes: API key, OAuth client credentials, OAuth authorization code (browser-redirect and device-code variants).
-- Silent token refresh on every call where possible.
-- Human-in-the-loop reauth flow that pauses tool calls durably and resumes them on completion.
-- Servers added/removed/reconfigured at runtime are visible to running agents within the same wake.
+- Silent token refresh on every call where possible. When silent refresh isn't possible, the tool call returns a structured error to the agent's model.
+- Per-call timeouts so a misbehaving or slow server can't hang a wake.
 - A web UI surface (agents-server-ui) showing server health and providing reauth actions.
+- Servers added/removed/reconfigured at runtime are visible to running agents within the same wake.
 - Pluggable key vault interface; default file-on-disk implementation for v1.
 
 ## Non-goals (v1)
 
-- **User identity / per-user credentials.** Electric Agents has no user record today. Credentials are app-scoped: one set of credentials per registered server, shared across all agents in the runtime. Spawn-scoped or user-scoped credentials are deferred until a user identity model exists.
-- **Spawn-scoped credentials.** A future addition once identity exists.
-- **Active background token refresher.** Reactive refresh-on-use plus the catalog page handle correctness without the moving parts.
-- **Suspend-on-`progressToken`.** The durable pause primitive is built once for reauth; wiring `progressToken` into suspend semantics is deferred until a concrete user shows up with a slow MCP server. Pass-through to the timeline (rendering progress events) IS in v1.
-- **Legacy SSE transport** (deprecated in the MCP spec).
-- **WebSocket or other non-spec transports.**
+- **Wake-level suspend for long-running tool calls.** Tool calls are synchronous within the wake; if a call exceeds the per-call timeout it fails with `timeout`. The MCP servers in the v1 use cases (Sentry, Honeycomb, GitHub, Linear, Notion, internal docs, codebase stdio servers) all return in seconds. Genuinely long-running MCP servers (CI orchestrators, deep-research, LLM-wrapping servers) are rare/emerging; we'll add wake suspension when a concrete use case shows up. The durable runtime makes it cheap to add later.
+- **User identity / per-user credentials.** Electric Agents has no user record today. Credentials are app-scoped: one set per registered server.
+- **Spawn-scoped credentials.** Future addition once identity exists.
+- **Durable pause-and-resume of tool calls on auth failure.** Auth failures resolve as tool errors the agent's model handles; the operator fixes broken credentials via the catalog page; future invocations work. We considered a runtime-managed pause-on-reauth primitive (block the call until the user reauthorizes, then resume) but it complicates the model and risks blocked agents waiting on humans who don't return. Revisit only if a use case demands it.
+- **Active background token refresher.** Refresh-on-use plus the catalog page handle correctness.
+- **Legacy SSE transport** (deprecated in the MCP spec). **WebSocket** (not in spec).
 - **In-process resource limits** for stdio subprocesses. Operators apply limits externally (containerization).
 
 ## User stories
 
-### US-1: Automated workflow uses shared system credentials
+The user stories below describe the **software-factory patterns** Electric Agents enables once MCP support is in place. MCP is the substrate that makes the integration surface uniform — every SaaS tool, observability platform, codebase, and internal data source becomes a pluggable tool surface for any agent in the factory.
 
-A honeycomb webhook fires; the runtime spawns an entity tree to investigate. The agent calls the honeycomb MCP server (registered with an API key) and the sentry MCP server (registered with OAuth client_credentials). Neither integration requires a human to be present. Tokens refresh silently on each call. If a credential ever fails (rotation, revocation), the catalog page surfaces it for an on-call operator.
+### US-1: Incident response factory
 
-### US-2: Developer-driven workflow uses personal credentials
+A signal (Sentry alert, Honeycomb trigger, PagerDuty page) fires a webhook. An investigator agent wakes, pulls context across multiple observability MCP servers (Sentry, Honeycomb, Datadog), correlates it with recent code changes via a GitHub MCP server, and reads runbooks from an internal-docs MCP server. It produces a structured incident summary in the on-call channel. If the signal warrants remediation, it spawns a coding subagent that opens a PR through the GitHub MCP. Operators can audit, after the fact, which servers each agent touched and why.
 
-A developer runs a coding agent locally that needs to push a branch via the GitHub MCP server. The first time the agent calls a GitHub tool, no credential is in the vault. The runtime pauses the tool call and surfaces a reauthorization prompt on the entity timeline (and on the catalog page). The developer clicks "Authorize," completes OAuth in their browser, and the agent resumes — the original `create_pull_request` call returns the actual result. Subsequent calls reuse the stored token and refresh silently.
+*MCP unlocks this by giving every observability platform and code host a uniform tool surface — adding Datadog to the factory is registering a new server, not writing a new integration. Runtime-owned credentials let the same workflow run unattended at 3am as well as during business hours.*
 
-### US-3: Operator hot-adds an MCP server
+### US-2: Coding-agent factory
 
-While agents are running, an operator edits `mcp.json` to add a new server (e.g. a Linear MCP server). The runtime picks up the change. A running agent's next tool-selection step sees the new tools available without the wake restarting.
+A developer kicks off a coding task in a horton chat. The agent plans the work using Linear and GitHub MCP servers, drafts code locally with stdio MCP servers (filesystem, git, language servers, type-checkers), and pushes a branch via the GitHub MCP using the developer's credentials. It spawns specialized subagents for narrow subtasks — a test-writer, a docs-updater, a deploy-checker — each inheriting the same MCP allowlist.
 
-### US-4: Operator inspects credential health
+*MCP support makes coding agents portable across companies: every customer plugs in their own MCP servers without the runtime needing per-company integrations. The split between app-scoped servers (the company's shared SaaS) and the developer's local stdio servers (their working environment) maps cleanly to "what the factory reads" vs "what the developer acts through."*
 
-An operator visits the Connected Services page in agents-server-ui to see all registered MCP servers, their auth status, last successful token refresh, and any pending reauth prompts. Servers showing `needs_auth` or `expired` can be authorized in place.
+### US-3: Continuous knowledge factory
+
+Scheduled agents periodically query company-internal sources (Notion, Slack, Drive, Linear, internal wikis) and external ones (web search, GitHub, arxiv) to produce role-specific digests — a security report for the CISO, a product-feedback rollup for PMs, a research feed for engineers. New sources are added by registering an MCP server; running agents pick them up at the next wake.
+
+*MCP's hot-reload support means the factory's "what we research" surface evolves by config edit, not by deploy. Each digest pipeline is a small composition of MCP servers and a prompt — easy to spin up new ones without touching runtime code.*
 
 ## Architecture
 
@@ -64,10 +62,9 @@ An operator visits the Connected Services page in agents-server-ui to see all re
 │  ┌─────────────────────┐  ┌────────────────────────────────┐    │
 │  │  MCP Registry       │  │  Key Vault (pluggable)         │    │
 │  │  - Loads mcp.json   │  │  - get/set/delete by ref       │    │
-│  │  - Watches for      │  │  - Default: file-on-disk       │    │
-│  │    changes          │  │  - Future: HC Vault, AWS SM    │    │
-│  │  - Manages stdio    │  └────────────────────────────────┘    │
-│  │    subprocesses     │                                         │
+│  │  - Watches changes  │  │  - Default: file-on-disk       │    │
+│  │  - Manages stdio    │  │  - Future: HC Vault, AWS SM    │    │
+│  │    subprocesses     │  └────────────────────────────────┘    │
 │  └──────────┬──────────┘  ┌────────────────────────────────┐    │
 │             │             │  OAuth Coordinator             │    │
 │             │             │  - PKCE / DCR / device-code    │    │
@@ -77,22 +74,22 @@ An operator visits the Connected Services page in agents-server-ui to see all re
 │             │                                                    │
 │  ┌──────────▼──────────────────────────────────────────────┐    │
 │  │  MCP Bridge (per-tool-call)                             │    │
-│  │  - Asks vault for token                                 │    │
+│  │  - Asks vault for token; runs silent refresh if needed  │    │
 │  │  - Routes call (stdio JSON-RPC / Streamable HTTP)       │    │
-│  │  - On auth fail: pauses call, emits reauth event        │    │
-│  │  - Pass-through progress notifications                  │    │
+│  │  - Enforces per-call timeout                            │    │
+│  │  - On unrecoverable failure: returns structured error   │    │
 │  └────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
                              │
-                             │  reauth events / progress events
+                             │  server-state events
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    agents-server-ui                              │
-│  ┌─────────────────────────┐  ┌──────────────────────────────┐  │
-│  │  Entity Timeline         │  │  Connected Services page     │  │
-│  │  - Inline reauth prompts │  │  - Per-server status         │  │
-│  │  - Progress events       │  │  - Authorize / Re-authorize  │  │
-│  └─────────────────────────┘  └──────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Connected Services page                                 │   │
+│  │  - Per-server status (healthy / needs_auth / error)      │   │
+│  │  - Authorize / Re-authorize / Disconnect actions         │   │
+│  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -101,9 +98,9 @@ An operator visits the Connected Services page in agents-server-ui to see all re
 | Transport | Where runs | Notes |
 |---|---|---|
 | **stdio** | Subprocess of the agents-server runtime, on the runtime host | Lazy-spawned on first tool call; one process per server; multiplexed via JSON-RPC `id`; restarted on crash |
-| **Streamable HTTP** | Anywhere network-reachable | Single HTTP endpoint per spec; server-pushed messages over SSE inside the HTTP response stream |
+| **Streamable HTTP** | Anywhere network-reachable | Single HTTP endpoint per spec; server-pushed messages over SSE inside the response stream |
 
-In local-dev, the runtime is the developer's machine, so stdio servers can read local user credentials (e.g. an existing `gh` CLI token via env). In a server-hosted deployment, the runtime is on the agents-server host; stdio servers there are inherently shared/system-level (no user identity to attach to). **Stdio + personal credentials is a local-dev pattern, not a deployment pattern** — this should be documented prominently.
+In local-dev, the runtime is the developer's machine, so stdio servers can read local user credentials (e.g. an existing `gh` CLI token via env). In a server-hosted deployment, the runtime is on the agents-server host; stdio servers there are inherently shared/system-level. **Stdio + personal credentials is a local-dev pattern, not a deployment pattern** — documented prominently.
 
 ### Credential model
 
@@ -112,44 +109,26 @@ Three auth modes per server:
 | Mode | Initial setup | Steady state | Operator action when fails |
 |---|---|---|---|
 | `apiKey` | Operator pastes key into vault | Never expires until rotated | Rotate key |
-| `clientCredentials` | Operator pastes `client_id` + `client_secret` | Runtime exchanges for short-lived access tokens silently, every call | Rotate client secret |
-| `authorizationCode` (`browser` or `device`) | Browser/device flow → user approves | Silent refresh on each use; refresh tokens rotate | Re-consent |
+| `clientCredentials` | Operator pastes `client_id` + `client_secret` | Runtime exchanges for short-lived access tokens silently | Rotate client secret |
+| `authorizationCode` (`browser` or `device`) | Browser/device flow → user approves | Silent refresh on each use; refresh tokens rotate | Re-consent via catalog |
 
-The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server that an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out).
+The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out).
 
-### Pause-on-reauth flow
+### Token handling
 
-This is the central novel behavior. Sequence for a single tool call:
+The runtime always tries to keep a valid token in hand:
 
-1. **Wake N starts.** Agent dispatches `github.create_issue`.
-2. **MCP Bridge asks vault for token.** Three branches:
-   - Valid access token → call proceeds; tool result returned synchronously.
-   - Expired access + valid refresh → bridge runs refresh exchange under per-server mutex; on success, retries with new token; on failure, falls into branch 3.
-   - No usable token → enter pause flow.
-3. **Pause flow:**
-   - Tool call recorded in entity stream as `pending: awaiting_auth`, with metadata `{ server, reason, request_payload }`.
-   - Reauth request emitted to two surfaces: entity timeline and Connected Services catalog. Carries OAuth authorization URL (browser flow) or device code + verification URL (device flow).
-   - Wake N's other independent work continues; if everything depends on this call, the wake ends.
-4. **Entity sleeps** durably. Manifest entry: "wake me when server `<name>` becomes authorized."
-5. **Authorization completes** out-of-band:
-   - Browser flow: callback hits agents-server `/oauth/callback/<server>`, OAuth Coordinator exchanges code for token, vault stores token, server-state event fires.
-   - Device flow: agents-server polls token endpoint with the device code; when authorization completes, vault stores token, event fires.
-6. **Wake N+1 fires** with the server-state-changed event. Runtime retries all pending tool calls bound to this server with the new token. Materializes results into the timeline. Runs the agent loop with results in context.
+- **Valid token in vault** → call proceeds.
+- **Expired access token + valid refresh token (or clientCredentials)** → silent refresh under a per-`(server, scope)` mutex; on success the call retries transparently. The agent never sees this happen.
+- **Silent refresh impossible** (no credential, refresh token expired/revoked, OAuth provider unreachable) → the tool call resolves with a structured `auth_unavailable` error. The agent's model decides what to do (retry, fall back, abort, surface to the user). The credential issue is also reflected on the Connected Services catalog so an operator can fix it; once fixed, future calls work normally.
 
-Variations:
+The mutex on the refresh exchange is what prevents the [Claude Code #24317](https://github.com/anthropics/claude-code/issues/24317) class of bug where concurrent sessions invalidate each other's single-use refresh tokens.
 
-- **Coalescing.** Multiple in-flight calls to the same server share one reauth request and all retry on resolution.
-- **Multi-server.** Two different servers needing auth produce two reauth requests; the entity wakes when both resolve.
-- **TTL.** Pending-auth tool calls have a default 24h TTL. On expiry, the call resolves with an `auth_unavailable` error so the agent can decide what to do (fall back, abort, alert).
-- **Concurrent refresh serialization.** Multiple wakes hitting the same near-expiry token: one runs the refresh exchange under a `(server, scope)` mutex; others await its result. Solves the [Claude Code #24317](https://github.com/anthropics/claude-code/issues/24317) class of bugs.
+### Per-call timeouts
 
-### Long-running tool calls and `progressToken`
+Every MCP tool call has a timeout (default 30s, overridable per server in `mcp.json`). When exceeded, the bridge cancels the call (JSON-RPC cancellation for stdio servers; HTTP request abort for HTTP servers) and resolves it with a `timeout` error result. The agent's model decides what to do.
 
-Same machinery as pause-on-reauth, but triggered by a different signal:
-
-- If the tool call carries a `progressToken` and the MCP server emits progress notifications, the bridge passes them through to the entity timeline as they arrive.
-- v1: progress events are visible to the user; the wake stays open. (Same as today's tool calls.)
-- v2 (deferred): on first progress notification, optionally end the wake and treat further progress / terminal events as wake events. Durable substrate makes this cheap; deferring until a real long-running MCP server enters the picture.
+The timeout is a hygiene feature, not a long-running-call solution. Calls in v1 are synchronous within the wake; the timeout exists to prevent a misbehaving server from hanging the wake indefinitely.
 
 ## SDK shape
 
@@ -232,7 +211,6 @@ interface KeyVault {
   get(ref: string): Promise<string | null>
   set(ref: string, secret: string, opts?: { expiresAt?: Date }): Promise<void>
   delete(ref: string): Promise<void>
-  // Optional: list refs for the catalog UI
   list(prefix?: string): Promise<Array<{ ref: string; expiresAt?: Date }>>
 }
 ```
@@ -256,19 +234,21 @@ Changes to `mcp.json` (or `runtime.registerMcpServer` / `unregisterMcpServer`) t
 
 ## Connected Services UI
 
-A new page in agents-server-ui listing all registered servers as rows. Each row shows:
+A new page in agents-server-ui listing all registered servers. Each row shows:
 
 - **Name and transport** (stdio / http).
 - **Auth mode** (apiKey / clientCredentials / authorizationCode).
 - **Status** — one of:
   - `healthy` — token valid, recent successful call.
-  - `expiring` — token within configurable window of expiry, refresh is expected to succeed silently.
-  - `needs_auth` — no credential in vault, or refresh failed; pending reauth.
+  - `expiring` — token within configurable window of expiry, refresh expected to succeed silently.
+  - `needs_auth` — no credential in vault, or refresh failed.
   - `error` — server returned errors recently (other than auth).
   - `disabled` — operator paused the server.
 - **Last successful call / refresh** timestamp.
 - **Per-row actions:** `Authorize` / `Re-authorize` / `Disconnect` / `Disable` / `Enable`.
-- **Pending reauth detail** — when a tool call is paused waiting on this server, show the count of pending calls and (for device flow) the user code + verification URL.
+- **Device-flow detail** — when an in-progress device flow exists, the user code + verification URL.
+
+The catalog is the operator's primary mechanism for noticing and fixing broken credentials, and the developer's primary surface for kicking off initial OAuth flows.
 
 ## MCP spec conformance
 
@@ -276,99 +256,23 @@ We follow the MCP authorization spec for HTTP servers:
 
 - OAuth 2.1 with PKCE (S256).
 - Dynamic Client Registration (RFC 7591).
-- Protected Resource Metadata (RFC 9728) for resource discovery.
+- Protected Resource Metadata (RFC 9728).
 - Resource Indicators (RFC 8707).
 - Streamable HTTP transport per the current spec.
 
-Two intentional deviations:
-
-1. **Pause-tool-call-on-auth-fail** instead of returning a 401 to the model. The spec doesn't forbid this; it's a runtime-level concern about how to handle auth failures.
-2. **Durable progress-token handling.** Pass-through to the timeline in v1; durable suspend-on-progress in a future version.
-
 We add device-code grant (RFC 8628) as a first-class flow alongside browser-redirect — better fit for headless / webhook-spawned / remote-runtime contexts where there's no developer-at-a-browser.
 
-## Failure scenarios
+## Failure handling
 
-The system encounters two broad classes of failure: **authentication failures**, which trigger the durable pause-on-reauth flow described above; and **everything else**, which surfaces as a tool-call error result that the agent's model can read and react to. The dividing line matters — pausing on a non-auth failure (e.g. an HTTP 503) would prevent the agent from ever falling back to a different approach, while returning a 401 to the model would defeat the runtime's whole reason for owning credentials.
+The runtime returns a structured error to the agent's model on any tool-call failure it can't transparently recover from. Categories the model may see:
 
-### Transport and process failures
+- `auth_unavailable` — silent refresh failed and no credential is usable; the operator/developer must reauthorize via the catalog.
+- `transport_error` — server unreachable, connection dropped, malformed response.
+- `timeout` — call exceeded its per-call timeout.
+- `server_error` — the MCP server returned a structured error.
+- `tool_not_found` — capability mismatch (e.g. server's tool list changed since compose).
 
-| Scenario | Behavior |
-|---|---|
-| **HTTP MCP server unreachable** (DNS, refused, timeout) | Tool call fails with a `transport_error` result; agent's model sees it, can retry or fall back. After N consecutive failures (configurable, default 5) the catalog flips the server's status to `error` and surfaces the last error message. |
-| **HTTP server returns 5xx** | Bridge retries with exponential backoff up to a per-call timeout (default 30s); on giving up, returns `transport_error` to the agent. |
-| **Streamable HTTP connection drops mid-call** | If the spec's session resumption applies (server supports it), bridge resumes; otherwise the call fails with `transport_error`. |
-| **Stdio subprocess fails to spawn** (binary missing, permission denied) | Tool call fails with `server_unavailable`; catalog flips to `error` until config is fixed. Operator sees the spawn error in the catalog row's "last error" detail. |
-| **Stdio subprocess crashes mid-call** | All in-flight calls to that server fail with `transport_error`. Subprocess respawns lazily on the next call. Crash count and last crash time visible on the catalog row. |
-| **Stdio subprocess hangs** | Per-call timeout (default 30s, configurable per server) fires; bridge sends a JSON-RPC cancellation if supported, else kills the subprocess. Returns `timeout` to the agent. |
-| **Stdio subprocess writes invalid JSON-RPC** | Bridge logs the malformed line, returns `protocol_error` for the in-flight call. After repeated occurrences the subprocess is killed and respawned. |
-
-### Authentication failures (these trigger pause-on-reauth)
-
-| Scenario | Behavior |
-|---|---|
-| **No credential in vault** (first use of a server) | Tool call enters pending-auth state; reauth prompt surfaces on timeline + catalog. |
-| **Access token expired, refresh token valid** | Bridge runs silent refresh under per-`(server, scope)` mutex; on success retries with new token transparently. No pause, no model-visible event. |
-| **Refresh token expired or revoked** | Silent refresh fails; tool call enters pending-auth state. |
-| **OAuth authorization server unreachable** during refresh | Bridge retries with backoff (this is a transport failure on the auth side). After exhausting retries, the call enters pending-auth state — the operator may need to investigate the auth server, but the user-facing surface is the same: a reauth prompt. The catalog shows the underlying error. |
-| **Authorization code flow abandoned** (user closed browser) | The authorization-code request has its own TTL (default 10 minutes). On expiry the pending tool call remains in pending-auth and a fresh reauth prompt can be issued. |
-| **Device code expires before user verifies** | Same as above — the device-flow request has a TTL (per the OAuth provider, typically 5–15 minutes); on expiry, surface a fresh prompt. |
-| **Token revoked server-side mid-call** (we just refreshed but get 401) | Bridge attempts one silent refresh; if that also fails, falls into pending-auth flow. Avoids infinite refresh loops via a per-call refresh-attempt counter (max 1). |
-| **Refresh-token reuse detected by provider** (e.g. provider invalidates the chain) | Treated as refresh failure → pending-auth flow. The mutex on `(server, scope)` makes self-induced reuse races impossible; reuse detected here is from out-of-band events (another client, manual revocation). |
-| **Provider requires step-up / MFA / re-consent** | Provider-specific error response → pending-auth flow with a reason string carried into the prompt. |
-
-### Tool-call result failures
-
-| Scenario | Behavior |
-|---|---|
-| **MCP tool returns a structured error** | Surfaced to the agent as a tool error result. Agent's model decides what to do. |
-| **MCP tool result fails its declared output schema** | Bridge logs the violation, returns `schema_violation` to the agent. The catalog flags the server as `error` if it persists. |
-| **MCP server reports tool doesn't exist** (race with hot-reload, or stale capabilities) | Bridge re-fetches the server's tool list and either retries or returns `tool_not_found`. |
-| **Tool call payload exceeds server limit** | Returns the server's error to the agent unchanged. |
-
-### Vault failures
-
-| Scenario | Behavior |
-|---|---|
-| **Vault unavailable** (file locked, keychain not unlocked, backend down) | All in-flight tool calls needing credentials fail with `vault_unavailable`; catalog shows runtime-level error banner. Calls do NOT enter pending-auth — pausing wouldn't help if the vault itself is broken. |
-| **Vault returns corrupted data** | Treated as missing credential → pending-auth flow. The catalog row shows a `vault_error` annotation. |
-| **Vault write fails after successful OAuth callback** | Callback returns 500 to the OAuth provider; user sees an error in the browser. The pending tool call stays paused. Operator must investigate vault before reauth can complete. |
-| **Two concurrent reauth completions for same server** | Last write wins at the vault layer; the per-`(server, scope)` mutex prevents this within one runtime. Cross-runtime races are out of scope (single-runtime assumption in v1). |
-
-### Pause/resume durability failures
-
-| Scenario | Behavior |
-|---|---|
-| **agents-server restarts with pending-auth calls in flight** | Pending state is durable (entity stream); on restart, the manifest still has "wake me when server X is authorized" entries. Reauth completion (via callback or device-flow polling) wakes the entity normally. |
-| **OAuth callback URL unreachable from provider** (NAT, dev environment) | The flow simply doesn't complete. TTL eventually fires; the prompt expires and can be reissued. Local-dev users typically use a tunneling proxy or device-code flow to avoid this. |
-| **Pending-auth TTL fires while user is mid-reauth** | Race window; we resolve by checking TTL only at wake time, not in a separate timer. If the reauth completion event arrives while the call is technically expired, we still honor it and resolve the call. The TTL is a backstop, not a hard fence. |
-| **Wake event fires but vault write hasn't propagated** | Wake event is emitted only after vault write commits. No race in the single-runtime assumption. |
-
-### Hot-reload edge cases
-
-| Scenario | Behavior |
-|---|---|
-| **`mcp.json` is invalid JSON mid-edit** | File watcher debounces (default 500ms) and validates before applying. Invalid configs are logged and ignored; the previous valid config remains active. Error visible on the catalog page. |
-| **`mcp.json` references a vault ref that doesn't exist** | Server registers but flips to `needs_auth` immediately; tool calls enter pending-auth on first use. |
-| **Server reconfigured with different transport** (stdio → http) | Treated as remove + add: existing stdio subprocess terminates after in-flight calls drain, new HTTP server registers. |
-| **File watcher misses an event** | Hot-reload is best-effort; the catalog page has a "Reload config" button that forces a re-read. |
-
-### Security failures
-
-| Scenario | Behavior |
-|---|---|
-| **OAuth callback CSRF / state parameter mismatch** | Callback rejects the request with 400; OAuth Coordinator generates and validates `state` per RFC 6749 §10.12. |
-| **Vault file permissions become world-readable** | Vault implementation enforces `chmod 600` on every write; logs a warning and refuses to read if mode is wider than `0600`. |
-| **MCP server returns a tool description containing prompt-injection text** | Out of scope for the runtime to detect; documented as a known risk. Operators should only register MCP servers they trust. The catalog page can show the registered tool descriptions so operators can audit. |
-| **Stdio subprocess attempts to escalate** (reads files outside intended scope) | Out of scope for v1; operators run agents-server with appropriate OS-level isolation (containers, user accounts). Future: optional sandboxing for stdio servers. |
-
-### Concurrency hazards
-
-| Scenario | Behavior |
-|---|---|
-| **Multiple wakes refreshing same near-expiry token** | Per-`(server, scope)` mutex; one runs the exchange, others await its result. |
-| **Token refreshed mid-call** (call started with old token, refresh succeeded mid-flight) | Old token's call either completes (provider still accepts it briefly) or fails with 401, in which case the per-call refresh-attempt counter (max 1) allows a single retry with the new token. |
-| **Two simultaneous browser-flow authorizations for same server** | Both produce valid `state` parameters; whichever callback returns first wins; the second's vault write either races (mutex serializes) or is treated as a token refresh. The catalog page shows whichever credential is current. |
+Agents are expected to handle these like any other tool error: retry, fall back, give up gracefully, or escalate to the user. The runtime does not block tool calls indefinitely waiting for out-of-band recovery.
 
 ## Project risks and mitigations
 
@@ -376,30 +280,24 @@ The system encounters two broad classes of failure: **authentication failures**,
 |---|---|
 | Refresh-token race across wakes | Per-`(server, scope)` mutex around the refresh exchange; runtime owns the credential. |
 | Vault file leaks if file permissions wrong | Default implementation enforces `chmod 600`; refuses to read wider modes; encryption-at-rest where OS keychain is available. |
-| Operator misconfigures `authorizationCode` for unattended workflow | Schema validator warns; docs call out the right modes for unattended use. |
 | Hot-reload causes user confusion when tool list changes mid-wake | Manifest snapshot at compose time records what the agent saw; catalog shows live truth. |
-| Stdio + personal credentials confused for a deployment pattern | Documentation prominently scopes it as local-dev only; spec validator may warn when stdio servers reference user-only credential sources in deployed configs (future). |
+| Stdio + personal credentials confused for a deployment pattern | Documentation prominently scopes it as local-dev only. |
 | Untrusted MCP servers leak data or inject prompts | Out of scope for runtime; operators register only trusted servers; catalog surfaces registered tool descriptions for audit. |
 
 ## Rollout plan
 
-1. **Phase 1 — registry and bridge.** MCP Registry (with `mcp.json` loading and file-watch), key vault interface + file-on-disk default, stdio + HTTP bridge, per-agent allowlist, hot-reload of newly-added servers. No OAuth yet — only `apiKey` mode. Goal: agents can call MCP tools given a pre-configured API key, and operators can hot-add new API-key servers.
+1. **Phase 1 — registry and bridge.** MCP Registry (with `mcp.json` loading and file-watch), key vault interface + file-on-disk default, stdio + HTTP bridge with per-call timeouts, per-agent allowlist, hot-reload of newly-added servers. `apiKey` mode only. Agents can call MCP tools given a pre-configured API key.
 2. **Phase 2 — OAuth.** OAuth Coordinator with PKCE/DCR, browser-redirect flow, silent refresh with per-`(server, scope)` mutex. `clientCredentials` and `authorizationCode (browser)`.
-3. **Phase 3 — pause-on-reauth.** Durable pending-tool-call state, server-state wake events, retry-on-resume, coalescing, TTL.
-4. **Phase 4 — UI.** Connected Services page, inline timeline reauth prompts, progress passthrough.
-5. **Phase 5 — device-code flow.** Add `authorizationCode (device)` for headless contexts; surface user code + verification URL on the catalog.
-6. **Phase 6 — polish.** Dynamic `runtime.registerMcpServer` API, in-flight-safe reconfiguration of running servers, schema validator warnings.
-
-Phases 1–4 are the meaningful product. 5–6 add the unattended-workflow polish.
+3. **Phase 3 — UI.** Connected Services page with server status, per-row actions, and surfaces for kicking off OAuth flows.
+4. **Phase 4 — device-code flow.** Add `authorizationCode (device)`; surface user code + verification URL on the catalog.
 
 ## Open questions
 
-- **Stdio process resource limits.** Default off in v1; revisit if operators report runaway-process incidents.
-- **Multi-server reauth ordering.** When two servers both need auth in one wake, do we surface them as one combined prompt or two separate prompts? Default: separate; revisit if the UX is bad.
-- **Vault rotation.** Mechanics of rotating an `apiKey` while in-flight calls are using it — need to confirm a clean swap.
+- **Stdio process resource limits.** Default off in v1.
+- **Vault rotation.** Mechanics of rotating an `apiKey` while in-flight calls are using it — confirm a clean swap.
 - **Schema validator severity.** Should `authorizationCode` mode for an unattended-flagged workflow be a warning or a hard error? Probably warning until we have user feedback.
-- **Catalog page for `mcp.tools('*')` agents.** When `'*'` agents exist, do we show the resolved set as of last compose, or always the live set? Probably last compose, with a note.
-- **Server-side rate limiting / circuit breakers.** Out of scope for v1; revisit if MCP servers cause cascading failures in agent workflows.
+- **Catalog page for `mcp.tools('*')` agents.** Show the resolved set as of last compose, or always the live set? Probably last compose, with a note.
+- **Per-call timeout default.** 30s is a starting point; revisit based on what real MCP servers in the ecosystem do.
 
 ## Appendix: prior-art summary
 
@@ -407,7 +305,6 @@ Phases 1–4 are the meaningful product. 5–6 add the unattended-workflow polis
 
 - **No coding agent has a real Connected Services catalog.** Several open issues in Claude Code trace directly to its absence ([#30272](https://github.com/anthropics/claude-code/issues/30272), [#18442](https://github.com/anthropics/claude-code/issues/18442)).
 - **Refresh-token races bite multi-session agents.** [Claude Code #24317](https://github.com/anthropics/claude-code/issues/24317).
-- **Suspend-on-progress-token is unimplemented anywhere** despite the MCP spec supporting `progressToken` and Streamable HTTP resumption.
 - **Goose's keychain-first credential storage** with env-var override and file fallback is the cleanest pattern in the field.
 - **Claude Code's `.mcp.json` + `~/.claude.json` split** (committed team manifest + personal credential overlay) is the strongest onboarding pattern.
 - **Device-code flow** (Goose) is friendlier than browser-redirect for headless contexts.
