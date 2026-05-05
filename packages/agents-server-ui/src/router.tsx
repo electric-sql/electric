@@ -8,6 +8,8 @@ import {
   useNavigate,
   useParams,
 } from '@tanstack/react-router'
+import { connectEntityStream, getActiveBaseUrl } from './lib/entity-connection'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { useServerConnection } from './hooks/useServerConnection'
@@ -32,7 +34,7 @@ import { EntityContextDrawer } from './components/EntityContextDrawer'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { NewSessionPage } from './components/NewSessionPage'
-import { Stack } from './ui'
+import { Link, Stack, Text } from './ui'
 import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
@@ -72,16 +74,6 @@ function RootShell(): React.ReactElement {
   useHotkey(`mod+n`, openNewSession)
   useHotkey(`mod+shift+o`, openNewSession)
 
-  const navigateToEntity = useCallback(
-    (entityUrl: string) => {
-      navigate({
-        to: `/entity/$`,
-        params: { _splat: entityUrl.replace(/^\//, ``) },
-      })
-    },
-    [navigate]
-  )
-
   const params = useParams({ strict: false })
   const splat = (params as Record<string, string | undefined>)._splat
   const selectedEntityUrl = splat ? `/${splat}` : null
@@ -91,7 +83,6 @@ function RootShell(): React.ReactElement {
       {!collapsed && (
         <Sidebar
           selectedEntityUrl={selectedEntityUrl}
-          onSelectEntity={navigateToEntity}
           pinnedUrls={pinnedUrls}
           onTogglePin={togglePin}
         />
@@ -104,6 +95,7 @@ function RootShell(): React.ReactElement {
 
 function EntityPage(): React.ReactElement {
   const { _splat } = useParams({ from: `/entity/$` })
+  const { db: preloadedDb } = entityRoute.useLoaderData()
   const entityUrl = `/${_splat}`
   const { activeServer } = useServerConnection()
   const { pinnedUrls, togglePin } = usePinnedEntities()
@@ -158,7 +150,17 @@ function EntityPage(): React.ReactElement {
       })
   }, [entityUrl, forkEntity, forking, navigate])
 
+  const [waitedLong, setWaitedLong] = useState(false)
+  useEffect(() => {
+    if (selectedEntity) return
+    const timer = setTimeout(() => setWaitedLong(true), 2_000)
+    return () => clearTimeout(timer)
+  }, [selectedEntity])
+
   if (!selectedEntity) {
+    if (entitiesCollection && waitedLong) {
+      return <NotFoundPage message={`Session ${_splat} not found`} />
+    }
     return (
       <Stack
         align="center"
@@ -166,7 +168,7 @@ function EntityPage(): React.ReactElement {
         grow
         className={styles.entityShell}
       >
-        <span>Loading entity...</span>
+        <span>Loading entity…</span>
       </Stack>
     )
   }
@@ -195,7 +197,7 @@ function EntityPage(): React.ReactElement {
             entityUrl={connectUrl}
             entity={selectedEntity}
             entityStopped={entityStopped}
-            isSpawning={isSpawning}
+            preloadedDb={preloadedDb}
           />
         </Stack>
         {stateExplorerOpen && (
@@ -248,25 +250,19 @@ function GenericEntityBody({
   entityUrl,
   entity,
   entityStopped,
-  isSpawning,
+  preloadedDb,
 }: {
   baseUrl: string
   entityUrl: string | null
   entity: ElectricEntity
   entityStopped: boolean
-  isSpawning: boolean
+  preloadedDb?: EntityStreamDBWithActions | null
 }): React.ReactElement {
   const { entries, db, loading, error } = useEntityTimeline(
     baseUrl || null,
-    entityUrl
+    entityUrl,
+    preloadedDb
   )
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (error && !isSpawning) {
-      navigate({ to: `/` })
-    }
-  }, [error, navigate, isSpawning])
 
   return (
     <>
@@ -288,7 +284,33 @@ function GenericEntityBody({
   )
 }
 
-const rootRoute = createRootRoute({ component: RootLayout })
+function NotFoundPage({ message }: { message?: string }): React.ReactElement {
+  return (
+    <Stack
+      align="center"
+      justify="center"
+      grow
+      direction="column"
+      gap={3}
+      className={styles.entityShell}
+    >
+      <Text size={5} weight="medium">
+        Not found
+      </Text>
+      <Text size={2} tone="muted">
+        {message ?? `The page you're looking for doesn't exist.`}
+      </Text>
+      <Link href="#/" size={2}>
+        Go home
+      </Link>
+    </Stack>
+  )
+}
+
+const rootRoute = createRootRoute({
+  component: RootLayout,
+  notFoundComponent: () => <NotFoundPage />,
+})
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -299,6 +321,22 @@ const indexRoute = createRoute({
 const entityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/entity/$`,
+  // Kick off (or reuse a cached) stream connection during navigation so the
+  // db is ready by the time the component renders. defaultPreload:'intent'
+  // on the router means this also fires on sidebar hover via <Link>.
+  loader: async ({
+    params,
+  }): Promise<{ db: EntityStreamDBWithActions | null }> => {
+    const baseUrl = getActiveBaseUrl()
+    if (!baseUrl) return { db: null }
+    const entityUrl = `/${params._splat}`
+    try {
+      const { db } = await connectEntityStream({ baseUrl, entityUrl })
+      return { db }
+    } catch {
+      return { db: null }
+    }
+  },
   component: EntityPage,
 })
 
@@ -307,6 +345,7 @@ const routeTree = rootRoute.addChildren([indexRoute, entityRoute])
 export const router = createRouter({
   routeTree,
   history: createHashHistory(),
+  defaultPreload: `intent`,
 })
 
 // eslint-disable-next-line quotes

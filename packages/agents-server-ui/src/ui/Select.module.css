@@ -50,18 +50,20 @@
   line-height: 1;
   font-family: var(--ds-font-body);
   color: var(--ds-text-2);
-  background: var(--ds-gray-a3);
-  border: none;
+  background: var(--ds-gray-a4);
+  border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-2);
   cursor: pointer;
   outline: none;
   transition:
     background 100ms ease,
+    border-color 100ms ease,
     color 100ms ease;
 }
 
 .triggerPill:hover:not(:disabled) {
-  background: var(--ds-gray-a4);
+  background: var(--ds-gray-a5);
+  border-color: var(--ds-gray-a6);
   color: var(--ds-text-1);
 }
 

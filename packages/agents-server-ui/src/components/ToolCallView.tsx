@@ -103,16 +103,12 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
       const timedOut = r.details.timedOut as boolean | undefined
       return (
         <Stack direction="column" gap={2}>
-          <Text size={1} tone="muted" weight="medium">
-            Command
-          </Text>
+          <span className={toolBlock.sectionLabel}>Command</span>
           <pre className={toolBlock.codeBlock}>{args.command as string}</pre>
           {r.text && (
             <>
               <Stack align="center" gap={2}>
-                <Text size={1} tone="muted" weight="medium">
-                  Output
-                </Text>
+                <span className={toolBlock.sectionLabel}>Output</span>
                 {exitCode !== undefined && exitCode !== 0 && (
                   <Badge tone="danger" variant="soft" size={1}>
                     exit {exitCode}
@@ -134,9 +130,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
     case `read`:
       return (
         <Stack direction="column" gap={2}>
-          <Text size={1} tone="muted" weight="medium">
-            Content
-          </Text>
+          <span className={toolBlock.sectionLabel}>Content</span>
           <pre className={toolBlock.codeBlock}>
             {r.text ? truncate(r.text, 2000) : `(empty)`}
           </pre>
@@ -183,9 +177,7 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
         <Stack direction="column" gap={2}>
           {typeof args.content === `string` && (
             <>
-              <Text size={1} tone="muted" weight="medium">
-                Content
-              </Text>
+              <span className={toolBlock.sectionLabel}>Content</span>
               <pre className={toolBlock.codeBlock}>
                 {truncate(args.content, 1000)}
               </pre>
@@ -202,17 +194,13 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
     default:
       return (
         <Stack direction="column" gap={2}>
-          <Text size={1} tone="muted" weight="medium">
-            Input
-          </Text>
+          <span className={toolBlock.sectionLabel}>Input</span>
           <pre className={toolBlock.codeBlock}>
             {JSON.stringify(args, null, 2)}
           </pre>
           {r.text && (
             <>
-              <Text size={1} tone="muted" weight="medium">
-                Output
-              </Text>
+              <span className={toolBlock.sectionLabel}>Output</span>
               <pre className={toolBlock.codeBlock}>{r.text}</pre>
             </>
           )}

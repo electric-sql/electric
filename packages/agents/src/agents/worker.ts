@@ -132,7 +132,7 @@ function buildToolsForWorker(
       case `edit`:
         out.push(createEditTool(workingDirectory, readSet))
         break
-      case `brave_search`:
+      case `web_search`:
         out.push(braveSearchTool)
         break
       case `fetch_url`:

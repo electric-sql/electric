@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "start": "cross-env ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 tsx --watch src/entrypoint.ts",
+    "start": "cross-env ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 tsx src/entrypoint.ts",
     "docs:sync": "node scripts/sync-docs.mjs",
     "docs:clean": "node scripts/sync-docs.mjs --clean",
     "prepack": "node scripts/sync-docs.mjs",

@@ -16,6 +16,7 @@
     "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.1",
     "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.1",
     "@electric-ax/agents-runtime": "workspace:*",
+    "@fontsource-variable/figtree": "^5.2.10",
     "@streamdown/math": "^1.0.2",
     "@tanstack/db": "^0.6.4",
     "@tanstack/electric-db-collection": "^0.3.2",

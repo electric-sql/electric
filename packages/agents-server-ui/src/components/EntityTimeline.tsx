@@ -414,7 +414,7 @@ export function EntityTimeline({
         scrollbars="vertical"
       >
         <div ref={contentRef} className={styles.content}>
-          <Stack justify="center">
+          <Stack>
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
                 <Text size={1} tone="muted" className={styles.statusPill}>
@@ -477,7 +477,7 @@ export function EntityTimeline({
           )}
 
           {entityStopped && (
-            <Stack justify="center" style={{ marginTop: ROW_GAP }}>
+            <Stack style={{ marginTop: ROW_GAP }}>
               <Text size={1} tone="muted" className={styles.statusPill}>
                 stopped
               </Text>

@@ -62,6 +62,102 @@ describe(`budget enforcement`, () => {
     )
   })
 
+  it(`stubs oversized tool_result content instead of dropping it`, async () => {
+    const messages = await assembleContext({
+      sourceBudget: 100,
+      sources: {
+        self: {
+          content: () => [
+            { role: `user` as const, content: `Hi`, at: 1 },
+            { role: `assistant` as const, content: `Let me check`, at: 2 },
+            {
+              role: `tool_call` as const,
+              content: `search`,
+              toolCallId: `tc-1`,
+              toolName: `search`,
+              toolArgs: { q: `hello` },
+              at: 3,
+            },
+            {
+              role: `tool_result` as const,
+              content: `x`.repeat(5000),
+              toolCallId: `tc-1`,
+              isError: false,
+              at: 4,
+            },
+            {
+              role: `assistant` as const,
+              content: `Here is the answer`,
+              at: 5,
+            },
+          ],
+          max: 100_000,
+          cache: `volatile`,
+        },
+      },
+    })
+
+    const toolCalls = messages.filter((m) => m.role === `tool_call`)
+    const toolResults = messages.filter((m) => m.role === `tool_result`)
+
+    expect(toolCalls).toHaveLength(1)
+    expect(toolResults).toHaveLength(1)
+    expect((toolCalls[0] as any).toolCallId).toBe(`tc-1`)
+    expect((toolResults[0] as any).toolCallId).toBe(`tc-1`)
+    expect(toolResults[0]!.content).toMatch(/\[content truncated/)
+    expect(toolResults[0]!.content).toMatch(/load_timeline_range/)
+  })
+
+  it(`drops orphaned tool_results when their tool_call is budget-truncated`, async () => {
+    const messages = await assembleContext({
+      sourceBudget: 30,
+      sources: {
+        self: {
+          content: () => [
+            { role: `assistant` as const, content: `I will search`, at: 1 },
+            {
+              role: `tool_call` as const,
+              content: `search`,
+              toolCallId: `tc-old`,
+              toolName: `search`,
+              toolArgs: {},
+              at: 2,
+            },
+            {
+              role: `tool_result` as const,
+              content: `found`,
+              toolCallId: `tc-old`,
+              isError: false,
+              at: 3,
+            },
+            {
+              role: `assistant` as const,
+              content: `Here is the answer`,
+              at: 4,
+            },
+            { role: `user` as const, content: `Thanks`, at: 5 },
+          ],
+          max: 100_000,
+          cache: `volatile`,
+        },
+      },
+    })
+
+    const toolCalls = messages.filter((m) => m.role === `tool_call`)
+    const toolResults = messages.filter((m) => m.role === `tool_result`)
+
+    for (const tr of toolResults) {
+      const trId = (tr as any).toolCallId
+      expect(toolCalls.some((tc) => (tc as any).toolCallId === trId)).toBe(true)
+    }
+    for (const tc of toolCalls) {
+      const tcId = (tc as any).toolCallId
+      expect(toolResults.some((tr) => (tr as any).toolCallId === tcId)).toBe(
+        true
+      )
+    }
+  })
+
   it(`does not write a stream event on overflow`, async () => {
     const logger = vi.fn()
     await assembleContext(

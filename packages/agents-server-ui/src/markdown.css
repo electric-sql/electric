@@ -49,7 +49,7 @@
 .agent-ui-markdown > div {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 /* Cancel any auto-margins on direct children — the parent flex `gap`
@@ -64,7 +64,7 @@
 .agent-ui-markdown p,
 .agent-ui-markdown li {
   font-size: var(--ds-text-sm);
-  line-height: var(--ds-text-sm-lh);
+  line-height: 1.5;
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
 }
@@ -99,19 +99,19 @@
   font-size: var(--ds-text-lg); /* 16px */
   line-height: 1.35;
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: 10px;
 }
 .agent-ui-markdown h2 {
   font-size: var(--ds-text-base); /* 14px */
   line-height: 1.4;
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .agent-ui-markdown h3 {
   font-size: var(--ds-text-sm); /* 13px */
   line-height: 1.45;
   font-weight: 600;
-  margin-top: 2px;
+  margin-top: 6px;
 }
 .agent-ui-markdown h4,
 .agent-ui-markdown h5,
@@ -132,7 +132,7 @@
 .agent-ui-markdown ul,
 .agent-ui-markdown ol {
   list-style-position: outside;
-  padding-left: 1.5em;
+  padding-left: 1.75em;
 }
 .agent-ui-markdown ul {
   list-style: disc;
@@ -141,7 +141,7 @@
   list-style: decimal;
 }
 .agent-ui-markdown li + li {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 /* Streamdown wraps each list item's text in a paragraph; collapse it
    so list items render on a single line by default, and only break
@@ -414,11 +414,9 @@
   white-space: pre;
 }
 
-/* Shiki returns each token with an inline `style` containing both
-   `--shiki-light` and `--shiki-dark` CSS variables plus
-   `color: var(--shiki-light)`. The default already lights up
-   correctly in light mode; for dark mode swap to the dark variable
-   on every token span inside a code block body. */
+.agent-ui-markdown [data-md-code-block-line] span[style*='--shiki'] {
+  color: var(--shiki-light, inherit);
+}
 [data-theme='dark']
   .agent-ui-markdown
   [data-md-code-block-line]

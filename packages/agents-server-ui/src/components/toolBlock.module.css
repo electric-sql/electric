@@ -19,9 +19,10 @@
 
 .card {
   border: 1px solid var(--ds-gray-a3);
-  border-radius: var(--ds-radius-3);
+  border-radius: var(--ds-radius-4);
   overflow: hidden;
-  background: var(--ds-gray-a1);
+  background: var(--ds-surface);
+  box-shadow: 0 1px 2px rgba(15, 15, 30, 0.04);
 }
 
 /* The header is metadata about the tool call, not part of the
@@ -34,11 +35,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 7px 10px;
   font-size: 12px;
   line-height: 1.45;
-  font-family: var(--ds-font-body);
+  font-family: var(--ds-font-mono);
   color: var(--ds-text-1);
+  background: var(--ds-gray-a1);
 }
 
 /* Strip `<button>`'s built-in chrome (background, border, UA
@@ -61,10 +63,14 @@
   width: 100%;
   box-sizing: border-box;
   border-radius: 0;
+  outline: none;
   transition: background 0.08s ease;
 }
 .headerToggle:hover {
   background: var(--ds-gray-a2);
+}
+.headerToggle:focus-visible {
+  background: var(--ds-accent-a2);
 }
 
 /* Chevron lives in a fixed-size 16px slot so the row height doesn't
@@ -90,6 +96,7 @@
 
 .summary {
   color: var(--ds-text-3);
+  font-family: var(--ds-font-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -107,13 +114,21 @@
   background: var(--ds-bg);
 }
 
+.sectionLabel {
+  font-size: var(--ds-text-xs);
+  font-weight: 600;
+  font-variant: all-small-caps;
+  letter-spacing: 0.04em;
+  color: var(--ds-text-2);
+}
+
 .codeBlock {
   margin: 0;
   padding: 8px 10px;
-  background: var(--ds-gray-a2);
-  border-radius: var(--ds-radius-2);
+  background: color-mix(in oklab, var(--ds-bg-subtle) 70%, var(--ds-surface));
+  border-radius: var(--ds-radius-3);
   font-size: var(--ds-text-xs);
-  line-height: 1.55;
+  line-height: 1.6;
   font-family: var(--ds-font-mono);
   white-space: pre-wrap;
   word-break: break-word;

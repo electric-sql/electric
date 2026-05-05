@@ -36,7 +36,7 @@
    * so existing `size="1"`..`size="6"` migrations are visually 1:1.   */
   --ds-text-xs: 11px;
   --ds-text-xs-lh: 1.45;
-  --ds-text-sm: 13px;
+  --ds-text-sm: 14px;
   --ds-text-sm-lh: 1.5;
   --ds-text-base: 14px;
   --ds-text-base-lh: 1.55;
@@ -51,8 +51,8 @@
 
   /* ---- Font families ------------------------------------------------- */
   --ds-font-body:
-    Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    'Figtree Variable', ui-sans-serif, system-ui, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --ds-font-heading: var(--ds-font-body);
   --ds-font-mono:
     SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono',
@@ -74,8 +74,8 @@
    * is solid white so inputs read clearly against the off-white page;
    * in dark mode it stays a translucent grey so inputs blend with
    * raised surfaces (panels, popovers) wherever they're used.         */
-  --ds-bg: #f7f7f5;
-  --ds-bg-subtle: #f0efed;
+  --ds-bg: #f9f8f6;
+  --ds-bg-subtle: #efeeeb;
   --ds-surface: #ffffff;
   --ds-surface-raised: #ffffff;
   --ds-input-bg: #ffffff;
@@ -114,6 +114,7 @@
   --ds-text-1: var(--ds-gray-12);
   --ds-text-2: var(--ds-gray-11);
   --ds-text-3: var(--ds-gray-10);
+  --ds-text-4: var(--ds-gray-9);
   --ds-text-on-accent: #1a1a1a;
 
   /* ---- Borders / dividers ---------------------------------------- */
@@ -247,25 +248,25 @@
  * ========================================================================== */
 
 :root[data-theme='dark'] {
-  --ds-bg: #111318;
-  --ds-bg-subtle: #16181f;
-  --ds-surface: #1a1d27;
-  --ds-surface-raised: #22252f;
-  --ds-input-bg: color-mix(in oklab, #ffffff 6%, transparent);
+  --ds-bg: #0c1019;
+  --ds-bg-subtle: #101622;
+  --ds-surface: #141b28;
+  --ds-surface-raised: #1a2233;
+  --ds-input-bg: color-mix(in oklab, #ffffff 7.5%, transparent);
   --ds-overlay: rgba(0, 0, 0, 0.55);
 
-  --ds-gray-1: #111113;
-  --ds-gray-2: #19191b;
-  --ds-gray-3: #222325;
-  --ds-gray-4: #292a2e;
-  --ds-gray-5: #303136;
-  --ds-gray-6: #393a40;
-  --ds-gray-7: #46484f;
-  --ds-gray-8: #5f606a;
-  --ds-gray-9: #6c6e79;
-  --ds-gray-10: #797b86;
-  --ds-gray-11: #b2b3bd;
-  --ds-gray-12: #eeeef0;
+  --ds-gray-1: #0e1219;
+  --ds-gray-2: #141a24;
+  --ds-gray-3: #1a2130;
+  --ds-gray-4: #212839;
+  --ds-gray-5: #283040;
+  --ds-gray-6: #313a4a;
+  --ds-gray-7: #3e4758;
+  --ds-gray-8: #566070;
+  --ds-gray-9: #687384;
+  --ds-gray-10: #7a8596;
+  --ds-gray-11: #b0b9c9;
+  --ds-gray-12: #e7edf7;
 
   --ds-gray-a1: color-mix(in oklab, var(--ds-gray-12) 4%, transparent);
   --ds-gray-a2: color-mix(in oklab, var(--ds-gray-12) 7%, transparent);
@@ -280,9 +281,10 @@
   --ds-gray-a11: color-mix(in oklab, var(--ds-gray-12) 78%, transparent);
   --ds-gray-a12: color-mix(in oklab, var(--ds-gray-12) 96%, transparent);
 
-  --ds-text-1: rgba(255, 255, 245, 0.92);
-  --ds-text-2: rgba(235, 235, 245, 0.78);
-  --ds-text-3: rgba(235, 235, 245, 0.62);
+  --ds-text-1: #e7edf7;
+  --ds-text-2: #b0b9c9;
+  --ds-text-3: #8590a4;
+  --ds-text-4: #66728a;
   --ds-text-on-accent: #1a1a1a;
 
   --ds-border-1: var(--ds-gray-a3);

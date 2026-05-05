@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { serverLog } from '../log'
@@ -169,7 +170,7 @@ export function buildHortonSystemPrompt(
     ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
     : ``
   const docsGuidance = opts.hasDocsSupport
-    ? `\n- For ANY question about Electric Agents, Durable Agents, or this framework, ALWAYS use search_durable_agents_docs FIRST. Do not use brave_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
+    ? `\n- For ANY question about Electric Agents, Durable Agents, or this framework, ALWAYS use search_durable_agents_docs FIRST. Do not use web_search or fetch_url for Electric Agents topics unless the docs search returns no useful results.\n- The search tool returns chunk content directly — you do not need to read the source files.\n- Use repo read/bash tools only for non-doc files or when you need to inspect exact implementation code in the workspace.`
     : ``
   const skillsGuidance = opts.hasSkills
     ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
@@ -209,7 +210,7 @@ Don't force onboarding. If someone just wants to chat or code, let them. When in
 - ${opts.hasDocsSupport ? `If search_durable_agents_docs is available, use it first (faster, hybrid search).` : `Use fetch_url to look up documentation pages.`}
 - The Electric Agents docs site is at ${opts.docsUrl}
 - The docs site covers: Usage (entity definition, handlers, tools, state, spawning, coordination, waking, shared state, client integration, app setup), Reference (handler context, entity definitions, configurations, tools, state proxies, wake events, registries), Entities (Horton, Worker), and Patterns (Manager-Worker, Pipeline, Map-Reduce, Dispatcher, Blackboard, Reactive Observers).
-- For general coding questions unrelated to Electric Agents, use brave_search or your own knowledge.`
+- For general coding questions unrelated to Electric Agents, use web_search or your own knowledge.`
     : ``
   const modelGuidance =
     opts.modelProvider && opts.modelId
@@ -226,7 +227,7 @@ When a user opens with a greeting ("hi", "hello", "hey", etc.) or a broad statem
 - read: read a file
 - write: create or overwrite a file
 - edit: targeted string replacement in an existing file (you must read the file first)
-- brave_search: search the web
+- web_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
 ${docsTools}${skillsTools}
@@ -302,6 +303,21 @@ export function extractFirstUserMessage(
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
 
+function readAgentsMd(workingDirectory: string): string | null {
+  const path = `${workingDirectory}/AGENTS.md`
+  try {
+    if (!fs.existsSync(path) || !fs.statSync(path).isFile()) return null
+    const content = fs.readFileSync(path, `utf8`)
+    return [
+      `<context_file kind="instructions" path="${path}">`,
+      content,
+      `</context_file>`,
+    ].join(`\n`)
+  } catch {
+    return null
+  }
+}
+
 function createAssistantHandler(options: {
   workingDirectory: string
   streamFn?: StreamFn
@@ -327,10 +343,29 @@ function createAssistantHandler(options: {
     wake: WakeEvent
   ): Promise<void> {
     const readSet = new Set<string>()
+    const effectiveCwd =
+      typeof ctx.args.workingDirectory === `string`
+        ? ctx.args.workingDirectory
+        : workingDirectory
+
+    if (
+      typeof ctx.args.workingDirectory === `string` &&
+      (!fs.existsSync(effectiveCwd) || !fs.statSync(effectiveCwd).isDirectory())
+    ) {
+      ctx.useAgent({
+        systemPrompt: `Tell the user that the working directory "${effectiveCwd}" does not exist or is not a directory. Ask them to check the project path and try again.`,
+        ...resolveBuiltinModelConfig(modelCatalog, ctx.args),
+        tools: [...ctx.electricTools],
+      })
+      await ctx.agent.run()
+      return
+    }
+
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
+    const agentsMd = readAgentsMd(effectiveCwd)
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(workingDirectory, ctx, readSet, {
+      ...createHortonTools(effectiveCwd, ctx, readSet, {
         docsSearchTool,
         modelConfig,
       }),
@@ -362,6 +397,15 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...(agentsMd
+            ? {
+                agents_md: {
+                  content: () => agentsMd,
+                  max: 20_000,
+                  cache: `stable` as const,
+                },
+              }
+            : {}),
           ...(skillsRegistry && skillsRegistry.catalog.size > 0
             ? {
                 skills_catalog: {
@@ -386,12 +430,36 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...(agentsMd
+            ? {
+                agents_md: {
+                  content: () => agentsMd,
+                  max: 20_000,
+                  cache: `stable` as const,
+                },
+              }
+            : {}),
+        },
+      })
+    } else if (agentsMd) {
+      ctx.useContext({
+        sourceBudget: 100_000,
+        sources: {
+          conversation: {
+            content: () => ctx.timelineMessages(),
+            cache: `volatile`,
+          },
+          agents_md: {
+            content: () => agentsMd,
+            max: 20_000,
+            cache: `stable` as const,
+          },
         },
       })
     }
 
     ctx.useAgent({
-      systemPrompt: buildHortonSystemPrompt(workingDirectory, {
+      systemPrompt: buildHortonSystemPrompt(effectiveCwd, {
         hasDocsSupport: Boolean(docsSupport),
         hasSkills,
         docsUrl,
@@ -484,6 +552,12 @@ export function registerHorton(
       .default(`auto`)
       .describe(
         `Reasoning effort for compatible reasoning models. Auto uses a safe provider default.`
+      ),
+    workingDirectory: z
+      .string()
+      .optional()
+      .describe(
+        `Working directory for file operations. Defaults to the server's configured cwd.`
       ),
   })
 

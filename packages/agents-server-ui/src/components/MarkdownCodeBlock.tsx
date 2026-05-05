@@ -223,22 +223,25 @@ function FencedCodeBlock({
         <pre {...rest}>
           {tokens ? (
             <code>
-              {tokens.tokens.map((line, i) => (
-                <span data-md-code-block-line="" key={i}>
-                  {line.length === 0
-                    ? // Empty lines need at least a non-breaking space
-                      // so the row still has a baseline + visible height.
-                      `\u00A0`
-                    : line.map((token, j) => (
-                        <span
-                          key={j}
-                          style={tokenStyle(token.color, token.htmlStyle)}
-                        >
-                          {token.content}
-                        </span>
-                      ))}
-                </span>
-              ))}
+              {tokens.tokens
+                .filter(
+                  (line, i) =>
+                    !(i === tokens.tokens.length - 1 && line.length === 0)
+                )
+                .map((line, i) => (
+                  <span data-md-code-block-line="" key={i}>
+                    {line.length === 0
+                      ? `\u00A0`
+                      : line.map((token, j) => (
+                          <span
+                            key={j}
+                            style={tokenStyle(token.color, token.htmlStyle)}
+                          >
+                            {token.content}
+                          </span>
+                        ))}
+                  </span>
+                ))}
             </code>
           ) : (
             <code>{codeText}</code>
@@ -428,12 +431,15 @@ function MermaidBlock({
 // switch colours per theme; we just have to forward them as
 // inline-style props.
 function tokenStyle(
-  color: string | undefined,
+  _color: string | undefined,
   htmlStyle: Record<string, string> | undefined
 ): React.CSSProperties {
   const out: Record<string, string> = {}
-  if (color) out.color = color
-  if (htmlStyle) Object.assign(out, htmlStyle)
+  if (htmlStyle) {
+    for (const [k, v] of Object.entries(htmlStyle)) {
+      if (k !== `color`) out[k] = v
+    }
+  }
   return out as React.CSSProperties
 }
 

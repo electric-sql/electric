@@ -29,6 +29,7 @@
   cursor: pointer;
   user-select: none;
   color: var(--ds-text-1);
+  text-decoration: none;
   background: transparent;
   transition: background 0.08s ease;
 }
@@ -36,7 +37,7 @@
   background: var(--ds-gray-a3);
 }
 .selected {
-  background: var(--ds-accent-a3);
+  background: var(--ds-accent-a2);
 }
 .selected:hover {
   background: var(--ds-accent-a3);
@@ -123,8 +124,8 @@
 .type {
   flex-shrink: 0;
   padding-right: 5px;
-  font-size: var(--ds-text-sm);
-  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-4, var(--ds-text-3));
   text-transform: lowercase;
   line-height: 1;
   /* Animate the mask in/out as the row is hovered. */
@@ -142,7 +143,7 @@
   padding-right: 0;
 }
 .row:hover .type {
-  color: var(--ds-text-2);
+  color: var(--ds-text-3);
 }
 /* On hover, fade the right edge of the type+count text so the
    chevron icon (positioned absolutely on top of the same area) has
