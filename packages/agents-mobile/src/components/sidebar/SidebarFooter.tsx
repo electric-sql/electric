@@ -60,9 +60,11 @@ const THEME_GLYPHS: Record<string, string> = {
 export function SidebarFooter({
   serverStatus,
   onChangeServer,
+  onOpenDiagnostics,
 }: {
   serverStatus: ServerStatus
   onChangeServer: () => void
+  onOpenDiagnostics: () => void
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
@@ -283,6 +285,15 @@ export function SidebarFooter({
             />
           ))}
         </BottomSheetSection>
+        <BottomSheetSeparator />
+        <BottomSheetItem
+          label="Diagnostics"
+          icon={<Text style={{ color: tokens.text2, fontSize: 14 }}>ⓘ</Text>}
+          onPress={() => {
+            setSettingsOpen(false)
+            onOpenDiagnostics()
+          }}
+        />
       </BottomSheet>
     </View>
   )
