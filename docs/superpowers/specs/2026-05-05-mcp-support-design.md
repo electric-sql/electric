@@ -287,16 +287,99 @@ Two intentional deviations:
 
 We add device-code grant (RFC 8628) as a first-class flow alongside browser-redirect — better fit for headless / webhook-spawned / remote-runtime contexts where there's no developer-at-a-browser.
 
-## Risks and mitigations
+## Failure scenarios
+
+The system encounters two broad classes of failure: **authentication failures**, which trigger the durable pause-on-reauth flow described above; and **everything else**, which surfaces as a tool-call error result that the agent's model can read and react to. The dividing line matters — pausing on a non-auth failure (e.g. an HTTP 503) would prevent the agent from ever falling back to a different approach, while returning a 401 to the model would defeat the runtime's whole reason for owning credentials.
+
+### Transport and process failures
+
+| Scenario | Behavior |
+|---|---|
+| **HTTP MCP server unreachable** (DNS, refused, timeout) | Tool call fails with a `transport_error` result; agent's model sees it, can retry or fall back. After N consecutive failures (configurable, default 5) the catalog flips the server's status to `error` and surfaces the last error message. |
+| **HTTP server returns 5xx** | Bridge retries with exponential backoff up to a per-call timeout (default 30s); on giving up, returns `transport_error` to the agent. |
+| **Streamable HTTP connection drops mid-call** | If the spec's session resumption applies (server supports it), bridge resumes; otherwise the call fails with `transport_error`. |
+| **Stdio subprocess fails to spawn** (binary missing, permission denied) | Tool call fails with `server_unavailable`; catalog flips to `error` until config is fixed. Operator sees the spawn error in the catalog row's "last error" detail. |
+| **Stdio subprocess crashes mid-call** | All in-flight calls to that server fail with `transport_error`. Subprocess respawns lazily on the next call. Crash count and last crash time visible on the catalog row. |
+| **Stdio subprocess hangs** | Per-call timeout (default 30s, configurable per server) fires; bridge sends a JSON-RPC cancellation if supported, else kills the subprocess. Returns `timeout` to the agent. |
+| **Stdio subprocess writes invalid JSON-RPC** | Bridge logs the malformed line, returns `protocol_error` for the in-flight call. After repeated occurrences the subprocess is killed and respawned. |
+
+### Authentication failures (these trigger pause-on-reauth)
+
+| Scenario | Behavior |
+|---|---|
+| **No credential in vault** (first use of a server) | Tool call enters pending-auth state; reauth prompt surfaces on timeline + catalog. |
+| **Access token expired, refresh token valid** | Bridge runs silent refresh under per-`(server, scope)` mutex; on success retries with new token transparently. No pause, no model-visible event. |
+| **Refresh token expired or revoked** | Silent refresh fails; tool call enters pending-auth state. |
+| **OAuth authorization server unreachable** during refresh | Bridge retries with backoff (this is a transport failure on the auth side). After exhausting retries, the call enters pending-auth state — the operator may need to investigate the auth server, but the user-facing surface is the same: a reauth prompt. The catalog shows the underlying error. |
+| **Authorization code flow abandoned** (user closed browser) | The authorization-code request has its own TTL (default 10 minutes). On expiry the pending tool call remains in pending-auth and a fresh reauth prompt can be issued. |
+| **Device code expires before user verifies** | Same as above — the device-flow request has a TTL (per the OAuth provider, typically 5–15 minutes); on expiry, surface a fresh prompt. |
+| **Token revoked server-side mid-call** (we just refreshed but get 401) | Bridge attempts one silent refresh; if that also fails, falls into pending-auth flow. Avoids infinite refresh loops via a per-call refresh-attempt counter (max 1). |
+| **Refresh-token reuse detected by provider** (e.g. provider invalidates the chain) | Treated as refresh failure → pending-auth flow. The mutex on `(server, scope)` makes self-induced reuse races impossible; reuse detected here is from out-of-band events (another client, manual revocation). |
+| **Provider requires step-up / MFA / re-consent** | Provider-specific error response → pending-auth flow with a reason string carried into the prompt. |
+
+### Tool-call result failures
+
+| Scenario | Behavior |
+|---|---|
+| **MCP tool returns a structured error** | Surfaced to the agent as a tool error result. Agent's model decides what to do. |
+| **MCP tool result fails its declared output schema** | Bridge logs the violation, returns `schema_violation` to the agent. The catalog flags the server as `error` if it persists. |
+| **MCP server reports tool doesn't exist** (race with hot-reload, or stale capabilities) | Bridge re-fetches the server's tool list and either retries or returns `tool_not_found`. |
+| **Tool call payload exceeds server limit** | Returns the server's error to the agent unchanged. |
+
+### Vault failures
+
+| Scenario | Behavior |
+|---|---|
+| **Vault unavailable** (file locked, keychain not unlocked, backend down) | All in-flight tool calls needing credentials fail with `vault_unavailable`; catalog shows runtime-level error banner. Calls do NOT enter pending-auth — pausing wouldn't help if the vault itself is broken. |
+| **Vault returns corrupted data** | Treated as missing credential → pending-auth flow. The catalog row shows a `vault_error` annotation. |
+| **Vault write fails after successful OAuth callback** | Callback returns 500 to the OAuth provider; user sees an error in the browser. The pending tool call stays paused. Operator must investigate vault before reauth can complete. |
+| **Two concurrent reauth completions for same server** | Last write wins at the vault layer; the per-`(server, scope)` mutex prevents this within one runtime. Cross-runtime races are out of scope (single-runtime assumption in v1). |
+
+### Pause/resume durability failures
+
+| Scenario | Behavior |
+|---|---|
+| **agents-server restarts with pending-auth calls in flight** | Pending state is durable (entity stream); on restart, the manifest still has "wake me when server X is authorized" entries. Reauth completion (via callback or device-flow polling) wakes the entity normally. |
+| **OAuth callback URL unreachable from provider** (NAT, dev environment) | The flow simply doesn't complete. TTL eventually fires; the prompt expires and can be reissued. Local-dev users typically use a tunneling proxy or device-code flow to avoid this. |
+| **Pending-auth TTL fires while user is mid-reauth** | Race window; we resolve by checking TTL only at wake time, not in a separate timer. If the reauth completion event arrives while the call is technically expired, we still honor it and resolve the call. The TTL is a backstop, not a hard fence. |
+| **Wake event fires but vault write hasn't propagated** | Wake event is emitted only after vault write commits. No race in the single-runtime assumption. |
+
+### Hot-reload edge cases
+
+| Scenario | Behavior |
+|---|---|
+| **`mcp.json` is invalid JSON mid-edit** | File watcher debounces (default 500ms) and validates before applying. Invalid configs are logged and ignored; the previous valid config remains active. Error visible on the catalog page. |
+| **`mcp.json` references a vault ref that doesn't exist** | Server registers but flips to `needs_auth` immediately; tool calls enter pending-auth on first use. |
+| **Server reconfigured with different transport** (stdio → http) | Treated as remove + add: existing stdio subprocess terminates after in-flight calls drain, new HTTP server registers. |
+| **File watcher misses an event** | Hot-reload is best-effort; the catalog page has a "Reload config" button that forces a re-read. |
+
+### Security failures
+
+| Scenario | Behavior |
+|---|---|
+| **OAuth callback CSRF / state parameter mismatch** | Callback rejects the request with 400; OAuth Coordinator generates and validates `state` per RFC 6749 §10.12. |
+| **Vault file permissions become world-readable** | Vault implementation enforces `chmod 600` on every write; logs a warning and refuses to read if mode is wider than `0600`. |
+| **MCP server returns a tool description containing prompt-injection text** | Out of scope for the runtime to detect; documented as a known risk. Operators should only register MCP servers they trust. The catalog page can show the registered tool descriptions so operators can audit. |
+| **Stdio subprocess attempts to escalate** (reads files outside intended scope) | Out of scope for v1; operators run agents-server with appropriate OS-level isolation (containers, user accounts). Future: optional sandboxing for stdio servers. |
+
+### Concurrency hazards
+
+| Scenario | Behavior |
+|---|---|
+| **Multiple wakes refreshing same near-expiry token** | Per-`(server, scope)` mutex; one runs the exchange, others await its result. |
+| **Token refreshed mid-call** (call started with old token, refresh succeeded mid-flight) | Old token's call either completes (provider still accepts it briefly) or fails with 401, in which case the per-call refresh-attempt counter (max 1) allows a single retry with the new token. |
+| **Two simultaneous browser-flow authorizations for same server** | Both produce valid `state` parameters; whichever callback returns first wins; the second's vault write either races (mutex serializes) or is treated as a token refresh. The catalog page shows whichever credential is current. |
+
+## Project risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| Stdio subprocess crashes leak tool-call state | Bridge marks in-flight calls as failed on subprocess exit; restart on next call |
-| Refresh-token race across wakes | Per-`(server, scope)` mutex around the refresh exchange; runtime owns the credential, not the wake |
-| Vault file leaks if file permissions wrong | Default implementation enforces `chmod 600`; encryption-at-rest where keychain available |
-| Operator misconfigures `authorizationCode` for unattended workflow | Schema validator warns; docs call out the right modes for unattended use |
-| Hot-reload causes user confusion when tool list changes mid-wake | Manifest snapshot at compose time; tool catalog visible in agents-server-ui shows the truth at any moment |
-| Stdio + personal credentials confused for a deployment pattern | Documentation prominently scopes it as local-dev only |
+| Refresh-token race across wakes | Per-`(server, scope)` mutex around the refresh exchange; runtime owns the credential. |
+| Vault file leaks if file permissions wrong | Default implementation enforces `chmod 600`; refuses to read wider modes; encryption-at-rest where OS keychain is available. |
+| Operator misconfigures `authorizationCode` for unattended workflow | Schema validator warns; docs call out the right modes for unattended use. |
+| Hot-reload causes user confusion when tool list changes mid-wake | Manifest snapshot at compose time records what the agent saw; catalog shows live truth. |
+| Stdio + personal credentials confused for a deployment pattern | Documentation prominently scopes it as local-dev only; spec validator may warn when stdio servers reference user-only credential sources in deployed configs (future). |
+| Untrusted MCP servers leak data or inject prompts | Out of scope for runtime; operators register only trusted servers; catalog surfaces registered tool descriptions for audit. |
 
 ## Rollout plan
 
