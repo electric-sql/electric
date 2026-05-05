@@ -75,8 +75,9 @@ defmodule Electric.ShapeCache.ExpiryManager do
     {handles_to_expire, min_age} = least_recently_used(state, number_to_expire)
 
     Logger.notice(
-      "Expiring #{number_to_expire} shapes as the number of shapes " <>
-        "has exceeded the limit (#{state.max_shapes})"
+      "Expiring shapes as the number of shapes has exceeded the limit",
+      number_to_expire: number_to_expire,
+      max_shapes: state.max_shapes
     )
 
     OpenTelemetry.with_span(

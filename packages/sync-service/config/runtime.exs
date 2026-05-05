@@ -383,7 +383,9 @@ if Electric.telemetry_enabled?() do
              received_transaction_lsn: "received.transaction.lsn",
              publication_alter_drop_tables: "publication.alter.drop_tables",
              publication_alter_add_tables: "publication.alter.add_tables",
-             publication_alter_set_tables: "publication.alter.set_tables"
+             publication_alter_set_tables: "publication.alter.set_tables",
+             number_to_expire: "shape.expiry.number_to_expire",
+             max_shapes: "shape.expiry.max_shapes"
            }
          }
        }}
