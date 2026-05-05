@@ -6,8 +6,10 @@ import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
 import { useWorkspace } from '../../hooks/useWorkspace'
+import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
 import { Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
+import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import styles from '../NewSessionPage.module.css'
 import type { ElectricEntityType } from '../../lib/ElectricAgentsProvider'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
@@ -47,6 +49,16 @@ export function NewSessionView({
   const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { recents: recentDirs, addRecent: addRecentDir } =
+    useRecentWorkingDirectories()
+  // Default to the most-recently-used working directory so a user
+  // who keeps opening sessions against the same project root doesn't
+  // have to re-select it each time. Initialised lazily so subsequent
+  // additions to `recents` don't yank the picker out from under the
+  // user mid-edit.
+  const [workingDirectory, setWorkingDirectory] = useState<string | null>(
+    () => recentDirs[0] ?? null
+  )
 
   const { data: entityTypes = [] } = useLiveQuery(
     (query) => {
@@ -134,9 +146,17 @@ export function NewSessionView({
   const handleStartDefault = useCallback(
     (text: string, args: Record<string, unknown>) => {
       if (!defaultAgent) return
-      void doSpawn(defaultAgent.name, args, text)
+      // Inject the picker's choice into the spawn args for the
+      // composer flow only — non-default agents have their own
+      // schemas and may not understand `workingDirectory`. Also
+      // remember the chosen path so the next session opens with the
+      // same default.
+      const augmented =
+        workingDirectory !== null ? { ...args, workingDirectory } : args
+      if (workingDirectory !== null) addRecentDir(workingDirectory)
+      void doSpawn(defaultAgent.name, augmented, text)
     },
-    [defaultAgent, doSpawn]
+    [defaultAgent, doSpawn, workingDirectory, addRecentDir]
   )
 
   return (
@@ -157,6 +177,8 @@ export function NewSessionView({
             onStartDefault={handleStartDefault}
             spawnReady={Boolean(spawnEntity)}
             error={error}
+            workingDirectory={workingDirectory}
+            onChangeWorkingDirectory={setWorkingDirectory}
           />
         )}
       </div>
@@ -171,6 +193,8 @@ function Picker({
   onStartDefault,
   spawnReady,
   error,
+  workingDirectory,
+  onChangeWorkingDirectory,
 }: {
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
@@ -178,6 +202,8 @@ function Picker({
   onStartDefault: (text: string, args: Record<string, unknown>) => void
   spawnReady: boolean
   error: string | null
+  workingDirectory: string | null
+  onChangeWorkingDirectory: (path: string | null) => void
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
 
@@ -201,6 +227,8 @@ function Picker({
           agent={defaultAgent}
           onSubmit={onStartDefault}
           disabled={!spawnReady}
+          workingDirectory={workingDirectory}
+          onChangeWorkingDirectory={onChangeWorkingDirectory}
         />
       )}
 
@@ -308,10 +336,14 @@ function DefaultAgentComposer({
   agent,
   onSubmit,
   disabled,
+  workingDirectory,
+  onChangeWorkingDirectory,
 }: {
   agent: ElectricEntityType
   onSubmit: (text: string, args: Record<string, unknown>) => void
   disabled?: boolean
+  workingDirectory: string | null
+  onChangeWorkingDirectory: (path: string | null) => void
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
@@ -404,6 +436,11 @@ function DefaultAgentComposer({
               />
             ) : null
           )}
+          <WorkingDirectoryPicker
+            value={workingDirectory}
+            onChange={onChangeWorkingDirectory}
+            disabled={submitting || disabled}
+          />
         </div>
         <div className={styles.composerSendCluster}>
           {submitting && <span className={styles.composerHint}>Starting…</span>}

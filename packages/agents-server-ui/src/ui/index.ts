@@ -55,6 +55,8 @@ export { Tooltip, TooltipProvider } from './Tooltip'
 export { Select } from './Select'
 export type { SelectSize } from './Select'
 
+export { Combobox } from './Combobox'
+
 export { ScrollArea } from './ScrollArea'
 
 export { DataList } from './DataList'

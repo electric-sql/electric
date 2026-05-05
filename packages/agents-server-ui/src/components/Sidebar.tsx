@@ -7,6 +7,7 @@ import {
   bucketEntities,
   groupByStatus,
   groupByType,
+  groupByWorkingDirectory,
 } from '../lib/sessionGroups'
 import { useSidebarView } from '../hooks/useSidebarView'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
@@ -146,6 +147,8 @@ export function Sidebar({
         return groupByType(unpinnedRoots)
       case `status`:
         return groupByStatus(unpinnedRoots)
+      case `workingDir`:
+        return groupByWorkingDirectory(unpinnedRoots)
       case `date`:
       default:
         return bucketEntities(unpinnedRoots)

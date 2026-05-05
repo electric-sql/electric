@@ -8,6 +8,7 @@ import {
   ChevronsUpDown,
   Eye,
   EyeOff,
+  Folder,
   ListFilter,
   Tag,
 } from 'lucide-react'
@@ -36,6 +37,7 @@ const GROUP_BY_ICONS: Record<SidebarGroupBy, React.ReactElement> = {
   date: <CalendarClock size={14} />,
   type: <Tag size={14} />,
   status: <Activity size={14} />,
+  workingDir: <Folder size={14} />,
 }
 
 /**

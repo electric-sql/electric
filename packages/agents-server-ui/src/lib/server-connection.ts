@@ -87,6 +87,16 @@ declare global {
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
+      /**
+       * One-shot native folder picker. Unlike `chooseWorkingDirectory`,
+       * this does NOT update the runtime's persistent working dir or
+       * restart the runtime — used by the new-session screen so each
+       * spawned session can carry its own ephemeral `workingDirectory`
+       * spawn arg.
+       */
+      pickDirectory?: (options?: {
+        defaultPath?: string
+      }) => Promise<string | null>
       onDesktopStateChanged?: (
         callback: (state: DesktopState) => void
       ) => () => void

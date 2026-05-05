@@ -3,18 +3,20 @@ import { useSyncExternalStore } from 'react'
 const STORAGE_KEY = `electric-agents-ui.sidebar.view`
 
 /** Available grouping modes for the session list. */
-export type SidebarGroupBy = `date` | `type` | `status`
+export type SidebarGroupBy = `date` | `type` | `status` | `workingDir`
 
 export const SIDEBAR_GROUP_BY_OPTIONS: ReadonlyArray<SidebarGroupBy> = [
   `date`,
   `type`,
   `status`,
+  `workingDir`,
 ]
 
 export const SIDEBAR_GROUP_BY_LABELS: Record<SidebarGroupBy, string> = {
   date: `Date`,
   type: `Type`,
   status: `Status`,
+  workingDir: `Working dir`,
 }
 
 interface SidebarViewState {

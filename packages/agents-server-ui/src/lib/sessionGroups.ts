@@ -188,3 +188,53 @@ export function groupByStatus(
 function formatLabel(id: string): string {
   return id.replace(/[-_]+/g, ` `).replace(/\b\w/g, (c) => c.toUpperCase())
 }
+
+/**
+ * Group by `spawn_args.workingDirectory`. Entities without a working
+ * directory fall into a single trailing "None" bucket so they're
+ * still visible — hiding them would silently drop sessions that were
+ * spawned through paths that don't carry a cwd (e.g. older sessions,
+ * agent types other than horton).
+ *
+ * Buckets are labelled with the basename of the path; the full path
+ * is stashed on `id` for tooltip / debugging purposes downstream.
+ * Sort order: most-populous first, alphabetical tiebreaker.
+ */
+export function groupByWorkingDirectory(
+  entities: ReadonlyArray<ElectricEntity>
+): Array<SessionGroup> {
+  const buckets = new Map<string, Group>()
+  const noDir = new Group(`cwd:none`, `older`, `None`)
+
+  for (const entity of [...entities].sort(
+    (a, b) => b.updated_at - a.updated_at
+  )) {
+    const raw = entity.spawn_args?.workingDirectory
+    const cwd = typeof raw === `string` && raw.trim().length > 0 ? raw : null
+    if (cwd === null) {
+      noDir.items.push(entity)
+      continue
+    }
+    let group = buckets.get(cwd)
+    if (!group) {
+      group = new Group(`cwd:${cwd}`, `older`, basenameOrPath(cwd))
+      buckets.set(cwd, group)
+    }
+    group.items.push(entity)
+  }
+
+  const dirGroups = Array.from(buckets.values()).sort((a, b) => {
+    const dx = b.items.length - a.items.length
+    if (dx !== 0) return dx
+    return a.label.localeCompare(b.label)
+  })
+  // "None" bucket always last so user-tagged groups dominate the
+  // visual top of the list.
+  return noDir.items.length > 0 ? [...dirGroups, noDir] : dirGroups
+}
+
+function basenameOrPath(path: string): string {
+  const trimmed = path.replace(/[/\\]+$/, ``)
+  const idx = Math.max(trimmed.lastIndexOf(`/`), trimmed.lastIndexOf(`\\`))
+  return idx === -1 ? trimmed : trimmed.slice(idx + 1) || trimmed
+}

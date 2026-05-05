@@ -1,0 +1,139 @@
+/* Trigger pill — matches `Select.triggerPill` geometry so it slots
+   into the composer toolbar next to the model / reasoning pills.
+   We don't reuse Select's class directly because this trigger
+   layout is icon + label (no chevron / Value child) and needs an
+   ellipsis on the label, but the visual treatment (height, padding,
+   bg, hover) mirrors `Select.module.css → .triggerPill` exactly. */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  max-width: 220px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--ds-radius-2);
+  background: var(--ds-chip-bg);
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  line-height: 1;
+  color: var(--ds-text-2);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+.trigger:hover:not(:disabled) {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+.trigger:focus-visible {
+  box-shadow: 0 0 0 1px var(--ds-accent-9);
+}
+.trigger[data-disabled],
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.trigger[data-empty='true'] {
+  /* Slightly muted so the unset state reads as a placeholder rather
+     than an active selection. */
+  color: var(--ds-text-3);
+}
+.triggerIcon {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+.triggerLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Popup needs a touch more breathing room than the default 180px
+   min-width because path strings are long. Keep narrow enough to
+   feel like a contextual menu rather than a settings panel. */
+.popup {
+  min-width: 280px;
+  max-width: min(calc(100vw - 16px), 420px);
+}
+
+/* Inner row wrapper — copied verbatim from
+   `ServerPicker.module.css → .menuRow`. Sits inside `Combobox.Item`
+   (which supplies the row's padding / radius / highlight via the
+   shared `.item` class) and carries the row-content layout so every
+   row — None, recents, Open folder… — shares one geometry.
+
+   `min-height: 24px` matches an inline `IconButton size={1}` so
+   rows with a trailing button and rows without one stay on the
+   same row pitch. `gap: 8px` matches ServerPicker's row gap so
+   icon → label → trailing read at identical spacing across
+   dropdowns. */
+.menuRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-height: 24px;
+}
+
+.menuRowIcon {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+
+.menuRowLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Trailing slot — sized to `IconButton size={1}` (24×24) so the
+   remove button slots in cleanly and `margin-left: auto` pushes
+   it past the flex-1 label to the row's right edge, exactly like
+   `ServerPicker.module.css → .removeBtn`. The check sits stacked
+   in the same slot via absolute positioning so swapping check ↔ X
+   never reflows the row. */
+.trailing {
+  position: relative;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+}
+
+.trailingCheck {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-2);
+  pointer-events: none;
+}
+
+.trailingRemove {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+/* Hover / kbd-focus on the row reveals the X and hides the check
+   — they share the same trailing slot, so the row never reflows.
+   The IconButton stays interactive (its own pointer events live on
+   the button element, not on `.trailing`) so its `:hover` bg
+   tinting from `Button.module.css → .variant-ghost` still reads. */
+.recentItem:hover .trailingRemove,
+.recentItem[data-highlighted] .trailingRemove {
+  opacity: 1;
+}
+.recentItem:hover .trailingCheck,
+.recentItem[data-highlighted] .trailingCheck {
+  opacity: 0;
+}

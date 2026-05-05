@@ -725,6 +725,23 @@ function registerIpcHandlers(): void {
     }
     return settings.workingDirectory
   })
+  // One-shot directory picker — does NOT mutate the runtime cwd or
+  // restart anything. Used by the new-session screen so each spawned
+  // session can carry its own `workingDirectory` spawn arg without
+  // disturbing the global default. Returns `null` on cancel; caller
+  // is responsible for treating the result as ephemeral and (if it
+  // wants to remember it) plumbing it into recent-dirs storage.
+  ipcMain.handle(
+    `desktop:pick-directory`,
+    async (_event, options?: { defaultPath?: string }) => {
+      const result = await dialog.showOpenDialog({
+        properties: [`openDirectory`, `createDirectory`],
+        defaultPath: options?.defaultPath,
+      })
+      if (result.canceled) return null
+      return result.filePaths[0] ?? null
+    }
+  )
 }
 
 function windowDisplayLabel(win: BrowserWindow): string {

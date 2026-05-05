@@ -86,6 +86,8 @@ const api = {
     ipcRenderer.invoke(`desktop:get-working-directory`),
   chooseWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:choose-working-directory`),
+  pickDirectory: (options?: { defaultPath?: string }): Promise<string | null> =>
+    ipcRenderer.invoke(`desktop:pick-directory`, options),
   onDesktopStateChanged: (
     callback: (state: DesktopState) => void
   ): (() => void) => {

@@ -327,10 +327,18 @@ function createAssistantHandler(options: {
     wake: WakeEvent
   ): Promise<void> {
     const readSet = new Set<string>()
+    // `workingDirectory` may be overridden per-spawn — used by the
+    // desktop UI's directory picker so each Horton session can run
+    // against its own project root without restarting the runtime.
+    const effectiveCwd =
+      typeof ctx.args.workingDirectory === `string` &&
+      ctx.args.workingDirectory.trim().length > 0
+        ? ctx.args.workingDirectory
+        : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(workingDirectory, ctx, readSet, {
+      ...createHortonTools(effectiveCwd, ctx, readSet, {
         docsSearchTool,
         modelConfig,
       }),
@@ -391,7 +399,7 @@ function createAssistantHandler(options: {
     }
 
     ctx.useAgent({
-      systemPrompt: buildHortonSystemPrompt(workingDirectory, {
+      systemPrompt: buildHortonSystemPrompt(effectiveCwd, {
         hasDocsSupport: Boolean(docsSupport),
         hasSkills,
         docsUrl,
@@ -484,6 +492,12 @@ export function registerHorton(
       .default(`auto`)
       .describe(
         `Reasoning effort for compatible reasoning models. Auto uses a safe provider default.`
+      ),
+    workingDirectory: z
+      .string()
+      .optional()
+      .describe(
+        `Working directory for file operations. Defaults to the server's configured cwd.`
       ),
   })
 
