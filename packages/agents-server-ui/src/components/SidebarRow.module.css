@@ -29,6 +29,7 @@
   cursor: pointer;
   user-select: none;
   color: var(--ds-text-1);
+  text-decoration: none;
   background: transparent;
   transition: background 0.08s ease;
 }

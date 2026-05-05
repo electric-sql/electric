@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { StatusDot } from './StatusDot'
 import { HoverCard, Text } from '../ui'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
@@ -32,7 +33,7 @@ type HoverCardHandle = ReturnType<
 type SidebarRowProps = {
   entity: ElectricEntity
   selected: boolean
-  onSelect: () => void
+  onSelect?: () => void
   depth?: number
   /** Number of immediate children. 0 means no expand affordance. */
   childCount?: number
@@ -78,7 +79,7 @@ type SidebarRowProps = {
 export const SidebarRow = memo(function SidebarRow({
   entity,
   selected,
-  onSelect,
+  onSelect: _onSelect,
   depth = 0,
   childCount = 0,
   expanded = false,
@@ -106,24 +107,20 @@ export const SidebarRow = memo(function SidebarRow({
     childCount,
   }
 
+  const splat = entity.url.replace(/^\//, ``)
+
   return (
     <HoverCard.Trigger
       handle={hoverHandle}
       payload={payload}
       render={
-        <div
-          role="button"
-          tabIndex={0}
+        <Link
+          to="/entity/$"
+          params={{ _splat: splat }}
           className={className}
-          onClick={onSelect}
-          onKeyDown={(e) => {
-            if (e.key === `Enter` || e.key === ` `) {
-              e.preventDefault()
-              onSelect()
-            }
-          }}
           style={{ paddingLeft: BASE_PADDING_LEFT + depth * INDENT_PX }}
           title={title}
+          preload="intent"
         >
           <span className={styles.iconSlot}>
             <span className={styles.statusDot}>
@@ -194,7 +191,7 @@ export const SidebarRow = memo(function SidebarRow({
               </button>
             )
           ) : null}
-        </div>
+        </Link>
       }
     />
   )

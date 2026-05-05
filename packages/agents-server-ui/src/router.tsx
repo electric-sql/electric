@@ -8,6 +8,8 @@ import {
   useNavigate,
   useParams,
 } from '@tanstack/react-router'
+import { connectEntityStream, getActiveBaseUrl } from './lib/entity-connection'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { useServerConnection } from './hooks/useServerConnection'
@@ -104,6 +106,7 @@ function RootShell(): React.ReactElement {
 
 function EntityPage(): React.ReactElement {
   const { _splat } = useParams({ from: `/entity/$` })
+  const { db: preloadedDb } = entityRoute.useLoaderData()
   const entityUrl = `/${_splat}`
   const { activeServer } = useServerConnection()
   const { pinnedUrls, togglePin } = usePinnedEntities()
@@ -205,6 +208,7 @@ function EntityPage(): React.ReactElement {
             entityUrl={connectUrl}
             entity={selectedEntity}
             entityStopped={entityStopped}
+            preloadedDb={preloadedDb}
           />
         </Stack>
         {stateExplorerOpen && (
@@ -257,15 +261,18 @@ function GenericEntityBody({
   entityUrl,
   entity,
   entityStopped,
+  preloadedDb,
 }: {
   baseUrl: string
   entityUrl: string | null
   entity: ElectricEntity
   entityStopped: boolean
+  preloadedDb?: EntityStreamDBWithActions | null
 }): React.ReactElement {
   const { entries, db, loading, error } = useEntityTimeline(
     baseUrl || null,
-    entityUrl
+    entityUrl,
+    preloadedDb
   )
 
   return (
@@ -325,6 +332,22 @@ const indexRoute = createRoute({
 const entityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/entity/$`,
+  // Kick off (or reuse a cached) stream connection during navigation so the
+  // db is ready by the time the component renders. defaultPreload:'intent'
+  // on the router means this also fires on sidebar hover via <Link>.
+  loader: async ({
+    params,
+  }): Promise<{ db: EntityStreamDBWithActions | null }> => {
+    const baseUrl = getActiveBaseUrl()
+    if (!baseUrl) return { db: null }
+    const entityUrl = `/${params._splat}`
+    try {
+      const { db } = await connectEntityStream({ baseUrl, entityUrl })
+      return { db }
+    } catch {
+      return { db: null }
+    }
+  },
   component: EntityPage,
 })
 
@@ -333,6 +356,7 @@ const routeTree = rootRoute.addChildren([indexRoute, entityRoute])
 export const router = createRouter({
   routeTree,
   history: createHashHistory(),
+  defaultPreload: `intent`,
 })
 
 // eslint-disable-next-line quotes

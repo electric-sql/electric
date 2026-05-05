@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react'
 import { loadServers, saveServers } from '../lib/server-connection'
+import { registerActiveBaseUrl } from '../lib/entity-connection'
 import type { ReactNode } from 'react'
 import type { ServerConfig } from '../lib/types'
 
@@ -58,6 +59,12 @@ export function ServerConnectionProvider({
         setActiveServerState(next[0] ?? null)
       })
   }, [])
+
+  // Keep the module-level accessor in sync so the route loader
+  // (outside React context) can call connectEntityStream.
+  useEffect(() => {
+    registerActiveBaseUrl(activeServer?.url ?? null)
+  }, [activeServer])
 
   useEffect(() => {
     if (!activeServer) {
