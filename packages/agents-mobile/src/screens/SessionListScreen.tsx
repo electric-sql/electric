@@ -7,13 +7,15 @@ import {
   View,
 } from 'react-native'
 import { useLiveQuery } from '@tanstack/react-db'
+import { Fab } from '../components/Fab'
 import { Header } from '../components/Header'
+import { HomeMenu, type ServerHealth } from '../components/HomeMenu'
 import { Screen } from '../components/Screen'
-import { NewSessionRow, SidebarRow } from '../components/SidebarRow'
-import { SidebarFooter } from '../components/sidebar/SidebarFooter'
-import type { ServerStatus } from '../components/sidebar/ServerPickerTile'
+import { SearchBar } from '../components/SearchBar'
+import { SessionRow } from '../components/SessionRow'
+import { TopBarIconButton } from '../components/TopBarIconButton'
 import { useAgents } from '../lib/AgentsProvider'
-import { checkServerHealth } from '../lib/agentsClient'
+import { checkServerHealth, getEntityDisplayTitle } from '../lib/agentsClient'
 import {
   bucketEntities,
   groupByStatus,
@@ -25,6 +27,27 @@ import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
 
+/**
+ * Home screen — the ChatGPT-mobile-style entry point. Layout is:
+ *
+ *   ┌──────────────────────────────────────────────┐
+ *   │ Electric Agents          🔍  ⋯               │   <Header>
+ *   ├──────────────────────────────────────────────┤
+ *   │ Today                                        │
+ *   │   Session A                                  │   <SessionRow>
+ *   │   Session B                                  │
+ *   │ Yesterday                                    │
+ *   │   Session C                                  │
+ *   │                                              │
+ *   │                            [✎ New]           │   <Fab>
+ *   └──────────────────────────────────────────────┘
+ *
+ * Search slides in inline (replacing the header) with debounced
+ * filtering by display title; the kebab opens `<HomeMenu>` for
+ * server / filter / theme / diagnostics. The FAB launches the new-
+ * session flow. We intentionally do not show status dots, type
+ * labels, or footers — those affordances live in the kebab.
+ */
 export function SessionListScreen({
   onOpenSession,
   onNewSession,
@@ -41,46 +64,64 @@ export function SessionListScreen({
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const prefs = useSidebarPrefs()
 
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState(``)
+  const [menuOpen, setMenuOpen] = useState(false)
+
   const { data: entities = [] } = useLiveQuery(
-    (query) =>
-      query
+    (q) =>
+      q
         .from({ entity: entitiesCollection })
         .orderBy(({ entity }) => entity.updated_at, `desc`),
     [entitiesCollection]
   )
 
-  // Apply Show > Type / Show > Status filters before bucketing so a
-  // hidden parent doesn't reparent its children to the root level —
-  // matches the web sidebar behaviour.
-  const visibleEntities = useMemo(() => {
-    if (prefs.hiddenTypes.size === 0 && prefs.hiddenStatuses.size === 0) {
-      return entities
-    }
-    return entities.filter(
-      (entity) =>
-        !prefs.hiddenTypes.has(entity.type) &&
-        !prefs.hiddenStatuses.has(entity.status)
-    )
-  }, [entities, prefs.hiddenTypes, prefs.hiddenStatuses])
+  // Filter pipeline: hidden types/statuses → search query → grouping.
+  const filteredEntities = useMemo(() => {
+    const hidesAnything =
+      prefs.hiddenTypes.size > 0 || prefs.hiddenStatuses.size > 0
+    const trimmed = query.trim().toLowerCase()
+    if (!hidesAnything && !trimmed) return entities
+    return entities.filter((entity) => {
+      if (prefs.hiddenTypes.has(entity.type)) return false
+      if (prefs.hiddenStatuses.has(entity.status)) return false
+      if (!trimmed) return true
+      const title = getEntityDisplayTitle(entity).toLowerCase()
+      return title.includes(trimmed)
+    })
+  }, [entities, prefs.hiddenTypes, prefs.hiddenStatuses, query])
 
+  // Search overrides grouping — a flat hit list reads better than
+  // pretending the matches still belong to time buckets.
   const groups: Array<SessionGroup> = useMemo(() => {
+    if (query.trim()) {
+      // Search overrides bucketing: a flat hit list reads better
+      // than pretending matches still belong to time buckets. We
+      // reuse the `older` key purely so this conforms to
+      // `SessionGroup` — the row renderer only consumes `label`.
+      return [
+        {
+          id: `results`,
+          key: `older` as const,
+          label: `Results`,
+          items: [...filteredEntities],
+        },
+      ]
+    }
     switch (prefs.groupBy) {
       case `type`:
-        return groupByType(visibleEntities)
+        return groupByType(filteredEntities)
       case `status`:
-        return groupByStatus(visibleEntities)
+        return groupByStatus(filteredEntities)
       case `date`:
       default:
-        return bucketEntities(visibleEntities)
+        return bucketEntities(filteredEntities)
     }
-  }, [visibleEntities, prefs.groupBy])
+  }, [filteredEntities, prefs.groupBy, query])
 
-  // Cheap connectivity probe so the footer's status dot reads
-  // green/red instead of the unset grey. Mirrors the web sidebar's
-  // ServerPicker dot which lights up from the same `/health` ping.
-  const [serverStatus, setServerStatus] = useState<ServerStatus>(`unset`)
-  // Bumped by the user's pull-to-refresh gesture so we can run the
-  // probe outside the polling cadence too.
+  // Same connectivity ping the old footer used — feeds the green/red
+  // dot in the home menu.
+  const [serverStatus, setServerStatus] = useState<ServerHealth>(`unset`)
   const probeId = useRef(0)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -99,7 +140,6 @@ export function SessionListScreen({
   useEffect(() => {
     const signal = { cancelled: false }
     setServerStatus(`unset`)
-
     void probeOnce(signal)
     const interval = setInterval(() => void probeOnce(signal), 10_000)
     return () => {
@@ -108,11 +148,6 @@ export function SessionListScreen({
     }
   }, [serverUrl, probeOnce])
 
-  // Pull-to-refresh: the live query is already up-to-date, so this is
-  // really a "is the server still reachable?" gesture + a quick visual
-  // beat so the user gets feedback. We run the same probe the polling
-  // tick does and hold the spinner for ~600 ms minimum so the gesture
-  // doesn't snap back instantly on a fast network.
   const onRefresh = useCallback(async () => {
     const id = ++probeId.current
     setRefreshing(true)
@@ -125,41 +160,64 @@ export function SessionListScreen({
     if (probeId.current === id) setRefreshing(false)
   }, [probeOnce])
 
+  const closeSearch = (): void => {
+    setSearchOpen(false)
+    setQuery(``)
+  }
+
   return (
     <Screen>
-      {/*
-        Top strip mirrors `<MainHeader>` — 44px, page bg, no border.
-        Title is plain "Sessions"; the footer below carries the
-        server picker, filter and settings affordances exactly as on
-        the web sidebar.
-      */}
-      <Header title="Sessions" />
+      {searchOpen ? (
+        <SearchBar
+          value={query}
+          onChangeText={setQuery}
+          onCancel={closeSearch}
+        />
+      ) : (
+        <Header
+          title="Electric Agents"
+          actions={
+            <>
+              <TopBarIconButton
+                icon="search"
+                onPress={() => setSearchOpen(true)}
+                accessibilityLabel="Search sessions"
+              />
+              <TopBarIconButton
+                icon="more"
+                onPress={() => setMenuOpen(true)}
+                accessibilityLabel="More options"
+              />
+            </>
+          }
+        />
+      )}
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            // Tint the spinner with the accent so it reads as part of
-            // the brand. iOS only — Android uses `colors=[…]`.
             tintColor={tokens.accent11}
             colors={[tokens.accent11]}
             progressBackgroundColor={tokens.surface}
           />
         }
       >
-        <NewSessionRow onPress={onNewSession} />
-
-        {groups.map((group) => (
-          <View key={group.id} style={styles.section}>
+        {groups.map((group, idx) => (
+          <View
+            key={group.id}
+            style={[styles.section, idx === 0 ? styles.sectionFirst : null]}
+          >
             <Text style={styles.sectionLabel}>{group.label}</Text>
             {group.items.map((entity) => (
-              <SidebarRow
+              <SessionRow
                 key={entity.url}
                 entity={entity}
-                selected={false}
                 onPress={() => onOpenSession(entity.url)}
               />
             ))}
@@ -167,21 +225,73 @@ export function SessionListScreen({
         ))}
 
         {entities.length === 0 && (
-          <Text style={styles.emptyText}>No sessions</Text>
+          <EmptyState
+            title="No sessions yet"
+            body={`Tap "New" to start your first session.`}
+          />
         )}
-        {entities.length > 0 && visibleEntities.length === 0 && (
-          <Text style={styles.emptyText}>
-            No sessions match the current filters
-          </Text>
+        {entities.length > 0 && filteredEntities.length === 0 && (
+          <EmptyState
+            title={query.trim() ? `No matches` : `No sessions match`}
+            body={
+              query.trim()
+                ? `Try a different search.`
+                : `Adjust the filters in the more menu.`
+            }
+          />
         )}
       </ScrollView>
 
-      <SidebarFooter
-        serverStatus={serverStatus}
+      {!searchOpen && (
+        <Fab
+          icon="pencil"
+          label="New"
+          onPress={onNewSession}
+          accessibilityLabel="New session"
+        />
+      )}
+
+      <HomeMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        serverHealth={serverStatus}
         onChangeServer={onChangeServer}
         onOpenDiagnostics={onOpenDiagnostics}
       />
     </Screen>
+  )
+}
+
+function EmptyState({
+  title,
+  body,
+}: {
+  title: string
+  body: string
+}): React.ReactElement {
+  const tokens = useTokens()
+  return (
+    <View style={{ paddingTop: 64, paddingHorizontal: 24, gap: 6 }}>
+      <Text
+        style={{
+          textAlign: `center`,
+          color: tokens.text2,
+          fontSize: fontSize.lg,
+          fontWeight: `500`,
+        }}
+      >
+        {title}
+      </Text>
+      <Text
+        style={{
+          textAlign: `center`,
+          color: tokens.text3,
+          fontSize: fontSize.base,
+        }}
+      >
+        {body}
+      </Text>
+    </View>
   )
 }
 
@@ -192,27 +302,25 @@ function createStyles(tokens: Tokens) {
     },
     scrollContent: {
       paddingHorizontal: 8,
-      paddingBottom: spacing.lg,
+      // Reserve room at the bottom so the FAB never covers the last
+      // row. 96 ≈ FAB height (48) + bottom inset margin (16) + gap.
+      paddingBottom: 96,
     },
     section: {
-      marginTop: 6,
+      marginTop: spacing.md,
+    },
+    sectionFirst: {
+      marginTop: spacing.sm,
     },
     sectionLabel: {
-      // Mirrors `Sidebar.module.css .sectionLabel`: 11px / 500 / muted,
-      // padding 14px 4px 4px 8px so it aligns with the icon column.
-      paddingTop: 14,
-      paddingRight: 4,
-      paddingBottom: 4,
-      paddingLeft: 8,
+      paddingTop: 8,
+      paddingHorizontal: 12,
+      paddingBottom: 6,
       color: tokens.text3,
-      fontSize: 11,
-      fontWeight: `500`,
-    },
-    emptyText: {
-      paddingTop: 20,
-      textAlign: `center`,
-      color: tokens.text3,
-      fontSize: fontSize.sm,
+      fontSize: 12,
+      fontWeight: `600`,
+      letterSpacing: 0.2,
+      textTransform: `uppercase`,
     },
   })
 }

@@ -78,7 +78,8 @@ export function NewSessionScreen({
   return (
     <Screen>
       <Header
-        leading={<HeaderBackButton onPress={onBack} label="Sessions" />}
+        align="center"
+        leading={<HeaderBackButton onPress={onBack} />}
         title="New session"
       />
 
