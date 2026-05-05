@@ -110,8 +110,13 @@ export interface OutboundBridge {
   onTextStart: () => void
   onTextDelta: (delta: string) => void
   onTextEnd: () => void
-  onToolCallStart: (name: string, args: unknown) => void
-  onToolCallEnd: (name: string, result: unknown, isError: boolean) => void
+  onToolCallStart: (toolCallId: string, name: string, args: unknown) => void
+  onToolCallEnd: (
+    toolCallId: string,
+    name: string,
+    result: unknown,
+    isError: boolean
+  ) => void
 }
 
 export function createOutboundBridge(
@@ -145,9 +150,10 @@ export function createOutboundBridge(
   let currentStepNumber = 0
   let currentMsgKey: string | null = null
   let currentTextRunKey: string | null = null
-  let currentTcKey: string | null = null
-  let currentTcRunKey: string | null = null
-  let currentTcArgs: unknown = undefined
+  const toolCallsById = new Map<
+    string,
+    { key: string; runKey: string; args: unknown }
+  >()
   const requireActiveRun = (action: string): string => {
     if (!currentRunKey) {
       throw new Error(
@@ -268,16 +274,16 @@ export function createOutboundBridge(
       )
     },
 
-    onToolCallStart(name: string, args: unknown) {
+    onToolCallStart(toolCallId: string, name: string, args: unknown) {
       const runKey = requireActiveRun(`onToolCallStart`)
-      currentTcKey = `tc-${counters.tc++}`
+      const key = `tc-${counters.tc++}`
       persistSeed()
-      currentTcRunKey = runKey
-      currentTcArgs = args
+      toolCallsById.set(toolCallId, { key, runKey, args })
       writeEvent(
         entityStateSchema.toolCalls.insert({
-          key: currentTcKey,
+          key,
           value: {
+            tool_call_id: toolCallId,
             tool_name: name,
             status: `started`,
             args,
@@ -287,21 +293,29 @@ export function createOutboundBridge(
       )
     },
 
-    onToolCallEnd(name: string, result: unknown, isError: boolean) {
-      if (!currentTcKey) return
+    onToolCallEnd(
+      toolCallId: string,
+      name: string,
+      result: unknown,
+      isError: boolean
+    ) {
+      const toolCall = toolCallsById.get(toolCallId)
+      if (!toolCall) return
       writeEvent(
         entityStateSchema.toolCalls.update({
-          key: currentTcKey,
+          key: toolCall.key,
           value: {
+            tool_call_id: toolCallId,
             tool_name: name,
             status: isError ? `failed` : `completed`,
-            args: currentTcArgs,
+            args: toolCall.args,
             result:
               typeof result === `string` ? result : JSON.stringify(result),
-            run_id: currentTcRunKey,
+            run_id: toolCall.runKey,
           } as never,
         }) as ChangeEvent
       )
+      toolCallsById.delete(toolCallId)
     },
   }
 }

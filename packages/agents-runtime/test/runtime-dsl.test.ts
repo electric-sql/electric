@@ -451,18 +451,23 @@ function createFakeToolAssistant(opts?: {
 
         if (trimmed.startsWith(`sync_echo `)) {
           const text = trimmed.slice(`sync_echo `.length)
-          bridge.onToolCallStart(`sync_echo`, { text })
+          bridge.onToolCallStart(`call-sync_echo`, `sync_echo`, { text })
           const result = { echoed: text }
-          bridge.onToolCallEnd(`sync_echo`, result, false)
+          bridge.onToolCallEnd(`call-sync_echo`, `sync_echo`, result, false)
           return `sync_echo: ${text}`
         }
 
         if (trimmed.startsWith(`async_lookup `)) {
           const key = trimmed.slice(`async_lookup `.length)
-          bridge.onToolCallStart(`async_lookup`, { key })
+          bridge.onToolCallStart(`call-async_lookup`, `async_lookup`, { key })
           await new Promise((resolve) => setTimeout(resolve, 5))
           const result = { key, value: `lookup:${key}` }
-          bridge.onToolCallEnd(`async_lookup`, result, false)
+          bridge.onToolCallEnd(
+            `call-async_lookup`,
+            `async_lookup`,
+            result,
+            false
+          )
           return `async_lookup: lookup:${key}`
         }
 
@@ -470,7 +475,7 @@ function createFakeToolAssistant(opts?: {
           const match = trimmed.match(/^stateful_note write (\S+)\s+(.+)$/)
           const key = match?.[1] ?? ``
           const text = match?.[2] ?? ``
-          bridge.onToolCallStart(`stateful_note`, {
+          bridge.onToolCallStart(`call-stateful_note`, `stateful_note`, {
             action: `write`,
             key,
             text,
@@ -486,6 +491,7 @@ function createFakeToolAssistant(opts?: {
             }
           }
           bridge.onToolCallEnd(
+            `call-stateful_note`,
             `stateful_note`,
             { action: `write`, key, text },
             false
@@ -495,9 +501,13 @@ function createFakeToolAssistant(opts?: {
 
         if (trimmed.startsWith(`stateful_note read `)) {
           const key = trimmed.slice(`stateful_note read `.length)
-          bridge.onToolCallStart(`stateful_note`, { action: `read`, key })
+          bridge.onToolCallStart(`call-stateful_note`, `stateful_note`, {
+            action: `read`,
+            key,
+          })
           const text = opts?.notes?.get(key)?.text ?? `<missing>`
           bridge.onToolCallEnd(
+            `call-stateful_note`,
             `stateful_note`,
             { action: `read`, key, text },
             false
@@ -507,8 +517,13 @@ function createFakeToolAssistant(opts?: {
 
         if (trimmed.startsWith(`fail_tool `)) {
           const reason = trimmed.slice(`fail_tool `.length)
-          bridge.onToolCallStart(`fail_tool`, { reason })
-          bridge.onToolCallEnd(`fail_tool`, `fail_tool: ${reason}`, true)
+          bridge.onToolCallStart(`call-fail_tool`, `fail_tool`, { reason })
+          bridge.onToolCallEnd(
+            `call-fail_tool`,
+            `fail_tool`,
+            `fail_tool: ${reason}`,
+            true
+          )
           return `fail_tool error: ${reason}`
         }
 
@@ -841,7 +856,10 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
       const countRow = counters.get(`dispatchCount`)
       const dispatchCount = (countRow?.value ?? 0) + 1
 
-      bridge.onToolCallStart(`dispatch`, { type: targetKind, task })
+      bridge.onToolCallStart(`call-dispatch`, `dispatch`, {
+        type: targetKind,
+        task,
+      })
 
       if (countRow) {
         counters.update(`dispatchCount`, (draft) => {
@@ -877,7 +895,12 @@ function createDispatcherAssistant(ctx: HandlerContext): TestAgentSpec {
         draft.value = `idle`
       })
 
-      bridge.onToolCallEnd(`dispatch`, { type: targetKind, childId }, false)
+      bridge.onToolCallEnd(
+        `call-dispatch`,
+        `dispatch`,
+        { type: targetKind, childId },
+        false
+      )
       return fullText || `(no text output)`
     },
   })
@@ -907,7 +930,11 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
       if (trimmed.startsWith(`spawn_perspectives `)) {
         const question = trimmed.slice(`spawn_perspectives `.length)
         const parentId = entityIdFromUrl(ctx.entityUrl)
-        bridge.onToolCallStart(`spawn_perspectives`, { question })
+        bridge.onToolCallStart(
+          `call-spawn_perspectives`,
+          `spawn_perspectives`,
+          { question }
+        )
 
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `spawning`
@@ -942,6 +969,7 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
         })
 
         bridge.onToolCallEnd(
+          `call-spawn_perspectives`,
           `spawn_perspectives`,
           { spawned: perspectives.map((perspective) => perspective.id) },
           false
@@ -950,10 +978,15 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
       }
 
       if (trimmed === `wait_for_all`) {
-        bridge.onToolCallStart(`wait_for_all`, {})
+        bridge.onToolCallStart(`call-wait_for_all`, `wait_for_all`, {})
 
         if (children.toArray.length === 0) {
-          bridge.onToolCallEnd(`wait_for_all`, { error: true }, true)
+          bridge.onToolCallEnd(
+            `call-wait_for_all`,
+            `wait_for_all`,
+            { error: true },
+            true
+          )
           return `No perspective agents have been spawned yet.`
         }
 
@@ -981,6 +1014,7 @@ function createManagerWorkerAssistant(ctx: HandlerContext): TestAgentSpec {
         })
 
         bridge.onToolCallEnd(
+          `call-wait_for_all`,
           `wait_for_all`,
           { collected: results.length },
           false
@@ -1014,7 +1048,7 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
       }>(ctx.db, `status`)
       const parentId = entityIdFromUrl(ctx.entityUrl)
 
-      bridge.onToolCallStart(`map_chunks`, {
+      bridge.onToolCallStart(`call-map_chunks`, `map_chunks`, {
         task,
         chunkCount: chunkSpecs.length,
       })
@@ -1059,7 +1093,12 @@ function createMapReduceAssistant(ctx: HandlerContext): TestAgentSpec {
       status.update(`current`, (draft: Record<string, unknown>) => {
         draft.value = `idle`
       })
-      bridge.onToolCallEnd(`map_chunks`, { chunkCount: results.length }, false)
+      bridge.onToolCallEnd(
+        `call-map_chunks`,
+        `map_chunks`,
+        { chunkCount: results.length },
+        false
+      )
 
       return results
         .map((result, index) => `chunk-${index + 1}:${result}`)
@@ -1090,7 +1129,7 @@ function createPipelineAssistant(ctx: HandlerContext): TestAgentSpec {
       const pipeline = buildStateProxy<PipelineStateRow>(ctx.db, `pipeline`)
       const parentId = entityIdFromUrl(ctx.entityUrl)
 
-      bridge.onToolCallStart(`run_pipeline`, {
+      bridge.onToolCallStart(`call-run_pipeline`, `run_pipeline`, {
         input,
         stageCount: stages.length,
       })
@@ -1142,7 +1181,12 @@ function createPipelineAssistant(ctx: HandlerContext): TestAgentSpec {
         })
       )
 
-      bridge.onToolCallEnd(`run_pipeline`, { stageCount: stages.length }, false)
+      bridge.onToolCallEnd(
+        `call-run_pipeline`,
+        `run_pipeline`,
+        { stageCount: stages.length },
+        false
+      )
       return currentInput
     },
   })
@@ -1184,7 +1228,7 @@ function createResearchAssistant(ctx: HandlerContext): TestAgentSpec {
           .map((part) => part.trim())
           .filter(Boolean)
 
-        bridge.onToolCallStart(`spawn_researchers`, {
+        bridge.onToolCallStart(`call-spawn_researchers`, `spawn_researchers`, {
           topic,
           researcherCount: subtopics.length,
         })
@@ -1216,15 +1260,25 @@ function createResearchAssistant(ctx: HandlerContext): TestAgentSpec {
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `waiting`
         })
-        bridge.onToolCallEnd(`spawn_researchers`, { topic, subtopics }, false)
+        bridge.onToolCallEnd(
+          `call-spawn_researchers`,
+          `spawn_researchers`,
+          { topic, subtopics },
+          false
+        )
         return `spawned_researchers:${subtopics.join(`,`)}`
       }
 
       if (trimmed === `wait_for_results`) {
-        bridge.onToolCallStart(`wait_for_results`, {})
+        bridge.onToolCallStart(`call-wait_for_results`, `wait_for_results`, {})
 
         if (children.toArray.length === 0) {
-          bridge.onToolCallEnd(`wait_for_results`, { error: true }, true)
+          bridge.onToolCallEnd(
+            `call-wait_for_results`,
+            `wait_for_results`,
+            { error: true },
+            true
+          )
           return `No researcher agents have been spawned yet.`
         }
 
@@ -1247,6 +1301,7 @@ function createResearchAssistant(ctx: HandlerContext): TestAgentSpec {
           draft.value = `idle`
         })
         bridge.onToolCallEnd(
+          `call-wait_for_results`,
           `wait_for_results`,
           { resultCount: results.length },
           false
@@ -1306,7 +1361,9 @@ function createPeerReviewAssistant(
 
       if (trimmed.startsWith(`start_review `)) {
         const artifact = trimmed.slice(`start_review `.length)
-        bridge.onToolCallStart(`start_review`, { artifact })
+        bridge.onToolCallStart(`call-start_review`, `start_review`, {
+          artifact,
+        })
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `reviewing`
         })
@@ -1337,6 +1394,7 @@ function createPeerReviewAssistant(
         }
 
         bridge.onToolCallEnd(
+          `call-start_review`,
           `start_review`,
           { reviewers: reviewers.map((reviewer) => reviewer.id) },
           false
@@ -1345,13 +1403,22 @@ function createPeerReviewAssistant(
       }
 
       if (trimmed === `summarize_reviews`) {
-        bridge.onToolCallStart(`summarize_reviews`, {})
+        bridge.onToolCallStart(
+          `call-summarize_reviews`,
+          `summarize_reviews`,
+          {}
+        )
         const rows = reviewers
           .map((reviewer) => shared.reviews.get(`review-${reviewer.reviewer}`))
           .filter(Boolean) as Array<ReviewRow>
 
         if (rows.length === 0) {
-          bridge.onToolCallEnd(`summarize_reviews`, { count: 0 }, true)
+          bridge.onToolCallEnd(
+            `call-summarize_reviews`,
+            `summarize_reviews`,
+            { count: 0 },
+            true
+          )
           return `No reviews have been written yet.`
         }
 
@@ -1368,7 +1435,12 @@ function createPeerReviewAssistant(
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `done`
         })
-        bridge.onToolCallEnd(`summarize_reviews`, { count: rows.length }, false)
+        bridge.onToolCallEnd(
+          `call-summarize_reviews`,
+          `summarize_reviews`,
+          { count: rows.length },
+          false
+        )
         return `average:${average.toFixed(1)};count:${rows.length};${ordered}`
       }
 
@@ -1450,13 +1522,18 @@ function createDebateAssistant(
 
       if (trimmed.startsWith(`start_debate `)) {
         const topic = trimmed.slice(`start_debate `.length)
-        bridge.onToolCallStart(`start_debate`, { topic })
+        bridge.onToolCallStart(`call-start_debate`, `start_debate`, { topic })
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `debating`
         })
         await spawnDebaters(debaters, topic)
 
-        bridge.onToolCallEnd(`start_debate`, { topic }, false)
+        bridge.onToolCallEnd(
+          `call-start_debate`,
+          `start_debate`,
+          { topic },
+          false
+        )
         return `started:${topic}`
       }
 
@@ -1473,22 +1550,32 @@ function createDebateAssistant(
           return `invalid:start_side`
         }
 
-        bridge.onToolCallStart(`start_side`, { side, topic })
+        bridge.onToolCallStart(`call-start_side`, `start_side`, { side, topic })
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `debating`
         })
         await spawnDebaters([debater], topic)
-        bridge.onToolCallEnd(`start_side`, { side, topic }, false)
+        bridge.onToolCallEnd(
+          `call-start_side`,
+          `start_side`,
+          { side, topic },
+          false
+        )
         return `started:${side}:${topic}`
       }
 
       if (trimmed === `end_debate`) {
-        bridge.onToolCallStart(`end_debate`, {})
+        bridge.onToolCallStart(`call-end_debate`, `end_debate`, {})
         const pro = shared.arguments.get(`pro-1`)
         const con = shared.arguments.get(`con-1`)
 
         if (!pro || !con) {
-          bridge.onToolCallEnd(`end_debate`, { count: 0 }, true)
+          bridge.onToolCallEnd(
+            `call-end_debate`,
+            `end_debate`,
+            { count: 0 },
+            true
+          )
           return `No debate arguments have been recorded yet.`
         }
 
@@ -1499,7 +1586,12 @@ function createDebateAssistant(
         status.update(`current`, (draft: Record<string, unknown>) => {
           draft.value = `done`
         })
-        bridge.onToolCallEnd(`end_debate`, { count: 2 }, false)
+        bridge.onToolCallEnd(
+          `call-end_debate`,
+          `end_debate`,
+          { count: 2 },
+          false
+        )
         return [`winner:pro`, `pro:${pro.text}`, `con:${con.text}`].join(`;`)
       }
 
@@ -1555,7 +1647,7 @@ function createWikiAssistant(
           .map((part) => part.trim())
           .filter(Boolean)
 
-        bridge.onToolCallStart(`create_wiki`, {
+        bridge.onToolCallStart(`call-create_wiki`, `create_wiki`, {
           topic,
           specialistCount: subtopics.length,
         })
@@ -1563,6 +1655,7 @@ function createWikiAssistant(
         const existingMeta = meta.get(`wiki`)
         if (existingMeta && existingMeta.topic !== topic) {
           bridge.onToolCallEnd(
+            `call-create_wiki`,
             `create_wiki`,
             { topic, existingTopic: existingMeta.topic },
             true
@@ -1613,6 +1706,7 @@ function createWikiAssistant(
         }
 
         bridge.onToolCallEnd(
+          `call-create_wiki`,
           `create_wiki`,
           { topic, subtopics, spawned, reused },
           false
@@ -1622,25 +1716,35 @@ function createWikiAssistant(
 
       if (trimmed.startsWith(`query_wiki `)) {
         const query = trimmed.slice(`query_wiki `.length)
-        bridge.onToolCallStart(`query_wiki`, { query })
+        bridge.onToolCallStart(`call-query_wiki`, `query_wiki`, { query })
 
         const rows = [...shared.articles.toArray].sort((left, right) =>
           left.key.localeCompare(right.key)
         )
 
         if (rows.length === 0) {
-          bridge.onToolCallEnd(`query_wiki`, { articleCount: 0 }, false)
+          bridge.onToolCallEnd(
+            `call-query_wiki`,
+            `query_wiki`,
+            { articleCount: 0 },
+            false
+          )
           return `No wiki articles have been written yet.`
         }
 
         const summary = rows.map((row) => `${row.key}:${row.topic}`).join(`;`)
 
-        bridge.onToolCallEnd(`query_wiki`, { articleCount: rows.length }, false)
+        bridge.onToolCallEnd(
+          `call-query_wiki`,
+          `query_wiki`,
+          { articleCount: rows.length },
+          false
+        )
         return `articles:${rows.length};${summary}`
       }
 
       if (trimmed === `get_wiki_status`) {
-        bridge.onToolCallStart(`get_wiki_status`, {})
+        bridge.onToolCallStart(`call-get_wiki_status`, `get_wiki_status`, {})
         const rows = [...children.toArray]
         const completeCount = shared.articles.toArray.length
         const pending = rows
@@ -1648,6 +1752,7 @@ function createWikiAssistant(
           .map((row) => row.kind ?? row.key)
           .join(`,`)
         bridge.onToolCallEnd(
+          `call-get_wiki_status`,
           `get_wiki_status`,
           {
             complete: completeCount,

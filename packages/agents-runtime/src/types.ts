@@ -753,8 +753,13 @@ export interface OutboundBridgeHandle {
   onTextStart: () => void
   onTextDelta: (delta: string) => void
   onTextEnd: () => void
-  onToolCallStart: (name: string, args: unknown) => void
-  onToolCallEnd: (name: string, result: unknown, isError: boolean) => void
+  onToolCallStart: (toolCallId: string, name: string, args: unknown) => void
+  onToolCallEnd: (
+    toolCallId: string,
+    name: string,
+    result: unknown,
+    isError: boolean
+  ) => void
 }
 
 export interface AgentHandle {
