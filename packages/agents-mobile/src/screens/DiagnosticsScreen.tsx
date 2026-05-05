@@ -140,7 +140,8 @@ export function DiagnosticsScreen({
   return (
     <Screen>
       <Header
-        leading={<HeaderBackButton onPress={onBack} label="Settings" />}
+        align="center"
+        leading={<HeaderBackButton onPress={onBack} />}
         title="Diagnostics"
       />
 

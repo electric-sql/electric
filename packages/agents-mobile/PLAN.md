@@ -298,16 +298,55 @@ Bundling Vite output into Expo needs a small build pipeline. Keep the embed buil
 
 ### Phase 4: Native Mobile Shell — IN PROGRESS
 
-- ✅ `Header` component mirrors the web `MainHeader` strip exactly: 44px row, page background, no border, 10px gutter, leading + title + actions slots, identical to `MainHeader.module.css`.
-- ✅ `SessionListScreen` mirrors the web `Sidebar`: `MainHeader` strip, `New session` row in the same 22px-icon-column geometry, date-bucketed sections (`Today` / `Yesterday` / `Previous 7 days` …) using the same `bucketEntities` algorithm as the web, `SidebarFooter` with server picker / filter / settings.
-- ✅ `SidebarRow` mirrors `SidebarRow.module.css`: 28px row, 22px status-dot column, ellipsed title, lowercase `--ds-text-3` type label, `--ds-accent-a3` selected halo, `--ds-bg-hover` press halo, 0.55 stopped opacity.
-- ✅ `SidebarFooter` mirrors the web composition: `ServerPickerTile` (status dot + name + chevrons) on the left, ghost `FooterIconButton`s for filter and settings on the right. All three open `BottomSheet` menus.
-- ✅ `BottomSheet` primitive renders an iOS-style sheet over the screen with sectioned `BottomSheetItem` rows (icon + label + check), used by the server / filter / settings menus.
-- ✅ `useSidebarPrefs` mirrors the web `useSidebarView` store (group-by + hidden-types + hidden-statuses), persisted to AsyncStorage. The list applies the prefs the same way the web sidebar does.
-- ✅ `useThemePreference` mirrors the web `useDarkMode` preference (`system` / `light` / `dark`), persisted to AsyncStorage and consumed by `ThemeProvider`.
-- ✅ `SessionScreen` toolbar mirrors `EntityHeader`: `MainHeader`-styled strip with `‹ Sessions` back affordance, baseline-aligned title + monospace sessionId subtitle, status `Badge` (matching `BadgeTone`), and ghost `IconToggle`s for the `chat` / `state-explorer` view switch.
+The shell intentionally pivoted from a literal port of the web sidebar to
+the standard mobile chat-app pattern (ChatGPT/Claude/Anthropic Console).
+The web sidebar concepts are still present, but they live behind a kebab
+instead of in a permanent footer:
+
+- ✅ `Header` supports two layouts:
+  - `align="leading"` — `[title (flex)] [actions]` for the home screen.
+  - `align="center"` — `[leading abs] [title centred] [actions abs]` for
+    pushed screens (chat, new session, diagnostics) — matches
+    `UINavigationBar`.
+- ✅ `Icon` primitive draws a small inline SVG set
+  (back / search / more / pencil / check / chevron-right / sun / moon /
+  system / server / filter / info / swap / chat / database) using
+  `react-native-svg`. Lucide-styled stroke icons keep the embed asset
+  parity with the web sidebar without a font dependency.
+- ✅ `TopBarIconButton` is the 36×36 ghost button used in `Header`
+  action slots.
+- ✅ `Fab` is an extended pill anchored bottom-right with safe-area
+  awareness — used by `SessionListScreen` for the primary "New" CTA
+  (replaces the inline `New session` row + footer).
+- ✅ `SessionListScreen` is the home screen:
+  `[Electric Agents] … [search] [more] / list / FAB`. Tapping search
+  swaps the header for an inline `<SearchBar>` and filters by display
+  title; the kebab opens `<HomeMenu>`.
+- ✅ `SessionRow` is title-only (`fontSize.base`, `minHeight: 44`),
+  drops to 0.55 opacity for stopped sessions. Status dots and type
+  labels were intentionally removed — that detail moved into the chat
+  screen's kebab.
+- ✅ `HomeMenu` (kebab on the home screen) is a `<BottomSheet>` with
+  sub-pages for: Server (with status dot + change), Group by, Show
+  (drill-in to per-type / per-status visibility), Theme, Diagnostics.
+  Replaces the old `<SidebarFooter>` + filter/settings sheets entirely.
+- ✅ `SearchBar` is a focused inline replacement for `<Header>` while
+  search is active — pill input + Cancel.
+- ✅ `useSidebarPrefs` (group-by + hidden-types + hidden-statuses) and
+  `useThemePreference` (`system` / `light` / `dark`) survive the
+  redesign — both are now consumed by `<HomeMenu>`.
+- ✅ `SessionScreen` toolbar follows the iOS chat pattern:
+  `[← back-icon] [title centred] [⋯ kebab]`. The kebab opens
+  `<SessionMenu>`, which exposes the entity status + the chat /
+  state-explorer view toggle. Replaces the previous baseline-aligned
+  title + status badge + dual `IconToggle` cluster.
 - ✅ `StatusBar` style flips with the resolved theme.
-- ✅ Theme + serverUrl + entityUrl + view propagated to the WebView via `injectedJavaScriptBeforeContentLoaded` (sets `window.__MOBILE_EMBED__`).
+- ✅ Theme + serverUrl + entityUrl + view propagated to the WebView via
+  `injectedJavaScriptBeforeContentLoaded` (sets `window.__MOBILE_EMBED__`).
+- ⏭ Removed components (no longer needed): `SidebarRow`, `StatusDot`,
+  `IconToggle`, `Badge`, `SidebarFooter`, `ServerPickerTile`,
+  `FooterIconButton`. Their geometry survives in `BottomSheet` and the
+  new primitives.
 
 ### Phase 5: Additional Views & Bridge — DONE (foundations)
 
