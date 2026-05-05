@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Check, Folder, FolderOpen, Home, X } from 'lucide-react'
 import { Combobox, IconButton } from '../ui'
 import { useRecentWorkingDirectories } from '../hooks/useRecentWorkingDirectories'
+import { detectHomeDir, tildifyPath } from '../lib/pathDisplay'
 import styles from './WorkingDirectoryPicker.module.css'
 
 type WorkingDirectoryPickerProps = {
@@ -52,12 +53,12 @@ export function WorkingDirectoryPicker({
     typeof window !== `undefined` && Boolean(window.electronAPI?.pickDirectory)
 
   const homeDir = useMemo(
-    () => detectHomeDir(recents, defaultPath),
+    () => detectHomeDir([defaultPath, ...recents]),
     [recents, defaultPath]
   )
 
   const triggerLabel = useMemo(
-    () => (value ? tildify(value, homeDir) : `None`),
+    () => (value ? tildifyPath(value, homeDir) : `None`),
     [value, homeDir]
   )
 
@@ -169,7 +170,7 @@ export function WorkingDirectoryPicker({
                 <span className={styles.menuRow}>
                   <Folder size={14} className={styles.menuRowIcon} />
                   <span className={styles.menuRowLabel}>
-                    {tildify(path, homeDir)}
+                    {tildifyPath(path, homeDir)}
                   </span>
                   {/* Trailing slot is a 24×24 box (matching
                       IconButton size={1}) with the check and the
@@ -224,37 +225,4 @@ export function WorkingDirectoryPicker({
       </Combobox.Content>
     </Combobox.Root>
   )
-}
-
-/**
- * Replace `$HOME` with `~` in a path for display. We don't have a
- * platform `os.homedir()` in the renderer, so we sniff the longest
- * common prefix among recent paths and `defaultPath` that looks like
- * a home dir (`/Users/<name>` on macOS, `/home/<name>` on Linux,
- * `C:\\Users\\<name>` on Windows). Degrades gracefully — if we can't
- * find one, paths render as-is.
- */
-function tildify(path: string, homeDir: string | null): string {
-  if (!homeDir) return path
-  if (path === homeDir) return `~`
-  if (path.startsWith(homeDir + `/`)) return `~${path.slice(homeDir.length)}`
-  if (path.startsWith(homeDir + `\\`)) return `~${path.slice(homeDir.length)}`
-  return path
-}
-
-function detectHomeDir(
-  recents: ReadonlyArray<string>,
-  defaultPath?: string | null
-): string | null {
-  const candidates = [defaultPath, ...recents].filter(
-    (p): p is string => typeof p === `string` && p.length > 0
-  )
-  for (const p of candidates) {
-    const m =
-      p.match(/^(\/Users\/[^/]+)/) ||
-      p.match(/^(\/home\/[^/]+)/) ||
-      p.match(/^([A-Za-z]:\\Users\\[^\\]+)/)
-    if (m) return m[1] ?? null
-  }
-  return null
 }

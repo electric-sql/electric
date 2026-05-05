@@ -125,12 +125,18 @@
 
 /* Section label ("Pinned", "Today", "Last 7 days", …) — text
    aligns with the icon column above so the column reads cleanly
-   from top to bottom. */
+   from top to bottom. Sentence-case (no `text-transform`) so
+   working-dir labels like `~/Code/electric` render naturally;
+   font-weight is the prominence cue instead of uppercase letterforms.
+   Single-line ellipsis is a safety net for the working-dir grouping
+   mode where a label can be a long abbreviated path. */
 .sectionLabel {
   display: block;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 500;
   padding: 14px 4px 4px 8px;
   color: var(--ds-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

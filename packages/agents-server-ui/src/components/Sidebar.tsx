@@ -231,7 +231,7 @@ export function Sidebar({
 
           {ungroupedBuckets.map((group) => (
             <div key={group.id}>
-              <SectionLabel>{group.label}</SectionLabel>
+              <SectionLabel title={group.title}>{group.label}</SectionLabel>
               {group.items.map((root) => (
                 <SidebarTree key={root.url} entity={root} {...treeProps} />
               ))}
@@ -302,11 +302,19 @@ function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
 
 function SectionLabel({
   children,
+  title,
 }: {
   children: React.ReactNode
+  /**
+   * Optional longer-form text surfaced as a native tooltip on hover.
+   * Used by the working-directory grouping mode where `children` is
+   * an abbreviated path (e.g. `…/projects/acme`) and the full path
+   * is worth showing on hover.
+   */
+  title?: string
 }): React.ReactElement {
   return (
-    <Text size={1} tone="muted" className={styles.sectionLabel}>
+    <Text size={1} tone="muted" className={styles.sectionLabel} title={title}>
       {children}
     </Text>
   )

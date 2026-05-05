@@ -7,7 +7,7 @@
 }
 
 .headerLabel {
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .eventListScroll {

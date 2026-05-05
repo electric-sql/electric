@@ -60,7 +60,6 @@
   padding: 4px 8px 2px;
   font-size: var(--ds-text-xs);
   line-height: var(--ds-text-xs-lh);
+  font-weight: 500;
   color: var(--ds-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }

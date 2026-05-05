@@ -1,4 +1,5 @@
 import type { ElectricEntity } from './ElectricAgentsProvider'
+import { abbreviatePath, detectHomeDir, tildifyPath } from './pathDisplay'
 
 /**
  * Session list grouping by recency.
@@ -33,6 +34,13 @@ export type SessionGroup = {
   id: string
   key: BucketKey
   label: string
+  /**
+   * Optional longer-form text — useful as a tooltip when the
+   * `label` had to be abbreviated to fit a confined column (e.g.
+   * working-directory labels in the sidebar). Falls back to
+   * `label` when omitted.
+   */
+  title?: string
   items: Array<ElectricEntity>
 }
 
@@ -118,7 +126,8 @@ class Group implements SessionGroup {
   constructor(
     public id: string,
     public key: BucketKey,
-    public label: string
+    public label: string,
+    public title?: string
   ) {}
 }
 
@@ -196,9 +205,12 @@ function formatLabel(id: string): string {
  * spawned through paths that don't carry a cwd (e.g. older sessions,
  * agent types other than horton).
  *
- * Buckets are labelled with the basename of the path; the full path
- * is stashed on `id` for tooltip / debugging purposes downstream.
- * Sort order: most-populous first, alphabetical tiebreaker.
+ * Group labels are tildified and abbreviated to fit a sidebar
+ * column (`~/Code/electric`, `…/projects/acme`) — see
+ * `pathDisplay.abbreviatePath` for the truncation rule. The full
+ * absolute path is preserved on `title` so the sidebar can surface
+ * it as a tooltip on hover. Sort order: most-populous first,
+ * alphabetical tiebreaker on the label.
  */
 export function groupByWorkingDirectory(
   entities: ReadonlyArray<ElectricEntity>
@@ -206,9 +218,19 @@ export function groupByWorkingDirectory(
   const buckets = new Map<string, Group>()
   const noDir = new Group(`cwd:none`, `older`, `None`)
 
-  for (const entity of [...entities].sort(
+  // Two passes: collect all paths first so `detectHomeDir` can sniff
+  // the home prefix from the full set, then label each bucket using
+  // that consistent home dir. Doing it per-entity would re-detect
+  // home for each path and risk inconsistent labels across groups.
+  const sortedEntities = [...entities].sort(
     (a, b) => b.updated_at - a.updated_at
-  )) {
+  )
+  const allPaths = sortedEntities
+    .map((e) => e.spawn_args?.workingDirectory)
+    .filter((p): p is string => typeof p === `string` && p.trim().length > 0)
+  const homeDir = detectHomeDir(allPaths)
+
+  for (const entity of sortedEntities) {
     const raw = entity.spawn_args?.workingDirectory
     const cwd = typeof raw === `string` && raw.trim().length > 0 ? raw : null
     if (cwd === null) {
@@ -217,7 +239,8 @@ export function groupByWorkingDirectory(
     }
     let group = buckets.get(cwd)
     if (!group) {
-      group = new Group(`cwd:${cwd}`, `older`, basenameOrPath(cwd))
+      const label = abbreviatePath(tildifyPath(cwd, homeDir))
+      group = new Group(`cwd:${cwd}`, `older`, label, cwd)
       buckets.set(cwd, group)
     }
     group.items.push(entity)
@@ -231,10 +254,4 @@ export function groupByWorkingDirectory(
   // "None" bucket always last so user-tagged groups dominate the
   // visual top of the list.
   return noDir.items.length > 0 ? [...dirGroups, noDir] : dirGroups
-}
-
-function basenameOrPath(path: string): string {
-  const trimmed = path.replace(/[/\\]+$/, ``)
-  const idx = Math.max(trimmed.lastIndexOf(`/`), trimmed.lastIndexOf(`\\`))
-  return idx === -1 ? trimmed : trimmed.slice(idx + 1) || trimmed
 }

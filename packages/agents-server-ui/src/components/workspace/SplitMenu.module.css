@@ -10,8 +10,7 @@
 .sectionLabel {
   padding: 6px 8px 2px;
   font-size: var(--ds-font-size-1, 11px);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 500;
   color: var(--ds-gray-11);
   user-select: none;
 }
