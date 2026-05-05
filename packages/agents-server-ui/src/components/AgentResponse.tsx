@@ -347,7 +347,7 @@ export const AgentResponse = memo(function AgentResponse({
             </IconButton>
           </Tooltip>
         )}
-        {copyText && (
+        {section.done && copyText && (
           <button
             type="button"
             className={styles.copyButton}
