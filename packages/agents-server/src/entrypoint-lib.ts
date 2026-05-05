@@ -140,7 +140,8 @@ export function resolveElectricAgentsEntrypointOptions(
 }
 
 function createEmbeddedStreamsServer(
-  env: EnvSource
+  env: EnvSource,
+  cwd: string
 ): DurableStreamTestServer | undefined {
   const externalUrl = readEnv(env, [
     `ELECTRIC_AGENTS_DURABLE_STREAMS_URL`,
@@ -150,6 +151,10 @@ function createEmbeddedStreamsServer(
   if (externalUrl) {
     return undefined
   }
+
+  const dataDir =
+    readEnv(env, [`ELECTRIC_AGENTS_STREAMS_DATA_DIR`, `STREAMS_DATA_DIR`]) ??
+    `${cwd}/.streams-data`
 
   return new DurableStreamTestServer({
     host:
@@ -161,10 +166,7 @@ function createEmbeddedStreamsServer(
         [`ELECTRIC_AGENTS_STREAMS_PORT`, `STREAMS_PORT`],
         `embedded streams port`
       ) ?? 0,
-    dataDir: readEnv(env, [
-      `ELECTRIC_AGENTS_STREAMS_DATA_DIR`,
-      `STREAMS_DATA_DIR`,
-    ]),
+    dataDir,
     webhooks: true,
   })
 }
@@ -178,7 +180,7 @@ export async function runElectricAgentsEntrypoint({
   server: ElectricAgentsEntrypointServer
   url: string
 }> {
-  const embeddedStreamsServer = createEmbeddedStreamsServer(env)
+  const embeddedStreamsServer = createEmbeddedStreamsServer(env, cwd)
   const options = {
     ...resolveElectricAgentsEntrypointOptions(env, cwd),
     durableStreamsServer: embeddedStreamsServer,

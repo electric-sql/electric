@@ -176,4 +176,32 @@ describe(`runElectricAgentsEntrypoint`, () => {
       webhooks: true,
     })
   })
+
+  it(`persists embedded durable streams under the working directory by default`, async () => {
+    embeddedStreamsCtorMock.mockReset()
+
+    const createServer = vi.fn(
+      (options: ElectricAgentsEntrypointOptions) =>
+        ({
+          start: vi.fn(() => Promise.resolve(`http://127.0.0.1:4437`)),
+          stop: vi.fn(() => Promise.resolve()),
+          options,
+        }) as const
+    )
+
+    await runElectricAgentsEntrypoint({
+      env: {
+        ELECTRIC_AGENTS_DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
+      },
+      cwd: `/workspace/app`,
+      createServer,
+    })
+
+    expect(embeddedStreamsCtorMock).toHaveBeenCalledWith({
+      dataDir: `/workspace/app/.streams-data`,
+      host: `127.0.0.1`,
+      port: 0,
+      webhooks: true,
+    })
+  })
 })
