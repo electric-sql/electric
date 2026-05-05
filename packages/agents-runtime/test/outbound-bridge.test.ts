@@ -69,7 +69,9 @@ describe(`createOutboundBridge`, () => {
 
   it(`rejects tool call outside an active run`, () => {
     const bridge = createOutboundBridge([], () => {})
-    expect(() => bridge.onToolCallStart(`search`, {})).toThrow(/active run/i)
+    expect(() => bridge.onToolCallStart(`call-search`, `search`, {})).toThrow(
+      /active run/i
+    )
   })
 
   it(`rejects step start outside an active run`, () => {
@@ -84,11 +86,14 @@ describe(`createOutboundBridge`, () => {
     })
 
     bridge.onRunStart()
-    bridge.onToolCallStart(`search`, { q: `test` })
+    bridge.onToolCallStart(`call-search`, `search`, { q: `test` })
 
     expect(writes).toHaveLength(2)
     expect(writes[1]!.type).toBe(`tool_call`)
     expect(writes[1]!.key).toBe(`tc-0`)
+    expect((writes[1]!.value as Record<string, unknown>).tool_call_id).toBe(
+      `call-search`
+    )
     expect((writes[1]!.value as Record<string, unknown>).tool_name).toBe(
       `search`
     )
@@ -103,13 +108,16 @@ describe(`createOutboundBridge`, () => {
     })
 
     bridge.onRunStart()
-    bridge.onToolCallStart(`search`, { q: `test` })
-    bridge.onToolCallEnd(`search`, `3 results`, false)
+    bridge.onToolCallStart(`call-search`, `search`, { q: `test` })
+    bridge.onToolCallEnd(`call-search`, `search`, `3 results`, false)
 
     expect(writes).toHaveLength(3)
     expect(writes[2]!.type).toBe(`tool_call`)
     expect(writes[2]!.key).toBe(`tc-0`)
     expect(writes[2]!.headers.operation).toBe(`update`)
+    expect((writes[2]!.value as Record<string, unknown>).tool_call_id).toBe(
+      `call-search`
+    )
     expect((writes[2]!.value as Record<string, unknown>).status).toBe(
       `completed`
     )
@@ -126,11 +134,45 @@ describe(`createOutboundBridge`, () => {
     })
 
     bridge.onRunStart()
-    bridge.onToolCallStart(`bash`, { cmd: `rm -rf /` })
-    bridge.onToolCallEnd(`bash`, `Permission denied`, true)
+    bridge.onToolCallStart(`call-bash`, `bash`, { cmd: `rm -rf /` })
+    bridge.onToolCallEnd(`call-bash`, `bash`, `Permission denied`, true)
 
     expect((writes[2]!.value as Record<string, unknown>).status).toBe(`failed`)
     expect((writes[2]!.value as Record<string, unknown>).run_id).toBe(`run-0`)
+  })
+
+  it(`matches overlapping tool call starts and ends by provider id`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onToolCallStart(`call-a`, `search`, { q: `a` })
+    bridge.onToolCallStart(`call-b`, `search`, { q: `b` })
+    bridge.onToolCallEnd(`call-a`, `search`, `result a`, false)
+    bridge.onToolCallEnd(`call-b`, `search`, `result b`, false)
+
+    expect(writes[3]!.key).toBe(`tc-0`)
+    expect((writes[3]!.value as Record<string, unknown>).tool_call_id).toBe(
+      `call-a`
+    )
+    expect((writes[3]!.value as Record<string, unknown>).args).toEqual({
+      q: `a`,
+    })
+    expect((writes[3]!.value as Record<string, unknown>).result).toBe(
+      `result a`
+    )
+    expect(writes[4]!.key).toBe(`tc-1`)
+    expect((writes[4]!.value as Record<string, unknown>).tool_call_id).toBe(
+      `call-b`
+    )
+    expect((writes[4]!.value as Record<string, unknown>).args).toEqual({
+      q: `b`,
+    })
+    expect((writes[4]!.value as Record<string, unknown>).result).toBe(
+      `result b`
+    )
   })
 
   it(`reconstructs ID counters from existing stream events`, () => {
@@ -152,7 +194,7 @@ describe(`createOutboundBridge`, () => {
     expect(writes[0]!.key).toBe(`run-3`)
     expect(writes[1]!.key).toBe(`msg-4`)
 
-    bridge.onToolCallStart(`test`, {})
+    bridge.onToolCallStart(`call-test`, `test`, {})
     expect(writes[2]!.key).toBe(`tc-6`)
     expect((writes[2]!.value as Record<string, unknown>).run_id).toBe(`run-3`)
   })
@@ -169,7 +211,7 @@ describe(`createOutboundBridge`, () => {
     bridge.onRunStart()
     bridge.onStepStart()
     bridge.onTextStart()
-    bridge.onToolCallStart(`search`, {})
+    bridge.onToolCallStart(`call-search`, `search`, {})
 
     expect(writes[0]!.key).toBe(`run-2`)
     expect(writes[1]!.key).toBe(`step-4`)
@@ -228,7 +270,9 @@ describe(`createOutboundBridge`, () => {
 
     bridge.onRunStart()
     bridge.onRunEnd()
-    expect(() => bridge.onToolCallStart(`search`, {})).toThrow(/active run/i)
+    expect(() => bridge.onToolCallStart(`call-search`, `search`, {})).toThrow(
+      /active run/i
+    )
   })
 
   it(`rejects step start after run ends`, () => {

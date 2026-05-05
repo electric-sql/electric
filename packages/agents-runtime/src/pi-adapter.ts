@@ -297,12 +297,17 @@ export function createPiAgentAdapter(
               }
 
               case `tool_execution_start`: {
-                bridge.onToolCallStart(event.toolName, event.args)
+                bridge.onToolCallStart(
+                  event.toolCallId,
+                  event.toolName,
+                  event.args
+                )
                 break
               }
 
               case `tool_execution_end`: {
                 bridge.onToolCallEnd(
+                  event.toolCallId,
                   event.toolName,
                   event.result,
                   event.isError
