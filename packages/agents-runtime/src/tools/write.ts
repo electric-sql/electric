@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
+import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
@@ -40,11 +41,30 @@ export function createWriteTool(
           }
         }
 
+        let original = ``
+        let existed = true
+        try {
+          original = await readFile(resolved, `utf-8`)
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code
+          if (code !== `ENOENT`) throw err
+          existed = false
+        }
+
         await mkdir(dirname(resolved), { recursive: true })
         await writeFile(resolved, content, `utf-8`)
         readSet?.add(resolved)
 
         const bytesWritten = Buffer.byteLength(content, `utf-8`)
+        const patch = createTwoFilesPatch(
+          existed ? rel : `/dev/null`,
+          rel,
+          original,
+          content,
+          undefined,
+          undefined,
+          { context: 3 }
+        )
         return {
           content: [
             {
@@ -52,7 +72,7 @@ export function createWriteTool(
               text: `Wrote ${bytesWritten} bytes to ${rel}`,
             },
           ],
-          details: { bytesWritten },
+          details: { bytesWritten, diff: patch, existed },
         }
       } catch (err) {
         runtimeLog.warn(

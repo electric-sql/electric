@@ -17,3 +17,35 @@
 .sentMessageBody {
   white-space: pre-wrap;
 }
+
+.diffBlock {
+  padding: 0;
+  white-space: pre;
+  word-break: normal;
+  overflow-x: auto;
+}
+
+.diffBlock span {
+  display: block;
+  padding: 0 10px;
+  min-height: 1.6em;
+}
+
+.diffLineAdded {
+  background: var(--ds-green-a2);
+  color: var(--ds-green-11);
+}
+
+.diffLineRemoved {
+  background: var(--ds-red-a2);
+  color: var(--ds-red-11);
+}
+
+.diffLineMeta {
+  background: var(--ds-gray-a2);
+  color: var(--ds-text-2);
+}
+
+.diffLineContext {
+  color: var(--ds-text-1);
+}

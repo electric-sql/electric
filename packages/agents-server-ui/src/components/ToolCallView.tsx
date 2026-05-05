@@ -37,6 +37,51 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + `…` : s
 }
 
+function createInlinePatch(
+  path: string,
+  oldText: string,
+  newText: string
+): string {
+  const oldLines = oldText.split(`\n`)
+  const newLines = newText.split(`\n`)
+  return [
+    `--- ${path}`,
+    `+++ ${path}`,
+    `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
+    ...oldLines.map((line) => `-${line}`),
+    ...newLines.map((line) => `+${line}`),
+  ].join(`\n`)
+}
+
+function DiffView({ diff }: { diff: string }): React.ReactElement {
+  return (
+    <pre className={`${toolBlock.codeBlock} ${styles.diffBlock}`}>
+      {diff.split(`\n`).map((line, i) => {
+        let className = styles.diffLineContext
+        if (line.startsWith(`+`) && !line.startsWith(`+++`)) {
+          className = styles.diffLineAdded
+        } else if (line.startsWith(`-`) && !line.startsWith(`---`)) {
+          className = styles.diffLineRemoved
+        } else if (
+          line.startsWith(`diff `) ||
+          line.startsWith(`index `) ||
+          line.startsWith(`---`) ||
+          line.startsWith(`+++`) ||
+          line.startsWith(`@@`)
+        ) {
+          className = styles.diffLineMeta
+        }
+        return (
+          <span key={i} className={className}>
+            {line || ` `}
+            {`\n`}
+          </span>
+        )
+      })}
+    </pre>
+  )
+}
+
 function getSummary(toolName: string, args: Record<string, unknown>): string {
   switch (toolName) {
     case `bash`:
@@ -97,6 +142,19 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
   const args = item.args
   const r = parseResult(item.result)
 
+  const fallbackDiff =
+    item.toolName === `edit` &&
+    typeof args.old_string === `string` &&
+    typeof args.new_string === `string`
+      ? createInlinePatch(
+          (args.path as string | undefined) ?? `file`,
+          args.old_string,
+          args.new_string
+        )
+      : item.toolName === `write` && typeof args.content === `string`
+        ? createInlinePatch(`/dev/null`, ``, truncate(args.content, 4000))
+        : null
+
   switch (item.toolName) {
     case `bash`: {
       const exitCode = r.details.exitCode as number | undefined
@@ -138,51 +196,17 @@ function ToolBody({ item }: { item: ToolCallItem }): React.ReactElement {
       )
 
     case `edit`:
-      return (
-        <Stack direction="column" gap={2}>
-          {typeof args.old_string === `string` && (
-            <>
-              <Text size={1} tone="danger" weight="medium">
-                Removed
-              </Text>
-              <pre
-                className={`${toolBlock.codeBlock} ${styles.codeBlockRemoved}`}
-              >
-                {truncate(args.old_string, 500)}
-              </pre>
-            </>
-          )}
-          {typeof args.new_string === `string` && (
-            <>
-              <Text size={1} tone="success" weight="medium">
-                Added
-              </Text>
-              <pre
-                className={`${toolBlock.codeBlock} ${styles.codeBlockAdded}`}
-              >
-                {truncate(args.new_string, 500)}
-              </pre>
-            </>
-          )}
-          {r.text && (
-            <Text size={1} tone={item.isError ? `danger` : `success`}>
-              {r.text}
-            </Text>
-          )}
-        </Stack>
-      )
-
     case `write`:
       return (
         <Stack direction="column" gap={2}>
-          {typeof args.content === `string` && (
+          {typeof r.details.diff === `string` || fallbackDiff ? (
             <>
-              <span className={toolBlock.sectionLabel}>Content</span>
-              <pre className={toolBlock.codeBlock}>
-                {truncate(args.content, 1000)}
-              </pre>
+              <span className={toolBlock.sectionLabel}>Diff</span>
+              <DiffView
+                diff={(r.details.diff as string | undefined) ?? fallbackDiff!}
+              />
             </>
-          )}
+          ) : null}
           {r.text && (
             <Text size={1} tone={item.isError ? `danger` : `success`}>
               {r.text}
@@ -241,7 +265,9 @@ export function ToolCallView({
     )
   }
 
-  const [expanded, setExpanded] = useState(false)
+  const shouldDefaultExpand =
+    item.toolName === `edit` || item.toolName === `write`
+  const [expanded, setExpanded] = useState(shouldDefaultExpand)
   const summary = getSummary(item.toolName, item.args)
   const badge = statusBadge(item)
 
