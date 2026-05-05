@@ -64,7 +64,7 @@
 .agent-ui-markdown p,
 .agent-ui-markdown li {
   font-size: var(--ds-text-sm);
-  line-height: 1.65;
+  line-height: 1.5;
   font-family: var(--ds-font-body);
   color: var(--ds-text-1);
 }
