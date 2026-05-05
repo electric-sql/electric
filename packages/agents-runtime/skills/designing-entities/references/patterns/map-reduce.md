@@ -75,7 +75,7 @@ async handler(ctx, wake) {
           id,
           {
             systemPrompt: task,
-            tools: chunkTools, // required for built-in worker, e.g. ["brave_search", "fetch_url"]
+            tools: chunkTools, // required for built-in worker, e.g. ["web_search", "fetch_url"]
           },
           { initialMessage: chunks[i], wake: "runFinished" }
         )
