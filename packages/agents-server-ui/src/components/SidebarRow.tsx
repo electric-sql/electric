@@ -33,7 +33,6 @@ type HoverCardHandle = ReturnType<
 type SidebarRowProps = {
   entity: ElectricEntity
   selected: boolean
-  onSelect?: () => void
   depth?: number
   /** Number of immediate children. 0 means no expand affordance. */
   childCount?: number
@@ -79,7 +78,6 @@ type SidebarRowProps = {
 export const SidebarRow = memo(function SidebarRow({
   entity,
   selected,
-  onSelect: _onSelect,
   depth = 0,
   childCount = 0,
   expanded = false,

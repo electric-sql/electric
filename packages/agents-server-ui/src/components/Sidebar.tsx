@@ -45,12 +45,10 @@ function useSidebarWidth(): readonly [number, (w: number) => void] {
 
 export function Sidebar({
   selectedEntityUrl,
-  onSelectEntity,
   pinnedUrls,
   onTogglePin,
 }: {
   selectedEntityUrl: string | null
-  onSelectEntity: (url: string) => void
   pinnedUrls: Array<string>
   onTogglePin: (url: string) => void
 }): React.ReactElement {
@@ -142,7 +140,6 @@ export function Sidebar({
   const treeProps = {
     childrenByParent,
     selectedEntityUrl,
-    onSelectEntity,
     pinnedUrls,
     onTogglePin,
     hoverHandle,

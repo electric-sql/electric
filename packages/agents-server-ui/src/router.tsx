@@ -74,16 +74,6 @@ function RootShell(): React.ReactElement {
   useHotkey(`mod+n`, openNewSession)
   useHotkey(`mod+shift+o`, openNewSession)
 
-  const navigateToEntity = useCallback(
-    (entityUrl: string) => {
-      navigate({
-        to: `/entity/$`,
-        params: { _splat: entityUrl.replace(/^\//, ``) },
-      })
-    },
-    [navigate]
-  )
-
   const params = useParams({ strict: false })
   const splat = (params as Record<string, string | undefined>)._splat
   const selectedEntityUrl = splat ? `/${splat}` : null
@@ -93,7 +83,6 @@ function RootShell(): React.ReactElement {
       {!collapsed && (
         <Sidebar
           selectedEntityUrl={selectedEntityUrl}
-          onSelectEntity={navigateToEntity}
           pinnedUrls={pinnedUrls}
           onTogglePin={togglePin}
         />
