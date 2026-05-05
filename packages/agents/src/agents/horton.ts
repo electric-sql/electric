@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { serverLog } from '../log'
@@ -302,6 +304,23 @@ export function extractFirstUserMessage(
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
 
+function readAgentsMd(workingDirectory: string): string | null {
+  const agentsMdPath = path.join(workingDirectory, `AGENTS.md`)
+  try {
+    if (!fs.existsSync(agentsMdPath) || !fs.statSync(agentsMdPath).isFile()) {
+      return null
+    }
+    const content = fs.readFileSync(agentsMdPath, `utf8`)
+    return [
+      `<context_file kind="instructions" path="${agentsMdPath}">`,
+      content,
+      `</context_file>`,
+    ].join(`\n`)
+  } catch {
+    return null
+  }
+}
+
 function createAssistantHandler(options: {
   workingDirectory: string
   streamFn?: StreamFn
@@ -336,6 +355,7 @@ function createAssistantHandler(options: {
         ? ctx.args.workingDirectory
         : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
+    const agentsMd = readAgentsMd(effectiveCwd)
     const tools = [
       ...ctx.electricTools,
       ...createHortonTools(effectiveCwd, ctx, readSet, {
@@ -370,6 +390,15 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...(agentsMd
+            ? {
+                agents_md: {
+                  content: () => agentsMd,
+                  max: 20_000,
+                  cache: `stable` as const,
+                },
+              }
+            : {}),
           ...(skillsRegistry && skillsRegistry.catalog.size > 0
             ? {
                 skills_catalog: {
@@ -393,6 +422,30 @@ function createAssistantHandler(options: {
           conversation: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
+          },
+          ...(agentsMd
+            ? {
+                agents_md: {
+                  content: () => agentsMd,
+                  max: 20_000,
+                  cache: `stable` as const,
+                },
+              }
+            : {}),
+        },
+      })
+    } else if (agentsMd) {
+      ctx.useContext({
+        sourceBudget: 100_000,
+        sources: {
+          conversation: {
+            content: () => ctx.timelineMessages(),
+            cache: `volatile`,
+          },
+          agents_md: {
+            content: () => agentsMd,
+            max: 20_000,
+            cache: `stable`,
           },
         },
       })
