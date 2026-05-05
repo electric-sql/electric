@@ -9,8 +9,10 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useRouter,
 } from '@tanstack/react-router'
 import { z } from 'zod'
+import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import {
   SidebarCollapsedProvider,
@@ -63,6 +65,7 @@ function RootLayout(): React.ReactElement {
 function RootShell(): React.ReactElement {
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
+  const router = useRouter()
   const { collapsed, toggle } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
@@ -174,6 +177,16 @@ function RootShell(): React.ReactElement {
     [helpers, navigateToEntity]
   )
 
+  const preloadEntity = useCallback(
+    (entityUrl: string) => {
+      void router.preloadRoute({
+        to: `/entity/$`,
+        params: { _splat: entityUrl.replace(/^\//, ``) },
+      })
+    },
+    [router]
+  )
+
   const params = useParams({ strict: false })
   const splat = (params as Record<string, string | undefined>)._splat
   const selectedEntityUrl = splat ? `/${splat}` : null
@@ -199,6 +212,7 @@ function RootShell(): React.ReactElement {
             selectedEntityUrl={selectedEntityUrl}
             onSelectEntity={navigateToEntity}
             onOpenEntityInSplit={openEntityInSplit}
+            onPreloadEntity={preloadEntity}
             pinnedUrls={pinnedUrls}
             onTogglePin={togglePin}
           />
@@ -271,6 +285,15 @@ const indexRoute = createRoute({
 const entityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/entity/$`,
+  loader: async ({ params }): Promise<null> => {
+    const baseUrl = getActiveBaseUrl()
+    if (!baseUrl) return null
+    await preloadEntityStream({
+      baseUrl,
+      entityUrl: `/${params._splat}`,
+    })
+    return null
+  },
   component: WorkspacePage,
   validateSearch: workspaceSearchSchema,
 })
@@ -325,6 +348,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   history: createHashHistory(),
+  defaultPreload: `intent`,
 })
 
 // eslint-disable-next-line quotes

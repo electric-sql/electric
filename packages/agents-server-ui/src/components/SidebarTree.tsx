@@ -13,6 +13,7 @@ type SidebarTreeProps = {
   onSelectEntity: (url: string) => void
   /** Optional ⌘/Ctrl-click handler — opens the entity in a new split. */
   onOpenEntityInSplit?: (url: string) => void
+  onPreloadEntity?: (url: string) => void
   pinnedUrls: ReadonlyArray<string>
   onTogglePin: (url: string) => void
   depth?: number
@@ -68,6 +69,7 @@ export const SidebarTree = memo(function SidebarTree({
   selectedEntityUrl,
   onSelectEntity,
   onOpenEntityInSplit,
+  onPreloadEntity,
   pinnedUrls,
   onTogglePin,
   depth = 0,
@@ -98,6 +100,7 @@ export const SidebarTree = memo(function SidebarTree({
             ? () => onOpenEntityInSplit(entity.url)
             : undefined
         }
+        onPreload={() => onPreloadEntity?.(entity.url)}
         depth={depth}
         childCount={children.length}
         expanded={expanded}
@@ -116,6 +119,7 @@ export const SidebarTree = memo(function SidebarTree({
               selectedEntityUrl={selectedEntityUrl}
               onSelectEntity={onSelectEntity}
               onOpenEntityInSplit={onOpenEntityInSplit}
+              onPreloadEntity={onPreloadEntity}
               pinnedUrls={pinnedUrls}
               onTogglePin={onTogglePin}
               depth={depth + 1}

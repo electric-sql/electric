@@ -12,6 +12,7 @@ import {
   saveActiveServer,
   saveServers,
 } from '../lib/server-connection'
+import { registerActiveBaseUrl } from '../lib/entity-connection'
 import type { ReactNode } from 'react'
 import type { ServerConfig } from '../lib/types'
 
@@ -86,6 +87,10 @@ export function ServerConnectionProvider({
       unsubscribe?.()
     }
   }, [])
+
+  useEffect(() => {
+    registerActiveBaseUrl(activeServer?.url ?? null)
+  }, [activeServer])
 
   useEffect(() => {
     if (!activeServer) {

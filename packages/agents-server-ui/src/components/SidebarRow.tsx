@@ -47,6 +47,7 @@ type SidebarRowProps = {
    * `helpers.openEntity(url, { target: { groupId, position: 'split-right' }})`.
    */
   onOpenInSplit?: () => void
+  onPreload?: () => void
   depth?: number
   /** Number of immediate children. 0 means no expand affordance. */
   childCount?: number
@@ -94,6 +95,7 @@ export const SidebarRow = memo(function SidebarRow({
   selected,
   onSelect,
   onOpenInSplit,
+  onPreload,
   depth = 0,
   childCount = 0,
   expanded = false,
@@ -131,6 +133,8 @@ export const SidebarRow = memo(function SidebarRow({
           tabIndex={0}
           className={className}
           draggable
+          onMouseEnter={onPreload}
+          onFocus={onPreload}
           onDragStart={(e) => {
             setDragPayload(e, {
               kind: `sidebar-entity`,
