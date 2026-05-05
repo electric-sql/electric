@@ -121,3 +121,70 @@ class Group implements SessionGroup {
     public label: string
   ) {}
 }
+
+/**
+ * Group by entity `type`, sorted by group size (most populous group
+ * first) and then alphabetically. Inside each group entities are
+ * ordered by `updated_at` descending — same as the date buckets — so
+ * the most recently touched entity in any group is always at the top.
+ */
+export function groupByType(
+  entities: ReadonlyArray<ElectricEntity>
+): Array<SessionGroup> {
+  const buckets = new Map<string, Group>()
+  for (const entity of [...entities].sort(
+    (a, b) => b.updated_at - a.updated_at
+  )) {
+    const t = entity.type
+    let group = buckets.get(t)
+    if (!group) {
+      group = new Group(`type-${t}`, `older`, formatLabel(t))
+      buckets.set(t, group)
+    }
+    group.items.push(entity)
+  }
+  return Array.from(buckets.values()).sort((a, b) => {
+    const dx = b.items.length - a.items.length
+    if (dx !== 0) return dx
+    return a.label.localeCompare(b.label)
+  })
+}
+
+/**
+ * Group by `status`, ordered by lifecycle (running → idle → spawning
+ * → stopped) so the user's eye lands on currently-active sessions
+ * first. Same in-group sort as `groupByType`.
+ */
+const STATUS_ORDER: Record<string, number> = {
+  running: 0,
+  idle: 1,
+  spawning: 2,
+  stopped: 3,
+}
+
+export function groupByStatus(
+  entities: ReadonlyArray<ElectricEntity>
+): Array<SessionGroup> {
+  const buckets = new Map<string, Group>()
+  for (const entity of [...entities].sort(
+    (a, b) => b.updated_at - a.updated_at
+  )) {
+    const s = entity.status
+    let group = buckets.get(s)
+    if (!group) {
+      group = new Group(`status-${s}`, `older`, formatLabel(s))
+      buckets.set(s, group)
+    }
+    group.items.push(entity)
+  }
+  return Array.from(buckets.values()).sort((a, b) => {
+    const ax = STATUS_ORDER[a.id.replace(`status-`, ``)] ?? 99
+    const bx = STATUS_ORDER[b.id.replace(`status-`, ``)] ?? 99
+    return ax - bx
+  })
+}
+
+/** Title-case a snake_case / kebab-case identifier for use as a label. */
+function formatLabel(id: string): string {
+  return id.replace(/[-_]+/g, ` `).replace(/\b\w/g, (c) => c.toUpperCase())
+}

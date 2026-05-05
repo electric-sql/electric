@@ -3,7 +3,12 @@ import { SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { bucketEntities } from '../lib/sessionGroups'
+import {
+  bucketEntities,
+  groupByStatus,
+  groupByType,
+} from '../lib/sessionGroups'
+import { useSidebarView } from '../hooks/useSidebarView'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
 import { setDragPayload } from '../lib/workspace/dragPayload'
@@ -105,12 +110,29 @@ export function Sidebar({
     },
     [entitiesCollection]
   )
+
+  const view = useSidebarView()
+
+  // Apply Show > Type / Show > Status filters before building the
+  // tree so a hidden parent doesn't accidentally hide its (visible)
+  // children — instead, the children are reparented to the root level
+  // in the filtered view, which is the conventional behaviour for
+  // tree filtering.
+  const visibleEntities = useMemo(() => {
+    if (view.hiddenTypes.size === 0 && view.hiddenStatuses.size === 0) {
+      return entities
+    }
+    return entities.filter(
+      (e) => !view.hiddenTypes.has(e.type) && !view.hiddenStatuses.has(e.status)
+    )
+  }, [entities, view.hiddenTypes, view.hiddenStatuses])
+
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
-  const pinnedEntities = entities.filter((e) => pinnedSet.has(e.url))
+  const pinnedEntities = visibleEntities.filter((e) => pinnedSet.has(e.url))
 
   const { roots, childrenByParent } = useMemo(
-    () => buildEntityTree(entities),
-    [entities]
+    () => buildEntityTree(visibleEntities),
+    [visibleEntities]
   )
 
   const unpinnedRoots = useMemo(
@@ -118,10 +140,17 @@ export function Sidebar({
     [roots, pinnedSet]
   )
 
-  const ungroupedBuckets = useMemo(
-    () => bucketEntities(unpinnedRoots),
-    [unpinnedRoots]
-  )
+  const ungroupedBuckets = useMemo(() => {
+    switch (view.groupBy) {
+      case `type`:
+        return groupByType(unpinnedRoots)
+      case `status`:
+        return groupByStatus(unpinnedRoots)
+      case `date`:
+      default:
+        return bucketEntities(unpinnedRoots)
+    }
+  }, [unpinnedRoots, view.groupBy])
 
   const handleNewSession = useCallback(() => {
     navigate({ to: `/` })
@@ -211,6 +240,16 @@ export function Sidebar({
               className={styles.emptyTreeText}
             >
               No sessions
+            </Text>
+          )}
+          {entities.length > 0 && visibleEntities.length === 0 && (
+            <Text
+              size={1}
+              tone="muted"
+              align="center"
+              className={styles.emptyTreeText}
+            >
+              No sessions match the current filters
             </Text>
           )}
         </Stack>

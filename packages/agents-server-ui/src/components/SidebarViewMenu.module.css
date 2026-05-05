@@ -1,0 +1,32 @@
+/* Mirrors SettingsMenu.module.css — kept as a separate stylesheet
+   so each menu can grow its own tweaks without spooky cross-talk. */
+
+.activeMark {
+  margin-left: auto;
+  color: var(--ds-text-2);
+}
+
+.submenuTrigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 8px;
+  border-radius: 7px;
+  font-size: var(--ds-text-sm);
+  line-height: 1.3;
+  font-family: var(--ds-font-body);
+  color: var(--ds-text-1);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  text-align: start;
+  width: 100%;
+  box-sizing: border-box;
+}
+.submenuTrigger[data-highlighted] {
+  background: var(--ds-bg-hover);
+}
+.submenuChevron {
+  margin-left: auto;
+  color: var(--ds-text-3);
+}

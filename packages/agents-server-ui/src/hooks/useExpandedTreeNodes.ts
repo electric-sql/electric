@@ -49,6 +49,37 @@ class ExpandedTreeNodesStore {
     this.notify(url)
   }
 
+  /**
+   * Collapse every currently-expanded row in one shot. Notifies each
+   * affected URL's listeners individually so only the rows that were
+   * actually expanded re-render.
+   */
+  collapseAll = (): void => {
+    if (this.expanded.size === 0) return
+    const wasExpanded = Array.from(this.expanded)
+    this.expanded.clear()
+    this.persist()
+    for (const url of wasExpanded) this.notify(url)
+  }
+
+  /**
+   * Expand every URL provided. Useful for the "Expand all" affordance
+   * — caller passes the set of expandable nodes (e.g. tree roots
+   * with children) so we don't need to know about the entity tree
+   * here.
+   */
+  expandAll = (urls: ReadonlyArray<string>): void => {
+    let changed = false
+    for (const url of urls) {
+      if (!this.expanded.has(url)) {
+        this.expanded.add(url)
+        this.notify(url)
+        changed = true
+      }
+    }
+    if (changed) this.persist()
+  }
+
   subscribe = (url: string, listener: Listener): (() => void) => {
     let bucket = this.listeners.get(url)
     if (!bucket) {
@@ -105,6 +136,16 @@ export function useIsExpanded(url: string): boolean {
  */
 export function toggleExpanded(url: string): void {
   store.toggle(url)
+}
+
+/** Collapse every expanded row. Bound to the SidebarViewMenu action. */
+export function collapseAllExpanded(): void {
+  store.collapseAll()
+}
+
+/** Expand the supplied list of URLs (no-op for already-expanded). */
+export function expandAllUrls(urls: ReadonlyArray<string>): void {
+  store.expandAll(urls)
 }
 
 /**
