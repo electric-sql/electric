@@ -131,6 +131,9 @@ type DesktopCommand =
   | `close-tile`
   | `toggle-sidebar`
   | `open-search`
+  | `open-find`
+  | `find-next`
+  | `find-previous`
   | `split-right`
   | `split-down`
   | `cycle-tile`
@@ -979,6 +982,22 @@ function buildApplicationMenu(): void {
             ]
           : [{ role: `delete` as const }]),
         { role: `selectAll` },
+        { type: `separator` },
+        {
+          label: `Find in Pane…`,
+          accelerator: `CommandOrControl+F`,
+          click: () => sendCommand(`open-find`),
+        },
+        {
+          label: `Find Next`,
+          accelerator: `CommandOrControl+G`,
+          click: () => sendCommand(`find-next`),
+        },
+        {
+          label: `Find Previous`,
+          accelerator: `Shift+CommandOrControl+G`,
+          click: () => sendCommand(`find-previous`),
+        },
       ],
     },
     {

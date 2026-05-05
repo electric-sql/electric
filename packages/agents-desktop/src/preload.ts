@@ -60,6 +60,9 @@ type DesktopCommand =
   | `close-tile`
   | `toggle-sidebar`
   | `open-search`
+  | `open-find`
+  | `find-next`
+  | `find-previous`
   | `split-right`
   | `split-down`
   | `cycle-tile`

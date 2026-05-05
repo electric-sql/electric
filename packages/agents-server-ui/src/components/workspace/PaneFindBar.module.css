@@ -1,0 +1,47 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ds-border);
+  background: var(--ds-bg-elevated, var(--ds-bg));
+  -webkit-app-region: no-drag;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--ds-border);
+  border-radius: 6px;
+  background: var(--ds-bg);
+  color: var(--ds-fg);
+  font: inherit;
+}
+
+.count {
+  min-width: 52px;
+  color: var(--ds-fg-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.button {
+  height: 28px;
+  min-width: 28px;
+  border: 1px solid var(--ds-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ds-fg);
+}
+
+.highlight {
+  background: #ffe16a;
+  color: #111;
+  border-radius: 2px;
+}
+
+.current {
+  background: #ff9f1a;
+}

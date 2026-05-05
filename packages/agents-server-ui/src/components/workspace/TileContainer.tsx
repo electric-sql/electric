@@ -11,6 +11,7 @@ import { MainHeader } from '../MainHeader'
 import { Stack } from '../../ui'
 import { SplitMenu } from './SplitMenu'
 import { DropOverlay } from './DropOverlay'
+import { PaneFindBar } from './PaneFindBar'
 import type { Tile } from '../../lib/workspace/types'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
 import styles from './TileContainer.module.css'
@@ -40,9 +41,13 @@ export function TileContainer({ tile }: { tile: Tile }): React.ReactElement {
   return (
     <div ref={tileRef} className={styles.tile} onMouseDownCapture={onActivate}>
       {tile.entityUrl !== null ? (
-        <EntityTileBody tile={tile} entityUrl={tile.entityUrl} />
+        <EntityTileBody
+          tile={tile}
+          entityUrl={tile.entityUrl}
+          rootRef={tileRef}
+        />
       ) : (
-        <StandaloneTileBody tile={tile} />
+        <StandaloneTileBody tile={tile} rootRef={tileRef} />
       )}
       <DropOverlay tileId={tile.id} containerRef={tileRef} />
     </div>
@@ -52,9 +57,11 @@ export function TileContainer({ tile }: { tile: Tile }): React.ReactElement {
 function EntityTileBody({
   tile,
   entityUrl,
+  rootRef,
 }: {
   tile: Tile
   entityUrl: string
+  rootRef: React.RefObject<HTMLDivElement | null>
 }): React.ReactElement {
   const { activeServer } = useServerConnection()
   const { entitiesCollection } = useElectricAgents()
@@ -114,19 +121,16 @@ function EntityTileBody({
   }
 
   return (
-    <Stack
-      direction="column"
-      className={styles.body}
-      data-tile-id={tile.id}
-      draggable
-      onDragStart={onHeaderDragStart}
-    >
-      <EntityHeader
-        entity={entity}
-        currentViewId={tile.viewId}
-        onSetView={setView}
-        menu={<SplitMenu tile={tile} entity={entity} />}
-      />
+    <Stack direction="column" className={styles.body} data-tile-id={tile.id}>
+      <div draggable onDragStart={onHeaderDragStart}>
+        <EntityHeader
+          entity={entity}
+          currentViewId={tile.viewId}
+          onSetView={setView}
+          menu={<SplitMenu tile={tile} entity={entity} />}
+        />
+      </div>
+      <PaneFindBar tileId={tile.id} rootRef={rootRef} />
       {View ? (
         <View
           baseUrl={baseUrl}
@@ -152,7 +156,13 @@ function EntityTileBody({
  * tile participates in splits / drops / "..." actions just like an
  * entity tile.
  */
-function StandaloneTileBody({ tile }: { tile: Tile }): React.ReactElement {
+function StandaloneTileBody({
+  tile,
+  rootRef,
+}: {
+  tile: Tile
+  rootRef: React.RefObject<HTMLDivElement | null>
+}): React.ReactElement {
   const { activeServer } = useServerConnection()
   const viewDef = getView(tile.viewId)
   const baseUrl = activeServer?.url ?? ``
@@ -176,14 +186,11 @@ function StandaloneTileBody({ tile }: { tile: Tile }): React.ReactElement {
   const View = viewDef.Component
 
   return (
-    <Stack
-      direction="column"
-      className={styles.body}
-      data-tile-id={tile.id}
-      draggable
-      onDragStart={onHeaderDragStart}
-    >
-      <MainHeader actions={<SplitMenu tile={tile} entity={null} />} />
+    <Stack direction="column" className={styles.body} data-tile-id={tile.id}>
+      <div draggable onDragStart={onHeaderDragStart}>
+        <MainHeader actions={<SplitMenu tile={tile} entity={null} />} />
+      </div>
+      <PaneFindBar tileId={tile.id} rootRef={rootRef} />
       <View baseUrl={baseUrl} tileId={tile.id} />
     </Stack>
   )

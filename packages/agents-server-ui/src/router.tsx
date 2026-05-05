@@ -30,6 +30,7 @@ import {
 import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { useDocumentTitle } from './hooks/useDocumentTitle'
+import { PaneFindProvider, usePaneFindCommands } from './hooks/usePaneFind'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
@@ -54,7 +55,9 @@ function RootLayout(): React.ReactElement {
     <SidebarCollapsedProvider>
       <SearchPaletteProvider>
         <WorkspaceProvider>
-          <RootShell />
+          <PaneFindProvider>
+            <RootShell />
+          </PaneFindProvider>
         </WorkspaceProvider>
       </SearchPaletteProvider>
     </SidebarCollapsedProvider>
@@ -67,12 +70,38 @@ function RootShell(): React.ReactElement {
   const { collapsed, toggle } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
+  const { openFindForTile, findNextInTile, findPreviousInTile } =
+    usePaneFindCommands()
 
   useHotkey(`mod+b`, toggle)
   useHotkey(`mod+k`, (e) => {
     e.preventDefault()
     search.toggle()
   })
+  useHotkey(
+    `mod+f`,
+    (e) => {
+      e.preventDefault()
+      openFindForTile(helpers.activeTileId)
+    },
+    { ignoreInputs: false }
+  )
+  useHotkey(
+    `mod+g`,
+    (e) => {
+      e.preventDefault()
+      findNextInTile(helpers.activeTileId)
+    },
+    { ignoreInputs: false }
+  )
+  useHotkey(
+    `mod+shift+g`,
+    (e) => {
+      e.preventDefault()
+      findPreviousInTile(helpers.activeTileId)
+    },
+    { ignoreInputs: false }
+  )
   // New session: bind both ⌘N / Ctrl+N (works in Electron) and
   // ⌘⇧O / Ctrl+Shift+O (works in browsers — `⌘N` is reserved by
   // browsers for opening a new window and can't be intercepted, so
@@ -116,6 +145,15 @@ function RootShell(): React.ReactElement {
         case `open-search`:
           search.toggle()
           break
+        case `open-find`:
+          openFindForTile(helpers.activeTileId)
+          break
+        case `find-next`:
+          findNextInTile(helpers.activeTileId)
+          break
+        case `find-previous`:
+          findPreviousInTile(helpers.activeTileId)
+          break
         case `close-tile`: {
           const id = helpers.activeTile?.id
           if (id) helpers.closeTile(id)
@@ -144,7 +182,16 @@ function RootShell(): React.ReactElement {
       }
     })
     return () => off?.()
-  }, [openNewSession, toggle, search, helpers, workspace])
+  }, [
+    openNewSession,
+    toggle,
+    search,
+    helpers,
+    workspace,
+    openFindForTile,
+    findNextInTile,
+    findPreviousInTile,
+  ])
 
   const navigateToEntity = useCallback(
     (entityUrl: string) => {

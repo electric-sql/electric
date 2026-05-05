@@ -9,6 +9,9 @@
   /* Required for `<DropOverlay>` (position: absolute; inset: 0) to
    * cover only this tile and not bleed into adjacent tiles. */
   position: relative;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-app-region: no-drag;
 }
 
 .body {
