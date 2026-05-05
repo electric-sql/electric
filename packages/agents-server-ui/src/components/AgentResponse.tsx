@@ -320,7 +320,7 @@ export const AgentResponse = memo(function AgentResponse({
         {timestamp != null && !isStreaming && (
           <TimeText ts={timestamp} className={styles.timeText} />
         )}
-        {copyText && (
+        {section.done && copyText && (
           <button
             type="button"
             className={styles.copyButton}
