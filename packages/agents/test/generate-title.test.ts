@@ -11,8 +11,7 @@ describe(`generateTitle`, () => {
     expect(result).toBe(`Refactor auth middleware`)
     expect(llmCall).toHaveBeenCalledTimes(1)
     const prompt = llmCall.mock.calls[0][0]
-    expect(prompt).toContain(`Help me refactor the auth middleware`)
-    expect(prompt).toMatch(/3-5 words/i)
+    expect(prompt).toBe(`User request:\nHelp me refactor the auth middleware`)
   })
 
   it(`falls back to a local title if the llm returns an empty response`, async () => {

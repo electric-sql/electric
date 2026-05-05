@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
+import { completeSimple, getModel } from '@mariozechner/pi-ai'
+import { eq, not, queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
@@ -10,7 +12,9 @@ import {
   modelChoiceValues,
   REASONING_EFFORT_VALUES,
   resolveBuiltinModelConfig,
+  type BuiltinAgentModelConfig,
   type BuiltinModelCatalog,
+  type BuiltinModelChoice,
 } from '../model-catalog'
 import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
 import type {
@@ -26,7 +30,7 @@ import {
   braveSearchTool,
   fetchUrlTool,
 } from '@electric-ax/agents-runtime/tools'
-import type { ChangeEvent } from '@durable-streams/state'
+import type { MessageReceived } from '@electric-ax/agents-runtime'
 import type { SkillsRegistry } from '../skills/types'
 
 const TITLE_MODEL = `claude-haiku-4-5-20251001`
@@ -41,23 +45,24 @@ function getClient(): Anthropic {
   return anthropic
 }
 
-async function defaultHaikuCall(prompt: string): Promise<string> {
+const TITLE_SYSTEM_PROMPT =
+  `You generate concise chat session titles in 3-5 words. ` +
+  `Respond with only the title, no quotes, no punctuation, no preamble.`
+
+const TITLE_USER_PROMPT = (userMessage: string): string =>
+  `User request:\n${userMessage}`
+
+async function defaultHaikuCall(userPrompt: string): Promise<string> {
   const client = getClient()
   const res = await client.messages.create({
     model: TITLE_MODEL,
     max_tokens: 64,
-    messages: [{ role: `user`, content: prompt }],
+    system: TITLE_SYSTEM_PROMPT,
+    messages: [{ role: `user`, content: userPrompt }],
   })
   const block = res.content[0]
   return block?.type === `text` ? block.text : ``
 }
-
-const TITLE_PROMPT = (userMessage: string): string =>
-  `Summarize the following user request in 3-5 words for use as a chat session title.
-Respond with only the title, no quotes, no punctuation, no preamble.
-
-User request:
-${userMessage}`
 
 const TITLE_STOP_WORDS = new Set([
   `a`,
@@ -141,15 +146,104 @@ function buildFallbackTitle(userMessage: string): string {
   return selected.join(` `).slice(0, 80).trim() || `Untitled Chat`
 }
 
+function selectTitleModelChoice(
+  catalog: BuiltinModelCatalog,
+  modelConfig: BuiltinAgentModelConfig
+): BuiltinModelChoice {
+  const configuredProvider = modelConfig.provider ?? `anthropic`
+  const preferredIdsByProvider: Record<string, Array<string>> = {
+    anthropic: [`claude-3-5-haiku-latest`, `claude-3-5-haiku-20241022`],
+    openai: [`gpt-4.1-nano`, `gpt-4o-mini`, `gpt-4.1-mini`],
+    'openai-codex': [`gpt-5.4-mini`, `gpt-5.1-codex-mini`],
+  }
+
+  for (const provider of [configuredProvider, `openai`, `anthropic`]) {
+    for (const id of preferredIdsByProvider[provider] ?? []) {
+      const choice = catalog.choices.find(
+        (candidate) => candidate.provider === provider && candidate.id === id
+      )
+      if (choice) return choice
+    }
+
+    const nonReasoningChoice = catalog.choices.find(
+      (candidate) =>
+        candidate.provider === provider && candidate.reasoning === false
+    )
+    if (nonReasoningChoice) return nonReasoningChoice
+  }
+
+  return (
+    catalog.choices.find(
+      (candidate) =>
+        candidate.provider === configuredProvider &&
+        candidate.id === String(modelConfig.model)
+    ) ?? catalog.defaultChoice
+  )
+}
+
+function createConfiguredTitleCall(
+  catalog: BuiltinModelCatalog,
+  modelConfig: BuiltinAgentModelConfig,
+  logPrefix: string
+): (prompt: string) => Promise<string> {
+  const choice = selectTitleModelChoice(catalog, modelConfig)
+
+  return async (prompt: string) => {
+    const model = getModel(
+      choice.provider,
+      choice.id as Parameters<typeof getModel>[1]
+    )
+    if (!model) {
+      throw new Error(
+        `unknown title model "${choice.id}" for provider "${choice.provider}"`
+      )
+    }
+
+    serverLog.info(
+      `${logPrefix} title generation using ${choice.provider}:${choice.id}`
+    )
+
+    const apiKey =
+      choice.provider === modelConfig.provider && modelConfig.getApiKey
+        ? await modelConfig.getApiKey(choice.provider)
+        : undefined
+    const res = await completeSimple(
+      model,
+      {
+        systemPrompt: TITLE_SYSTEM_PROMPT,
+        messages: [{ role: `user`, content: prompt, timestamp: Date.now() }],
+      },
+      {
+        maxTokens: choice.reasoning ? 1024 : 64,
+        ...(choice.reasoning && { reasoning: `low` as const }),
+        ...(apiKey && { apiKey }),
+      }
+    )
+    const text = res.content.find((block) => block.type === `text`)?.text
+    if (!text || text.trim().length === 0) {
+      const contentTypes =
+        res.content.map((block) => block.type).join(`,`) || `none`
+      throw new Error(
+        `empty LLM title response from ${choice.provider}:${choice.id} stopReason=${res.stopReason} errorMessage=${res.errorMessage ?? `none`} contentTypes=${contentTypes}`
+      )
+    }
+    return text
+  }
+}
+
 export async function generateTitle(
   userMessage: string,
-  llmCall: (prompt: string) => Promise<string> = defaultHaikuCall
+  llmCall: (prompt: string) => Promise<string> = defaultHaikuCall,
+  onFallback?: (reason: string) => void
 ): Promise<string> {
   try {
-    const raw = await llmCall(TITLE_PROMPT(userMessage))
+    const raw = await llmCall(TITLE_USER_PROMPT(userMessage))
     const title = raw.trim()
-    return title.length > 0 ? title : buildFallbackTitle(userMessage)
-  } catch {
+    if (title.length > 0) return title
+    onFallback?.(`empty LLM title response`)
+    return buildFallbackTitle(userMessage)
+  } catch (err) {
+    onFallback?.(err instanceof Error ? err.message : String(err))
     return buildFallbackTitle(userMessage)
   }
 }
@@ -286,20 +380,30 @@ export function createHortonTools(
   ]
 }
 
-export function extractFirstUserMessage(
-  events: Array<ChangeEvent>
-): string | null {
-  for (const event of events) {
-    if (event.type !== `message_received`) continue
-    const value = event.value as
-      | { from?: string; payload?: unknown }
-      | undefined
-    if (!value || value.from === `system`) continue
-    const payload = value.payload
-    if (typeof payload === `string`) return payload
-    if (payload != null) return JSON.stringify(payload)
+function payloadToTitleText(payload: unknown): string {
+  if (typeof payload === `string`) return payload
+  if (payload == null) return ``
+  if (typeof payload === `object`) {
+    const text = (payload as Record<string, unknown>).text
+    return typeof text === `string` ? text : JSON.stringify(payload)
   }
-  return null
+  return String(payload)
+}
+
+export async function extractFirstUserMessage(
+  ctx: HandlerContext
+): Promise<string | null> {
+  const firstMessage = await queryOnce((q) =>
+    q
+      .from({ inbox: ctx.db.collections.inbox })
+      .where(({ inbox }) => not(eq(inbox.from, `system`)))
+      .orderBy(({ inbox }) => inbox._seq, `asc`)
+      .findOne()
+  )
+
+  if (!firstMessage) return null
+  const text = payloadToTitleText((firstMessage as MessageReceived).payload)
+  return text.length > 0 ? text : null
 }
 
 type HortonDocsSupport = NonNullable<ReturnType<typeof createHortonDocsSupport>>
@@ -366,6 +470,46 @@ function createAssistantHandler(options: {
         ? createSkillTools(skillsRegistry, ctx)
         : []),
     ]
+
+    const titlePromise =
+      ctx.firstWake && !ctx.tags.title
+        ? (async () => {
+            const firstUserMessage = await extractFirstUserMessage(ctx)
+            if (!firstUserMessage) return
+
+            let title: string | null = null
+            try {
+              const result = await generateTitle(
+                firstUserMessage,
+                createConfiguredTitleCall(
+                  modelCatalog,
+                  modelConfig,
+                  `[horton ${ctx.entityUrl}]`
+                ),
+                (reason) => {
+                  serverLog.warn(
+                    `[horton ${ctx.entityUrl}] title generation fell back to local title: ${reason}`
+                  )
+                }
+              )
+              if (result.length > 0) title = result
+            } catch (err) {
+              serverLog.warn(
+                `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
+              )
+            }
+
+            if (title !== null) {
+              try {
+                await ctx.setTag(`title`, title)
+              } catch (err) {
+                serverLog.warn(
+                  `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
+                )
+              }
+            }
+          })()
+        : Promise.resolve()
 
     if (docsSupport) {
       ctx.useContext({
@@ -464,30 +608,7 @@ function createAssistantHandler(options: {
       ...(streamFn && { streamFn }),
     })
     await ctx.agent.run()
-
-    if (ctx.firstWake && !ctx.tags.title) {
-      const firstUserMessage = extractFirstUserMessage(ctx.events)
-      if (firstUserMessage) {
-        let title: string | null = null
-        try {
-          const result = await generateTitle(firstUserMessage)
-          if (result.length > 0) title = result
-        } catch (err) {
-          serverLog.warn(
-            `[horton ${ctx.entityUrl}] title generation failed: ${err instanceof Error ? err.message : String(err)}`
-          )
-        }
-        if (title !== null) {
-          try {
-            await ctx.setTag(`title`, title)
-          } catch (err) {
-            serverLog.warn(
-              `[horton ${ctx.entityUrl}] setTag failed: ${err instanceof Error ? err.message : String(err)}`
-            )
-          }
-        }
-      }
-    }
+    await titlePromise
   }
 }
 
