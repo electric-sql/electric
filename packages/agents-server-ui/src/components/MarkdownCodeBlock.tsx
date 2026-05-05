@@ -223,22 +223,32 @@ function FencedCodeBlock({
         <pre {...rest}>
           {tokens ? (
             <code>
-              {tokens.tokens.map((line, i) => (
-                <span data-md-code-block-line="" key={i}>
-                  {line.length === 0
-                    ? // Empty lines need at least a non-breaking space
-                      // so the row still has a baseline + visible height.
-                      `\u00A0`
-                    : line.map((token, j) => (
-                        <span
-                          key={j}
-                          style={tokenStyle(token.color, token.htmlStyle)}
-                        >
-                          {token.content}
-                        </span>
-                      ))}
-                </span>
-              ))}
+              {tokens.tokens
+                // Strip a single trailing empty line — Shiki appends
+                // one when the source ends in a newline, which would
+                // otherwise render as a blank row at the bottom of
+                // every fenced block.
+                .filter(
+                  (line, i) =>
+                    !(i === tokens.tokens.length - 1 && line.length === 0)
+                )
+                .map((line, i) => (
+                  <span data-md-code-block-line="" key={i}>
+                    {line.length === 0
+                      ? // Empty lines need at least a non-breaking
+                        // space so the row keeps a baseline + visible
+                        // height.
+                        `\u00A0`
+                      : line.map((token, j) => (
+                          <span
+                            key={j}
+                            style={tokenStyle(token.color, token.htmlStyle)}
+                          >
+                            {token.content}
+                          </span>
+                        ))}
+                  </span>
+                ))}
             </code>
           ) : (
             <code>{codeText}</code>
@@ -424,16 +434,24 @@ function MermaidBlock({
 
 // Shiki returns per-token colours via `htmlStyle` (an inline-style
 // object with `--shiki-light`, `--shiki-dark`, etc. CSS variables)
-// plus a fallback `color`. CSS in `markdown.css` reads those vars to
-// switch colours per theme; we just have to forward them as
-// inline-style props.
+// AND a literal `color: var(--shiki-light)` fallback baked in.
+// We deliberately strip the `color` field — both the one Shiki
+// stamps into `htmlStyle` and the standalone `token.color` — and
+// let the CSS rules in `markdown.css` decide which `--shiki-*`
+// variable to read per theme. Otherwise the inline `color` (which
+// always points at the light theme) wins over the dark-mode CSS
+// rule (inline > author CSS in specificity), and dark mode renders
+// the light syntax-highlighting theme.
 function tokenStyle(
-  color: string | undefined,
+  _color: string | undefined,
   htmlStyle: Record<string, string> | undefined
 ): React.CSSProperties {
   const out: Record<string, string> = {}
-  if (color) out.color = color
-  if (htmlStyle) Object.assign(out, htmlStyle)
+  if (htmlStyle) {
+    for (const [k, v] of Object.entries(htmlStyle)) {
+      if (k !== `color`) out[k] = v
+    }
+  }
   return out as React.CSSProperties
 }
 

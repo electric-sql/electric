@@ -3,6 +3,7 @@
 // Token / global stylesheets are imported as side effects so any consumer
 // of `./ui` gets the styles automatically. Components are re-exported.
 
+import './fonts.css'
 import './tokens.css'
 import './global.css'
 

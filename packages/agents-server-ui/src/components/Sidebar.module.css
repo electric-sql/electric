@@ -55,7 +55,7 @@
   transition: background 0.08s ease;
 }
 .newSessionRow:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 /* Same 22px slot, same 16px glyph and the SAME `--ds-text-1` colour
    as the sidebar/search IconButtons in SidebarHeader so the three
@@ -121,41 +121,6 @@
 
 .emptyTreeText {
   padding-top: 20px;
-}
-
-.projectHeader {
-  all: unset;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  height: var(--ds-row-height-md);
-  padding: 14px 4px 4px 8px;
-  cursor: pointer;
-  color: var(--ds-text-2);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  transition: color 0.1s ease;
-}
-.projectHeader:hover {
-  color: var(--ds-text-1);
-}
-.projectHeaderIcon {
-  flex-shrink: 0;
-  opacity: 0.7;
-}
-.projectHeaderLabel {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.projectHeaderCount {
-  flex-shrink: 0;
-  opacity: 0.5;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Section label ("Pinned", "Today", "Last 7 days", …) — text

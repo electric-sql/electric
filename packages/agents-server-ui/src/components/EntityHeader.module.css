@@ -98,7 +98,7 @@
 }
 
 .inspectPre {
-  background: var(--ds-gray-a3);
+  background: var(--ds-chip-bg);
   padding: 16px;
   border-radius: 8px;
   overflow: auto;

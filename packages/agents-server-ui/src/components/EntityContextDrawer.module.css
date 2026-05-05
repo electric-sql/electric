@@ -89,7 +89,7 @@
   transition: background-color 0.12s ease;
 }
 .row:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 .row:focus-visible {
   outline: 2px solid var(--ds-accent-a6);

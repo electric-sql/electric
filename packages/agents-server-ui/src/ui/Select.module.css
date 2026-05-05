@@ -50,7 +50,10 @@
   line-height: 1;
   font-family: var(--ds-font-body);
   color: var(--ds-text-2);
-  background: var(--ds-gray-a3);
+  /* Solid chip surface (matches inline pills, project picker pill,
+     `<kbd>`, code chips). Avoids the muddy mid-grey produced by an
+     alpha-white tint over the dark page bg. */
+  background: var(--ds-chip-bg);
   border: none;
   border-radius: var(--ds-radius-2);
   cursor: pointer;
@@ -61,7 +64,7 @@
 }
 
 .triggerPill:hover:not(:disabled) {
-  background: var(--ds-gray-a4);
+  background: var(--ds-bg-hover);
   color: var(--ds-text-1);
 }
 
@@ -113,7 +116,7 @@
 }
 
 .item[data-highlighted] {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 .item[data-selected] {
   font-weight: 500;

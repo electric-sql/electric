@@ -12,9 +12,11 @@
 }
 
 .doneText {
-  opacity: 0.5;
+  color: var(--ds-text-4, var(--ds-text-3));
+  opacity: 0.8;
 }
 
 .timeText {
-  opacity: 0.4;
+  color: var(--ds-text-4, var(--ds-text-3));
+  opacity: 0.7;
 }

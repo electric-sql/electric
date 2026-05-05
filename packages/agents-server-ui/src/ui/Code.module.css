@@ -18,7 +18,10 @@
 }
 
 .variant-soft {
-  background: var(--ds-gray-a3);
+  /* Inline code chip — same elevation as the marketing site's
+     `--vp-code-bg`. Solid surface so the chip reads as crisp chrome
+     on whatever surface it's embedded in. */
+  background: var(--ds-chip-bg);
   padding: 0.1em 0.4em;
   border-radius: var(--ds-radius-2);
 }

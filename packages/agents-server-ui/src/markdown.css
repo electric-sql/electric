@@ -49,7 +49,7 @@
 .agent-ui-markdown > div {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 /* Cancel any auto-margins on direct children — the parent flex `gap`
@@ -99,19 +99,19 @@
   font-size: var(--ds-text-lg); /* 16px */
   line-height: 1.35;
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: 10px;
 }
 .agent-ui-markdown h2 {
   font-size: var(--ds-text-base); /* 14px */
   line-height: 1.4;
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .agent-ui-markdown h3 {
   font-size: var(--ds-text-sm); /* 13px */
   line-height: 1.45;
   font-weight: 600;
-  margin-top: 2px;
+  margin-top: 6px;
 }
 .agent-ui-markdown h4,
 .agent-ui-markdown h5,
@@ -132,7 +132,7 @@
 .agent-ui-markdown ul,
 .agent-ui-markdown ol {
   list-style-position: outside;
-  padding-left: 1.5em;
+  padding-left: 1.75em;
 }
 .agent-ui-markdown ul {
   list-style: disc;
@@ -141,7 +141,7 @@
   list-style: decimal;
 }
 .agent-ui-markdown li + li {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 /* Streamdown wraps each list item's text in a paragraph; collapse it
    so list items render on a single line by default, and only break
@@ -159,7 +159,10 @@
 .agent-ui-markdown [data-md-inline-code] {
   font-family: var(--ds-font-mono);
   font-size: 0.92em;
-  background: var(--ds-gray-a3);
+  /* Solid chip surface — matches the marketing site's `--vp-code-bg`
+     and the inline `<Code>` primitive. Avoids the muddy mid-grey
+     produced by an alpha-white tint over the dark chat surface. */
+  background: var(--ds-chip-bg);
   padding: 0.1em 0.4em;
   border-radius: var(--ds-radius-1);
   color: var(--ds-text-1);
@@ -270,7 +273,7 @@
   display: none;
 }
 .agent-ui-markdown summary:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 
 /* Chevron — SVG mask of lucide's `chevron-right` so the colour
@@ -376,12 +379,14 @@
 }
 
 /* The code area itself — the only part that carries chrome.
-   `--ds-gray-a2` reads as a faint surface tint over the chat
-   background; the 1px hairline + 6px corner radius mirror the
-   inline-code chip and the table wrapper so all three feel like
-   variants of the same surface. */
+   `--ds-surface-raised` matches the marketing site's
+   `--vp-code-bg = --vp-c-bg-elv` so code wells sit at the same
+   elevation as the rest of the chrome (inputs, popovers). The
+   1px hairline + 6px corner radius mirror the inline-code chip
+   and the table wrapper so all three feel like variants of the
+   same surface. */
 .agent-ui-markdown [data-md-code-block-body] {
-  background: var(--ds-gray-a2);
+  background: var(--ds-surface-raised);
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-3);
   padding: 10px 12px;
@@ -415,10 +420,14 @@
 }
 
 /* Shiki returns each token with an inline `style` containing both
-   `--shiki-light` and `--shiki-dark` CSS variables plus
-   `color: var(--shiki-light)`. The default already lights up
-   correctly in light mode; for dark mode swap to the dark variable
-   on every token span inside a code block body. */
+   `--shiki-light` and `--shiki-dark` CSS variables. The inline
+   `color` it would normally also stamp on is stripped in
+   `MarkdownCodeBlock.tsx` (`tokenStyle`) — that lets these CSS
+   rules pick the right variable per theme without losing to
+   inline-style specificity. */
+.agent-ui-markdown [data-md-code-block-line] span[style*='--shiki'] {
+  color: var(--shiki-light, inherit);
+}
 [data-theme='dark']
   .agent-ui-markdown
   [data-md-code-block-line]
@@ -468,7 +477,7 @@
 .agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] {
   padding: 8px 12px;
   font-size: 13px;
-  background: var(--ds-gray-a3);
+  background: var(--ds-chip-bg);
 }
 
 .agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] pre {
@@ -516,7 +525,7 @@
 .agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-pending] {
   padding: 8px 12px;
   font-size: 13px;
-  background: var(--ds-gray-a3);
+  background: var(--ds-chip-bg);
   display: block;
 }
 
@@ -608,7 +617,9 @@
 }
 
 .agent-ui-markdown [data-streamdown='table-header'] {
-  background: var(--ds-gray-a2);
+  /* Subtle band that distinguishes header from body without
+     producing a muddy mid-grey wash on the dark chat surface. */
+  background: var(--ds-bg-subtle);
 }
 
 .agent-ui-markdown [data-streamdown='table-header-cell'] {

@@ -55,7 +55,7 @@
  * CSS variables so EntityTimeline + MessageInput can stay perfectly
  * aligned without duplicating constants. */
 .content {
-  padding: 32px 40px;
+  padding: 36px 40px;
   max-width: calc(var(--chat-surface-width) + 80px);
   margin: 0 auto;
   overflow-anchor: none;
@@ -63,10 +63,13 @@
   width: 100%;
 }
 
+/* "spawned" / "stopped" status markers — left-bordered text block
+   that sits flush with the message column rather than as a centered
+   chip floating above it. Reads as a quiet log entry, not a label. */
 .statusPill {
-  padding: 4px 14px;
-  border-radius: 12px;
-  opacity: 0.5;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--ds-gray-a3);
+  color: var(--ds-text-4, var(--ds-text-3));
   letter-spacing: 0.02em;
 }
 
@@ -86,25 +89,33 @@
   width: 100%;
 }
 
+/* Jump-to-bottom affordance — small bordered surface tucked into the
+   bottom-right corner so it doesn't compete with the centred chat
+   column. Opaque enough to read against the bottom-fade mask but
+   uses the page's normal surface tones rather than an inverted
+   high-contrast pill. */
 .jumpToBottom {
   position: absolute;
   bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 24px;
   z-index: 10;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ds-gray-a3);
   border-radius: 9999px;
-  background: var(--ds-gray-12);
-  color: var(--ds-gray-1);
+  background: var(--ds-surface);
+  color: var(--ds-gray-9);
   cursor: pointer;
-  box-shadow: var(--ds-shadow-3);
-  transition: background 120ms ease;
+  box-shadow: var(--ds-shadow-2);
+  opacity: 0.85;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
 }
 .jumpToBottom:hover {
-  background: var(--ds-gray-11);
+  opacity: 1;
+  background: var(--ds-gray-2);
 }

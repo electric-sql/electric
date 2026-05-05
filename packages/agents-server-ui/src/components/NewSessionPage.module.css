@@ -67,7 +67,7 @@
     border-color 0.12s ease;
 }
 .typeCard:hover {
-  background: var(--ds-gray-a2);
+  background: var(--ds-surface-raised);
   border-color: var(--ds-border-2);
 }
 .typeCardName {
@@ -227,14 +227,19 @@
   border-radius: var(--ds-radius-2);
   font-size: var(--ds-text-xs);
   color: var(--ds-text-2);
-  background: var(--ds-gray-a3);
+  /* Shared chip surface — same elevation as inputs, `<kbd>`, code
+     chips and the Select pill trigger. Avoids the muddy mid-grey
+     produced by an alpha-white tint over the dark page bg. */
+  background: var(--ds-chip-bg);
   cursor: pointer;
   transition:
     background 0.1s ease,
     color 0.1s ease;
 }
 .pill:hover {
-  background: var(--ds-gray-a4);
+  /* Universal hover lift — clean cool-grey one step above
+     `--ds-chip-bg`, shared with drop-down items, sidebar rows etc. */
+  background: var(--ds-bg-hover);
   color: var(--ds-text-1);
 }
 .pillButton {
@@ -271,59 +276,6 @@
 }
 .composerSendActive:hover {
   color: var(--ds-accent-10);
-}
-
-/* Project picker -------------------------------------------------- */
-
-.projectPicker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ds-space-1);
-}
-.projectPickerLabel {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 10px;
-}
-.projectPickerRow {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-2);
-  flex-wrap: wrap;
-}
-.projectCreateForm {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-2);
-}
-.projectCreateInput {
-  border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-2);
-  padding: 4px 8px;
-  font-size: var(--ds-text-sm);
-  font-family: var(--ds-font-body);
-  color: var(--ds-text-1);
-  background: var(--ds-input-bg);
-  outline: none;
-  height: 28px;
-}
-.projectCreateInput:focus {
-  border-color: var(--ds-accent-a6);
-}
-.projectCreateBtn {
-  all: unset;
-  cursor: pointer;
-  font-size: var(--ds-text-sm);
-  color: var(--ds-accent-9);
-  padding: 4px 8px;
-  border-radius: var(--ds-radius-2);
-}
-.projectCreateBtn:hover {
-  background: var(--ds-accent-a2);
-}
-.projectCreateBtn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 /* Other-agents section under the composer ----------------------- */

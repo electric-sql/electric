@@ -27,15 +27,20 @@
 }
 
 .composer {
-  /* Use the raised-surface token (solid in both themes) rather than
-     `--ds-input-bg`. The latter is translucent in dark mode by
-     design — a deliberate choice for inline form inputs that sit on
-     popovers / panels. The composer is different: it docks at the
-     bottom of a scrolling chat surface and chat content must NOT
-     bleed through it. Solid raised surface is the right semantic. */
+  /* Solid raised-surface fill (also what `--ds-input-bg` resolves to,
+     since both inherit from `--ds-surface-raised`). The composer
+     docks at the bottom of a scrolling chat surface and chat content
+     must NOT bleed through it. Solid raised surface is the right
+     semantic. */
   background: var(--ds-surface-raised);
-  border: 1px solid var(--ds-gray-a4);
+  border: 1px solid var(--ds-border-1);
   border-radius: 12px;
+  /* Soft drop shadow lifts the composer slightly off the chat
+     surface so the docked feel reads even when the bottom-fade mask
+     thins out the chat content right above it. */
+  box-shadow:
+    0 1px 3px rgba(15, 15, 30, 0.04),
+    0 1px 1px rgba(15, 15, 30, 0.02);
   /* 12px on all sides — same as the user-message bubble (`Stack p={3}`
      in UserMessage.tsx, where `--ds-space-3 = 12px`). Keeping the
      two surfaces on the same padding makes the textarea text column
@@ -97,7 +102,7 @@
 }
 
 .sendIcon {
-  color: var(--ds-gray-8);
+  color: var(--ds-gray-7);
   cursor: default;
   transition: color 0.15s ease;
   flex-shrink: 0;

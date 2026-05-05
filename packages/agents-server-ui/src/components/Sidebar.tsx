@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, FolderOpen, SquarePen } from 'lucide-react'
+import { SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { useProjects } from '../hooks/useProjects'
 import { bucketEntities } from '../lib/sessionGroups'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
@@ -15,7 +14,6 @@ import { SidebarTree } from './SidebarTree'
 import { SidebarFooter } from './SidebarFooter'
 import styles from './Sidebar.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
-import type { Project } from '../hooks/useProjects'
 
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -55,14 +53,10 @@ export function Sidebar({
   onTogglePin: (url: string) => void
 }): React.ReactElement {
   const { entitiesCollection } = useElectricAgents()
-  const { projects } = useProjects()
   const navigate = useNavigate()
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
-    () => new Set()
-  )
 
   const hoverHandle = HoverCard.useHandle<SidebarRowInfoPayload>()
 
@@ -116,24 +110,10 @@ export function Sidebar({
     [roots, pinnedSet]
   )
 
-  const { projectSections, ungrouped } = useMemo(
-    () => groupByProject(unpinnedRoots, projects),
-    [unpinnedRoots, projects]
+  const ungroupedBuckets = useMemo(
+    () => bucketEntities(unpinnedRoots),
+    [unpinnedRoots]
   )
-
-  const ungroupedBuckets = useMemo(() => bucketEntities(ungrouped), [ungrouped])
-
-  const toggleProjectCollapsed = useCallback((projectId: string) => {
-    setCollapsedProjects((prev) => {
-      const next = new Set(prev)
-      if (next.has(projectId)) {
-        next.delete(projectId)
-      } else {
-        next.add(projectId)
-      }
-      return next
-    })
-  }, [])
 
   const handleNewSession = useCallback(() => {
     navigate({ to: `/` })
@@ -196,36 +176,6 @@ export function Sidebar({
             </>
           )}
 
-          {projectSections.map((section) => {
-            const collapsed = collapsedProjects.has(section.id)
-            return (
-              <div key={section.id}>
-                <button
-                  type="button"
-                  className={styles.projectHeader}
-                  onClick={() => toggleProjectCollapsed(section.id)}
-                >
-                  <FolderOpen size={12} className={styles.projectHeaderIcon} />
-                  <span className={styles.projectHeaderLabel}>
-                    {section.name}
-                  </span>
-                  <span className={styles.projectHeaderCount}>
-                    {section.items.length}
-                  </span>
-                  {collapsed ? (
-                    <ChevronRight size={12} />
-                  ) : (
-                    <ChevronDown size={12} />
-                  )}
-                </button>
-                {!collapsed &&
-                  section.items.map((root) => (
-                    <SidebarTree key={root.url} entity={root} {...treeProps} />
-                  ))}
-              </div>
-            )
-          })}
-
           {ungroupedBuckets.map((group) => (
             <div key={group.id}>
               <SectionLabel>{group.label}</SectionLabel>
@@ -265,49 +215,6 @@ export function Sidebar({
       </HoverCard.Root>
     </Stack>
   )
-}
-
-interface ProjectSection {
-  id: string
-  name: string
-  items: Array<ElectricEntity>
-}
-
-function groupByProject(
-  roots: ReadonlyArray<ElectricEntity>,
-  projects: ReadonlyArray<Project>
-): {
-  projectSections: Array<ProjectSection>
-  ungrouped: Array<ElectricEntity>
-} {
-  const projectMap = new Map(projects.map((p) => [p.id, p]))
-  const byProject = new Map<string, Array<ElectricEntity>>()
-  const ungrouped: Array<ElectricEntity> = []
-
-  for (const entity of roots) {
-    const projectId = entity.tags?.project
-    if (projectId && projectMap.has(projectId)) {
-      const list = byProject.get(projectId) ?? []
-      list.push(entity)
-      byProject.set(projectId, list)
-    } else {
-      ungrouped.push(entity)
-    }
-  }
-
-  const projectSections: Array<ProjectSection> = []
-  for (const [id, items] of byProject) {
-    const project = projectMap.get(id)!
-    projectSections.push({ id, name: project.name, items })
-  }
-
-  projectSections.sort((a, b) => {
-    const aMax = Math.max(...a.items.map((e) => e.updated_at))
-    const bMax = Math.max(...b.items.map((e) => e.updated_at))
-    return bMax - aMax
-  })
-
-  return { projectSections, ungrouped }
 }
 
 function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {

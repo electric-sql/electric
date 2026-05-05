@@ -13,7 +13,7 @@
   transition: background 0.08s ease;
 }
 .tile:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 
 .tileLabel {

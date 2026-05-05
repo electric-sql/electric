@@ -35,7 +35,7 @@
 }
 
 .item[data-highlighted] {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 
 .item[data-disabled] {

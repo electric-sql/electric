@@ -1,7 +1,12 @@
 .button {
   --btn-bg: transparent;
   --btn-fg: var(--ds-text-1);
-  --btn-bg-hover: var(--ds-gray-a3);
+  /* Universal interactive hover — clean cool-grey lift. Shared with
+     drop-down items, sidebar rows and chip triggers so every
+     pointer-targeted control hovers to the same colour regardless
+     of which surface it sits on. Replaces the `--ds-gray-a3` alpha
+     tint that produced a muddy mid-grey wash on the dark page bg. */
+  --btn-bg-hover: var(--ds-bg-hover);
   --btn-bg-active: var(--ds-gray-a4);
   --btn-border: transparent;
 
@@ -80,9 +85,13 @@
   --btn-solid-bg: var(--ds-gray-12);
   --btn-solid-fg: var(--ds-gray-1);
   --btn-solid-bg-hover: var(--ds-gray-11);
-  --btn-soft-bg: var(--ds-gray-a3);
+  /* Solid neutral chip surface for soft-variant neutral buttons —
+     matches inline pills, code chips and dropdown triggers so the
+     whole neutral-chrome family reads as one consistent step above
+     the page bg, instead of a muddy alpha tint. */
+  --btn-soft-bg: var(--ds-chip-bg);
   --btn-soft-fg: var(--ds-text-1);
-  --btn-soft-bg-hover: var(--ds-gray-a4);
+  --btn-soft-bg-hover: var(--ds-bg-hover);
 }
 .tone-accent {
   --btn-solid-bg: var(--ds-accent-9);
@@ -122,10 +131,16 @@
   background: transparent;
   color: var(--btn-soft-fg);
 }
+/* Ghost hover uses the universal `--btn-bg-hover` lift (clean cool
+   grey) rather than the per-tone soft fill, so icon buttons hover
+   to the SAME colour as drop-down items and sidebar rows regardless
+   of tone or which surface they sit on. The icon/label colour
+   already conveys the tone (accent, danger), so the bg doesn't
+   need to repeat it. */
 .variant-ghost:hover:not(:disabled),
 .variant-ghost[data-popup-open]:not(:disabled),
 .variant-ghost[data-pressed]:not(:disabled) {
-  background: var(--btn-soft-bg);
+  background: var(--btn-bg-hover);
 }
 
 .variant-outline {

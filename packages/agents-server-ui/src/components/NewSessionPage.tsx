@@ -6,7 +6,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../hooks/useServerConnection'
-import { useProjects } from '../hooks/useProjects'
 import { Select, Stack, Text } from '../ui'
 import { MainHeader } from './MainHeader'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from './SchemaForm'
@@ -44,8 +43,6 @@ export function NewSessionPage(): React.ReactElement {
   const navigate = useNavigate()
   const { entityTypesCollection, spawnEntity } = useElectricAgents()
   const { activeServer } = useServerConnection()
-  const { projects, activeProjectId, setActiveProjectId, createProject } =
-    useProjects()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -86,10 +83,7 @@ export function NewSessionPage(): React.ReactElement {
       if (!spawnEntity) return
       setError(null)
       const name = nanoid(10)
-      const tags: Record<string, string> | undefined = activeProjectId
-        ? { project: activeProjectId }
-        : undefined
-      const tx = spawnEntity({ type: typeName, name, args, tags })
+      const tx = spawnEntity({ type: typeName, name, args })
       navigate({
         to: `/entity/$`,
         params: { _splat: `${typeName}/${name}` },
@@ -116,7 +110,7 @@ export function NewSessionPage(): React.ReactElement {
         )
       }
     },
-    [navigate, spawnEntity, baseUrl, activeProjectId]
+    [navigate, spawnEntity, baseUrl]
   )
 
   const handleSelectType = useCallback(
@@ -158,10 +152,6 @@ export function NewSessionPage(): React.ReactElement {
               onStartDefault={handleStartDefault}
               spawnReady={Boolean(spawnEntity)}
               error={error}
-              projects={projects}
-              activeProjectId={activeProjectId}
-              onChangeProject={setActiveProjectId}
-              onCreateProject={createProject}
             />
           )}
         </div>
@@ -177,10 +167,6 @@ function Picker({
   onStartDefault,
   spawnReady,
   error,
-  projects,
-  activeProjectId,
-  onChangeProject,
-  onCreateProject,
 }: {
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
@@ -188,10 +174,6 @@ function Picker({
   onStartDefault: (text: string, args: Record<string, unknown>) => void
   spawnReady: boolean
   error: string | null
-  projects: Array<{ id: string; name: string }>
-  activeProjectId: string | null
-  onChangeProject: (id: string | null) => void
-  onCreateProject: (name: string) => { id: string }
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
 
@@ -207,13 +189,6 @@ function Picker({
             : `Pick the kind of agent you want to spawn.`}
         </span>
       </div>
-
-      <ProjectPicker
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onChangeProject={onChangeProject}
-        onCreateProject={onCreateProject}
-      />
 
       {error && <div className={styles.error}>{error}</div>}
 
@@ -529,94 +504,5 @@ function PillToggle({
     >
       {label}
     </button>
-  )
-}
-
-function ProjectPicker({
-  projects,
-  activeProjectId,
-  onChangeProject,
-  onCreateProject,
-}: {
-  projects: Array<{ id: string; name: string }>
-  activeProjectId: string | null
-  onChangeProject: (id: string | null) => void
-  onCreateProject: (name: string) => { id: string }
-}): React.ReactElement {
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState(``)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleCreate = useCallback(() => {
-    const trimmed = newName.trim()
-    if (!trimmed) return
-    const project = onCreateProject(trimmed)
-    onChangeProject(project.id)
-    setNewName(``)
-    setCreating(false)
-  }, [newName, onCreateProject, onChangeProject])
-
-  return (
-    <div className={styles.projectPicker}>
-      <Text size={1} tone="muted" className={styles.projectPickerLabel}>
-        Project
-      </Text>
-      <div className={styles.projectPickerRow}>
-        <Select.Root<string>
-          value={activeProjectId ?? `__none__`}
-          onValueChange={(v) => {
-            if (v === `__new__`) {
-              setCreating(true)
-              setTimeout(() => inputRef.current?.focus(), 0)
-            } else {
-              onChangeProject(v === `__none__` ? null : v)
-            }
-          }}
-        >
-          <Select.Trigger size="pill" aria-label="Project" title="Project" />
-          <Select.Content>
-            <Select.Item value="__none__">No project</Select.Item>
-            {projects.map((p) => (
-              <Select.Item key={p.id} value={p.id}>
-                {p.name}
-              </Select.Item>
-            ))}
-            <Select.Item value="__new__">+ New project…</Select.Item>
-          </Select.Content>
-        </Select.Root>
-
-        {creating && (
-          <form
-            className={styles.projectCreateForm}
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleCreate()
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Project name"
-              className={styles.projectCreateInput}
-              onKeyDown={(e) => {
-                if (e.key === `Escape`) {
-                  setCreating(false)
-                  setNewName(``)
-                }
-              }}
-            />
-            <button
-              type="submit"
-              disabled={!newName.trim()}
-              className={styles.projectCreateBtn}
-            >
-              Create
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
   )
 }

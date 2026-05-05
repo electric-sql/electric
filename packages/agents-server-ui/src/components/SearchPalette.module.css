@@ -98,7 +98,7 @@
 }
 .row[data-active='true'],
 .row:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 
 .rowTitle {
