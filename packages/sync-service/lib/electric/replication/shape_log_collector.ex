@@ -290,7 +290,8 @@ defmodule Electric.Replication.ShapeLogCollector do
 
                 {:error, {:missing_dependencies, missing_deps}} ->
                   Logger.warning(
-                    "Skipping shape #{shape_handle} during restore: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                    "Skipping shape during restore: missing dependencies #{inspect(MapSet.to_list(missing_deps))}",
+                    shape_handle: shape_handle
                   )
 
                   {partitions, event_router, layers, count}
@@ -412,7 +413,8 @@ defmodule Electric.Replication.ShapeLogCollector do
 
                   {:error, {:missing_dependencies, missing_deps}} ->
                     Logger.warning(
-                      "Shape #{shape_handle} cannot be added: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                      "Shape cannot be added: missing dependencies #{inspect(MapSet.to_list(missing_deps))}",
+                      shape_handle: shape_handle
                     )
 
                     {state, Map.put(results, shape_handle, {:error, :missing_dependencies})}

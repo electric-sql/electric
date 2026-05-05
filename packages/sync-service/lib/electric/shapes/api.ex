@@ -740,11 +740,17 @@ defmodule Electric.Shapes.Api do
 
       {:error, %SnapshotError{type: :schema_changed}} ->
         error = Api.Error.must_refetch()
-        Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
+
+        Logger.warning("Schema changed while creating snapshot for shape",
+          shape_handle: shape_handle
+        )
+
         Response.error(request, error.message, status: error.status)
 
       {:error, %SnapshotError{} = error} ->
-        Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
+        Logger.warning("Failed to create snapshot for shape: #{error.message}",
+          shape_handle: shape_handle
+        )
 
         if error.type == :unknown &&
              DbConnectionError.from_error(error.original_error).type == :unknown do

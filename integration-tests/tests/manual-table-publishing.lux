@@ -42,7 +42,7 @@
 
 [shell electric]
   -
-  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" is missing from the publication \"electric_publication_integration\" and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
+  ?shape_handle=\d+-\d+ .*\[warning\] Failed to create snapshot for shape: Database table \"public.items\" is missing from the publication \"electric_publication_integration\" and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
   -$fail_pattern
 
 ## Add the table to the publication and try again
@@ -63,7 +63,7 @@
 
 [shell electric]
   -
-  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" does not have its replica identity set to FULL
+  ?shape_handle=\d+-\d+ .*\[warning\] Failed to create snapshot for shape: Database table \"public.items\" does not have its replica identity set to FULL
   -$fail_pattern
 
 ## Set table's replica identity to FULL and try again
