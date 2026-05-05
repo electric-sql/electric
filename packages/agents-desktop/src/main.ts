@@ -98,6 +98,16 @@ const APP_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/icon.png`)
 const APP_DISPLAY_NAME = `Electric Agents`
 
 /**
+ * When set, the renderer is loaded from this dev-server URL instead
+ * of the prebuilt `dist-desktop/index.html` file. Wired up by the
+ * `dev` script in `package.json`, which boots Vite on port 5174 and
+ * exports `ELECTRIC_DESKTOP_DEV_SERVER_URL=http://localhost:5174`
+ * so the renderer gets full HMR. Unset in `start` / packaged builds,
+ * so production keeps loading the static bundle from disk.
+ */
+const DEV_SERVER_URL = process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ?? null
+
+/**
  * Commands sent from the menu / tray (main process) to the focused
  * renderer over the `desktop:command` IPC channel. The renderer
  * subscribes via `window.electronAPI.onDesktopCommand` and dispatches
@@ -432,7 +442,18 @@ function createWindow(): BrowserWindow {
     buildApplicationMenu()
   })
   win.webContents.setWindowOpenHandler(() => ({ action: `deny` }))
-  void win.loadFile(RENDERER_INDEX)
+  // Dev: load from the running Vite dev server so the renderer gets
+  // HMR (CSS / React Refresh / module replacement). Production: load
+  // the prebuilt `dist-desktop/index.html` from disk via file://.
+  // DevTools are not auto-opened — multi-window setups would spawn
+  // a detached DevTools per window, which gets noisy fast. The
+  // standard `View → Toggle Developer Tools` menu item (Cmd+Opt+I /
+  // Ctrl+Shift+I) works in every window when you actually need it.
+  if (DEV_SERVER_URL) {
+    void win.loadURL(DEV_SERVER_URL)
+  } else {
+    void win.loadFile(RENDERER_INDEX)
+  }
   buildApplicationMenu()
 
   return win
@@ -530,11 +551,25 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
 
 async function setActiveServer(server: ServerConfig | null): Promise<void> {
   const normalized = normalizeServer(server)
-  settings.activeServer =
+  const next =
     normalized && serverInList(normalized, settings.servers) ? normalized : null
+  // Renderer mount fires `saveActiveServer(active)` even when the
+  // value didn't actually change (React 19 StrictMode also double-
+  // fires the effect in dev). Bail early when the active server is
+  // identical to what we already had so we don't tear down and
+  // restart Horton on every window open.
+  const same =
+    (next === null && settings.activeServer === null) ||
+    (next !== null &&
+      settings.activeServer !== null &&
+      next.url === settings.activeServer.url &&
+      next.name === settings.activeServer.name)
+  settings.activeServer = next
   setState({ activeServer: settings.activeServer })
   await saveSettings()
-  await restartRuntime()
+  if (!same) {
+    await restartRuntime()
+  }
 }
 
 async function quitApp(): Promise<void> {

@@ -24,11 +24,16 @@ function desktopHtmlMarker(): Plugin {
   }
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const desktop = mode === `desktop`
+  // Desktop *build* serves the bundle via file:// from the Electron
+  // app, so assets must be referenced with relative URLs (`./`). The
+  // dev server, on the other hand, serves over http and needs an
+  // absolute base (`/`) for HMR and dynamic imports to resolve.
+  const desktopServe = desktop && command === `serve`
 
   return {
-    base: desktop ? `./` : `/__agent_ui/`,
+    base: desktop ? (desktopServe ? `/` : `./`) : `/__agent_ui/`,
     plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
     build: {
       outDir: desktop ? `dist-desktop` : `dist`,

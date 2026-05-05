@@ -6,8 +6,10 @@
   "type": "module",
   "main": "./dist/main.js",
   "scripts": {
-    "build": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && tsdown",
-    "dev": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && tsdown && pnpm run ensure:electron && electron .",
+    "build": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && vite build",
+    "dev": "pnpm --filter @electric-ax/agents build && pnpm run ensure:electron && concurrently -k -n ui,desktop -c cyan,green \"pnpm run dev:ui\" \"pnpm run dev:desktop\"",
+    "dev:ui": "pnpm --filter @electric-ax/agents-server-ui dev:desktop",
+    "dev:desktop": "wait-on -d 200 http-get://localhost:5183 && vite",
     "ensure:electron": "node ./node_modules/electron/install.js",
     "start": "pnpm run ensure:electron && electron .",
     "typecheck": "tsc --noEmit"
@@ -18,8 +20,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
+    "concurrently": "^8.2.2",
     "electron": "^41.5.0",
-    "tsdown": "^0.9.9",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vite": "^7.1.7",
+    "vite-plugin-electron": "^0.29.1",
+    "wait-on": "^9.0.1"
   }
 }

@@ -1607,15 +1607,24 @@ importers:
       '@types/node':
         specifier: ^22.19.17
         version: 22.19.17
+      concurrently:
+        specifier: ^8.2.2
+        version: 8.2.2
       electron:
         specifier: ^41.5.0
         version: 41.5.0
-      tsdown:
-        specifier: ^0.9.9
-        version: 0.9.9(typescript@5.8.3)
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
+      vite:
+        specifier: ^7.1.7
+        version: 7.3.2(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.8.1)
+      vite-plugin-electron:
+        specifier: ^0.29.1
+        version: 0.29.1
+      wait-on:
+        specifier: ^9.0.1
+        version: 9.0.5
 
   packages/agents-runtime:
     dependencies:
@@ -2349,13 +2358,13 @@ importers:
         version: 5.8.3
       vitepress:
         specifier: ^1.3.1
-        version: 1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3)
+        version: 1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(axios@1.16.0)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3)
       vitepress-plugin-llms:
         specifier: ^1.7.5
         version: 1.7.5
       vitepress-plugin-tabs:
         specifier: ^0.5.0
-        version: 0.5.0(vitepress@1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3))(vue@3.5.12(typescript@5.8.3))
+        version: 0.5.0(vitepress@1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(axios@1.16.0)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3))(vue@3.5.12(typescript@5.8.3))
       vitest:
         specifier: ^4.0.15
         version: 4.0.15(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@29.1.0(@noble/hashes@2.0.1))(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.6.0)
@@ -5517,6 +5526,26 @@ packages:
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
+
+  '@hapi/address@5.1.1':
+    resolution: {integrity: sha512-A+po2d/dVoY7cYajycYI43ZbYMXukuopIsqCjh5QzsBCipDtdofHntljDlpccMjIfTy6UOkg+5KPriwYch2bXA==}
+    engines: {node: '>=14.0.0'}
+
+  '@hapi/formula@3.0.2':
+    resolution: {integrity: sha512-hY5YPNXzw1He7s0iqkRQi+uMGh383CGdyyIGYtB+W5N3KHPXoqychklvHhKCC9M3Xtv0OCs/IHw+r4dcHtBYWw==}
+
+  '@hapi/hoek@11.0.7':
+    resolution: {integrity: sha512-HV5undWkKzcB4RZUusqOpcgxOaq6VOAH7zhhIr2g3G8NF/MlFO75SjOr2NfuSx0Mh40+1FqCkagKLJRykUWoFQ==}
+
+  '@hapi/pinpoint@2.0.1':
+    resolution: {integrity: sha512-EKQmr16tM8s16vTT3cA5L0kZZcTMU5DUOZTuvpnY738m+jyP3JIUj+Mm1xc1rsLkGBQ/gVnfKYPwOmPg1tUR4Q==}
+
+  '@hapi/tlds@1.1.6':
+    resolution: {integrity: sha512-xdi7A/4NZokvV0ewovme3aUO5kQhW9pQ2YD1hRqZGhhSi5rBv4usHYidVocXSi9eihYsznZxLtAiEYYUL6VBGw==}
+    engines: {node: '>=14.0.0'}
+
+  '@hapi/topo@6.0.2':
+    resolution: {integrity: sha512-KR3rD5inZbGMrHmgPxsJ9dbi6zEK+C3ZwUwTa+eMwWLz7oijWUTWD2pMSNNYJAU6Qq+65NkxXjqHr/7LM2Xkqg==}
 
   '@harperfast/extended-iterable@1.0.3':
     resolution: {integrity: sha512-sSAYhQca3rDWtQUHSAPeO7axFIUJOI6hn1gjRC5APVE1a90tuyT8f5WIgRsFhhWA7htNkju2veB9eWL6YHi/Lw==}
@@ -10562,6 +10591,9 @@ packages:
   aws4fetch@1.0.20:
     resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
 
+  axios@1.16.0:
+    resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
+
   babel-dead-code-elimination@1.0.10:
     resolution: {integrity: sha512-DV5bdJZTzZ0zn0DC24v3jD7Mnidh6xhKa4GfKCbq3sfW8kaWhDdZjP3i81geA8T33tdYqWKw4D3fVv0CwEgKVA==}
 
@@ -12192,10 +12224,6 @@ packages:
   es-array-method-boxes-properly@1.0.0:
     resolution: {integrity: sha512-wd6JXUmyHmt8T5a2xreUwKcGPq6f1f+WwIJkijUqiGcJz1qqnZgP6XIK+QyIWU5lT7imeNxUll48bziG+TSYcA==}
 
-  es-define-property@1.0.0:
-    resolution: {integrity: sha512-jxayLKShrEqqzJ0eumQbVhTYQM27CfT1T35+gCgDFoL82JLsXqTJ76zv6A0YLOgEnLUMvLzsDsGIrl8NFpT2gQ==}
-    engines: {node: '>= 0.4'}
-
   es-define-property@1.0.1:
     resolution: {integrity: sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==}
     engines: {node: '>= 0.4'}
@@ -12977,6 +13005,15 @@ packages:
   focus-trap@7.6.0:
     resolution: {integrity: sha512-1td0l3pMkWJLFipobUcGaf+5DTY4PLDDrcqoSaKP8ediO/CoWCCYk/fT/Y2A4e6TNB+Sh6clRJCjOPPnKoNHnQ==}
 
+  follow-redirects@1.16.0:
+    resolution: {integrity: sha512-y5rN/uOsadFT/JfYwhxRS5R7Qce+g3zG97+JrtFZlC9klX/W5hD7iiLzScI4nZqUS7DNUdhPgw4xI8W2LuXlUw==}
+    engines: {node: '>=4.0'}
+    peerDependencies:
+      debug: '*'
+    peerDependenciesMeta:
+      debug:
+        optional: true
+
   fontfaceobserver@2.3.0:
     resolution: {integrity: sha512-6FPvD/IVyT4ZlNe7Wcn5Fb/4ChigpucKYSvD6a+0iMoLn2inpo711eyIcKjmDtE5XNcgAkSH9uN/nfAeZzHEfg==}
 
@@ -12996,6 +13033,10 @@ packages:
 
   form-data@4.0.1:
     resolution: {integrity: sha512-tzN8e4TX8+kkxGPK8D5u0FNmjPUjw3lwC9lSLxxoB/+GtsJG91CO8bSWy73APlgAZzZbXEYZJuxjkHH2w+Ezhw==}
+    engines: {node: '>= 6'}
+
+  form-data@4.0.5:
+    resolution: {integrity: sha512-8RipRLol37bNs2bhoV67fiTEvdTrbMUYcFTiy3+wuuOnUog2QBHCZWXDRijWQfAkhBj2Uf5UnVaiWwA5vdd82w==}
     engines: {node: '>= 6'}
 
   format@0.2.2:
@@ -13109,10 +13150,6 @@ packages:
   get-east-asian-width@1.5.0:
     resolution: {integrity: sha512-CQ+bEO+Tva/qlmw24dCejulK5pMzVnUOFOijVogd3KQs07HnRIgp8TGipvCCRT06xeYEbpbgwaCxglFyiuIcmA==}
     engines: {node: '>=18'}
-
-  get-intrinsic@1.2.4:
-    resolution: {integrity: sha512-5uYhsJH8VJBTv7oslg4BznJYhDoRI6waYCxMmCdnTrcCrHA/fCFKoTFz2JKKE0HdDFUF7/oQuhzumXJK7paBRQ==}
-    engines: {node: '>= 0.4'}
 
   get-intrinsic@1.3.0:
     resolution: {integrity: sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==}
@@ -13230,9 +13267,6 @@ packages:
     resolution: {integrity: sha512-eAmLkjDjAFCVXg7A1unxHsLf961m6y17QFqXqAXGj/gVkKFrEICfStRfwUlGNfeCEjNRa32JEWOUTlYXPyyKvA==}
     engines: {node: '>=14'}
 
-  gopd@1.0.1:
-    resolution: {integrity: sha512-d65bNlIadxvpb/A2abVdlqKqV563juRnZ1Wtk6s1sIR8uNsXR70xqIzVqxVf1eTqDunwT2MkczEeaezCKTZhwA==}
-
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
@@ -13291,16 +13325,8 @@ packages:
   has-property-descriptors@1.0.2:
     resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==}
 
-  has-proto@1.0.3:
-    resolution: {integrity: sha512-SJ1amZAJUiZS+PhsVLf5tGydlaVB8EdFpaSO4gmiUKUOxk8qzn5AIy4ZeJUmh22znIdk/uMAUT2pl3FxzVUH+Q==}
-    engines: {node: '>= 0.4'}
-
   has-proto@1.2.0:
     resolution: {integrity: sha512-KIL7eQPfHQRC8+XluaIw7BHUwwqL19bQn4hzNgdr+1wXoU0KKj6rufu47lhY7KbJR2C6T6+PfyN0Ea7wkSS+qQ==}
-    engines: {node: '>= 0.4'}
-
-  has-symbols@1.0.3:
-    resolution: {integrity: sha512-l3LCuF6MgDNwTDKkdYGEihYjt5pRPbEg46rtlmnSPlUbgmB8LOIrKJbYYFBSbnPaJexMKtiPO8hmeRjRz2Td+A==}
     engines: {node: '>= 0.4'}
 
   has-symbols@1.1.0:
@@ -14009,6 +14035,10 @@ packages:
   jmespath@0.16.0:
     resolution: {integrity: sha512-9FzQjJ7MATs1tSpnco1K6ayiYE3figslrXA72G2HQ/n76RzvYlofyi5QM+iX4YRs/pu3yzxlVQSST23+dMDknw==}
     engines: {node: '>= 0.6.0'}
+
+  joi@18.2.1:
+    resolution: {integrity: sha512-2/OKlogiESf2Nh3TFCrRjrr9z1DRHeW0I+KReF67+4J0Ns+8hBtHRmoWAZ2OFU6I5+TWLEe6sVlSdXPjHm5UbQ==}
+    engines: {node: '>= 20'}
 
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
@@ -14875,10 +14905,6 @@ packages:
 
   mime-db@1.52.0:
     resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
-    engines: {node: '>= 0.6'}
-
-  mime-db@1.53.0:
-    resolution: {integrity: sha512-oHlN/w+3MQ3rba9rqFr6V/ypF10LSkdwUysQL7GkXoTgIWeV+tcXGA852TBxH+gsh8UWoyhR1hKcoMJTuWflpg==}
     engines: {node: '>= 0.6'}
 
   mime-db@1.54.0:
@@ -16090,6 +16116,10 @@ packages:
   proxy-from-env@1.1.0:
     resolution: {integrity: sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==}
 
+  proxy-from-env@2.1.0:
+    resolution: {integrity: sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==}
+    engines: {node: '>=10'}
+
   psql-describe@0.1.6:
     resolution: {integrity: sha512-cZqmsO1FOTmKZFnwbZxViPzEkH/Kyof/t1O2QI25oN5TEexXl6AXVFNIYpoIVBGm2Ic+ImJDR760zUgBMBv+KQ==}
 
@@ -16847,6 +16877,9 @@ packages:
 
   rxjs@7.8.1:
     resolution: {integrity: sha512-AA3TVj+0A2iuIoQkWEK/tqFjBq2j+6PO6Y0zJcvzLAFhEFIO3HL0vls9hWLncZbAAbK0mar7oZ4V079I/qPMxg==}
+
+  rxjs@7.8.2:
+    resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
 
   safe-array-concat@1.1.3:
     resolution: {integrity: sha512-AURm5f0jYEOydBj7VQlVvDrjeFgthDdEF5H1dP+6mNpoXOMo1quQqJ4wvJDyRZ9+pO3kGWoOdmV08cSv2aJV6Q==}
@@ -18451,6 +18484,14 @@ packages:
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
 
+  vite-plugin-electron@0.29.1:
+    resolution: {integrity: sha512-AejNed5BgHFnuw8h5puTa61C6vdP4ydbsbo/uVjH1fTdHAlCDz1+o6pDQ/scQj1udDrGvH01+vTbzQh/vMnR9w==}
+    peerDependencies:
+      vite-plugin-electron-renderer: '*'
+    peerDependenciesMeta:
+      vite-plugin-electron-renderer:
+        optional: true
+
   vite-plugin-pwa@0.21.0:
     resolution: {integrity: sha512-gnDE5sN2hdxA4vTl0pe6PCTPXqChk175jH8dZVVTBjFhWarZZoXaAdoTIKCIa8Zbx94sC0CnCOyERBWpxvry+g==}
     engines: {node: '>=16.0.0'}
@@ -18827,6 +18868,11 @@ packages:
   w3c-xmlserializer@5.0.0:
     resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
     engines: {node: '>=18'}
+
+  wait-on@9.0.5:
+    resolution: {integrity: sha512-qgnbHDfDTRIp73ANEJNRW/7kn8CrDUcvZz18xotJQku/P4saTGkbIzvnMZebPmVvVNUiRq1qWAPyqCH+W4H8KA==}
+    engines: {node: '>=20.0.0'}
+    hasBin: true
 
   walker@1.0.8:
     resolution: {integrity: sha512-ts/8E8l5b7kY0vlWLewOkDXMmPdLcVV4GmOQLyxuSswIJsweeFZtAsMF7k1Nszz+TYBQrlYRmzOnr398y1JemQ==}
@@ -19285,7 +19331,7 @@ snapshots:
 
   '@alcalzone/ansi-tokenize@0.2.5':
     dependencies:
-      ansi-styles: 6.2.1
+      ansi-styles: 6.2.3
       is-fullwidth-code-point: 5.1.0
 
   '@algolia/autocomplete-core@1.17.6(@algolia/client-search@5.13.0)(algoliasearch@5.13.0)(search-insights@2.17.2)':
@@ -23332,6 +23378,22 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  '@hapi/address@5.1.1':
+    dependencies:
+      '@hapi/hoek': 11.0.7
+
+  '@hapi/formula@3.0.2': {}
+
+  '@hapi/hoek@11.0.7': {}
+
+  '@hapi/pinpoint@2.0.1': {}
+
+  '@hapi/tlds@1.1.6': {}
+
+  '@hapi/topo@6.0.2':
+    dependencies:
+      '@hapi/hoek': 11.0.7
 
   '@harperfast/extended-iterable@1.0.3': {}
 
@@ -29204,12 +29266,13 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
-  '@vueuse/integrations@11.2.0(focus-trap@7.6.0)(jwt-decode@4.0.0)(vue@3.5.12(typescript@5.8.3))':
+  '@vueuse/integrations@11.2.0(axios@1.16.0)(focus-trap@7.6.0)(jwt-decode@4.0.0)(vue@3.5.12(typescript@5.8.3))':
     dependencies:
       '@vueuse/core': 11.2.0(vue@3.5.12(typescript@5.8.3))
       '@vueuse/shared': 11.2.0(vue@3.5.12(typescript@5.8.3))
       vue-demi: 0.14.10(vue@3.5.12(typescript@5.8.3))
     optionalDependencies:
+      axios: 1.16.0
       focus-trap: 7.6.0
       jwt-decode: 4.0.0
     transitivePeerDependencies:
@@ -29537,6 +29600,14 @@ snapshots:
   aws4fetch@1.0.18: {}
 
   aws4fetch@1.0.20: {}
+
+  axios@1.16.0:
+    dependencies:
+      follow-redirects: 1.16.0
+      form-data: 4.0.5
+      proxy-from-env: 2.1.0
+    transitivePeerDependencies:
+      - debug
 
   babel-dead-code-elimination@1.0.10:
     dependencies:
@@ -29942,10 +30013,10 @@ snapshots:
 
   call-bind@1.0.7:
     dependencies:
-      es-define-property: 1.0.0
+      es-define-property: 1.0.1
       es-errors: 1.3.0
       function-bind: 1.1.2
-      get-intrinsic: 1.2.4
+      get-intrinsic: 1.3.0
       set-function-length: 1.2.2
 
   call-bind@1.0.8:
@@ -30272,7 +30343,7 @@ snapshots:
 
   compressible@2.0.18:
     dependencies:
-      mime-db: 1.53.0
+      mime-db: 1.54.0
 
   compression@1.7.5:
     dependencies:
@@ -30808,7 +30879,7 @@ snapshots:
       array-buffer-byte-length: 1.0.1
       call-bind: 1.0.7
       es-get-iterator: 1.1.3
-      get-intrinsic: 1.2.4
+      get-intrinsic: 1.3.0
       is-arguments: 1.1.1
       is-array-buffer: 3.0.4
       is-date-object: 1.0.5
@@ -30845,9 +30916,9 @@ snapshots:
 
   define-data-property@1.1.4:
     dependencies:
-      es-define-property: 1.0.0
+      es-define-property: 1.0.1
       es-errors: 1.3.0
-      gopd: 1.0.1
+      gopd: 1.2.0
 
   define-lazy-prop@2.0.0: {}
 
@@ -31111,7 +31182,7 @@ snapshots:
 
   enzyme-shallow-equal@1.0.7:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.3
       object-is: 1.1.6
 
   enzyme@3.11.0:
@@ -31171,7 +31242,7 @@ snapshots:
       has-property-descriptors: 1.0.2
       has-proto: 1.2.0
       has-symbols: 1.1.0
-      hasown: 2.0.2
+      hasown: 2.0.3
       internal-slot: 1.1.0
       is-array-buffer: 3.0.5
       is-callable: 1.2.7
@@ -31263,10 +31334,6 @@ snapshots:
 
   es-array-method-boxes-properly@1.0.0: {}
 
-  es-define-property@1.0.0:
-    dependencies:
-      get-intrinsic: 1.2.4
-
   es-define-property@1.0.1: {}
 
   es-errors@1.3.0: {}
@@ -31315,11 +31382,11 @@ snapshots:
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
       has-tostringtag: 1.0.2
-      hasown: 2.0.2
+      hasown: 2.0.3
 
   es-shim-unscopables@1.0.2:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.3
 
   es-shim-unscopables@1.1.0:
     dependencies:
@@ -32523,6 +32590,8 @@ snapshots:
     dependencies:
       tabbable: 6.2.0
 
+  follow-redirects@1.16.0: {}
+
   fontfaceobserver@2.3.0: {}
 
   for-each@0.3.3:
@@ -32544,6 +32613,14 @@ snapshots:
     dependencies:
       asynckit: 0.4.0
       combined-stream: 1.0.8
+      mime-types: 2.1.35
+
+  form-data@4.0.5:
+    dependencies:
+      asynckit: 0.4.0
+      combined-stream: 1.0.8
+      es-set-tostringtag: 2.1.0
+      hasown: 2.0.3
       mime-types: 2.1.35
 
   format@0.2.2: {}
@@ -32614,7 +32691,7 @@ snapshots:
       call-bound: 1.0.4
       define-properties: 1.2.1
       functions-have-names: 1.2.3
-      hasown: 2.0.2
+      hasown: 2.0.3
       is-callable: 1.2.7
 
   functions-have-names@1.2.3: {}
@@ -32658,14 +32735,6 @@ snapshots:
 
   get-east-asian-width@1.5.0: {}
 
-  get-intrinsic@1.2.4:
-    dependencies:
-      es-errors: 1.3.0
-      function-bind: 1.1.2
-      has-proto: 1.0.3
-      has-symbols: 1.0.3
-      hasown: 2.0.2
-
   get-intrinsic@1.3.0:
     dependencies:
       call-bind-apply-helpers: 1.0.2
@@ -32676,7 +32745,7 @@ snapshots:
       get-proto: 1.0.1
       gopd: 1.2.0
       has-symbols: 1.1.0
-      hasown: 2.0.2
+      hasown: 2.0.3
       math-intrinsics: 1.1.0
 
   get-nonce@1.0.1: {}
@@ -32805,10 +32874,6 @@ snapshots:
 
   google-logging-utils@1.1.3: {}
 
-  gopd@1.0.1:
-    dependencies:
-      get-intrinsic: 1.2.4
-
   gopd@1.2.0: {}
 
   got@11.8.6:
@@ -32871,15 +32936,11 @@ snapshots:
 
   has-property-descriptors@1.0.2:
     dependencies:
-      es-define-property: 1.0.0
-
-  has-proto@1.0.3: {}
+      es-define-property: 1.0.1
 
   has-proto@1.2.0:
     dependencies:
       dunder-proto: 1.0.1
-
-  has-symbols@1.0.3: {}
 
   has-symbols@1.1.0: {}
 
@@ -33274,13 +33335,13 @@ snapshots:
   internal-slot@1.0.7:
     dependencies:
       es-errors: 1.3.0
-      hasown: 2.0.2
+      hasown: 2.0.3
       side-channel: 1.1.0
 
   internal-slot@1.1.0:
     dependencies:
       es-errors: 1.3.0
-      hasown: 2.0.2
+      hasown: 2.0.3
       side-channel: 1.1.0
 
   internmap@1.0.1: {}
@@ -33362,11 +33423,11 @@ snapshots:
 
   is-core-module@2.15.1:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.3
 
   is-core-module@2.16.1:
     dependencies:
-      hasown: 2.0.2
+      hasown: 2.0.3
 
   is-data-view@1.0.2:
     dependencies:
@@ -33472,7 +33533,7 @@ snapshots:
       call-bound: 1.0.4
       gopd: 1.2.0
       has-tostringtag: 1.0.2
-      hasown: 2.0.2
+      hasown: 2.0.3
 
   is-regexp@1.0.0: {}
 
@@ -33715,6 +33776,16 @@ snapshots:
   jiti@2.6.1: {}
 
   jmespath@0.16.0: {}
+
+  joi@18.2.1:
+    dependencies:
+      '@hapi/address': 5.1.1
+      '@hapi/formula': 3.0.2
+      '@hapi/hoek': 11.0.7
+      '@hapi/pinpoint': 2.0.1
+      '@hapi/tlds': 1.1.6
+      '@hapi/topo': 6.0.2
+      '@standard-schema/spec': 1.1.0
 
   jose@4.15.9: {}
 
@@ -34985,8 +35056,6 @@ snapshots:
       yargs: 17.7.2
 
   mime-db@1.52.0: {}
-
-  mime-db@1.53.0: {}
 
   mime-db@1.54.0: {}
 
@@ -36297,6 +36366,8 @@ snapshots:
 
   proxy-from-env@1.1.0: {}
 
+  proxy-from-env@2.1.0: {}
+
   psql-describe@0.1.6: {}
 
   pstree.remy@1.1.8: {}
@@ -37325,6 +37396,10 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  rxjs@7.8.2:
+    dependencies:
+      tslib: 2.8.1
+
   safe-array-concat@1.1.3:
     dependencies:
       call-bind: 1.0.8
@@ -37493,8 +37568,8 @@ snapshots:
       define-data-property: 1.1.4
       es-errors: 1.3.0
       function-bind: 1.1.2
-      get-intrinsic: 1.2.4
-      gopd: 1.0.1
+      get-intrinsic: 1.3.0
+      gopd: 1.2.0
       has-property-descriptors: 1.0.2
 
   set-function-name@2.0.2:
@@ -37651,7 +37726,7 @@ snapshots:
     dependencies:
       call-bind: 1.0.7
       es-errors: 1.3.0
-      get-intrinsic: 1.2.4
+      get-intrinsic: 1.3.0
       object-inspect: 1.13.2
 
   side-channel@1.1.0:
@@ -39047,6 +39122,8 @@ snapshots:
       - supports-color
       - terser
 
+  vite-plugin-electron@0.29.1: {}
+
   vite-plugin-pwa@0.21.0(vite@5.4.10(@types/node@25.6.0)(lightningcss@1.30.1)(terser@5.46.2))(workbox-build@7.3.0(@types/babel__core@7.20.5))(workbox-window@7.3.0):
     dependencies:
       debug: 4.3.7(supports-color@5.5.0)
@@ -39285,12 +39362,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  vitepress-plugin-tabs@0.5.0(vitepress@1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3))(vue@3.5.12(typescript@5.8.3)):
+  vitepress-plugin-tabs@0.5.0(vitepress@1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(axios@1.16.0)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3))(vue@3.5.12(typescript@5.8.3)):
     dependencies:
-      vitepress: 1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3)
+      vitepress: 1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(axios@1.16.0)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3)
       vue: 3.5.12(typescript@5.8.3)
 
-  vitepress@1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3):
+  vitepress@1.5.0(@algolia/client-search@5.13.0)(@types/node@25.6.0)(@types/react@18.3.12)(axios@1.16.0)(jwt-decode@4.0.0)(lightningcss@1.30.1)(postcss@8.5.6)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)(terser@5.46.2)(typescript@5.8.3):
     dependencies:
       '@docsearch/css': 3.7.0
       '@docsearch/js': 3.7.0(@algolia/client-search@5.13.0)(@types/react@18.3.12)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)
@@ -39303,7 +39380,7 @@ snapshots:
       '@vue/devtools-api': 7.6.3
       '@vue/shared': 3.5.12
       '@vueuse/core': 11.2.0(vue@3.5.12(typescript@5.8.3))
-      '@vueuse/integrations': 11.2.0(focus-trap@7.6.0)(jwt-decode@4.0.0)(vue@3.5.12(typescript@5.8.3))
+      '@vueuse/integrations': 11.2.0(axios@1.16.0)(focus-trap@7.6.0)(jwt-decode@4.0.0)(vue@3.5.12(typescript@5.8.3))
       focus-trap: 7.6.0
       mark.js: 8.11.1
       minisearch: 7.1.0
@@ -39796,6 +39873,16 @@ snapshots:
     dependencies:
       xml-name-validator: 5.0.0
 
+  wait-on@9.0.5:
+    dependencies:
+      axios: 1.16.0
+      joi: 18.2.1
+      lodash: 4.18.1
+      minimist: 1.2.8
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - debug
+
   walker@1.0.8:
     dependencies:
       makeerror: 1.0.12
@@ -40097,13 +40184,13 @@ snapshots:
 
   wrap-ansi@8.1.0:
     dependencies:
-      ansi-styles: 6.2.1
+      ansi-styles: 6.2.3
       string-width: 5.1.2
       strip-ansi: 7.2.0
 
   wrap-ansi@9.0.2:
     dependencies:
-      ansi-styles: 6.2.1
+      ansi-styles: 6.2.3
       string-width: 7.2.0
       strip-ansi: 7.2.0
 
