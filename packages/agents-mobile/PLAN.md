@@ -317,15 +317,19 @@ Bundling Vite output into Expo needs a small build pipeline. Keep the embed buil
   silently dropped during boot.
 - ✅ State Explorer toggle and entity navigation now flow through the bridge.
   Switching view, jumping to a related entity, and toggling the theme all
-  re-render in-place without re-parsing the multi-MB bundle.
+  re-render in-place without re-parsing the bundle.
 - ✅ WebView wrapped in `KeyboardAvoidingView` (iOS `padding`) so the embed
   composer follows the keyboard; embed CSS uses `height: 100%` (not `100vh`)
   so it shrinks correctly.
 - ✅ EntityHost is keyed on `entityUrl` so the chat input/scroll reset
   cleanly when the host swaps the active entity.
-- ⏭ Pull-to-refresh / drag-to-dismiss on the entity list.
+- ✅ Persistent WebView (`PersistentEmbed`) lives at the App level and is
+  hidden via `display: 'none'` when off-session. Cross-screen navigation
+  (list ↔ session ↔ session) no longer re-parses the bundle.
+- ✅ Pull-to-refresh on the session list re-runs the connectivity probe
+  with a 600 ms minimum dwell.
 
-### Phase 6: Polish — IN PROGRESS
+### Phase 6: Polish — DONE (foundations)
 
 - ✅ Native screens consume the same color, spacing, radius and typography tokens
   as the web app, in both light and dark modes.
@@ -336,9 +340,16 @@ Bundling Vite output into Expo needs a small build pipeline. Keep the embed buil
   which co-operates with edge-to-edge translucent system bars.
 - ✅ Crypto polyfill (`react-native-random-uuid`) hoisted to `index.ts`
   so it loads before any other module evaluates `crypto.randomUUID`.
+- ✅ `DiagnosticsScreen` (reachable from Settings sheet) surfaces server
+  URL + live health probe + embed bundle URI/size + app/Expo/OS versions.
+- ✅ Mobile embed bundle trimmed from 13.1 MB → 5.0 MB by aliasing
+  `mermaid` / `shiki/bundle/web` / `katex` / `@streamdown/math` to tiny
+  stubs in `src/embed/stubs/` (mobile chat shows code unhighlighted and
+  skips diagrams + math, which is acceptable for v1).
+- ✅ `bridge.ts` parsers covered by vitest on both sides
+  (`agents-server-ui/src/embed/__tests__/bridge.test.ts` and
+  `agents-mobile/src/webview/__tests__/bridge.test.ts`, 24 tests total).
 - ⏭ Safe-area edge cases on landscape / tablet.
-- ⏭ Diagnostics for server connectivity and WebView errors.
-- ⏭ Mobile-focused tests where practical.
 
 ## Working with the mobile-embed bundle
 

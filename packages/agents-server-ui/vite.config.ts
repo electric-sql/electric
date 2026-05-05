@@ -51,6 +51,34 @@ export default defineConfig(({ command, mode }) => {
               generateScopedName: `[name]_[local]_[hash:base64:5]`,
             },
           },
+          // Heavy markdown deps (`mermaid` ~5 MB, `shiki` ~3.8 MB,
+          // `katex` ~600 KB, `@streamdown/math` pulls katex) get
+          // swapped for tiny stubs in `src/embed/stubs/`. Mobile chat
+          // shows code as plain monospace and skips math/diagrams,
+          // which trims the embed bundle from ~13 MB to ~3 MB.
+          resolve: {
+            alias: [
+              {
+                find: `mermaid`,
+                replacement: resolve(__dirname, `src/embed/stubs/mermaid.ts`),
+              },
+              {
+                find: /^shiki\/bundle\/web$/,
+                replacement: resolve(__dirname, `src/embed/stubs/shiki.ts`),
+              },
+              {
+                find: /^katex$/,
+                replacement: resolve(__dirname, `src/embed/stubs/katex.ts`),
+              },
+              {
+                find: /^@streamdown\/math$/,
+                replacement: resolve(
+                  __dirname,
+                  `src/embed/stubs/streamdown-math.ts`
+                ),
+              },
+            ],
+          },
         }
       : {}),
     plugins: [

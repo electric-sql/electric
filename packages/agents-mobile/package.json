@@ -9,6 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
     "embed:build": "pnpm --filter @electric-ax/agents-server-ui build:mobile-embed",
     "doctor": "expo-doctor"
   },
@@ -19,6 +20,7 @@
     "@tanstack/react-db": "^0.1.83",
     "expo": "54.0.34",
     "expo-asset": "~12.0.13",
+    "expo-constants": "~18.0.13",
     "expo-status-bar": "~3.0.9",
     "react": "^19.1.0",
     "react-native": "0.81.5",
@@ -30,6 +32,7 @@
   "devDependencies": {
     "@types/react": "^19.1.17",
     "babel-preset-expo": "~54.0.10",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
   }
 }

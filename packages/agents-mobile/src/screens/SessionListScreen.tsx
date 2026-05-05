@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { useLiveQuery } from '@tanstack/react-db'
 import { Header } from '../components/Header'
 import { Screen } from '../components/Screen'
@@ -23,10 +29,12 @@ export function SessionListScreen({
   onOpenSession,
   onNewSession,
   onChangeServer,
+  onOpenDiagnostics,
 }: {
   onOpenSession: (entityUrl: string) => void
   onNewSession: () => void
   onChangeServer: () => void
+  onOpenDiagnostics: () => void
 }): React.ReactElement {
   const { entitiesCollection, serverUrl } = useAgents()
   const tokens = useTokens()
@@ -71,26 +79,51 @@ export function SessionListScreen({
   // green/red instead of the unset grey. Mirrors the web sidebar's
   // ServerPicker dot which lights up from the same `/health` ping.
   const [serverStatus, setServerStatus] = useState<ServerStatus>(`unset`)
-  useEffect(() => {
-    let cancelled = false
-    setServerStatus(`unset`)
+  // Bumped by the user's pull-to-refresh gesture so we can run the
+  // probe outside the polling cadence too.
+  const probeId = useRef(0)
+  const [refreshing, setRefreshing] = useState(false)
 
-    const tick = async () => {
+  const probeOnce = useCallback(
+    async (signal: { cancelled: boolean }): Promise<void> => {
       try {
         await checkServerHealth(serverUrl)
-        if (!cancelled) setServerStatus(`ok`)
+        if (!signal.cancelled) setServerStatus(`ok`)
       } catch {
-        if (!cancelled) setServerStatus(`down`)
+        if (!signal.cancelled) setServerStatus(`down`)
       }
-    }
+    },
+    [serverUrl]
+  )
 
-    void tick()
-    const interval = setInterval(tick, 10_000)
+  useEffect(() => {
+    const signal = { cancelled: false }
+    setServerStatus(`unset`)
+
+    void probeOnce(signal)
+    const interval = setInterval(() => void probeOnce(signal), 10_000)
     return () => {
-      cancelled = true
+      signal.cancelled = true
       clearInterval(interval)
     }
-  }, [serverUrl])
+  }, [serverUrl, probeOnce])
+
+  // Pull-to-refresh: the live query is already up-to-date, so this is
+  // really a "is the server still reachable?" gesture + a quick visual
+  // beat so the user gets feedback. We run the same probe the polling
+  // tick does and hold the spinner for ~600 ms minimum so the gesture
+  // doesn't snap back instantly on a fast network.
+  const onRefresh = useCallback(async () => {
+    const id = ++probeId.current
+    setRefreshing(true)
+    const start = Date.now()
+    await probeOnce({ cancelled: false })
+    const elapsed = Date.now() - start
+    if (elapsed < 600) {
+      await new Promise<void>((r) => setTimeout(r, 600 - elapsed))
+    }
+    if (probeId.current === id) setRefreshing(false)
+  }, [probeOnce])
 
   return (
     <Screen>
@@ -105,6 +138,17 @@ export function SessionListScreen({
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // Tint the spinner with the accent so it reads as part of
+            // the brand. iOS only — Android uses `colors=[…]`.
+            tintColor={tokens.accent11}
+            colors={[tokens.accent11]}
+            progressBackgroundColor={tokens.surface}
+          />
+        }
       >
         <NewSessionRow onPress={onNewSession} />
 
@@ -135,6 +179,7 @@ export function SessionListScreen({
       <SidebarFooter
         serverStatus={serverStatus}
         onChangeServer={onChangeServer}
+        onOpenDiagnostics={onOpenDiagnostics}
       />
     </Screen>
   )
