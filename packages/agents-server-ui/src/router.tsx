@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import {
   Outlet,
   createHashHistory,
@@ -19,12 +19,18 @@ import {
   SearchPaletteProvider,
   useSearchPalette,
 } from './hooks/useSearchPalette'
-import { WorkspaceProvider, useWorkspace } from './hooks/useWorkspace'
+import {
+  WorkspaceProvider,
+  useWorkspace,
+  listTiles,
+} from './hooks/useWorkspace'
 import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
 import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
+import { useDocumentTitle } from './hooks/useDocumentTitle'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
+import { ApiKeysModal } from './components/ApiKeysModal'
 import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
@@ -44,7 +50,7 @@ function RootShell(): React.ReactElement {
   const navigate = useNavigate()
   const { collapsed, toggle } = useSidebarCollapsed()
   const search = useSearchPalette()
-  const { helpers } = useWorkspace()
+  const { workspace, helpers } = useWorkspace()
 
   useHotkey(`mod+b`, toggle)
   useHotkey(`mod+k`, (e) => {
@@ -62,18 +68,67 @@ function RootShell(): React.ReactElement {
   // effect in `<Workspace>` then focuses an existing new-session
   // tile or replaces the active tile with a fresh one. Going through
   // the URL means the persistence layer sees the change too.
-  const openNewSession = useCallback(
-    (e: KeyboardEvent) => {
-      e.preventDefault()
-      navigate({ to: `/` })
-    },
-    [navigate]
-  )
-  useHotkey(`mod+n`, openNewSession)
-  useHotkey(`mod+shift+o`, openNewSession)
+  const openNewSession = useCallback(() => {
+    navigate({ to: `/` })
+  }, [navigate])
+  useHotkey(`mod+n`, (e) => {
+    e.preventDefault()
+    openNewSession()
+  })
+  useHotkey(`mod+shift+o`, (e) => {
+    e.preventDefault()
+    openNewSession()
+  })
 
   useWorkspaceHotkeys()
   useWorkspacePersistence()
+  useDocumentTitle()
+
+  // In Electron, the application menu and tray fire `desktop:command`
+  // IPC events that map 1:1 to the actions above. Subscribing here
+  // means menu items, on-screen buttons and keyboard shortcuts share
+  // the same code path — the menu is just another invocation channel.
+  useEffect(() => {
+    const off = window.electronAPI?.onDesktopCommand?.((command) => {
+      switch (command) {
+        case `new-chat`:
+          openNewSession()
+          break
+        case `toggle-sidebar`:
+          toggle()
+          break
+        case `open-search`:
+          search.toggle()
+          break
+        case `close-tile`: {
+          const id = helpers.activeTile?.id
+          if (id) helpers.closeTile(id)
+          break
+        }
+        case `split-right`: {
+          const id = helpers.activeTile?.id
+          if (id) helpers.splitTile(id, `right`)
+          break
+        }
+        case `split-down`: {
+          const id = helpers.activeTile?.id
+          if (id) helpers.splitTile(id, `down`)
+          break
+        }
+        case `cycle-tile`: {
+          const tiles = listTiles(workspace.root)
+          if (tiles.length < 2) break
+          const currentIdx = tiles.findIndex(
+            (t) => t.id === workspace.activeTileId
+          )
+          const next = tiles[(currentIdx + 1) % tiles.length]
+          if (next) helpers.setActiveTile(next.id)
+          break
+        }
+      }
+    })
+    return () => off?.()
+  }, [openNewSession, toggle, search, helpers, workspace])
 
   const navigateToEntity = useCallback(
     (entityUrl: string) => {
@@ -121,6 +176,7 @@ function RootShell(): React.ReactElement {
       )}
       <Outlet />
       <SearchPalette />
+      <ApiKeysModal />
     </div>
   )
 }

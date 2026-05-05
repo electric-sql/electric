@@ -53,6 +53,15 @@
   align-items: center;
   gap: 8px;
   flex: 1;
+  /*
+   * Match the saved-server row's IconButton (size=1, 24px tall) so
+   * rows without a trailing button — discovered-localhost entries —
+   * still render at the same height. Without this min-height the
+   * trash button is the only thing forcing the saved row up to
+   * 24px and the menu visibly jumps as the cursor moves between
+   * the two groups.
+   */
+  min-height: 24px;
 }
 
 .menuRowName {

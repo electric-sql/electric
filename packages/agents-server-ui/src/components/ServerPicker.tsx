@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronsUpDown, Plus, Trash2 } from 'lucide-react'
 import { useServerConnection } from '../hooks/useServerConnection'
+import {
+  loadDesktopState,
+  onDesktopStateChanged,
+  rescanDiscoveredServers,
+  type DiscoveredServer,
+} from '../lib/server-connection'
 import {
   Button,
   Dialog,
@@ -13,6 +19,9 @@ import {
   Tooltip,
 } from '../ui'
 import styles from './ServerPicker.module.css'
+
+/** How often to re-probe localhost while the picker menu is open. */
+const DISCOVERY_REFRESH_MS = 5000
 
 type ServerStatus = `ok` | `down` | `unset`
 
@@ -36,6 +45,70 @@ export function ServerPicker(): React.ReactElement {
     removeServer,
   } = useServerConnection()
   const [adding, setAdding] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [discovered, setDiscovered] = useState<Array<DiscoveredServer>>([])
+  const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
+
+  // Mirror the main process's discovered-server set into local state
+  // via the same desktop-state broadcast channel the rest of the
+  // desktop UI listens on. Web mode never receives a payload here.
+  useEffect(() => {
+    if (!isDesktop) return
+    void loadDesktopState().then((s) => {
+      if (s?.discoveredServers) setDiscovered(s.discoveredServers)
+    })
+    const unsubscribe = onDesktopStateChanged((s) =>
+      setDiscovered(s.discoveredServers ?? [])
+    )
+    return () => {
+      unsubscribe?.()
+    }
+  }, [isDesktop])
+
+  // Hide URLs the user has already saved — the saved-servers list
+  // covers them. Sort by port for a stable display order.
+  const savedUrls = useMemo(() => new Set(servers.map((s) => s.url)), [servers])
+  const newDiscovered = useMemo(
+    () =>
+      discovered
+        .filter((entry) => !savedUrls.has(entry.url))
+        .sort((a, b) => a.port - b.port),
+    [discovered, savedUrls]
+  )
+
+  const handleAddDiscovered = useCallback(
+    (entry: DiscoveredServer) => {
+      addServer({ name: `localhost:${entry.port}`, url: entry.url })
+    },
+    [addServer]
+  )
+
+  // While the menu is open, re-probe localhost on a 5-second cadence
+  // so newly-started agents servers appear (and stopped ones drop)
+  // without a manual refresh button. Background discovery in the
+  // main process still runs every 30s when the menu is closed —
+  // this loop just tightens the cadence for the moment the user
+  // is actively looking at the list. Probe results are broadcast
+  // via `desktop:state-changed`, so our existing subscription
+  // updates `discovered` automatically; we don't need the return
+  // value here.
+  useEffect(() => {
+    if (!isDesktop || !menuOpen) return
+    let cancelled = false
+    const tick = () => {
+      void rescanDiscoveredServers().catch(() => {
+        // Swallow — main will report errors via state if it cares.
+      })
+    }
+    tick()
+    const interval = setInterval(() => {
+      if (!cancelled) tick()
+    }, DISCOVERY_REFRESH_MS)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [isDesktop, menuOpen])
 
   const status: ServerStatus = !activeServer
     ? `unset`
@@ -43,24 +116,14 @@ export function ServerPicker(): React.ReactElement {
       ? `ok`
       : `down`
 
-  // Dismissing the dialog when there is no configured server would leave
-  // the app in an unusable state — block it until at least one entry has
-  // been added. (`useServerConnection` seeds a fallback "This Server"
-  // entry on first load, so this is a defensive guard rather than a
-  // common path.)
-  const canDismissAdd = servers.length > 0
-
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open && !canDismissAdd) return
-      setAdding(open)
-    },
-    [canDismissAdd]
-  )
+  // Dialog is always dismissible. The picker tile already shows
+  // "No server" as a valid empty state, and the user can re-open
+  // the form any time from the Add server menu item — there's no
+  // need to trap them in the modal on first launch.
 
   return (
     <>
-      <Menu.Root>
+      <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <Menu.Trigger
           render={
             <button
@@ -111,7 +174,25 @@ export function ServerPicker(): React.ReactElement {
               </Menu.Item>
             )
           })}
-          {servers.length > 0 && <Menu.Separator />}
+          {isDesktop && newDiscovered.length > 0 && (
+            <>
+              {servers.length > 0 && <Menu.Separator />}
+              {newDiscovered.map((entry) => (
+                <Menu.Item
+                  key={entry.url}
+                  onSelect={() => handleAddDiscovered(entry)}
+                >
+                  <span className={styles.menuRow}>
+                    <span className={styles.dot} data-state="unset" />
+                    <Text size={2} className={styles.menuRowName}>
+                      localhost:{entry.port}
+                    </Text>
+                  </span>
+                </Menu.Item>
+              ))}
+            </>
+          )}
+          <Menu.Separator />
           <Menu.Item onSelect={() => setAdding(true)}>
             <Plus size={14} />
             <Text size={2}>Add server</Text>
@@ -119,7 +200,7 @@ export function ServerPicker(): React.ReactElement {
         </Menu.Content>
       </Menu.Root>
 
-      <Dialog.Root open={adding} onOpenChange={handleOpenChange}>
+      <Dialog.Root open={adding} onOpenChange={setAdding}>
         <Dialog.Content maxWidth={440}>
           <Dialog.Title>Add server</Dialog.Title>
           <Dialog.Description>
@@ -131,7 +212,6 @@ export function ServerPicker(): React.ReactElement {
               addServer({ name, url })
               setAdding(false)
             }}
-            canCancel={canDismissAdd}
             onCancel={() => setAdding(false)}
           />
         </Dialog.Content>
@@ -143,11 +223,9 @@ export function ServerPicker(): React.ReactElement {
 function AddServerForm({
   onAdd,
   onCancel,
-  canCancel,
 }: {
   onAdd: (name: string, url: string) => void
   onCancel: () => void
-  canCancel: boolean
 }): React.ReactElement {
   const [name, setName] = useState(``)
   const [url, setUrl] = useState(``)
@@ -184,13 +262,7 @@ function AddServerForm({
         </Field>
       </Stack>
       <Stack gap={2} justify="end" className={styles.addFormActions}>
-        <Button
-          type="button"
-          variant="soft"
-          tone="neutral"
-          onClick={onCancel}
-          disabled={!canCancel}
-        >
+        <Button type="button" variant="soft" tone="neutral" onClick={onCancel}>
           Cancel
         </Button>
         <Button type="submit" disabled={!canSubmit}>

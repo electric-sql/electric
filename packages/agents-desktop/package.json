@@ -1,5 +1,6 @@
 {
   "name": "@electric-ax/agents-desktop",
+  "productName": "Electric Agents",
   "private": true,
   "version": "0.0.0",
   "type": "module",

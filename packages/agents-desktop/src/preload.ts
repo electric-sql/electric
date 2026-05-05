@@ -25,13 +25,44 @@ type ServerConfig = {
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
 
+type DiscoveredServer = {
+  url: string
+  port: number
+  lastSeen: number
+}
+
 type DesktopState = {
   runtimeStatus: DesktopRuntimeStatus
   runtimeUrl: string | null
   activeServer: ServerConfig | null
   workingDirectory: string | null
   error: string | null
+  discoveredServers: Array<DiscoveredServer>
 }
+
+type ApiKeys = {
+  anthropic: string | null
+  openai: string | null
+  brave: string | null
+}
+
+type ApiKeysStatus = {
+  hasAnyKey: boolean
+  saved: ApiKeys
+  suggested: ApiKeys
+}
+
+// Mirror of `DesktopCommand` in main.ts. Kept as a string union here so
+// the preload bundle has zero runtime cost; main is the source of
+// truth for which commands actually fire.
+type DesktopCommand =
+  | `new-chat`
+  | `close-tile`
+  | `toggle-sidebar`
+  | `open-search`
+  | `split-right`
+  | `split-down`
+  | `cycle-tile`
 
 const api = {
   getServers: (): Promise<Array<ServerConfig>> =>
@@ -45,6 +76,12 @@ const api = {
   restartRuntime: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:restart-runtime`),
   stopRuntime: (): Promise<void> => ipcRenderer.invoke(`desktop:stop-runtime`),
+  rescanServers: (): Promise<Array<DiscoveredServer>> =>
+    ipcRenderer.invoke(`desktop:rescan-servers`),
+  getApiKeysStatus: (): Promise<ApiKeysStatus> =>
+    ipcRenderer.invoke(`desktop:get-api-keys-status`),
+  saveApiKeys: (keys: ApiKeys): Promise<void> =>
+    ipcRenderer.invoke(`desktop:save-api-keys`, keys),
   getWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:get-working-directory`),
   chooseWorkingDirectory: (): Promise<string | null> =>
@@ -56,6 +93,16 @@ const api = {
       callback(state)
     ipcRenderer.on(`desktop:state-changed`, listener)
     return () => ipcRenderer.removeListener(`desktop:state-changed`, listener)
+  },
+  onDesktopCommand: (
+    callback: (command: DesktopCommand) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      command: DesktopCommand
+    ) => callback(command)
+    ipcRenderer.on(`desktop:command`, listener)
+    return () => ipcRenderer.removeListener(`desktop:command`, listener)
   },
 }
 
