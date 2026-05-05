@@ -52,7 +52,6 @@ export function Sidebar({
   selectedEntityUrl,
   onSelectEntity,
   onOpenEntityInSplit,
-  onPreloadEntity,
   pinnedUrls,
   onTogglePin,
 }: {
@@ -64,7 +63,6 @@ export function Sidebar({
    * the workspace helpers in `RootShell`.
    */
   onOpenEntityInSplit?: (url: string) => void
-  onPreloadEntity?: (url: string) => void
   pinnedUrls: Array<string>
   onTogglePin: (url: string) => void
 }): React.ReactElement {
@@ -166,7 +164,6 @@ export function Sidebar({
     selectedEntityUrl,
     onSelectEntity,
     onOpenEntityInSplit,
-    onPreloadEntity,
     pinnedUrls,
     onTogglePin,
     hoverHandle,

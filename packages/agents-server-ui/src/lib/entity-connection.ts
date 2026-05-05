@@ -55,12 +55,23 @@ function scheduleEviction(key: string, entry: CachedConnection): void {
   }, 30_000)
 }
 
+function abortError(): DOMException {
+  return new DOMException(`Entity stream preload was aborted`, `AbortError`)
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw abortError()
+  }
+}
+
 function getOrCreateConnection(opts: {
   baseUrl: string
   entityUrl: string
   customState?: UICustomState
+  signal?: AbortSignal
 }): { key: string; entry: CachedConnection } {
-  const { baseUrl, entityUrl, customState } = opts
+  const { baseUrl, entityUrl, customState, signal } = opts
   const key = cacheKey(baseUrl, entityUrl)
   const existing = connectionCache.get(key)
   if (existing) {
@@ -68,7 +79,12 @@ function getOrCreateConnection(opts: {
     return { key, entry: existing }
   }
 
-  const promise = connectEntityStreamFresh({ baseUrl, entityUrl, customState })
+  const promise = connectEntityStreamFresh({
+    baseUrl,
+    entityUrl,
+    customState,
+    signal,
+  })
   const entry: CachedConnection = { promise, refs: 0, evictionTimer: null }
   connectionCache.set(key, entry)
   promise.catch(() => {
@@ -77,10 +93,37 @@ function getOrCreateConnection(opts: {
   return { key, entry }
 }
 
+async function preloadWithAbort(
+  db: EntityStreamDBWithActions,
+  signal?: AbortSignal
+): Promise<void> {
+  if (!signal) {
+    await db.preload()
+    return
+  }
+
+  throwIfAborted(signal)
+
+  let abort: (() => void) | null = null
+  const aborted = new Promise<never>((_, reject) => {
+    abort = () => reject(abortError())
+    signal.addEventListener(`abort`, abort, { once: true })
+  })
+
+  try {
+    await Promise.race([db.preload(), aborted])
+  } finally {
+    if (abort) {
+      signal.removeEventListener(`abort`, abort)
+    }
+  }
+}
+
 export async function preloadEntityStream(opts: {
   baseUrl: string
   entityUrl: string
   customState?: UICustomState
+  signal?: AbortSignal
 }): Promise<void> {
   const { key, entry } = getOrCreateConnection(opts)
   try {
@@ -120,21 +163,30 @@ async function connectEntityStreamFresh(opts: {
   baseUrl: string
   entityUrl: string
   customState?: UICustomState
+  signal?: AbortSignal
 }): Promise<{ db: EntityStreamDBWithActions; close: () => void }> {
-  const { baseUrl, entityUrl, customState } = opts
+  const { baseUrl, entityUrl, customState, signal } = opts
+  throwIfAborted(signal)
   const res = await fetch(`${baseUrl}${entityUrl}`, {
     headers: { accept: `application/json` },
+    signal,
   })
   if (!res.ok) {
     throw new Error(`Failed to fetch entity at ${entityUrl}: ${res.statusText}`)
   }
   await res.body?.cancel()
+  throwIfAborted(signal)
   const streamUrl = `${baseUrl}${getMainStreamPath(entityUrl)}`
   const db = createEntityStreamDB(
     streamUrl,
     customState as unknown as Parameters<typeof createEntityStreamDB>[1]
   )
-  await db.preload()
+  try {
+    await preloadWithAbort(db, signal)
+  } catch (err) {
+    db.close()
+    throw err
+  }
 
   return { db, close: () => db.close() }
 }
