@@ -414,11 +414,9 @@
   white-space: pre;
 }
 
-/* Shiki returns each token with an inline `style` containing both
-   `--shiki-light` and `--shiki-dark` CSS variables plus
-   `color: var(--shiki-light)`. The default already lights up
-   correctly in light mode; for dark mode swap to the dark variable
-   on every token span inside a code block body. */
+.agent-ui-markdown [data-md-code-block-line] span[style*='--shiki'] {
+  color: var(--shiki-light, inherit);
+}
 [data-theme='dark']
   .agent-ui-markdown
   [data-md-code-block-line]
