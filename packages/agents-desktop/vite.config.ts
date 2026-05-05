@@ -1,33 +1,39 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, type PluginOption } from 'vite'
 import electron from 'vite-plugin-electron/simple'
 
 const RENDERER_DEV_SERVER_URL = `http://localhost:5183`
+const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = path.resolve(PACKAGE_DIR, `../..`)
 
-/**
- * Treat any bare module specifier as external — i.e. let Node
- * resolve it from `node_modules` at runtime. This is the standard
- * pattern for Electron main / preload bundles:
- *
- *  - Avoids dragging optional native deps (jsdom → canvas, sharp,
- *    keytar, …) into the bundle and failing the build when they're
- *    not actually installed.
- *  - Keeps the bundled `main.js` small (just our own source) so any
- *    rebuild during dev stays sub-second.
- *  - Works in dev (workspace `node_modules` is symlinked) and in
- *    production (electron-builder ships the package's `node_modules`
- *    alongside the bundled main).
- *
- * Entry modules and any path-like import (relative, absolute) stay
- * internal so they actually get bundled.
- */
+const MUST_EXTERNALIZE = new Set([
+  `electron`,
+  `better-sqlite3`,
+  `sqlite-vec`,
+  `canvas`,
+  `bufferutil`,
+  `utf-8-validate`,
+  `jsdom`,
+  `pino`,
+  `pino-pretty`,
+])
+
 function externalizeBareImports(
   id: string,
   parent: string | undefined
 ): boolean {
   if (parent === undefined) return false
-  if (id.startsWith(`.`)) return false
-  if (id.startsWith(`/`) || /^[A-Za-z]:[\\/]/.test(id)) return false
-  return true
+  if (MUST_EXTERNALIZE.has(id)) return true
+  const pkgName = id.startsWith(`@`)
+    ? id.split(`/`).slice(0, 2).join(`/`)
+    : id.split(`/`)[0]
+  if (MUST_EXTERNALIZE.has(pkgName)) return true
+  if (id.includes(`node_modules`)) {
+    const match = id.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/)
+    if (match && MUST_EXTERNALIZE.has(match[1])) return true
+  }
+  return false
 }
 
 // vite-plugin-electron ships its own bundled `Plugin` type derived
@@ -65,6 +71,22 @@ const electronPlugin = electron as unknown as (
  *    separately by `agents-server-ui`'s `build:desktop` script.
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@electric-ax/agents': path.resolve(
+        REPO_ROOT,
+        `packages/agents/src/index.ts`
+      ),
+      '@electric-ax/agents-runtime': path.resolve(
+        REPO_ROOT,
+        `packages/agents-runtime/src/index.ts`
+      ),
+      '@electric-ax/agents-runtime/tools': path.resolve(
+        REPO_ROOT,
+        `packages/agents-runtime/src/tools.ts`
+      ),
+    },
+  },
   server: {
     port: 0,
     strictPort: false,
@@ -90,11 +112,13 @@ export default defineConfig({
             minify: false,
             rollupOptions: {
               external: externalizeBareImports,
-              output: {
-                entryFileNames: `main.js`,
-                format: `es`,
-                inlineDynamicImports: true,
-              },
+              output: [
+                {
+                  entryFileNames: `main.cjs`,
+                  format: `cjs`,
+                  inlineDynamicImports: true,
+                },
+              ],
             },
           },
         },
