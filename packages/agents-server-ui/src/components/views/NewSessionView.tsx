@@ -21,6 +21,17 @@ import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
  */
 const DEFAULT_AGENT_NAME = `horton`
 
+const HERO_TITLES = [
+  `Let’s ship`,
+  `Let’s create`,
+  `Let’s build`,
+  `Let’s explore`,
+  `Let’s debug`,
+  `Let’s design`,
+  `Let’s hack`,
+  `Let’s improve`,
+] as const
+
 interface SchemaProperty {
   type?: string
   enum?: Array<unknown>
@@ -206,12 +217,15 @@ function Picker({
   onChangeWorkingDirectory: (path: string | null) => void
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
+  const [heroTitle] = useState(
+    () => HERO_TITLES[Math.floor(Math.random() * HERO_TITLES.length)]
+  )
 
   return (
     <Stack direction="column" gap={5}>
       <div className={styles.heading}>
         <Text size={7} as="h1" className={styles.headingTitle}>
-          Let’s ship
+          {heroTitle}
         </Text>
         <span className={styles.headingSubtitle}>
           {defaultAgent
