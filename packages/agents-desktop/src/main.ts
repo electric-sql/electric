@@ -96,6 +96,15 @@ const TRAY_ICON_2X_PATH = path.resolve(
 )
 const APP_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/icon.png`)
 const APP_DISPLAY_NAME = `Electric Agents`
+const MAX_CONNECTIONS_PER_HOST = `256`
+
+// Electric streams can hold many long-polling HTTP requests open to the same
+// agents server. Raise Chromium's default per-host connection cap before
+// Electron creates its network context so those streams do not queue behind it.
+app.commandLine.appendSwitch(
+  `max-connections-per-host`,
+  MAX_CONNECTIONS_PER_HOST
+)
 
 /**
  * When set, the renderer is loaded from this dev-server URL instead
