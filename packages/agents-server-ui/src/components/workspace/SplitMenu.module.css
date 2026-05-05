@@ -1,0 +1,94 @@
+.shortcut {
+  margin-left: auto;
+  color: var(--ds-gray-11);
+  font-size: var(--ds-font-size-1, 12px);
+  padding-left: 16px;
+}
+
+/* Section label inside Menu.Content. Plain styled span (not Base UI's
+ * Menu.GroupLabel, which crashes when used outside a Menu.Group). */
+.sectionLabel {
+  padding: 6px 8px 2px;
+  font-size: var(--ds-font-size-1, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ds-gray-11);
+  user-select: none;
+}
+
+/* ---- ViewRow ----------------------------------------------------- */
+/* Layout inside the Menu.Item:
+ *   [icon] Label [✓?] (spacer) [→][↓]
+ * We rely on the parent Menu.Item's padding + hover styles, and just
+ * lay out our children with flex. The trailing buttons claim a small
+ * fixed width and stop click propagation so the row's onSelect (open
+ * here) doesn't fire when they're targeted. */
+
+.viewRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewActiveTick {
+  color: var(--ds-gray-11);
+  font-size: var(--ds-font-size-1, 12px);
+}
+
+.viewRowSpacer {
+  flex: 1 1 auto;
+  /* Min-width so there's always at least a small visual gap between
+   * the label/checkmark and the trailing action buttons even on a
+   * narrow popup. */
+  min-width: 12px;
+}
+
+.viewRowAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-gray-11);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* The row uses `gap: 8px` to separate label/icon/checkmark, but the
+ * two trailing action buttons should sit right next to each other —
+ * counter the row gap with a negative margin so they end up touching
+ * (a single 22px button width worth of pairing, not gapped). */
+.viewRowAction + .viewRowAction {
+  margin-left: -8px;
+}
+
+.viewRowAction:hover {
+  background: var(--ds-gray-a5);
+  color: var(--ds-gray-12);
+}
+
+.viewRowAction:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: -1px;
+}
+
+.inspectPre {
+  background: var(--ds-gray-a3);
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 12px;
+  max-height: 400px;
+  font-family: var(--ds-font-mono);
+}
+
+.dialogActions {
+  margin-top: var(--ds-space-3);
+}
+
+.killActions {
+  margin-top: var(--ds-space-4);
+}

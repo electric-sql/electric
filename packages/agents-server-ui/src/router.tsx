@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import {
   Outlet,
   createHashHistory,
@@ -8,13 +8,8 @@ import {
   useNavigate,
   useParams,
 } from '@tanstack/react-router'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq } from '@tanstack/db'
-import { useServerConnection } from './hooks/useServerConnection'
+import { z } from 'zod'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
-import { useElectricAgents } from './lib/ElectricAgentsProvider'
-import type { ElectricEntity } from './lib/ElectricAgentsProvider'
-import { useEntityTimeline } from './hooks/useEntityTimeline'
 import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
@@ -24,22 +19,21 @@ import {
   SearchPaletteProvider,
   useSearchPalette,
 } from './hooks/useSearchPalette'
+import { WorkspaceProvider, useWorkspace } from './hooks/useWorkspace'
+import { useWorkspaceHotkeys } from './hooks/useWorkspaceHotkeys'
+import { useWorkspacePersistence } from './hooks/useWorkspacePersistence'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
-import { EntityHeader } from './components/EntityHeader'
-import { EntityTimeline } from './components/EntityTimeline'
-import { EntityContextDrawer } from './components/EntityContextDrawer'
-import { MessageInput } from './components/MessageInput'
-import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
-import { NewSessionPage } from './components/NewSessionPage'
-import { Stack } from './ui'
+import { Workspace } from './components/workspace/Workspace'
 import styles from './router.module.css'
 
 function RootLayout(): React.ReactElement {
   return (
     <SidebarCollapsedProvider>
       <SearchPaletteProvider>
-        <RootShell />
+        <WorkspaceProvider>
+          <RootShell />
+        </WorkspaceProvider>
       </SearchPaletteProvider>
     </SidebarCollapsedProvider>
   )
@@ -50,6 +44,7 @@ function RootShell(): React.ReactElement {
   const navigate = useNavigate()
   const { collapsed, toggle } = useSidebarCollapsed()
   const search = useSearchPalette()
+  const { helpers } = useWorkspace()
 
   useHotkey(`mod+b`, toggle)
   useHotkey(`mod+k`, (e) => {
@@ -62,6 +57,11 @@ function RootShell(): React.ReactElement {
   // we fall back to a combo that isn't claimed by the chrome).
   // The displayed shortcut hint switches per environment via
   // `NewSessionKey` / `newSessionLabel`.
+  //
+  // Navigating to `/` is the simplest trigger: the URL → workspace
+  // effect in `<Workspace>` then focuses an existing new-session
+  // tile or replaces the active tile with a fresh one. Going through
+  // the URL means the persistence layer sees the change too.
   const openNewSession = useCallback(
     (e: KeyboardEvent) => {
       e.preventDefault()
@@ -72,6 +72,9 @@ function RootShell(): React.ReactElement {
   useHotkey(`mod+n`, openNewSession)
   useHotkey(`mod+shift+o`, openNewSession)
 
+  useWorkspaceHotkeys()
+  useWorkspacePersistence()
+
   const navigateToEntity = useCallback(
     (entityUrl: string) => {
       navigate({
@@ -80,6 +83,25 @@ function RootShell(): React.ReactElement {
       })
     },
     [navigate]
+  )
+
+  // ⌘/Ctrl-click + middle-click on a sidebar row → open the entity to
+  // the right of the active tile, rather than replacing it (matches
+  // VS Code's "open to side" gesture).
+  const openEntityInSplit = useCallback(
+    (entityUrl: string) => {
+      const tileId = helpers.activeTileId
+      if (!tileId) {
+        // Empty workspace — fall through to plain navigation, which
+        // will bootstrap the workspace's first tile.
+        navigateToEntity(entityUrl)
+        return
+      }
+      helpers.openEntity(entityUrl, {
+        target: { tileId, position: `split-right` },
+      })
+    },
+    [helpers, navigateToEntity]
   )
 
   const params = useParams({ strict: false })
@@ -92,6 +114,7 @@ function RootShell(): React.ReactElement {
         <Sidebar
           selectedEntityUrl={selectedEntityUrl}
           onSelectEntity={navigateToEntity}
+          onOpenEntityInSplit={openEntityInSplit}
           pinnedUrls={pinnedUrls}
           onTogglePin={togglePin}
         />
@@ -102,190 +125,37 @@ function RootShell(): React.ReactElement {
   )
 }
 
-function EntityPage(): React.ReactElement {
-  const { _splat } = useParams({ from: `/entity/$` })
-  const entityUrl = `/${_splat}`
-  const { activeServer } = useServerConnection()
-  const { pinnedUrls, togglePin } = usePinnedEntities()
-  const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
-  const navigate = useNavigate()
+/**
+ * Search-param schema for the workspace routes.
+ *
+ * - `view`   optional view id (e.g. `state-explorer`). Omitted from
+ *            the URL when it matches the default view (`chat`) so
+ *            `/entity/foo` stays clean for the common case.
+ * - `layout` optional shareable layout payload. When present we
+ *            hydrate the workspace from it and *strip the param*
+ *            (see `<Workspace>`'s ?layout effect) so the address bar
+ *            settles back to "active tile only".
+ *
+ * Both index (`/`) and entity routes share this schema because both
+ * accept `?layout=` (a layout link can land on either route — the
+ * decoder restores the full tree regardless).
+ */
+const workspaceSearchSchema = z.object({
+  view: z.string().optional(),
+  layout: z.string().optional(),
+})
 
-  const { data: matchingEntities = [] } = useLiveQuery(
-    (query) => {
-      if (!entitiesCollection) return undefined
-      return query
-        .from({ e: entitiesCollection })
-        .where(({ e }) => eq(e.url, entityUrl))
-    },
-    [entitiesCollection, entityUrl]
-  )
-  const selectedEntity = matchingEntities.at(0) ?? null
-  const isSpawning = selectedEntity?.status === `spawning`
-  const entityStopped = selectedEntity?.status === `stopped`
-
-  const [stateExplorerOpen, setStateExplorerOpen] = useState(false)
-  const [statePanelWidth, setStatePanelWidth] = useState(0.5)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [killError, setKillError] = useState<string | null>(null)
-  const [forkError, setForkError] = useState<string | null>(null)
-  const [forking, setForking] = useState(false)
-
-  const handleKill = useCallback(() => {
-    if (!killEntity) return
-    setKillError(null)
-    const tx = killEntity(entityUrl)
-    tx.isPersisted.promise.catch((err: Error) => {
-      setKillError(err.message)
-    })
-  }, [killEntity, entityUrl])
-
-  const handleFork = useCallback(() => {
-    if (!forkEntity || forking) return
-    setForkError(null)
-    setForking(true)
-    forkEntity(entityUrl)
-      .then((root) => {
-        navigate({
-          to: `/entity/$`,
-          params: { _splat: root.url.replace(/^\//, ``) },
-        })
-      })
-      .catch((err: Error) => {
-        setForkError(err.message)
-      })
-      .finally(() => {
-        setForking(false)
-      })
-  }, [entityUrl, forkEntity, forking, navigate])
-
-  if (!selectedEntity) {
-    return (
-      <Stack
-        align="center"
-        justify="center"
-        grow
-        className={styles.entityShell}
-      >
-        <span>Loading entity...</span>
-      </Stack>
-    )
-  }
-
-  const baseUrl = activeServer?.url ?? ``
-  const connectUrl = isSpawning ? null : entityUrl
-
-  return (
-    <Stack direction="column" className={styles.entityShell}>
-      <EntityHeader
-        entity={selectedEntity}
-        pinned={pinnedUrls.includes(entityUrl)}
-        onTogglePin={() => togglePin(entityUrl)}
-        onKill={handleKill}
-        killError={killError}
-        onFork={forkEntity && !selectedEntity.parent ? handleFork : undefined}
-        forkError={forkError}
-        forking={forking}
-        stateExplorerOpen={stateExplorerOpen}
-        onToggleStateExplorer={() => setStateExplorerOpen((prev) => !prev)}
-      />
-      <Stack ref={containerRef} className={styles.entityBody}>
-        <Stack direction="column" className={styles.entityMain}>
-          <GenericEntityBody
-            baseUrl={baseUrl}
-            entityUrl={connectUrl}
-            entity={selectedEntity}
-            entityStopped={entityStopped}
-            isSpawning={isSpawning}
-          />
-        </Stack>
-        {stateExplorerOpen && (
-          <>
-            <div
-              className={styles.splitter}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                const container = containerRef.current
-                if (!container) return
-                const startX = e.clientX
-                const startWidth = statePanelWidth
-                const rect = container.getBoundingClientRect()
-                const onMouseMove = (ev: MouseEvent) => {
-                  const dx = startX - ev.clientX
-                  const newWidth = Math.min(
-                    0.7,
-                    Math.max(0.2, startWidth + dx / rect.width)
-                  )
-                  setStatePanelWidth(newWidth)
-                }
-                const onMouseUp = () => {
-                  document.removeEventListener(`mousemove`, onMouseMove)
-                  document.removeEventListener(`mouseup`, onMouseUp)
-                  document.body.style.cursor = ``
-                  document.body.style.userSelect = ``
-                }
-                document.body.style.cursor = `col-resize`
-                document.body.style.userSelect = `none`
-                document.addEventListener(`mousemove`, onMouseMove)
-                document.addEventListener(`mouseup`, onMouseUp)
-              }}
-            />
-            <Stack
-              direction="column"
-              className={styles.statePanel}
-              style={{ flex: `0 0 ${statePanelWidth * 100}%` }}
-            >
-              <StateExplorerPanel baseUrl={baseUrl} entityUrl={entityUrl} />
-            </Stack>
-          </>
-        )}
-      </Stack>
-    </Stack>
-  )
-}
-
-function GenericEntityBody({
-  baseUrl,
-  entityUrl,
-  entity,
-  entityStopped,
-  isSpawning,
-}: {
-  baseUrl: string
-  entityUrl: string | null
-  entity: ElectricEntity
-  entityStopped: boolean
-  isSpawning: boolean
-}): React.ReactElement {
-  const { entries, db, loading, error } = useEntityTimeline(
-    baseUrl || null,
-    entityUrl
-  )
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (error && !isSpawning) {
-      navigate({ to: `/` })
-    }
-  }, [error, navigate, isSpawning])
-
-  return (
-    <>
-      <EntityTimeline
-        entries={entries}
-        loading={loading}
-        error={error}
-        entityStopped={entityStopped}
-        cacheKey={`${baseUrl}${entityUrl ?? ``}`}
-      />
-      <MessageInput
-        db={db}
-        baseUrl={baseUrl}
-        entityUrl={entityUrl ?? ``}
-        disabled={entityStopped || !db}
-        drawer={<EntityContextDrawer entity={entity} />}
-      />
-    </>
-  )
+/**
+ * Thin route component — all the rendering work happens inside
+ * `<Workspace>`, which reads the route params (entity splat + ?view)
+ * via TanStack Router hooks and reflects them into the workspace
+ * tree. Keeping the route handler this small means the component tree
+ * underneath stays the same regardless of which entity is selected
+ * (or whether the new-session tile is active), which lets per-tile
+ * state (scroll, selection, etc.) survive navigation between tiles.
+ */
+function WorkspacePage(): React.ReactElement {
+  return <Workspace />
 }
 
 const rootRoute = createRootRoute({ component: RootLayout })
@@ -293,13 +163,15 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/`,
-  component: NewSessionPage,
+  component: WorkspacePage,
+  validateSearch: workspaceSearchSchema,
 })
 
 const entityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/entity/$`,
-  component: EntityPage,
+  component: WorkspacePage,
+  validateSearch: workspaceSearchSchema,
 })
 
 const routeTree = rootRoute.addChildren([indexRoute, entityRoute])

@@ -5,6 +5,58 @@
   flex-direction: column;
   background: var(--ds-bg);
   overflow: hidden;
+  /* Anchor for the .dropHint overlay below — without this the
+   * absolutely-positioned hint would escape the page and cover the
+   * sidebar too. */
+  position: relative;
+}
+
+/* ---- Drag-and-drop targeting ----------------------------------- */
+/* When a workspace drag begins anywhere in the document we render a
+ * single full-page drop hint over the new-session content. The hint
+ * has two visual states:
+ *   - .dropArmed (a workspace drag is in flight)  → soft outline
+ *   - .dropOver  (the cursor is over this page)   → strong outline
+ *                                                   + label visible
+ * Sidebar entity drops navigate to that entity, which bootstraps the
+ * workspace as a single tile via the URL → workspace effect in
+ * <Workspace>. */
+.dropHint {
+  position: absolute;
+  inset: var(--ds-space-3);
+  pointer-events: none;
+  border: 2px dashed var(--ds-accent-a6);
+  border-radius: var(--ds-radius-4);
+  background: var(--ds-accent-a2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.45;
+  transition:
+    opacity 0.12s ease-out,
+    background 0.12s ease-out,
+    border-color 0.12s ease-out;
+  z-index: 20;
+}
+
+.dropHintActive {
+  opacity: 1;
+  background: var(--ds-accent-a4);
+  border-color: var(--ds-accent-a9);
+}
+
+.dropHintLabel {
+  padding: 6px 12px;
+  border-radius: var(--ds-radius-2);
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11);
+  font-size: var(--ds-text-sm);
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+
+.dropHintActive .dropHintLabel {
+  opacity: 1;
 }
 
 .body {

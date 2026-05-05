@@ -2,23 +2,20 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
-import { useNavigate } from '@tanstack/react-router'
 import { nanoid } from 'nanoid'
-import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { useServerConnection } from '../hooks/useServerConnection'
-import { Select, Stack, Text } from '../ui'
-import { MainHeader } from './MainHeader'
-import { SchemaForm, hasSchemaProperties, isObjectSchema } from './SchemaForm'
-import styles from './NewSessionPage.module.css'
-import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
+import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
+import { useServerConnection } from '../../hooks/useServerConnection'
+import { useWorkspace } from '../../hooks/useWorkspace'
+import { Select, Stack, Text } from '../../ui'
+import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
+import styles from '../NewSessionPage.module.css'
+import type { ElectricEntityType } from '../../lib/ElectricAgentsProvider'
+import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
 
 /**
  * The "default agent" — when an entity type with this name is registered
- * we surface a chat-input quick-start at the top of the new-session page
+ * we surface a chat-input quick-start at the top of the new-session view
  * so the most common flow is one keystroke away.
- *
- * TODO: replace this with a server-side flag (e.g. tags.default) once
- * the entity_types schema gets one.
  */
 const DEFAULT_AGENT_NAME = `horton`
 
@@ -31,18 +28,23 @@ interface SchemaProperty {
 }
 
 /**
- * "New session" page shown at `/`.
+ * Standalone view: the new-session picker.
  *
- * If a `horton` entity type is available we render a chat-style
- * composer at the top of the page so the user can just type and hit
- * Enter to start a new conversation. Other agent types are listed
- * below as cards. Picking one of those either spawns immediately
- * (no schema) or transitions to an inline form.
+ * Rendered inside a `<TileContainer>` like any other view, so it can
+ * be split / dragged / replaced through the same workspace machinery.
+ *
+ * When the user spawns a session, the workspace helper replaces *this
+ * tile* with the new entity (rather than navigating off the page) so
+ * other tiles in adjacent splits stay intact. The address bar still
+ * reflects the active tile via the URL ↔ workspace sync in
+ * `<Workspace />`.
  */
-export function NewSessionPage(): React.ReactElement {
-  const navigate = useNavigate()
+export function NewSessionView({
+  tileId,
+}: StandaloneViewProps): React.ReactElement {
   const { entityTypesCollection, spawnEntity } = useElectricAgents()
   const { activeServer } = useServerConnection()
+  const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -73,6 +75,11 @@ export function NewSessionPage(): React.ReactElement {
    * user message. We prefer this two-step over `initialMessage` on
    * spawn so the message goes through the same path as the regular
    * MessageInput (which is the proven path that wakes horton).
+   *
+   * On success we *replace this tile* with the freshly-created entity.
+   * That keeps the workspace layout intact (other tiles around us
+   * stay in place) and feels like opening a file in VS Code's
+   * "untitled" tab — the placeholder turns into the new content.
    */
   const doSpawn = useCallback(
     async (
@@ -84,9 +91,9 @@ export function NewSessionPage(): React.ReactElement {
       setError(null)
       const name = nanoid(10)
       const tx = spawnEntity({ type: typeName, name, args })
-      navigate({
-        to: `/entity/$`,
-        params: { _splat: `${typeName}/${name}` },
+      const entityUrl = `/${typeName}/${name}`
+      helpers.openEntity(entityUrl, {
+        target: { tileId, position: `replace` },
       })
       try {
         await tx.isPersisted.promise
@@ -110,7 +117,7 @@ export function NewSessionPage(): React.ReactElement {
         )
       }
     },
-    [navigate, spawnEntity, baseUrl]
+    [helpers, spawnEntity, baseUrl, tileId]
   )
 
   const handleSelectType = useCallback(
@@ -133,28 +140,25 @@ export function NewSessionPage(): React.ReactElement {
   )
 
   return (
-    <div className={styles.shell}>
-      <MainHeader title={<Text size={2}>New session</Text>} />
-      <div className={styles.body}>
-        <div className={styles.container}>
-          {selected ? (
-            <SelectedAgentForm
-              entityType={selected}
-              onCancel={() => setSelected(null)}
-              onSubmit={(args) => void doSpawn(selected.name, args)}
-              error={error}
-            />
-          ) : (
-            <Picker
-              defaultAgent={defaultAgent}
-              otherAgents={otherAgents}
-              onSelectType={handleSelectType}
-              onStartDefault={handleStartDefault}
-              spawnReady={Boolean(spawnEntity)}
-              error={error}
-            />
-          )}
-        </div>
+    <div className={styles.body}>
+      <div className={styles.container}>
+        {selected ? (
+          <SelectedAgentForm
+            entityType={selected}
+            onCancel={() => setSelected(null)}
+            onSubmit={(args) => void doSpawn(selected.name, args)}
+            error={error}
+          />
+        ) : (
+          <Picker
+            defaultAgent={defaultAgent}
+            otherAgents={otherAgents}
+            onSelectType={handleSelectType}
+            onStartDefault={handleStartDefault}
+            spawnReady={Boolean(spawnEntity)}
+            error={error}
+          />
+        )}
       </div>
     </div>
   )
@@ -284,12 +288,6 @@ function SelectedAgentForm({
   )
 }
 
-/**
- * Walk the agent's `creation_schema` and pull out the keys we know how
- * to render inline as compact controls (enums and booleans). Other
- * fields fall through to schema defaults; if they're required without
- * a default, the user can switch to the full form via "Other agents".
- */
 function inlineSchemaProperties(
   schema: unknown
 ): Array<{ key: string; prop: SchemaProperty }> {
@@ -319,12 +317,6 @@ function DefaultAgentComposer({
   const [submitting, setSubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-grow the textarea up to the CSS `max-height` cap as the
-  // user types (matches the chat composer in `MessageInput.tsx`).
-  // Reset to `auto` first so `scrollHeight` reports the natural
-  // content height, then assign that back as the inline height; the
-  // CSS bounds clamp it. Layout effect ensures the resize lands
-  // before paint so there's no one-frame flicker.
   useLayoutEffect(() => {
     const el = textareaRef.current
     if (!el) return
@@ -353,8 +345,6 @@ function DefaultAgentComposer({
     const trimmed = value.trim()
     if (!trimmed || disabled || submitting) return
     setSubmitting(true)
-    // Strip undefined/empty values so the server can fall back to schema
-    // defaults instead of receiving an explicit empty/null.
     const cleaned: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
@@ -437,13 +427,6 @@ function DefaultAgentComposer({
   )
 }
 
-/**
- * Tiny dropdown rendered as a borderless pill so it sits cleanly
- * in the composer footer without competing visually with the textarea.
- * Backed by the Base UI `Select` so we get a custom popover with proper
- * keyboard semantics (instead of the OS-native picker, which doesn't
- * blend with the rest of the surface).
- */
 function PillSelect({
   label,
   value,

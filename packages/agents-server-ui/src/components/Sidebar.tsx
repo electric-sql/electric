@@ -6,6 +6,7 @@ import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { bucketEntities } from '../lib/sessionGroups'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
+import { setDragPayload } from '../lib/workspace/dragPayload'
 import { SidebarHeader } from './SidebarHeader'
 import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
@@ -44,11 +45,18 @@ function useSidebarWidth(): readonly [number, (w: number) => void] {
 export function Sidebar({
   selectedEntityUrl,
   onSelectEntity,
+  onOpenEntityInSplit,
   pinnedUrls,
   onTogglePin,
 }: {
   selectedEntityUrl: string | null
   onSelectEntity: (url: string) => void
+  /**
+   * Optional ⌘/Ctrl-click + middle-click handler — opens an entity in
+   * a new split rather than replacing the active tile. Routed through
+   * the workspace helpers in `RootShell`.
+   */
+  onOpenEntityInSplit?: (url: string) => void
   pinnedUrls: Array<string>
   onTogglePin: (url: string) => void
 }): React.ReactElement {
@@ -123,6 +131,7 @@ export function Sidebar({
     childrenByParent,
     selectedEntityUrl,
     onSelectEntity,
+    onOpenEntityInSplit,
     pinnedUrls,
     onTogglePin,
     hoverHandle,
@@ -152,6 +161,15 @@ export function Sidebar({
           <button
             type="button"
             onClick={handleNewSession}
+            // Draggable so the user can drop a fresh new-session tile
+            // into any quadrant of an existing tile (creating a split)
+            // — gives them multiple new-session tiles at once. The
+            // browser only fires `dragstart` after the cursor moves,
+            // so a click that doesn't drag still triggers `onClick`.
+            draggable
+            onDragStart={(e) =>
+              setDragPayload(e, { kind: `sidebar-new-session` })
+            }
             className={styles.newSessionRow}
           >
             <span className={styles.newSessionIconSlot}>

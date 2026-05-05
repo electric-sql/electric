@@ -6,6 +6,7 @@ import {
 } from '@durable-streams/state'
 import { stream as createStream } from '@durable-streams/client'
 import { Badge, Select, Stack, Text } from '../../ui'
+import { Splitter } from '../workspace/Splitter'
 import { TypeList } from './TypeList'
 import { StateTable } from './StateTable'
 import { EventSidebar } from './EventSidebar'
@@ -404,33 +405,17 @@ export function StateExplorerPanel({
         />
       </Stack>
 
-      <div
-        className={styles.splitter}
-        onMouseDown={(e) => {
-          e.preventDefault()
-          const container = containerRef.current
-          if (!container) return
-          const startY = e.clientY
-          const startRatio = splitRatio
-          const rect = container.getBoundingClientRect()
-          const onMouseMove = (ev: MouseEvent) => {
-            const dy = ev.clientY - startY
-            const newRatio = Math.min(
-              0.8,
-              Math.max(0.15, startRatio + dy / rect.height)
-            )
-            setSplitRatio(newRatio)
-          }
-          const onMouseUp = () => {
-            document.removeEventListener(`mousemove`, onMouseMove)
-            document.removeEventListener(`mouseup`, onMouseUp)
-            document.body.style.cursor = ``
-            document.body.style.userSelect = ``
-          }
-          document.body.style.cursor = `row-resize`
-          document.body.style.userSelect = `none`
-          document.addEventListener(`mousemove`, onMouseMove)
-          document.addEventListener(`mouseup`, onMouseUp)
+      <Splitter
+        // Vertical = stacked-layout splitter (horizontal line, row-resize
+        // cursor). Drag deltas are cumulative from drag-start; the
+        // closure captures `splitRatio` from the render before the drag
+        // began, so `splitRatio + delta` always means start+cumulative.
+        direction="vertical"
+        measureContainer={() =>
+          containerRef.current?.getBoundingClientRect().height ?? 0
+        }
+        onResize={(delta) => {
+          setSplitRatio(Math.min(0.8, Math.max(0.15, splitRatio + delta)))
         }}
       />
 

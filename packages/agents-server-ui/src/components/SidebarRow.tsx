@@ -4,6 +4,7 @@ import { StatusDot } from './StatusDot'
 import { HoverCard, Text } from '../ui'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { formatAbsoluteDateTime, formatRelativeTime } from '../lib/formatTime'
+import { setDragPayload } from '../lib/workspace/dragPayload'
 import styles from './SidebarRow.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
@@ -32,7 +33,20 @@ type HoverCardHandle = ReturnType<
 type SidebarRowProps = {
   entity: ElectricEntity
   selected: boolean
+  /**
+   * Triggered for plain clicks. The row dispatches a different action
+   * for modifier-clicks (e.g. ⌘-click → open in new split); those go
+   * through `onOpenInSplit` instead so the sidebar can decide on a
+   * per-app basis what those modifiers mean.
+   */
   onSelect: () => void
+  /**
+   * Optional: triggered when the user ⌘/Ctrl-clicks the row (or
+   * middle-clicks). Used to open the entity in a new split rather
+   * than replacing the active tile. The sidebar wires this to
+   * `helpers.openEntity(url, { target: { groupId, position: 'split-right' }})`.
+   */
+  onOpenInSplit?: () => void
   depth?: number
   /** Number of immediate children. 0 means no expand affordance. */
   childCount?: number
@@ -79,6 +93,7 @@ export const SidebarRow = memo(function SidebarRow({
   entity,
   selected,
   onSelect,
+  onOpenInSplit,
   depth = 0,
   childCount = 0,
   expanded = false,
@@ -115,7 +130,34 @@ export const SidebarRow = memo(function SidebarRow({
           role="button"
           tabIndex={0}
           className={className}
-          onClick={onSelect}
+          draggable
+          onDragStart={(e) => {
+            setDragPayload(e, {
+              kind: `sidebar-entity`,
+              entityUrl: entity.url,
+            })
+          }}
+          onClick={(e) => {
+            // ⌘/Ctrl-click or middle-click → open in new split (when
+            // the sidebar wired up an `onOpenInSplit` handler);
+            // otherwise plain selection. Matches VS Code's
+            // ⌘-click-on-file-tree → open to side.
+            if (onOpenInSplit && (e.metaKey || e.ctrlKey || e.button === 1)) {
+              e.preventDefault()
+              onOpenInSplit()
+              return
+            }
+            onSelect()
+          }}
+          onAuxClick={(e) => {
+            // Middle-click also opens in split (button 1 doesn't always
+            // fire onClick on every browser; onAuxClick is the
+            // canonical handler).
+            if (onOpenInSplit && e.button === 1) {
+              e.preventDefault()
+              onOpenInSplit()
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === `Enter` || e.key === ` `) {
               e.preventDefault()
