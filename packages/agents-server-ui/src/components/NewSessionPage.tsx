@@ -387,6 +387,20 @@ function ProjectPicker({
       >
         <div className={styles.projectPopoverHeader}>Select your project</div>
 
+        <button
+          type="button"
+          className={styles.projectItem}
+          onClick={() => {
+            onChangeProject(null)
+            setOpen(false)
+          }}
+        >
+          No project
+          {!activeProject && (
+            <Check size={14} className={styles.projectItemCheck} />
+          )}
+        </button>
+
         {projects.map((p) => (
           <button
             key={p.id}
