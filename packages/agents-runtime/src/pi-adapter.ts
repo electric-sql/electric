@@ -89,6 +89,11 @@ export function toAgentHistory(
   const history: Array<AgentMessage> = []
   const toolNamesById = new Map<string, string>()
 
+  const lastAssistant = (): AgentMessage | undefined => {
+    const last = history[history.length - 1]
+    return last?.role === `assistant` ? last : undefined
+  }
+
   for (const message of messages) {
     switch (message.role) {
       case `user`:
@@ -99,30 +104,44 @@ export function toAgentHistory(
         } as AgentMessage)
         break
 
-      case `assistant`:
-        history.push({
-          role: `assistant`,
-          content: [{ type: `text`, text: message.content }],
-          timestamp: Date.now(),
-        } as AgentMessage)
+      case `assistant`: {
+        const prev = lastAssistant()
+        if (prev) {
+          ;(prev.content as Array<unknown>).push({
+            type: `text`,
+            text: message.content,
+          })
+        } else {
+          history.push({
+            role: `assistant`,
+            content: [{ type: `text`, text: message.content }],
+            timestamp: Date.now(),
+          } as AgentMessage)
+        }
         break
+      }
 
-      case `tool_call`:
+      case `tool_call`: {
         toolNamesById.set(message.toolCallId, message.toolName)
-        history.push({
-          role: `assistant`,
-          content: [
-            {
-              type: `toolCall`,
-              id: message.toolCallId,
-              name: message.toolName,
-              arguments:
-                (message.toolArgs as Record<string, unknown> | undefined) ?? {},
-            },
-          ],
-          timestamp: Date.now(),
-        } as AgentMessage)
+        const block = {
+          type: `toolCall`,
+          id: message.toolCallId,
+          name: message.toolName,
+          arguments:
+            (message.toolArgs as Record<string, unknown> | undefined) ?? {},
+        }
+        const prev = lastAssistant()
+        if (prev) {
+          ;(prev.content as Array<unknown>).push(block)
+        } else {
+          history.push({
+            role: `assistant`,
+            content: [block],
+            timestamp: Date.now(),
+          } as AgentMessage)
+        }
         break
+      }
 
       case `tool_result`:
         history.push({

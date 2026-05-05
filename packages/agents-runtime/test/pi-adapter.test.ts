@@ -230,4 +230,84 @@ describe(`toAgentHistory`, () => {
     expect(first?.role).toBe(`user`)
     expect(second?.role).toBe(`assistant`)
   })
+
+  it(`merges assistant text and tool_call into a single assistant message`, () => {
+    const messages: Array<LLMMessage> = [
+      { role: `user`, content: `Help me` },
+      { role: `assistant`, content: `Let me look that up` },
+      {
+        role: `tool_call`,
+        content: `lookup`,
+        toolCallId: `tc-0`,
+        toolName: `lookup`,
+        toolArgs: { q: `hello` },
+      },
+      {
+        role: `tool_result`,
+        content: `found it`,
+        toolCallId: `tc-0`,
+        isError: false,
+      },
+    ]
+
+    const history = toAgentHistory(messages)
+
+    const assistantMessages = history.filter((m) => m.role === `assistant`)
+    expect(assistantMessages).toHaveLength(1)
+
+    const assistant = assistantMessages[0] as AssistantMessage
+    expect(assistant.content).toHaveLength(2)
+    expect(assistant.content[0]).toMatchObject({
+      type: `text`,
+      text: `Let me look that up`,
+    })
+    expect(assistant.content[1]).toMatchObject({
+      type: `toolCall`,
+      id: `tc-0`,
+      name: `lookup`,
+    })
+  })
+
+  it(`keeps separate assistant turns after tool results`, () => {
+    const messages: Array<LLMMessage> = [
+      { role: `user`, content: `Do two things` },
+      { role: `assistant`, content: `I will do both` },
+      {
+        role: `tool_call`,
+        content: `{}`,
+        toolCallId: `tc-0`,
+        toolName: `tool_a`,
+        toolArgs: {},
+      },
+      {
+        role: `tool_result`,
+        content: `a`,
+        toolCallId: `tc-0`,
+        isError: false,
+      },
+      { role: `assistant`, content: `Now the second` },
+      {
+        role: `tool_call`,
+        content: `{}`,
+        toolCallId: `tc-1`,
+        toolName: `tool_b`,
+        toolArgs: {},
+      },
+      {
+        role: `tool_result`,
+        content: `b`,
+        toolCallId: `tc-1`,
+        isError: false,
+      },
+      { role: `assistant`, content: `All done` },
+    ]
+
+    const history = toAgentHistory(messages)
+
+    for (let i = 1; i < history.length; i++) {
+      if (history[i]!.role === `assistant`) {
+        expect(history[i - 1]!.role).not.toBe(`assistant`)
+      }
+    }
+  })
 })
