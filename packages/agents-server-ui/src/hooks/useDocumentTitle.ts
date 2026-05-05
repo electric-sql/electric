@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useLiveQuery } from '@tanstack/react-db'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { useWorkspace } from './useWorkspace'
@@ -28,8 +28,7 @@ export function useDocumentTitle(): void {
       if (!entitiesCollection || !activeEntityUrl) return undefined
       return q
         .from({ e: entitiesCollection })
-        .where(({ e }) => e.url === activeEntityUrl)
-        .limit(1)
+        .where(({ e }) => eq(e.url, activeEntityUrl))
     },
     [entitiesCollection, activeEntityUrl]
   )
