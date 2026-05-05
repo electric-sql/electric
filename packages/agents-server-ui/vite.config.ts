@@ -1,7 +1,9 @@
+import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { viteSingleFile } from 'vite-plugin-singlefile'
 
 const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const localNodeModules = (...segments: Array<string>): string =>
@@ -32,6 +34,7 @@ function desktopHtmlMarker(platform: `darwin` | `win32` = `darwin`): Plugin {
 
 export default defineConfig(({ command, mode }) => {
   const desktop = mode === `desktop`
+  const mobileEmbed = mode === `mobile-embed`
   // Desktop *build* serves the bundle via file:// from the Electron
   // app, so assets must be referenced with relative URLs (`./`). The
   // dev server, on the other hand, serves over http and needs an
@@ -40,7 +43,31 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base: desktop ? (desktopServe ? `/` : `./`) : `/__agent_ui/`,
-    plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
+    // Mobile embed needs the file-name prefix preserved on CSS module
+    // class names so the embed's mobile-only override sheet (which
+    // targets selectors like `[class*='EntityTimeline_content']`) can
+    // pin point individual rules from the desktop component sheets.
+    // Vite's default production hash (`_[local]_[hash]_[counter]`) drops
+    // the file name; restore it so the embed overrides keep matching
+    // across rebuilds.
+    ...(mobileEmbed
+      ? {
+          css: {
+            modules: {
+              generateScopedName: `[name]_[local]_[hash:base64:5]`,
+            },
+          },
+        }
+      : {}),
+    plugins: [
+      react(),
+      ...(desktop ? [desktopHtmlMarker()] : []),
+      // Mobile embed inlines all JS + CSS into a single HTML so the
+      // React Native side can ship one self-contained string.
+      ...(mobileEmbed
+        ? [viteSingleFile({ removeViteModuleLoader: true })]
+        : []),
+    ],
     resolve: {
       alias: {
         react: localNodeModules(`react`),
@@ -62,8 +89,25 @@ export default defineConfig(({ command, mode }) => {
       ],
     },
     build: {
-      outDir: desktop ? `dist-desktop` : `dist`,
+      outDir: mobileEmbed
+        ? `dist-mobile-embed`
+        : desktop
+          ? `dist-desktop`
+          : `dist`,
       emptyOutDir: true,
+      // Use `embed.html` as the lone entry for the mobile-embed bundle
+      // so the regular `index.html` (workspace shell) is excluded.
+      ...(mobileEmbed
+        ? {
+            rollupOptions: {
+              input: { index: resolve(__dirname, `embed.html`) },
+            },
+            // Keep things in a single chunk for the singlefile inliner.
+            assetsInlineLimit: 100 * 1024 * 1024,
+            chunkSizeWarningLimit: 100 * 1024,
+            cssCodeSplit: false,
+          }
+        : {}),
     },
   }
 })

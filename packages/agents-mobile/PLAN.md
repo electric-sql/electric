@@ -119,45 +119,47 @@ It should avoid:
 - `Sidebar`
 - desktop IPC hooks
 
-## Embed Route Contract
+## Embed Boot Contract
 
-The bundled web app can expose a minimal route/query contract.
+The native shell injects the initial config into `window.__MOBILE_EMBED__`
+**before** any embed script runs (using
+`WebView.injectedJavaScriptBeforeContentLoaded`). The embed reads it
+synchronously in `readEmbedConfig()` so the first paint already matches the
+host. URL hash params (`#serverUrl=…&entityUrl=…&view=…&theme=…`) are
+honoured as a fallback so `embed.html` can be opened in a normal browser
+during development.
 
-Example:
-
-```text
-embed.html?serverUrl=https%3A%2F%2Fagents.example.com&entityUrl=%2Fhorton%2Fabc123&view=chat&theme=dark
-```
-
-Supported views for v1:
-
-- `chat`
-- `state-explorer`
-
-The mobile app can start with query params only. Add `postMessage` later for richer bidirectional coordination.
+Supported views: `chat`, `state-explorer`.
 
 ## WebView Bridge
 
-Start minimal and expand when needed.
+The native ⇄ embed protocol is a tiny, typed JSON envelope passed over the
+WebView `postMessage` channel. Both sides share the schema in mirrored
+files (`packages/agents-mobile/src/webview/bridge.ts` and
+`packages/agents-server-ui/src/embed/bridge.ts`).
 
-Native to WebView:
+Native → embed (live updates after `ready`):
 
-- `serverUrl`
-- `entityUrl`
-- `view`
-- `theme`
+- `{ type: 'set-view', view: 'chat' | 'state-explorer' }`
+- `{ type: 'set-entity', entityUrl: string }`
+- `{ type: 'set-theme', theme: 'light' | 'dark' }`
 
-WebView to native:
+Embed → native:
 
-- `ready`
-- `error`
-- `navigateToEntity`
-- `spawnedEntity`
-- `entityStatusChanged`
-- `titleChanged`
-- `openExternalUrl`
+- `{ type: 'ready' }` — sent once the React tree mounts. The host queues
+  all `set-*` messages until it sees this so nothing is lost between mount
+  and first user interaction.
+- `{ type: 'navigate', pathname: string }` — every router resolution
+  (e.g. `useNavigate({ to: '/entity/$' })` from `EntityContextDrawer`) is
+  forwarded so the native shell can decide whether to open a different
+  session.
+- `{ type: 'error', message: string }` — reserved for embed-side fatals.
 
-The bridge should be versioned once it grows beyond the initial query-param contract.
+Live `set-*` messages are how we change view, entity and theme **without
+re-parsing the multi-MB bundle**. The WebView stays mounted (keyed only on
+`embed.uri`) for the lifetime of the `SessionScreen`. Cross-screen
+navigation (back to the list, opening a different session via the list)
+unmounts the WebView and re-parses; that's accepted for v1.
 
 ## Native Screens
 
@@ -268,48 +270,105 @@ Bundling Vite output into Expo needs a small build pipeline. Keep the embed buil
 
 ## Implementation Phases
 
-### Phase 1: Skeleton
+### Phase 1: Skeleton — DONE
 
 - Create Expo package in `packages/agents-mobile`.
 - Add `react-native-webview`.
 - Add server URL setup and health check.
 - Add local persistence for the active server.
 - Add basic native navigation.
+- Track Expo SDK 54 (React Native 0.81, React 19.1). Built-in pnpm-monorepo Metro support means no `metro.config.js` overrides are required — `html` is in the default `assetExts`, every workspace package is in `watchFolders`, and `unstable_enableSymlinks` is no longer needed. Run `pnpm dlx expo-doctor` from `packages/agents-mobile` to confirm.
 
-### Phase 2: Server Data
+### Phase 2: Server Data — DONE
 
 - Reuse or extract Electric Agents client logic for entity and entity-type collections.
 - Render a native session list.
 - Render a native new-session flow without working-directory support.
 
-### Phase 3: Embedded Chat
+### Phase 3: Embedded Chat — IN PROGRESS
 
-- Add mobile embed entrypoint to `agents-server-ui`.
-- Build and bundle embed assets into the Expo app.
-- Load chat view in a WebView for the active entity.
-- Validate streaming, sending, markdown, tool calls, and reconnect behavior.
+- ✅ Added mobile-embed entrypoint at `packages/agents-server-ui/embed.html` + `src/embed/main.tsx`.
+- ✅ Added `vite build --mode mobile-embed` using `vite-plugin-singlefile` so the entire SPA inlines into one HTML file.
+- ✅ Added `scripts/emit-mobile-embed.mjs` which copies that HTML into `packages/agents-mobile/assets/embed.html` as a tracked static asset.
+- ✅ Mobile WebView host (`embedSource.ts`) loads the asset via `expo-asset` so Metro doesn't inline a multi-MB string into the JS bundle.
+- ✅ Embed disables zoom: `viewport` is `maximum-scale=1, user-scalable=no` and the override sheet floors `<input>`/`<textarea>` to 16px so iOS doesn't auto-zoom on focus.
+- ✅ Embed override sheet (`EmbedApp.module.css`) collapses the desktop chat geometry on mobile — `EntityTimeline.content`, `MessageInput.root` and `MessageInput.composer` lose their 36–40px gutters and run edge-to-edge.
+- ✅ Vite mobile-embed mode pins CSS-modules to `[name]_[local]_[hash:base64:5]` so the embed override selectors (`[class*='EntityTimeline'][class*='_content_']` etc.) keep matching the production hash output.
+- ⏭ Validate streaming, sending, markdown, tool calls and reconnect behaviour end-to-end; trim heavy renderers (mermaid, shiki, katex, streamdown) so the bundle is not 13 MB.
 
-### Phase 4: Native Mobile Shell
+### Phase 4: Native Mobile Shell — IN PROGRESS
 
-- Add native top toolbar.
-- Add native drawer/sidebar behavior.
-- Add view switcher.
-- Add theme propagation to WebView.
-- Add native back behavior.
+- ✅ `Header` component mirrors the web `MainHeader` strip exactly: 44px row, page background, no border, 10px gutter, leading + title + actions slots, identical to `MainHeader.module.css`.
+- ✅ `SessionListScreen` mirrors the web `Sidebar`: `MainHeader` strip, `New session` row in the same 22px-icon-column geometry, date-bucketed sections (`Today` / `Yesterday` / `Previous 7 days` …) using the same `bucketEntities` algorithm as the web, `SidebarFooter` with server picker / filter / settings.
+- ✅ `SidebarRow` mirrors `SidebarRow.module.css`: 28px row, 22px status-dot column, ellipsed title, lowercase `--ds-text-3` type label, `--ds-accent-a3` selected halo, `--ds-bg-hover` press halo, 0.55 stopped opacity.
+- ✅ `SidebarFooter` mirrors the web composition: `ServerPickerTile` (status dot + name + chevrons) on the left, ghost `FooterIconButton`s for filter and settings on the right. All three open `BottomSheet` menus.
+- ✅ `BottomSheet` primitive renders an iOS-style sheet over the screen with sectioned `BottomSheetItem` rows (icon + label + check), used by the server / filter / settings menus.
+- ✅ `useSidebarPrefs` mirrors the web `useSidebarView` store (group-by + hidden-types + hidden-statuses), persisted to AsyncStorage. The list applies the prefs the same way the web sidebar does.
+- ✅ `useThemePreference` mirrors the web `useDarkMode` preference (`system` / `light` / `dark`), persisted to AsyncStorage and consumed by `ThemeProvider`.
+- ✅ `SessionScreen` toolbar mirrors `EntityHeader`: `MainHeader`-styled strip with `‹ Sessions` back affordance, baseline-aligned title + monospace sessionId subtitle, status `Badge` (matching `BadgeTone`), and ghost `IconToggle`s for the `chat` / `state-explorer` view switch.
+- ✅ `StatusBar` style flips with the resolved theme.
+- ✅ Theme + serverUrl + entityUrl + view propagated to the WebView via `injectedJavaScriptBeforeContentLoaded` (sets `window.__MOBILE_EMBED__`).
 
-### Phase 5: Additional Views
+### Phase 5: Additional Views & Bridge — DONE (foundations)
 
-- Add state explorer WebView.
-- Add any other existing entity views that make sense on mobile.
-- Improve responsive behavior inside embedded views.
+- ✅ Bridge protocol formalised in `bridge.ts` (mirrored on both sides) covering
+  `ready`, `navigate`, `set-view`, `set-entity`, `set-theme`. Native posts
+  `set-*` only after the embed has acknowledged `ready` so no message can be
+  silently dropped during boot.
+- ✅ State Explorer toggle and entity navigation now flow through the bridge.
+  Switching view, jumping to a related entity, and toggling the theme all
+  re-render in-place without re-parsing the multi-MB bundle.
+- ✅ WebView wrapped in `KeyboardAvoidingView` (iOS `padding`) so the embed
+  composer follows the keyboard; embed CSS uses `height: 100%` (not `100vh`)
+  so it shrinks correctly.
+- ✅ EntityHost is keyed on `entityUrl` so the chat input/scroll reset
+  cleanly when the host swaps the active entity.
+- ⏭ Pull-to-refresh / drag-to-dismiss on the entity list.
 
-### Phase 6: Polish
+### Phase 6: Polish — IN PROGRESS
 
-- Tune mobile spacing and typography.
-- Handle safe areas and keyboard edge cases.
-- Add loading/error/empty states.
-- Add diagnostics for server connectivity and WebView errors.
-- Add mobile-focused tests where practical.
+- ✅ Native screens consume the same color, spacing, radius and typography tokens
+  as the web app, in both light and dark modes.
+- ✅ `Screen` now uses `react-native-safe-area-context`'s `SafeAreaView`
+  wrapped in a top-level `SafeAreaProvider`; insets work on both iOS notches
+  and Android `edgeToEdgeEnabled`.
+- ✅ Status bar handled via `expo-status-bar` (`style="light"|"dark"`),
+  which co-operates with edge-to-edge translucent system bars.
+- ✅ Crypto polyfill (`react-native-random-uuid`) hoisted to `index.ts`
+  so it loads before any other module evaluates `crypto.randomUUID`.
+- ⏭ Safe-area edge cases on landscape / tablet.
+- ⏭ Diagnostics for server connectivity and WebView errors.
+- ⏭ Mobile-focused tests where practical.
+
+## Working with the mobile-embed bundle
+
+The bundled embed is **opt-in** and ignored from git history because the current single-file build is ~13 MB. Generate it on demand from either side:
+
+```sh
+# from the workspace root
+pnpm --filter @electric-ax/agents-server-ui build:mobile-embed
+
+# or from the mobile package (same script, just convenient)
+pnpm --filter @electric-ax/agents-mobile embed:build
+```
+
+The script overwrites `packages/agents-mobile/assets/embed.html` with the freshly built bundle. Metro picks it up on next reload because `embedSource.ts` resolves it via `expo-asset`. A small placeholder ships in the repo under the same path so a fresh checkout still resolves; do **not** commit the regenerated 13 MB file back.
+
+## Verifying the foundation
+
+```sh
+pnpm --filter @electric-ax/agents-mobile typecheck
+pnpm --filter @electric-ax/agents-mobile doctor       # = expo-doctor (17/17 must pass)
+pnpm --filter @electric-ax/agents-server-ui typecheck
+```
+
+When changing the embed, also rebuild and re-run the embed in the simulator
+to confirm `ready`/`set-*` traffic in the JS console:
+
+```sh
+pnpm --filter @electric-ax/agents-mobile embed:build
+pnpm --filter @electric-ax/agents-mobile ios   # or android
+```
 
 ## First Milestone
 

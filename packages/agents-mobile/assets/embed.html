@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-electric-mobile-embed-placeholder="true">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Electric Agents · embed placeholder</title>
+    <meta name="color-scheme" content="light dark" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #111318;
+        --surface: #1a1d27;
+        --text-1: rgba(255, 255, 245, 0.92);
+        --text-2: rgba(235, 235, 245, 0.8);
+        --text-3: rgba(235, 235, 245, 0.68);
+        --accent: #75fbfd;
+        --border: rgba(255, 255, 255, 0.11);
+        --font-mono:
+          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f7f7f5;
+          --surface: #ffffff;
+          --text-1: #1a1a2e;
+          --text-2: #5c5c6e;
+          --text-3: #999999;
+          --accent: #1a1a2e;
+          --border: rgba(30, 31, 36, 0.14);
+        }
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text-1);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-text-size-adjust: 100%;
+        touch-action: manipulation;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        gap: 8px;
+      }
+      .title {
+        font-size: 14px;
+        color: var(--text-1);
+      }
+      .body {
+        font-size: 13px;
+        color: var(--text-3);
+        max-width: 32em;
+      }
+      code {
+        font-family: var(--font-mono);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-size: 12px;
+        color: var(--text-2);
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Tracked placeholder for the mobile embed bundle.
+
+      The real bundle (~13 MB of inlined JS+CSS) is produced by:
+
+          pnpm --filter @electric-ax/agents-server-ui build:mobile-embed
+
+      That script overwrites this file in place so Metro's
+      `require('./assets/embed.html')` resolves to the freshly built
+      single-file SPA. Do NOT commit the regenerated file.
+    -->
+    <div id="root">
+      <div class="title">Mobile embed bundle is missing.</div>
+      <div class="body">
+        Run
+        <code
+          >pnpm --filter @electric-ax/agents-server-ui
+          build:mobile-embed</code
+        >
+        (or <code>pnpm --filter @electric-ax/agents-mobile embed:build</code>)
+        to regenerate <code>assets/embed.html</code>, then reload the WebView.
+      </div>
+    </div>
+    <script>
+      // Confirm boot to the React-Native host so the SessionScreen drops
+      // its loading overlay and renders this placeholder instead of
+      // hanging on a spinner.
+      try {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({ type: 'ready' })
+          )
+        }
+      } catch (_) {}
+    </script>
+  </body>
+</html>

@@ -1,0 +1,116 @@
+/* Mobile embed full-bleed layout — fills the WebView so the chat
+   timeline and composer stretch edge-to-edge. The native shell owns
+   the global chrome (top bar, back button, view switcher), so the
+   embed body has no padding of its own.
+
+   We use plain `100%` heights (not `100vh`) because mobile WebViews
+   shrink the viewport when the on-screen keyboard appears, but
+   `100vh` does not respect that shrinkage on iOS. Pairing the
+   100% height column with `flex: 1` on EntityTimeline keeps the
+   chat composer pinned just above the keyboard once the native
+   `KeyboardAvoidingView` reduces the WebView's outer height.
+*/
+
+:global(html),
+:global(body),
+:global(#root) {
+  height: 100%;
+  margin: 0;
+}
+
+:global(body) {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-touch-callout: none;
+  /* Prevent iOS double-tap-to-zoom on UI controls; pair with
+     viewport `user-scalable=no` set in embed.html so the WebView
+     never zooms in when the user focuses an input. */
+  touch-action: manipulation;
+}
+
+/*
+  Mobile-only overrides for the desktop chat geometry. The desktop
+  stylesheet pads `EntityTimeline.content` at 36px×40px and the
+  composer slab at `0 40px 16px` to keep the chat column narrow on
+  wide windows. On a phone WebView those 40px gutters eat half the
+  screen, so we collapse them.
+
+  Important: we *only* drop the outer horizontal padding here. The
+  composer's own surface (`.composer`: 1px border, 12px radius, 12px
+  inner padding, raised-surface fill, drop shadow) is left untouched
+  so it keeps the same visual language as the desktop and the rest of
+  the chat — just rendered closer to the screen edge.
+
+  Vite's CSS-modules production names look like
+  `EntityTimeline-module_content_<hash>`, while dev uses
+  `EntityTimeline_content_<hash>`. Pairing two `[class*=]` matchers
+  catches both formats without depending on the hash.
+*/
+
+:global([class*='EntityTimeline'][class*='_content_']) {
+  padding: var(--ds-space-4) var(--ds-space-2) !important;
+  max-width: 100% !important;
+}
+
+:global([class*='MessageInput'][class*='_root_']) {
+  padding-left: var(--ds-space-2) !important;
+  padding-right: var(--ds-space-2) !important;
+  padding-bottom: var(--ds-space-2) !important;
+  max-width: 100% !important;
+}
+
+/* Tighten the user-message bubble's horizontal padding on small
+   screens — the desktop bubble is sized for a 640px column. */
+:global([class*='UserMessage'][class*='_bubble_']) {
+  padding: var(--ds-space-2) var(--ds-space-3) !important;
+}
+
+/* Stop iOS form controls from getting auto-zoomed when focused.
+   `user-scalable=no` in the viewport meta blocks the WKWebView pinch-
+   and double-tap zooms; we additionally floor the input font-size to
+   16px so iOS doesn't auto-zoom into sub-16px inputs on focus (a
+   behaviour that survives `user-scalable=no` on some iOS versions). */
+:global(input:not([type='checkbox']):not([type='radio'])),
+:global(textarea),
+:global(select) {
+  font-size: 16px !important;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--ds-bg);
+}
+
+.scroll {
+  display: block;
+  height: 100%;
+  overflow: auto;
+  background: var(--ds-bg);
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--ds-space-5);
+  text-align: center;
+  gap: var(--ds-space-2);
+  color: var(--ds-text-2);
+  background: var(--ds-bg);
+}
+
+.messageTitle {
+  font-size: var(--ds-text-base);
+  color: var(--ds-text-1);
+}
+
+.messageBody {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-3);
+  word-break: break-all;
+}

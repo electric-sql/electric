@@ -1,0 +1,21 @@
+# Expo / Metro
+.expo
+.expo-shared
+dist
+web-build
+
+# `assets/embed.html` ships in the repo as a placeholder (so Metro's
+# static `require('./assets/embed.html')` resolves on a fresh checkout).
+# The real bundle (13MB+) is produced by:
+#   pnpm --filter @electric-ax/agents-server-ui build:mobile-embed
+# Do NOT commit the regenerated file. The .gitignore line below is a
+# safety net for the generated `dist-mobile-embed` Vite output, not
+# for `assets/embed.html` (which must remain tracked).
+dist-mobile-embed
+
+# iOS / Android native projects (created on demand by `expo prebuild`)
+ios
+android
+
+# Misc
+.DS_Store
