@@ -8,6 +8,7 @@ defmodule Electric.ShapeCache do
   alias Electric.Shapes
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
 
@@ -244,11 +245,15 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @spec start_consumer_for_handle(shape_handle(), stack_id()) ::
+  @spec start_consumer_for_handle(shape_handle(), stack_id(), opts :: Access.t()) ::
           {:ok, pid()} | {:error, :no_shape}
-  def start_consumer_for_handle(shape_handle, stack_id)
+  def start_consumer_for_handle(shape_handle, stack_id, opts \\ [])
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    GenServer.call(name(stack_id), {:start_consumer_for_handle, shape_handle}, @call_timeout)
+    GenServer.call(
+      name(stack_id),
+      {:start_consumer_for_handle, shape_handle, opts[:otel_ctx]},
+      @call_timeout
+    )
   end
 
   @impl GenServer
@@ -302,6 +307,8 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def handle_call({:create_or_wait_shape_handle, shape, otel_ctx}, _from, state) do
+    if not is_nil(otel_ctx), do: OpenTelemetry.set_current_context(otel_ctx)
+
     case safe_maybe_create_shape(shape, %{
            stack_id: state.stack_id,
            otel_ctx: otel_ctx,
@@ -322,21 +329,22 @@ defmodule Electric.ShapeCache do
     {:reply, ShapeStatus.has_shape_handle?(state.stack_id, shape_handle), state}
   end
 
-  def handle_call({:start_consumer_for_handle, shape_handle}, _from, state) do
+  def handle_call({:start_consumer_for_handle, shape_handle, otel_ctx}, _from, state) do
     # This is racy: it's possible for a shape to have been deleted while the
     # ShapeLogCollector is processing a transaction that includes it
     # In this case fetch_shape_by_handle returns an error. ConsumerRegistry
     # basically ignores the {:error, :no_shape} result - excluding the shape handle
     # from the broadcast.
+    if not is_nil(otel_ctx), do: OpenTelemetry.set_current_context(otel_ctx)
+
     case ShapeStatus.fetch_shape_by_handle(state.stack_id, shape_handle) do
       {:ok, shape} ->
-        # TODO: otel ctx from shape log collector?
         {
           :reply,
           restore_shape_and_dependencies(shape_handle, shape, %{
             stack_id: state.stack_id,
             action: :restore,
-            otel_ctx: nil,
+            otel_ctx: otel_ctx,
             feature_flags: state.feature_flags
           }),
           state

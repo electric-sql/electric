@@ -684,7 +684,7 @@ defmodule Electric.ShapeCacheTest do
       log =
         capture_log(fn ->
           assert {:error, {:exit, _reason}} =
-                   ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id, otel_ctx: %{})
+                   ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id, otel_ctx: nil)
         end)
 
       assert log =~ "Failed to create shape"
@@ -709,7 +709,7 @@ defmodule Electric.ShapeCacheTest do
       log =
         capture_log(fn ->
           assert {:error, _reason} =
-                   ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id, otel_ctx: %{})
+                   ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id, otel_ctx: nil)
         end)
 
       assert log =~ "[error] Failed to create shape"
