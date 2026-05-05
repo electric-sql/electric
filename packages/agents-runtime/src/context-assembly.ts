@@ -324,6 +324,15 @@ export async function assembleContext(
     const message = volatileMessages[i]!
     const nextTokens = approxTokens(message.content)
     if (volatileBudgetUsed + nextTokens > remainingBudget) {
+      if (message.role === `tool_call` || message.role === `tool_result`) {
+        const stub = `[content truncated — use load_timeline_range({ from: ${message.at}, to: ${message.at} }) to read]`
+        const stubTokens = approxTokens(stub)
+        if (volatileBudgetUsed + stubTokens <= remainingBudget) {
+          volatileBudgetUsed += stubTokens
+          accepted.push({ ...message, content: stub })
+          continue
+        }
+      }
       droppedOffsets.push(message.at)
       continue
     }

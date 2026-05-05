@@ -230,4 +230,144 @@ describe(`toAgentHistory`, () => {
     expect(first?.role).toBe(`user`)
     expect(second?.role).toBe(`assistant`)
   })
+
+  it(`merges assistant text and tool_call into a single assistant message`, () => {
+    const messages: Array<LLMMessage> = [
+      { role: `user`, content: `Help me` },
+      { role: `assistant`, content: `Let me look that up` },
+      {
+        role: `tool_call`,
+        content: `lookup`,
+        toolCallId: `tc-0`,
+        toolName: `lookup`,
+        toolArgs: { q: `hello` },
+      },
+      {
+        role: `tool_result`,
+        content: `found it`,
+        toolCallId: `tc-0`,
+        isError: false,
+      },
+    ]
+
+    const history = toAgentHistory(messages)
+
+    // The assistant text and tool_call should be merged into one assistant
+    // message, otherwise the Claude API rejects consecutive assistant messages
+    // and tool_result can't find its matching tool_use in the previous message.
+    const assistantMessages = history.filter((m) => m.role === `assistant`)
+    expect(assistantMessages).toHaveLength(1)
+
+    const assistant = assistantMessages[0] as AssistantMessage
+    expect(assistant.content).toHaveLength(2)
+    expect(assistant.content[0]).toMatchObject({
+      type: `text`,
+      text: `Let me look that up`,
+    })
+    expect(assistant.content[1]).toMatchObject({
+      type: `toolCall`,
+      id: `tc-0`,
+      name: `lookup`,
+    })
+  })
+
+  it(`handles interleaved tool_call/tool_result pairs without consecutive assistants`, () => {
+    const messages: Array<LLMMessage> = [
+      { role: `user`, content: `Do two things` },
+      { role: `assistant`, content: `I will do both` },
+      {
+        role: `tool_call`,
+        content: `{}`,
+        toolCallId: `tc-0`,
+        toolName: `tool_a`,
+        toolArgs: {},
+      },
+      {
+        role: `tool_result`,
+        content: `result a`,
+        toolCallId: `tc-0`,
+        isError: false,
+      },
+      {
+        role: `tool_call`,
+        content: `{}`,
+        toolCallId: `tc-1`,
+        toolName: `tool_b`,
+        toolArgs: {},
+      },
+      {
+        role: `tool_result`,
+        content: `result b`,
+        toolCallId: `tc-1`,
+        isError: false,
+      },
+    ]
+
+    const history = toAgentHistory(messages)
+
+    // First tool call should be merged with the preceding text
+    const first = history[1] as AssistantMessage
+    expect(first.role).toBe(`assistant`)
+    expect(first.content).toHaveLength(2)
+    expect(first.content[0]).toMatchObject({ type: `text` })
+    expect(first.content[1]).toMatchObject({ type: `toolCall`, id: `tc-0` })
+
+    // No consecutive assistant messages
+    for (let i = 1; i < history.length; i++) {
+      if (history[i].role === `assistant`) {
+        expect(history[i - 1].role).not.toBe(`assistant`)
+      }
+    }
+
+    // Each tool_result should still be present
+    const toolResults = history.filter((m) => m.role === `toolResult`)
+    expect(toolResults).toHaveLength(2)
+  })
+
+  it(`does not produce consecutive assistant messages across multi-step runs`, () => {
+    const messages: Array<LLMMessage> = [
+      { role: `user`, content: `Help` },
+      // Step 1: text + tool call
+      { role: `assistant`, content: `Step 1` },
+      {
+        role: `tool_call`,
+        content: `{}`,
+        toolCallId: `tc-0`,
+        toolName: `search`,
+        toolArgs: {},
+      },
+      {
+        role: `tool_result`,
+        content: `found`,
+        toolCallId: `tc-0`,
+        isError: false,
+      },
+      // Step 2: text + tool call
+      { role: `assistant`, content: `Step 2` },
+      {
+        role: `tool_call`,
+        content: `{}`,
+        toolCallId: `tc-1`,
+        toolName: `write`,
+        toolArgs: {},
+      },
+      {
+        role: `tool_result`,
+        content: `done`,
+        toolCallId: `tc-1`,
+        isError: false,
+      },
+      // Step 3: final answer
+      { role: `assistant`, content: `All done` },
+    ]
+
+    const history = toAgentHistory(messages)
+
+    // Verify no consecutive assistant messages
+    for (let i = 1; i < history.length; i++) {
+      if (history[i].role === `assistant`) {
+        expect(history[i - 1].role).not.toBe(`assistant`)
+      }
+    }
+  })
 })

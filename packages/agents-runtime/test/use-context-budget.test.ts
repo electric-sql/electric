@@ -62,6 +62,52 @@ describe(`budget enforcement`, () => {
     )
   })
 
+  it(`stubs oversized tool_result content instead of dropping it`, async () => {
+    const messages = await assembleContext({
+      sourceBudget: 100,
+      sources: {
+        self: {
+          content: () => [
+            { role: `user` as const, content: `Hi`, at: 1 },
+            { role: `assistant` as const, content: `Let me check`, at: 2 },
+            {
+              role: `tool_call` as const,
+              content: `search`,
+              toolCallId: `tc-1`,
+              toolName: `search`,
+              toolArgs: { q: `hello` },
+              at: 3,
+            },
+            {
+              role: `tool_result` as const,
+              content: `x`.repeat(5000),
+              toolCallId: `tc-1`,
+              isError: false,
+              at: 4,
+            },
+            {
+              role: `assistant` as const,
+              content: `Here is the answer`,
+              at: 5,
+            },
+          ],
+          max: 100_000,
+          cache: `volatile`,
+        },
+      },
+    })
+
+    const toolCalls = messages.filter((m) => m.role === `tool_call`)
+    const toolResults = messages.filter((m) => m.role === `tool_result`)
+
+    expect(toolCalls).toHaveLength(1)
+    expect(toolResults).toHaveLength(1)
+    expect((toolCalls[0] as any).toolCallId).toBe(`tc-1`)
+    expect((toolResults[0] as any).toolCallId).toBe(`tc-1`)
+    expect(toolResults[0]!.content).toMatch(/\[content truncated/)
+    expect(toolResults[0]!.content).toMatch(/load_timeline_range/)
+  })
+
   it(`does not write a stream event on overflow`, async () => {
     const logger = vi.fn()
     await assembleContext(
