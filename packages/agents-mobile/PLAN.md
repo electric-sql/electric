@@ -322,10 +322,27 @@ instead of in a permanent footer:
   `[Electric Agents] … [search] [more] / list / FAB`. Tapping search
   swaps the header for an inline `<SearchBar>` and filters by display
   title; the kebab opens `<HomeMenu>`.
-- ✅ `SessionRow` is title-only (`fontSize.base`, `minHeight: 44`),
-  drops to 0.55 opacity for stopped sessions. Status dots and type
-  labels were intentionally removed — that detail moved into the chat
-  screen's kebab.
+- ✅ `SessionRow` is the home-screen row primitive: status dot in a
+  22px icon column on the left, ellipsed title (`fontSize.base`),
+  lowercase muted type label on the right with an inline `+N` count
+  when a subtree is collapsed, and a chevron-right / chevron-down
+  expand affordance when there are children. Stopped sessions drop
+  to 0.55 opacity (`SidebarRow.module.css .stopped` parity). Indents
+  by `BASE_PADDING_LEFT (8) + depth * INDENT_PX (12)`.
+- ✅ `StatusDot` mirrors `agents-server-ui/src/components/StatusDot.tsx`
+  with the same fixed cross-theme palette
+  (`#3b82f6` running / `#22c55e` idle / `#eab308` spawning /
+  `#cbd5e1` stopped).
+- ✅ `SessionTree` recursively renders a parent + its (optionally
+  expanded) children. Connectors are drawn per-row (vertical trunk
+  through the row + horizontal stub at vertical mid for siblings;
+  L-shape with rounded corner for the last sibling), matching the
+  `.subtree > … > .row::before/::after` pseudo-elements in
+  `SidebarRow.module.css` 1:1.
+- ✅ `expandedTree.ts` is the mobile mirror of
+  `useExpandedTreeNodes.ts`: per-url listener buckets so toggling row
+  A only re-renders A. Persisted to AsyncStorage so expanded subtrees
+  survive a relaunch.
 - ✅ `HomeMenu` (kebab on the home screen) is a `<BottomSheet>` with
   sub-pages for: Server (with status dot + change), Group by, Show
   (drill-in to per-type / per-status visibility), Theme, Diagnostics.
@@ -343,10 +360,9 @@ instead of in a permanent footer:
 - ✅ `StatusBar` style flips with the resolved theme.
 - ✅ Theme + serverUrl + entityUrl + view propagated to the WebView via
   `injectedJavaScriptBeforeContentLoaded` (sets `window.__MOBILE_EMBED__`).
-- ⏭ Removed components (no longer needed): `SidebarRow`, `StatusDot`,
+- ⏭ Removed components (no longer needed): `SidebarRow`,
   `IconToggle`, `Badge`, `SidebarFooter`, `ServerPickerTile`,
-  `FooterIconButton`. Their geometry survives in `BottomSheet` and the
-  new primitives.
+  `FooterIconButton`. `StatusDot` was reinstated for the tree.
 
 ### Phase 5: Additional Views & Bridge — DONE (foundations)
 

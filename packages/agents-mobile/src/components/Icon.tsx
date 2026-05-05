@@ -18,6 +18,7 @@ export type IconName =
   | `pencil`
   | `check`
   | `chevron-right`
+  | `chevron-down`
   | `close`
   | `sun`
   | `moon`
@@ -36,6 +37,7 @@ const PATHS: Record<IconName, string> = {
   pencil: `M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z`,
   check: `M5 12l4 4L19 7`,
   'chevron-right': `M9 6l6 6-6 6`,
+  'chevron-down': `M6 9l6 6 6-6`,
   close: `M6 6l12 12M6 18L18 6`,
   sun: `M12 4v2M12 18v2M5 5l1.5 1.5M17.5 17.5L19 19M4 12h2M18 12h2M5 19l1.5-1.5M17.5 6.5L19 5M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z`,
   moon: `M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z`,

@@ -156,10 +156,13 @@ export const darkTokens: Tokens = {
   accent11: `#75fbfd`,
   accent12: `#b8fdfe`,
   accentText: `#75fbfd`,
+  // Alphas inherit `--ds-accent-base = #75fbfd` from the dark override
+  // (the percentage stops are *not* re-defined in the dark block of
+  // tokens.css, so they're 8/14/22/44 % of teal — not 22/32/58 %).
   accentA2: `rgba(117, 251, 253, 0.08)`,
-  accentA3: `rgba(117, 251, 253, 0.22)`,
-  accentA4: `rgba(117, 251, 253, 0.32)`,
-  accentA6: `rgba(117, 251, 253, 0.58)`,
+  accentA3: `rgba(117, 251, 253, 0.14)`,
+  accentA4: `rgba(117, 251, 253, 0.22)`,
+  accentA6: `rgba(117, 251, 253, 0.44)`,
 
   red9: `#f87171`,
   red11: `#fca5a5`,

@@ -13,9 +13,14 @@ import { HomeMenu, type ServerHealth } from '../components/HomeMenu'
 import { Screen } from '../components/Screen'
 import { SearchBar } from '../components/SearchBar'
 import { SessionRow } from '../components/SessionRow'
+import { buildEntityTree, SessionTree } from '../components/SessionTree'
 import { TopBarIconButton } from '../components/TopBarIconButton'
 import { useAgents } from '../lib/AgentsProvider'
-import { checkServerHealth, getEntityDisplayTitle } from '../lib/agentsClient'
+import {
+  checkServerHealth,
+  getEntityDisplayTitle,
+  type ElectricEntity,
+} from '../lib/agentsClient'
 import {
   bucketEntities,
   groupByStatus,
@@ -28,25 +33,26 @@ import { fontSize, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
 
 /**
- * Home screen — the ChatGPT-mobile-style entry point. Layout is:
+ * Home screen — ChatGPT-mobile-style entry point with web-sidebar
+ * tree parity. Layout:
  *
  *   ┌──────────────────────────────────────────────┐
- *   │ Electric Agents          🔍  ⋯               │   <Header>
+ *   │ Electric Agents          🔍  ⋯               │
  *   ├──────────────────────────────────────────────┤
- *   │ Today                                        │
- *   │   Session A                                  │   <SessionRow>
- *   │   Session B                                  │
- *   │ Yesterday                                    │
- *   │   Session C                                  │
- *   │                                              │
- *   │                            [✎ New]           │   <Fab>
+ *   │ TODAY                                        │
+ *   │   ● horton-1                       horton ›  │
+ *   │   ● horton-2                       horton ›  │
+ *   │ YESTERDAY                                    │
+ *   │   ● parent-agent                horton +2 ⌄  │
+ *   │     │── ● child-1                   worker   │
+ *   │     └── ● child-2                   worker   │
+ *   │                            [✎ New]           │
  *   └──────────────────────────────────────────────┘
  *
- * Search slides in inline (replacing the header) with debounced
- * filtering by display title; the kebab opens `<HomeMenu>` for
- * server / filter / theme / diagnostics. The FAB launches the new-
- * session flow. We intentionally do not show status dots, type
- * labels, or footers — those affordances live in the kebab.
+ * Search slides in inline (replacing the header) with title-based
+ * filtering — matches render as a flat list (no tree, no grouping)
+ * since that reads better than pretending matches still belong to
+ * time buckets or to a particular subtree.
  */
 export function SessionListScreen({
   onOpenSession,
@@ -76,48 +82,62 @@ export function SessionListScreen({
     [entitiesCollection]
   )
 
-  // Filter pipeline: hidden types/statuses → search query → grouping.
-  const filteredEntities = useMemo(() => {
-    const hidesAnything =
-      prefs.hiddenTypes.size > 0 || prefs.hiddenStatuses.size > 0
-    const trimmed = query.trim().toLowerCase()
-    if (!hidesAnything && !trimmed) return entities
-    return entities.filter((entity) => {
-      if (prefs.hiddenTypes.has(entity.type)) return false
-      if (prefs.hiddenStatuses.has(entity.status)) return false
-      if (!trimmed) return true
-      const title = getEntityDisplayTitle(entity).toLowerCase()
-      return title.includes(trimmed)
-    })
-  }, [entities, prefs.hiddenTypes, prefs.hiddenStatuses, query])
+  // Apply Show > Type / Show > Status filters before the tree build
+  // so a hidden parent doesn't take its (visible) children with it —
+  // children of a hidden parent reparent to the root level instead,
+  // matching the web sidebar's filtering convention.
+  const visibleEntities = useMemo(() => {
+    if (prefs.hiddenTypes.size === 0 && prefs.hiddenStatuses.size === 0) {
+      return entities
+    }
+    return entities.filter(
+      (entity) =>
+        !prefs.hiddenTypes.has(entity.type) &&
+        !prefs.hiddenStatuses.has(entity.status)
+    )
+  }, [entities, prefs.hiddenTypes, prefs.hiddenStatuses])
 
-  // Search overrides grouping — a flat hit list reads better than
-  // pretending the matches still belong to time buckets.
+  // Build the parent → children map once per filtered set; the
+  // grouping below operates on the resulting roots only so a child
+  // expanded under a parent doesn't also appear at the top level.
+  const { roots, childrenByParent } = useMemo(
+    () => buildEntityTree(visibleEntities),
+    [visibleEntities]
+  )
+
+  // Search overrides bucketing AND tree structure: a flat hit list
+  // matches every visible entity (any depth) whose title contains
+  // the query. Filters and group-by are still applied because they
+  // determine the candidate `visibleEntities` set above.
+  const trimmedQuery = query.trim().toLowerCase()
+  const searchResults = useMemo<Array<ElectricEntity>>(() => {
+    if (!trimmedQuery) return []
+    return visibleEntities.filter((entity) =>
+      getEntityDisplayTitle(entity).toLowerCase().includes(trimmedQuery)
+    )
+  }, [visibleEntities, trimmedQuery])
+
   const groups: Array<SessionGroup> = useMemo(() => {
-    if (query.trim()) {
-      // Search overrides bucketing: a flat hit list reads better
-      // than pretending matches still belong to time buckets. We
-      // reuse the `older` key purely so this conforms to
-      // `SessionGroup` — the row renderer only consumes `label`.
+    if (trimmedQuery) {
       return [
         {
           id: `results`,
           key: `older` as const,
           label: `Results`,
-          items: [...filteredEntities],
+          items: searchResults,
         },
       ]
     }
     switch (prefs.groupBy) {
       case `type`:
-        return groupByType(filteredEntities)
+        return groupByType(roots)
       case `status`:
-        return groupByStatus(filteredEntities)
+        return groupByStatus(roots)
       case `date`:
       default:
-        return bucketEntities(filteredEntities)
+        return bucketEntities(roots)
     }
-  }, [filteredEntities, prefs.groupBy, query])
+  }, [roots, prefs.groupBy, trimmedQuery, searchResults])
 
   // Same connectivity ping the old footer used — feeds the green/red
   // dot in the home menu.
@@ -214,13 +234,29 @@ export function SessionListScreen({
             style={[styles.section, idx === 0 ? styles.sectionFirst : null]}
           >
             <Text style={styles.sectionLabel}>{group.label}</Text>
-            {group.items.map((entity) => (
-              <SessionRow
-                key={entity.url}
-                entity={entity}
-                onPress={() => onOpenSession(entity.url)}
-              />
-            ))}
+            {trimmedQuery
+              ? // Flat list when searching — no expand chevrons, no
+                // tree connectors, no child-count chips. The user is
+                // looking for a specific session by name.
+                group.items.map((entity) => (
+                  <SessionRow
+                    key={entity.url}
+                    entity={entity}
+                    depth={0}
+                    onPress={() => onOpenSession(entity.url)}
+                  />
+                ))
+              : // Default mode — every group item is a tree root. The
+                // tree component reads expansion state per-url from
+                // `expandedTree` and recursively renders children.
+                group.items.map((root) => (
+                  <SessionTree
+                    key={root.url}
+                    entity={root}
+                    childrenByParent={childrenByParent}
+                    onSelectEntity={onOpenSession}
+                  />
+                ))}
           </View>
         ))}
 
@@ -230,16 +266,18 @@ export function SessionListScreen({
             body={`Tap "New" to start your first session.`}
           />
         )}
-        {entities.length > 0 && filteredEntities.length === 0 && (
+        {entities.length > 0 && visibleEntities.length === 0 && (
           <EmptyState
-            title={query.trim() ? `No matches` : `No sessions match`}
-            body={
-              query.trim()
-                ? `Try a different search.`
-                : `Adjust the filters in the more menu.`
-            }
+            title="No sessions match"
+            body="Adjust the filters in the more menu."
           />
         )}
+        {entities.length > 0 &&
+          visibleEntities.length > 0 &&
+          trimmedQuery &&
+          searchResults.length === 0 && (
+            <EmptyState title="No matches" body="Try a different search." />
+          )}
       </ScrollView>
 
       {!searchOpen && (
@@ -302,8 +340,6 @@ function createStyles(tokens: Tokens) {
     },
     scrollContent: {
       paddingHorizontal: 8,
-      // Reserve room at the bottom so the FAB never covers the last
-      // row. 96 ≈ FAB height (48) + bottom inset margin (16) + gap.
       paddingBottom: 96,
     },
     section: {
