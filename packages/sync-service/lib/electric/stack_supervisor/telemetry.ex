@@ -1,6 +1,4 @@
 defmodule Electric.StackSupervisor.Telemetry do
-  require Logger
-
   def configure(config) do
     # Set shared OpenTelemetry span attributes for the given stack. They are stored in
     # persistent_term so it doesn't matter which process this function is called from.
@@ -29,20 +27,20 @@ defmodule Electric.StackSupervisor.Telemetry do
   end
 
   def count_shapes(stack_id, _telemetry_opts) do
-    # Telemetry is started before everything else in the stack, so we need to handle
-    # the case where the shape cache is not started yet.
-    with %{total: num_shapes, indexed: indexed_shapes, unindexed: unindexed_shapes} <-
-           Electric.ShapeCache.shape_counts(stack_id) do
-      Electric.Telemetry.OpenTelemetry.execute(
-        [:electric, :shapes, :total_shapes],
-        %{count: num_shapes, count_indexed: indexed_shapes, count_unindexed: unindexed_shapes},
-        %{stack_id: stack_id}
-      )
-    end
-
+    # Emit active_shapes first so that a failure in shape_counts (e.g. shape cache not yet
+    # started during stack startup) doesn't drop this metric for the tick.
     Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :shapes, :active_shapes],
       %{count: Electric.Shapes.ConsumerRegistry.active_consumer_count(stack_id)},
+      %{stack_id: stack_id}
+    )
+
+    %{total: num_shapes, indexed: indexed_shapes, unindexed: unindexed_shapes} =
+      Electric.ShapeCache.shape_counts(stack_id)
+
+    Electric.Telemetry.OpenTelemetry.execute(
+      [:electric, :shapes, :total_shapes],
+      %{count: num_shapes, count_indexed: indexed_shapes, count_unindexed: unindexed_shapes},
       %{stack_id: stack_id}
     )
   end
@@ -74,47 +72,34 @@ defmodule Electric.StackSupervisor.Telemetry do
   @doc false
   @spec report_retained_wal_size(Electric.stack_id(), binary(), map()) :: :ok
   def report_retained_wal_size(stack_id, slot_name, _telemetry_opts) do
-    try do
-      %Postgrex.Result{rows: [[pg_wal_offset, retained_wal_size, confirmed_flush_lsn_lag]]} =
-        Postgrex.query!(
-          Electric.Connection.Manager.admin_pool(stack_id),
-          @retained_wal_size_query,
-          [slot_name],
-          timeout: 3_000,
-          deadline: 3_000
-        )
-
-      # The query above can return `-1` for `confirmed_flush_lsn_lag` which means that Electric
-      # is caught up with Postgres' replication stream.
-      # This is a confusing stat if we're measuring in bytes, so use 0 as the bottom limit.
-
-      Electric.Telemetry.OpenTelemetry.execute(
-        [:electric, :postgres, :replication],
-        %{
-          # The absolute value of pg_current_wal_lsn() doesn't convey any useful info but by
-          # plotting its rate of change we can see how fast the WAL is growing.
-          #
-          # We shift the absolute value of pg_current_wal_lsn() by -2**63 in the query above
-          # to make sure it fits inside the signed 64-bit integer type expected by the
-          # OpenTelemetry Protocol,
-          pg_wal_offset: pg_wal_offset,
-          slot_retained_wal_size: retained_wal_size,
-          slot_confirmed_flush_lsn_lag: max(0, confirmed_flush_lsn_lag)
-        },
-        %{stack_id: stack_id}
+    %Postgrex.Result{rows: [[pg_wal_offset, retained_wal_size, confirmed_flush_lsn_lag]]} =
+      Postgrex.query!(
+        Electric.Connection.Manager.admin_pool(stack_id),
+        @retained_wal_size_query,
+        [slot_name],
+        timeout: 3_000,
+        deadline: 3_000
       )
-    catch
-      :exit, {:noproc, _} ->
-        :ok
 
-      # catch all errors to not log them as errors, those are reporing issues at best
-      type, reason ->
-        Logger.warning(
-          "Failed to query retained WAL size\nError: #{Exception.format(type, reason)}",
-          stack_id: stack_id,
-          slot_name: slot_name
-        )
-    end
+    # The query above can return `-1` for `confirmed_flush_lsn_lag` which means that Electric
+    # is caught up with Postgres' replication stream.
+    # This is a confusing stat if we're measuring in bytes, so use 0 as the bottom limit.
+
+    Electric.Telemetry.OpenTelemetry.execute(
+      [:electric, :postgres, :replication],
+      %{
+        # The absolute value of pg_current_wal_lsn() doesn't convey any useful info but by
+        # plotting its rate of change we can see how fast the WAL is growing.
+        #
+        # We shift the absolute value of pg_current_wal_lsn() by -2**63 in the query above
+        # to make sure it fits inside the signed 64-bit integer type expected by the
+        # OpenTelemetry Protocol,
+        pg_wal_offset: pg_wal_offset,
+        slot_retained_wal_size: retained_wal_size,
+        slot_confirmed_flush_lsn_lag: max(0, confirmed_flush_lsn_lag)
+      },
+      %{stack_id: stack_id}
+    )
   end
 
   if Code.ensure_loaded?(ElectricTelemetry.DiskUsage) do
