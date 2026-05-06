@@ -1,6 +1,6 @@
 ---
 title: Shared SubqueryIndex Base View with Sparse XOR Exceptions
-version: "0.2"
+version: "0.3"
 status: draft
 owner: robacourt
 contributors: []
@@ -14,7 +14,17 @@ prd_version: N/A
 
 ## Summary
 
-Electric v1.6 introduced per-shape subquery indexing so each shape consumer could maintain the exact dependency view it needed while subquery rows moved across boolean `WHERE` clauses. That preserved correctness but made the index memory inefficient: in the common case many shapes have the same dependency view, yet the index stores that view once per shape. Shape removal now needs to clean up per-shape index entries and has been observed to block replication processing and cause WAL lag. This RFC proposes replacing full per-shape subquery membership with one shared base view per subquery index cohort plus sparse per-participant XOR exceptions for the short windows where consumers are out of sync. The design targets removal cost proportional to the shape's subquery participants and outstanding exceptions, not to total shapes or the shape's full dependency view.
+Electric v1.6 introduced per-shape subquery indexing so each shape consumer could maintain the exact dependency view it needed while subquery rows moved across boolean `WHERE` clauses. That preserved correctness, but it made the index memory-inefficient: in the common case many shapes have the same dependency view, yet the index stores that view once per shape.
+
+Shape removal now needs to clean up per-shape index entries and has been observed to block replication processing and cause WAL lag.
+
+This RFC proposes replacing full per-shape subquery membership with one shared base view per subquery index cohort plus sparse per-participant XOR exceptions for the short windows where consumers are out of sync.
+
+The target outcome is:
+
+- removal cost proportional to a shape's subquery participants and outstanding exceptions, not to total shapes or the shape's full dependency view;
+- steady-state memory closer to `O(V + P)` than `O(P * V)`;
+- the same correctness guarantees for positive and negated subqueries during dependency moves.
 
 ## Background
 
@@ -60,6 +70,16 @@ That would improve removal, but it would increase memory use for a structure tha
 
 The wider design problem is that the current implementation optimizes for the exceptional case -- each shape consumer can have a distinct dependency view -- by paying the cost all the time. In practice, most consumers using the same subquery index cohort should have the same dependency view most of the time. They usually diverge only during subquery moves.
 
+At a high level:
+
+| Concern | Current index | Proposed index |
+|---------|---------------|----------------|
+| Shared dependency view | Stored once per shape | Stored once per cohort |
+| Temporary divergence | Full per-shape view | Sparse exceptions only |
+| Shape removal | Scan value-keyed membership rows | Follow participant reverse index plus sparse exceptions |
+| Steady-state memory | `O(P * V)` | `O(V + P)` |
+| Move handling correctness | Exact | Exact |
+
 **Link to PRD hypothesis:** There is no PRD for this RFC. The working hypothesis comes from issue #4279:
 
 > Redesigning the SubqueryIndex so it does not store full per-shape dependency views will make shape add/remove scalable and reduce memory consumption, while preserving v1.6 subquery move correctness.
@@ -91,6 +111,8 @@ The wider design problem is that the current implementation optimizes for the ex
 ### Core idea
 
 Represent the common dependency view once, and represent only the temporary differences per participant.
+
+This section describes the logical model. The later data model section describes the compact ETS layout that implements it efficiently.
 
 For each subquery index cohort:
 
@@ -130,9 +152,7 @@ set_membership(participant, cohort, value, desired_local_member?)
 
 A cohort is the unit that shares a base dependency view.
 
-For the first implementation, a cohort should be conservative: it should include only participants whose dependency membership can safely be represented by the same base. A practical first version can define a cohort around the existing subquery filter node plus the dependency identity needed to avoid merging unlike views.
-
-Example shape:
+For the first implementation, a cohort should be conservative: it should include only participants whose dependency membership can safely be represented by the same base. A practical first version can define a cohort around the existing subquery filter node plus the dependency identity needed to avoid merging unlike views, for example:
 
 ```text
 cohort_id = {node_id, subquery_ref, dep_index}
@@ -150,7 +170,7 @@ The important implementation detail is that the logical cohort identity should b
 
 #### Participant
 
-A participant is a shape's position in a subquery filter node, not necessarily just the shape handle.
+A participant is a shape's position in a subquery filter node, not just the shape handle.
 
 The current index stores rows involving:
 
@@ -365,33 +385,25 @@ Polarity is applied after this:
 
 ### Shape registration and readiness
 
-A newly registered participant should not be counted as an indexed participant until it is safe to represent it as:
-
-```text
-base + sparse exceptions
-```
+A newly registered participant should not be counted as an indexed participant until it is safe to represent it as `base + sparse exceptions`.
 
 Before that point, it remains in fallback routing, as today.
 
 The common-case registration path should be:
 
-```text
 1. Register participant metadata.
-2. Attach participant to the existing cohort base with no exceptions.
-3. Increment participant_count.
-4. Remove participant from fallback once ready.
-```
+2. Attach the participant to the existing cohort base with no exceptions.
+3. Increment `participant_count`.
+4. Remove the participant from fallback once ready.
 
 That path is O(number of participants in the shape), not O(number of values in the dependency view), provided the participant can safely adopt the cohort base.
 
 If a participant starts while a move is in progress, or if it cannot prove that its local dependency view equals the cohort base, it must stay in fallback until one of these is true:
 
-```text
-- it can adopt the base safely;
-- it can seed the exact sparse diff from the base;
-- the cohort is rebuilt or compacted; or
-- the implementation chooses a separate cohort for it.
-```
+- It can adopt the base safely.
+- It can seed the exact sparse diff from the base.
+- The cohort is rebuilt or compacted.
+- The implementation chooses a separate cohort for it.
 
 This is an important correctness boundary. Joining a participant with no exceptions asserts that its local view equals the base. The implementation must not make that assertion unless it is true.
 
@@ -488,25 +500,20 @@ Fallback remains the safety mechanism for participants that are not yet represen
 
 A participant should be in fallback when:
 
-```text
-- it has registered but not seeded/aligned;
-- its cohort base cannot be safely adopted;
-- the implementation detects uncertainty during recovery;
-- the participant is being restored or resumed and exact index state is not yet known.
-```
+- It has registered but not seeded/aligned.
+- Its cohort base cannot be safely adopted.
+- The implementation detects uncertainty during recovery.
+- The participant is being restored or resumed and exact index state is not yet known.
 
 Fallback participants are conservatively routed as affected candidates. They should not be counted in `participant_count` for promotion until they become indexed participants.
 
 ### Memory model
 
-Let:
+Definitions:
 
-```text
-S = number of shapes
-P = number of subquery participants
-V = number of values in the shared dependency view
-E = number of outstanding sparse exceptions
-```
+- `P`: number of subquery participants
+- `V`: number of values in the shared dependency view
+- `E`: number of outstanding sparse exceptions
 
 Current approximate memory shape:
 
@@ -544,6 +551,12 @@ packages/sync-service/scripts/subquery_index_memory.exs
 ```
 
 The benchmark uses small integer dependency values, so these figures are conservative. UUID/text-heavy workloads should benefit more because the current layout duplicates those larger values once per shape, while the proposed layout stores them once per cohort plus sparse exceptions.
+
+The practical read is simple:
+
+- When many participants share a view and divergence is rare, the new layout is dramatically smaller.
+- During moves, memory rises with `E`, but only for the values and participants that are actually out of sync.
+- Even under heavy divergence, the new layout still remained materially smaller in local tests.
 
 #### Local measurements: current vs compact proposed layout
 
@@ -720,16 +733,14 @@ This change ships as a single cutover release, not a staged rollout behind a fea
 
 Model the index as a map of exact participant membership and compare it to the base + exception implementation after random operations:
 
-```text
-register participant
-mark ready
-set membership true
-set membership false
-remove participant
-promote when eligible
-route positive
-route negated
-```
+- register participant
+- mark ready
+- set membership true
+- set membership false
+- remove participant
+- promote when eligible
+- route positive
+- route negated
 
 The property should assert that for all ready participants and values:
 
@@ -750,15 +761,13 @@ exact_model_member?(participant, value) ==
 
 Benchmarks should compare current and proposed index behavior for:
 
-```text
-S shapes sharing V dependency values, no exceptions
-S shapes sharing V dependency values, M moved values, K lagging participants
-shape removal with E = 0
-shape removal with E > 0
-promotion with K exceptions
-routing positive with base present/absent
-routing negated with base present/absent
-```
+- `S` shapes sharing `V` dependency values, no exceptions
+- `S` shapes sharing `V` dependency values, `M` moved values, `K` lagging participants
+- shape removal with `E = 0`
+- shape removal with `E > 0`
+- promotion with `K` exceptions
+- routing positive with base present/absent
+- routing negated with base present/absent
 
 Expected shape:
 
@@ -785,6 +794,7 @@ proposed removal: O(P + E)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.3 | 2026-05-06 | robacourt | Readability pass: tightened the opening sections, added a current-vs-proposed summary table, and converted pseudo-list code blocks into normal prose/lists. |
 | 0.2 | 2026-05-06 | robacourt | Added measured ETS memory tables, switched the proposed layout to compact interned ids plus dedicated tables, and clarified the single-release cutover plan. |
 | 0.1 | 2026-05-06 | robacourt | Initial draft based on issue #4279 and design discussion. |
 
