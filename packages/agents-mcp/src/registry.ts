@@ -145,41 +145,76 @@ export function createRegistry(opts: RegistryOpts): Registry {
         // Older SDK clients or test fakes may omit setNotificationHandler;
         // progress passthrough is best-effort.
       }
+      // Capability negotiation: the SDK exposes the server's declared
+      // capabilities after `connect()`. Servers that don't advertise the
+      // `tools` capability are flagged as `error` (we treat tools as
+      // mandatory for v1). Resources and prompts are optional — if the
+      // server doesn't declare them, we simply leave the corresponding
+      // entries undefined (no error).
+      //
+      // Older SDKs and test fakes may not expose `getServerCapabilities`;
+      // in that case we skip the check entirely (treat as healthy).
+      let capsHasResources = true
+      let capsHasPrompts = true
+      const getCaps = (client as { getServerCapabilities?: () => unknown })
+        .getServerCapabilities
+      if (typeof getCaps === `function`) {
+        const caps = getCaps.call(client) as
+          | {
+              tools?: unknown
+              resources?: unknown
+              prompts?: unknown
+            }
+          | undefined
+          | null
+        if (caps == null) {
+          throw new Error(`server did not declare capabilities`)
+        }
+        if (caps.tools === undefined) {
+          throw new Error(`server has no tools capability`)
+        }
+        capsHasResources = caps.resources !== undefined
+        capsHasPrompts = caps.prompts !== undefined
+      }
       const result = await client.listTools()
       entry.tools = (result.tools ?? []).map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
       }))
-      // Resources are optional — many MCP servers don't expose them. Failures
-      // here should not flip status to `error`; just leave `resources`
-      // undefined.
-      try {
-        const res = await client.listResources()
-        entry.resources = (res.resources ?? []).map((r) => ({
-          uri: r.uri,
-          name: r.name,
-          mimeType: r.mimeType,
-        }))
-      } catch {
-        entry.resources = undefined
+      // Resources are optional — many MCP servers don't expose them. Skip
+      // the call when the capability isn't advertised; otherwise tolerate
+      // failures (just leave `resources` undefined) so a partial-failure
+      // server doesn't flip to `error`.
+      if (capsHasResources) {
+        try {
+          const res = await client.listResources()
+          entry.resources = (res.resources ?? []).map((r) => ({
+            uri: r.uri,
+            name: r.name,
+            mimeType: r.mimeType,
+          }))
+        } catch {
+          entry.resources = undefined
+        }
       }
       // Prompts are also optional — many MCP servers don't expose them.
-      // Failures here should not flip status to `error`; just leave
-      // `prompts` undefined.
-      try {
-        const pr = await client.listPrompts()
-        entry.prompts = (pr.prompts ?? []).map((p) => ({
-          name: p.name,
-          description: p.description,
-          arguments: p.arguments?.map((a) => ({
-            name: a.name,
-            description: a.description,
-            required: a.required,
-          })),
-        }))
-      } catch {
-        entry.prompts = undefined
+      // Same treatment as resources above.
+      if (capsHasPrompts) {
+        try {
+          const pr = await client.listPrompts()
+          entry.prompts = (pr.prompts ?? []).map((p) => ({
+            name: p.name,
+            description: p.description,
+            arguments: p.arguments?.map((a) => ({
+              name: a.name,
+              description: a.description,
+              required: a.required,
+            })),
+          }))
+        } catch {
+          entry.prompts = undefined
+        }
       }
     } catch (err) {
       entry.status = `error`
