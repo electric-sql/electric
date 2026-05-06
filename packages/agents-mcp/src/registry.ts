@@ -100,6 +100,11 @@ export function createRegistry(opts: RegistryOpts): Registry {
         }),
       }
     }
+    if (cfg.auth.mode === `none`) {
+      return {
+        transport: createHttpTransport({ name: cfg.name, url: cfg.url }),
+      }
+    }
     if (cfg.auth.mode === `apiKey`) {
       const key = await opts.credentials.getApiKey?.(cfg.name)
       if (!key)
