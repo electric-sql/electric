@@ -56,7 +56,7 @@ const registry = new Map<string, PaneFindApi>()
 
 export function usePaneFindRegistration(
   tileId: string,
-  api: PaneFindApi
+  api: PaneFindApi | null
 ): void {
   const apiRef = useRef(api)
   apiRef.current = api
@@ -64,10 +64,14 @@ export function usePaneFindRegistration(
   // Register a stable proxy once per tile id so callers always hit the
   // latest callbacks without re-registering on every render.
   useEffect(() => {
+    if (!apiRef.current) {
+      registry.delete(tileId)
+      return
+    }
     const proxy: PaneFindApi = {
-      open: () => apiRef.current.open(),
-      next: () => apiRef.current.next(),
-      previous: () => apiRef.current.previous(),
+      open: () => apiRef.current?.open(),
+      next: () => apiRef.current?.next(),
+      previous: () => apiRef.current?.previous(),
     }
     registry.set(tileId, proxy)
     return () => {
@@ -90,8 +94,10 @@ export function usePaneFindCommands(): {
     openFindForTile: useCallback(
       (tileId) => {
         if (!tileId) return
+        const api = registry.get(tileId)
+        if (!api) return
         openForTile(tileId)
-        registry.get(tileId)?.open()
+        api.open()
       },
       [openForTile]
     ),

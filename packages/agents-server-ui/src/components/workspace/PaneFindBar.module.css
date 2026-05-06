@@ -36,12 +36,11 @@
   color: var(--ds-fg);
 }
 
-.highlight {
-  background: #ffe16a;
-  color: #111;
-  border-radius: 2px;
+:global(::highlight(electric-pane-find-match)) {
+  background: rgba(255, 225, 106, 0.42);
 }
 
-.current {
-  background: #ff9f1a;
+:global(::highlight(electric-pane-find-current)) {
+  background: rgba(255, 159, 26, 0.72);
+  color: #111;
 }

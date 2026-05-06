@@ -4,6 +4,33 @@ import styles from './PaneFindBar.module.css'
 
 type Match = { node: Text; start: number; end: number }
 
+const MATCH_HIGHLIGHT_NAME = `electric-pane-find-match`
+const CURRENT_HIGHLIGHT_NAME = `electric-pane-find-current`
+
+type HighlightRegistry = {
+  set: (name: string, highlight: unknown) => void
+  delete: (name: string) => void
+}
+
+type HighlightConstructor = new (...ranges: Array<Range>) => unknown
+
+function getHighlightApi(): {
+  highlights: HighlightRegistry
+  Highlight: HighlightConstructor
+} | null {
+  if (typeof window === `undefined`) return null
+  const css = window.CSS as unknown as { highlights?: HighlightRegistry }
+  const HighlightCtor = (
+    window as unknown as { Highlight?: HighlightConstructor }
+  ).Highlight
+  if (!css.highlights || !HighlightCtor) return null
+  return { highlights: css.highlights, Highlight: HighlightCtor }
+}
+
+export function supportsPaneFind(): boolean {
+  return getHighlightApi() !== null
+}
+
 export function PaneFindBar({
   tileId,
   rootRef,
@@ -16,6 +43,7 @@ export function PaneFindBar({
   const [index, setIndex] = useState(0)
   const [count, setCount] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const supported = supportsPaneFind()
   const active = activeTileId === tileId
 
   const open = useCallback(() => {
@@ -28,7 +56,7 @@ export function PaneFindBar({
     setIndex((i) => (count ? (i - 1 + count) % count : 0))
   }, [count])
 
-  usePaneFindRegistration(tileId, { open, next, previous })
+  usePaneFindRegistration(tileId, supported ? { open, next, previous } : null)
 
   useEffect(() => {
     if (active) open()
@@ -40,18 +68,18 @@ export function PaneFindBar({
 
   useEffect(() => {
     const root = rootRef.current
-    clearHighlights(root)
-    if (!active || !query || !root) {
+    clearHighlights()
+    if (!supported || !active || !query || !root) {
       setCount(0)
       return
     }
     const matches = findMatches(root, query)
     setCount(matches.length)
     renderHighlights(root, matches, Math.min(index, matches.length - 1))
-    return () => clearHighlights(root)
-  }, [active, query, index, rootRef])
+    return () => clearHighlights()
+  }, [active, query, index, rootRef, supported])
 
-  if (!active) return null
+  if (!supported || !active) return null
 
   return (
     <div className={styles.bar} data-pane-find-bar>
@@ -92,7 +120,7 @@ function findMatches(root: HTMLElement, query: string): Array<Match> {
     acceptNode(node) {
       const parent = node.parentElement
       if (!parent) return NodeFilter.FILTER_REJECT
-      if (parent.closest(`[data-pane-find-bar], mark[data-pane-find]`)) {
+      if (parent.closest(`[data-pane-find-bar]`)) {
         return NodeFilter.FILTER_REJECT
       }
       if (!node.nodeValue?.trim()) return NodeFilter.FILTER_REJECT
@@ -114,12 +142,21 @@ function findMatches(root: HTMLElement, query: string): Array<Match> {
   return matches
 }
 
-function clearHighlights(root: HTMLElement | null): void {
-  if (!root) return
-  root.querySelectorAll(`mark[data-pane-find]`).forEach((mark) => {
-    mark.replaceWith(document.createTextNode(mark.textContent ?? ``))
-  })
-  root.normalize()
+function clearHighlights(): void {
+  const api = getHighlightApi()
+  api?.highlights.delete(MATCH_HIGHLIGHT_NAME)
+  api?.highlights.delete(CURRENT_HIGHLIGHT_NAME)
+}
+
+function createRange(match: Match): Range | null {
+  const range = document.createRange()
+  try {
+    range.setStart(match.node, match.start)
+    range.setEnd(match.node, match.end)
+    return range
+  } catch {
+    return null
+  }
 }
 
 function renderHighlights(
@@ -127,22 +164,41 @@ function renderHighlights(
   matches: Array<Match>,
   current: number
 ): void {
-  let currentMark: HTMLElement | null = null
-  for (let i = matches.length - 1; i >= 0; i--) {
+  const api = getHighlightApi()
+  if (!api) return
+
+  const matchRanges: Array<Range> = []
+  let currentRange: Range | null = null
+
+  for (let i = 0; i < matches.length; i++) {
     const match = matches[i]
     if (!match?.node.parentNode) continue
-    const range = document.createRange()
-    try {
-      range.setStart(match.node, match.start)
-      range.setEnd(match.node, match.end)
-    } catch {
-      continue
+    const range = createRange(match)
+    if (!range) continue
+    if (i === current) {
+      currentRange = range
+    } else {
+      matchRanges.push(range)
     }
-    const mark = document.createElement(`mark`)
-    mark.dataset.paneFind = `true`
-    mark.className = `${styles.highlight} ${i === current ? styles.current : ``}`
-    range.surroundContents(mark)
-    if (i === current) currentMark = mark
   }
-  currentMark?.scrollIntoView({ block: `center`, inline: `nearest` })
+
+  if (matchRanges.length > 0) {
+    api.highlights.set(MATCH_HIGHLIGHT_NAME, new api.Highlight(...matchRanges))
+  }
+  if (currentRange) {
+    api.highlights.set(CURRENT_HIGHLIGHT_NAME, new api.Highlight(currentRange))
+    scrollRangeIntoView(root, currentRange)
+  }
+}
+
+function scrollRangeIntoView(root: HTMLElement, range: Range): void {
+  const rect = range.getBoundingClientRect()
+  if (rect.width > 0 || rect.height > 0) {
+    const rootRect = root.getBoundingClientRect()
+    if (rect.top >= rootRect.top && rect.bottom <= rootRect.bottom) return
+  }
+  range.startContainer.parentElement?.scrollIntoView({
+    block: `center`,
+    inline: `nearest`,
+  })
 }
