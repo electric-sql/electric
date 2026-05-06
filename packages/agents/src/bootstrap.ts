@@ -8,6 +8,14 @@ import {
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
+import {
+  createFileVault,
+  createMcpTools,
+  createRegistry,
+  defaultTransportFactory,
+  watchConfig,
+  type McpToolsHandle,
+} from '@electric-ax/agents-mcp'
 import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
@@ -32,6 +40,50 @@ export interface AgentHandlerResult {
   registry: EntityRegistry
   typeNames: Array<string>
   skillsRegistry: SkillsRegistry | null
+  /** MCP tools handle (always present; empty if no mcp.json was found). */
+  mcpHandle: McpToolsHandle
+  /** Stop the MCP config watcher. No-op if no watcher was started. */
+  stopMcpWatcher: () => void
+}
+
+function bootstrapMcp(cwd: string): {
+  handle: McpToolsHandle
+  stopWatcher: () => void
+} {
+  const vaultPath =
+    process.env.MCP_VAULT_PATH ??
+    path.resolve(cwd, `.electric-agents/vault.json`)
+  const vaultKeyPath =
+    process.env.MCP_VAULT_KEY_PATH ??
+    path.resolve(cwd, `.electric-agents/vault.key`)
+  const configPath =
+    process.env.MCP_CONFIG_PATH ?? path.resolve(cwd, `mcp.json`)
+
+  const vault = createFileVault(vaultPath, { keyPath: vaultKeyPath })
+  const registry = createRegistry({
+    vault,
+    transportFactory: defaultTransportFactory,
+  })
+
+  let stopWatcher: () => void = () => {}
+  try {
+    stopWatcher = watchConfig(configPath, (cfg) => {
+      registry.applyConfig(cfg).catch((err) => {
+        serverLog.warn(
+          `[mcp] applyConfig failed: ${err instanceof Error ? err.message : String(err)}`
+        )
+      })
+    })
+    serverLog.info(`[mcp] watching config: ${configPath}`)
+  } catch (err) {
+    // No mcp.json (or unreadable) — that's fine; the registry stays empty.
+    serverLog.debug(
+      `[mcp] no config watcher started (${err instanceof Error ? err.message : String(err)})`
+    )
+  }
+
+  const handle = createMcpTools(registry, `*`)
+  return { handle, stopWatcher }
 }
 
 export interface BuiltinAgentHandlerOptions {
@@ -110,12 +162,15 @@ export async function createBuiltinAgentHandler(
     )
   }
 
+  const { handle: mcpHandle, stopWatcher: stopMcpWatcher } = bootstrapMcp(cwd)
+
   const registry = createEntityRegistry()
   const typeNames = registerHorton(registry, {
     workingDirectory: cwd,
     streamFn,
     skillsRegistry,
     modelCatalog,
+    mcpHandle,
   })
 
   registerWorker(registry, { workingDirectory: cwd, streamFn, modelCatalog })
@@ -136,6 +191,8 @@ export async function createBuiltinAgentHandler(
     registry,
     typeNames,
     skillsRegistry,
+    mcpHandle,
+    stopMcpWatcher,
   }
 }
 

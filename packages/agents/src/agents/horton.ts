@@ -4,6 +4,8 @@ import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createSkillTools } from '../skills/tools'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
+import { bridgedToolsToAgentTools } from '../tools/mcp-tools'
+import type { McpToolsHandle } from '@electric-ax/agents-mcp'
 import {
   modelChoiceValues,
   REASONING_EFFORT_VALUES,
@@ -270,6 +272,7 @@ export function createHortonTools(
   opts: {
     docsSearchTool?: AgentTool
     modelConfig?: ReturnType<typeof resolveBuiltinModelConfig>
+    mcpHandle?: McpToolsHandle
   } = {}
 ): Array<AgentTool> {
   return [
@@ -281,6 +284,7 @@ export function createHortonTools(
     fetchUrlTool,
     createSpawnWorkerTool(ctx, opts.modelConfig),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
+    ...(opts.mcpHandle ? bridgedToolsToAgentTools(opts.mcpHandle.tools()) : []),
   ]
 }
 
@@ -310,6 +314,7 @@ function createAssistantHandler(options: {
   skillsRegistry: SkillsRegistry | null
   modelCatalog: BuiltinModelCatalog
   docsUrl?: string
+  mcpHandle?: McpToolsHandle
 }) {
   const {
     workingDirectory,
@@ -319,6 +324,7 @@ function createAssistantHandler(options: {
     skillsRegistry,
     modelCatalog,
     docsUrl,
+    mcpHandle,
   } = options
   const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
 
@@ -333,6 +339,7 @@ function createAssistantHandler(options: {
       ...createHortonTools(workingDirectory, ctx, readSet, {
         docsSearchTool,
         modelConfig,
+        mcpHandle,
       }),
       ...(skillsRegistry && skillsRegistry.catalog.size > 0
         ? createSkillTools(skillsRegistry, ctx)
@@ -438,6 +445,7 @@ export function registerHorton(
     skillsRegistry?: SkillsRegistry | null
     modelCatalog: BuiltinModelCatalog
     docsUrl?: string
+    mcpHandle?: McpToolsHandle
   }
 ): Array<string> {
   const {
@@ -445,6 +453,7 @@ export function registerHorton(
     streamFn,
     skillsRegistry = null,
     modelCatalog,
+    mcpHandle,
   } = options
   const docsUrl = options.docsUrl ?? process.env.HORTON_DOCS_URL
 
@@ -473,6 +482,7 @@ export function registerHorton(
     skillsRegistry,
     modelCatalog,
     docsUrl,
+    mcpHandle,
   })
 
   const hortonCreationSchema = z.object({

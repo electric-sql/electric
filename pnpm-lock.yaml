@@ -1511,6 +1511,9 @@ importers:
       '@durable-streams/state':
         specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
         version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
+      '@electric-ax/agents-mcp':
+        specifier: workspace:*
+        version: link:../agents-mcp
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
