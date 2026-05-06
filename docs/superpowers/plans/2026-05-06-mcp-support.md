@@ -14,45 +14,45 @@
 
 ### New package: `packages/agents-mcp/`
 
-| File | Responsibility |
-|---|---|
-| `package.json`, `tsconfig.json`, `tsdown.config.ts`, `vitest.config.ts` | Workspace package boilerplate |
-| `src/index.ts` | Public exports |
-| `src/types.ts` | Shared types: `McpServerConfig`, `McpAuthMode`, `McpToolError`, `McpServerStatus` |
-| `src/config/loader.ts` | Parse + validate `mcp.json` |
-| `src/config/watcher.ts` | File-watch wrapper around `loader.ts` |
-| `src/config/env-expand.ts` | `${env:VAR}` substitution |
-| `src/vault/types.ts` | `KeyVault` interface |
-| `src/vault/file-vault.ts` | Default file-on-disk implementation (`chmod 600`, OS-keychain encryption when available) |
-| `src/transports/types.ts` | `McpTransport` interface |
-| `src/transports/stdio.ts` | Stdio subprocess transport |
-| `src/transports/http.ts` | Streamable HTTP transport |
-| `src/transports/timeout.ts` | Per-call timeout helper |
-| `src/auth/types.ts` | Auth-related types |
-| `src/auth/api-key.ts` | `apiKey` mode header injection |
-| `src/auth/client-credentials.ts` | OAuth `client_credentials` grant |
-| `src/auth/authorization-code.ts` | OAuth authorization-code grant + PKCE |
-| `src/auth/device-code.ts` | OAuth device-code grant (RFC 8628) |
-| `src/auth/coordinator.ts` | Owns refresh exchange with per-`(server, scope)` mutex |
-| `src/auth/dcr.ts` | Dynamic Client Registration (RFC 7591) |
-| `src/auth/discovery.ts` | RFC 9728 protected-resource-metadata discovery |
-| `src/registry.ts` | MCP Registry: server lifecycle, hot-reload, status tracking |
-| `src/bridge/tool-bridge.ts` | Wraps MCP tool calls as `AgentTool`, prefixes names, handles errors |
-| `src/tools.ts` | `mcp.tools(allowlist)` factory exposed to agent definitions |
-| `test/**/*.test.ts` | Vitest unit + integration tests (one file per src module) |
+| File                                                                    | Responsibility                                                                           |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `package.json`, `tsconfig.json`, `tsdown.config.ts`, `vitest.config.ts` | Workspace package boilerplate                                                            |
+| `src/index.ts`                                                          | Public exports                                                                           |
+| `src/types.ts`                                                          | Shared types: `McpServerConfig`, `McpAuthMode`, `McpToolError`, `McpServerStatus`        |
+| `src/config/loader.ts`                                                  | Parse + validate `mcp.json`                                                              |
+| `src/config/watcher.ts`                                                 | File-watch wrapper around `loader.ts`                                                    |
+| `src/config/env-expand.ts`                                              | `${env:VAR}` substitution                                                                |
+| `src/vault/types.ts`                                                    | `KeyVault` interface                                                                     |
+| `src/vault/file-vault.ts`                                               | Default file-on-disk implementation (`chmod 600`, OS-keychain encryption when available) |
+| `src/transports/types.ts`                                               | `McpTransport` interface                                                                 |
+| `src/transports/stdio.ts`                                               | Stdio subprocess transport                                                               |
+| `src/transports/http.ts`                                                | Streamable HTTP transport                                                                |
+| `src/transports/timeout.ts`                                             | Per-call timeout helper                                                                  |
+| `src/auth/types.ts`                                                     | Auth-related types                                                                       |
+| `src/auth/api-key.ts`                                                   | `apiKey` mode header injection                                                           |
+| `src/auth/client-credentials.ts`                                        | OAuth `client_credentials` grant                                                         |
+| `src/auth/authorization-code.ts`                                        | OAuth authorization-code grant + PKCE                                                    |
+| `src/auth/device-code.ts`                                               | OAuth device-code grant (RFC 8628)                                                       |
+| `src/auth/coordinator.ts`                                               | Owns refresh exchange with per-`(server, scope)` mutex                                   |
+| `src/auth/dcr.ts`                                                       | Dynamic Client Registration (RFC 7591)                                                   |
+| `src/auth/discovery.ts`                                                 | RFC 9728 protected-resource-metadata discovery                                           |
+| `src/registry.ts`                                                       | MCP Registry: server lifecycle, hot-reload, status tracking                              |
+| `src/bridge/tool-bridge.ts`                                             | Wraps MCP tool calls as `AgentTool`, prefixes names, handles errors                      |
+| `src/tools.ts`                                                          | `mcp.tools(allowlist)` factory exposed to agent definitions                              |
+| `test/**/*.test.ts`                                                     | Vitest unit + integration tests (one file per src module)                                |
 
 ### Modified packages
 
-| File | Modification |
-|---|---|
-| `packages/agents-server/src/oauth-routes.ts` (new) | OAuth callback (`GET /oauth/callback/:server`) and device-flow endpoints |
-| `packages/agents-server/src/mcp-status-routes.ts` (new) | Connected Services API (status + per-server actions) |
-| `packages/agents-server/src/server.ts` | Mount the new routes |
-| `packages/agents-server-ui/src/router.tsx` | Add `/connected-services` route |
-| `packages/agents-server-ui/src/components/connected-services/*.tsx` (new) | The page itself + per-row components |
-| `packages/agents/src/bootstrap.ts` | Wire `@electric-ax/agents-mcp` registry into runtime startup |
-| `packages/agents/src/agents/horton.ts` | Compose `mcp.tools('*')` into Horton's tool set |
-| `pnpm-workspace.yaml` | (already includes `packages/*`) |
+| File                                                                      | Modification                                                             |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `packages/agents-server/src/oauth-routes.ts` (new)                        | OAuth callback (`GET /oauth/callback/:server`) and device-flow endpoints |
+| `packages/agents-server/src/mcp-status-routes.ts` (new)                   | Connected Services API (status + per-server actions)                     |
+| `packages/agents-server/src/server.ts`                                    | Mount the new routes                                                     |
+| `packages/agents-server-ui/src/router.tsx`                                | Add `/connected-services` route                                          |
+| `packages/agents-server-ui/src/components/connected-services/*.tsx` (new) | The page itself + per-row components                                     |
+| `packages/agents/src/bootstrap.ts`                                        | Wire `@electric-ax/agents-mcp` registry into runtime startup             |
+| `packages/agents/src/agents/horton.ts`                                    | Compose `mcp.tools('*')` into Horton's tool set                          |
+| `pnpm-workspace.yaml`                                                     | (already includes `packages/*`)                                          |
 
 ---
 
@@ -63,6 +63,7 @@ End state: an agent declaration like `tools: [...mcp.tools(['github'])]` causes 
 ### Task 1: Bootstrap `agents-mcp` package
 
 **Files:**
+
 - Create: `packages/agents-mcp/package.json`
 - Create: `packages/agents-mcp/tsconfig.json`
 - Create: `packages/agents-mcp/tsdown.config.ts`
@@ -110,7 +111,10 @@ Expected: FAIL — package not buildable yet.
   "exports": {
     ".": {
       "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     }
   },
   "dependencies": {
@@ -150,6 +154,7 @@ git commit -m "feat(agents-mcp): bootstrap package"
 ### Task 2: Define core types
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/types.ts`
 - Create: `packages/agents-mcp/test/types.test.ts`
 
@@ -158,15 +163,31 @@ git commit -m "feat(agents-mcp): bootstrap package"
 ```ts
 // test/types.test.ts
 import { describe, expect, it } from 'vitest'
-import type { McpServerConfig, McpAuthMode, McpToolError, McpServerStatus } from '../src/types'
+import type {
+  McpServerConfig,
+  McpAuthMode,
+  McpToolError,
+  McpServerStatus,
+} from '../src/types'
 
 describe('types', () => {
   it('McpAuthMode enumerates expected modes', () => {
-    const modes: McpAuthMode[] = ['apiKey', 'clientCredentials', 'authorizationCode']
+    const modes: McpAuthMode[] = [
+      'apiKey',
+      'clientCredentials',
+      'authorizationCode',
+    ]
     expect(modes).toHaveLength(3)
   })
   it('McpToolError categories', () => {
-    const errs: McpToolError['kind'][] = ['auth_unavailable', 'transport_error', 'timeout', 'server_error', 'tool_not_found', 'schema_violation']
+    const errs: McpToolError['kind'][] = [
+      'auth_unavailable',
+      'transport_error',
+      'timeout',
+      'server_error',
+      'tool_not_found',
+      'schema_violation',
+    ]
     expect(errs).toHaveLength(6)
   })
 })
@@ -183,7 +204,12 @@ Expected: FAIL — module not found.
 // src/types.ts
 export type McpAuthMode = 'apiKey' | 'clientCredentials' | 'authorizationCode'
 
-export type McpServerStatus = 'healthy' | 'expiring' | 'needs_auth' | 'error' | 'disabled'
+export type McpServerStatus =
+  | 'healthy'
+  | 'expiring'
+  | 'needs_auth'
+  | 'error'
+  | 'disabled'
 
 export type McpTransport = 'stdio' | 'http'
 
@@ -208,14 +234,32 @@ export type McpServerConfig = McpStdioConfig | McpHttpConfig
 
 export type McpAuthConfig =
   | { mode: 'apiKey'; headerName: string; valueRef: string }
-  | { mode: 'clientCredentials'; clientIdRef: string; clientSecretRef: string; tokenUrl: string; scopes?: string[] }
-  | { mode: 'authorizationCode'; flow: 'browser' | 'device'; scopes?: string[]; clientIdRef?: string; authorizationUrl?: string; tokenUrl?: string }
+  | {
+      mode: 'clientCredentials'
+      clientIdRef: string
+      clientSecretRef: string
+      tokenUrl: string
+      scopes?: string[]
+    }
+  | {
+      mode: 'authorizationCode'
+      flow: 'browser' | 'device'
+      scopes?: string[]
+      clientIdRef?: string
+      authorizationUrl?: string
+      tokenUrl?: string
+    }
 
 export type McpToolError =
   | { kind: 'auth_unavailable'; server: string; detail?: string }
   | { kind: 'transport_error'; server: string; detail: string }
   | { kind: 'timeout'; server: string; ms: number }
-  | { kind: 'server_error'; server: string; code?: string | number; message: string }
+  | {
+      kind: 'server_error'
+      server: string
+      code?: string | number
+      message: string
+    }
   | { kind: 'tool_not_found'; server: string; tool: string }
   | { kind: 'schema_violation'; server: string; tool: string; detail: string }
 ```
@@ -239,6 +283,7 @@ git commit -m "feat(agents-mcp): core types"
 ### Task 3: Env-var expansion utility
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/config/env-expand.ts`
 - Create: `packages/agents-mcp/test/config/env-expand.test.ts`
 
@@ -254,7 +299,9 @@ describe('expandEnv', () => {
     expect(expandEnv('Bearer ${env:GITHUB_TOKEN}', env)).toBe('Bearer gh_abc')
   })
   it('expands multiple', () => {
-    expect(expandEnv('${env:WORKSPACE}/${env:GITHUB_TOKEN}', env)).toBe('/repo/gh_abc')
+    expect(expandEnv('${env:WORKSPACE}/${env:GITHUB_TOKEN}', env)).toBe(
+      '/repo/gh_abc'
+    )
   })
   it('throws on missing', () => {
     expect(() => expandEnv('${env:MISSING}', env)).toThrow(/MISSING/)
@@ -276,7 +323,10 @@ Expected: FAIL.
 // src/config/env-expand.ts
 const PATTERN = /\$\{env:([A-Z_][A-Z0-9_]*)\}/g
 
-export function expandEnv(input: string, env: NodeJS.ProcessEnv | Record<string, string | undefined>): string {
+export function expandEnv(
+  input: string,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>
+): string {
   return input.replace(PATTERN, (_, name: string) => {
     const v = env[name]
     if (v === undefined) throw new Error(`Missing env var: ${name}`)
@@ -297,6 +347,7 @@ git add . && git commit -m "feat(agents-mcp): env-var expansion utility"
 ### Task 4: Config loader (parse + validate `mcp.json`)
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/config/loader.ts`
 - Create: `packages/agents-mcp/test/config/loader.test.ts`
 - Create: `packages/agents-mcp/test/fixtures/valid.json`
@@ -311,20 +362,32 @@ git add . && git commit -m "feat(agents-mcp): env-var expansion utility"
     "github": {
       "transport": "http",
       "url": "https://api.example.com/mcp",
-      "auth": { "mode": "apiKey", "headerName": "Authorization", "valueRef": "vault://github/token" }
+      "auth": {
+        "mode": "apiKey",
+        "headerName": "Authorization",
+        "valueRef": "vault://github/token",
+      },
     },
     "git-local": {
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-git"]
-    }
-  }
+      "args": ["-y", "@modelcontextprotocol/server-git"],
+    },
+  },
 }
 ```
 
 ```jsonc
 // test/fixtures/invalid-mode.json
-{ "servers": { "x": { "transport": "http", "url": "https://x", "auth": { "mode": "bogus" } } } }
+{
+  "servers": {
+    "x": {
+      "transport": "http",
+      "url": "https://x",
+      "auth": { "mode": "bogus" },
+    },
+  },
+}
 ```
 
 - [ ] **Step 2: Write the test**
@@ -335,7 +398,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { loadConfig, parseConfig } from '../../src/config/loader'
 
-const fixture = (name: string) => readFileSync(join(__dirname, '../fixtures', name), 'utf8')
+const fixture = (name: string) =>
+  readFileSync(join(__dirname, '../fixtures', name), 'utf8')
 
 describe('config loader', () => {
   it('parses valid config', () => {
@@ -344,7 +408,9 @@ describe('config loader', () => {
     expect(cfg.servers.github.transport).toBe('http')
   })
   it('rejects invalid auth mode', () => {
-    expect(() => parseConfig(fixture('invalid-mode.json'))).toThrow(/auth.*mode/)
+    expect(() => parseConfig(fixture('invalid-mode.json'))).toThrow(
+      /auth.*mode/
+    )
   })
   it('loadConfig reads from path', async () => {
     const cfg = await loadConfig(join(__dirname, '../fixtures/valid.json'))
@@ -366,7 +432,11 @@ export interface McpConfig {
   servers: Record<string, McpServerConfig>
 }
 
-const ALLOWED_MODES: McpAuthMode[] = ['apiKey', 'clientCredentials', 'authorizationCode']
+const ALLOWED_MODES: McpAuthMode[] = [
+  'apiKey',
+  'clientCredentials',
+  'authorizationCode',
+]
 
 export function parseConfig(text: string): McpConfig {
   const data: unknown = JSON.parse(text)
@@ -381,19 +451,24 @@ export function parseConfig(text: string): McpConfig {
 }
 
 function validateServer(name: string, raw: unknown): void {
-  if (typeof raw !== 'object' || raw === null) throw new Error(`Server "${name}" must be an object`)
+  if (typeof raw !== 'object' || raw === null)
+    throw new Error(`Server "${name}" must be an object`)
   const s = raw as Record<string, unknown>
   if (s.transport !== 'stdio' && s.transport !== 'http') {
     throw new Error(`Server "${name}": transport must be "stdio" or "http"`)
   }
   if (s.transport === 'stdio') {
-    if (typeof s.command !== 'string') throw new Error(`Server "${name}" (stdio): command required`)
+    if (typeof s.command !== 'string')
+      throw new Error(`Server "${name}" (stdio): command required`)
   } else {
-    if (typeof s.url !== 'string') throw new Error(`Server "${name}" (http): url required`)
+    if (typeof s.url !== 'string')
+      throw new Error(`Server "${name}" (http): url required`)
     const auth = s.auth as Record<string, unknown> | undefined
     if (!auth) throw new Error(`Server "${name}" (http): auth required`)
     if (!ALLOWED_MODES.includes(auth.mode as McpAuthMode)) {
-      throw new Error(`Server "${name}": auth.mode must be one of ${ALLOWED_MODES.join(', ')}`)
+      throw new Error(
+        `Server "${name}": auth.mode must be one of ${ALLOWED_MODES.join(', ')}`
+      )
     }
   }
 }
@@ -413,6 +488,7 @@ git add . && git commit -m "feat(agents-mcp): config loader with validation"
 ### Task 5: Config watcher (hot reload)
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/config/watcher.ts`
 - Create: `packages/agents-mcp/test/config/watcher.test.ts`
 
@@ -427,18 +503,35 @@ import { watchConfig } from '../../src/config/watcher'
 
 describe('watchConfig', () => {
   let dir = ''
-  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'mcp-')); })
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'mcp-'))
+  })
 
   it('emits initial + change events with debounce', async () => {
     const path = join(dir, 'mcp.json')
     await writeFile(path, JSON.stringify({ servers: {} }))
     const events: string[] = []
-    const stop = watchConfig(path, (cfg) => {
-      events.push(Object.keys(cfg.servers).join(',') || 'empty')
-    }, { debounceMs: 50 })
+    const stop = watchConfig(
+      path,
+      (cfg) => {
+        events.push(Object.keys(cfg.servers).join(',') || 'empty')
+      },
+      { debounceMs: 50 }
+    )
 
-    await new Promise((r) => setTimeout(r, 100))  // initial load
-    await writeFile(path, JSON.stringify({ servers: { a: { transport: 'http', url: 'http://x', auth: { mode: 'apiKey', headerName: 'X', valueRef: 'v' } } } }))
+    await new Promise((r) => setTimeout(r, 100)) // initial load
+    await writeFile(
+      path,
+      JSON.stringify({
+        servers: {
+          a: {
+            transport: 'http',
+            url: 'http://x',
+            auth: { mode: 'apiKey', headerName: 'X', valueRef: 'v' },
+          },
+        },
+      })
+    )
     await new Promise((r) => setTimeout(r, 200))
 
     stop()
@@ -456,7 +549,9 @@ describe('watchConfig', () => {
 import { watch } from 'node:fs'
 import { loadConfig, type McpConfig } from './loader'
 
-export interface WatchOptions { debounceMs?: number }
+export interface WatchOptions {
+  debounceMs?: number
+}
 
 export function watchConfig(
   path: string,
@@ -468,13 +563,19 @@ export function watchConfig(
   const reload = () => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(async () => {
-      try { onChange(await loadConfig(path)) }
-      catch (err) { console.error(`mcp.json reload failed:`, err) }
+      try {
+        onChange(await loadConfig(path))
+      } catch (err) {
+        console.error(`mcp.json reload failed:`, err)
+      }
     }, debounceMs)
   }
   reload()
   const watcher = watch(path, () => reload())
-  return () => { watcher.close(); if (timer) clearTimeout(timer) }
+  return () => {
+    watcher.close()
+    if (timer) clearTimeout(timer)
+  }
 }
 ```
 
@@ -487,6 +588,7 @@ git add . && git commit -m "feat(agents-mcp): config file watcher with debounce"
 ### Task 6: KeyVault interface + file-on-disk implementation
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/vault/types.ts`
 - Create: `packages/agents-mcp/src/vault/file-vault.ts`
 - Create: `packages/agents-mcp/test/vault/file-vault.test.ts`
@@ -502,7 +604,9 @@ import { createFileVault } from '../../src/vault/file-vault'
 
 describe('file-vault', () => {
   let dir = ''
-  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'vault-')) })
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'vault-'))
+  })
 
   it('round-trips secrets', async () => {
     const vault = createFileVault(join(dir, 'vault.json'))
@@ -549,12 +653,19 @@ import { readFile, writeFile, chmod, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { KeyVault } from './types'
 
-interface Entry { secret: string; expiresAt?: string }
+interface Entry {
+  secret: string
+  expiresAt?: string
+}
 type Store = Record<string, Entry>
 
 async function read(path: string): Promise<Store> {
-  try { return JSON.parse(await readFile(path, 'utf8')) as Store }
-  catch (err: any) { if (err.code === 'ENOENT') return {}; throw err }
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as Store
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return {}
+    throw err
+  }
 }
 
 async function write(path: string, store: Store): Promise<void> {
@@ -571,7 +682,10 @@ export function createFileVault(path: string): KeyVault {
     },
     async set(ref, secret, opts) {
       const s = await read(path)
-      s[ref] = { secret, ...(opts?.expiresAt ? { expiresAt: opts.expiresAt.toISOString() } : {}) }
+      s[ref] = {
+        secret,
+        ...(opts?.expiresAt ? { expiresAt: opts.expiresAt.toISOString() } : {}),
+      }
       await write(path, s)
     },
     async delete(ref) {
@@ -583,7 +697,10 @@ export function createFileVault(path: string): KeyVault {
       const s = await read(path)
       return Object.entries(s)
         .filter(([k]) => k.startsWith(prefix))
-        .map(([ref, v]) => ({ ref, ...(v.expiresAt ? { expiresAt: new Date(v.expiresAt) } : {}) }))
+        .map(([ref, v]) => ({
+          ref,
+          ...(v.expiresAt ? { expiresAt: new Date(v.expiresAt) } : {}),
+        }))
     },
   }
 }
@@ -600,6 +717,7 @@ git add . && git commit -m "feat(agents-mcp): KeyVault interface + file-on-disk 
 ### Task 6b: OS-keychain encryption-at-rest (optional best-effort layer)
 
 **Files:**
+
 - Modify: `packages/agents-mcp/src/vault/file-vault.ts`
 - Create: `packages/agents-mcp/src/vault/keychain.ts`
 - Create: `packages/agents-mcp/test/vault/keychain.test.ts`
@@ -608,7 +726,11 @@ git add . && git commit -m "feat(agents-mcp): KeyVault interface + file-on-disk 
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { encryptWithKey, decryptWithKey, generateVaultKey } from '../../src/vault/keychain'
+import {
+  encryptWithKey,
+  decryptWithKey,
+  generateVaultKey,
+} from '../../src/vault/keychain'
 
 describe('vault encryption', () => {
   it('round-trips through AES-256-GCM', () => {
@@ -631,7 +753,9 @@ describe('vault encryption', () => {
 // src/vault/keychain.ts
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto'
 
-export function generateVaultKey(): Buffer { return randomBytes(32) }
+export function generateVaultKey(): Buffer {
+  return randomBytes(32)
+}
 
 export function encryptWithKey(plaintext: string, key: Buffer): string {
   const iv = randomBytes(12)
@@ -659,8 +783,16 @@ Modify `file-vault.ts` to optionally accept a `key: Buffer`. When provided, secr
 - [ ] **Step 4: Update `createFileVault` signature**
 
 ```ts
-export interface FileVaultOptions { keyPath?: string; key?: Buffer }
-export function createFileVault(path: string, opts: FileVaultOptions = {}): KeyVault { /* ... */ }
+export interface FileVaultOptions {
+  keyPath?: string
+  key?: Buffer
+}
+export function createFileVault(
+  path: string,
+  opts: FileVaultOptions = {}
+): KeyVault {
+  /* ... */
+}
 ```
 
 - [ ] **Step 5: Run, commit**
@@ -672,6 +804,7 @@ git add . && git commit -m "feat(agents-mcp): AES-256-GCM encryption for vault e
 ### Task 7: Stdio transport
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/transports/types.ts`
 - Create: `packages/agents-mcp/src/transports/stdio.ts`
 - Create: `packages/agents-mcp/test/transports/stdio.test.ts`
@@ -686,7 +819,11 @@ import { createStdioTransport } from '../../src/transports/stdio'
 
 describe('stdio transport', () => {
   it('exposes connect/send/close', () => {
-    const t = createStdioTransport({ transport: 'stdio', command: 'echo', args: [] })
+    const t = createStdioTransport({
+      transport: 'stdio',
+      command: 'echo',
+      args: [],
+    })
     expect(typeof t.connect).toBe('function')
     expect(typeof t.send).toBe('function')
     expect(typeof t.close).toBe('function')
@@ -696,12 +833,17 @@ describe('stdio transport', () => {
 
 - [ ] **Step 2: Implement (delegates to MCP SDK)**
 
+The handle exposes the underlying SDK `Client` directly rather than wrapping `Client.request` with an opaque `send`. The SDK's `Client` already provides typed, schema-validated helpers for every MCP method downstream consumers need (`callTool`, `listTools`, `listResources`, `readResource`, `getPrompt`, etc), so re-wrapping them is friction. The transport handle's job is just lifecycle (connect / close).
+
 ```ts
 // src/transports/types.ts
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
+
 export interface McpTransportHandle {
   connect(): Promise<void>
-  send(message: unknown): Promise<unknown>
   close(): Promise<void>
+  /** The underlying MCP client. Populated after connect() resolves; null before. */
+  readonly client: Client | null
 }
 ```
 
@@ -713,22 +855,28 @@ import type { McpStdioConfig } from '../types'
 import type { McpTransportHandle } from './types'
 
 export function createStdioTransport(cfg: McpStdioConfig): McpTransportHandle {
-  let client: Client | undefined
-  let transport: StdioClientTransport | undefined
+  let _client: Client | undefined
+  let _transport: StdioClientTransport | undefined
   return {
     async connect() {
-      transport = new StdioClientTransport({ command: cfg.command, args: cfg.args ?? [], env: cfg.env })
-      client = new Client({ name: 'agents-mcp', version: '0.1.0' }, { capabilities: {} })
-      await client.connect(transport)
-    },
-    async send(message) {
-      if (!client) throw new Error('not connected')
-      return client.request(message as any, undefined as any)
+      _transport = new StdioClientTransport({
+        command: cfg.command,
+        args: cfg.args ?? [],
+        env: cfg.env,
+      })
+      _client = new Client(
+        { name: 'agents-mcp', version: '0.1.0' },
+        { capabilities: {} }
+      )
+      await _client.connect(_transport)
     },
     async close() {
-      await client?.close()
-      client = undefined
-      transport = undefined
+      await _client?.close()
+      _client = undefined
+      _transport = undefined
+    },
+    get client() {
+      return _client ?? null
     },
   }
 }
@@ -743,6 +891,7 @@ git add . && git commit -m "feat(agents-mcp): stdio transport wrapping MCP SDK"
 ### Task 8: HTTP transport
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/transports/http.ts`
 - Create: `packages/agents-mcp/test/transports/http.test.ts`
 
@@ -755,7 +904,11 @@ import { createHttpTransport } from '../../src/transports/http'
 describe('http transport', () => {
   it('exposes connect/send/close', () => {
     const t = createHttpTransport(
-      { transport: 'http', url: 'http://x', auth: { mode: 'apiKey', headerName: 'X', valueRef: 'v' } },
+      {
+        transport: 'http',
+        url: 'http://x',
+        auth: { mode: 'apiKey', headerName: 'X', valueRef: 'v' },
+      },
       async () => 'token'
     )
     expect(typeof t.connect).toBe('function')
@@ -774,23 +927,34 @@ import type { McpTransportHandle } from './types'
 
 export type GetToken = () => Promise<string | null>
 
-export function createHttpTransport(cfg: McpHttpConfig, getToken: GetToken): McpTransportHandle {
-  let client: Client | undefined
-  let transport: StreamableHTTPClientTransport | undefined
+export function createHttpTransport(
+  cfg: McpHttpConfig,
+  getToken: GetToken
+): McpTransportHandle {
+  let _client: Client | undefined
+  let _transport: StreamableHTTPClientTransport | undefined
   return {
     async connect() {
       const token = await getToken()
-      transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
-        requestInit: token ? { headers: { Authorization: `Bearer ${token}` } } : {},
+      _transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
+        requestInit: token
+          ? { headers: { Authorization: `Bearer ${token}` } }
+          : {},
       })
-      client = new Client({ name: 'agents-mcp', version: '0.1.0' }, { capabilities: {} })
-      await client.connect(transport)
+      _client = new Client(
+        { name: 'agents-mcp', version: '0.1.0' },
+        { capabilities: {} }
+      )
+      await _client.connect(_transport)
     },
-    async send(message) {
-      if (!client) throw new Error('not connected')
-      return client.request(message as any, undefined as any)
+    async close() {
+      await _client?.close()
+      _client = undefined
+      _transport = undefined
     },
-    async close() { await client?.close(); client = undefined; transport = undefined },
+    get client() {
+      return _client ?? null
+    },
   }
 }
 ```
@@ -806,6 +970,7 @@ git add . && git commit -m "feat(agents-mcp): Streamable HTTP transport"
 ### Task 9: Per-call timeout helper
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/transports/timeout.ts`
 - Create: `packages/agents-mcp/test/transports/timeout.test.ts`
 
@@ -820,7 +985,9 @@ describe('withTimeout', () => {
     expect(await withTimeout(Promise.resolve(7), 50)).toBe(7)
   })
   it('rejects on timeout', async () => {
-    await expect(withTimeout(new Promise(() => {}), 20)).rejects.toBeInstanceOf(TimeoutError)
+    await expect(withTimeout(new Promise(() => {}), 20)).rejects.toBeInstanceOf(
+      TimeoutError
+    )
   })
 })
 ```
@@ -829,12 +996,25 @@ describe('withTimeout', () => {
 
 ```ts
 // src/transports/timeout.ts
-export class TimeoutError extends Error { constructor(public ms: number) { super(`timed out after ${ms}ms`) } }
+export class TimeoutError extends Error {
+  constructor(public ms: number) {
+    super(`timed out after ${ms}ms`)
+  }
+}
 
 export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new TimeoutError(ms)), ms)
-    p.then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(t)
+        reject(e)
+      }
+    )
   })
 }
 ```
@@ -848,6 +1028,7 @@ git add . && git commit -m "feat(agents-mcp): per-call timeout helper"
 ### Task 10: apiKey auth adapter
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/api-key.ts`
 - Create: `packages/agents-mcp/test/auth/api-key.test.ts`
 
@@ -858,7 +1039,9 @@ import { describe, expect, it } from 'vitest'
 import { createApiKeyAuth } from '../../src/auth/api-key'
 
 describe('apiKey auth', () => {
-  const vault = { get: async (r: string) => (r === 'vault://x/key' ? 'TOKEN' : null) } as any
+  const vault = {
+    get: async (r: string) => (r === 'vault://x/key' ? 'TOKEN' : null),
+  } as any
   it('reads from vault', async () => {
     const auth = createApiKeyAuth(
       { mode: 'apiKey', headerName: 'X-Token', valueRef: 'vault://x/key' },
@@ -908,6 +1091,7 @@ git add . && git commit -m "feat(agents-mcp): apiKey auth adapter"
 ### Task 11: MCP Registry
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/registry.ts`
 - Create: `packages/agents-mcp/test/registry.test.ts`
 
@@ -922,7 +1106,9 @@ import type { KeyVault } from '../src/vault/types'
 
 const vault: KeyVault = {
   get: async (r) => (r === 'vault://github/token' ? 'TOKEN' : null),
-  set: async () => {}, delete: async () => {}, list: async () => [],
+  set: async () => {},
+  delete: async () => {},
+  list: async () => [],
 }
 
 describe('registry', () => {
@@ -930,11 +1116,19 @@ describe('registry', () => {
     const reg = createRegistry({ vault, transportFactory: fakeFactory() })
     await reg.applyConfig({
       servers: {
-        gh: { transport: 'http', url: 'http://x', auth: { mode: 'apiKey', headerName: 'A', valueRef: 'vault://github/token' } }
-      }
+        gh: {
+          transport: 'http',
+          url: 'http://x',
+          auth: {
+            mode: 'apiKey',
+            headerName: 'A',
+            valueRef: 'vault://github/token',
+          },
+        },
+      },
     })
     expect(reg.list()).toEqual([
-      expect.objectContaining({ name: 'gh', status: 'healthy' })
+      expect.objectContaining({ name: 'gh', status: 'healthy' }),
     ])
   })
 
@@ -942,14 +1136,24 @@ describe('registry', () => {
     const reg = createRegistry({ vault, transportFactory: fakeFactory() })
     await reg.applyConfig({
       servers: {
-        bad: { transport: 'http', url: 'http://x', auth: { mode: 'apiKey', headerName: 'A', valueRef: 'vault://missing' } }
-      }
+        bad: {
+          transport: 'http',
+          url: 'http://x',
+          auth: {
+            mode: 'apiKey',
+            headerName: 'A',
+            valueRef: 'vault://missing',
+          },
+        },
+      },
     })
     expect(reg.list().find((s) => s.name === 'bad')?.status).toBe('needs_auth')
   })
 })
 
-function fakeFactory() { /* see implementation below — return a stub transport */ }
+function fakeFactory() {
+  /* see implementation below — return a stub transport */
+}
 ```
 
 - [ ] **Step 2: Implement registry**
@@ -972,26 +1176,38 @@ export interface ServerEntry {
 
 export interface RegistryOpts {
   vault: KeyVault
-  transportFactory: (name: string, cfg: McpServerConfig, vault: KeyVault) => McpTransportHandle
+  transportFactory: (
+    name: string,
+    cfg: McpServerConfig,
+    vault: KeyVault
+  ) => McpTransportHandle
 }
 
 export interface Registry {
   applyConfig(cfg: McpConfig): Promise<void>
   list(): ServerEntry[]
   get(name: string): ServerEntry | undefined
-  invokeTool(server: string, tool: string, args: unknown, timeoutMs: number): Promise<unknown>
+  invokeTool(
+    server: string,
+    tool: string,
+    args: unknown,
+    timeoutMs: number
+  ): Promise<unknown>
 }
 
 export function createRegistry(opts: RegistryOpts): Registry {
   const servers = new Map<string, ServerEntry>()
 
-  async function checkAuth(name: string, cfg: McpServerConfig): Promise<McpServerStatus> {
+  async function checkAuth(
+    name: string,
+    cfg: McpServerConfig
+  ): Promise<McpServerStatus> {
     if (cfg.transport === 'stdio') return 'healthy'
     if (cfg.auth.mode === 'apiKey') {
       const tok = await opts.vault.get(cfg.auth.valueRef)
       return tok ? 'healthy' : 'needs_auth'
     }
-    return 'needs_auth'  // OAuth flows handled later
+    return 'needs_auth' // OAuth flows handled later
   }
 
   return {
@@ -1020,9 +1236,14 @@ export function createRegistry(opts: RegistryOpts): Registry {
         e.transport = opts.transportFactory(serverName, e.config, opts.vault)
         await e.transport.connect()
       }
+      if (!e.transport.client)
+        throw new Error(`transport not connected: ${serverName}`)
       const { withTimeout } = await import('./transports/timeout')
       return withTimeout(
-        e.transport.send({ method: 'tools/call', params: { name: tool, arguments: args } }),
+        e.transport.client.callTool({
+          name: tool,
+          arguments: args as Record<string, unknown>,
+        }),
         timeoutMs
       )
     },
@@ -1039,6 +1260,7 @@ git add . && git commit -m "feat(agents-mcp): registry with hot-reload-capable a
 ### Task 12: Tool bridge — wrap MCP tools as `AgentTool`
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/bridge/tool-bridge.ts`
 - Create: `packages/agents-mcp/test/bridge/tool-bridge.test.ts`
 
@@ -1054,19 +1276,31 @@ describe('bridgeMcpTool', () => {
     const tool = bridgeMcpTool({
       server: 'github',
       tool: { name: 'create_issue', description: 'create' },
-      invoke: async (s, t, a, tm) => { calls.push({ s, t, a, tm }); return { ok: true } },
+      invoke: async (s, t, a, tm) => {
+        calls.push({ s, t, a, tm })
+        return { ok: true }
+      },
       timeoutMs: 30_000,
     })
     expect(tool.name).toBe('github.create_issue')
     const result = await tool.run({ repo: 'foo' })
     expect(result).toEqual({ ok: true })
-    expect(calls[0]).toEqual({ s: 'github', t: 'create_issue', a: { repo: 'foo' }, tm: 30_000 })
+    expect(calls[0]).toEqual({
+      s: 'github',
+      t: 'create_issue',
+      a: { repo: 'foo' },
+      tm: 30_000,
+    })
   })
 
   it('maps timeout to structured error', async () => {
     const tool = bridgeMcpTool({
-      server: 'gh', tool: { name: 'x' },
-      invoke: async () => { const { TimeoutError } = await import('../../src/transports/timeout'); throw new TimeoutError(30) },
+      server: 'gh',
+      tool: { name: 'x' },
+      invoke: async () => {
+        const { TimeoutError } = await import('../../src/transports/timeout')
+        throw new TimeoutError(30)
+      },
       timeoutMs: 30,
     })
     const r = await tool.run({})
@@ -1085,18 +1319,32 @@ import type { McpToolError } from '../types'
 export interface BridgeOpts {
   server: string
   tool: { name: string; description?: string; inputSchema?: unknown }
-  invoke: (server: string, tool: string, args: unknown, timeoutMs: number) => Promise<unknown>
+  invoke: (
+    server: string,
+    tool: string,
+    args: unknown,
+    timeoutMs: number
+  ) => Promise<unknown>
   timeoutMs: number
 }
 
-export function bridgeMcpTool(opts: BridgeOpts): { name: string; description?: string; run: (args: unknown) => Promise<unknown> } {
+export function bridgeMcpTool(opts: BridgeOpts): {
+  name: string
+  description?: string
+  run: (args: unknown) => Promise<unknown>
+} {
   const fullName = `${opts.server}.${opts.tool.name}`
   return {
     name: fullName,
     description: opts.tool.description,
     async run(args) {
       try {
-        return await opts.invoke(opts.server, opts.tool.name, args, opts.timeoutMs)
+        return await opts.invoke(
+          opts.server,
+          opts.tool.name,
+          args,
+          opts.timeoutMs
+        )
       } catch (err) {
         return { error: toToolError(err, opts.server, opts.tool.name) }
       }
@@ -1105,9 +1353,11 @@ export function bridgeMcpTool(opts: BridgeOpts): { name: string; description?: s
 }
 
 function toToolError(err: unknown, server: string, tool: string): McpToolError {
-  if (err instanceof TimeoutError) return { kind: 'timeout', server, ms: err.ms }
+  if (err instanceof TimeoutError)
+    return { kind: 'timeout', server, ms: err.ms }
   const msg = err instanceof Error ? err.message : String(err)
-  if (/auth/i.test(msg)) return { kind: 'auth_unavailable', server, detail: msg }
+  if (/auth/i.test(msg))
+    return { kind: 'auth_unavailable', server, detail: msg }
   return { kind: 'transport_error', server, detail: msg }
 }
 ```
@@ -1123,6 +1373,7 @@ git add . && git commit -m "feat(agents-mcp): tool bridge with prefixing and str
 ### Task 13: `mcp.tools(...)` factory + AgentTool integration
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/tools.ts`
 - Create: `packages/agents-mcp/test/tools.test.ts`
 
@@ -1134,8 +1385,18 @@ import { createMcpTools } from '../src/tools'
 
 const fakeRegistry = {
   list: () => [
-    { name: 'github', config: {} as any, status: 'healthy', tools: [{ name: 'create_issue' }, { name: 'get_pr' }] },
-    { name: 'sentry', config: {} as any, status: 'healthy', tools: [{ name: 'list_events' }] },
+    {
+      name: 'github',
+      config: {} as any,
+      status: 'healthy',
+      tools: [{ name: 'create_issue' }, { name: 'get_pr' }],
+    },
+    {
+      name: 'sentry',
+      config: {} as any,
+      status: 'healthy',
+      tools: [{ name: 'list_events' }],
+    },
   ],
   get: (n: string) => fakeRegistry.list().find((s) => s.name === n),
   applyConfig: async () => {},
@@ -1145,11 +1406,18 @@ const fakeRegistry = {
 describe('createMcpTools', () => {
   it('selects by allowlist', () => {
     const tools = createMcpTools(fakeRegistry as any, ['github']).tools()
-    expect(tools.map((t) => t.name)).toEqual(['github.create_issue', 'github.get_pr'])
+    expect(tools.map((t) => t.name)).toEqual([
+      'github.create_issue',
+      'github.get_pr',
+    ])
   })
   it('returns all on wildcard', () => {
     const tools = createMcpTools(fakeRegistry as any, '*').tools()
-    expect(tools.map((t) => t.name)).toEqual(['github.create_issue', 'github.get_pr', 'sentry.list_events'])
+    expect(tools.map((t) => t.name)).toEqual([
+      'github.create_issue',
+      'github.get_pr',
+      'sentry.list_events',
+    ])
   })
 })
 ```
@@ -1176,7 +1444,8 @@ export function createMcpTools(
   return {
     tools() {
       const all = registry.list()
-      const selected = allowlist === '*' ? all : all.filter((s) => allowlist.includes(s.name))
+      const selected =
+        allowlist === '*' ? all : all.filter((s) => allowlist.includes(s.name))
       return selected.flatMap((s) =>
         (s.tools ?? []).map((t) =>
           bridgeMcpTool({
@@ -1218,6 +1487,7 @@ git add . && git commit -m "feat(agents-mcp): mcp.tools(...) factory with allowl
 ### Task 14: Wire into `agents` package + Horton
 
 **Files:**
+
 - Modify: `packages/agents/src/bootstrap.ts`
 - Modify: `packages/agents/src/agents/horton.ts`
 - Modify: `packages/agents/package.json`
@@ -1231,13 +1501,24 @@ In `packages/agents/package.json` add `"@electric-ax/agents-mcp": "workspace:*"`
 In `packages/agents/src/bootstrap.ts` (read first to understand current shape), construct the vault + registry + watcher:
 
 ```ts
-import { createFileVault, createRegistry, createMcpTools } from '@electric-ax/agents-mcp'
-import { watchConfig } from '@electric-ax/agents-mcp/dist/config/watcher'  // adjust per actual exports
+import {
+  createFileVault,
+  createRegistry,
+  createMcpTools,
+} from '@electric-ax/agents-mcp'
+import { watchConfig } from '@electric-ax/agents-mcp/dist/config/watcher' // adjust per actual exports
 // ... existing imports
 
-const vault = createFileVault(process.env.MCP_VAULT_PATH ?? '.electric-agents/vault.json')
-const registry = createRegistry({ vault, transportFactory: defaultTransportFactory })
-const stop = watchConfig(process.env.MCP_CONFIG_PATH ?? 'mcp.json', (cfg) => registry.applyConfig(cfg).catch(console.error))
+const vault = createFileVault(
+  process.env.MCP_VAULT_PATH ?? '.electric-agents/vault.json'
+)
+const registry = createRegistry({
+  vault,
+  transportFactory: defaultTransportFactory,
+})
+const stop = watchConfig(process.env.MCP_CONFIG_PATH ?? 'mcp.json', (cfg) =>
+  registry.applyConfig(cfg).catch(console.error)
+)
 
 // expose registry to agent definitions
 export const mcpHandle = createMcpTools(registry, '*')
@@ -1288,10 +1569,12 @@ End state: a hermetic mock MCP server fixture exercises the registry + bridge ac
 ### Task 15a: Mock MCP server fixture (stdio + HTTP modes)
 
 **Files:**
+
 - Create: `packages/agents-mcp/test/fixtures/mock-mcp-server.ts`
 - Create: `packages/agents-mcp/test/fixtures/mock-mcp-server.test.ts`
 
 The fixture is a single TypeScript module that can be invoked two ways:
+
 1. **As a stdio subprocess** — `node dist/test-fixtures/mock-mcp-server.js [scenario]` reads JSON-RPC from stdin and writes to stdout.
 2. **As an in-process HTTP handler** — exposes a `Fetch`-style handler the HTTP transport tests can call directly without a real server.
 
@@ -1306,19 +1589,40 @@ import { createMockServer } from './mock-mcp-server'
 describe('mock MCP server', () => {
   it('responds to initialize with capabilities', async () => {
     const srv = createMockServer({ scenario: 'default' })
-    const res = await srv.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '0' } } })
+    const res = await srv.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'test', version: '0' },
+      },
+    })
     expect(res.result.capabilities.tools).toBeDefined()
   })
 
   it('lists tools', async () => {
     const srv = createMockServer({ scenario: 'default' })
-    const res = await srv.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
-    expect(res.result.tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'echo' })]))
+    const res = await srv.handle({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/list',
+      params: {},
+    })
+    expect(res.result.tools).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'echo' })])
+    )
   })
 
   it('echoes tools/call', async () => {
     const srv = createMockServer({ scenario: 'default' })
-    const res = await srv.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: { msg: 'hi' } } })
+    const res = await srv.handle({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: { name: 'echo', arguments: { msg: 'hi' } },
+    })
     expect(res.result.content[0]).toEqual({ type: 'text', text: 'hi' })
   })
 
@@ -1326,7 +1630,12 @@ describe('mock MCP server', () => {
     const srv = createMockServer({ scenario: 'progress' })
     const events: any[] = []
     srv.onNotification = (n) => events.push(n)
-    await srv.handle({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'long', arguments: {}, _meta: { progressToken: 'p1' } } })
+    await srv.handle({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: { name: 'long', arguments: {}, _meta: { progressToken: 'p1' } },
+    })
     expect(events.some((e) => e.method === 'notifications/progress')).toBe(true)
   })
 })
@@ -1336,18 +1645,45 @@ describe('mock MCP server', () => {
 
 ```ts
 // test/fixtures/mock-mcp-server.ts
-export type Scenario = 'default' | 'error' | 'slow' | 'progress' | 'auth-required' | 'tools-changed'
+export type Scenario =
+  | 'default'
+  | 'error'
+  | 'slow'
+  | 'progress'
+  | 'auth-required'
+  | 'tools-changed'
 
 export interface MockServer {
-  handle(req: { jsonrpc: '2.0'; id: number | string; method: string; params?: any }): Promise<any>
+  handle(req: {
+    jsonrpc: '2.0'
+    id: number | string
+    method: string
+    params?: any
+  }): Promise<any>
   onNotification?: (n: { jsonrpc: '2.0'; method: string; params?: any }) => void
   setScenario(s: Scenario): void
 }
 
 const TOOLS = {
   default: [
-    { name: 'echo', description: 'echo input', inputSchema: { type: 'object', properties: { msg: { type: 'string' } }, required: ['msg'] } },
-    { name: 'add', description: 'add two numbers', inputSchema: { type: 'object', properties: { a: { type: 'number' }, b: { type: 'number' } }, required: ['a', 'b'] } },
+    {
+      name: 'echo',
+      description: 'echo input',
+      inputSchema: {
+        type: 'object',
+        properties: { msg: { type: 'string' } },
+        required: ['msg'],
+      },
+    },
+    {
+      name: 'add',
+      description: 'add two numbers',
+      inputSchema: {
+        type: 'object',
+        properties: { a: { type: 'number' }, b: { type: 'number' } },
+        required: ['a', 'b'],
+      },
+    },
   ],
   changed: [
     { name: 'echo2', description: 'echo v2', inputSchema: { type: 'object' } },
@@ -1360,52 +1696,164 @@ const RESOURCES = [
 ]
 
 const PROMPTS = [
-  { name: 'greet', description: 'greet user', arguments: [{ name: 'name', required: true }] },
+  {
+    name: 'greet',
+    description: 'greet user',
+    arguments: [{ name: 'name', required: true }],
+  },
 ]
 
-export function createMockServer(opts: { scenario?: Scenario } = {}): MockServer {
+export function createMockServer(
+  opts: { scenario?: Scenario } = {}
+): MockServer {
   let scenario: Scenario = opts.scenario ?? 'default'
   const server: MockServer = {
-    setScenario(s) { scenario = s },
+    setScenario(s) {
+      scenario = s
+    },
     async handle(req) {
       switch (req.method) {
         case 'initialize':
-          return { jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {}, resources: {}, prompts: {}, logging: {} }, serverInfo: { name: 'mock', version: '0' } } }
+          return {
+            jsonrpc: '2.0',
+            id: req.id,
+            result: {
+              protocolVersion: '2024-11-05',
+              capabilities: {
+                tools: {},
+                resources: {},
+                prompts: {},
+                logging: {},
+              },
+              serverInfo: { name: 'mock', version: '0' },
+            },
+          }
         case 'tools/list': {
-          const tools = scenario === 'tools-changed' ? TOOLS.changed : TOOLS.default
+          const tools =
+            scenario === 'tools-changed' ? TOOLS.changed : TOOLS.default
           return { jsonrpc: '2.0', id: req.id, result: { tools } }
         }
         case 'tools/call': {
-          if (scenario === 'auth-required') return { jsonrpc: '2.0', id: req.id, error: { code: -32001, message: 'Unauthorized' } }
-          if (scenario === 'error') return { jsonrpc: '2.0', id: req.id, error: { code: -32603, message: 'tool failed' } }
-          if (scenario === 'slow') { await new Promise((r) => setTimeout(r, 100)); /* fallthrough */ }
+          if (scenario === 'auth-required')
+            return {
+              jsonrpc: '2.0',
+              id: req.id,
+              error: { code: -32001, message: 'Unauthorized' },
+            }
+          if (scenario === 'error')
+            return {
+              jsonrpc: '2.0',
+              id: req.id,
+              error: { code: -32603, message: 'tool failed' },
+            }
+          if (scenario === 'slow') {
+            await new Promise((r) => setTimeout(r, 100)) /* fallthrough */
+          }
           if (scenario === 'progress' && req.params?._meta?.progressToken) {
             const token = req.params._meta.progressToken
             for (let i = 1; i <= 3; i++) {
               await new Promise((r) => setTimeout(r, 5))
-              server.onNotification?.({ jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: token, progress: i, total: 3 } })
+              server.onNotification?.({
+                jsonrpc: '2.0',
+                method: 'notifications/progress',
+                params: { progressToken: token, progress: i, total: 3 },
+              })
             }
           }
           const name = req.params?.name
-          if (name === 'echo') return { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: String(req.params.arguments.msg) }] } }
-          if (name === 'add') return { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: String(req.params.arguments.a + req.params.arguments.b) }] } }
-          if (name === 'long') return { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: 'done' }] } }
-          return { jsonrpc: '2.0', id: req.id, error: { code: -32602, message: `unknown tool: ${name}` } }
+          if (name === 'echo')
+            return {
+              jsonrpc: '2.0',
+              id: req.id,
+              result: {
+                content: [
+                  { type: 'text', text: String(req.params.arguments.msg) },
+                ],
+              },
+            }
+          if (name === 'add')
+            return {
+              jsonrpc: '2.0',
+              id: req.id,
+              result: {
+                content: [
+                  {
+                    type: 'text',
+                    text: String(
+                      req.params.arguments.a + req.params.arguments.b
+                    ),
+                  },
+                ],
+              },
+            }
+          if (name === 'long')
+            return {
+              jsonrpc: '2.0',
+              id: req.id,
+              result: { content: [{ type: 'text', text: 'done' }] },
+            }
+          return {
+            jsonrpc: '2.0',
+            id: req.id,
+            error: { code: -32602, message: `unknown tool: ${name}` },
+          }
         }
         case 'resources/list':
-          return { jsonrpc: '2.0', id: req.id, result: { resources: RESOURCES } }
+          return {
+            jsonrpc: '2.0',
+            id: req.id,
+            result: { resources: RESOURCES },
+          }
         case 'resources/read': {
           const uri = req.params?.uri
-          if (uri === 'mock://config.json') return { jsonrpc: '2.0', id: req.id, result: { contents: [{ uri, mimeType: 'application/json', text: '{"hello":1}' }] } }
-          if (uri === 'mock://readme.md') return { jsonrpc: '2.0', id: req.id, result: { contents: [{ uri, mimeType: 'text/markdown', text: '# mock' }] } }
-          return { jsonrpc: '2.0', id: req.id, error: { code: -32602, message: 'unknown resource' } }
+          if (uri === 'mock://config.json')
+            return {
+              jsonrpc: '2.0',
+              id: req.id,
+              result: {
+                contents: [
+                  { uri, mimeType: 'application/json', text: '{"hello":1}' },
+                ],
+              },
+            }
+          if (uri === 'mock://readme.md')
+            return {
+              jsonrpc: '2.0',
+              id: req.id,
+              result: {
+                contents: [{ uri, mimeType: 'text/markdown', text: '# mock' }],
+              },
+            }
+          return {
+            jsonrpc: '2.0',
+            id: req.id,
+            error: { code: -32602, message: 'unknown resource' },
+          }
         }
         case 'prompts/list':
           return { jsonrpc: '2.0', id: req.id, result: { prompts: PROMPTS } }
         case 'prompts/get':
-          return { jsonrpc: '2.0', id: req.id, result: { messages: [{ role: 'user', content: { type: 'text', text: `Hello, ${req.params.arguments.name}!` } }] } }
+          return {
+            jsonrpc: '2.0',
+            id: req.id,
+            result: {
+              messages: [
+                {
+                  role: 'user',
+                  content: {
+                    type: 'text',
+                    text: `Hello, ${req.params.arguments.name}!`,
+                  },
+                },
+              ],
+            },
+          }
         default:
-          return { jsonrpc: '2.0', id: req.id, error: { code: -32601, message: `method not found: ${req.method}` } }
+          return {
+            jsonrpc: '2.0',
+            id: req.id,
+            error: { code: -32601, message: `method not found: ${req.method}` },
+          }
       }
     },
   }
@@ -1447,6 +1895,7 @@ git add . && git commit -m "test(agents-mcp): mock MCP server fixture with scena
 ### Task 15b: Resources bridge
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/bridge/resource-bridge.ts`
 - Create: `packages/agents-mcp/test/bridge/resource-bridge.test.ts`
 - Modify: `packages/agents-mcp/src/registry.ts` (track resources alongside tools)
@@ -1465,10 +1914,18 @@ describe('bridgeResourceTools', () => {
     const invoked: any[] = []
     const tools = bridgeResourceTools({
       server: 'gh',
-      invoke: async (s, method, args) => { invoked.push({ s, method, args }); return method === 'resources/list' ? { resources: [{ uri: 'x://y' }] } : { contents: [{ uri: args.uri, text: 'hi' }] } },
+      invoke: async (s, method, args) => {
+        invoked.push({ s, method, args })
+        return method === 'resources/list'
+          ? { resources: [{ uri: 'x://y' }] }
+          : { contents: [{ uri: args.uri, text: 'hi' }] }
+      },
       timeoutMs: 30_000,
     })
-    expect(tools.map((t) => t.name)).toEqual(['gh.list_resources', 'gh.read_resource'])
+    expect(tools.map((t) => t.name)).toEqual([
+      'gh.list_resources',
+      'gh.read_resource',
+    ])
     const list = await tools[0].run({})
     expect((list as any).resources).toHaveLength(1)
     const read = await tools[1].run({ uri: 'x://y' })
@@ -1485,7 +1942,12 @@ import { TimeoutError } from '../transports/timeout'
 
 export interface ResourceBridgeOpts {
   server: string
-  invoke: (server: string, method: string, args: any, timeoutMs: number) => Promise<unknown>
+  invoke: (
+    server: string,
+    method: string,
+    args: any,
+    timeoutMs: number
+  ) => Promise<unknown>
   timeoutMs: number
 }
 
@@ -1495,16 +1957,44 @@ export function bridgeResourceTools(opts: ResourceBridgeOpts) {
       name: `${opts.server}.list_resources`,
       description: `List resources exposed by ${opts.server}`,
       async run() {
-        try { return await opts.invoke(opts.server, 'resources/list', {}, opts.timeoutMs) }
-        catch (err) { return { error: { kind: err instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(err) } } }
+        try {
+          return await opts.invoke(
+            opts.server,
+            'resources/list',
+            {},
+            opts.timeoutMs
+          )
+        } catch (err) {
+          return {
+            error: {
+              kind: err instanceof TimeoutError ? 'timeout' : 'transport_error',
+              server: opts.server,
+              detail: String(err),
+            },
+          }
+        }
       },
     },
     {
       name: `${opts.server}.read_resource`,
       description: `Read a resource by URI from ${opts.server}`,
       async run(args: any) {
-        try { return await opts.invoke(opts.server, 'resources/read', { uri: args.uri }, opts.timeoutMs) }
-        catch (err) { return { error: { kind: err instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(err) } } }
+        try {
+          return await opts.invoke(
+            opts.server,
+            'resources/read',
+            { uri: args.uri },
+            opts.timeoutMs
+          )
+        } catch (err) {
+          return {
+            error: {
+              kind: err instanceof TimeoutError ? 'timeout' : 'transport_error',
+              server: opts.server,
+              detail: String(err),
+            },
+          }
+        }
       },
     },
   ]
@@ -1520,8 +2010,19 @@ In `registry.ts`, generalize `invokeTool` to `invokeMethod(server, method, args,
 ```ts
 // In createMcpTools.tools():
 return selected.flatMap((s) => [
-  ...(s.tools ?? []).map((t) => bridgeMcpTool({ server: s.name, tool: t, invoke: registry.invokeMethod, timeoutMs })),
-  ...bridgeResourceTools({ server: s.name, invoke: registry.invokeMethod, timeoutMs }),
+  ...(s.tools ?? []).map((t) =>
+    bridgeMcpTool({
+      server: s.name,
+      tool: t,
+      invoke: registry.invokeMethod,
+      timeoutMs,
+    })
+  ),
+  ...bridgeResourceTools({
+    server: s.name,
+    invoke: registry.invokeMethod,
+    timeoutMs,
+  }),
 ])
 ```
 
@@ -1534,6 +2035,7 @@ git add . && git commit -m "feat(agents-mcp): expose resources/list and resource
 ### Task 15c: Prompts bridge
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/bridge/prompt-bridge.ts`
 - Create: `packages/agents-mcp/test/bridge/prompt-bridge.test.ts`
 - Modify: `packages/agents-mcp/src/tools.ts`
@@ -1548,10 +2050,56 @@ Symmetric to resources — expose `<server>.list_prompts()` and `<server>.get_pr
 // src/bridge/prompt-bridge.ts
 import { TimeoutError } from '../transports/timeout'
 
-export function bridgePromptTools(opts: { server: string; invoke: (s: string, m: string, a: any, t: number) => Promise<unknown>; timeoutMs: number }) {
+export function bridgePromptTools(opts: {
+  server: string
+  invoke: (s: string, m: string, a: any, t: number) => Promise<unknown>
+  timeoutMs: number
+}) {
   return [
-    { name: `${opts.server}.list_prompts`, description: `List prompts exposed by ${opts.server}`, async run() { try { return await opts.invoke(opts.server, 'prompts/list', {}, opts.timeoutMs) } catch (e) { return { error: { kind: e instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(e) } } } } },
-    { name: `${opts.server}.get_prompt`, description: `Get a prompt by name from ${opts.server}`, async run(args: any) { try { return await opts.invoke(opts.server, 'prompts/get', { name: args.name, arguments: args.arguments }, opts.timeoutMs) } catch (e) { return { error: { kind: e instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(e) } } } } },
+    {
+      name: `${opts.server}.list_prompts`,
+      description: `List prompts exposed by ${opts.server}`,
+      async run() {
+        try {
+          return await opts.invoke(
+            opts.server,
+            'prompts/list',
+            {},
+            opts.timeoutMs
+          )
+        } catch (e) {
+          return {
+            error: {
+              kind: e instanceof TimeoutError ? 'timeout' : 'transport_error',
+              server: opts.server,
+              detail: String(e),
+            },
+          }
+        }
+      },
+    },
+    {
+      name: `${opts.server}.get_prompt`,
+      description: `Get a prompt by name from ${opts.server}`,
+      async run(args: any) {
+        try {
+          return await opts.invoke(
+            opts.server,
+            'prompts/get',
+            { name: args.name, arguments: args.arguments },
+            opts.timeoutMs
+          )
+        } catch (e) {
+          return {
+            error: {
+              kind: e instanceof TimeoutError ? 'timeout' : 'transport_error',
+              server: opts.server,
+              detail: String(e),
+            },
+          }
+        }
+      },
+    },
   ]
 }
 ```
@@ -1569,6 +2117,7 @@ git add . && git commit -m "feat(agents-mcp): expose prompts/list and prompts/ge
 ### Task 15d: Progress notifications passthrough
 
 **Files:**
+
 - Modify: `packages/agents-mcp/src/registry.ts`
 - Modify: `packages/agents-mcp/src/types.ts`
 - Create: `packages/agents-mcp/test/registry-progress.test.ts`
@@ -1587,10 +2136,25 @@ describe('progress passthrough', () => {
     // Build a transport that delegates to createMockServer({ scenario: 'progress' })
     // and forwards onNotification callbacks to the registry.
     const events: any[] = []
-    const reg = createRegistry({ /* … */ })
+    const reg = createRegistry({
+      /* … */
+    })
     reg.subscribeToProgress((e) => events.push(e))
-    await reg.applyConfig({ servers: { mock: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'progress'] } } })
-    await reg.invokeMethod('mock', 'tools/call', { name: 'long', arguments: {} }, 5_000)
+    await reg.applyConfig({
+      servers: {
+        mock: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['./dist/test-fixtures/mock-mcp-server.js', 'progress'],
+        },
+      },
+    })
+    await reg.invokeMethod(
+      'mock',
+      'tools/call',
+      { name: 'long', arguments: {} },
+      5_000
+    )
     expect(events.length).toBe(3)
     expect(events.every((e) => e.server === 'mock')).toBe(true)
   })
@@ -1602,7 +2166,13 @@ describe('progress passthrough', () => {
 Add to `Registry`:
 
 ```ts
-export interface ProgressEvent { server: string; progressToken: string | number; progress: number; total?: number; message?: string }
+export interface ProgressEvent {
+  server: string
+  progressToken: string | number
+  progress: number
+  total?: number
+  message?: string
+}
 
 interface Registry {
   // … existing
@@ -1621,6 +2191,7 @@ git add . && git commit -m "feat(agents-mcp): progress notifications passthrough
 ### Task 15e: Cancellation
 
 **Files:**
+
 - Modify: `packages/agents-mcp/src/registry.ts`
 - Modify: `packages/agents-mcp/src/transports/types.ts` (add cancel method)
 - Create: `packages/agents-mcp/test/cancellation.test.ts`
@@ -1638,9 +2209,28 @@ describe('cancellation', () => {
     // Configure registry to use a transport that records notifications/cancelled.
     const sent: any[] = []
     // … set up registry with mock transport that resolves slowly
-    const reg = createRegistry({ /* … with transport that captures onNotificationSent */ })
-    await reg.applyConfig({ servers: { mock: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'slow'] } } })
-    await expect(reg.invokeMethod('mock', 'tools/call', { name: 'long', arguments: {} }, 10)).rejects.toBeInstanceOf((await import('../src/transports/timeout')).TimeoutError)
+    const reg = createRegistry({
+      /* … with transport that captures onNotificationSent */
+    })
+    await reg.applyConfig({
+      servers: {
+        mock: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['./dist/test-fixtures/mock-mcp-server.js', 'slow'],
+        },
+      },
+    })
+    await expect(
+      reg.invokeMethod(
+        'mock',
+        'tools/call',
+        { name: 'long', arguments: {} },
+        10
+      )
+    ).rejects.toBeInstanceOf(
+      (await import('../src/transports/timeout')).TimeoutError
+    )
     // After timeout: assert cancelled was sent for the request id.
   })
 })
@@ -1659,6 +2249,7 @@ git add . && git commit -m "feat(agents-mcp): send notifications/cancelled on ti
 ### Task 15f: Capability negotiation assertions
 
 **Files:**
+
 - Modify: `packages/agents-mcp/src/registry.ts`
 - Create: `packages/agents-mcp/test/capabilities.test.ts`
 
@@ -1686,6 +2277,7 @@ git add . && git commit -m "feat(agents-mcp): capability negotiation status chec
 ### Task 15g: End-to-end tests against the mock server (stdio)
 
 **Files:**
+
 - Create: `packages/agents-mcp/test/e2e/stdio.e2e.test.ts`
 
 A complete E2E suite that starts the mock server as a stdio subprocess and exercises the full registry → bridge → tool path.
@@ -1708,7 +2300,11 @@ describe('E2E: stdio mock server', () => {
   beforeAll(async () => {
     vaultDir = mkdtempSync(join(tmpdir(), 'mcp-e2e-'))
     const vault = createFileVault(join(vaultDir, 'vault.json'))
-    registry = createRegistry({ vault, oauth: nullOAuth(), transportFactory: defaultTransportFactory })
+    registry = createRegistry({
+      vault,
+      oauth: nullOAuth(),
+      transportFactory: defaultTransportFactory,
+    })
     await registry.applyConfig({
       servers: {
         mock: {
@@ -1726,7 +2322,16 @@ describe('E2E: stdio mock server', () => {
 
   it('lists tools via mcp.tools(...)', () => {
     const tools = createMcpTools(registry, ['mock']).tools()
-    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(['mock.echo', 'mock.add', 'mock.list_resources', 'mock.read_resource', 'mock.list_prompts', 'mock.get_prompt']))
+    expect(tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining([
+        'mock.echo',
+        'mock.add',
+        'mock.list_resources',
+        'mock.read_resource',
+        'mock.list_prompts',
+        'mock.get_prompt',
+      ])
+    )
   })
 
   it('echo round-trip', async () => {
@@ -1739,46 +2344,81 @@ describe('E2E: stdio mock server', () => {
   it('add round-trip', async () => {
     const tools = createMcpTools(registry, ['mock']).tools()
     const add = tools.find((t) => t.name === 'mock.add')!
-    expect(await add.run({ a: 2, b: 3 })).toMatchObject({ content: [{ type: 'text', text: '5' }] })
+    expect(await add.run({ a: 2, b: 3 })).toMatchObject({
+      content: [{ type: 'text', text: '5' }],
+    })
   })
 
   it('lists resources', async () => {
     const tools = createMcpTools(registry, ['mock']).tools()
     const list = tools.find((t) => t.name === 'mock.list_resources')!
-    const r = await list.run({}) as any
+    const r = (await list.run({})) as any
     expect(r.resources.length).toBeGreaterThan(0)
   })
 
   it('reads a resource', async () => {
     const tools = createMcpTools(registry, ['mock']).tools()
     const read = tools.find((t) => t.name === 'mock.read_resource')!
-    const r = await read.run({ uri: 'mock://config.json' }) as any
+    const r = (await read.run({ uri: 'mock://config.json' })) as any
     expect(r.contents[0].text).toContain('hello')
   })
 
   it('returns timeout error on slow scenario', async () => {
-    await registry.applyConfig({ servers: { slow: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'slow'] } } })
+    await registry.applyConfig({
+      servers: {
+        slow: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['./dist/test-fixtures/mock-mcp-server.js', 'slow'],
+        },
+      },
+    })
     const tools = createMcpTools(registry, ['slow'], { timeoutMs: 10 }).tools()
     const echo = tools.find((t) => t.name === 'slow.echo')!
-    const r = await echo.run({ msg: 'x' }) as any
+    const r = (await echo.run({ msg: 'x' })) as any
     expect(r.error).toMatchObject({ kind: 'timeout', server: 'slow' })
   })
 
   it('returns server_error on error scenario', async () => {
-    await registry.applyConfig({ servers: { err: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'error'] } } })
+    await registry.applyConfig({
+      servers: {
+        err: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['./dist/test-fixtures/mock-mcp-server.js', 'error'],
+        },
+      },
+    })
     const tools = createMcpTools(registry, ['err']).tools()
     const echo = tools.find((t) => t.name === 'err.echo')!
-    const r = await echo.run({ msg: 'x' }) as any
+    const r = (await echo.run({ msg: 'x' })) as any
     expect(r.error).toBeDefined()
   })
 
   it('hot-reload picks up new server within applyConfig', async () => {
-    await registry.applyConfig({ servers: { ...currentConfig, late: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'default'] } } })
+    await registry.applyConfig({
+      servers: {
+        ...currentConfig,
+        late: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['./dist/test-fixtures/mock-mcp-server.js', 'default'],
+        },
+      },
+    })
     expect(registry.list().some((s) => s.name === 'late')).toBe(true)
   })
 
   it('progress notifications fire during a tool call', async () => {
-    await registry.applyConfig({ servers: { p: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'progress'] } } })
+    await registry.applyConfig({
+      servers: {
+        p: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['./dist/test-fixtures/mock-mcp-server.js', 'progress'],
+        },
+      },
+    })
     const events: any[] = []
     const unsub = registry.subscribeToProgress((e) => events.push(e))
     const tools = createMcpTools(registry, ['p']).tools()
@@ -1804,11 +2444,17 @@ import type { KeyVault } from '../src/vault/types'
 export function nullOAuth() {
   return createOAuthCoordinator({
     cache: { get: () => undefined, set: () => {} },
-    doRefresh: async () => { throw new Error('OAuth not configured for this test') },
+    doRefresh: async () => {
+      throw new Error('OAuth not configured for this test')
+    },
   })
 }
 
-export function defaultTransportFactory(name: string, cfg: McpServerConfig, vault: KeyVault) {
+export function defaultTransportFactory(
+  name: string,
+  cfg: McpServerConfig,
+  vault: KeyVault
+) {
   if (cfg.transport === 'stdio') return createStdioTransport(cfg)
   return createHttpTransport(cfg, async () => null)
 }
@@ -1824,6 +2470,7 @@ git add . && git commit -m "test(agents-mcp): E2E suite against stdio mock serve
 ### Task 15h: End-to-end tests against the mock server (HTTP)
 
 **Files:**
+
 - Create: `packages/agents-mcp/test/e2e/http.e2e.test.ts`
 
 Same scenarios but driving the HTTP transport against an in-process HTTP server that wraps the mock fixture.
@@ -1874,6 +2521,7 @@ End state: HTTP MCP servers using OAuth `clientCredentials` or `authorizationCod
 ### Task 16: PKCE generator
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/pkce.ts`
 - Create: `packages/agents-mcp/test/auth/pkce.test.ts`
 
@@ -1891,7 +2539,7 @@ describe('PKCE', () => {
   it('challenge matches S256 of verifier', () => {
     const { verifier, challenge } = generatePkcePair()
     expect(challenge).toBe(codeChallengeS256(verifier))
-    expect(challenge).toMatch(/^[A-Za-z0-9\-_]+$/)  // base64url, no padding
+    expect(challenge).toMatch(/^[A-Za-z0-9\-_]+$/) // base64url, no padding
   })
 })
 ```
@@ -1902,7 +2550,13 @@ describe('PKCE', () => {
 // src/auth/pkce.ts
 import { randomBytes, createHash } from 'node:crypto'
 
-function base64Url(b: Buffer): string { return b.toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_') }
+function base64Url(b: Buffer): string {
+  return b
+    .toString('base64')
+    .replace(/=+$/, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+}
 
 export function generatePkcePair(): { verifier: string; challenge: string } {
   const verifier = base64Url(randomBytes(64)).slice(0, 64)
@@ -1923,6 +2577,7 @@ git add . && git commit -m "feat(agents-mcp): PKCE S256 generator"
 ### Task 17: clientCredentials grant
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/client-credentials.ts`
 - Create: `packages/agents-mcp/test/auth/client-credentials.test.ts`
 
@@ -1932,13 +2587,26 @@ git add . && git commit -m "feat(agents-mcp): PKCE S256 generator"
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { exchangeClientCredentials } from '../../src/auth/client-credentials'
 
-beforeEach(() => { vi.restoreAllMocks() })
+beforeEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('exchangeClientCredentials', () => {
   it('POSTs and returns access token', async () => {
-    const f = vi.fn(async () => ({ ok: true, json: async () => ({ access_token: 'AT', expires_in: 3600, token_type: 'Bearer' }) })) as any
+    const f = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        access_token: 'AT',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      }),
+    })) as any
     const tok = await exchangeClientCredentials({
-      tokenUrl: 'https://x/token', clientId: 'id', clientSecret: 'sec', scopes: ['s'], fetch: f,
+      tokenUrl: 'https://x/token',
+      clientId: 'id',
+      clientSecret: 'sec',
+      scopes: ['s'],
+      fetch: f,
     })
     expect(tok.accessToken).toBe('AT')
     expect(tok.expiresAt.getTime()).toBeGreaterThan(Date.now())
@@ -1946,9 +2614,19 @@ describe('exchangeClientCredentials', () => {
     expect(init.body.toString()).toContain('grant_type=client_credentials')
   })
   it('throws on non-200', async () => {
-    const f = vi.fn(async () => ({ ok: false, status: 401, text: async () => 'no' })) as any
-    await expect(exchangeClientCredentials({ tokenUrl: 'http://x', clientId: 'i', clientSecret: 's', fetch: f }))
-      .rejects.toThrow(/401/)
+    const f = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      text: async () => 'no',
+    })) as any
+    await expect(
+      exchangeClientCredentials({
+        tokenUrl: 'http://x',
+        clientId: 'i',
+        clientSecret: 's',
+        fetch: f,
+      })
+    ).rejects.toThrow(/401/)
   })
 })
 ```
@@ -1978,9 +2656,19 @@ export async function exchangeClientCredentials(opts: {
     client_secret: opts.clientSecret,
     ...(opts.scopes ? { scope: opts.scopes.join(' ') } : {}),
   })
-  const res = await f(opts.tokenUrl, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-  if (!res.ok) throw new Error(`token endpoint ${res.status}: ${await res.text()}`)
-  const j = await res.json() as { access_token: string; expires_in?: number; token_type?: string; refresh_token?: string }
+  const res = await f(opts.tokenUrl, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
+  if (!res.ok)
+    throw new Error(`token endpoint ${res.status}: ${await res.text()}`)
+  const j = (await res.json()) as {
+    access_token: string
+    expires_in?: number
+    token_type?: string
+    refresh_token?: string
+  }
   return {
     accessToken: j.access_token,
     refreshToken: j.refresh_token,
@@ -1999,6 +2687,7 @@ git add . && git commit -m "feat(agents-mcp): clientCredentials grant exchange"
 ### Task 18: authorizationCode (browser) — URL builder + state store
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/authorization-code.ts`
 - Create: `packages/agents-mcp/test/auth/authorization-code.test.ts`
 
@@ -2006,13 +2695,17 @@ git add . && git commit -m "feat(agents-mcp): clientCredentials grant exchange"
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { buildAuthorizationUrl, exchangeAuthorizationCode } from '../../src/auth/authorization-code'
+import {
+  buildAuthorizationUrl,
+  exchangeAuthorizationCode,
+} from '../../src/auth/authorization-code'
 
 describe('authorizationCode', () => {
   it('builds URL with PKCE + state', () => {
     const { url, state, verifier } = buildAuthorizationUrl({
       authorizationUrl: 'https://x/authorize',
-      clientId: 'cid', redirectUri: 'http://localhost/cb',
+      clientId: 'cid',
+      redirectUri: 'http://localhost/cb',
       scopes: ['repo', 'read:user'],
     })
     const u = new URL(url)
@@ -2075,9 +2768,14 @@ export async function exchangeAuthorizationCode(opts: {
     code: opts.code,
     code_verifier: opts.verifier,
   })
-  const res = await f(opts.tokenUrl, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-  if (!res.ok) throw new Error(`token endpoint ${res.status}: ${await res.text()}`)
-  const j = await res.json() as any
+  const res = await f(opts.tokenUrl, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
+  if (!res.ok)
+    throw new Error(`token endpoint ${res.status}: ${await res.text()}`)
+  const j = (await res.json()) as any
   return {
     accessToken: j.access_token,
     refreshToken: j.refresh_token,
@@ -2087,14 +2785,30 @@ export async function exchangeAuthorizationCode(opts: {
 }
 
 export async function refreshToken(opts: {
-  tokenUrl: string; clientId: string; refreshToken: string; fetch?: typeof globalThis.fetch
+  tokenUrl: string
+  clientId: string
+  refreshToken: string
+  fetch?: typeof globalThis.fetch
 }): Promise<TokenSet> {
   const f = opts.fetch ?? globalThis.fetch
-  const body = new URLSearchParams({ grant_type: 'refresh_token', client_id: opts.clientId, refresh_token: opts.refreshToken })
-  const res = await f(opts.tokenUrl, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: opts.clientId,
+    refresh_token: opts.refreshToken,
+  })
+  const res = await f(opts.tokenUrl, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
   if (!res.ok) throw new Error(`refresh failed: ${res.status}`)
-  const j = await res.json() as any
-  return { accessToken: j.access_token, refreshToken: j.refresh_token, expiresAt: new Date(Date.now() + (j.expires_in ?? 3600) * 1000), tokenType: j.token_type ?? 'Bearer' }
+  const j = (await res.json()) as any
+  return {
+    accessToken: j.access_token,
+    refreshToken: j.refresh_token,
+    expiresAt: new Date(Date.now() + (j.expires_in ?? 3600) * 1000),
+    tokenType: j.token_type ?? 'Bearer',
+  }
 }
 ```
 
@@ -2109,6 +2823,7 @@ git add . && git commit -m "feat(agents-mcp): authorization-code URL + token + r
 The OAuth flow is multi-step: build URL → user redirected → callback returns code → exchange. We need to remember `(state, verifier, server)` between the URL build and the callback.
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/pending-auth.ts`
 - Create: `packages/agents-mcp/test/auth/pending-auth.test.ts`
 
@@ -2121,14 +2836,31 @@ import { createPendingAuthStore } from '../../src/auth/pending-auth'
 describe('pending-auth store', () => {
   it('stores and consumes by state', () => {
     const store = createPendingAuthStore({ ttlMs: 600_000 })
-    store.put({ state: 's1', server: 'github', verifier: 'v1', clientId: 'cid', tokenUrl: 'http://t', redirectUri: 'http://cb' })
+    store.put({
+      state: 's1',
+      server: 'github',
+      verifier: 'v1',
+      clientId: 'cid',
+      tokenUrl: 'http://t',
+      redirectUri: 'http://cb',
+    })
     const v = store.consume('s1')
     expect(v?.verifier).toBe('v1')
-    expect(store.consume('s1')).toBeUndefined()  // consumed
+    expect(store.consume('s1')).toBeUndefined() // consumed
   })
   it('expires after TTL', () => {
-    const store = createPendingAuthStore({ ttlMs: 1, now: () => Date.now() + 100 })
-    store.put({ state: 's', server: 's', verifier: 'v', clientId: 'c', tokenUrl: 't', redirectUri: 'r' })
+    const store = createPendingAuthStore({
+      ttlMs: 1,
+      now: () => Date.now() + 100,
+    })
+    store.put({
+      state: 's',
+      server: 's',
+      verifier: 'v',
+      clientId: 'c',
+      tokenUrl: 't',
+      redirectUri: 'r',
+    })
     expect(store.consume('s')).toBeUndefined()
   })
 })
@@ -2153,11 +2885,16 @@ export interface PendingAuthStore {
   consume(state: string): PendingAuth | undefined
 }
 
-export function createPendingAuthStore(opts: { ttlMs: number; now?: () => number }): PendingAuthStore {
+export function createPendingAuthStore(opts: {
+  ttlMs: number
+  now?: () => number
+}): PendingAuthStore {
   const now = opts.now ?? (() => Date.now())
   const map = new Map<string, PendingAuth>()
   return {
-    put(p) { map.set(p.state, { ...p, insertedAt: now() }) },
+    put(p) {
+      map.set(p.state, { ...p, insertedAt: now() })
+    },
     consume(state) {
       const v = map.get(state)
       if (!v) return undefined
@@ -2178,6 +2915,7 @@ git add . && git commit -m "feat(agents-mcp): pending-auth state store"
 ### Task 20: OAuth Coordinator (refresh exchange with mutex)
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/coordinator.ts`
 - Create: `packages/agents-mcp/test/auth/coordinator.test.ts`
 
@@ -2187,21 +2925,45 @@ The coordinator owns: "give me a current access token for server X" with seriali
 
 ```ts
 import { describe, expect, it, vi } from 'vitest'
-import { createOAuthCoordinator, AuthUnavailableError } from '../../src/auth/coordinator'
+import {
+  createOAuthCoordinator,
+  AuthUnavailableError,
+} from '../../src/auth/coordinator'
 
 describe('OAuthCoordinator', () => {
   it('serializes refresh: only one exchange runs for concurrent callers', async () => {
     let exchangeCount = 0
     const coordinator = createOAuthCoordinator({
-      vault: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] } as any,
+      vault: {
+        get: async () => null,
+        set: async () => {},
+        delete: async () => {},
+        list: async () => [],
+      } as any,
       doRefresh: async () => {
         exchangeCount++
         await new Promise((r) => setTimeout(r, 20))
-        return { accessToken: 'NEW', expiresAt: new Date(Date.now() + 60_000), tokenType: 'Bearer' }
+        return {
+          accessToken: 'NEW',
+          expiresAt: new Date(Date.now() + 60_000),
+          tokenType: 'Bearer',
+        }
       },
-      cache: { get: () => ({ accessToken: 'OLD', refreshToken: 'rt', expiresAt: new Date(Date.now() - 1000), tokenType: 'Bearer' }), set: () => {} },
+      cache: {
+        get: () => ({
+          accessToken: 'OLD',
+          refreshToken: 'rt',
+          expiresAt: new Date(Date.now() - 1000),
+          tokenType: 'Bearer',
+        }),
+        set: () => {},
+      },
     } as any)
-    const [a, b, c] = await Promise.all([coordinator.getToken('s', ['x']), coordinator.getToken('s', ['x']), coordinator.getToken('s', ['x'])])
+    const [a, b, c] = await Promise.all([
+      coordinator.getToken('s', ['x']),
+      coordinator.getToken('s', ['x']),
+      coordinator.getToken('s', ['x']),
+    ])
     expect([a, b, c]).toEqual(['NEW', 'NEW', 'NEW'])
     expect(exchangeCount).toBe(1)
   })
@@ -2209,10 +2971,14 @@ describe('OAuthCoordinator', () => {
   it('throws AuthUnavailable when no refresh token and no cached', async () => {
     const c = createOAuthCoordinator({
       vault: { get: async () => null } as any,
-      doRefresh: async () => { throw new Error('no token') },
+      doRefresh: async () => {
+        throw new Error('no token')
+      },
       cache: { get: () => undefined, set: () => {} },
     } as any)
-    await expect(c.getToken('s', ['x'])).rejects.toBeInstanceOf(AuthUnavailableError)
+    await expect(c.getToken('s', ['x'])).rejects.toBeInstanceOf(
+      AuthUnavailableError
+    )
   })
 })
 ```
@@ -2224,7 +2990,14 @@ describe('OAuthCoordinator', () => {
 import type { TokenSet } from './client-credentials'
 import type { KeyVault } from '../vault/types'
 
-export class AuthUnavailableError extends Error { constructor(public server: string, public detail: string) { super(`auth unavailable for ${server}: ${detail}`) } }
+export class AuthUnavailableError extends Error {
+  constructor(
+    public server: string,
+    public detail: string
+  ) {
+    super(`auth unavailable for ${server}: ${detail}`)
+  }
+}
 
 export interface TokenCache {
   get(server: string, scopeKey: string): TokenSet | undefined
@@ -2237,19 +3010,27 @@ export interface OAuthCoordinator {
 }
 
 export interface CoordinatorOpts {
-  doRefresh: (server: string, scopes: string[] | undefined, cached: TokenSet | undefined) => Promise<TokenSet>
+  doRefresh: (
+    server: string,
+    scopes: string[] | undefined,
+    cached: TokenSet | undefined
+  ) => Promise<TokenSet>
   cache: TokenCache
 }
 
-export function createOAuthCoordinator(opts: CoordinatorOpts): OAuthCoordinator {
+export function createOAuthCoordinator(
+  opts: CoordinatorOpts
+): OAuthCoordinator {
   const inflight = new Map<string, Promise<TokenSet>>()
-  const scopeKey = (s: string[] | undefined) => (s?.slice().sort().join(' ') ?? '')
+  const scopeKey = (s: string[] | undefined) =>
+    s?.slice().sort().join(' ') ?? ''
 
   return {
     async getToken(server, scopes) {
       const key = `${server}::${scopeKey(scopes)}`
       const cached = opts.cache.get(server, scopeKey(scopes))
-      if (cached && cached.expiresAt.getTime() > Date.now() + 30_000) return cached.accessToken
+      if (cached && cached.expiresAt.getTime() > Date.now() + 30_000)
+        return cached.accessToken
       let p = inflight.get(key)
       if (!p) {
         p = (async () => {
@@ -2258,7 +3039,10 @@ export function createOAuthCoordinator(opts: CoordinatorOpts): OAuthCoordinator 
             opts.cache.set(server, scopeKey(scopes), t)
             return t
           } catch (err) {
-            throw new AuthUnavailableError(server, err instanceof Error ? err.message : String(err))
+            throw new AuthUnavailableError(
+              server,
+              err instanceof Error ? err.message : String(err)
+            )
           }
         })()
         inflight.set(key, p)
@@ -2267,7 +3051,9 @@ export function createOAuthCoordinator(opts: CoordinatorOpts): OAuthCoordinator 
       const t = await p
       return t.accessToken
     },
-    setToken(server, scopes, t) { opts.cache.set(server, scopeKey(scopes), t) },
+    setToken(server, scopes, t) {
+      opts.cache.set(server, scopeKey(scopes), t)
+    },
   }
 }
 ```
@@ -2281,6 +3067,7 @@ git add . && git commit -m "feat(agents-mcp): OAuth coordinator with refresh-exc
 ### Task 21: Wire OAuth into the registry
 
 **Files:**
+
 - Modify: `packages/agents-mcp/src/registry.ts`
 - Modify: `packages/agents-mcp/test/registry.test.ts`
 
@@ -2289,8 +3076,12 @@ The registry's `checkAuth` and `transportFactory` currently only handle `apiKey`
 - [ ] **Step 1: Add tests for clientCredentials and authorizationCode statuses**
 
 ```ts
-it('clientCredentials: healthy when client_id+secret in vault', async () => { /* … */ })
-it('authorizationCode: needs_auth when no token cached', async () => { /* … */ })
+it('clientCredentials: healthy when client_id+secret in vault', async () => {
+  /* … */
+})
+it('authorizationCode: needs_auth when no token cached', async () => {
+  /* … */
+})
 ```
 
 - [ ] **Step 2: Inject the coordinator into `RegistryOpts`**
@@ -2301,11 +3092,16 @@ Update `createRegistry` signature:
 export interface RegistryOpts {
   vault: KeyVault
   oauth: OAuthCoordinator
-  transportFactory: (name: string, cfg: McpServerConfig, getAuthHeader: () => Promise<{ name: string; value: string } | null>) => McpTransportHandle
+  transportFactory: (
+    name: string,
+    cfg: McpServerConfig,
+    getAuthHeader: () => Promise<{ name: string; value: string } | null>
+  ) => McpTransportHandle
 }
 ```
 
 The registry computes `getAuthHeader` per server based on auth mode:
+
 - `apiKey` → reads `valueRef` from vault, returns `{ name: cfg.headerName, value: <vault value> }`.
 - `clientCredentials` / `authorizationCode` → calls `oauth.getToken(server, scopes)`, returns `{ name: 'Authorization', value: 'Bearer <token>' }`. Errors are mapped to `null` (transport then sees no header → server returns 401 → bridge maps to `auth_unavailable`).
 
@@ -2322,11 +3118,21 @@ const coordinator = createOAuthCoordinator({
       const id = await vault.get(cfg.auth.clientIdRef)
       const secret = await vault.get(cfg.auth.clientSecretRef)
       if (!id || !secret) throw new Error('missing client credentials')
-      return exchangeClientCredentials({ tokenUrl: cfg.auth.tokenUrl, clientId: id, clientSecret: secret, scopes })
+      return exchangeClientCredentials({
+        tokenUrl: cfg.auth.tokenUrl,
+        clientId: id,
+        clientSecret: secret,
+        scopes,
+      })
     }
     if (cfg.auth.mode === 'authorizationCode') {
-      if (!cached?.refreshToken) throw new Error('no refresh token; reauth required')
-      return refreshToken({ tokenUrl: cfg.auth.tokenUrl!, clientId: cfg.auth.clientIdRef!, refreshToken: cached.refreshToken })
+      if (!cached?.refreshToken)
+        throw new Error('no refresh token; reauth required')
+      return refreshToken({
+        tokenUrl: cfg.auth.tokenUrl!,
+        clientId: cfg.auth.clientIdRef!,
+        refreshToken: cached.refreshToken,
+      })
     }
     throw new Error('unsupported auth mode')
   },
@@ -2342,6 +3148,7 @@ git add . && git commit -m "feat(agents-mcp): registry uses OAuth coordinator fo
 ### Task 21a: Protected Resource Metadata discovery (RFC 9728)
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/discovery.ts`
 - Create: `packages/agents-mcp/test/auth/discovery.test.ts`
 
@@ -2357,10 +3164,25 @@ describe('discoverAuthServer', () => {
   it('follows RFC 9728 chain', async () => {
     const f = vi.fn(async (url: string) => {
       if (url.endsWith('/.well-known/oauth-protected-resource')) {
-        return { ok: true, json: async () => ({ authorization_servers: ['https://auth.example.com'] }) } as any
+        return {
+          ok: true,
+          json: async () => ({
+            authorization_servers: ['https://auth.example.com'],
+          }),
+        } as any
       }
-      if (url === 'https://auth.example.com/.well-known/oauth-authorization-server') {
-        return { ok: true, json: async () => ({ authorization_endpoint: 'https://auth.example.com/authorize', token_endpoint: 'https://auth.example.com/token', registration_endpoint: 'https://auth.example.com/register' }) } as any
+      if (
+        url ===
+        'https://auth.example.com/.well-known/oauth-authorization-server'
+      ) {
+        return {
+          ok: true,
+          json: async () => ({
+            authorization_endpoint: 'https://auth.example.com/authorize',
+            token_endpoint: 'https://auth.example.com/token',
+            registration_endpoint: 'https://auth.example.com/register',
+          }),
+        } as any
       }
       return { ok: false, status: 404, text: async () => 'nope' } as any
     })
@@ -2384,17 +3206,23 @@ export interface AuthServerMetadata {
   scopesSupported?: string[]
 }
 
-export async function discoverAuthServer(resourceUrl: string, fetchFn: typeof globalThis.fetch = globalThis.fetch): Promise<AuthServerMetadata> {
+export async function discoverAuthServer(
+  resourceUrl: string,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch
+): Promise<AuthServerMetadata> {
   const u = new URL(resourceUrl)
   const wellKnown = `${u.origin}/.well-known/oauth-protected-resource`
   const r1 = await fetchFn(wellKnown)
   if (!r1.ok) throw new Error(`discovery: ${wellKnown} returned ${r1.status}`)
-  const meta1 = await r1.json() as { authorization_servers?: string[] }
+  const meta1 = (await r1.json()) as { authorization_servers?: string[] }
   const authServer = meta1.authorization_servers?.[0]
-  if (!authServer) throw new Error('discovery: no authorization_servers in resource metadata')
-  const r2 = await fetchFn(`${authServer}/.well-known/oauth-authorization-server`)
+  if (!authServer)
+    throw new Error('discovery: no authorization_servers in resource metadata')
+  const r2 = await fetchFn(
+    `${authServer}/.well-known/oauth-authorization-server`
+  )
   if (!r2.ok) throw new Error(`discovery: auth server metadata ${r2.status}`)
-  const meta2 = await r2.json() as any
+  const meta2 = (await r2.json()) as any
   return {
     authorizationEndpoint: meta2.authorization_endpoint,
     tokenEndpoint: meta2.token_endpoint,
@@ -2414,6 +3242,7 @@ git add . && git commit -m "feat(agents-mcp): RFC 9728 protected-resource-metada
 ### Task 21b: Dynamic Client Registration (RFC 7591)
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/dcr.ts`
 - Create: `packages/agents-mcp/test/auth/dcr.test.ts`
 
@@ -2425,7 +3254,10 @@ import { registerClient } from '../../src/auth/dcr'
 
 describe('registerClient', () => {
   it('POSTs metadata and returns client_id + client_secret', async () => {
-    const f = vi.fn(async () => ({ ok: true, json: async () => ({ client_id: 'cid', client_secret: 'csec' }) })) as any
+    const f = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ client_id: 'cid', client_secret: 'csec' }),
+    })) as any
     const r = await registerClient({
       registrationEndpoint: 'https://x/register',
       clientName: 'electric-agents',
@@ -2443,7 +3275,10 @@ describe('registerClient', () => {
 
 ```ts
 // src/auth/dcr.ts
-export interface RegisteredClient { clientId: string; clientSecret?: string }
+export interface RegisteredClient {
+  clientId: string
+  clientSecret?: string
+}
 
 export async function registerClient(opts: {
   registrationEndpoint: string
@@ -2461,9 +3296,13 @@ export async function registerClient(opts: {
     token_endpoint_auth_method: 'client_secret_post',
     ...(opts.scopes ? { scope: opts.scopes.join(' ') } : {}),
   }
-  const res = await f(opts.registrationEndpoint, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
+  const res = await f(opts.registrationEndpoint, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  })
   if (!res.ok) throw new Error(`DCR ${res.status}: ${await res.text()}`)
-  const j = await res.json() as { client_id: string; client_secret?: string }
+  const j = (await res.json()) as { client_id: string; client_secret?: string }
   return { clientId: j.client_id, clientSecret: j.client_secret }
 }
 ```
@@ -2481,6 +3320,7 @@ git add . && git commit -m "feat(agents-mcp): RFC 7591 Dynamic Client Registrati
 ### Task 22: agents-server OAuth callback endpoint
 
 **Files:**
+
 - Create: `packages/agents-server/src/oauth-routes.ts`
 - Modify: `packages/agents-server/src/server.ts`
 - Create: `packages/agents-server/test/oauth-routes.test.ts`
@@ -2495,7 +3335,9 @@ it('GET /oauth/callback/:server completes flow and stores token', async () => {
   // Expect: 200 page; vault has token; cache has token.
 })
 
-it('rejects unknown state', async () => { /* expect 400 */ })
+it('rejects unknown state', async () => {
+  /* expect 400 */
+})
 ```
 
 - [ ] **Step 2: Implement route**
@@ -2504,12 +3346,15 @@ Read `packages/agents-server/src/server.ts` to understand current router convent
 
 ```ts
 // packages/agents-server/src/oauth-routes.ts
-import type { Router } from 'express'  // or whatever the server uses
+import type { Router } from 'express' // or whatever the server uses
 import { exchangeAuthorizationCode } from '@electric-ax/agents-mcp/auth/authorization-code'
 import type { PendingAuthStore } from '@electric-ax/agents-mcp/auth/pending-auth'
 import type { OAuthCoordinator } from '@electric-ax/agents-mcp/auth/coordinator'
 
-export function mountOAuthRoutes(router: Router, deps: { pending: PendingAuthStore; coordinator: OAuthCoordinator }) {
+export function mountOAuthRoutes(
+  router: Router,
+  deps: { pending: PendingAuthStore; coordinator: OAuthCoordinator }
+) {
   router.get('/oauth/callback/:server', async (req, res) => {
     const code = String(req.query.code ?? '')
     const state = String(req.query.state ?? '')
@@ -2527,7 +3372,11 @@ export function mountOAuthRoutes(router: Router, deps: { pending: PendingAuthSto
       deps.coordinator.setToken(pending.server, undefined, tokens)
       res.status(200).send('Authorization complete. You can close this window.')
     } catch (err) {
-      res.status(500).send(`Token exchange failed: ${err instanceof Error ? err.message : String(err)}`)
+      res
+        .status(500)
+        .send(
+          `Token exchange failed: ${err instanceof Error ? err.message : String(err)}`
+        )
     }
   })
 }
@@ -2544,6 +3393,7 @@ git add . && git commit -m "feat(agents-server): OAuth callback route"
 ### Task 23: Initiate authorization-code flow API
 
 **Files:**
+
 - Create: `packages/agents-server/src/mcp-status-routes.ts` (placeholder for Phase 3 too)
 - Modify: `packages/agents-server/src/server.ts`
 
@@ -2594,15 +3444,22 @@ End state: an operator visits agents-server-ui, sees all configured servers with
 ### Task 25: Status API
 
 **Files:**
+
 - Modify: `packages/agents-server/src/mcp-status-routes.ts`
 - Create: `packages/agents-server/test/mcp-status-routes.test.ts`
 
 - [ ] **Step 1: Test**
 
 ```ts
-it('GET /api/mcp/servers returns list with status', async () => { /* … */ })
-it('POST /api/mcp/servers/:s/disable + /enable toggle status', async () => { /* … */ })
-it('DELETE /api/mcp/servers/:s/credentials revokes vault entry', async () => { /* … */ })
+it('GET /api/mcp/servers returns list with status', async () => {
+  /* … */
+})
+it('POST /api/mcp/servers/:s/disable + /enable toggle status', async () => {
+  /* … */
+})
+it('DELETE /api/mcp/servers/:s/credentials revokes vault entry', async () => {
+  /* … */
+})
 ```
 
 - [ ] **Step 2: Implement endpoints**
@@ -2627,6 +3484,7 @@ git add . && git commit -m "feat(agents-server): MCP status + management API"
 ### Task 26: Connected Services route + page shell
 
 **Files:**
+
 - Modify: `packages/agents-server-ui/src/router.tsx`
 - Create: `packages/agents-server-ui/src/components/connected-services/page.tsx`
 - Create: `packages/agents-server-ui/src/components/connected-services/page.test.tsx` (if test infra exists)
@@ -2647,17 +3505,41 @@ Page fetches `GET /api/mcp/servers` on mount and renders a list (one row per ser
 // page.tsx (skeleton — adapt to existing UI primitives in packages/agents-server-ui)
 import { useEffect, useState } from 'react'
 
-interface ServerRow { name: string; transport: string; authMode: string; status: string; lastRefresh?: string; lastError?: string }
+interface ServerRow {
+  name: string
+  transport: string
+  authMode: string
+  status: string
+  lastRefresh?: string
+  lastError?: string
+}
 
 export function ConnectedServicesPage() {
   const [rows, setRows] = useState<ServerRow[]>([])
-  useEffect(() => { fetch('/api/mcp/servers').then((r) => r.json()).then(setRows) }, [])
+  useEffect(() => {
+    fetch('/api/mcp/servers')
+      .then((r) => r.json())
+      .then(setRows)
+  }, [])
   return (
     <div>
       <h1>Connected Services</h1>
       <table>
-        <thead><tr><th>Name</th><th>Transport</th><th>Auth</th><th>Status</th><th>Last refresh</th><th>Actions</th></tr></thead>
-        <tbody>{rows.map((r) => <Row key={r.name} row={r} />)}</tbody>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Transport</th>
+            <th>Auth</th>
+            <th>Status</th>
+            <th>Last refresh</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <Row key={r.name} row={r} />
+          ))}
+        </tbody>
       </table>
     </div>
   )
@@ -2673,6 +3555,7 @@ git add . && git commit -m "feat(agents-server-ui): Connected Services page shel
 ### Task 27: Per-row actions (Authorize / Re-authorize / Disable / Enable / Disconnect)
 
 **Files:**
+
 - Modify: `packages/agents-server-ui/src/components/connected-services/page.tsx`
 - Create: `packages/agents-server-ui/src/components/connected-services/row.tsx`
 
@@ -2681,21 +3564,38 @@ git add . && git commit -m "feat(agents-server-ui): Connected Services page shel
 ```tsx
 function Row({ row }: { row: ServerRow }) {
   const authorize = async () => {
-    const { url } = await fetch(`/api/mcp/servers/${row.name}/authorize`, { method: 'POST' }).then((r) => r.json())
+    const { url } = await fetch(`/api/mcp/servers/${row.name}/authorize`, {
+      method: 'POST',
+    }).then((r) => r.json())
     window.open(url, '_blank')
   }
-  const disable = () => fetch(`/api/mcp/servers/${row.name}/disable`, { method: 'POST' })
-  const enable = () => fetch(`/api/mcp/servers/${row.name}/enable`, { method: 'POST' })
-  const disconnect = () => fetch(`/api/mcp/servers/${row.name}/credentials`, { method: 'DELETE' })
+  const disable = () =>
+    fetch(`/api/mcp/servers/${row.name}/disable`, { method: 'POST' })
+  const enable = () =>
+    fetch(`/api/mcp/servers/${row.name}/enable`, { method: 'POST' })
+  const disconnect = () =>
+    fetch(`/api/mcp/servers/${row.name}/credentials`, { method: 'DELETE' })
 
   return (
     <tr>
-      <td>{row.name}</td><td>{row.transport}</td><td>{row.authMode}</td>
-      <td><StatusPill status={row.status} /></td>
+      <td>{row.name}</td>
+      <td>{row.transport}</td>
+      <td>{row.authMode}</td>
+      <td>
+        <StatusPill status={row.status} />
+      </td>
       <td>{row.lastRefresh ?? '—'}</td>
       <td>
-        {row.authMode !== 'apiKey' && <button onClick={authorize}>{row.status === 'healthy' ? 'Re-authorize' : 'Authorize'}</button>}
-        {row.status !== 'disabled' ? <button onClick={disable}>Disable</button> : <button onClick={enable}>Enable</button>}
+        {row.authMode !== 'apiKey' && (
+          <button onClick={authorize}>
+            {row.status === 'healthy' ? 'Re-authorize' : 'Authorize'}
+          </button>
+        )}
+        {row.status !== 'disabled' ? (
+          <button onClick={disable}>Disable</button>
+        ) : (
+          <button onClick={enable}>Enable</button>
+        )}
         <button onClick={disconnect}>Disconnect</button>
       </td>
     </tr>
@@ -2706,7 +3606,10 @@ function Row({ row }: { row: ServerRow }) {
 - [ ] **Step 2: Auto-refresh status every 5s**
 
 ```tsx
-useEffect(() => { const i = setInterval(reload, 5000); return () => clearInterval(i) }, [])
+useEffect(() => {
+  const i = setInterval(reload, 5000)
+  return () => clearInterval(i)
+}, [])
 ```
 
 - [ ] **Step 3: Manual smoke test**
@@ -2750,6 +3653,7 @@ End state: `authorizationCode` mode with `flow: 'device'` works end-to-end. The 
 ### Task 29: Device authorization request (RFC 8628)
 
 **Files:**
+
 - Create: `packages/agents-mcp/src/auth/device-code.ts`
 - Create: `packages/agents-mcp/test/auth/device-code.test.ts`
 
@@ -2761,13 +3665,29 @@ import { startDeviceFlow, pollDeviceFlow } from '../../src/auth/device-code'
 
 describe('device flow', () => {
   it('startDeviceFlow returns user_code + verification_uri', async () => {
-    const f = vi.fn(async () => ({ ok: true, json: async () => ({ device_code: 'd', user_code: 'ABCD-1234', verification_uri: 'http://x', interval: 5, expires_in: 600 }) })) as any
-    const r = await startDeviceFlow({ deviceAuthorizationUrl: 'http://x/device', clientId: 'c', scopes: ['s'], fetch: f })
+    const f = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        device_code: 'd',
+        user_code: 'ABCD-1234',
+        verification_uri: 'http://x',
+        interval: 5,
+        expires_in: 600,
+      }),
+    })) as any
+    const r = await startDeviceFlow({
+      deviceAuthorizationUrl: 'http://x/device',
+      clientId: 'c',
+      scopes: ['s'],
+      fetch: f,
+    })
     expect(r.userCode).toBe('ABCD-1234')
     expect(r.deviceCode).toBe('d')
   })
 
-  it('pollDeviceFlow handles authorization_pending and slow_down', async () => { /* … */ })
+  it('pollDeviceFlow handles authorization_pending and slow_down', async () => {
+    /* … */
+  })
 })
 ```
 
@@ -2777,25 +3697,50 @@ describe('device flow', () => {
 // src/auth/device-code.ts
 import type { TokenSet } from './client-credentials'
 
-export interface DeviceFlowStart { deviceCode: string; userCode: string; verificationUri: string; verificationUriComplete?: string; intervalSec: number; expiresAt: Date }
+export interface DeviceFlowStart {
+  deviceCode: string
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  intervalSec: number
+  expiresAt: Date
+}
 
 export async function startDeviceFlow(opts: {
-  deviceAuthorizationUrl: string; clientId: string; scopes?: string[]; fetch?: typeof globalThis.fetch
+  deviceAuthorizationUrl: string
+  clientId: string
+  scopes?: string[]
+  fetch?: typeof globalThis.fetch
 }): Promise<DeviceFlowStart> {
   const f = opts.fetch ?? globalThis.fetch
-  const body = new URLSearchParams({ client_id: opts.clientId, ...(opts.scopes ? { scope: opts.scopes.join(' ') } : {}) })
-  const res = await f(opts.deviceAuthorizationUrl, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+  const body = new URLSearchParams({
+    client_id: opts.clientId,
+    ...(opts.scopes ? { scope: opts.scopes.join(' ') } : {}),
+  })
+  const res = await f(opts.deviceAuthorizationUrl, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
   if (!res.ok) throw new Error(`device authorization failed: ${res.status}`)
-  const j = await res.json() as any
+  const j = (await res.json()) as any
   return {
-    deviceCode: j.device_code, userCode: j.user_code,
-    verificationUri: j.verification_uri, verificationUriComplete: j.verification_uri_complete,
-    intervalSec: j.interval ?? 5, expiresAt: new Date(Date.now() + (j.expires_in ?? 600) * 1000),
+    deviceCode: j.device_code,
+    userCode: j.user_code,
+    verificationUri: j.verification_uri,
+    verificationUriComplete: j.verification_uri_complete,
+    intervalSec: j.interval ?? 5,
+    expiresAt: new Date(Date.now() + (j.expires_in ?? 600) * 1000),
   }
 }
 
 export async function pollDeviceFlow(opts: {
-  tokenUrl: string; clientId: string; deviceCode: string; intervalSec: number; expiresAt: Date; fetch?: typeof globalThis.fetch
+  tokenUrl: string
+  clientId: string
+  deviceCode: string
+  intervalSec: number
+  expiresAt: Date
+  fetch?: typeof globalThis.fetch
 }): Promise<TokenSet> {
   const f = opts.fetch ?? globalThis.fetch
   let interval = opts.intervalSec
@@ -2803,13 +3748,27 @@ export async function pollDeviceFlow(opts: {
     await new Promise((r) => setTimeout(r, interval * 1000))
     const body = new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      device_code: opts.deviceCode, client_id: opts.clientId,
+      device_code: opts.deviceCode,
+      client_id: opts.clientId,
     })
-    const res = await f(opts.tokenUrl, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-    const j = await res.json() as any
-    if (res.ok) return { accessToken: j.access_token, refreshToken: j.refresh_token, expiresAt: new Date(Date.now() + (j.expires_in ?? 3600) * 1000), tokenType: j.token_type ?? 'Bearer' }
+    const res = await f(opts.tokenUrl, {
+      method: 'POST',
+      body,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
+    const j = (await res.json()) as any
+    if (res.ok)
+      return {
+        accessToken: j.access_token,
+        refreshToken: j.refresh_token,
+        expiresAt: new Date(Date.now() + (j.expires_in ?? 3600) * 1000),
+        tokenType: j.token_type ?? 'Bearer',
+      }
     if (j.error === 'authorization_pending') continue
-    if (j.error === 'slow_down') { interval += 5; continue }
+    if (j.error === 'slow_down') {
+      interval += 5
+      continue
+    }
     throw new Error(`device flow error: ${j.error_description ?? j.error}`)
   }
   throw new Error('device flow timed out')
@@ -2825,6 +3784,7 @@ git add . && git commit -m "feat(agents-mcp): device-code flow"
 ### Task 30: Wire device flow into server + UI
 
 **Files:**
+
 - Modify: `packages/agents-server/src/oauth-routes.ts`
 - Modify: `packages/agents-server-ui/src/components/connected-services/row.tsx`
 
@@ -2834,26 +3794,66 @@ git add . && git commit -m "feat(agents-mcp): device-code flow"
 router.post('/oauth/device/:server/start', async (req, res) => {
   const cfg = registry.get(req.params.server)?.config
   // … resolve clientId from vault, scopes from config
-  const start = await startDeviceFlow({ deviceAuthorizationUrl, clientId, scopes })
+  const start = await startDeviceFlow({
+    deviceAuthorizationUrl,
+    clientId,
+    scopes,
+  })
   pollingMap.set(req.params.server, { ...start, status: 'pending' })
-  pollDeviceFlow({ tokenUrl, clientId, deviceCode: start.deviceCode, intervalSec: start.intervalSec, expiresAt: start.expiresAt })
-    .then((t) => { coordinator.setToken(req.params.server, undefined, t); pollingMap.set(req.params.server, { ...start, status: 'completed' }) })
-    .catch((e) => pollingMap.set(req.params.server, { ...start, status: 'failed', error: String(e) }))
-  res.json({ userCode: start.userCode, verificationUri: start.verificationUri, verificationUriComplete: start.verificationUriComplete })
+  pollDeviceFlow({
+    tokenUrl,
+    clientId,
+    deviceCode: start.deviceCode,
+    intervalSec: start.intervalSec,
+    expiresAt: start.expiresAt,
+  })
+    .then((t) => {
+      coordinator.setToken(req.params.server, undefined, t)
+      pollingMap.set(req.params.server, { ...start, status: 'completed' })
+    })
+    .catch((e) =>
+      pollingMap.set(req.params.server, {
+        ...start,
+        status: 'failed',
+        error: String(e),
+      })
+    )
+  res.json({
+    userCode: start.userCode,
+    verificationUri: start.verificationUri,
+    verificationUriComplete: start.verificationUriComplete,
+  })
 })
 
-router.get('/oauth/device/:server/status', (req, res) => res.json(pollingMap.get(req.params.server) ?? { status: 'idle' }))
+router.get('/oauth/device/:server/status', (req, res) =>
+  res.json(pollingMap.get(req.params.server) ?? { status: 'idle' })
+)
 ```
 
 - [ ] **Step 2: UI: when row's auth mode is device flow, show user code + verification URL**
 
 ```tsx
-{row.authMode === 'authorizationCode' && row.flow === 'device' && row.deviceFlow && (
-  <div>
-    <p>Visit <a href={row.deviceFlow.verificationUri} target="_blank" rel="noreferrer">{row.deviceFlow.verificationUri}</a></p>
-    <p>Enter code: <code>{row.deviceFlow.userCode}</code></p>
-  </div>
-)}
+{
+  row.authMode === 'authorizationCode' &&
+    row.flow === 'device' &&
+    row.deviceFlow && (
+      <div>
+        <p>
+          Visit{' '}
+          <a
+            href={row.deviceFlow.verificationUri}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {row.deviceFlow.verificationUri}
+          </a>
+        </p>
+        <p>
+          Enter code: <code>{row.deviceFlow.userCode}</code>
+        </p>
+      </div>
+    )
+}
 ```
 
 The Authorize button on a device-flow row calls the start endpoint, then polls `/oauth/device/:server/status` until completion.
