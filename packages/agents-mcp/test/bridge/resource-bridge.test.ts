@@ -15,8 +15,8 @@ describe(`bridgeResourceTools`, () => {
       timeoutMs: 30_000,
     })
     expect(tools.map((t) => t.name)).toEqual([
-      `gh.list_resources`,
-      `gh.read_resource`,
+      `mcp__gh__list_resources`,
+      `mcp__gh__read_resource`,
     ])
     const list = await tools[0].run({})
     expect((list as any).resources).toHaveLength(1)

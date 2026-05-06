@@ -1,5 +1,5 @@
 import { TimeoutError } from '../transports/timeout'
-import type { BridgedTool } from './tool-bridge'
+import { mcpToolName, type BridgedTool } from './tool-bridge'
 
 export interface ResourceBridgeOpts {
   server: string
@@ -15,7 +15,7 @@ export interface ResourceBridgeOpts {
 export function bridgeResourceTools(opts: ResourceBridgeOpts): BridgedTool[] {
   return [
     {
-      name: `${opts.server}.list_resources`,
+      name: mcpToolName(opts.server, `list_resources`),
       description: `List resources exposed by ${opts.server}`,
       async run() {
         try {
@@ -37,7 +37,7 @@ export function bridgeResourceTools(opts: ResourceBridgeOpts): BridgedTool[] {
       },
     },
     {
-      name: `${opts.server}.read_resource`,
+      name: mcpToolName(opts.server, `read_resource`),
       description: `Read a resource by URI from ${opts.server}`,
       async run(args) {
         try {

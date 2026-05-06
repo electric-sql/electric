@@ -20,8 +20,20 @@ export interface BridgedTool {
   run(args: unknown): Promise<unknown>
 }
 
+/**
+ * Builds an Anthropic-compatible tool name. Anthropic enforces
+ * `^[a-zA-Z0-9_-]{1,128}$` on tool names, so we cannot use `.` as a
+ * separator. We use `mcp__<server>__<tool>` (Claude Code convention),
+ * sanitizing the server name to the allowed alphabet.
+ */
+export function mcpToolName(server: string, tool: string): string {
+  const safeServer = server.replace(/[^a-zA-Z0-9_-]/g, `_`)
+  const safeTool = tool.replace(/[^a-zA-Z0-9_-]/g, `_`)
+  return `mcp__${safeServer}__${safeTool}`
+}
+
 export function bridgeMcpTool(opts: BridgeOpts): BridgedTool {
-  const fullName = `${opts.server}.${opts.tool.name}`
+  const fullName = mcpToolName(opts.server, opts.tool.name)
   return {
     name: fullName,
     description: opts.tool.description,

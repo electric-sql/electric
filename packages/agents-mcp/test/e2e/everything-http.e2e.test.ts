@@ -194,13 +194,16 @@ describe(`E2E: @modelcontextprotocol/server-everything (HTTP)`, () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
     const names = tools.map((t) => t.name)
     expect(names).toEqual(
-      expect.arrayContaining([`${SERVER_NAME}.echo`, `${SERVER_NAME}.get-sum`])
+      expect.arrayContaining([
+        `mcp__${SERVER_NAME}__echo`,
+        `mcp__${SERVER_NAME}__get-sum`,
+      ])
     )
   })
 
   itLive(`tools/call echo round-trips via HTTP`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const echo = tools.find((t) => t.name === `${SERVER_NAME}.echo`)!
+    const echo = tools.find((t) => t.name === `mcp__${SERVER_NAME}__echo`)!
     const result = (await echo.run({ message: `hello-http` })) as {
       content?: Array<{ type: string; text: string }>
       error?: unknown
@@ -212,7 +215,7 @@ describe(`E2E: @modelcontextprotocol/server-everything (HTTP)`, () => {
 
   itLive(`tools/call get-sum via HTTP`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const sum = tools.find((t) => t.name === `${SERVER_NAME}.get-sum`)!
+    const sum = tools.find((t) => t.name === `mcp__${SERVER_NAME}__get-sum`)!
     const result = (await sum.run({ a: 7, b: 4 })) as {
       content?: Array<{ type: string; text: string }>
       error?: unknown
@@ -231,7 +234,8 @@ describe(`E2E: @modelcontextprotocol/server-everything (HTTP)`, () => {
       try {
         const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
         const long = tools.find(
-          (t) => t.name === `${SERVER_NAME}.trigger-long-running-operation`
+          (t) =>
+            t.name === `mcp__${SERVER_NAME}__trigger-long-running-operation`
         )!
         const result = (await long.run({ duration: 1, steps: 3 })) as {
           content?: Array<{ type: string; text: string }>

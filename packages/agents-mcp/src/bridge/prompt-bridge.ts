@@ -1,5 +1,5 @@
 import { TimeoutError } from '../transports/timeout'
-import type { BridgedTool } from './tool-bridge'
+import { mcpToolName, type BridgedTool } from './tool-bridge'
 
 export interface PromptBridgeOpts {
   server: string
@@ -15,7 +15,7 @@ export interface PromptBridgeOpts {
 export function bridgePromptTools(opts: PromptBridgeOpts): BridgedTool[] {
   return [
     {
-      name: `${opts.server}.list_prompts`,
+      name: mcpToolName(opts.server, `list_prompts`),
       description: `List prompts exposed by ${opts.server}`,
       async run() {
         try {
@@ -37,7 +37,7 @@ export function bridgePromptTools(opts: PromptBridgeOpts): BridgedTool[] {
       },
     },
     {
-      name: `${opts.server}.get_prompt`,
+      name: mcpToolName(opts.server, `get_prompt`),
       description: `Get a prompt by name from ${opts.server}`,
       async run(args) {
         try {

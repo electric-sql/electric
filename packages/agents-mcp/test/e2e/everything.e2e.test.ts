@@ -112,27 +112,27 @@ describe(`E2E: @modelcontextprotocol/server-everything`, () => {
     // The reference server's headline tools at 2026.1.26.
     expect(names).toEqual(
       expect.arrayContaining([
-        `${SERVER_NAME}.echo`,
-        `${SERVER_NAME}.get-sum`,
-        `${SERVER_NAME}.trigger-long-running-operation`,
-        `${SERVER_NAME}.get-tiny-image`,
-        `${SERVER_NAME}.get-env`,
+        `mcp__${SERVER_NAME}__echo`,
+        `mcp__${SERVER_NAME}__get-sum`,
+        `mcp__${SERVER_NAME}__trigger-long-running-operation`,
+        `mcp__${SERVER_NAME}__get-tiny-image`,
+        `mcp__${SERVER_NAME}__get-env`,
       ])
     )
     // Bridged resource & prompt helpers are always present.
     expect(names).toEqual(
       expect.arrayContaining([
-        `${SERVER_NAME}.list_resources`,
-        `${SERVER_NAME}.read_resource`,
-        `${SERVER_NAME}.list_prompts`,
-        `${SERVER_NAME}.get_prompt`,
+        `mcp__${SERVER_NAME}__list_resources`,
+        `mcp__${SERVER_NAME}__read_resource`,
+        `mcp__${SERVER_NAME}__list_prompts`,
+        `mcp__${SERVER_NAME}__get_prompt`,
       ])
     )
   })
 
   itLive(`tools/call echo round-trips a string`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const echo = tools.find((t) => t.name === `${SERVER_NAME}.echo`)!
+    const echo = tools.find((t) => t.name === `mcp__${SERVER_NAME}__echo`)!
     const result = (await echo.run({ message: `hello-everything` })) as {
       content?: Array<{ type: string; text: string }>
       error?: unknown
@@ -144,7 +144,7 @@ describe(`E2E: @modelcontextprotocol/server-everything`, () => {
 
   itLive(`tools/call get-sum returns the sum of two numbers`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const sum = tools.find((t) => t.name === `${SERVER_NAME}.get-sum`)!
+    const sum = tools.find((t) => t.name === `mcp__${SERVER_NAME}__get-sum`)!
     const result = (await sum.run({ a: 2, b: 3 })) as {
       content?: Array<{ type: string; text: string }>
       error?: unknown
@@ -163,7 +163,8 @@ describe(`E2E: @modelcontextprotocol/server-everything`, () => {
       try {
         const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
         const long = tools.find(
-          (t) => t.name === `${SERVER_NAME}.trigger-long-running-operation`
+          (t) =>
+            t.name === `mcp__${SERVER_NAME}__trigger-long-running-operation`
         )!
         const result = (await long.run({ duration: 1, steps: 3 })) as {
           content?: Array<{ type: string; text: string }>
@@ -182,7 +183,9 @@ describe(`E2E: @modelcontextprotocol/server-everything`, () => {
 
   itLive(`resources/list returns at least one resource`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const list = tools.find((t) => t.name === `${SERVER_NAME}.list_resources`)!
+    const list = tools.find(
+      (t) => t.name === `mcp__${SERVER_NAME}__list_resources`
+    )!
     const r = (await list.run({})) as {
       resources?: Array<{ uri: string }>
       error?: unknown
@@ -193,8 +196,12 @@ describe(`E2E: @modelcontextprotocol/server-everything`, () => {
 
   itLive(`resources/read returns contents for a listed resource`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const list = tools.find((t) => t.name === `${SERVER_NAME}.list_resources`)!
-    const read = tools.find((t) => t.name === `${SERVER_NAME}.read_resource`)!
+    const list = tools.find(
+      (t) => t.name === `mcp__${SERVER_NAME}__list_resources`
+    )!
+    const read = tools.find(
+      (t) => t.name === `mcp__${SERVER_NAME}__read_resource`
+    )!
     const listed = (await list.run({})) as {
       resources: Array<{ uri: string }>
     }
@@ -210,7 +217,9 @@ describe(`E2E: @modelcontextprotocol/server-everything`, () => {
 
   itLive(`prompts/list includes the documented prompts`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const list = tools.find((t) => t.name === `${SERVER_NAME}.list_prompts`)!
+    const list = tools.find(
+      (t) => t.name === `mcp__${SERVER_NAME}__list_prompts`
+    )!
     const r = (await list.run({})) as {
       prompts?: Array<{ name: string }>
       error?: unknown
@@ -235,7 +244,7 @@ describe(`E2E: @modelcontextprotocol/server-everything`, () => {
 
   itLive(`prompts/get simple-prompt returns a messages array`, async () => {
     const tools = createMcpTools(registry!, [SERVER_NAME]).tools()
-    const get = tools.find((t) => t.name === `${SERVER_NAME}.get_prompt`)!
+    const get = tools.find((t) => t.name === `mcp__${SERVER_NAME}__get_prompt`)!
     const r = (await get.run({ name: `simple-prompt` })) as {
       messages?: Array<{ role: string; content: unknown }>
       error?: unknown

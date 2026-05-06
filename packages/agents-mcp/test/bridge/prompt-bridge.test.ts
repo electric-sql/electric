@@ -22,8 +22,8 @@ describe(`bridgePromptTools`, () => {
       timeoutMs: 30_000,
     })
     expect(tools.map((t) => t.name)).toEqual([
-      `gh.list_prompts`,
-      `gh.get_prompt`,
+      `mcp__gh__list_prompts`,
+      `mcp__gh__get_prompt`,
     ])
     const list = await tools[0].run({})
     expect((list as { prompts: unknown[] }).prompts).toHaveLength(1)

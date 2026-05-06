@@ -13,7 +13,7 @@ describe(`bridgeMcpTool`, () => {
       },
       timeoutMs: 30_000,
     })
-    expect(tool.name).toBe(`github.create_issue`)
+    expect(tool.name).toBe(`mcp__github__create_issue`)
     const result = await tool.run({ repo: `foo` })
     expect(result).toEqual({ ok: true })
     expect(calls[0]).toEqual({

@@ -51,7 +51,7 @@ describe(`E2E: edge cases (mock fixture)`, () => {
     })
 
     const tools = createMcpTools(reg, [`locked`]).tools()
-    const echo = tools.find((t) => t.name === `locked.echo`)!
+    const echo = tools.find((t) => t.name === `mcp__locked__echo`)!
     expect(echo).toBeDefined()
     const result = (await echo.run({ msg: `x` })) as {
       error?: { kind: string; server: string; detail?: string }
@@ -84,8 +84,8 @@ describe(`E2E: edge cases (mock fixture)`, () => {
     const initialTools = createMcpTools(reg, [`shifty`])
       .tools()
       .map((t) => t.name)
-    expect(initialTools).toContain(`shifty.echo`)
-    expect(initialTools).not.toContain(`shifty.echo2`)
+    expect(initialTools).toContain(`mcp__shifty__echo`)
+    expect(initialTools).not.toContain(`mcp__shifty__echo2`)
 
     // A second `tools/list` against the same subprocess now returns the
     // changed set (the mock advances its counter on each `tools/list`
