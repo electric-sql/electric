@@ -20,6 +20,7 @@ export function ChatView({
   entity,
   entityStopped,
   isSpawning,
+  tileId,
 }: ViewProps): React.ReactElement {
   // While `spawning`, the entity has no inbox yet — `connectUrl` is null
   // so `useEntityTimeline` doesn't try to subscribe and we render an empty
@@ -33,6 +34,7 @@ export function ChatView({
       entity={entity}
       entityStopped={entityStopped}
       isSpawning={isSpawning}
+      tileId={tileId}
     />
   )
 }
@@ -43,12 +45,14 @@ function GenericChatBody({
   entity,
   entityStopped,
   isSpawning,
+  tileId,
 }: {
   baseUrl: string
   entityUrl: string | null
   entity: ViewProps[`entity`]
   entityStopped: boolean
   isSpawning: boolean
+  tileId: string
 }): React.ReactElement {
   const { entries, db, loading, error } = useEntityTimeline(
     baseUrl || null,
@@ -74,6 +78,7 @@ function GenericChatBody({
         error={error}
         entityStopped={entityStopped}
         cacheKey={`${baseUrl}${entityUrl ?? ``}`}
+        tileId={tileId}
       />
       <MessageInput
         db={db}

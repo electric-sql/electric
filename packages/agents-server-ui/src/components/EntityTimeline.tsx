@@ -16,16 +16,22 @@ import {
   loadTimelineRowHeights,
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
+import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
+import {
+  getCurrentMatchIndexInRoot,
+  getTextMatchStarts,
+} from './workspace/PaneFindBar'
 import {
   formatAbsoluteDateTimeVerbose,
   formatShortTime,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
 import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
+import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
 /**
  * Width-aware row-height estimate used as the initial size hint for the
@@ -73,6 +79,60 @@ const SCROLL_THRESHOLD = 80
 const ROW_GAP = 24
 const ROW_SETTLE_MS = 500
 
+type TimelinePaneFindMatch = PaneFindMatch & {
+  rowKey: string
+  rowIndex: number
+  rowOccurrence: number
+}
+
+function timelineRowSearchText(row: EntityTimelineEntry): string {
+  const { section } = row
+  if (section.kind === `user_message`) return section.text
+
+  return section.items
+    .map((item) => {
+      if (item.kind === `text`) return item.text
+      const parts = [
+        item.toolName,
+        JSON.stringify(item.args, null, 2),
+        item.result ?? ``,
+      ]
+      return parts.filter((part) => part.trim().length > 0).join(`\n`)
+    })
+    .filter((part) => part.trim().length > 0)
+    .join(`\n\n`)
+}
+
+function timelineRowLabel(row: EntityTimelineEntry): string {
+  return row.section.kind === `user_message` ? `User message` : `Agent response`
+}
+
+function excerptAround(
+  text: string,
+  start: number,
+  queryLength: number
+): string {
+  const context = 48
+  const from = Math.max(0, start - context)
+  const to = Math.min(text.length, start + queryLength + context)
+  const prefix = from > 0 ? `...` : ``
+  const suffix = to < text.length ? `...` : ``
+  return `${prefix}${text.slice(from, to).replace(/\s+/g, ` `)}${suffix}`
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+function isTimelineFindMatch(
+  match: PaneFindMatch
+): match is TimelinePaneFindMatch {
+  return (
+    typeof (match as TimelinePaneFindMatch).rowKey === `string` &&
+    typeof (match as TimelinePaneFindMatch).rowIndex === `number`
+  )
+}
+
 // `section` and `responseTimestamp` are pulled out of the parent
 // `EntityTimelineEntry` so React.memo's shallow compare can hit on
 // the *section* identity. `buildTimelineEntries` returns a fresh
@@ -116,12 +176,14 @@ export function EntityTimeline({
   error,
   entityStopped,
   cacheKey,
+  tileId,
 }: {
   entries: Array<EntityTimelineEntry>
   loading: boolean
   error: string | null
   entityStopped: boolean
   cacheKey?: string | null
+  tileId?: string | null
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
@@ -233,6 +295,55 @@ export function EntityTimeline({
     measureElement: measureRowElement,
     enabled: rows.length > 0,
   })
+
+  const paneFindAdapter = useMemo<PaneFindAdapter>(() => {
+    const getHighlightRoot = (match: PaneFindMatch): HTMLElement | null => {
+      if (!contentElement || !isTimelineFindMatch(match)) return null
+      return contentElement.querySelector<HTMLElement>(
+        `[data-pane-find-row-key="${CSS.escape(match.rowKey)}"]`
+      )
+    }
+
+    return {
+      search(query) {
+        const matches: Array<TimelinePaneFindMatch> = []
+        if (!query.trim()) return matches
+
+        rows.forEach((row, rowIndex) => {
+          const text = timelineRowSearchText(row)
+          const starts = getTextMatchStarts(text, query)
+          starts.forEach((start, rowOccurrence) => {
+            matches.push({
+              id: `${row.key}:${rowOccurrence}`,
+              rowKey: row.key,
+              rowIndex,
+              rowOccurrence,
+              label: timelineRowLabel(row),
+              excerpt: excerptAround(text, start, query.length),
+            })
+          })
+        })
+        return matches
+      },
+      async reveal(match) {
+        if (!isTimelineFindMatch(match)) return
+        rowVirtualizer.scrollToIndex(match.rowIndex, { align: `center` })
+        for (let i = 0; i < 8; i++) {
+          await nextFrame()
+          if (getHighlightRoot(match)) return
+        }
+      },
+      getHighlightRoot,
+      getCurrentMatchIndex(match, query) {
+        if (!isTimelineFindMatch(match)) return 0
+        const root = getHighlightRoot(match)
+        if (!root) return 0
+        return getCurrentMatchIndexInRoot(root, query, match)
+      },
+    }
+  }, [contentElement, rowVirtualizer, rows])
+
+  usePaneFindAdapterRegistration(tileId ?? null, paneFindAdapter)
 
   useEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false
@@ -460,6 +571,7 @@ export function EntityTimeline({
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
                     data-item-key={row.key}
+                    data-pane-find-row-key={row.key}
                     className={styles.virtualRow}
                     style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >

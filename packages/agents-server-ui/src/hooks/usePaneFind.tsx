@@ -12,6 +12,7 @@ type PaneFindContextValue = {
   activeTileId: string | null
   openForTile: (tileId: string) => void
   close: () => void
+  getAdapter: (tileId: string) => PaneFindAdapter | null
 }
 
 const PaneFindContext = createContext<PaneFindContextValue | null>(null)
@@ -23,13 +24,19 @@ export function PaneFindProvider({
 }): React.ReactElement {
   const [activeTileId, setActiveTileId] = useState<string | null>(null)
 
+  const getAdapter = useCallback(
+    (tileId: string) => adapterRegistry.get(tileId) ?? null,
+    []
+  )
+
   const value = useMemo<PaneFindContextValue>(
     () => ({
       activeTileId,
       openForTile: setActiveTileId,
       close: () => setActiveTileId(null),
+      getAdapter,
     }),
-    [activeTileId]
+    [activeTileId, getAdapter]
   )
 
   return (
@@ -52,7 +59,22 @@ export type PaneFindApi = {
   previous: () => void
 }
 
+export type PaneFindMatch = {
+  id: string
+  label?: string
+  excerpt?: string
+  rowOccurrence?: number
+}
+
+export type PaneFindAdapter = {
+  search: (query: string) => Array<PaneFindMatch>
+  reveal: (match: PaneFindMatch) => void | Promise<void>
+  getHighlightRoot: (match: PaneFindMatch) => HTMLElement | null
+  getCurrentMatchIndex?: (match: PaneFindMatch, query: string) => number
+}
+
 const registry = new Map<string, PaneFindApi>()
+const adapterRegistry = new Map<string, PaneFindAdapter>()
 
 export function usePaneFindRegistration(
   tileId: string,
@@ -82,6 +104,34 @@ export function usePaneFindRegistration(
 
 export function unregisterPaneFind(tileId: string): void {
   registry.delete(tileId)
+}
+
+export function usePaneFindAdapterRegistration(
+  tileId: string | null,
+  adapter: PaneFindAdapter | null
+): void {
+  const adapterRef = useRef(adapter)
+  adapterRef.current = adapter
+
+  useEffect(() => {
+    if (!tileId) return
+    if (!adapterRef.current) {
+      adapterRegistry.delete(tileId)
+      return
+    }
+    const proxy: PaneFindAdapter = {
+      search: (query) => adapterRef.current?.search(query) ?? [],
+      reveal: (match) => adapterRef.current?.reveal(match),
+      getHighlightRoot: (match) =>
+        adapterRef.current?.getHighlightRoot(match) ?? null,
+      getCurrentMatchIndex: (match, query) =>
+        adapterRef.current?.getCurrentMatchIndex?.(match, query) ?? 0,
+    }
+    adapterRegistry.set(tileId, proxy)
+    return () => {
+      if (adapterRegistry.get(tileId) === proxy) adapterRegistry.delete(tileId)
+    }
+  }, [tileId])
 }
 
 export function usePaneFindCommands(): {

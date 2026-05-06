@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePaneFind, usePaneFindRegistration } from '../../hooks/usePaneFind'
 import styles from './PaneFindBar.module.css'
+import type { PaneFindAdapter, PaneFindMatch } from '../../hooks/usePaneFind'
 
 type Match = { node: Text; start: number; end: number }
 
@@ -38,11 +39,13 @@ export function PaneFindBar({
   tileId: string
   rootRef: React.RefObject<HTMLElement | null>
 }): React.ReactElement | null {
-  const { activeTileId, close } = usePaneFind()
+  const { activeTileId, close, getAdapter } = usePaneFind()
   const [query, setQuery] = useState(``)
   const [index, setIndex] = useState(0)
   const [count, setCount] = useState(0)
+  const [domVersion, setDomVersion] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const navigationKeyRef = useRef<string | null>(null)
   const supported = supportsPaneFind()
   const active = activeTileId === tileId
 
@@ -68,16 +71,79 @@ export function PaneFindBar({
 
   useEffect(() => {
     const root = rootRef.current
+    if (!supported || !active || !query || !root) return
+
+    let frame = 0
+    const observer = new MutationObserver(() => {
+      if (frame !== 0) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        setDomVersion((v) => v + 1)
+      })
+    })
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+
+    return () => {
+      observer.disconnect()
+      if (frame !== 0) cancelAnimationFrame(frame)
+    }
+  }, [active, query, rootRef, supported])
+
+  useEffect(() => {
+    const root = rootRef.current
     clearHighlights()
     if (!supported || !active || !query || !root) {
       setCount(0)
+      navigationKeyRef.current = null
       return
     }
+
+    const navigationKey = `${tileId}\0${query}\0${index}`
+    const shouldReveal = navigationKeyRef.current !== navigationKey
+    navigationKeyRef.current = navigationKey
+
+    const adapter = getAdapter(tileId)
+    if (adapter) {
+      let cancelled = false
+      const matches = adapter.search(query)
+      const nextCount = matches.length
+      setCount(nextCount)
+      const match = matches[Math.min(index, nextCount - 1)]
+      if (!match) return () => clearHighlights()
+
+      const paint = () => {
+        if (cancelled) return
+        renderAdapterHighlights(adapter, matches, match, query, shouldReveal)
+      }
+
+      if (shouldReveal) {
+        void Promise.resolve(adapter.reveal(match)).then(paint)
+      } else {
+        paint()
+      }
+
+      return () => {
+        cancelled = true
+        clearHighlights()
+      }
+    }
+
     const matches = findMatches(root, query)
-    setCount(matches.length)
-    renderHighlights(root, matches, Math.min(index, matches.length - 1))
+    const nextCount = matches.length
+    setCount(nextCount)
+    renderRootHighlights(
+      root,
+      matches,
+      Math.min(index, nextCount - 1),
+      shouldReveal
+    )
     return () => clearHighlights()
-  }, [active, query, index, rootRef, supported])
+  }, [active, domVersion, getAdapter, index, query, rootRef, supported, tileId])
 
   if (!supported || !active) return null
 
@@ -142,6 +208,32 @@ function findMatches(root: HTMLElement, query: string): Array<Match> {
   return matches
 }
 
+export function getTextMatchStarts(text: string, query: string): Array<number> {
+  const needle = query.toLocaleLowerCase()
+  if (!needle) return []
+  const haystack = text.toLocaleLowerCase()
+  const starts: Array<number> = []
+  let from = 0
+  for (;;) {
+    const start = haystack.indexOf(needle, from)
+    if (start === -1) break
+    starts.push(start)
+    from = start + Math.max(query.length, 1)
+  }
+  return starts
+}
+
+export function getCurrentMatchIndexInRoot(
+  root: HTMLElement,
+  query: string,
+  match: PaneFindMatch & { rowOccurrence?: number }
+): number {
+  if (typeof match.rowOccurrence !== `number`) return 0
+  const count = findMatches(root, query).length
+  if (count === 0) return 0
+  return Math.min(match.rowOccurrence, count - 1)
+}
+
 function clearHighlights(): void {
   const api = getHighlightApi()
   api?.highlights.delete(MATCH_HIGHLIGHT_NAME)
@@ -159,21 +251,17 @@ function createRange(match: Match): Range | null {
   }
 }
 
-function renderHighlights(
+function renderRootHighlights(
   root: HTMLElement,
   matches: Array<Match>,
-  current: number
+  current: number,
+  scrollCurrent: boolean
 ): void {
-  const api = getHighlightApi()
-  if (!api) return
-
   const matchRanges: Array<Range> = []
   let currentRange: Range | null = null
 
   for (let i = 0; i < matches.length; i++) {
-    const match = matches[i]
-    if (!match?.node.parentNode) continue
-    const range = createRange(match)
+    const range = createRange(matches[i]!)
     if (!range) continue
     if (i === current) {
       currentRange = range
@@ -182,12 +270,68 @@ function renderHighlights(
     }
   }
 
+  renderHighlightRanges(matchRanges, currentRange, root, scrollCurrent)
+}
+
+function renderAdapterHighlights(
+  adapter: PaneFindAdapter,
+  matches: Array<PaneFindMatch>,
+  currentMatch: PaneFindMatch,
+  query: string,
+  scrollCurrent: boolean
+): void {
+  const rootCurrentIndexes = new Map<HTMLElement, number | null>()
+
+  for (const match of matches) {
+    const root = adapter.getHighlightRoot(match)
+    if (!root) continue
+    if (!rootCurrentIndexes.has(root)) rootCurrentIndexes.set(root, null)
+    if (match === currentMatch) {
+      rootCurrentIndexes.set(
+        root,
+        adapter.getCurrentMatchIndex?.(match, query) ?? 0
+      )
+    }
+  }
+
+  const matchRanges: Array<Range> = []
+  let currentRange: Range | null = null
+  let currentRoot: HTMLElement | null = null
+
+  for (const [root, currentIndex] of rootCurrentIndexes) {
+    const rootMatches = findMatches(root, query)
+    for (let i = 0; i < rootMatches.length; i++) {
+      const range = createRange(rootMatches[i]!)
+      if (!range) continue
+      if (currentIndex !== null && i === currentIndex) {
+        currentRange = range
+        currentRoot = root
+      } else {
+        matchRanges.push(range)
+      }
+    }
+  }
+
+  renderHighlightRanges(matchRanges, currentRange, currentRoot, scrollCurrent)
+}
+
+function renderHighlightRanges(
+  matchRanges: Array<Range>,
+  currentRange: Range | null,
+  currentRoot: HTMLElement | null,
+  scrollCurrent: boolean
+): void {
+  const api = getHighlightApi()
+  if (!api) return
+
   if (matchRanges.length > 0) {
     api.highlights.set(MATCH_HIGHLIGHT_NAME, new api.Highlight(...matchRanges))
   }
   if (currentRange) {
     api.highlights.set(CURRENT_HIGHLIGHT_NAME, new api.Highlight(currentRange))
-    scrollRangeIntoView(root, currentRange)
+    if (scrollCurrent && currentRoot) {
+      scrollRangeIntoView(currentRoot, currentRange)
+    }
   }
 }
 
