@@ -217,14 +217,15 @@ defmodule Electric.Shapes.ConsumerRegistry do
   disabled, because the configuration message will have the side-effect of
   waking all consumers from hibernation.
 
-  The `jitter_period` value allows for spreading the suspension of existing
-  consumers over a large time period to avoid a sudden rush of consumer
-  shutdowns after `hibernate_after` ms.
+  The `jitter_period` value allows for spreading the hibernation of existing
+  consumers over a time period to avoid a sudden rush of hibernation events.
+  Each consumer picks a random timeout between `hibernate_after` and `jitter_period`,
+  then hibernates and schedules suspension for `suspend_after` ms later.
 
   To re-enable consumer suspend:
 
-      # set the hibernation timeout to 1 minute, suspend 4 minutes after hibernation,
-      # and phase the suspension of existing consumers over a 20 minute period
+      # hibernation timeout: 1 min, suspend timeout: 4 min, jitter window: 20 min
+      # Consumers will hibernate between 1-20 min, then suspend 4 min after hibernating
       Electric.Shapes.ConsumerRegistry.enable_suspend(stack_id, 60_000, 4 * 60_000, 60_000 * 20)
 
   Disabling suspension is as easy as:
