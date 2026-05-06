@@ -18,9 +18,16 @@ export interface BridgeToolOpts {
   tool: { name: string; description?: string; inputSchema: unknown }
   /** Subset of MCP SDK Client we use here. */
   client: {
-    callTool: (args: { name: string; arguments?: unknown }) => Promise<unknown>
+    callTool: (
+      args: { name: string; arguments?: unknown },
+      opts?: { onProgress?: (p: unknown) => void; signal?: AbortSignal }
+    ) => Promise<unknown>
   }
   timeoutMs?: number
+  /** Optional progress notification callback forwarded to the SDK. */
+  onProgress?: (p: unknown) => void
+  /** Optional AbortSignal forwarded to the SDK callTool. */
+  signal?: AbortSignal
 }
 
 export interface BridgedTool {
@@ -41,10 +48,14 @@ export function bridgeMcpTool(opts: BridgeToolOpts): BridgedTool {
     inputSchema: opts.tool.inputSchema,
     async call(args) {
       try {
-        return await withTimeout(
-          opts.client.callTool({ name: opts.tool.name, arguments: args }),
-          ms
-        )
+        const callArgs: Parameters<typeof opts.client.callTool> =
+          opts.onProgress !== undefined || opts.signal !== undefined
+            ? [
+                { name: opts.tool.name, arguments: args },
+                { onProgress: opts.onProgress, signal: opts.signal },
+              ]
+            : [{ name: opts.tool.name, arguments: args }]
+        return await withTimeout(opts.client.callTool(...callArgs), ms)
       } catch (err) {
         const e = err as Partial<McpToolError> & { message?: string }
         if (e.kind === `timeout`) throw err
