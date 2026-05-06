@@ -25,7 +25,7 @@ async function read(path: string): Promise<Store> {
 
 async function write(path: string, store: Store): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, JSON.stringify(store, null, 2))
+  await writeFile(path, JSON.stringify(store, null, 2), { mode: 0o600 })
   await chmod(path, 0o600)
 }
 
