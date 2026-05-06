@@ -1,6 +1,8 @@
 // Process-global registry of tool providers. Wake-time tool composition appends
 // each registered provider's tools to whatever the entity type declared.
 
+import { isMcpToolsSentinel, filterByAllowlist } from '@electric-ax/agents-mcp'
+
 export interface ToolProviderEntry {
   name: string
   tools: () => unknown[] | Promise<unknown[]>
@@ -23,6 +25,32 @@ export async function resolveToolProviders(): Promise<unknown[]> {
     out.push(...t)
   }
   return out
+}
+
+/**
+ * Expands any MCP sentinel objects in `declaredTools` into the actual provider
+ * tools they match, leaving non-sentinel entries unchanged.
+ */
+export async function composeToolsWithProviders(
+  declaredTools: ReadonlyArray<unknown>
+): Promise<unknown[]> {
+  const providerTools = await resolveToolProviders()
+  const allServers = [
+    ...new Set(
+      providerTools
+        .map((p) => (p as { server?: string }).server)
+        .filter((s): s is string => typeof s === `string`)
+    ),
+  ]
+  return declaredTools.flatMap((t) => {
+    if (isMcpToolsSentinel(t)) {
+      const matching = filterByAllowlist(allServers, t.allowlist)
+      return providerTools.filter((p) =>
+        matching.includes((p as { server: string }).server)
+      )
+    }
+    return [t]
+  })
 }
 
 /** @internal — used in unit tests. */

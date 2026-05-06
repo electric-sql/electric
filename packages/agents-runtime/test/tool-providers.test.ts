@@ -3,8 +3,10 @@ import {
   registerToolProvider,
   unregisterToolProvider,
   resolveToolProviders,
+  composeToolsWithProviders,
   __resetToolProvidersForTest,
 } from '../src/tool-providers'
+import { mcp } from '@electric-ax/agents-mcp'
 
 describe(`tool-providers`, () => {
   beforeEach(() => __resetToolProvidersForTest())
@@ -60,5 +62,50 @@ describe(`tool-providers`, () => {
       expect(isMcpToolsSentinel(sentinel)).toBe(true)
       expect(isMcpToolsSentinel({ name: `regular-tool` })).toBe(false)
     })
+  })
+})
+
+describe(`composeToolsWithProviders (wake-time sentinel composition)`, () => {
+  beforeEach(() => __resetToolProvidersForTest())
+
+  it(`expands an explicit allowlist to only matching servers tools`, async () => {
+    registerToolProvider({
+      name: `mcp`,
+      tools: () => [
+        { name: `mcp__a__t1`, server: `a` },
+        { name: `mcp__b__t1`, server: `b` },
+        { name: `mcp__c__t1`, server: `c` },
+      ],
+    })
+    const declared = [...mcp.tools([`a`, `c`])]
+    const composed = await composeToolsWithProviders(declared)
+    const names = (composed as Array<{ name: string }>)
+      .map((t) => t.name)
+      .sort()
+    expect(names).toEqual([`mcp__a__t1`, `mcp__c__t1`])
+  })
+
+  it(`'*' allowlist gets every provider tool`, async () => {
+    registerToolProvider({
+      name: `mcp`,
+      tools: () => [
+        { name: `mcp__a__t1`, server: `a` },
+        { name: `mcp__b__t1`, server: `b` },
+      ],
+    })
+    const declared = [...mcp.tools(`*`)]
+    const composed = await composeToolsWithProviders(declared)
+    expect(composed).toHaveLength(2)
+  })
+
+  it(`entity type with no sentinel sees no MCP tools`, async () => {
+    registerToolProvider({
+      name: `mcp`,
+      tools: () => [{ name: `mcp__a__t1`, server: `a` }],
+    })
+    const staticTool = { name: `static-thing` }
+    const declared = [staticTool]
+    const composed = await composeToolsWithProviders(declared)
+    expect(composed).toEqual([staticTool])
   })
 })
