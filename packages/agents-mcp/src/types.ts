@@ -46,6 +46,14 @@ export type McpAuthConfig =
       tokenUrl?: string
     }
 
+export interface ProgressEvent {
+  server: string
+  progressToken: string | number
+  progress: number
+  total?: number
+  message?: string
+}
+
 export type McpToolError =
   | { kind: `auth_unavailable`; server: string; detail?: string }
   | { kind: `transport_error`; server: string; detail: string }

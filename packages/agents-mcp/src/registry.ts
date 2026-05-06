@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto'
+import { ProgressNotificationSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { McpConfig } from './config/loader'
 import type { KeyVault } from './vault/types'
-import type { McpServerConfig, McpServerStatus } from './types'
+import type { McpServerConfig, McpServerStatus, ProgressEvent } from './types'
 import type { McpTransportHandle } from './transports/types'
 import { withTimeout } from './transports/timeout'
 
@@ -48,6 +50,12 @@ export interface Registry {
     args: Record<string, unknown>,
     timeoutMs: number
   ): Promise<unknown>
+  /**
+   * Subscribe to progress events emitted by any connected MCP server.
+   * Returns an unsubscribe function. Consumers (e.g. the agents-server-ui)
+   * use this to render `notifications/progress` events on a timeline.
+   */
+  subscribeToProgress(cb: (e: ProgressEvent) => void): () => void
 }
 
 /**
@@ -60,6 +68,17 @@ export interface Registry {
  */
 export function createRegistry(opts: RegistryOpts): Registry {
   const entries = new Map<string, ServerEntry>()
+  const progressSubscribers = new Set<(e: ProgressEvent) => void>()
+
+  function emitProgress(e: ProgressEvent): void {
+    for (const cb of progressSubscribers) {
+      try {
+        cb(e)
+      } catch {
+        // Subscriber errors must not break the notification pipeline.
+      }
+    }
+  }
 
   function buildAuthHeader(cfg: McpServerConfig): GetAuthHeader {
     return async () => {
@@ -93,6 +112,24 @@ export function createRegistry(opts: RegistryOpts): Registry {
       const client = entry.transport.client
       if (!client) {
         throw new Error(`transport.connect() did not populate client`)
+      }
+      // Wire `notifications/progress` -> ProgressEvent fan-out.
+      // The SDK validates against `ProgressNotificationSchema`; we re-shape
+      // the payload into our public `ProgressEvent` (tagged with the server
+      // name so subscribers can demultiplex events from many servers).
+      try {
+        client.setNotificationHandler(ProgressNotificationSchema, (notif) => {
+          emitProgress({
+            server: entry.name,
+            progressToken: notif.params.progressToken,
+            progress: notif.params.progress,
+            total: notif.params.total,
+            message: notif.params.message,
+          })
+        })
+      } catch {
+        // Older SDK clients or test fakes may omit setNotificationHandler;
+        // progress passthrough is best-effort.
       }
       const result = await client.listTools()
       entry.tools = (result.tools ?? []).map((t) => ({
@@ -209,13 +246,26 @@ export function createRegistry(opts: RegistryOpts): Registry {
       switch (method) {
         case `tools/list`:
           return withTimeout(client.listTools(), timeoutMs)
-        case `tools/call`:
+        case `tools/call`: {
+          // Inject a unique progressToken into `_meta`. The MCP server may
+          // emit `notifications/progress` referencing this token; the
+          // notification handler installed in `eagerConnect` fans those out
+          // to `progressSubscribers`.
+          const progressToken = randomUUID()
+          const callArgs = args as {
+            name: string
+            arguments?: Record<string, unknown>
+            _meta?: Record<string, unknown>
+          }
           return withTimeout(
-            client.callTool(
-              args as { name: string; arguments?: Record<string, unknown> }
-            ),
+            client.callTool({
+              name: callArgs.name,
+              arguments: callArgs.arguments,
+              _meta: { ...(callArgs._meta ?? {}), progressToken },
+            }),
             timeoutMs
           )
+        }
         case `resources/list`:
           return withTimeout(client.listResources(), timeoutMs)
         case `resources/read`:
@@ -234,6 +284,13 @@ export function createRegistry(opts: RegistryOpts): Registry {
           )
         default:
           throw new Error(`unsupported method: ${method}`)
+      }
+    },
+
+    subscribeToProgress(cb: (e: ProgressEvent) => void): () => void {
+      progressSubscribers.add(cb)
+      return () => {
+        progressSubscribers.delete(cb)
       }
     },
   }
