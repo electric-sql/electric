@@ -286,6 +286,22 @@
   --tree-line-color: var(--ds-border-2);
   --tree-stub-w: 9px;
   --tree-corner-radius: 6px;
+  --tree-parent-dot-radius: 3.5px;
+  position: relative;
+}
+
+/* When the expanded parent row is not selected, extend the trunk up
+   through the gap between parent and first child so it visually meets
+   the parent's status dot. Selected rows keep the line out of their
+   active background. */
+.treeNode:has(> .row:not(.selected)) > .subtree::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--tree-trunk-x) - 0.5px);
+  top: calc((var(--ds-row-height-md) / -2) + var(--tree-parent-dot-radius));
+  height: calc((var(--ds-row-height-md) / 2) - var(--tree-parent-dot-radius));
+  border-left: 1px solid var(--tree-line-color);
+  pointer-events: none;
 }
 
 /* Continuous vertical trunk through every child row. */
