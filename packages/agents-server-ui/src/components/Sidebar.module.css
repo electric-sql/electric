@@ -150,7 +150,7 @@
    at rest and only fully opaque while the row is hovered/focused so
    it never competes with the label.
 
-   `margin-right: 5px` gives the badge breathing room from the row's
+   `margin-right: 3px` gives the badge breathing room from the row's
    right edge — without it the keycap sits flush against the row
    padding (3px, sized for the concentric halo of inline buttons in
    sibling SidebarRow items) and visually crowds the rounded corner. */
@@ -160,7 +160,7 @@
   align-items: center;
   gap: 2px;
   margin-left: auto;
-  margin-right: 5px;
+  margin-right: 3px;
   opacity: 0.55;
   transition: opacity 0.1s ease;
 }
