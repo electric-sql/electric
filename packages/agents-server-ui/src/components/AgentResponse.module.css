@@ -12,9 +12,25 @@
 }
 
 .doneText {
-  opacity: 0.5;
+  color: var(--ds-text-4);
+  opacity: 0.8;
 }
 
 .timeText {
-  opacity: 0.4;
+  color: var(--ds-text-4);
+  opacity: 0.7;
+}
+
+.metaRow {
+  width: 100%;
+}
+
+.copyButton {
+  margin-left: auto;
+  color: var(--ds-text-4);
+  opacity: 0.7;
+}
+
+.copyButton:hover {
+  opacity: 1;
 }

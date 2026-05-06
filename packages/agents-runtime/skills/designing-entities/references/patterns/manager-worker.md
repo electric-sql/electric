@@ -13,7 +13,7 @@ The Electric agent server's built-in `worker` type has a strict contract (`/docs
 ```ts
 interface WorkerArgs {
   systemPrompt: string
-  tools: Array<WorkerToolName> // non-empty subset of: bash | read | write | edit | brave_search | fetch_url | spawn_worker
+  tools: Array<WorkerToolName> // non-empty subset of: bash | read | write | edit | web_search | fetch_url | spawn_worker
 }
 ```
 
@@ -69,7 +69,7 @@ async handler(ctx, wake) {
             `${p.id}`,
             {
               systemPrompt: p.systemPrompt,
-              tools: p.tools, // e.g. ["brave_search", "fetch_url"] — required, least-privilege
+              tools: p.tools, // e.g. ["web_search", "fetch_url"] — required, least-privilege
             },
             { initialMessage: question, wake: "runFinished" }
           )
@@ -132,7 +132,7 @@ async handler(ctx, wake) {
 - **Spawning inside `firstWake` only.** On re-wake after the first tool call, children don't exist in state yet. Spawn inside the tool or on message receipt, always guarded by state lookup.
 - **Awaiting each child sequentially.** Defeats parallelism; turns manager-worker into an ad-hoc pipeline.
 - **Per-wake specialist list.** If `PERSPECTIVES` is generated dynamically per wake, the pattern is `map-reduce`, not manager-worker.
-- **Secrets in worker prompts.** Don't interpolate API tokens / OAuth bearers / signed URLs into a worker's `systemPrompt` or `initialMessage` — they end up in the entity's persisted streams. For authenticated external APIs, have the manager do the fetch (tokens stay in trusted code) and pass the raw response to the worker as its message. Workers that still need to make their own calls should use built-in tools like `brave_search` that read their API key internally.
+- **Secrets in worker prompts.** Don't interpolate API tokens / OAuth bearers / signed URLs into a worker's `systemPrompt` or `initialMessage` — they end up in the entity's persisted streams. For authenticated external APIs, have the manager do the fetch (tokens stay in trusted code) and pass the raw response to the worker as its message. Workers that still need to make their own calls should use built-in tools like `web_search` that read their own API key internally.
 
 ## Handling authenticated external data
 

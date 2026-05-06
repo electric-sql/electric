@@ -24,7 +24,7 @@
      composer rather than a second raised card stacked under it. */
   background: var(--ds-bg);
   border: 1px solid var(--ds-gray-a4);
-  border-radius: 12px;
+  border-radius: var(--ds-radius-5);
   padding: 4px;
   /* Bottom padding = composer overlap (20px) + 1px drawer bottom
      border (covered by the composer) + 4px breathing room so the
@@ -65,7 +65,7 @@
   display: flex;
   align-items: center;
   /* Match `Menu.item`: gap 6px, vertical padding 3px, 1.3 line
-     height, 7px border-radius. Without these overrides the drawer
+     height, the item border-radius. Without these overrides the drawer
      rows ended up ~5px taller than dropdown menu items because
      `<Text size={2}>` sets `line-height: 1.5` (--ds-text-sm-lh)
      and the row carried 4px vertical padding. The line-height on
@@ -79,8 +79,8 @@
   border: 0;
   background: transparent;
   /* Concentric with drawer corner: 1px border + 4px drawer padding
-     + 7px row radius = 12px outer drawer radius. */
-  border-radius: 7px;
+     + item row radius = 12px outer drawer radius. */
+  border-radius: var(--ds-radius-item);
   cursor: pointer;
   font: inherit;
   color: var(--ds-text-1);
@@ -89,7 +89,7 @@
   transition: background-color 0.12s ease;
 }
 .row:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 .row:focus-visible {
   outline: 2px solid var(--ds-accent-a6);

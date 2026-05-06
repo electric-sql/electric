@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, FolderOpen, SquarePen } from 'lucide-react'
+import { SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { useProjects } from '../hooks/useProjects'
-import { bucketEntities } from '../lib/sessionGroups'
+import {
+  bucketEntities,
+  groupByStatus,
+  groupByType,
+  groupByWorkingDirectory,
+} from '../lib/sessionGroups'
+import { useSidebarView } from '../hooks/useSidebarView'
+import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
+import { useNarrowViewport } from '../hooks/useNarrowViewport'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
+import { setDragPayload } from '../lib/workspace/dragPayload'
 import { SidebarHeader } from './SidebarHeader'
 import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
@@ -15,7 +23,6 @@ import { SidebarTree } from './SidebarTree'
 import { SidebarFooter } from './SidebarFooter'
 import styles from './Sidebar.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
-import type { Project } from '../hooks/useProjects'
 
 const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -46,23 +53,62 @@ function useSidebarWidth(): readonly [number, (w: number) => void] {
 export function Sidebar({
   selectedEntityUrl,
   onSelectEntity,
+  onOpenEntityInSplit,
   pinnedUrls,
   onTogglePin,
 }: {
   selectedEntityUrl: string | null
   onSelectEntity: (url: string) => void
+  /**
+   * Optional ⌘/Ctrl-click + middle-click handler — opens an entity in
+   * a new split rather than replacing the active tile. Routed through
+   * the workspace helpers in `RootShell`.
+   */
+  onOpenEntityInSplit?: (url: string) => void
   pinnedUrls: Array<string>
   onTogglePin: (url: string) => void
 }): React.ReactElement {
   const { entitiesCollection } = useElectricAgents()
-  const { projects } = useProjects()
   const navigate = useNavigate()
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
-    () => new Set()
+  // Narrow viewports flip the sidebar from a push-displace flex
+  // column into an absolute-positioned overlay that floats above
+  // the main content with a backdrop. Selecting any sidebar row
+  // auto-collapses the sidebar in overlay mode (standard mobile
+  // drawer pattern) so the user is dropped straight into the new
+  // content without an extra dismiss tap.
+  const narrow = useNarrowViewport()
+  const { collapsed, setCollapsed } = useSidebarCollapsed()
+  // `data-state` drives the slide/fade transitions in CSS.
+  // - In wide mode the sidebar is always visible (or unmounted by
+  //   the parent), so no transition state is needed.
+  // - In narrow mode the parent keeps us mounted regardless of
+  //   `collapsed` so the exit transition can run before unmount,
+  //   and we toggle between `open`/`closed` here.
+  const overlayState: `open` | `closed` | undefined = narrow
+    ? collapsed
+      ? `closed`
+      : `open`
+    : undefined
+  const closeIfOverlay = useCallback(() => {
+    if (narrow) setCollapsed(true)
+  }, [narrow, setCollapsed])
+  const wrappedSelectEntity = useCallback(
+    (url: string) => {
+      onSelectEntity(url)
+      closeIfOverlay()
+    },
+    [onSelectEntity, closeIfOverlay]
   )
+  const wrappedOpenInSplit = useMemo(() => {
+    if (!onOpenEntityInSplit) return undefined
+    return (url: string) => {
+      onOpenEntityInSplit(url)
+      closeIfOverlay()
+    }
+  }, [onOpenEntityInSplit, closeIfOverlay])
 
   const hoverHandle = HoverCard.useHandle<SidebarRowInfoPayload>()
 
@@ -103,12 +149,29 @@ export function Sidebar({
     },
     [entitiesCollection]
   )
+
+  const view = useSidebarView()
+
+  // Apply Show > Type / Show > Status filters before building the
+  // tree so a hidden parent doesn't accidentally hide its (visible)
+  // children — instead, the children are reparented to the root level
+  // in the filtered view, which is the conventional behaviour for
+  // tree filtering.
+  const visibleEntities = useMemo(() => {
+    if (view.hiddenTypes.size === 0 && view.hiddenStatuses.size === 0) {
+      return entities
+    }
+    return entities.filter(
+      (e) => !view.hiddenTypes.has(e.type) && !view.hiddenStatuses.has(e.status)
+    )
+  }, [entities, view.hiddenTypes, view.hiddenStatuses])
+
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
-  const pinnedEntities = entities.filter((e) => pinnedSet.has(e.url))
+  const pinnedEntities = visibleEntities.filter((e) => pinnedSet.has(e.url))
 
   const { roots, childrenByParent } = useMemo(
-    () => buildEntityTree(entities),
-    [entities]
+    () => buildEntityTree(visibleEntities),
+    [visibleEntities]
   )
 
   const unpinnedRoots = useMemo(
@@ -116,198 +179,171 @@ export function Sidebar({
     [roots, pinnedSet]
   )
 
-  const { projectSections, ungrouped } = useMemo(
-    () => groupByProject(unpinnedRoots, projects),
-    [unpinnedRoots, projects]
-  )
-
-  const ungroupedBuckets = useMemo(() => bucketEntities(ungrouped), [ungrouped])
-
-  const toggleProjectCollapsed = useCallback((projectId: string) => {
-    setCollapsedProjects((prev) => {
-      const next = new Set(prev)
-      if (next.has(projectId)) {
-        next.delete(projectId)
-      } else {
-        next.add(projectId)
-      }
-      return next
-    })
-  }, [])
+  const ungroupedBuckets = useMemo(() => {
+    switch (view.groupBy) {
+      case `type`:
+        return groupByType(unpinnedRoots)
+      case `status`:
+        return groupByStatus(unpinnedRoots)
+      case `workingDir`:
+        return groupByWorkingDirectory(unpinnedRoots)
+      case `date`:
+      default:
+        return bucketEntities(unpinnedRoots)
+    }
+  }, [unpinnedRoots, view.groupBy])
 
   const handleNewSession = useCallback(() => {
     navigate({ to: `/` })
-  }, [navigate])
+    closeIfOverlay()
+  }, [navigate, closeIfOverlay])
 
   const treeProps = {
     childrenByParent,
     selectedEntityUrl,
-    onSelectEntity,
+    onSelectEntity: wrappedSelectEntity,
+    onOpenEntityInSplit: wrappedOpenInSplit,
     pinnedUrls,
     onTogglePin,
     hoverHandle,
   }
 
   return (
-    <Stack
-      direction="column"
-      className={styles.root}
-      style={{ width, minWidth: SIDEBAR_MIN_WIDTH }}
-    >
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        onMouseDown={startResize}
-        onMouseEnter={() => setResizeHandleHover(true)}
-        onMouseLeave={() => setResizeHandleHover(false)}
-        className={`${styles.resizeHandle} ${
-          resizing || resizeHandleHover ? styles.resizeHandleActive : ``
-        }`}
-      />
-      <SidebarHeader />
-
-      <ScrollArea className={styles.scrollFlex}>
-        <Stack direction="column" className={styles.treeRow}>
-          <button
-            type="button"
-            onClick={handleNewSession}
-            className={styles.newSessionRow}
-          >
-            <span className={styles.newSessionIconSlot}>
-              <SquarePen size={16} />
-            </span>
-            <span className={styles.newSessionLabel}>New session</span>
-            <span className={styles.newSessionKbd} aria-hidden="true">
-              <NewSessionKey />
-            </span>
-          </button>
-
-          {pinnedEntities.length > 0 && (
-            <>
-              <SectionLabel>Pinned</SectionLabel>
-              {pinnedEntities.map((entity) => (
-                <SidebarTree
-                  key={`pinned:${entity.url}`}
-                  entity={entity}
-                  {...treeProps}
-                />
-              ))}
-            </>
-          )}
-
-          {projectSections.map((section) => {
-            const collapsed = collapsedProjects.has(section.id)
-            return (
-              <div key={section.id}>
-                <button
-                  type="button"
-                  className={styles.projectHeader}
-                  onClick={() => toggleProjectCollapsed(section.id)}
-                >
-                  <FolderOpen size={12} className={styles.projectHeaderIcon} />
-                  <span className={styles.projectHeaderLabel}>
-                    {section.name}
-                  </span>
-                  <span className={styles.projectHeaderCount}>
-                    {section.items.length}
-                  </span>
-                  {collapsed ? (
-                    <ChevronRight size={12} />
-                  ) : (
-                    <ChevronDown size={12} />
-                  )}
-                </button>
-                {!collapsed &&
-                  section.items.map((root) => (
-                    <SidebarTree key={root.url} entity={root} {...treeProps} />
-                  ))}
-              </div>
-            )
-          })}
-
-          {ungroupedBuckets.map((group) => (
-            <div key={group.id}>
-              <SectionLabel>{group.label}</SectionLabel>
-              {group.items.map((root) => (
-                <SidebarTree key={root.url} entity={root} {...treeProps} />
-              ))}
-            </div>
-          ))}
-
-          {entities.length === 0 && (
-            <Text
-              size={1}
-              tone="muted"
-              align="center"
-              className={styles.emptyTreeText}
-            >
-              No sessions
-            </Text>
-          )}
-        </Stack>
-      </ScrollArea>
-
-      <SidebarFooter />
-
-      <HoverCard.Root handle={hoverHandle}>
-        {({ payload }: { payload: SidebarRowInfoPayload | undefined }) => (
-          <HoverCard.Content
-            side="right"
-            align="start"
-            sideOffset={8}
-            padded={false}
-            className={sidebarRowStyles.infoCard}
-          >
-            {payload ? <SidebarRowInfo {...payload} /> : null}
-          </HoverCard.Content>
+    <>
+      {narrow && (
+        <div
+          className={styles.backdrop}
+          data-state={overlayState}
+          onClick={() => setCollapsed(true)}
+          aria-hidden={collapsed ? `true` : undefined}
+        />
+      )}
+      <Stack
+        direction="column"
+        data-state={overlayState}
+        className={`${styles.root} ${narrow ? styles.overlay : ``}`}
+        style={
+          narrow
+            ? {
+                // Floating overlay — cap width so a visible chunk
+                // of backdrop remains for the user to tap-dismiss.
+                // The user's saved width still applies up to the
+                // cap. We deliberately drop `minWidth` so the
+                // sidebar can shrink to the cap on viewports
+                // narrower than `SIDEBAR_MIN_WIDTH`.
+                width,
+                minWidth: 0,
+                maxWidth: `min(85vw, 320px)`,
+              }
+            : { width, minWidth: SIDEBAR_MIN_WIDTH }
+        }
+      >
+        {/* Resize handle is push-mode-only — dragging an overlaid
+            sidebar wider doesn't make sense when there's no flex
+            sibling to take the displaced space. */}
+        {!narrow && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            onMouseDown={startResize}
+            onMouseEnter={() => setResizeHandleHover(true)}
+            onMouseLeave={() => setResizeHandleHover(false)}
+            className={`${styles.resizeHandle} ${
+              resizing || resizeHandleHover ? styles.resizeHandleActive : ``
+            }`}
+          />
         )}
-      </HoverCard.Root>
-    </Stack>
+        <SidebarHeader />
+
+        <ScrollArea className={styles.scrollFlex}>
+          <Stack direction="column" className={styles.treeRow}>
+            <button
+              type="button"
+              onClick={handleNewSession}
+              // Draggable so the user can drop a fresh new-session tile
+              // into any quadrant of an existing tile (creating a split)
+              // — gives them multiple new-session tiles at once. The
+              // browser only fires `dragstart` after the cursor moves,
+              // so a click that doesn't drag still triggers `onClick`.
+              draggable
+              onDragStart={(e) =>
+                setDragPayload(e, { kind: `sidebar-new-session` })
+              }
+              className={styles.newSessionRow}
+            >
+              <span className={styles.newSessionIconSlot}>
+                <SquarePen size={16} />
+              </span>
+              <span className={styles.newSessionLabel}>New session</span>
+              <span className={styles.newSessionKbd} aria-hidden="true">
+                <NewSessionKey />
+              </span>
+            </button>
+
+            {pinnedEntities.length > 0 && (
+              <>
+                <SectionLabel>Pinned</SectionLabel>
+                {pinnedEntities.map((entity) => (
+                  <SidebarTree
+                    key={`pinned:${entity.url}`}
+                    entity={entity}
+                    {...treeProps}
+                  />
+                ))}
+              </>
+            )}
+
+            {ungroupedBuckets.map((group) => (
+              <div key={group.id}>
+                <SectionLabel title={group.title}>{group.label}</SectionLabel>
+                {group.items.map((root) => (
+                  <SidebarTree key={root.url} entity={root} {...treeProps} />
+                ))}
+              </div>
+            ))}
+
+            {entities.length === 0 && (
+              <Text
+                size={1}
+                tone="muted"
+                align="center"
+                className={styles.emptyTreeText}
+              >
+                No sessions
+              </Text>
+            )}
+            {entities.length > 0 && visibleEntities.length === 0 && (
+              <Text
+                size={1}
+                tone="muted"
+                align="center"
+                className={styles.emptyTreeText}
+              >
+                No sessions match the current filters
+              </Text>
+            )}
+          </Stack>
+        </ScrollArea>
+
+        <SidebarFooter />
+
+        <HoverCard.Root handle={hoverHandle}>
+          {({ payload }: { payload: SidebarRowInfoPayload | undefined }) => (
+            <HoverCard.Content
+              side="right"
+              align="start"
+              sideOffset={8}
+              padded={false}
+              className={sidebarRowStyles.infoCard}
+            >
+              {payload ? <SidebarRowInfo {...payload} /> : null}
+            </HoverCard.Content>
+          )}
+        </HoverCard.Root>
+      </Stack>
+    </>
   )
-}
-
-interface ProjectSection {
-  id: string
-  name: string
-  items: Array<ElectricEntity>
-}
-
-function groupByProject(
-  roots: ReadonlyArray<ElectricEntity>,
-  projects: ReadonlyArray<Project>
-): {
-  projectSections: Array<ProjectSection>
-  ungrouped: Array<ElectricEntity>
-} {
-  const projectMap = new Map(projects.map((p) => [p.id, p]))
-  const byProject = new Map<string, Array<ElectricEntity>>()
-  const ungrouped: Array<ElectricEntity> = []
-
-  for (const entity of roots) {
-    const projectId = entity.tags?.project
-    if (projectId && projectMap.has(projectId)) {
-      const list = byProject.get(projectId) ?? []
-      list.push(entity)
-      byProject.set(projectId, list)
-    } else {
-      ungrouped.push(entity)
-    }
-  }
-
-  const projectSections: Array<ProjectSection> = []
-  for (const [id, items] of byProject) {
-    const project = projectMap.get(id)!
-    projectSections.push({ id, name: project.name, items })
-  }
-
-  projectSections.sort((a, b) => {
-    const aMax = Math.max(...a.items.map((e) => e.updated_at))
-    const bMax = Math.max(...b.items.map((e) => e.updated_at))
-    return bMax - aMax
-  })
-
-  return { projectSections, ungrouped }
 }
 
 function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
@@ -332,11 +368,19 @@ function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
 
 function SectionLabel({
   children,
+  title,
 }: {
   children: React.ReactNode
+  /**
+   * Optional longer-form text surfaced as a native tooltip on hover.
+   * Used by the working-directory grouping mode where `children` is
+   * an abbreviated path (e.g. `…/projects/acme`) and the full path
+   * is worth showing on hover.
+   */
+  title?: string
 }): React.ReactElement {
   return (
-    <Text size={1} tone="muted" className={styles.sectionLabel}>
+    <Text size={1} tone="muted" className={styles.sectionLabel} title={title}>
       {children}
     </Text>
   )

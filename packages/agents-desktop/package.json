@@ -1,0 +1,38 @@
+{
+  "name": "@electric-ax/agents-desktop",
+  "productName": "Electric Agents",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/main.cjs",
+  "scripts": {
+    "build": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && vite build",
+    "dev": "pnpm --filter @electric-ax/agents build && pnpm run ensure:electron && concurrently -k -n ui,desktop -c cyan,green \"pnpm run dev:ui\" \"pnpm run dev:desktop\"",
+    "dev:ui": "pnpm --filter @electric-ax/agents-server-ui dev:desktop",
+    "dev:desktop": "wait-on -d 200 http-get://localhost:5183 && vite",
+    "ensure:electron": "node ./node_modules/electron/install.js",
+    "start": "pnpm run ensure:electron && electron .",
+    "coverage": "true",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-ax/agents": "workspace:*",
+    "@electric-ax/agents-server-ui": "workspace:*",
+    "@mixmark-io/domino": "^2.2.0",
+    "better-sqlite3": "^11.10.0",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.0.0",
+    "turndown-plugin-gfm": "^1.0.2",
+    "jsdom": "^28.1.0",
+    "sqlite-vec": "^0.1.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "concurrently": "^8.2.2",
+    "electron": "^41.5.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.7",
+    "vite-plugin-electron": "^0.29.1",
+    "wait-on": "^9.0.1"
+  }
+}

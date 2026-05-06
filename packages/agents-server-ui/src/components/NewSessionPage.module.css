@@ -5,6 +5,58 @@
   flex-direction: column;
   background: var(--ds-bg);
   overflow: hidden;
+  /* Anchor for the .dropHint overlay below — without this the
+   * absolutely-positioned hint would escape the page and cover the
+   * sidebar too. */
+  position: relative;
+}
+
+/* ---- Drag-and-drop targeting ----------------------------------- */
+/* When a workspace drag begins anywhere in the document we render a
+ * single full-page drop hint over the new-session content. The hint
+ * has two visual states:
+ *   - .dropArmed (a workspace drag is in flight)  → soft outline
+ *   - .dropOver  (the cursor is over this page)   → strong outline
+ *                                                   + label visible
+ * Sidebar entity drops navigate to that entity, which bootstraps the
+ * workspace as a single tile via the URL → workspace effect in
+ * <Workspace>. */
+.dropHint {
+  position: absolute;
+  inset: var(--ds-space-3);
+  pointer-events: none;
+  border: 2px dashed var(--ds-accent-a6);
+  border-radius: var(--ds-radius-4);
+  background: var(--ds-accent-a2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.45;
+  transition:
+    opacity 0.12s ease-out,
+    background 0.12s ease-out,
+    border-color 0.12s ease-out;
+  z-index: 20;
+}
+
+.dropHintActive {
+  opacity: 1;
+  background: var(--ds-accent-a4);
+  border-color: var(--ds-accent-a9);
+}
+
+.dropHintLabel {
+  padding: 6px 12px;
+  border-radius: var(--ds-radius-2);
+  background: var(--ds-accent-a3);
+  color: var(--ds-accent-11);
+  font-size: var(--ds-text-sm);
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+
+.dropHintActive .dropHintLabel {
+  opacity: 1;
 }
 
 .body {
@@ -22,12 +74,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--ds-space-5);
+  align-items: center;
 }
 
 .heading {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-1);
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding-top: var(--ds-space-7);
+  text-align: center;
 }
 
 .headingTitle {
@@ -60,14 +116,14 @@
   padding: var(--ds-space-3) var(--ds-space-4);
   background: transparent;
   border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-3);
+  border-radius: var(--ds-radius-5);
   cursor: pointer;
   transition:
     background 0.12s ease,
     border-color 0.12s ease;
 }
 .typeCard:hover {
-  background: var(--ds-gray-a2);
+  background: var(--ds-surface-raised);
   border-color: var(--ds-border-2);
 }
 .typeCardName {
@@ -144,7 +200,7 @@
   padding: var(--ds-space-3) var(--ds-space-4);
   background: var(--ds-input-bg);
   border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-4);
+  border-radius: var(--ds-radius-5);
   transition: border-color 0.15s ease;
   margin: 0 calc(-1 * var(--ds-space-4));
 }
@@ -194,12 +250,19 @@
   gap: 4px;
   flex-wrap: wrap;
   min-width: 0;
+  /* Pill triggers have 8px inline padding. Shift the overlay left by
+     that amount so the first pill's label aligns with the textarea
+     text column, then drop it 4px so the chip edge has the same
+     8px inset from the composer bottom as it has from the side. */
+  margin-left: -8px;
+  transform: translateY(4px);
 }
 .composerSendCluster {
   display: flex;
   align-items: center;
   gap: var(--ds-space-3);
   margin-left: auto;
+  margin-right: -4px;
 }
 .composerHint {
   font-size: var(--ds-text-xs);
@@ -227,14 +290,19 @@
   border-radius: var(--ds-radius-2);
   font-size: var(--ds-text-xs);
   color: var(--ds-text-2);
-  background: var(--ds-gray-a3);
+  /* Shared chip surface — same elevation as inputs, `<kbd>`, code
+     chips and the Select pill trigger. Avoids the muddy mid-grey
+     produced by an alpha-white tint over the dark page bg. */
+  background: var(--ds-chip-bg);
   cursor: pointer;
   transition:
     background 0.1s ease,
     color 0.1s ease;
 }
 .pill:hover {
-  background: var(--ds-gray-a4);
+  /* Universal hover lift — clean cool-grey one step above
+     `--ds-chip-bg`, shared with drop-down items, sidebar rows etc. */
+  background: var(--ds-bg-hover);
   color: var(--ds-text-1);
 }
 .pillButton {
@@ -260,70 +328,21 @@
   width: 24px;
   height: 24px;
   border-radius: var(--ds-radius-full);
-  color: var(--ds-gray-8);
+  background: var(--ds-gray-a3);
+  color: var(--ds-text-3);
   cursor: not-allowed;
-  transition: color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
   flex-shrink: 0;
 }
 .composerSendActive {
-  color: var(--ds-accent-9);
+  background: var(--ds-accent-9);
+  color: var(--ds-text-on-accent);
   cursor: pointer;
 }
 .composerSendActive:hover {
-  color: var(--ds-accent-10);
-}
-
-/* Project picker -------------------------------------------------- */
-
-.projectPicker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ds-space-1);
-}
-.projectPickerLabel {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 10px;
-}
-.projectPickerRow {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-2);
-  flex-wrap: wrap;
-}
-.projectCreateForm {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-2);
-}
-.projectCreateInput {
-  border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-2);
-  padding: 4px 8px;
-  font-size: var(--ds-text-sm);
-  font-family: var(--ds-font-body);
-  color: var(--ds-text-1);
-  background: var(--ds-input-bg);
-  outline: none;
-  height: 28px;
-}
-.projectCreateInput:focus {
-  border-color: var(--ds-accent-a6);
-}
-.projectCreateBtn {
-  all: unset;
-  cursor: pointer;
-  font-size: var(--ds-text-sm);
-  color: var(--ds-accent-9);
-  padding: 4px 8px;
-  border-radius: var(--ds-radius-2);
-}
-.projectCreateBtn:hover {
-  background: var(--ds-accent-a2);
-}
-.projectCreateBtn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+  background: var(--ds-accent-10);
 }
 
 /* Other-agents section under the composer ----------------------- */
@@ -334,7 +353,6 @@
   gap: var(--ds-space-2);
 }
 .otherAgentsLabel {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 500;
 }

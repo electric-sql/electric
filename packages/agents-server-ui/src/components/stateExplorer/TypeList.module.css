@@ -8,7 +8,7 @@
 }
 
 .headerLabel {
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .list {
@@ -24,7 +24,7 @@
   color: var(--ds-text-2);
 }
 .item:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 .itemSelected {
   background: var(--ds-accent-a3);

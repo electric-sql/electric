@@ -47,16 +47,22 @@
 /* --- Vertical rhythm ------------------------------------------------ */
 
 .agent-ui-markdown > div {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: block;
 }
 
-/* Cancel any auto-margins on direct children — the parent flex `gap`
-   is the single source of truth for inter-block spacing. */
-.agent-ui-markdown > div > *,
-.agent-ui-markdown > div > * + * {
+/* Cancel renderer/browser margins on direct children. Element-specific
+   rules below own the rhythm so headings, prose, lists, and panels do
+   not all get the same mechanical spacing. */
+.agent-ui-markdown > div > * {
   margin: 0;
+}
+
+.agent-ui-markdown > div > * + * {
+  margin-top: 12px;
+}
+
+.agent-ui-markdown > div > :is(h1, h2, h3, h4, h5, h6) + * {
+  margin-top: 8px;
 }
 
 /* --- Body copy ------------------------------------------------------ */
@@ -99,19 +105,19 @@
   font-size: var(--ds-text-lg); /* 16px */
   line-height: 1.35;
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: 18px;
 }
 .agent-ui-markdown h2 {
   font-size: var(--ds-text-base); /* 14px */
   line-height: 1.4;
   font-weight: 600;
-  margin-top: 4px;
+  margin-top: 18px;
 }
 .agent-ui-markdown h3 {
   font-size: var(--ds-text-sm); /* 13px */
   line-height: 1.45;
   font-weight: 600;
-  margin-top: 2px;
+  margin-top: 14px;
 }
 .agent-ui-markdown h4,
 .agent-ui-markdown h5,
@@ -120,6 +126,7 @@
   line-height: 1.45;
   font-weight: 600;
   color: var(--ds-text-2);
+  margin-top: 12px;
 }
 
 /* First heading in the message has no extra top margin. */
@@ -132,7 +139,7 @@
 .agent-ui-markdown ul,
 .agent-ui-markdown ol {
   list-style-position: outside;
-  padding-left: 1.5em;
+  padding-left: 1.55em;
 }
 .agent-ui-markdown ul {
   list-style: disc;
@@ -141,7 +148,10 @@
   list-style: decimal;
 }
 .agent-ui-markdown li + li {
-  margin-top: 4px;
+  margin-top: 5px;
+}
+.agent-ui-markdown li > :is(ul, ol) {
+  margin-top: 5px;
 }
 /* Streamdown wraps each list item's text in a paragraph; collapse it
    so list items render on a single line by default, and only break
@@ -154,12 +164,39 @@
   font-size: 0.95em;
 }
 
+/* GFM task lists render native disabled checkboxes. Remove the normal
+   list marker and let the checkbox become the marker so we do not show
+   both a bullet and a control. */
+.agent-ui-markdown li:has(input[type='checkbox']) {
+  list-style: none;
+  margin-left: -1.25em;
+}
+.agent-ui-markdown li li:has(input[type='checkbox']) {
+  margin-left: 0;
+}
+.agent-ui-markdown li:has(input[type='checkbox'])::marker {
+  content: '';
+}
+.agent-ui-markdown li input[type='checkbox'] {
+  width: 12px;
+  height: 12px;
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+  accent-color: var(--ds-accent-9);
+}
+.agent-ui-markdown li input[type='checkbox']:disabled {
+  opacity: 0.65;
+}
+
 /* --- Inline code ---------------------------------------------------- */
 
 .agent-ui-markdown [data-md-inline-code] {
   font-family: var(--ds-font-mono);
   font-size: 0.92em;
-  background: var(--ds-gray-a3);
+  /* Solid chip surface — matches the marketing site's `--vp-code-bg`
+     and the inline `<Code>` primitive. Avoids the muddy mid-grey
+     produced by an alpha-white tint over the dark chat surface. */
+  background: var(--ds-chip-bg);
   padding: 0.1em 0.4em;
   border-radius: var(--ds-radius-1);
   color: var(--ds-text-1);
@@ -270,7 +307,7 @@
   display: none;
 }
 .agent-ui-markdown summary:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 
 /* Chevron — SVG mask of lucide's `chevron-right` so the colour
@@ -337,7 +374,7 @@
 .agent-ui-markdown [data-md-code-block] {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 /* Header + action toolbar share a single row above the bordered
@@ -348,7 +385,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 18px;
+  height: 16px;
   padding: 0 2px;
   gap: 8px;
 }
@@ -376,15 +413,17 @@
 }
 
 /* The code area itself — the only part that carries chrome.
-   `--ds-gray-a2` reads as a faint surface tint over the chat
-   background; the 1px hairline + 6px corner radius mirror the
-   inline-code chip and the table wrapper so all three feel like
-   variants of the same surface. */
+   `--ds-surface-raised` matches the marketing site's
+   `--vp-code-bg = --vp-c-bg-elv` so code wells sit at the same
+   elevation as the rest of the chrome (inputs, popovers). The
+   1px hairline + 6px corner radius mirror the inline-code chip
+   and the table wrapper so all three feel like variants of the
+   same surface. */
 .agent-ui-markdown [data-md-code-block-body] {
-  background: var(--ds-gray-a2);
+  background: var(--ds-surface-raised);
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-3);
-  padding: 10px 12px;
+  padding: 9px 11px;
   overflow-x: auto;
 }
 
@@ -398,7 +437,7 @@
 .agent-ui-markdown [data-md-code-block-body] code {
   font-family: var(--ds-font-mono);
   font-size: var(--ds-text-xs);
-  line-height: 1.55;
+  line-height: 1.5;
   background: none;
   padding: 0;
   border-radius: 0;
@@ -415,10 +454,14 @@
 }
 
 /* Shiki returns each token with an inline `style` containing both
-   `--shiki-light` and `--shiki-dark` CSS variables plus
-   `color: var(--shiki-light)`. The default already lights up
-   correctly in light mode; for dark mode swap to the dark variable
-   on every token span inside a code block body. */
+   `--shiki-light` and `--shiki-dark` CSS variables. The inline
+   `color` it would normally also stamp on is stripped in
+   `MarkdownCodeBlock.tsx` (`tokenStyle`) — that lets these CSS
+   rules pick the right variable per theme without losing to
+   inline-style specificity. */
+.agent-ui-markdown [data-md-code-block-line] span[style*='--shiki'] {
+  color: var(--shiki-light, inherit);
+}
 [data-theme='dark']
   .agent-ui-markdown
   [data-md-code-block-line]
@@ -443,11 +486,11 @@
  * ----------------------------------------------------------------------- */
 
 .agent-ui-markdown [data-md-math-block] {
-  margin: 0.75em 0;
-  padding: 12px 16px;
+  margin: 0;
+  padding: 10px 12px;
   border: 1px solid var(--ds-gray-a4);
-  border-radius: 8px;
-  background: var(--ds-background);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-bg);
   overflow-x: auto;
   font-size: 1.05em;
   line-height: 1.4;
@@ -468,7 +511,7 @@
 .agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] {
   padding: 8px 12px;
   font-size: 13px;
-  background: var(--ds-gray-a3);
+  background: var(--ds-chip-bg);
 }
 
 .agent-ui-markdown [data-md-math-block][data-md-math-block-streaming] pre {
@@ -493,11 +536,11 @@
  * ----------------------------------------------------------------------- */
 
 .agent-ui-markdown [data-md-mermaid-block] {
-  margin: 0.75em 0;
-  padding: 16px;
+  margin: 0;
+  padding: 12px;
   border: 1px solid var(--ds-gray-a4);
-  border-radius: 8px;
-  background: var(--ds-background);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-bg);
   overflow-x: auto;
   display: flex;
   justify-content: center;
@@ -516,7 +559,7 @@
 .agent-ui-markdown [data-md-mermaid-block][data-md-mermaid-block-pending] {
   padding: 8px 12px;
   font-size: 13px;
-  background: var(--ds-gray-a3);
+  background: var(--ds-chip-bg);
   display: block;
 }
 
@@ -533,14 +576,14 @@
   display: block;
   padding: 12px 14px;
   background: var(--ds-red-a3, var(--ds-gray-a3));
-  border-color: var(--ds-red-a6, var(--ds-gray-a4));
+  border-color: var(--ds-red-a5);
 }
 
 .agent-ui-markdown
   [data-md-mermaid-block][data-md-mermaid-block-error]
   [data-md-mermaid-block-error-message] {
   font-size: 12px;
-  color: var(--ds-red-11, var(--ds-foreground-muted));
+  color: var(--ds-red-11);
   margin-bottom: 8px;
   font-family: var(--font-mono);
 }
@@ -608,7 +651,9 @@
 }
 
 .agent-ui-markdown [data-streamdown='table-header'] {
-  background: var(--ds-gray-a2);
+  /* Subtle band that distinguishes header from body without
+     producing a muddy mid-grey wash on the dark chat surface. */
+  background: var(--ds-bg-subtle);
 }
 
 .agent-ui-markdown [data-streamdown='table-header-cell'] {

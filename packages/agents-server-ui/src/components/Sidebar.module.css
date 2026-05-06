@@ -5,6 +5,76 @@
   border-right: 1px solid var(--ds-border-1);
 }
 
+/* Narrow-viewport overlay mode — see `useNarrowViewport`. The
+   sidebar pops out of flex flow and floats over the main column
+   (with a backdrop sibling, `.backdrop` below) so it can stay open
+   without compressing the chat area on small screens. The shadow
+   provides the elevation cue, and the higher z-index ensures we
+   sit above the main content but below modals/toasts (which use
+   `--ds-z-modal` / `--ds-z-popover`).
+
+   The slide-in/out transition is driven by `data-state` toggled in
+   Sidebar.tsx (`open` ↔ `closed`). The parent keeps us mounted in
+   overlay mode regardless of `collapsed` so the exit transition
+   has time to run before unmount. `will-change` keeps the GPU
+   layer warm so the first frame of either direction doesn't jank. */
+.overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--ds-z-overlay);
+  box-shadow: var(--ds-overlay-shadow);
+  transition:
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 220ms ease;
+  will-change: transform;
+}
+.overlay[data-state='closed'] {
+  /* Translate by 100% of the sidebar's own width — slides exactly
+     off the left edge regardless of the user's saved width or the
+     viewport cap. Drop the shadow simultaneously so it doesn't
+     bleed into the dimmed backdrop. */
+  transform: translateX(-100%);
+  box-shadow: none;
+  pointer-events: none;
+}
+.overlay[data-state='open'] {
+  transform: translateX(0);
+}
+
+/* Backdrop sibling rendered next to `.overlay` (see Sidebar.tsx).
+   Sits above the main content but below the sidebar so a click
+   anywhere outside the sidebar dismisses it. Uses the same
+   `--ds-overlay` scrim token as Dialog so the dimming reads
+   consistently with other modal-style overlays. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--ds-z-overlay) - 1);
+  background: var(--ds-overlay);
+  cursor: pointer;
+  transition: opacity 220ms ease;
+}
+.backdrop[data-state='closed'] {
+  opacity: 0;
+  pointer-events: none;
+}
+.backdrop[data-state='open'] {
+  opacity: 1;
+}
+
+/* Respect the OS-level "reduce motion" preference — snap the
+   sidebar in/out instead of sliding. The sidebar still hides
+   correctly because the `transform` and `opacity` rules above
+   still apply, just without the animated interpolation. */
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .backdrop {
+    transition: none;
+  }
+}
+
 .resizeHandle {
   position: absolute;
   top: 0;
@@ -38,7 +108,7 @@
    x=22 — exactly where the SidebarHeader chrome icons (padding-left
    11px) and the SidebarRow status dots (BASE_PADDING_LEFT 3px) live.
 
-   `padding-right: 3px` and `border-radius: 7px` follow the same
+   `padding-right: 3px` and the item radius follow the same
    concentric-halo rule as `.row` in SidebarRow.module.css, so the
    New session row rounds identically to the entity rows below it. */
 .newSessionRow {
@@ -49,13 +119,13 @@
   height: var(--ds-row-height-md);
   padding-left: 3px;
   padding-right: 3px;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
   transition: background 0.08s ease;
 }
 .newSessionRow:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 /* Same 22px slot, same 16px glyph and the SAME `--ds-text-1` colour
    as the sidebar/search IconButtons in SidebarHeader so the three
@@ -80,7 +150,7 @@
    at rest and only fully opaque while the row is hovered/focused so
    it never competes with the label.
 
-   `margin-right: 5px` gives the badge breathing room from the row's
+   `margin-right: 3px` gives the badge breathing room from the row's
    right edge — without it the keycap sits flush against the row
    padding (3px, sized for the concentric halo of inline buttons in
    sibling SidebarRow items) and visually crowds the rounded corner. */
@@ -90,7 +160,7 @@
   align-items: center;
   gap: 2px;
   margin-left: auto;
-  margin-right: 5px;
+  margin-right: 3px;
   opacity: 0.55;
   transition: opacity 0.1s ease;
 }
@@ -109,63 +179,33 @@
  * lower-density auxiliary nav and its 8px gutter still leaves room
  * to spare. Targets Base UI's `<Scrollbar>` via its `data-orientation`
  * attribute (the inner class name is module-hashed and not reachable
- * from here). `!important` because the ScrollArea module's
- * `.scrollbar[data-orientation=...]` rule is the same specificity —
- * cascade order between sibling CSS modules isn't guaranteed across
- * builds, so we make the intent explicit. The 1px inner padding
- * keeps the thumb at 4px, in proportion with the narrower track. */
-.scrollFlex [data-orientation='vertical'] {
-  width: 6px !important;
-  padding: 1px !important;
+ * from here). `.root` increases specificity beyond the shared
+ * ScrollArea rule, so the override is deterministic without a
+ * priority escape hatch. The 1px inner padding keeps the thumb at 4px, in
+ * proportion with the narrower track. */
+.root .scrollFlex [data-orientation='vertical'] {
+  width: 6px;
+  padding: 1px;
 }
 
 .emptyTreeText {
   padding-top: 20px;
 }
 
-.projectHeader {
-  all: unset;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  height: var(--ds-row-height-md);
-  padding: 14px 4px 4px 8px;
-  cursor: pointer;
-  color: var(--ds-text-2);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  transition: color 0.1s ease;
-}
-.projectHeader:hover {
-  color: var(--ds-text-1);
-}
-.projectHeaderIcon {
-  flex-shrink: 0;
-  opacity: 0.7;
-}
-.projectHeaderLabel {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.projectHeaderCount {
-  flex-shrink: 0;
-  opacity: 0.5;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Section label ("Pinned", "Today", "Last 7 days", …) — text
    aligns with the icon column above so the column reads cleanly
-   from top to bottom. */
+   from top to bottom. Sentence-case (no `text-transform`) so
+   working-dir labels like `~/Code/electric` render naturally;
+   font-weight is the prominence cue instead of uppercase letterforms.
+   Single-line ellipsis is a safety net for the working-dir grouping
+   mode where a label can be a long abbreviated path. */
 .sectionLabel {
   display: block;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 500;
   padding: 14px 4px 4px 8px;
   color: var(--ds-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

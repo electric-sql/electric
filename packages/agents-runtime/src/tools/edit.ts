@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
+import { createTwoFilesPatch } from 'diff'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
@@ -98,6 +99,7 @@ export function createEditTool(
             new_string +
             original.slice(first + old_string.length)
           await writeFile(resolved, updated, `utf-8`)
+          const patch = createTwoFilesPatch(rel, rel, original, updated)
           return {
             content: [
               {
@@ -105,7 +107,7 @@ export function createEditTool(
                 text: `Edited ${rel}: 1 replacement`,
               },
             ],
-            details: { replacements: 1 },
+            details: { replacements: 1, diff: patch },
           }
         }
 
@@ -122,7 +124,9 @@ export function createEditTool(
             details: { replacements: 0 },
           }
         }
-        await writeFile(resolved, parts.join(new_string), `utf-8`)
+        const updated = parts.join(new_string)
+        await writeFile(resolved, updated, `utf-8`)
+        const patch = createTwoFilesPatch(rel, rel, original, updated)
         return {
           content: [
             {
@@ -130,7 +134,7 @@ export function createEditTool(
               text: `Edited ${rel}: ${count} occurrences replaced`,
             },
           ],
-          details: { replacements: count },
+          details: { replacements: count, diff: patch },
         }
       } catch (err) {
         runtimeLog.warn(

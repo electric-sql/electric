@@ -324,12 +324,43 @@ export async function assembleContext(
     const message = volatileMessages[i]!
     const nextTokens = approxTokens(message.content)
     if (volatileBudgetUsed + nextTokens > remainingBudget) {
+      if (message.role === `tool_call` || message.role === `tool_result`) {
+        const stub = `[content truncated — use load_timeline_range({ from: ${message.at}, to: ${message.at} }) to read]`
+        const stubTokens = approxTokens(stub)
+        if (volatileBudgetUsed + stubTokens <= remainingBudget) {
+          volatileBudgetUsed += stubTokens
+          accepted.push({ ...message, content: stub })
+          continue
+        }
+      }
       droppedOffsets.push(message.at)
       continue
     }
     volatileBudgetUsed += nextTokens
     accepted.push(message)
   }
+
+  const acceptedCallIds = new Set<string>()
+  const acceptedResultIds = new Set<string>()
+  for (const message of accepted) {
+    const id = (message as VolatileMessage & { toolCallId?: string }).toolCallId
+    if (!id) continue
+    if (message.role === `tool_call`) acceptedCallIds.add(id)
+    else if (message.role === `tool_result`) acceptedResultIds.add(id)
+  }
+  for (let i = accepted.length - 1; i >= 0; i--) {
+    const message = accepted[i]!
+    const id = (message as VolatileMessage & { toolCallId?: string }).toolCallId
+    if (!id) continue
+    if (
+      (message.role === `tool_call` && !acceptedResultIds.has(id)) ||
+      (message.role === `tool_result` && !acceptedCallIds.has(id))
+    ) {
+      droppedOffsets.push(message.at)
+      accepted.splice(i, 1)
+    }
+  }
+
   accepted.reverse()
 
   if (droppedOffsets.length > 0) {

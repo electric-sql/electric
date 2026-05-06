@@ -19,9 +19,17 @@
 
 .card {
   border: 1px solid var(--ds-gray-a3);
-  border-radius: var(--ds-radius-3);
+  border-radius: var(--ds-radius-4);
   overflow: hidden;
-  background: var(--ds-gray-a1);
+  /* Solid surface (one elevation step above the page bg) so the
+     card reads as a clear panel rather than a near-invisible
+     translucent slab over the dark page bg. Matches the way the
+     marketing site uses `--vp-c-bg-elv` for cards/panels. */
+  background: var(--ds-surface);
+  /* Hairline shadow — same lift the composer uses, just enough to
+     separate the card from the chat surface without competing with
+     prose. */
+  box-shadow: var(--ds-shadow-1);
 }
 
 /* The header is metadata about the tool call, not part of the
@@ -34,11 +42,18 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 7px 10px;
   font-size: 12px;
   line-height: 1.45;
-  font-family: var(--ds-font-body);
+  /* Mono font for the header strip — the row is tool metadata
+     (function name + arg summary), so reading it as code matches
+     its semantic. The `.summary` child opts back out to body font
+     so the human-readable summary stays legible at small sizes. */
+  font-family: var(--ds-font-mono);
   color: var(--ds-text-1);
+  /* Faint tinted strip — distinguishes the header from the body
+     panel below without raising it to a full chrome bar. */
+  background: var(--ds-gray-a1);
 }
 
 /* Strip `<button>`'s built-in chrome (background, border, UA
@@ -61,10 +76,16 @@
   width: 100%;
   box-sizing: border-box;
   border-radius: 0;
+  outline: none;
   transition: background 0.08s ease;
 }
 .headerToggle:hover {
-  background: var(--ds-gray-a2);
+  /* Universal hover lift — clean cool-grey, shared with sidebar
+     rows and drop-down items. */
+  background: var(--ds-bg-hover);
+}
+.headerToggle:focus-visible {
+  background: var(--ds-accent-a2);
 }
 
 /* Chevron lives in a fixed-size 16px slot so the row height doesn't
@@ -90,6 +111,9 @@
 
 .summary {
   color: var(--ds-text-3);
+  /* Header is mono; opt back to body font so the human-readable
+     summary text still reads as prose at small sizes. */
+  font-family: var(--ds-font-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -107,13 +131,28 @@
   background: var(--ds-bg);
 }
 
+/* Small caps section heading inside the tool body ("Input", "Output"
+   etc.) — sits above the code well as a quiet label that doesn't
+   compete with the well's chrome. */
+.sectionLabel {
+  font-size: var(--ds-text-xs);
+  font-weight: 600;
+  font-variant: all-small-caps;
+  letter-spacing: 0.04em;
+  color: var(--ds-text-2);
+}
+
 .codeBlock {
   margin: 0;
   padding: 8px 10px;
-  background: var(--ds-gray-a2);
-  border-radius: var(--ds-radius-2);
+  /* Recessed code well — slightly darker than the body panel so the
+     code reads as inset content rather than a raised chrome bar.
+     Mixing bg-subtle with surface gives a tone that always falls
+     between the two regardless of theme. */
+  background: color-mix(in oklab, var(--ds-bg-subtle) 70%, var(--ds-surface));
+  border-radius: var(--ds-radius-3);
   font-size: var(--ds-text-xs);
-  line-height: 1.55;
+  line-height: 1.6;
   font-family: var(--ds-font-mono);
   white-space: pre-wrap;
   word-break: break-word;

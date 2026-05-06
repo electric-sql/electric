@@ -1,4 +1,5 @@
 import type { ElectricEntity } from './ElectricAgentsProvider'
+import { abbreviatePath, detectHomeDir, tildifyPath } from './pathDisplay'
 
 /**
  * Session list grouping by recency.
@@ -33,6 +34,13 @@ export type SessionGroup = {
   id: string
   key: BucketKey
   label: string
+  /**
+   * Optional longer-form text — useful as a tooltip when the
+   * `label` had to be abbreviated to fit a confined column (e.g.
+   * working-directory labels in the sidebar). Falls back to
+   * `label` when omitted.
+   */
+  title?: string
   items: Array<ElectricEntity>
 }
 
@@ -118,6 +126,132 @@ class Group implements SessionGroup {
   constructor(
     public id: string,
     public key: BucketKey,
-    public label: string
+    public label: string,
+    public title?: string
   ) {}
+}
+
+/**
+ * Group by entity `type`, sorted by group size (most populous group
+ * first) and then alphabetically. Inside each group entities are
+ * ordered by `updated_at` descending — same as the date buckets — so
+ * the most recently touched entity in any group is always at the top.
+ */
+export function groupByType(
+  entities: ReadonlyArray<ElectricEntity>
+): Array<SessionGroup> {
+  const buckets = new Map<string, Group>()
+  for (const entity of [...entities].sort(
+    (a, b) => b.updated_at - a.updated_at
+  )) {
+    const t = entity.type
+    let group = buckets.get(t)
+    if (!group) {
+      group = new Group(`type-${t}`, `older`, formatLabel(t))
+      buckets.set(t, group)
+    }
+    group.items.push(entity)
+  }
+  return Array.from(buckets.values()).sort((a, b) => {
+    const dx = b.items.length - a.items.length
+    if (dx !== 0) return dx
+    return a.label.localeCompare(b.label)
+  })
+}
+
+/**
+ * Group by `status`, ordered by lifecycle (running → idle → spawning
+ * → stopped) so the user's eye lands on currently-active sessions
+ * first. Same in-group sort as `groupByType`.
+ */
+const STATUS_ORDER: Record<string, number> = {
+  running: 0,
+  idle: 1,
+  spawning: 2,
+  stopped: 3,
+}
+
+export function groupByStatus(
+  entities: ReadonlyArray<ElectricEntity>
+): Array<SessionGroup> {
+  const buckets = new Map<string, Group>()
+  for (const entity of [...entities].sort(
+    (a, b) => b.updated_at - a.updated_at
+  )) {
+    const s = entity.status
+    let group = buckets.get(s)
+    if (!group) {
+      group = new Group(`status-${s}`, `older`, formatLabel(s))
+      buckets.set(s, group)
+    }
+    group.items.push(entity)
+  }
+  return Array.from(buckets.values()).sort((a, b) => {
+    const ax = STATUS_ORDER[a.id.replace(`status-`, ``)] ?? 99
+    const bx = STATUS_ORDER[b.id.replace(`status-`, ``)] ?? 99
+    return ax - bx
+  })
+}
+
+/** Title-case a snake_case / kebab-case identifier for use as a label. */
+function formatLabel(id: string): string {
+  return id.replace(/[-_]+/g, ` `).replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Group by `spawn_args.workingDirectory`. Entities without a working
+ * directory fall into a single trailing "None" bucket so they're
+ * still visible — hiding them would silently drop sessions that were
+ * spawned through paths that don't carry a cwd (e.g. older sessions,
+ * agent types other than horton).
+ *
+ * Group labels are tildified and abbreviated to fit a sidebar
+ * column (`~/Code/electric`, `…/projects/acme`) — see
+ * `pathDisplay.abbreviatePath` for the truncation rule. The full
+ * absolute path is preserved on `title` so the sidebar can surface
+ * it as a tooltip on hover. Sort order: most-populous first,
+ * alphabetical tiebreaker on the label.
+ */
+export function groupByWorkingDirectory(
+  entities: ReadonlyArray<ElectricEntity>
+): Array<SessionGroup> {
+  const buckets = new Map<string, Group>()
+  const noDir = new Group(`cwd:none`, `older`, `None`)
+
+  // Two passes: collect all paths first so `detectHomeDir` can sniff
+  // the home prefix from the full set, then label each bucket using
+  // that consistent home dir. Doing it per-entity would re-detect
+  // home for each path and risk inconsistent labels across groups.
+  const sortedEntities = [...entities].sort(
+    (a, b) => b.updated_at - a.updated_at
+  )
+  const allPaths = sortedEntities
+    .map((e) => e.spawn_args?.workingDirectory)
+    .filter((p): p is string => typeof p === `string` && p.trim().length > 0)
+  const homeDir = detectHomeDir(allPaths)
+
+  for (const entity of sortedEntities) {
+    const raw = entity.spawn_args?.workingDirectory
+    const cwd = typeof raw === `string` && raw.trim().length > 0 ? raw : null
+    if (cwd === null) {
+      noDir.items.push(entity)
+      continue
+    }
+    let group = buckets.get(cwd)
+    if (!group) {
+      const label = abbreviatePath(tildifyPath(cwd, homeDir))
+      group = new Group(`cwd:${cwd}`, `older`, label, cwd)
+      buckets.set(cwd, group)
+    }
+    group.items.push(entity)
+  }
+
+  const dirGroups = Array.from(buckets.values()).sort((a, b) => {
+    const dx = b.items.length - a.items.length
+    if (dx !== 0) return dx
+    return a.label.localeCompare(b.label)
+  })
+  // "None" bucket always last so user-tagged groups dominate the
+  // visual top of the list.
+  return noDir.items.length > 0 ? [...dirGroups, noDir] : dirGroups
 }

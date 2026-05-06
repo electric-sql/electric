@@ -9,24 +9,99 @@ import {
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
-import { Search } from 'lucide-react'
-import { Kbd } from '../ui'
+import {
+  Copy,
+  ExternalLink,
+  GitFork,
+  LayoutPanelLeft,
+  PanelLeft,
+  Pin,
+  PinOff,
+  Search,
+  Settings,
+  SplitSquareHorizontal,
+  SplitSquareVertical,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react'
 import { StatusDot } from './StatusDot'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../hooks/usePinnedEntities'
+import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
+import { listTiles, useWorkspace } from '../hooks/useWorkspace'
+import { usePaneFindCommands } from '../hooks/usePaneFind'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
+import { encodeLayout } from '../lib/workspace/layoutCodec'
+import { listViews } from '../lib/workspace/viewRegistry'
 import styles from './SearchPalette.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
-type ResultGroup = { label: string; items: Array<ElectricEntity> }
+type PaletteItem =
+  | {
+      kind: `action`
+      id: string
+      title: string
+      subtitle?: string
+      keywords?: Array<string>
+      shortcut?: string
+      icon: LucideIcon
+      run: () => boolean | void | Promise<void>
+    }
+  | {
+      kind: `session`
+      id: string
+      title: string
+      subtitle: string
+      entity: ElectricEntity
+      run: () => void
+    }
+
+type ResultGroup = { label: string; items: Array<PaletteItem> }
+
+const MAX_SESSION_RESULTS = 30
+
+function matchesPaletteItem(item: PaletteItem, query: string): boolean {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+
+  const haystack = [
+    item.title,
+    item.subtitle,
+    item.kind,
+    ...(item.kind === `action` ? (item.keywords ?? []) : [item.entity.url]),
+  ]
+    .filter(Boolean)
+    .join(` `)
+    .toLowerCase()
+
+  return needle
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((part) => haystack.includes(part))
+}
+
+function copyWorkspaceLayout(
+  workspace: ReturnType<typeof useWorkspace>[`workspace`]
+): void {
+  const encoded = encodeLayout(workspace)
+  const url = new URL(window.location.href)
+  const hash = url.hash.replace(/^#/, ``)
+  const [path, query = ``] = hash.split(`?`)
+  const params = new URLSearchParams(query)
+  if (encoded) params.set(`layout`, encoded)
+  else params.delete(`layout`)
+  const newQuery = params.toString()
+  url.hash = `#` + path + (newQuery ? `?` + newQuery : ``)
+  void navigator.clipboard.writeText(url.toString())
+}
 
 /**
- * ⌘K session-search palette.
+ * ⌘K command palette.
  *
  * Command-palette-style overlay anchored 12vh from the top of the
- * viewport. Searches sessions only — a future command palette will
- * land on a separate shortcut for actions (kill / fork / etc.).
+ * viewport. Searches both sessions and runnable actions, with actions
+ * gated by the current workspace / active tile context.
  *
  * Keyboard:
  *   ↑ / ↓   move highlight (wraps)
@@ -35,8 +110,11 @@ type ResultGroup = { label: string; items: Array<ElectricEntity> }
  */
 export function SearchPalette(): React.ReactElement | null {
   const { isOpen, close } = useSearchPalette()
-  const { entitiesCollection } = useElectricAgents()
-  const { pinnedUrls } = usePinnedEntities()
+  const { entitiesCollection, forkEntity, killEntity } = useElectricAgents()
+  const { pinnedUrls, togglePin } = usePinnedEntities()
+  const { collapsed, toggle: toggleSidebar } = useSidebarCollapsed()
+  const { workspace, helpers } = useWorkspace()
+  const { openFindForTile } = usePaneFindCommands()
   const navigate = useNavigate()
 
   const [query, setQuery] = useState(``)
@@ -53,30 +131,287 @@ export function SearchPalette(): React.ReactElement | null {
     [entitiesCollection]
   )
 
-  const groups: Array<ResultGroup> = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    const matches = (entity: ElectricEntity): boolean => {
-      if (!needle) return true
-      const slug = entity.url.split(`/`).pop() ?? ``
-      const { title } = getEntityDisplayTitle(entity)
-      return (
-        slug.toLowerCase().includes(needle) ||
-        entity.type.toLowerCase().includes(needle) ||
-        title.toLowerCase().includes(needle) ||
-        entity.url.toLowerCase().includes(needle)
-      )
-    }
-    const filtered = entities.filter(matches)
-    const pinnedSet = new Set(pinnedUrls)
-    const pinned = filtered.filter((e) => pinnedSet.has(e.url))
-    const sessions = filtered.filter((e) => !pinnedSet.has(e.url))
-    const out: Array<ResultGroup> = []
-    if (pinned.length > 0) out.push({ label: `Pinned`, items: pinned })
-    if (sessions.length > 0) out.push({ label: `Sessions`, items: sessions })
-    return out
-  }, [entities, pinnedUrls, query])
+  const tiles = useMemo(() => listTiles(workspace.root), [workspace.root])
+  const activeTile = helpers.activeTile
+  const activeEntity = activeTile?.entityUrl
+    ? entities.find((entity) => entity.url === activeTile.entityUrl)
+    : undefined
+  const activeEntityTitle = activeEntity
+    ? getEntityDisplayTitle(activeEntity).title
+    : undefined
 
-  const flatResults = useMemo(() => groups.flatMap((g) => g.items), [groups])
+  const actions = useMemo<Array<PaletteItem>>(() => {
+    const out: Array<PaletteItem> = [
+      {
+        kind: `action`,
+        id: `new-session`,
+        title: `New session`,
+        subtitle: `Open a fresh agent session tile`,
+        keywords: [`new chat`, `start`, `agent`],
+        shortcut: `⌘N`,
+        icon: ExternalLink,
+        run: () => navigate({ to: `/` }),
+      },
+      {
+        kind: `action`,
+        id: `toggle-sidebar`,
+        title: collapsed ? `Show sidebar` : `Hide sidebar`,
+        subtitle: `Toggle the session sidebar`,
+        keywords: [`sidebar`, `panel`, `navigator`],
+        shortcut: `⌘B`,
+        icon: PanelLeft,
+        run: toggleSidebar,
+      },
+      {
+        kind: `action`,
+        id: `open-settings`,
+        title: `Open settings`,
+        subtitle: `Show application settings`,
+        keywords: [`preferences`, `config`],
+        icon: Settings,
+        run: () =>
+          navigate({
+            to: `/settings/$category`,
+            params: { category: `general` },
+          }),
+      },
+    ]
+
+    if (activeTile) {
+      out.push(
+        {
+          kind: `action`,
+          id: `find-current-pane`,
+          title: `Find in current pane`,
+          subtitle: `Search within the active tile`,
+          keywords: [`search`, `current`, `tile`, `pane`],
+          shortcut: `⌘F`,
+          icon: Search,
+          run: () => openFindForTile(activeTile.id),
+        },
+        {
+          kind: `action`,
+          id: `split-right`,
+          title: `Split right`,
+          subtitle: `Duplicate the active tile to the right`,
+          keywords: [`layout`, `pane`, `tile`],
+          shortcut: `⌘D`,
+          icon: SplitSquareHorizontal,
+          run: () => helpers.splitTile(activeTile.id, `right`),
+        },
+        {
+          kind: `action`,
+          id: `split-down`,
+          title: `Split down`,
+          subtitle: `Duplicate the active tile below`,
+          keywords: [`layout`, `pane`, `tile`],
+          shortcut: `⇧⌘D`,
+          icon: SplitSquareVertical,
+          run: () => helpers.splitTile(activeTile.id, `down`),
+        }
+      )
+
+      if (tiles.length > 1) {
+        out.push(
+          {
+            kind: `action`,
+            id: `close-tile`,
+            title: `Close tile`,
+            subtitle: `Close the active tile`,
+            keywords: [`pane`, `tab`, `window`],
+            shortcut: `⌘W`,
+            icon: Trash2,
+            run: () => helpers.closeTile(activeTile.id),
+          },
+          {
+            kind: `action`,
+            id: `cycle-tile`,
+            title: `Cycle to next tile`,
+            subtitle: `Focus the next tile in the workspace`,
+            keywords: [`next`, `focus`, `pane`],
+            shortcut: `⌘\\`,
+            icon: LayoutPanelLeft,
+            run: () => {
+              const currentIdx = tiles.findIndex((t) => t.id === activeTile.id)
+              const next = tiles[(currentIdx + 1) % tiles.length]
+              if (next) helpers.setActiveTile(next.id)
+            },
+          }
+        )
+      }
+    }
+
+    if (workspace.root) {
+      out.push({
+        kind: `action`,
+        id: `copy-layout-link`,
+        title: `Copy layout link`,
+        subtitle: `Copy a URL for the current workspace layout`,
+        keywords: [`share`, `url`, `workspace`],
+        icon: Copy,
+        run: () => copyWorkspaceLayout(workspace),
+      })
+    }
+
+    if (activeTile && activeEntity && activeTile.entityUrl) {
+      const isPinned = pinnedUrls.includes(activeTile.entityUrl)
+      out.push(
+        {
+          kind: `action`,
+          id: `copy-current-entity-url`,
+          title: `Copy current entity URL`,
+          subtitle: activeEntityTitle,
+          keywords: [`copy`, `session`, `url`],
+          icon: Copy,
+          run: () => {
+            if (activeTile.entityUrl) {
+              void navigator.clipboard.writeText(activeTile.entityUrl)
+            }
+          },
+        },
+        {
+          kind: `action`,
+          id: `toggle-pin-current-entity`,
+          title: isPinned ? `Unpin current entity` : `Pin current entity`,
+          subtitle: activeEntityTitle,
+          keywords: [`pin`, `sidebar`, `session`],
+          icon: isPinned ? PinOff : Pin,
+          run: () => {
+            if (activeTile.entityUrl) togglePin(activeTile.entityUrl)
+          },
+        }
+      )
+
+      listViews(activeEntity).forEach((view) => {
+        if (view.id === activeTile.viewId) return
+        out.push({
+          kind: `action`,
+          id: `show-view-${view.id}`,
+          title: `Show ${view.label}`,
+          subtitle: `Switch the active tile view`,
+          keywords: [`view`, `switch`, view.id],
+          icon: view.icon,
+          run: () => helpers.setTileView(activeTile.id, view.id),
+        })
+      })
+
+      if (
+        forkEntity &&
+        !activeEntity.parent &&
+        activeEntity.status !== `stopped`
+      ) {
+        out.push({
+          kind: `action`,
+          id: `fork-current-subtree`,
+          title: `Fork current subtree`,
+          subtitle: activeEntityTitle,
+          keywords: [`fork`, `session`, `agent`],
+          icon: GitFork,
+          run: () => {
+            if (!activeTile.entityUrl) return
+            void forkEntity(activeTile.entityUrl)
+              .then((root) =>
+                navigate({
+                  to: `/entity/$`,
+                  params: { _splat: root.url.replace(/^\//, ``) },
+                })
+              )
+              .catch(() => {})
+          },
+        })
+      }
+
+      if (killEntity && activeEntity.status !== `stopped`) {
+        out.push({
+          kind: `action`,
+          id: `kill-current-entity`,
+          title: `Kill current entity`,
+          subtitle: activeEntityTitle,
+          keywords: [`stop`, `terminate`, `agent`, `session`],
+          icon: Trash2,
+          run: () => {
+            if (!activeTile.entityUrl) return false
+            if (
+              !window.confirm(
+                `Kill ${activeEntityTitle ?? activeTile.entityUrl}?`
+              )
+            ) {
+              return false
+            }
+            const tx = killEntity(activeTile.entityUrl)
+            tx.isPersisted.promise.catch(() => {})
+          },
+        })
+      }
+    }
+
+    return out
+  }, [
+    activeEntity,
+    activeEntityTitle,
+    activeTile,
+    collapsed,
+    forkEntity,
+    helpers,
+    killEntity,
+    navigate,
+    openFindForTile,
+    pinnedUrls,
+    tiles,
+    togglePin,
+    toggleSidebar,
+    workspace,
+  ])
+
+  const groups: Array<ResultGroup> = useMemo(() => {
+    const pinnedSet = new Set(pinnedUrls)
+    const actionItems = actions.filter((item) =>
+      matchesPaletteItem(item, query)
+    )
+    const sessionItems = entities
+      .map<PaletteItem>((entity) => {
+        const { title } = getEntityDisplayTitle(entity)
+        return {
+          kind: `session`,
+          id: entity.url,
+          title,
+          subtitle: entity.type,
+          entity,
+          run: () =>
+            navigate({
+              to: `/entity/$`,
+              params: { _splat: entity.url.replace(/^\//, ``) },
+            }),
+        }
+      })
+      .filter((item) => matchesPaletteItem(item, query))
+    const pinned = sessionItems.filter(
+      (item): item is Extract<PaletteItem, { kind: `session` }> =>
+        item.kind === `session` && pinnedSet.has(item.entity.url)
+    )
+    const sessions = sessionItems.filter(
+      (item): item is Extract<PaletteItem, { kind: `session` }> =>
+        item.kind === `session` && !pinnedSet.has(item.entity.url)
+    )
+    const out: Array<ResultGroup> = []
+    if (actionItems.length > 0)
+      out.push({ label: `Actions`, items: actionItems })
+    if (pinned.length > 0) {
+      out.push({ label: `Pinned`, items: pinned.slice(0, MAX_SESSION_RESULTS) })
+    }
+    if (sessions.length > 0) {
+      out.push({
+        label: `Sessions`,
+        items: sessions.slice(0, MAX_SESSION_RESULTS),
+      })
+    }
+    return out
+  }, [actions, entities, navigate, pinnedUrls, query])
+
+  const flatResults = useMemo<Array<PaletteItem>>(
+    () => groups.flatMap((g) => g.items),
+    [groups]
+  )
 
   // Reset selection when query or open state changes.
   useEffect(() => {
@@ -104,18 +439,16 @@ export function SearchPalette(): React.ReactElement | null {
     return () => window.cancelAnimationFrame(id)
   }, [isOpen])
 
-  const openResult = useCallback(
-    (entity: ElectricEntity) => {
-      navigate({
-        to: `/entity/$`,
-        params: { _splat: entity.url.replace(/^\//, ``) },
-      })
+  const runItem = useCallback(
+    (item: PaletteItem) => {
+      const shouldClose = item.run()
+      if (shouldClose === false) return
       // Defer close to the next frame so React commits the navigation
       // before the dialog dismount; closing in the same render seems to
       // get coalesced and the dialog stays mounted.
       window.requestAnimationFrame(close)
     },
-    [close, navigate]
+    [close]
   )
 
   const onInputKeyDown = useCallback(
@@ -130,10 +463,10 @@ export function SearchPalette(): React.ReactElement | null {
       } else if (e.key === `Enter`) {
         e.preventDefault()
         const target = flatResults[highlight]
-        if (target) openResult(target)
+        if (target) runItem(target)
       }
     },
-    [flatResults, highlight, openResult]
+    [flatResults, highlight, runItem]
   )
 
   let cursor = 0
@@ -148,7 +481,7 @@ export function SearchPalette(): React.ReactElement | null {
               ref={inputRef}
               type="search"
               className={styles.searchInput}
-              placeholder="Search sessions…"
+              placeholder="Search sessions and actions…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onInputKeyDown}
@@ -159,48 +492,56 @@ export function SearchPalette(): React.ReactElement | null {
           <div className={styles.results} role="listbox">
             {flatResults.length === 0 && (
               <div className={styles.empty}>
-                {query ? `No matches` : `No sessions yet`}
+                {query ? `No matches` : `No sessions or actions`}
               </div>
             )}
             {groups.map((group) => (
               <div key={group.label}>
                 <span className={styles.groupLabel}>{group.label}</span>
-                {group.items.map((entity) => {
+                {group.items.map((item) => {
                   const idx = cursor++
                   const active = idx === highlight
-                  const { title } = getEntityDisplayTitle(entity)
                   return (
                     <div
-                      key={entity.url}
+                      key={item.id}
                       role="option"
                       aria-selected={active}
                       data-active={active}
                       className={styles.row}
                       onMouseEnter={() => setHighlight(idx)}
-                      onClick={() => openResult(entity)}
+                      onClick={() => runItem(item)}
                     >
-                      <StatusDot status={entity.status} />
-                      <span className={styles.rowTitle} title={title}>
-                        {title}
+                      <span className={styles.rowIconSlot}>
+                        {item.kind === `session` ? (
+                          <StatusDot status={item.entity.status} />
+                        ) : (
+                          <item.icon size={14} className={styles.rowIcon} />
+                        )}
                       </span>
-                      <span className={styles.rowType}>{entity.type}</span>
+                      <span className={styles.rowTitle} title={item.title}>
+                        {item.title}
+                      </span>
+                      {item.subtitle && (
+                        <span
+                          className={
+                            item.kind === `session`
+                              ? styles.rowType
+                              : styles.rowSubtitle
+                          }
+                        >
+                          {item.subtitle}
+                        </span>
+                      )}
+                      {item.kind === `action` && item.shortcut && (
+                        <span className={styles.rowShortcut}>
+                          {item.shortcut}
+                        </span>
+                      )}
                     </div>
                   )
                 })}
               </div>
             ))}
-          </div>
-          <div className={styles.footer}>
-            <span className={styles.hint}>
-              <Kbd>↑</Kbd>
-              <Kbd>↓</Kbd> Navigate
-            </span>
-            <span className={styles.hint}>
-              <Kbd>↵</Kbd> Open
-            </span>
-            <span className={styles.hint}>
-              <Kbd>esc</Kbd> Close
-            </span>
           </div>
         </BaseDialog.Popup>
       </BaseDialog.Portal>

@@ -10,7 +10,7 @@ export const WORKER_TOOL_NAMES = [
   `read`,
   `write`,
   `edit`,
-  `brave_search`,
+  `web_search`,
   `fetch_url`,
   `spawn_worker`,
 ] as const

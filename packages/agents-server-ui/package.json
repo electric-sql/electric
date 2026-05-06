@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:desktop": "vite build --mode desktop",
     "dev": "vite dev",
+    "dev:desktop": "vite dev --mode desktop --port 5183 --strictPort",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "coverage": "pnpm exec vitest run --coverage --passWithNoTests",

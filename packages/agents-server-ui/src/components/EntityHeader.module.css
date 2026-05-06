@@ -80,6 +80,7 @@
    pill from shrinking when the title row gets tight. */
 .statusBadge {
   flex-shrink: 0;
+  margin-right: 4px;
 }
 
 /* Toggled-on state for icon-only buttons (e.g. state-explorer
@@ -98,7 +99,7 @@
 }
 
 .inspectPre {
-  background: var(--ds-gray-a3);
+  background: var(--ds-chip-bg);
   padding: 16px;
   border-radius: 8px;
   overflow: auto;

@@ -12,7 +12,7 @@
   /* Body font, not mono — many monospace fonts (incl. Source Code Pro)
      lack glyphs for ⌘/⌥/⇧/⌃, falling back to system fonts mid-pill. */
   font-family: var(--ds-font-body);
-  font-size: 10px;
+  font-size: var(--ds-text-2xs);
   line-height: 1;
   letter-spacing: 0;
   font-weight: 500;

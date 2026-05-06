@@ -109,6 +109,7 @@ type TextDeltaValue = {
 type ToolCallValue = {
   key?: string
   run_id?: string
+  tool_call_id?: string
   tool_name: string
   status: `started` | `args_complete` | `executing` | `completed` | `failed`
   args?: unknown
@@ -353,6 +354,7 @@ function createToolCallSchema(): Schema<ToolCallValue> {
   return z.object({
     key: z.string().optional(),
     run_id: z.string().optional(),
+    tool_call_id: z.string().optional(),
     tool_name: z.string(),
     status: z.enum([
       `started`,

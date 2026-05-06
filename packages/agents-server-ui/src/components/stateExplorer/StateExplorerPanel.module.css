@@ -5,12 +5,12 @@
 }
 
 .header {
-  border-bottom: 1px solid var(--ds-gray-a5);
+  border-bottom: 1px solid var(--ds-border-1);
   flex-shrink: 0;
 }
 
 .headerLabel {
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .trigger {
@@ -21,17 +21,6 @@
 .row {
   min-height: 0;
   overflow: hidden;
-}
-
-.splitter {
-  height: 4px;
-  cursor: row-resize;
-  flex-shrink: 0;
-  background: var(--ds-gray-a5);
-}
-
-.splitter:hover {
-  background: var(--ds-accent-a6);
 }
 
 .empty {

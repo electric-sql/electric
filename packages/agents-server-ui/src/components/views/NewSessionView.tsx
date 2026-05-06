@@ -2,26 +2,65 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
-import { useNavigate } from '@tanstack/react-router'
 import { nanoid } from 'nanoid'
-import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { useServerConnection } from '../hooks/useServerConnection'
-import { useProjects } from '../hooks/useProjects'
-import { Select, Stack, Text } from '../ui'
-import { MainHeader } from './MainHeader'
-import { SchemaForm, hasSchemaProperties, isObjectSchema } from './SchemaForm'
-import styles from './NewSessionPage.module.css'
-import type { ElectricEntityType } from '../lib/ElectricAgentsProvider'
+import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
+import { useServerConnection } from '../../hooks/useServerConnection'
+import { useWorkspace } from '../../hooks/useWorkspace'
+import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
+import { Select, Stack, Text } from '../../ui'
+import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
+import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
+import styles from '../NewSessionPage.module.css'
+import type { ElectricEntityType } from '../../lib/ElectricAgentsProvider'
+import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
 
 /**
  * The "default agent" — when an entity type with this name is registered
- * we surface a chat-input quick-start at the top of the new-session page
+ * we surface a chat-input quick-start at the top of the new-session view
  * so the most common flow is one keystroke away.
- *
- * TODO: replace this with a server-side flag (e.g. tags.default) once
- * the entity_types schema gets one.
  */
 const DEFAULT_AGENT_NAME = `horton`
+
+const HERO_TITLES = [
+  `Let’s ship`,
+  `Let’s create`,
+  `Let’s build`,
+  `Let’s explore`,
+  `Let’s debug`,
+  `Let’s design`,
+  `Let’s hack`,
+  `Let’s improve`,
+] as const
+
+const LAST_PICKED_MODEL_STORAGE_KEY = `electric-agents-ui.new-session.last-picked-model`
+
+function isModelProperty(key: string): boolean {
+  const normalized = key.toLowerCase()
+  return (
+    normalized === `model` ||
+    normalized === `modelid` ||
+    normalized === `model_id`
+  )
+}
+
+function readLastPickedModel(options: Array<string>): string | null {
+  if (typeof window === `undefined`) return null
+  try {
+    const value = window.localStorage.getItem(LAST_PICKED_MODEL_STORAGE_KEY)
+    return value && options.includes(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+function persistLastPickedModel(value: string): void {
+  if (typeof window === `undefined`) return
+  try {
+    window.localStorage.setItem(LAST_PICKED_MODEL_STORAGE_KEY, value)
+  } catch {
+    // Quota / private mode — silent. This is only a picker convenience.
+  }
+}
 
 interface SchemaProperty {
   type?: string
@@ -32,22 +71,35 @@ interface SchemaProperty {
 }
 
 /**
- * "New session" page shown at `/`.
+ * Standalone view: the new-session picker.
  *
- * If a `horton` entity type is available we render a chat-style
- * composer at the top of the page so the user can just type and hit
- * Enter to start a new conversation. Other agent types are listed
- * below as cards. Picking one of those either spawns immediately
- * (no schema) or transitions to an inline form.
+ * Rendered inside a `<TileContainer>` like any other view, so it can
+ * be split / dragged / replaced through the same workspace machinery.
+ *
+ * When the user spawns a session, the workspace helper replaces *this
+ * tile* with the new entity (rather than navigating off the page) so
+ * other tiles in adjacent splits stay intact. The address bar still
+ * reflects the active tile via the URL ↔ workspace sync in
+ * `<Workspace />`.
  */
-export function NewSessionPage(): React.ReactElement {
-  const navigate = useNavigate()
+export function NewSessionView({
+  tileId,
+}: StandaloneViewProps): React.ReactElement {
   const { entityTypesCollection, spawnEntity } = useElectricAgents()
   const { activeServer } = useServerConnection()
-  const { projects, activeProjectId, setActiveProjectId, createProject } =
-    useProjects()
+  const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { recents: recentDirs, addRecent: addRecentDir } =
+    useRecentWorkingDirectories()
+  // Default to the most-recently-used working directory so a user
+  // who keeps opening sessions against the same project root doesn't
+  // have to re-select it each time. Initialised lazily so subsequent
+  // additions to `recents` don't yank the picker out from under the
+  // user mid-edit.
+  const [workingDirectory, setWorkingDirectory] = useState<string | null>(
+    () => recentDirs[0] ?? null
+  )
 
   const { data: entityTypes = [] } = useLiveQuery(
     (query) => {
@@ -76,6 +128,11 @@ export function NewSessionPage(): React.ReactElement {
    * user message. We prefer this two-step over `initialMessage` on
    * spawn so the message goes through the same path as the regular
    * MessageInput (which is the proven path that wakes horton).
+   *
+   * On success we *replace this tile* with the freshly-created entity.
+   * That keeps the workspace layout intact (other tiles around us
+   * stay in place) and feels like opening a file in VS Code's
+   * "untitled" tab — the placeholder turns into the new content.
    */
   const doSpawn = useCallback(
     async (
@@ -86,13 +143,10 @@ export function NewSessionPage(): React.ReactElement {
       if (!spawnEntity) return
       setError(null)
       const name = nanoid(10)
-      const tags: Record<string, string> | undefined = activeProjectId
-        ? { project: activeProjectId }
-        : undefined
-      const tx = spawnEntity({ type: typeName, name, args, tags })
-      navigate({
-        to: `/entity/$`,
-        params: { _splat: `${typeName}/${name}` },
+      const tx = spawnEntity({ type: typeName, name, args })
+      const entityUrl = `/${typeName}/${name}`
+      helpers.openEntity(entityUrl, {
+        target: { tileId, position: `replace` },
       })
       try {
         await tx.isPersisted.promise
@@ -116,7 +170,7 @@ export function NewSessionPage(): React.ReactElement {
         )
       }
     },
-    [navigate, spawnEntity, baseUrl, activeProjectId]
+    [helpers, spawnEntity, baseUrl, tileId]
   )
 
   const handleSelectType = useCallback(
@@ -133,38 +187,41 @@ export function NewSessionPage(): React.ReactElement {
   const handleStartDefault = useCallback(
     (text: string, args: Record<string, unknown>) => {
       if (!defaultAgent) return
-      void doSpawn(defaultAgent.name, args, text)
+      // Inject the picker's choice into the spawn args for the
+      // composer flow only — non-default agents have their own
+      // schemas and may not understand `workingDirectory`. Also
+      // remember the chosen path so the next session opens with the
+      // same default.
+      const augmented =
+        workingDirectory !== null ? { ...args, workingDirectory } : args
+      if (workingDirectory !== null) addRecentDir(workingDirectory)
+      void doSpawn(defaultAgent.name, augmented, text)
     },
-    [defaultAgent, doSpawn]
+    [defaultAgent, doSpawn, workingDirectory, addRecentDir]
   )
 
   return (
-    <div className={styles.shell}>
-      <MainHeader title={<Text size={2}>New session</Text>} />
-      <div className={styles.body}>
-        <div className={styles.container}>
-          {selected ? (
-            <SelectedAgentForm
-              entityType={selected}
-              onCancel={() => setSelected(null)}
-              onSubmit={(args) => void doSpawn(selected.name, args)}
-              error={error}
-            />
-          ) : (
-            <Picker
-              defaultAgent={defaultAgent}
-              otherAgents={otherAgents}
-              onSelectType={handleSelectType}
-              onStartDefault={handleStartDefault}
-              spawnReady={Boolean(spawnEntity)}
-              error={error}
-              projects={projects}
-              activeProjectId={activeProjectId}
-              onChangeProject={setActiveProjectId}
-              onCreateProject={createProject}
-            />
-          )}
-        </div>
+    <div className={styles.body}>
+      <div className={styles.container}>
+        {selected ? (
+          <SelectedAgentForm
+            entityType={selected}
+            onCancel={() => setSelected(null)}
+            onSubmit={(args) => void doSpawn(selected.name, args)}
+            error={error}
+          />
+        ) : (
+          <Picker
+            defaultAgent={defaultAgent}
+            otherAgents={otherAgents}
+            onSelectType={handleSelectType}
+            onStartDefault={handleStartDefault}
+            spawnReady={Boolean(spawnEntity)}
+            error={error}
+            workingDirectory={workingDirectory}
+            onChangeWorkingDirectory={setWorkingDirectory}
+          />
+        )}
       </div>
     </div>
   )
@@ -177,10 +234,8 @@ function Picker({
   onStartDefault,
   spawnReady,
   error,
-  projects,
-  activeProjectId,
-  onChangeProject,
-  onCreateProject,
+  workingDirectory,
+  onChangeWorkingDirectory,
 }: {
   defaultAgent: ElectricEntityType | null
   otherAgents: Array<ElectricEntityType>
@@ -188,18 +243,19 @@ function Picker({
   onStartDefault: (text: string, args: Record<string, unknown>) => void
   spawnReady: boolean
   error: string | null
-  projects: Array<{ id: string; name: string }>
-  activeProjectId: string | null
-  onChangeProject: (id: string | null) => void
-  onCreateProject: (name: string) => { id: string }
+  workingDirectory: string | null
+  onChangeWorkingDirectory: (path: string | null) => void
 }): React.ReactElement {
   const hasAnyAgent = defaultAgent !== null || otherAgents.length > 0
+  const [heroTitle] = useState(
+    () => HERO_TITLES[Math.floor(Math.random() * HERO_TITLES.length)]
+  )
 
   return (
     <Stack direction="column" gap={5}>
       <div className={styles.heading}>
-        <Text size={5} as="h1" className={styles.headingTitle}>
-          Start a new session
+        <Text size={7} as="h1" className={styles.headingTitle}>
+          {heroTitle}
         </Text>
         <span className={styles.headingSubtitle}>
           {defaultAgent
@@ -208,13 +264,6 @@ function Picker({
         </span>
       </div>
 
-      <ProjectPicker
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onChangeProject={onChangeProject}
-        onCreateProject={onCreateProject}
-      />
-
       {error && <div className={styles.error}>{error}</div>}
 
       {defaultAgent && (
@@ -222,6 +271,8 @@ function Picker({
           agent={defaultAgent}
           onSubmit={onStartDefault}
           disabled={!spawnReady}
+          workingDirectory={workingDirectory}
+          onChangeWorkingDirectory={onChangeWorkingDirectory}
         />
       )}
 
@@ -309,12 +360,6 @@ function SelectedAgentForm({
   )
 }
 
-/**
- * Walk the agent's `creation_schema` and pull out the keys we know how
- * to render inline as compact controls (enums and booleans). Other
- * fields fall through to schema defaults; if they're required without
- * a default, the user can switch to the full form via "Other agents".
- */
 function inlineSchemaProperties(
   schema: unknown
 ): Array<{ key: string; prop: SchemaProperty }> {
@@ -335,21 +380,19 @@ function DefaultAgentComposer({
   agent,
   onSubmit,
   disabled,
+  workingDirectory,
+  onChangeWorkingDirectory,
 }: {
   agent: ElectricEntityType
   onSubmit: (text: string, args: Record<string, unknown>) => void
   disabled?: boolean
+  workingDirectory: string | null
+  onChangeWorkingDirectory: (path: string | null) => void
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [submitting, setSubmitting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-grow the textarea up to the CSS `max-height` cap as the
-  // user types (matches the chat composer in `MessageInput.tsx`).
-  // Reset to `auto` first so `scrollHeight` reports the natural
-  // content height, then assign that back as the inline height; the
-  // CSS bounds clamp it. Layout effect ensures the resize lands
-  // before paint so there's no one-frame flicker.
   useLayoutEffect(() => {
     const el = textareaRef.current
     if (!el) return
@@ -363,6 +406,15 @@ function DefaultAgentComposer({
   const [args, setArgs] = useState<Record<string, unknown>>(() => {
     const init: Record<string, unknown> = {}
     for (const { key, prop } of inlineProps) {
+      if (prop.enum && prop.enum.length > 0 && isModelProperty(key)) {
+        const options = prop.enum.map((v) => String(v))
+        const lastPicked = readLastPickedModel(options)
+        if (lastPicked !== null) {
+          init[key] =
+            prop.enum.find((v) => String(v) === lastPicked) ?? lastPicked
+          continue
+        }
+      }
       if (prop.default !== undefined) {
         init[key] = prop.default
       } else if (prop.enum && prop.enum.length > 0) {
@@ -378,8 +430,6 @@ function DefaultAgentComposer({
     const trimmed = value.trim()
     if (!trimmed || disabled || submitting) return
     setSubmitting(true)
-    // Strip undefined/empty values so the server can fall back to schema
-    // defaults instead of receiving an explicit empty/null.
     const cleaned: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined && v !== ``) cleaned[k] = v
@@ -423,6 +473,7 @@ function DefaultAgentComposer({
                 options={prop.enum.map((v) => String(v))}
                 onChange={(next) => {
                   const original = prop.enum!.find((v) => String(v) === next)
+                  if (isModelProperty(key)) persistLastPickedModel(next)
                   setArgs((prev) => ({ ...prev, [key]: original ?? next }))
                 }}
                 disabled={submitting || disabled}
@@ -439,6 +490,11 @@ function DefaultAgentComposer({
               />
             ) : null
           )}
+          <WorkingDirectoryPicker
+            value={workingDirectory}
+            onChange={onChangeWorkingDirectory}
+            disabled={submitting || disabled}
+          />
         </div>
         <div className={styles.composerSendCluster}>
           {submitting && <span className={styles.composerHint}>Starting…</span>}
@@ -462,13 +518,6 @@ function DefaultAgentComposer({
   )
 }
 
-/**
- * Tiny dropdown rendered as a borderless pill so it sits cleanly
- * in the composer footer without competing visually with the textarea.
- * Backed by the Base UI `Select` so we get a custom popover with proper
- * keyboard semantics (instead of the OS-native picker, which doesn't
- * blend with the rest of the surface).
- */
 function PillSelect({
   label,
   value,
@@ -529,94 +578,5 @@ function PillToggle({
     >
       {label}
     </button>
-  )
-}
-
-function ProjectPicker({
-  projects,
-  activeProjectId,
-  onChangeProject,
-  onCreateProject,
-}: {
-  projects: Array<{ id: string; name: string }>
-  activeProjectId: string | null
-  onChangeProject: (id: string | null) => void
-  onCreateProject: (name: string) => { id: string }
-}): React.ReactElement {
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState(``)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleCreate = useCallback(() => {
-    const trimmed = newName.trim()
-    if (!trimmed) return
-    const project = onCreateProject(trimmed)
-    onChangeProject(project.id)
-    setNewName(``)
-    setCreating(false)
-  }, [newName, onCreateProject, onChangeProject])
-
-  return (
-    <div className={styles.projectPicker}>
-      <Text size={1} tone="muted" className={styles.projectPickerLabel}>
-        Project
-      </Text>
-      <div className={styles.projectPickerRow}>
-        <Select.Root<string>
-          value={activeProjectId ?? `__none__`}
-          onValueChange={(v) => {
-            if (v === `__new__`) {
-              setCreating(true)
-              setTimeout(() => inputRef.current?.focus(), 0)
-            } else {
-              onChangeProject(v === `__none__` ? null : v)
-            }
-          }}
-        >
-          <Select.Trigger size="pill" aria-label="Project" title="Project" />
-          <Select.Content>
-            <Select.Item value="__none__">No project</Select.Item>
-            {projects.map((p) => (
-              <Select.Item key={p.id} value={p.id}>
-                {p.name}
-              </Select.Item>
-            ))}
-            <Select.Item value="__new__">+ New project…</Select.Item>
-          </Select.Content>
-        </Select.Root>
-
-        {creating && (
-          <form
-            className={styles.projectCreateForm}
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleCreate()
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Project name"
-              className={styles.projectCreateInput}
-              onKeyDown={(e) => {
-                if (e.key === `Escape`) {
-                  setCreating(false)
-                  setNewName(``)
-                }
-              }}
-            />
-            <button
-              type="submit"
-              disabled={!newName.trim()}
-              className={styles.projectCreateBtn}
-            >
-              Create
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
   )
 }

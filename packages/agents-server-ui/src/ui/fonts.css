@@ -1,0 +1,95 @@
+/* ==========================================================================
+ * Font assets
+ *
+ * Self-hosted copies of the brand fonts used across the site:
+ *   - OpenSauceOne (body / heading)
+ *   - SourceCodePro (mono)
+ *
+ * The .woff2 files live next to this stylesheet under `../fonts/` and
+ * are bundled by Vite via the relative URL imports below. Mirrors the
+ * @font-face declarations in `website/.vitepress/theme/custom.css`.
+ * ========================================================================== */
+
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-Black.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-ExtraBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-BoldItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-MediumItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-Italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-Light.woff2') format('woff2');
+}
+@font-face {
+  font-family: OpenSauceOne;
+  font-style: italic;
+  font-weight: 300;
+  font-display: swap;
+  src: url('../fonts/OpenSauceOne-LightItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: SourceCodePro;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/SourceCodePro-Regular.woff2') format('woff2');
+}

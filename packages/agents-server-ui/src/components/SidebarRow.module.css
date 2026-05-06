@@ -25,7 +25,7 @@
   gap: 6px;
   height: var(--ds-row-height-md);
   padding-right: 3px;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-item);
   cursor: pointer;
   user-select: none;
   color: var(--ds-text-1);
@@ -33,7 +33,7 @@
   transition: background 0.08s ease;
 }
 .row:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 .selected {
   background: var(--ds-accent-a3);
@@ -105,7 +105,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1;
+  /* Tall enough to show descenders (g, p, y) — `line-height: 1`
+     clips them inside the title's `overflow: hidden` box. The row
+     stays at `--ds-row-height-md` via `align-items: center`, so
+     bumping line-height here doesn't grow the row. */
+  line-height: 1.3;
 }
 
 /* Type label (e.g. "horton") — same size as title, just muted.
@@ -123,10 +127,19 @@
 .type {
   flex-shrink: 0;
   padding-right: 5px;
-  font-size: var(--ds-text-sm);
+  /* Sized so the type label's cap-height optically matches the
+     x-height of the title text next to it — 10px caps ≈ 7px tall,
+     same height as the lowercase letters of the 13px title. */
+  font-size: var(--ds-text-2xs);
   color: var(--ds-text-3);
   text-transform: lowercase;
   line-height: 1;
+  /* Drop 1px so the type label optically shares a baseline with the
+     larger title text. `align-items: center` on the row centres both
+     glyphs in their own bounding boxes, but the smaller cap-height
+     of the 10px label leaves it sitting visually slightly above the
+     title baseline; this nudge restores the line. */
+  transform: translateY(1px);
   /* Animate the mask in/out as the row is hovered. */
   transition:
     color 0.1s ease,
@@ -273,6 +286,22 @@
   --tree-line-color: var(--ds-border-2);
   --tree-stub-w: 9px;
   --tree-corner-radius: 6px;
+  --tree-parent-dot-radius: 3.5px;
+  position: relative;
+}
+
+/* When the expanded parent row is not selected, extend the trunk up
+   through the gap between parent and first child so it visually meets
+   the parent's status dot. Selected rows keep the line out of their
+   active background. */
+.treeNode:has(> .row:not(.selected)) > .subtree::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--tree-trunk-x) - 0.5px);
+  top: calc((var(--ds-row-height-md) / -2) + var(--tree-parent-dot-radius));
+  height: calc((var(--ds-row-height-md) / 2) - var(--tree-parent-dot-radius));
+  border-left: 1px solid var(--tree-line-color);
+  pointer-events: none;
 }
 
 /* Continuous vertical trunk through every child row. */

@@ -19,3 +19,26 @@
   height: 44px;
   padding: 0 10px;
 }
+
+/* Electron desktop: extend the sidebar header up into the macOS
+   "hiddenInset" titlebar area so the toolbar buttons sit on the same
+   row as the OS traffic lights. Padding-left clears the three lights
+   (positioned at x:16, y:16 in main.ts → ~74px wide region) with a
+   small gap so the icons start to their right.
+   Height stays at the standard 44px so the 24px IconButton glyphs
+   flex-center on the same y as the traffic-light centers.
+   The whole bar is a window-drag region; interactive descendants
+   (buttons, tooltips, links, inputs) opt back out so they stay
+   clickable. */
+:global(html[data-electric-desktop='true']) .header {
+  padding-left: 84px;
+  -webkit-app-region: drag;
+}
+
+:global(html[data-electric-desktop='true']) .header button,
+:global(html[data-electric-desktop='true']) .header a,
+:global(html[data-electric-desktop='true']) .header input,
+:global(html[data-electric-desktop='true']) .header [role='button'],
+:global(html[data-electric-desktop='true']) .header [data-no-drag] {
+  -webkit-app-region: no-drag;
+}

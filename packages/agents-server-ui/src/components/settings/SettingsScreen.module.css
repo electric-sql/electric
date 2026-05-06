@@ -1,0 +1,165 @@
+/* Right-hand pane of the settings screen — fills the remaining width
+   next to the settings sidebar and owns its own scroll container so
+   long pages don't push the column header off-screen. */
+.root {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-bg);
+}
+
+/* Top strip mirrors `MainHeader` (44px tall, draggable on desktop)
+   so the settings shell carries the same titlebar height as the
+   workspace and the macOS hiddenInset traffic lights stay aligned
+   with the sidebar's "Back to app" row. */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  height: 44px;
+  padding: 0 10px;
+  background: var(--ds-bg);
+}
+
+/* Sidebar-toggle cluster — only rendered on narrow viewports, so
+   the chrome cluster pushes the title text right by one icon
+   slot when it's present and disappears entirely on wide. Same
+   24x24 icon column as MainHeader so the toggle lands at the
+   exact same screen-x as the workspace one. */
+.chrome {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+:global(html[data-electric-desktop='true']) .header {
+  -webkit-app-region: drag;
+}
+
+/* On Electron the SettingsScreen header is the only window-drag
+   region in the right column, so we need to push past the macOS
+   traffic lights when the SettingsSidebar is collapsed (overlay
+   on narrow viewports) — otherwise our header content would sit
+   under the lights. We *also* shift the toggle past the lights
+   when it's the leftmost element. Mirrors MainHeader's `:has`
+   rule. */
+:global(html[data-electric-desktop='true']) .header:has(.chrome) {
+  padding-left: 84px;
+}
+
+:global(html[data-electric-desktop='true']) .header button,
+:global(html[data-electric-desktop='true']) .header a,
+:global(html[data-electric-desktop='true']) .header input,
+:global(html[data-electric-desktop='true']) .header [role='button'],
+:global(html[data-electric-desktop='true']) .header [data-no-drag] {
+  -webkit-app-region: no-drag;
+}
+
+.headerTitle {
+  color: var(--ds-text-2);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Centered content column — capped width so the longest sections
+   don't sprawl across the screen on a wide desktop window. Matches
+   the reading column conventions of the rest of the app. */
+.body {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 32px 64px;
+}
+
+.pageTitle {
+  margin: 16px 0 24px;
+  font-size: var(--ds-text-2xl);
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--ds-text-1);
+}
+
+.sections {
+  width: 100%;
+}
+
+/* Each settings group ("API keys", "Theme", …) renders as a card
+   so the page reads as a list of bordered groupings, matching the
+   reference screenshot. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--ds-text-base);
+  font-weight: 500;
+  color: var(--ds-text-1);
+}
+
+.sectionDescription {
+  margin: 0;
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-3);
+  line-height: 1.45;
+}
+
+.sectionBody {
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-bg);
+  overflow: hidden;
+}
+
+/* Stacked rows inside a section — labelled left, control on the
+   right. Border separators between rows but not above the first or
+   below the last so the border-radius of the wrapper isn't broken. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ds-border-1);
+}
+.row:first-child {
+  border-top: 0;
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: var(--ds-text-sm);
+  color: var(--ds-text-1);
+}
+
+.rowDescription {
+  font-size: var(--ds-text-xs);
+  color: var(--ds-text-3);
+  line-height: 1.45;
+}
+
+.rowControl {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

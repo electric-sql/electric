@@ -5,6 +5,14 @@
  * Light values default; dark overrides apply when the document root has
  * `data-theme="dark"`. The <ThemeProvider> in `src/ui/ThemeProvider.tsx`
  * is responsible for setting that attribute.
+ *
+ * Palette + typography are kept in lock-step with the marketing site's
+ * `website/.vitepress/theme/custom.css`:
+ *   - Surfaces      → --vp-c-bg / --vp-c-bg-soft / --ec-surface-1 / --vp-c-bg-elv
+ *   - Greys (dark)  → --vp-c-gray-1..3, --vp-c-divider, --vp-c-gutter
+ *   - Text          → --vp-c-text-1..3 (warm translucent in dark, solid ink in light)
+ *   - Brand / accent→ navy `#1a1a2e` in light, accent teal `#75fbfd` in dark
+ *   - Body font     → OpenSauceOne, Mono → SourceCodePro
  * ========================================================================== */
 
 :root,
@@ -27,6 +35,7 @@
   --ds-radius-4: 8px;
   --ds-radius-5: 12px;
   --ds-radius-6: 16px;
+  --ds-radius-item: 7px;
   --ds-radius-full: 9999px;
 
   /* ---- Type scale (flat — no Capsize trim) --------------------------- *
@@ -34,6 +43,7 @@
    * controlled by the parent container's `gap`, not per-element trim.
    * Sizes intentionally keep close to Radix's font-size-1..6 mapping
    * so existing `size="1"`..`size="6"` migrations are visually 1:1.   */
+  --ds-text-2xs: 10px;
   --ds-text-xs: 11px;
   --ds-text-xs-lh: 1.45;
   --ds-text-sm: 13px;
@@ -49,9 +59,12 @@
   --ds-text-3xl: 28px;
   --ds-text-3xl-lh: 1.25;
 
-  /* ---- Font families ------------------------------------------------- */
+  /* ---- Font families ------------------------------------------------- *
+   * Matches `--vp-font-family-base` / `--vp-font-family-mono` on the
+   * marketing site. OpenSauceOne + SourceCodePro are bundled locally
+   * via `./fonts.css`.                                                  */
   --ds-font-body:
-    Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+    OpenSauceOne, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
     'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --ds-font-heading: var(--ds-font-body);
   --ds-font-mono:
@@ -68,18 +81,47 @@
     0 16px 40px rgba(15, 15, 30, 0.14), 0 4px 12px rgba(15, 15, 30, 0.08);
 
   /* ---- Surfaces ------------------------------------------------------ *
-   * `bg` is the page; `surface` sits on top (cards, popovers); `input-bg`
-   * is the dedicated background for editable controls (text inputs,
-   * textareas, native selects, composer wrappers). In light mode this
-   * is solid white so inputs read clearly against the off-white page;
-   * in dark mode it stays a translucent grey so inputs blend with
-   * raised surfaces (panels, popovers) wherever they're used.         */
+   * Mirrors the website's warm-stone ladder:
+   *   --vp-c-bg       #f7f7f5 → --ds-bg
+   *   --vp-c-bg-soft  #f0efed → --ds-bg-subtle (also --ec-surface-1)
+   *   --ec-surface-2  #e8e7e3 → --ds-surface
+   *   --vp-c-bg-elv   #ffffff → --ds-surface-raised (cards / popovers)
+   * Inputs always sit on the raised-surface fill so editable controls
+   * read as elevated above the page. In light mode that's solid white;
+   * in dark mode it's the website's `--vp-c-bg-elv` `#22252f`.          */
   --ds-bg: #f7f7f5;
   --ds-bg-subtle: #f0efed;
   --ds-surface: #ffffff;
   --ds-surface-raised: #ffffff;
-  --ds-input-bg: #ffffff;
+  --ds-input-bg: var(--ds-surface-raised);
   --ds-overlay: rgba(15, 15, 30, 0.45);
+
+  /* ---- Chip / chrome surfaces ----------------------------------- *
+   * Shared semantic for the small bordered/filled boxes that scatter
+   * across the UI: pill triggers, inline code chips, `<kbd>` keys,
+   * "input pre" panes, etc. Mirrors the marketing site's
+   * `--vp-code-bg = --vp-c-bg-elv` pattern — chips always sit at
+   * the raised-surface elevation so they read as one consistent
+   * chrome family regardless of which surface they live on. */
+  --ds-chip-bg: var(--ds-surface-raised);
+  --ds-chip-border: var(--ds-border-1);
+
+  /* Universal "interactive hover" surface — used by drop-down items,
+   * sidebar rows, search results, chip triggers, ghost icon buttons
+   * and any other pointer-targeted row that needs a hover lift.
+   *
+   * Per-theme strategy:
+   *   - Light: `--ds-gray-a3` (≈10% black tint). Alpha-black composes
+   *     cleanly on a warm-white page bg, producing a visible warm
+   *     grey lift on every surface; light mode never had the muddy
+   *     compositing problem dark mode does.
+   *   - Dark (override below): a SOLID cool-grey one step above
+   *     `--ds-surface-raised`, so the hover never mixes with the
+   *     deep navy page bg and produces a muddy mid-grey wash.
+   *
+   * Asymmetric on purpose — each mode picks the technique that gives
+   * the cleanest result for its underlying palette. */
+  --ds-bg-hover: var(--ds-gray-a3);
 
   /* ---- Gray scale (slate-flavoured neutral) -------------------------- *
    * Solid steps roughly mirror Radix's slate scale; alpha steps are
@@ -110,17 +152,26 @@
   --ds-gray-a11: color-mix(in oklab, var(--ds-gray-12) 70%, transparent);
   --ds-gray-a12: color-mix(in oklab, var(--ds-gray-12) 95%, transparent);
 
-  /* ---- Text -------------------------------------------------------- */
-  --ds-text-1: var(--ds-gray-12);
-  --ds-text-2: var(--ds-gray-11);
-  --ds-text-3: var(--ds-gray-10);
-  --ds-text-on-accent: #1a1a1a;
+  /* ---- Text -------------------------------------------------------- *
+   * Light values come straight from the marketing site:
+   *   --vp-c-text-1  #1a1a2e         → --ds-text-1 (deep ink, doubles as brand)
+   *   --vp-c-text-2  #5c5c6e         → --ds-text-2
+   *   --vp-c-text-3  #999999         → --ds-text-3
+   * --ds-text-4 is a faint label tone with no direct site equivalent.    */
+  --ds-text-1: #1a1a2e;
+  --ds-text-2: #5c5c6e;
+  --ds-text-3: #999999;
+  --ds-text-4: rgba(26, 26, 46, 0.4);
+  --ds-text-on-accent: #ffffff;
 
-  /* ---- Borders / dividers ---------------------------------------- */
+  /* ---- Borders / dividers ---------------------------------------- *
+   * `--ds-divider` mirrors the website's `--vp-c-divider: #e4e3e0` —
+   * a solid warm-stone hairline so dividers read consistently
+   * regardless of what surface they sit on.                           */
   --ds-border-1: var(--ds-gray-a4);
   --ds-border-2: var(--ds-gray-a5);
   --ds-border-3: var(--ds-gray-a6);
-  --ds-divider: var(--ds-gray-a4);
+  --ds-divider: #e4e3e0;
   --ds-focus-ring: color-mix(in oklab, var(--ds-accent-9) 60%, transparent);
 
   /* Hairline used by floating surfaces (popovers, dropdowns, modals,
@@ -128,62 +179,59 @@
      paired with a layered (but ring-less) drop shadow below.
      Stacking a border and a tight ring shadow at similar opacities
      reads as a "double rim" and was an explicit visual bug, so the
-     ring layer was removed and the border opacity nudged up to
-     11% to keep the edge crisp on its own. The dark-mode override
-     uses 12% white so the same border doubles as a soft rim
-     highlight against the raised surface. */
-  --ds-overlay-border: color-mix(in oklab, var(--ds-gray-12) 11%, transparent);
+     ring layer was removed so this can match the rest of the UI's
+     standard border weight. The dark-mode override uses 12% white
+     so the same border doubles as a soft rim highlight against the
+     raised surface. */
+  --ds-overlay-border: var(--ds-border-1);
 
   /* Shadow used by floating surfaces — popovers, menus, dialogs,
      dropdowns. PURE drop-shadow stack (no ring layer) so the
-     border above is the single defined edge:
-       1. Tight near-shadow (1px) — slight grounding under the edge.
-       2. Mid-distance shadow (12px blur) — the primary lift.
-       3. Far ambient shadow (32px blur) — soft penumbra that
-          gives the popup real depth without darkening the page.
-     Slightly stronger than the previous version so the loss of
-     the ring layer is compensated by a more pronounced lift —
-     definition now comes from edge + elevation, not edge + ring. */
+     border above is the single defined edge. Keep the shadow tight:
+     the border provides definition while the shadow only grounds the
+     floating surface. */
   --ds-overlay-shadow:
-    0 1px 2px rgba(15, 15, 30, 0.05), 0 4px 12px rgba(15, 15, 30, 0.08),
-    0 16px 32px rgba(15, 15, 30, 0.1);
+    0 1px 2px rgba(15, 15, 30, 0.05), 0 5px 12px rgba(15, 15, 30, 0.035);
 
-  /* ---- Accent (teal, derived from a single base) --------------------- *
-   * Generated via color-mix against the page background so the lower
-   * steps stay legible on light backgrounds. Mirrors the formula that
-   * was previously inlined in the .radix-themes override block.       */
-  --ds-accent-base: #56e8ea;
-  --ds-accent-hover: #3cd5d8;
-  --ds-accent-active: #27bfc2;
-  --ds-accent-text: #0b6f78;
+  /* ---- Accent (light = brand ink) ----------------------------------- *
+   * In light mode the marketing site's brand reads as the deep navy
+   * ink (`--vp-c-brand-1: #1a1a2e`); accent teal is reserved for dark.
+   * The accent ramp is generated via color-mix against the page
+   * background so the lower steps stay legible on the warm-stone bg.    */
+  --ds-accent-base: #1a1a2e;
+  --ds-accent-hover: #3a3a56;
+  --ds-accent-active: #0f0f1e;
+  --ds-accent-text: #1a1a2e;
 
-  --ds-accent-1: color-mix(in oklab, var(--ds-accent-base) 8%, var(--ds-bg));
-  --ds-accent-2: color-mix(in oklab, var(--ds-accent-base) 13%, var(--ds-bg));
-  --ds-accent-3: color-mix(in oklab, var(--ds-accent-base) 20%, var(--ds-bg));
-  --ds-accent-4: color-mix(in oklab, var(--ds-accent-base) 28%, var(--ds-bg));
-  --ds-accent-5: color-mix(in oklab, var(--ds-accent-base) 38%, var(--ds-bg));
-  --ds-accent-6: color-mix(in oklab, var(--ds-accent-base) 50%, var(--ds-bg));
-  --ds-accent-7: color-mix(in oklab, var(--ds-accent-base) 64%, var(--ds-bg));
-  --ds-accent-8: color-mix(in oklab, var(--ds-accent-base) 78%, var(--ds-bg));
+  --ds-accent-1: color-mix(in oklab, var(--ds-accent-base) 4%, var(--ds-bg));
+  --ds-accent-2: color-mix(in oklab, var(--ds-accent-base) 8%, var(--ds-bg));
+  --ds-accent-3: color-mix(in oklab, var(--ds-accent-base) 14%, var(--ds-bg));
+  --ds-accent-4: color-mix(in oklab, var(--ds-accent-base) 22%, var(--ds-bg));
+  --ds-accent-5: color-mix(in oklab, var(--ds-accent-base) 32%, var(--ds-bg));
+  --ds-accent-6: color-mix(in oklab, var(--ds-accent-base) 44%, var(--ds-bg));
+  --ds-accent-7: color-mix(in oklab, var(--ds-accent-base) 58%, var(--ds-bg));
+  --ds-accent-8: color-mix(in oklab, var(--ds-accent-base) 74%, var(--ds-bg));
   --ds-accent-9: var(--ds-accent-base);
   --ds-accent-10: var(--ds-accent-hover);
   --ds-accent-11: var(--ds-accent-text);
-  --ds-accent-12: #1a1a2e;
+  --ds-accent-12: #0f0f1e;
 
-  --ds-accent-a1: color-mix(in oklab, var(--ds-accent-base) 8%, transparent);
-  --ds-accent-a2: color-mix(in oklab, var(--ds-accent-base) 13%, transparent);
-  --ds-accent-a3: color-mix(in oklab, var(--ds-accent-base) 20%, transparent);
-  --ds-accent-a4: color-mix(in oklab, var(--ds-accent-base) 28%, transparent);
-  --ds-accent-a5: color-mix(in oklab, var(--ds-accent-base) 38%, transparent);
-  --ds-accent-a6: color-mix(in oklab, var(--ds-accent-base) 50%, transparent);
-  --ds-accent-a7: color-mix(in oklab, var(--ds-accent-base) 64%, transparent);
-  --ds-accent-a8: color-mix(in oklab, var(--ds-accent-base) 78%, transparent);
+  --ds-accent-a1: color-mix(in oklab, var(--ds-accent-base) 4%, transparent);
+  --ds-accent-a2: color-mix(in oklab, var(--ds-accent-base) 8%, transparent);
+  --ds-accent-a3: color-mix(in oklab, var(--ds-accent-base) 14%, transparent);
+  --ds-accent-a4: color-mix(in oklab, var(--ds-accent-base) 22%, transparent);
+  --ds-accent-a5: color-mix(in oklab, var(--ds-accent-base) 32%, transparent);
+  --ds-accent-a6: color-mix(in oklab, var(--ds-accent-base) 44%, transparent);
+  --ds-accent-a7: color-mix(in oklab, var(--ds-accent-base) 58%, transparent);
+  --ds-accent-a8: color-mix(in oklab, var(--ds-accent-base) 74%, transparent);
   --ds-accent-a9: color-mix(in oklab, var(--ds-accent-base) 88%, transparent);
   --ds-accent-a10: color-mix(in oklab, var(--ds-accent-hover) 88%, transparent);
   --ds-accent-a11: var(--ds-accent-text);
   --ds-accent-a12: var(--ds-accent-12);
 
-  /* ---- Status colours (badges, timeline rows, errors) ---------------- */
+  /* ---- Status colours (badges, timeline rows, errors) ---------------- *
+   * Hue base values match the website's `--ea-event-*` family — message
+   * (blue), tool-call (amber), tool-result (green), error (red).        */
   --ds-red-base: #dc2626;
   --ds-red-9: var(--ds-red-base);
   --ds-red-11: #b91c1c;
@@ -244,6 +292,17 @@
 
 /* ==========================================================================
  * Dark theme — triggered by `data-theme="dark"` on <html>.
+ *
+ * Anchored to the marketing site's `.dark` block:
+ *   --vp-c-bg          #111318 → --ds-bg
+ *   --vp-c-bg-soft     #16181f → --ds-bg-subtle
+ *   --ec-surface-1     #1a1d27 → --ds-surface
+ *   --vp-c-bg-elv      #22252f → --ds-surface-raised
+ *   --vp-c-divider     #2a2d38 → --ds-divider
+ *   --vp-c-gray-1..3   #3a3f52/#2d3142/#22252f → solid steps in --ds-gray-*
+ *   --vp-c-gutter      #0a0b0e → --ds-gray-1
+ *   --vp-c-text-1..3   warm translucent whites → --ds-text-1..3
+ *   --vp-c-brand-1     #75fbfd (accent teal) → --ds-accent-base
  * ========================================================================== */
 
 :root[data-theme='dark'] {
@@ -251,44 +310,71 @@
   --ds-bg-subtle: #16181f;
   --ds-surface: #1a1d27;
   --ds-surface-raised: #22252f;
-  --ds-input-bg: color-mix(in oklab, #ffffff 6%, transparent);
+  /* Solid raised fill — same value the marketing site uses for its
+     navbar search button, code blocks, demo cards etc. (`var(--vp-c-bg-elv)`).
+     Inherited via `--ds-surface-raised` so the two stay in lockstep. */
+  --ds-input-bg: var(--ds-surface-raised);
+  /* Universal hover lift — `#2d3142` (= --vp-c-gray-2 on the
+     marketing site) is one clean cool-grey step above
+     `--ds-surface-raised` (#22252f). Used by every drop-down item,
+     sidebar row, search-result row and chip trigger so they all
+     hover to the SAME clean cool-grey, regardless of what surface
+     they sit on. Replaces the `--ds-gray-a*` alpha tint pattern
+     which produced a muddy mid-grey wash whenever the alpha mixed
+     with the dark page bg. */
+  --ds-bg-hover: #2d3142;
   --ds-overlay: rgba(0, 0, 0, 0.55);
 
-  --ds-gray-1: #111113;
-  --ds-gray-2: #19191b;
-  --ds-gray-3: #222325;
-  --ds-gray-4: #292a2e;
-  --ds-gray-5: #303136;
-  --ds-gray-6: #393a40;
-  --ds-gray-7: #46484f;
-  --ds-gray-8: #5f606a;
-  --ds-gray-9: #6c6e79;
-  --ds-gray-10: #797b86;
-  --ds-gray-11: #b2b3bd;
-  --ds-gray-12: #eeeef0;
+  /* Cool blue-black ramp — built around the website's three anchor
+     overrides so any token that picks up a solid grey lands on the
+     same cool ink-blue family used across the marketing site. The
+     gutter (#0a0b0e) and bg (#111318) take the bottom of the ramp,
+     vp-c-gray-3..1 (22252f / 2d3142 / 3a3f52) sit in the mid-band,
+     and the top of the ramp interpolates up to a warm-tinted white
+     so text/foreground tokens read as the website's translucent
+     warm whites do (without going through the alpha layer).            */
+  --ds-gray-1: #0a0b0e;
+  --ds-gray-2: #111318;
+  --ds-gray-3: #16181f;
+  --ds-gray-4: #1a1d27;
+  --ds-gray-5: #22252f;
+  --ds-gray-6: #2a2d38;
+  --ds-gray-7: #2d3142;
+  --ds-gray-8: #3a3f52;
+  --ds-gray-9: #545a6e;
+  --ds-gray-10: #767c90;
+  --ds-gray-11: #b8bcc6;
+  --ds-gray-12: #ededee;
 
-  --ds-gray-a1: color-mix(in oklab, var(--ds-gray-12) 4%, transparent);
-  --ds-gray-a2: color-mix(in oklab, var(--ds-gray-12) 7%, transparent);
-  --ds-gray-a3: color-mix(in oklab, var(--ds-gray-12) 11%, transparent);
-  --ds-gray-a4: color-mix(in oklab, var(--ds-gray-12) 15%, transparent);
-  --ds-gray-a5: color-mix(in oklab, var(--ds-gray-12) 19%, transparent);
-  --ds-gray-a6: color-mix(in oklab, var(--ds-gray-12) 24%, transparent);
-  --ds-gray-a7: color-mix(in oklab, var(--ds-gray-12) 31%, transparent);
-  --ds-gray-a8: color-mix(in oklab, var(--ds-gray-12) 42%, transparent);
-  --ds-gray-a9: color-mix(in oklab, var(--ds-gray-12) 52%, transparent);
-  --ds-gray-a10: color-mix(in oklab, var(--ds-gray-12) 60%, transparent);
-  --ds-gray-a11: color-mix(in oklab, var(--ds-gray-12) 78%, transparent);
-  --ds-gray-a12: color-mix(in oklab, var(--ds-gray-12) 96%, transparent);
+  /* Alpha tints derive from pure white — same base the marketing site
+     uses for `--vp-c-gray-soft: rgba(255, 255, 255, 0.05)`, which in
+     turn feeds button alt backgrounds, hover states and dividers
+     across every dark-mode surface. Keeping the base neutral (rather
+     than warming it toward the text hue) means hover backgrounds
+     don't pick up an off yellow cast over the navy page bg.            */
+  --ds-gray-a1: color-mix(in oklab, #ffffff 4%, transparent);
+  --ds-gray-a2: color-mix(in oklab, #ffffff 7%, transparent);
+  --ds-gray-a3: color-mix(in oklab, #ffffff 11%, transparent);
+  --ds-gray-a4: color-mix(in oklab, #ffffff 15%, transparent);
+  --ds-gray-a5: color-mix(in oklab, #ffffff 19%, transparent);
+  --ds-gray-a6: color-mix(in oklab, #ffffff 24%, transparent);
+  --ds-gray-a7: color-mix(in oklab, #ffffff 31%, transparent);
+  --ds-gray-a8: color-mix(in oklab, #ffffff 42%, transparent);
+  --ds-gray-a9: color-mix(in oklab, #ffffff 52%, transparent);
+  --ds-gray-a10: color-mix(in oklab, #ffffff 60%, transparent);
+  --ds-gray-a11: color-mix(in oklab, #ffffff 78%, transparent);
+  --ds-gray-a12: color-mix(in oklab, #ffffff 96%, transparent);
 
   --ds-text-1: rgba(255, 255, 245, 0.92);
-  --ds-text-2: rgba(235, 235, 245, 0.78);
-  --ds-text-3: rgba(235, 235, 245, 0.62);
+  --ds-text-2: rgba(235, 235, 245, 0.8);
+  --ds-text-3: rgba(235, 235, 245, 0.68);
+  --ds-text-4: rgba(235, 235, 245, 0.5);
   --ds-text-on-accent: #1a1a1a;
 
   --ds-border-1: var(--ds-gray-a3);
   --ds-border-2: var(--ds-gray-a5);
   --ds-border-3: var(--ds-gray-a7);
-  --ds-divider: var(--ds-gray-a4);
+  --ds-divider: #2a2d38;
   --ds-focus-ring: color-mix(in oklab, var(--ds-accent-9) 60%, transparent);
 
   /* Dark-mode overlay border = 12% of `--ds-gray-12` (which is the
@@ -301,22 +387,64 @@
      elevation. */
   --ds-overlay-border: color-mix(in oklab, var(--ds-gray-12) 12%, transparent);
 
-  /* In dark mode the brand teal becomes the accent base. */
+  /* In dark mode the brand accent teal takes over (matches
+     `--vp-c-brand-1: #75fbfd` on the marketing site). */
   --ds-accent-base: #75fbfd;
   --ds-accent-hover: #56e8ea;
   --ds-accent-active: #3cd5d8;
   --ds-accent-text: #75fbfd;
   --ds-accent-12: #b8fdfe;
 
+  /* Status hue overrides — pull the website's lighter dark-mode
+     `--ea-event-*` variants so badges / status dots glow rather
+     than read muddy against the deep navy bg. */
+  --ds-red-base: #f87171;
+  --ds-red-9: var(--ds-red-base);
+  --ds-red-11: #fca5a5;
+  --ds-red-a2: color-mix(in oklab, var(--ds-red-base) 14%, transparent);
+  --ds-red-a3: color-mix(in oklab, var(--ds-red-base) 22%, transparent);
+  --ds-red-a5: color-mix(in oklab, var(--ds-red-base) 36%, transparent);
+  --ds-red-a9: color-mix(in oklab, var(--ds-red-base) 88%, transparent);
+
+  --ds-green-base: #34d399;
+  --ds-green-9: var(--ds-green-base);
+  --ds-green-11: #6ee7b7;
+  --ds-green-a2: color-mix(in oklab, var(--ds-green-base) 14%, transparent);
+  --ds-green-a3: color-mix(in oklab, var(--ds-green-base) 22%, transparent);
+  --ds-green-a5: color-mix(in oklab, var(--ds-green-base) 36%, transparent);
+  --ds-green-a9: color-mix(in oklab, var(--ds-green-base) 88%, transparent);
+
+  --ds-amber-base: #fbbf24;
+  --ds-amber-9: var(--ds-amber-base);
+  --ds-amber-11: #fcd34d;
+  --ds-amber-a2: color-mix(in oklab, var(--ds-amber-base) 14%, transparent);
+  --ds-amber-a3: color-mix(in oklab, var(--ds-amber-base) 22%, transparent);
+  --ds-amber-a5: color-mix(in oklab, var(--ds-amber-base) 36%, transparent);
+  --ds-amber-a9: color-mix(in oklab, var(--ds-amber-base) 88%, transparent);
+
+  --ds-blue-base: #60a5fa;
+  --ds-blue-9: var(--ds-blue-base);
+  --ds-blue-11: #93c5fd;
+  --ds-blue-a2: color-mix(in oklab, var(--ds-blue-base) 14%, transparent);
+  --ds-blue-a3: color-mix(in oklab, var(--ds-blue-base) 22%, transparent);
+  --ds-blue-a5: color-mix(in oklab, var(--ds-blue-base) 36%, transparent);
+  --ds-blue-a9: color-mix(in oklab, var(--ds-blue-base) 88%, transparent);
+
+  --ds-yellow-base: #facc15;
+  --ds-yellow-9: var(--ds-yellow-base);
+  --ds-yellow-11: #fde047;
+  --ds-yellow-a2: color-mix(in oklab, var(--ds-yellow-base) 14%, transparent);
+  --ds-yellow-a3: color-mix(in oklab, var(--ds-yellow-base) 22%, transparent);
+  --ds-yellow-a5: color-mix(in oklab, var(--ds-yellow-base) 36%, transparent);
+  --ds-yellow-a9: color-mix(in oklab, var(--ds-yellow-base) 88%, transparent);
+
   --ds-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --ds-shadow-2: 0 2px 4px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
   --ds-shadow-3: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
   --ds-shadow-4: 0 16px 40px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.5);
 
-  /* Dark-mode overlay shadow — same shape as light mode (pure
-     drop-shadow stack, no ring) but with much darker stops since
-     the popup needs to lift off a near-black background. */
+  /* Dark-mode overlay shadow — same compact shape as light mode
+     with darker stops so popups still lift off a near-black page. */
   --ds-overlay-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.55),
-    0 16px 32px rgba(0, 0, 0, 0.5);
+    0 1px 2px rgba(0, 0, 0, 0.36), 0 3px 6px rgba(0, 0, 0, 0.34);
 }

@@ -78,9 +78,8 @@
 
 .groupLabel {
   display: block;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--ds-text-3);
   padding: 10px 12px 4px;
 }
@@ -98,7 +97,7 @@
 }
 .row[data-active='true'],
 .row:hover {
-  background: var(--ds-gray-a3);
+  background: var(--ds-bg-hover);
 }
 
 .rowTitle {
@@ -110,28 +109,40 @@
   text-overflow: ellipsis;
 }
 
+.rowIconSlot {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rowIcon {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+
 .rowType {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--ds-text-2xs);
   letter-spacing: 0.04em;
   color: var(--ds-text-3);
   text-transform: lowercase;
 }
 
-.footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  border-top: 1px solid var(--ds-divider);
-  font-size: var(--ds-text-xs);
-  color: var(--ds-text-3);
+.rowSubtitle {
   flex-shrink: 0;
-  background: var(--ds-bg-subtle);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
 }
 
-.hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.rowShortcut {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
 }

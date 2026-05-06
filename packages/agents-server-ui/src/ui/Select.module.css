@@ -50,7 +50,10 @@
   line-height: 1;
   font-family: var(--ds-font-body);
   color: var(--ds-text-2);
-  background: var(--ds-gray-a3);
+  /* Solid chip surface (matches inline pills, project picker pill,
+     `<kbd>`, code chips). Avoids the muddy mid-grey produced by an
+     alpha-white tint over the dark page bg. */
+  background: var(--ds-chip-bg);
   border: none;
   border-radius: var(--ds-radius-2);
   cursor: pointer;
@@ -61,7 +64,7 @@
 }
 
 .triggerPill:hover:not(:disabled) {
-  background: var(--ds-gray-a4);
+  background: var(--ds-bg-hover);
   color: var(--ds-text-1);
 }
 
@@ -98,11 +101,13 @@
    padding can stay symmetric (8px), but the radius is bumped to 7px
    so the highlight radius matches the rest of the system. */
 .item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
-  border-radius: 7px;
+  min-height: 30px;
+  padding: 3px 28px 3px 8px;
+  border-radius: var(--ds-radius-item);
   font-size: var(--ds-text-sm);
   line-height: var(--ds-text-sm-lh);
   font-family: var(--ds-font-body);
@@ -110,15 +115,23 @@
   cursor: pointer;
   outline: none;
   user-select: none;
+  box-sizing: border-box;
 }
 
 .item[data-highlighted] {
-  background: var(--ds-gray-a3);
-}
-.item[data-selected] {
-  font-weight: 500;
+  background: var(--ds-bg-hover);
 }
 .item[data-disabled] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.indicator {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  color: var(--ds-text-2);
 }
