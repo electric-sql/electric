@@ -37,19 +37,19 @@ The user stories below describe the **software-factory patterns** Electric Agent
 
 A signal (Sentry alert, Honeycomb trigger, PagerDuty page) fires a webhook. An investigator agent wakes, pulls context across multiple observability MCP servers (Sentry, Honeycomb, Datadog), correlates it with recent code changes via a GitHub MCP server, and reads runbooks from an internal-docs MCP server. It produces a structured incident summary in the on-call channel. If the signal warrants remediation, it spawns a coding subagent that opens a PR through the GitHub MCP. Operators can audit, after the fact, which servers each agent touched and why.
 
-*MCP unlocks this by giving every observability platform and code host a uniform tool surface — adding Datadog to the factory is registering a new server, not writing a new integration. Runtime-owned credentials let the same workflow run unattended at 3am as well as during business hours.*
+_MCP unlocks this by giving every observability platform and code host a uniform tool surface — adding Datadog to the factory is registering a new server, not writing a new integration. Runtime-owned credentials let the same workflow run unattended at 3am as well as during business hours._
 
 ### US-2: Coding-agent factory
 
 A developer kicks off a coding task in a horton chat. The agent plans the work using Linear and GitHub MCP servers, drafts code locally with stdio MCP servers (filesystem, git, language servers, type-checkers), and pushes a branch via the GitHub MCP using the developer's credentials. It spawns specialized subagents for narrow subtasks — a test-writer, a docs-updater, a deploy-checker — each inheriting the same MCP allowlist.
 
-*MCP support makes coding agents portable across companies: every customer plugs in their own MCP servers without the runtime needing per-company integrations. The split between app-scoped servers (the company's shared SaaS) and the developer's local stdio servers (their working environment) maps cleanly to "what the factory reads" vs "what the developer acts through."*
+_MCP support makes coding agents portable across companies: every customer plugs in their own MCP servers without the runtime needing per-company integrations. The split between app-scoped servers (the company's shared SaaS) and the developer's local stdio servers (their working environment) maps cleanly to "what the factory reads" vs "what the developer acts through."_
 
 ### US-3: Continuous knowledge factory
 
 Scheduled agents periodically query company-internal sources (Notion, Slack, Drive, Linear, internal wikis) and external ones (web search, GitHub, arxiv) to produce role-specific digests — a security report for the CISO, a product-feedback rollup for PMs, a research feed for engineers. New sources are added by registering an MCP server; running agents pick them up at the next wake.
 
-*MCP's hot-reload support means the factory's "what we research" surface evolves by config edit, not by deploy. Each digest pipeline is a small composition of MCP servers and a prompt — easy to spin up new ones without touching runtime code.*
+_MCP's hot-reload support means the factory's "what we research" surface evolves by config edit, not by deploy. Each digest pipeline is a small composition of MCP servers and a prompt — easy to spin up new ones without touching runtime code._
 
 ## Architecture
 
@@ -95,10 +95,10 @@ Scheduled agents periodically query company-internal sources (Notion, Slack, Dri
 
 ### Transports and where they run
 
-| Transport | Where runs | Notes |
-|---|---|---|
-| **stdio** | Subprocess of the agents-server runtime, on the runtime host | Lazy-spawned on first tool call; one process per server; multiplexed via JSON-RPC `id`; restarted on crash |
-| **Streamable HTTP** | Anywhere network-reachable | Single HTTP endpoint per spec; server-pushed messages over SSE inside the response stream |
+| Transport           | Where runs                                                   | Notes                                                                                                      |
+| ------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **stdio**           | Subprocess of the agents-server runtime, on the runtime host | Lazy-spawned on first tool call; one process per server; multiplexed via JSON-RPC `id`; restarted on crash |
+| **Streamable HTTP** | Anywhere network-reachable                                   | Single HTTP endpoint per spec; server-pushed messages over SSE inside the response stream                  |
 
 In local-dev, the runtime is the developer's machine, so stdio servers can read local user credentials (e.g. an existing `gh` CLI token via env). In a server-hosted deployment, the runtime is on the agents-server host; stdio servers there are inherently shared/system-level. **Stdio + personal credentials is a local-dev pattern, not a deployment pattern** — documented prominently.
 
@@ -106,11 +106,11 @@ In local-dev, the runtime is the developer's machine, so stdio servers can read 
 
 Three auth modes per server:
 
-| Mode | Initial setup | Steady state | Operator action when fails |
-|---|---|---|---|
-| `apiKey` | Operator pastes key into vault | Never expires until rotated | Rotate key |
-| `clientCredentials` | Operator pastes `client_id` + `client_secret` | Runtime exchanges for short-lived access tokens silently | Rotate client secret |
-| `authorizationCode` (`browser` or `device`) | Browser/device flow → user approves | Silent refresh on each use; refresh tokens rotate | Re-consent via catalog |
+| Mode                                        | Initial setup                                 | Steady state                                             | Operator action when fails |
+| ------------------------------------------- | --------------------------------------------- | -------------------------------------------------------- | -------------------------- |
+| `apiKey`                                    | Operator pastes key into vault                | Never expires until rotated                              | Rotate key                 |
+| `clientCredentials`                         | Operator pastes `client_id` + `client_secret` | Runtime exchanges for short-lived access tokens silently | Rotate client secret       |
+| `authorizationCode` (`browser` or `device`) | Browser/device flow → user approves           | Silent refresh on each use; refresh tokens rotate        | Re-consent via catalog     |
 
 The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out).
 
@@ -146,8 +146,8 @@ Primary surface is a JSON config file (default location `mcp.json` at the runtim
         "mode": "clientCredentials",
         "clientIdRef": "vault://sentry/client_id",
         "clientSecretRef": "vault://sentry/client_secret",
-        "tokenUrl": "https://sentry.io/oauth/token"
-      }
+        "tokenUrl": "https://sentry.io/oauth/token",
+      },
     },
     "github": {
       "transport": "http",
@@ -155,20 +155,29 @@ Primary surface is a JSON config file (default location `mcp.json` at the runtim
       "auth": {
         "mode": "authorizationCode",
         "flow": "browser",
-        "scopes": ["repo", "read:user"]
-      }
+        "scopes": ["repo", "read:user"],
+      },
     },
     "honeycomb": {
       "transport": "http",
       "url": "https://api.honeycomb.io/mcp/",
-      "auth": { "mode": "apiKey", "headerName": "X-Honeycomb-Team", "valueRef": "vault://honeycomb/api_key" }
+      "auth": {
+        "mode": "apiKey",
+        "headerName": "X-Honeycomb-Team",
+        "valueRef": "vault://honeycomb/api_key",
+      },
     },
     "git-local": {
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "${workspaceRoot}"]
-    }
-  }
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git",
+        "--repository",
+        "${workspaceRoot}",
+      ],
+    },
+  },
 }
 ```
 
@@ -180,7 +189,11 @@ import { runtime } from '@electric-ax/agents-runtime'
 runtime.registerMcpServer('linear', {
   transport: 'http',
   url: 'https://mcp.linear.app/v1',
-  auth: { mode: 'authorizationCode', flow: 'browser', scopes: ['read', 'write'] },
+  auth: {
+    mode: 'authorizationCode',
+    flow: 'browser',
+    scopes: ['read', 'write'],
+  },
 })
 ```
 
@@ -196,7 +209,7 @@ defineEntity('horton', {
   tools: [
     createBashTool(),
     createReadFileTool(),
-    ...mcp.tools(['sentry', 'github']),  // explicit list
+    ...mcp.tools(['sentry', 'github']), // explicit list
     // or: ...mcp.tools('*')              // all registered servers
   ],
 })
@@ -276,13 +289,13 @@ Agents are expected to handle these like any other tool error: retry, fall back,
 
 ## Project risks and mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Refresh-token race across wakes | Per-`(server, scope)` mutex around the refresh exchange; runtime owns the credential. |
-| Vault file leaks if file permissions wrong | Default implementation enforces `chmod 600`; refuses to read wider modes; encryption-at-rest where OS keychain is available. |
-| Hot-reload causes user confusion when tool list changes mid-wake | Manifest snapshot at compose time records what the agent saw; catalog shows live truth. |
-| Stdio + personal credentials confused for a deployment pattern | Documentation prominently scopes it as local-dev only. |
-| Untrusted MCP servers leak data or inject prompts | Out of scope for runtime; operators register only trusted servers; catalog surfaces registered tool descriptions for audit. |
+| Risk                                                             | Mitigation                                                                                                                   |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Refresh-token race across wakes                                  | Per-`(server, scope)` mutex around the refresh exchange; runtime owns the credential.                                        |
+| Vault file leaks if file permissions wrong                       | Default implementation enforces `chmod 600`; refuses to read wider modes; encryption-at-rest where OS keychain is available. |
+| Hot-reload causes user confusion when tool list changes mid-wake | Manifest snapshot at compose time records what the agent saw; catalog shows live truth.                                      |
+| Stdio + personal credentials confused for a deployment pattern   | Documentation prominently scopes it as local-dev only.                                                                       |
+| Untrusted MCP servers leak data or inject prompts                | Out of scope for runtime; operators register only trusted servers; catalog surfaces registered tool descriptions for audit.  |
 
 ## Rollout plan
 
@@ -298,6 +311,27 @@ Agents are expected to handle these like any other tool error: retry, fall back,
 - **Schema validator severity.** Should `authorizationCode` mode for an unattended-flagged workflow be a warning or a hard error? Probably warning until we have user feedback.
 - **Catalog page for `mcp.tools('*')` agents.** Show the resolved set as of last compose, or always the live set? Probably last compose, with a note.
 - **Per-call timeout default.** 30s is a starting point; revisit based on what real MCP servers in the ecosystem do.
+
+## v1 scoping note: OAuth UI route wiring
+
+The agents-server provides `mountOAuthRoutes` (`/oauth/callback/:server`,
+`POST /api/mcp/servers/:server/authorize`) and `mountStatusRoutes`
+(`/api/mcp/servers/...`) modules with full pure-handler test coverage,
+but these mounts are **not** wired into agents-server's HTTP dispatch
+chain in v1. Wiring them requires a single `OAuthCoordinator` +
+`PendingAuthStore` instance that is shared between the agents-server
+process (which receives the browser redirect) and the agents process
+(whose registry actually mints bearer tokens for tool calls). Today
+those run in separate processes with no token-sync channel. Constructing
+local-only instances inside agents-server would let UI buttons fire but
+silently fail to make tokens visible to the registry — a worse UX than
+deferring.
+
+For v1, OAuth flows are exercised via direct curl/test invocations of
+the pure handlers; the Connected Services page renders read-only status
+and the per-row buttons return 404. Cross-process token sharing
+(shared cache via `agents-server` HTTP API, or a co-located deployment
+mode) is future work.
 
 ## Appendix: prior-art summary
 
