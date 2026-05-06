@@ -918,6 +918,34 @@ importers:
         specifier: ^4.18.1
         version: 4.24.4
 
+  examples/replay-loop-repro:
+    dependencies:
+      '@electric-sql/client':
+        specifier: workspace:*
+        version: link:../../packages/typescript-client
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.3
+        version: 18.3.12
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.1
+      '@vitejs/plugin-react':
+        specifier: ^4.3.1
+        version: 4.3.3(vite@5.4.10(@types/node@25.6.0)(lightningcss@1.30.1)(terser@5.46.2))
+      typescript:
+        specifier: ^5.5.3
+        version: 5.8.3
+      vite:
+        specifier: ^5.3.4
+        version: 5.4.10(@types/node@25.6.0)(lightningcss@1.30.1)(terser@5.46.2)
+
   examples/tanstack:
     dependencies:
       '@electric-sql/client':
