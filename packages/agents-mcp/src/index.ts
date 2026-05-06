@@ -25,3 +25,7 @@ export type {
   CoordinatorOpts,
 } from './auth/coordinator'
 export type { TokenSet } from './auth/client-credentials'
+export { discoverAuthServer } from './auth/discovery'
+export type { AuthServerMetadata } from './auth/discovery'
+export { registerClient } from './auth/dcr'
+export type { RegisteredClient } from './auth/dcr'
