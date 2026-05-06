@@ -36,7 +36,8 @@ describe(`Claim-scoped write tokens`, () => {
 
   async function createEntity(
     typeName: string,
-    instanceId: string
+    instanceId: string,
+    typeBody?: Record<string, unknown>
   ): Promise<{
     url: string
     streams: { main: string }
@@ -47,6 +48,7 @@ describe(`Claim-scoped write tokens`, () => {
       body: JSON.stringify({
         name: typeName,
         description: `${typeName} test type`,
+        ...typeBody,
       }),
     })
     expect(typeRes.status).toBe(201)
@@ -71,6 +73,7 @@ describe(`Claim-scoped write tokens`, () => {
   async function appendEntityEvent(opts: {
     streamPath: string
     writeToken: string
+    event?: Record<string, unknown>
     key: string
   }): Promise<Response> {
     return await fetch(`${baseUrl}${opts.streamPath}`, {
@@ -79,23 +82,49 @@ describe(`Claim-scoped write tokens`, () => {
         'content-type': `application/json`,
         authorization: `Bearer ${opts.writeToken}`,
       },
-      body: JSON.stringify({
-        type: `manifest`,
-        key: opts.key,
-        value: {
+      body: JSON.stringify(
+        opts.event ?? {
+          type: `manifest`,
           key: opts.key,
-          kind: `schedule`,
-          id: opts.key,
-          scheduleType: `future_send`,
-          fireAt: new Date(Date.now() + 60_000).toISOString(),
-          targetUrl: `/noop`,
-          payload: {},
-          status: `pending`,
-        },
-        headers: {
-          operation: `insert`,
-        },
-      }),
+          value: {
+            key: opts.key,
+            kind: `schedule`,
+            id: opts.key,
+            scheduleType: `future_send`,
+            fireAt: new Date(Date.now() + 60_000).toISOString(),
+            targetUrl: `/noop`,
+            payload: {},
+            status: `pending`,
+          },
+          headers: {
+            operation: `insert`,
+          },
+        }
+      ),
+    })
+  }
+
+  async function claimEntityConsumer(opts: {
+    streamPath: string
+    consumerId: string
+    epoch?: number
+    wakeId?: string
+  }): Promise<{
+    ok: boolean
+    writeToken?: string
+  }> {
+    const pgDb = (electricAgentsServer as any).pgDb
+
+    await pgDb.insert(consumerCallbacks).values({
+      consumerId: opts.consumerId,
+      callbackUrl: receiverUrl,
+      primaryStream: opts.streamPath,
+    })
+
+    return await claimConsumer({
+      consumerId: opts.consumerId,
+      epoch: opts.epoch ?? 4,
+      wakeId: opts.wakeId ?? `wake-${opts.consumerId}`,
     })
   }
 
@@ -149,6 +178,35 @@ describe(`Claim-scoped write tokens`, () => {
     expect(res.status).toBe(200)
     const entity = (await res.json()) as { status: string }
     return entity.status
+  }
+
+  async function expectTags(
+    entityUrl: string,
+    expected: Record<string, string>
+  ): Promise<void> {
+    const entityRes = await fetch(`${baseUrl}${entityUrl}`)
+    expect(entityRes.status).toBe(200)
+    const updatedEntity = (await entityRes.json()) as {
+      tags: Record<string, string>
+    }
+    expect(updatedEntity.tags).toEqual(expected)
+  }
+
+  function stateEvent(opts: {
+    key: string
+    type?: string
+    value?: Record<string, unknown>
+    headers?: Record<string, unknown>
+  }): Record<string, unknown> {
+    return {
+      type: opts.type ?? `default`,
+      key: opts.key,
+      value: opts.value ?? { data: `test` },
+      headers: {
+        operation: `insert`,
+        ...opts.headers,
+      },
+    }
   }
 
   beforeAll(async () => {
@@ -373,17 +431,10 @@ describe(`Claim-scoped write tokens`, () => {
   it(`tag writes accept the active claim token`, async () => {
     const typeName = `claim-tag-write-${Date.now()}`
     const entity = await createEntity(typeName, `owner`)
-    const pgDb = (electricAgentsServer as any).pgDb
 
-    await pgDb.insert(consumerCallbacks).values({
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
       consumerId: `consumer-tags`,
-      callbackUrl: receiverUrl,
-      primaryStream: entity.streams.main,
-    })
-
-    const claim = await claimConsumer({
-      consumerId: `consumer-tags`,
-      epoch: 4,
       wakeId: `wake-tags`,
     })
     expect(claim.ok).toBe(true)
@@ -399,11 +450,161 @@ describe(`Claim-scoped write tokens`, () => {
     })
     expect(setTagRes.status).toBe(200)
 
-    const entityRes = await fetch(`${baseUrl}${entity.url}`)
-    expect(entityRes.status).toBe(200)
-    const updatedEntity = (await entityRes.json()) as {
-      tags: Record<string, string>
+    await expectTags(entity.url, { title: `Onboarding` })
+  }, 20_000)
+
+  it(`claim-scoped writes validate state schemas and unknown event types`, async () => {
+    const typeName = `claim-write-schemas-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`, {
+      output_schemas: {
+        result: {
+          type: `object`,
+          properties: { value: { type: `number` } },
+          required: [`value`],
+        },
+      },
+    })
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-write-schema`,
+    })
+    expect(claim.writeToken).toBeTruthy()
+
+    const invalidSchemaRes = await appendEntityEvent({
+      streamPath: entity.streams.main,
+      writeToken: claim.writeToken!,
+      key: `invalid-schema`,
+      event: stateEvent({
+        type: `result`,
+        key: `invalid-schema`,
+        value: { wrong: `type` },
+      }),
+    })
+    expect(invalidSchemaRes.status).toBe(422)
+    const invalidSchemaBody = (await invalidSchemaRes.json()) as {
+      error: { code: string }
     }
-    expect(updatedEntity.tags.title).toBe(`Onboarding`)
+    expect(invalidSchemaBody.error.code).toBe(`SCHEMA_VALIDATION_FAILED`)
+
+    const unknownTypeRes = await appendEntityEvent({
+      streamPath: entity.streams.main,
+      writeToken: claim.writeToken!,
+      key: `unknown-type`,
+      event: stateEvent({
+        type: `unknown_event`,
+        key: `unknown-type`,
+      }),
+    })
+    expect(unknownTypeRes.status).toBe(422)
+    const unknownTypeBody = (await unknownTypeRes.json()) as {
+      error: { code: string }
+    }
+    expect(unknownTypeBody.error.code).toBe(`UNKNOWN_EVENT_TYPE`)
+  }, 20_000)
+
+  it(`claim-scoped writes accept arbitrary events when no state schemas exist`, async () => {
+    const typeName = `claim-write-no-schemas-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-write-no-schemas`,
+    })
+    expect(claim.writeToken).toBeTruthy()
+
+    const writeRes = await appendEntityEvent({
+      streamPath: entity.streams.main,
+      writeToken: claim.writeToken!,
+      key: `no-schemas`,
+      event: stateEvent({
+        key: `no-schemas`,
+        value: { anything: `goes` },
+      }),
+    })
+    expect(writeRes.status).toBe(204)
+  }, 20_000)
+
+  it(`claim-scoped writes to stopped entities are rejected`, async () => {
+    const typeName = `claim-write-stopped-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-write-stopped`,
+    })
+    expect(claim.writeToken).toBeTruthy()
+
+    const killRes = await fetch(`${baseUrl}${entity.url}`, {
+      method: `DELETE`,
+    })
+    expect(killRes.status).toBe(200)
+
+    const writeRes = await appendEntityEvent({
+      streamPath: entity.streams.main,
+      writeToken: claim.writeToken!,
+      key: `stopped-write`,
+      event: stateEvent({
+        key: `stopped-write`,
+      }),
+    })
+    expect(writeRes.status).toBe(401)
+  }, 20_000)
+
+  it(`claim-scoped tag writes reject non-string values and support merge/delete`, async () => {
+    const typeName = `claim-tag-semantics-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-tag-semantics`,
+    })
+    expect(claim.writeToken).toBeTruthy()
+
+    const invalidTagRes = await fetch(`${baseUrl}${entity.url}/tags/owner`, {
+      method: `POST`,
+      headers: {
+        'content-type': `application/json`,
+        authorization: `Bearer ${claim.writeToken}`,
+      },
+      body: JSON.stringify({ value: 123 }),
+    })
+    expect(invalidTagRes.status).toBe(400)
+
+    for (const [key, value] of [
+      [`key1`, `value1`],
+      [`key2`, `value2`],
+      [`key2`, `updated`],
+      [`key3`, `value3`],
+    ] as const) {
+      const res = await fetch(`${baseUrl}${entity.url}/tags/${key}`, {
+        method: `POST`,
+        headers: {
+          'content-type': `application/json`,
+          authorization: `Bearer ${claim.writeToken}`,
+        },
+        body: JSON.stringify({ value }),
+      })
+      expect(res.status).toBe(200)
+    }
+
+    await expectTags(entity.url, {
+      key1: `value1`,
+      key2: `updated`,
+      key3: `value3`,
+    })
+
+    const deleteTagRes = await fetch(`${baseUrl}${entity.url}/tags/key2`, {
+      method: `DELETE`,
+      headers: {
+        authorization: `Bearer ${claim.writeToken}`,
+      },
+    })
+    expect(deleteTagRes.status).toBe(200)
+
+    await expectTags(entity.url, {
+      key1: `value1`,
+      key3: `value3`,
+    })
   }, 20_000)
 })
