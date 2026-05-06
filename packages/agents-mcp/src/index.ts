@@ -47,3 +47,8 @@ export type { MountMcpHttpOpts } from './http/mount'
 
 export { bridgeMcpTool, prefixToolName } from './bridge/tool-bridge'
 export type { BridgeToolOpts, BridgedTool } from './bridge/tool-bridge'
+
+export { buildResourceTools } from './bridge/resource-bridge'
+export type { BuildResourceToolsOpts } from './bridge/resource-bridge'
+export { buildPromptTools } from './bridge/prompt-bridge'
+export type { BuildPromptToolsOpts } from './bridge/prompt-bridge'

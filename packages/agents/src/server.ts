@@ -16,6 +16,8 @@ import {
   watchConfig as watchMcpConfig,
   mountMcpHttp,
   bridgeMcpTool,
+  buildResourceTools,
+  buildPromptTools,
 } from '@electric-ax/agents-mcp'
 import { registerToolProvider } from '@electric-ax/agents-runtime'
 import type {
@@ -188,6 +190,27 @@ export class BuiltinAgentsServer {
                           arguments?: unknown
                         }) => Promise<unknown>
                       },
+                      timeoutMs: live.config.timeoutMs,
+                    })
+                  )
+                }
+                const caps = (
+                  live.transport.client as any
+                ).getServerCapabilities?.()
+                if (caps?.resources) {
+                  tools.push(
+                    ...buildResourceTools({
+                      server: entry.name,
+                      client: live.transport.client as any,
+                      timeoutMs: live.config.timeoutMs,
+                    })
+                  )
+                }
+                if (caps?.prompts) {
+                  tools.push(
+                    ...buildPromptTools({
+                      server: entry.name,
+                      client: live.transport.client as any,
                       timeoutMs: live.config.timeoutMs,
                     })
                   )
