@@ -1,12 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import {
+  ActivityIndicator,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { AgentsProvider } from './src/lib/AgentsProvider'
+import { AgentsProvider, useAgents } from './src/lib/AgentsProvider'
 import {
   ThemeProvider,
   useColorSchemeMode,
@@ -19,8 +26,27 @@ import { SessionListScreen } from './src/screens/SessionListScreen'
 import { SessionScreen } from './src/screens/SessionScreen'
 import { PersistentEmbed } from './src/webview/PersistentEmbed'
 import type { EmbedViewId } from './src/webview/embedSource'
+import SessionDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionDomEmbed'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
+const USE_DOM_EMBED = process.env.EXPO_PUBLIC_AGENTS_MOBILE_DOM_EMBED === `1`
+
+type SessionDomEmbedProps = {
+  serverUrl: string
+  entityUrl: string
+  view: EmbedViewId
+  theme: `light` | `dark`
+  onRequestOpenEntity: (entityUrl: string) => Promise<void>
+  style?: StyleProp<ViewStyle>
+  matchContents?: boolean
+  dom?: unknown
+}
+
+// Treat the Expo DOM component as an opaque runtime boundary from the native
+// package. Letting `tsc` follow this source import pulls in duplicate
+// TanStack DB type identities under pnpm; Metro still sees the real module.
+const SessionDomEmbed =
+  SessionDomEmbedModule as ComponentType<SessionDomEmbedProps>
 
 /**
  * Pixel height of the `<Header>` strip — kept in lockstep with
@@ -169,11 +195,29 @@ function RoutedShell({
   onBackToSessions: () => void
   onSetView: (view: EmbedViewId) => void
 }): React.ReactElement {
+  const { serverUrl } = useAgents()
+  const scheme = useColorSchemeMode()
   const insets = useSafeAreaInsets()
+  const windowDimensions = useWindowDimensions()
   // The persistent WebView slots into the body of `SessionScreen`,
   // i.e. directly under the safe-area top inset and the 44px
   // `<Header>` strip.
   const embedTop = insets.top + HEADER_HEIGHT
+  const embedFrame = useMemo(
+    () => ({
+      top: embedTop,
+      width: windowDimensions.width,
+      height: Math.max(0, windowDimensions.height - embedTop),
+    }),
+    [embedTop, windowDimensions.height, windowDimensions.width]
+  )
+  const embedSize = useMemo(
+    () => ({
+      width: embedFrame.width,
+      height: embedFrame.height,
+    }),
+    [embedFrame.height, embedFrame.width]
+  )
   const active = useMemo(
     () =>
       route.name === `session`
@@ -207,11 +251,36 @@ function RoutedShell({
         />
       )}
 
-      <PersistentEmbed
-        active={active}
-        containerStyle={{ top: embedTop }}
-        onNavigateToEntity={(target) => onOpenSession(target)}
-      />
+      {USE_DOM_EMBED && active ? (
+        <View style={[styles.domEmbedHost, embedFrame]}>
+          <SessionDomEmbed
+            style={[styles.domEmbedWeb, embedSize]}
+            matchContents={false}
+            serverUrl={serverUrl}
+            entityUrl={active.entityUrl}
+            view={active.view}
+            theme={scheme}
+            onRequestOpenEntity={async (target) => onOpenSession(target)}
+            dom={{
+              useExpoDOMWebView: false,
+              matchContents: false,
+              scrollEnabled: false,
+              bounces: false,
+              automaticallyAdjustContentInsets: false,
+              automaticallyAdjustsScrollIndicatorInsets: false,
+              contentInsetAdjustmentBehavior: `never`,
+              style: [styles.domEmbedWeb, embedSize],
+              containerStyle: [styles.domEmbedWeb, embedSize],
+            }}
+          />
+        </View>
+      ) : (
+        <PersistentEmbed
+          active={active}
+          containerStyle={{ top: embedTop }}
+          onNavigateToEntity={(target) => onOpenSession(target)}
+        />
+      )}
     </View>
   )
 }
@@ -224,5 +293,16 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: `center`,
     justifyContent: `center`,
+  },
+  domEmbedHost: {
+    position: `absolute`,
+    left: 0,
+    overflow: `hidden`,
+    display: `flex`,
+  },
+  domEmbedWeb: {
+    flex: 1,
+    alignSelf: `stretch`,
+    overflow: `hidden`,
   },
 })

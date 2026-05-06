@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import '../ui'
 import '../markdown.css'
 import '../lib/workspace/registerViews'
+import { installMobileCryptoPolyfill } from './mobileDomRuntime'
 import { EmbedApp } from './EmbedApp'
 
 /**
@@ -18,6 +19,8 @@ import { EmbedApp } from './EmbedApp'
  * design tokens — only the chrome (sidebar, tab bar, settings, …) is
  * dropped because those are owned by the native shell.
  */
+
+installMobileCryptoPolyfill()
 
 const rootEl = document.getElementById(`root`)
 if (!rootEl) {
