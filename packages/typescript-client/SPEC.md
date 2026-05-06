@@ -86,6 +86,59 @@ CDN, or proxy) — not from the server itself.
 `packages/sync-service/lib/electric/shape_cache/shape_status/shape_db/connection.ex`
 (`shapes_handle_idx`).
 
+## Client Transport Assumptions
+
+Properties of the fetch/abort layer that must hold before a network result is
+allowed to enter the state machine as a `response`, `messages`, or `sseClose`
+event.
+
+### T0: Aborted requests are quarantined
+
+Once a request's `AbortSignal` is aborted, that request is no longer allowed to
+deliver success metadata or message batches into the state machine, even if the
+underlying runtime later resolves the fetch successfully.
+
+This is a client-side requirement, not a server assumption. Some runtimes and
+transport stacks can surface a late successful response after the caller has
+already aborted the request, especially around pause/resume, refresh/reconnect,
+or desktop-app lifecycle edges. If that late response is processed, it can race
+with a newer request generation and violate the state machine's preconditions,
+e.g. by delivering a `response` event after the stream has already transitioned
+into `ErrorState`.
+
+Operationally:
+
+- Aborted requests must be converted into an abort outcome before returning from
+  the fetch wrapper chain
+- `#onInitialResponse`, `#onMessages`, and SSE close handling must only run for
+  the currently active, non-aborted request generation
+
+**Enforcement**: runtime checks in `createFetchWithBackoff` and
+`createFetchWithConsumedMessages`, plus regression test
+`should ignore successful responses that arrive after a paused request was aborted`
+in `test/stream.test.ts`.
+
+## Operational Diagnostics
+
+Client-side diagnostics controls that exist to make field failures observable
+without changing the state machine's behavior.
+
+### D0: Diagnostics are observational only
+
+Verbose diagnostics may be enabled at stream construction time via client-side
+storage, for example:
+
+- `localStorage.setItem('electric.debug', 'true')`
+- `localStorage.setItem('debug', 'electric*')`
+
+When enabled, the client may emit detailed request/response/state logs, but
+those diagnostics must not alter fetch sequencing, state transitions, retry
+eligibility, or message delivery semantics.
+
+**Enforcement**: diagnostics are implemented as logging-only hooks in
+`client.ts`, and the request/state behavior remains covered by the existing
+state-machine tests.
+
 ## Invariants
 
 Properties that must hold after every state transition. Checked automatically by
@@ -292,6 +345,23 @@ back to Live, SSE state resets to defaults.
 
 **Enforcement**: Dedicated test (`SSE state is preserved through LiveState self-transitions`).
 
+### C9: Aborted requests must not emit state-machine events
+
+The state machine may ignore `response/messages/sseClose` while in `ErrorState`
+or `PausedState` (C3), but aborted requests must not rely on that behavior for
+correctness. A request aborted by pause/resume, system wake, visibility change,
+or explicit refresh is part of an old request generation and must be discarded
+before it can emit a late `response` event.
+
+Without this constraint, a late success from an aborted request can be processed
+after a newer request has already failed and moved the stream into `ErrorState`,
+producing `"Response was ignored by state \"error\""` warnings and silently
+dropping fresh data until another restart.
+
+**Enforcement**: Dedicated regression test
+(`should ignore successful responses that arrive after a paused request was aborted`)
+plus runtime abort checks in the fetch wrapper chain.
+
 ## Shape notification semantics
 
 The `Shape` class (`shape.ts`) wraps a `ShapeStream` and notifies subscribers
@@ -368,6 +438,7 @@ observing an intermediate empty-rows notification. The
 | C6         | -     | -           | yes            |
 | C7         | -     | yes         | yes            |
 | C8         | -     | -           | yes            |
+| C9         | -     | -           | yes            |
 
 ### Code -> Doc: Is each test derived from the spec?
 
@@ -408,6 +479,14 @@ change the next request URL via state advancement or an explicit cache buster.
 This is enforced by the path-specific guards listed below. Live requests
 (`live=true`) legitimately reuse URLs.
 
+### Invariant: aborted-request quarantine
+
+Any request generation that has been aborted must terminate as an abort before
+it can feed metadata or messages into the state machine. This guard sits below
+the state machine itself: it preserves the assumption that every delivered
+`response/messages/sseClose` event belongs to the currently active request
+generation.
+
 ### Invariant: unconditional 409 cache buster
 
 Every code path that handles a 409 response must unconditionally call
@@ -437,15 +516,16 @@ Six sites in `client.ts` recurse or loop to issue a new fetch:
 
 ### Guard mechanisms
 
-| Guard                         | Scope                         | How it works                                                                                                                                                                                               |
-| ----------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `#checkFastLoop`              | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502).                                                           |
-| `maxStaleCacheRetries`        | Stale response path (L3)      | State machine counts stale retries. After 3 consecutive stale responses, clears expired entry and attempts one self-healing retry. Throws FetchError(502) if self-healing also fails.                      |
-| `#expiredShapeRecoveryKey`    | Self-healing (L3 extension)   | Records shape key after first self-healing attempt. Second exhaustion on same key skips self-healing → FetchError(502). Cleared on up-to-date.                                                             |
-| `#maxSnapshotRetries`         | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Unconditional cache buster on every retry. Throws FetchError(502) after 5. Runtime-enforced by `Shape #fetchSnapshotWithRetry 409 loop PBT` in `test/pbt-micro.test.ts`. |
-| `#maxConsecutiveErrorRetries` | `#start` onError retry (L5)   | Counts consecutive error retries. Sends error to subscribers and tears down after 50. Reset on successful message batch.                                                                                   |
-| Pause lock                    | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                                                                          |
-| Up-to-date exit               | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                                                                                  |
+| Guard                         | Scope                         | How it works                                                                                                                                                                                                     |
+| ----------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#checkFastLoop`              | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502).                                                                 |
+| `maxStaleCacheRetries`        | Stale response path (L3)      | State machine counts stale retries. After 3 consecutive stale responses, clears expired entry and attempts one self-healing retry. Throws FetchError(502) if self-healing also fails.                            |
+| `#expiredShapeRecoveryKey`    | Self-healing (L3 extension)   | Records shape key after first self-healing attempt. Second exhaustion on same key skips self-healing → FetchError(502). Cleared on up-to-date.                                                                   |
+| `#maxSnapshotRetries`         | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Unconditional cache buster on every retry. Throws FetchError(502) after 5. Runtime-enforced by `Shape #fetchSnapshotWithRetry 409 loop PBT` in `test/pbt-micro.test.ts`.       |
+| `#maxConsecutiveErrorRetries` | `#start` onError retry (L5)   | Counts consecutive error retries. Sends error to subscribers and tears down after 50. Reset on successful message batch.                                                                                         |
+| Abort-aware fetch wrappers    | All request paths             | `createFetchWithBackoff` and `createFetchWithConsumedMessages` re-check `signal.aborted` after fetch resolution and after body consumption, converting late successes into aborts before state-machine delivery. |
+| Pause lock                    | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                                                                                |
+| Up-to-date exit               | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                                                                                        |
 
 ### Coverage gaps
 

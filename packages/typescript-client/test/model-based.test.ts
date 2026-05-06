@@ -544,7 +544,7 @@ interface StreamModel {
   terminated: boolean
 }
 
-const MAX_CONSECUTIVE_ERROR_RETRIES = 50
+const MAX_CONSECUTIVE_ERROR_RETRIES = 3
 const MAX_URL_LENGTH = 2000
 
 /**
@@ -679,7 +679,7 @@ async function runRetryableErrorResponse(
   }
 }
 
-/** 400 Bad Request — counter increments, may terminate at >50 */
+/** 400 Bad Request — counter increments, may terminate at >3 */
 class Respond400Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   check(m: Readonly<StreamModel>): boolean {
     return !m.terminated
@@ -943,6 +943,9 @@ class Respond404Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
 
 /**
  * 409 with the same handle as the current one.
+ * The retry URL must still change via cache-buster, and the next
+ * successful response must carry a fresh handle to avoid simulating
+ * a stale cached replay forever.
  */
 class Respond409SameHandleCmd
   implements fc.AsyncCommand<StreamModel, StreamReal>
@@ -953,6 +956,7 @@ class Respond409SameHandleCmd
   async run(_m: StreamModel, r: StreamReal): Promise<void> {
     const prevUrl = r.gate.lastUrl
     await r.respond(make409(r.currentHandle))
+    r.currentHandle = `handle-recovered-${nextSeq()}`
     assert409ProducedUniqueUrl(r, prevUrl)
   }
   toString(): string {
