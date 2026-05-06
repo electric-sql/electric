@@ -15,5 +15,5 @@
       ]
     }
   },
-  "include": ["App.tsx", "index.ts", "src"]
+  "include": ["app", "App.tsx", "index.ts", "src"]
 }

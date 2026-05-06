@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -184,6 +185,17 @@ function NativeMessageComposer({
   const insets = useSafeAreaInsets()
   const styles = useMemo(() => createComposerStyles(tokens), [tokens])
   const { keyboardVisible, keyboardTranslateY } = useKeyboardAttachment()
+  const dismissKeyboardResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        keyboardVisible &&
+        gesture.dy > 8 &&
+        Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 28 || gesture.vy > 0.5) Keyboard.dismiss()
+      },
+    })
+  ).current
   const [value, setValue] = useState(``)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -258,6 +270,7 @@ function NativeMessageComposer({
   return (
     <Animated.View
       onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
+      {...dismissKeyboardResponder.panHandlers}
       style={[
         styles.root,
         {
