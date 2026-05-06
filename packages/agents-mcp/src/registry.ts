@@ -19,6 +19,7 @@ interface Entry {
   authUrl?: string
   transport?: McpTransport
   tools: Array<{ name: string; description?: string; inputSchema: unknown }>
+  capabilities?: unknown
 }
 
 export interface RegistryOpts {
@@ -42,6 +43,7 @@ export interface ListedEntry {
   authUrl?: string
   error?: McpToolError
   tools: Entry[`tools`]
+  capabilities?: unknown
 }
 
 export interface Registry {
@@ -141,6 +143,9 @@ export function createRegistry(opts: RegistryOpts): Registry {
         description: t.description,
         inputSchema: t.inputSchema,
       }))
+      entry.capabilities = (
+        entry.transport.client as { getServerCapabilities?: () => unknown }
+      ).getServerCapabilities?.()
       entry.status = `ready`
       return {
         state: `ready`,
@@ -219,6 +224,7 @@ export function createRegistry(opts: RegistryOpts): Registry {
         authUrl: e.authUrl,
         error: e.error,
         tools: e.tools,
+        capabilities: e.capabilities,
       }))
     },
 
