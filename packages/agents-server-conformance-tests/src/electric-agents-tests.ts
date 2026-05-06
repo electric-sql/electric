@@ -2143,7 +2143,7 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test.skip(`tag update on stopped entity`, () => {
+    test(`tag update on stopped entity is rejected without claim`, () => {
       const id = Date.now()
       return electricAgents(config.baseUrl)
         .subscription(`/meta-stopped-agent-${id}/**`, `meta-stopped-sub-${id}`)
@@ -2155,20 +2155,15 @@ export function runElectricAgentsConformanceTests(
         .spawn(`meta-stopped-agent-${id}`, `entity-1`)
         .kill()
         .custom(async (ctx) => {
-          const tagHeaders: Record<string, string> = {}
-          if (ctx.currentWriteToken) {
-            tagHeaders[`authorization`] = `Bearer ${ctx.currentWriteToken}`
-          }
           const res = await electricAgentsFetch(
             ctx.baseUrl,
             `${ctx.currentEntityUrl!}/tags/key`,
             {
               method: `POST`,
-              headers: tagHeaders,
               body: JSON.stringify({ value: `value` }),
             }
           )
-          expect(res.status).toBe(409)
+          expect(res.status).toBe(401)
         })
         .run()
     })
@@ -2285,7 +2280,7 @@ export function runElectricAgentsConformanceTests(
   // ============================================================================
 
   describe(`Concurrent Operations`, () => {
-    test.skip(`sequential tag updates accumulate`, async () => {
+    test(`sequential tag updates accumulate`, async () => {
       const id = Date.now()
       await electricAgents(config.baseUrl)
         .subscription(`/seq-meta-agent-${id}/**`, `seq-meta-sub-${id}`)
@@ -2295,11 +2290,30 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`seq-meta-agent-${id}`, `entity-1`)
+        .send({ trigger: `claim` }, { from: `test` })
+        .expectWebhook()
         .custom(async (ctx) => {
-          const tagHeaders: Record<string, string> = {}
-          if (ctx.currentWriteToken) {
-            tagHeaders[`authorization`] = `Bearer ${ctx.currentWriteToken}`
+          const notification = ctx.notification!
+          const claimRes = await fetch(notification.parsed.callback, {
+            method: `POST`,
+            headers: { 'content-type': `application/json` },
+            body: JSON.stringify({
+              epoch: notification.parsed.epoch,
+              wakeId: notification.parsed.wake_id,
+            }),
+          })
+          expect(claimRes.status).toBe(200)
+          const claim = (await claimRes.json()) as {
+            ok: boolean
+            writeToken?: string
           }
+          expect(claim.ok).toBe(true)
+          expect(claim.writeToken).toBeTruthy()
+
+          const tagHeaders = {
+            authorization: `Bearer ${claim.writeToken}`,
+          }
+
           const r1 = await electricAgentsFetch(
             ctx.baseUrl,
             `${ctx.currentEntityUrl!}/tags/key1`,
@@ -2332,6 +2346,7 @@ export function runElectricAgentsConformanceTests(
           expect(entity.tags.key1).toBe(`value1`)
           expect(entity.tags.key2).toBe(`value2`)
         })
+        .respondDone()
         .run()
     })
 
