@@ -5176,3 +5176,602 @@ git commit --allow-empty -m "milestone: agents-mcp phase 4 complete — Connecte
 ```
 
 ---
+
+## Phase 5 — Device-code flow
+
+End state: An MCP server declared with `auth.mode: 'authorizationCode', flow: 'device'` performs the RFC 8628 device-authorization grant. The runtime exposes `POST /oauth/device/:server/start` returning `{ user_code, verification_uri, expires_in }`; the UI surfaces these so a user on a different machine can complete authorization. After consent the runtime polls the token endpoint and persists tokens via `CredentialStore`.
+
+This phase is independent — `apiKey`, `clientCredentials`, and `authorizationCode (browser)` from prior phases are unchanged.
+
+### Task 40: Device-code grant helper
+
+**Files:**
+
+- Create: `packages/agents-mcp/src/auth/device-code.ts`
+- Create: `packages/agents-mcp/test/auth/device-code.test.ts`
+
+> Implement the grant against RFC 8628. The interface we need: a one-shot `startDeviceFlow()` that calls the device-authorization endpoint and returns a handle exposing `userCode`, `verificationUri`, `expiresAt`, `interval`, plus `poll()` (resolves with tokens once the user authorizes) and `cancel()`.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/auth/device-code.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { startDeviceFlow } from '../../src/auth/device-code'
+
+describe('startDeviceFlow', () => {
+  it('parses device_authorization response', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            device_code: 'DEV',
+            user_code: 'ABCD-EFGH',
+            verification_uri: 'https://x/device',
+            expires_in: 600,
+            interval: 5,
+          })
+        )
+    )
+    const handle = await startDeviceFlow({
+      deviceAuthorizationEndpoint: 'https://x/device_authorization',
+      tokenEndpoint: 'https://x/token',
+      clientId: 'cid',
+      scopes: ['mcp:read'],
+      fetchImpl,
+    })
+    expect(handle.userCode).toBe('ABCD-EFGH')
+    expect(handle.verificationUri).toBe('https://x/device')
+    expect(handle.interval).toBe(5)
+  })
+
+  it('poll resolves with tokens after success', async () => {
+    let pollCount = 0
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes('device_authorization')) {
+        return new Response(
+          JSON.stringify({
+            device_code: 'DEV',
+            user_code: 'X',
+            verification_uri: 'v',
+            expires_in: 600,
+            interval: 1,
+          })
+        )
+      }
+      pollCount += 1
+      if (pollCount < 2) {
+        return new Response(
+          JSON.stringify({ error: 'authorization_pending' }),
+          { status: 400 }
+        )
+      }
+      return new Response(
+        JSON.stringify({
+          access_token: 'AT',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        })
+      )
+    })
+    const handle = await startDeviceFlow({
+      deviceAuthorizationEndpoint: 'https://x/device_authorization',
+      tokenEndpoint: 'https://x/token',
+      clientId: 'cid',
+      fetchImpl,
+    })
+    const tokens = await handle.poll({ intervalMs: 5 })
+    expect(tokens.access_token).toBe('AT')
+  })
+
+  it('poll rejects on access_denied', async () => {
+    let pollCount = 0
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes('device_authorization')) {
+        return new Response(
+          JSON.stringify({
+            device_code: 'DEV',
+            user_code: 'X',
+            verification_uri: 'v',
+            expires_in: 600,
+            interval: 1,
+          })
+        )
+      }
+      pollCount += 1
+      return new Response(JSON.stringify({ error: 'access_denied' }), {
+        status: 400,
+      })
+    })
+    const handle = await startDeviceFlow({
+      deviceAuthorizationEndpoint: 'https://x/device_authorization',
+      tokenEndpoint: 'https://x/token',
+      clientId: 'cid',
+      fetchImpl,
+    })
+    await expect(handle.poll({ intervalMs: 5 })).rejects.toThrow(
+      /access_denied/
+    )
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement**
+
+```ts
+// src/auth/device-code.ts
+import type { OAuthTokens as SdkTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
+
+export interface StartDeviceFlowOpts {
+  deviceAuthorizationEndpoint: string
+  tokenEndpoint: string
+  clientId: string
+  clientSecret?: string
+  scopes?: string[]
+  resource?: string
+  fetchImpl?: typeof fetch
+}
+
+export interface DeviceFlowHandle {
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  expiresAt: number /* unix seconds */
+  interval: number /* seconds */
+  poll(opts?: { intervalMs?: number }): Promise<SdkTokens>
+  cancel(): void
+}
+
+export async function startDeviceFlow(
+  opts: StartDeviceFlowOpts
+): Promise<DeviceFlowHandle> {
+  const fetchImpl = opts.fetchImpl ?? fetch
+  const body = new URLSearchParams({ client_id: opts.clientId })
+  if (opts.scopes?.length) body.set('scope', opts.scopes.join(' '))
+  if (opts.resource) body.set('resource', opts.resource)
+
+  const res = await fetchImpl(opts.deviceAuthorizationEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  if (!res.ok) throw new Error(`device_authorization endpoint ${res.status}`)
+  const json = (await res.json()) as {
+    device_code: string
+    user_code: string
+    verification_uri: string
+    verification_uri_complete?: string
+    expires_in: number
+    interval?: number
+  }
+
+  const expiresAt = Math.floor(Date.now() / 1000) + json.expires_in
+  let cancelled = false
+
+  const poll = async (
+    pollOpts: { intervalMs?: number } = {}
+  ): Promise<SdkTokens> => {
+    const intervalMs = pollOpts.intervalMs ?? (json.interval ?? 5) * 1000
+    while (!cancelled) {
+      if (Math.floor(Date.now() / 1000) > expiresAt) {
+        throw new Error('expired_token')
+      }
+      const tokenBody = new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: json.device_code,
+        client_id: opts.clientId,
+      })
+      if (opts.clientSecret) tokenBody.set('client_secret', opts.clientSecret)
+      const tr = await fetchImpl(opts.tokenEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: tokenBody,
+      })
+      const result = (await tr.json()) as {
+        error?: string
+        access_token?: string
+        expires_in?: number
+        refresh_token?: string
+        token_type?: string
+      }
+      if (result.access_token) {
+        return result as SdkTokens
+      }
+      if (
+        result.error === 'authorization_pending' ||
+        result.error === 'slow_down'
+      ) {
+        await new Promise((r) => setTimeout(r, intervalMs))
+        continue
+      }
+      throw new Error(result.error ?? 'device flow failed')
+    }
+    throw new Error('cancelled')
+  }
+
+  return {
+    userCode: json.user_code,
+    verificationUri: json.verification_uri,
+    verificationUriComplete: json.verification_uri_complete,
+    expiresAt,
+    interval: json.interval ?? 5,
+    poll,
+    cancel() {
+      cancelled = true
+    },
+  }
+}
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-mcp/src/auth/device-code.ts packages/agents-mcp/test/auth/device-code.test.ts
+git commit -m "feat(agents-mcp): RFC 8628 device-code grant helper"
+```
+
+---
+
+### Task 41: Wire device-flow into the registry
+
+**Files:**
+
+- Modify: `packages/agents-mcp/src/types.ts` — extend `AddServerResult` with `deviceCode`
+- Modify: `packages/agents-mcp/src/registry.ts`
+- Create: `packages/agents-mcp/test/registry-device-flow.test.ts`
+
+> When `auth.mode === 'authorizationCode'` and `flow === 'device'`, `addServer` returns `{ state: 'authenticating', authUrl: verification_uri, deviceCode: { userCode, expiresAt, ... } }`. The registry kicks off `handle.poll()` in the background; once tokens arrive it persists them via `CredentialStore` and re-runs `addServer(cfg)` to connect the transport.
+
+- [ ] **Step 1: Extend `AddServerResult` to carry `deviceCode`**
+
+```ts
+// src/types.ts
+export type AddServerResult =
+  | { state: 'ready'; id: string; toolCount: number }
+  | {
+      state: 'authenticating'
+      id: string
+      authUrl: string
+      deviceCode?: {
+        userCode: string
+        expiresAt: number
+        verificationUriComplete?: string
+      }
+    }
+  | { state: 'error'; id: string; error: McpToolError }
+```
+
+- [ ] **Step 2: Extend the registry's `buildTransport` for device flow**
+
+```ts
+// inside src/registry.ts buildTransport():
+
+if (cfg.auth.mode === 'authorizationCode' && cfg.auth.flow === 'device') {
+  // Endpoints discovery: phase 5 requires explicit `auth.deviceEndpoints` in mcp.json.
+  const eps = (cfg.auth as any).deviceEndpoints as
+    | { deviceAuthorizationEndpoint: string; tokenEndpoint: string }
+    | undefined
+  if (!eps) {
+    return {
+      error: makeError(
+        'auth_unavailable',
+        'device flow requires auth.deviceEndpoints in mcp.json'
+      ),
+    }
+  }
+  const cc = await opts.credentials.getClientCredentials?.(cfg.name)
+  if (!cc) {
+    return {
+      error: makeError(
+        'auth_unavailable',
+        `no clientCredentials for ${cfg.name} (device flow needs at minimum a clientId)`
+      ),
+    }
+  }
+  const handle = await startDeviceFlow({
+    deviceAuthorizationEndpoint: eps.deviceAuthorizationEndpoint,
+    tokenEndpoint: eps.tokenEndpoint,
+    clientId: cc.clientId,
+    clientSecret: cc.clientSecret,
+    scopes: cfg.auth.scopes,
+    resource: cfg.auth.resource,
+  })
+  // Background poll — on success, persist tokens and re-add the server to connect.
+  void handle
+    .poll()
+    .then(async (tokens) => {
+      await opts.credentials.saveOAuthTokens?.(cfg.name, {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: tokens.expires_in
+          ? Math.floor(Date.now() / 1000) + tokens.expires_in
+          : undefined,
+        tokenType: tokens.token_type,
+      })
+      void registry.addServer(cfg).catch(() => {
+        /* re-entry handled by next caller */
+      })
+    })
+    .catch((err) => {
+      const e = entries.get(cfg.name)
+      if (e) {
+        e.status = 'error'
+        e.error = makeError('auth_unavailable', String(err))
+      }
+    })
+  return {
+    authUrl: handle.verificationUri,
+    deviceHandle: handle,
+  }
+}
+```
+
+Add `deviceHandle?: DeviceFlowHandle` to `Entry`. Update `Entry`'s teardown to call `deviceHandle?.cancel()` in `removeServer`.
+
+- [ ] **Step 3: Surface `deviceCode` in the `addServer` envelope**
+
+```ts
+// In addServer(), after buildTransport returns:
+if (built.authUrl && built.deviceHandle) {
+  entry.status = 'authenticating'
+  entry.authUrl = built.authUrl
+  entry.deviceHandle = built.deviceHandle
+  return {
+    state: 'authenticating',
+    id: cfg.name,
+    authUrl: built.authUrl,
+    deviceCode: {
+      userCode: built.deviceHandle.userCode,
+      expiresAt: built.deviceHandle.expiresAt,
+      verificationUriComplete: built.deviceHandle.verificationUriComplete,
+    },
+  }
+}
+```
+
+- [ ] **Step 4: Surface device fields through `list()`**
+
+Extend `ListedEntry` with optional `deviceCode` and include it in the projection.
+
+- [ ] **Step 5: Add a registry test for device flow**
+
+```ts
+// test/registry-device-flow.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { createRegistry } from '../src/registry'
+import { inMemoryCredentialStore } from '../src/credentials/in-memory'
+
+describe('Registry — device flow', () => {
+  it('addServer with device flow returns user code; background poll completes', async () => {
+    let pollCount = 0
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes('device_authorization')) {
+        return new Response(
+          JSON.stringify({
+            device_code: 'DEV',
+            user_code: 'CODE-1234',
+            verification_uri: 'https://x/device',
+            expires_in: 600,
+            interval: 0,
+          })
+        )
+      }
+      pollCount += 1
+      if (pollCount < 2)
+        return new Response(
+          JSON.stringify({ error: 'authorization_pending' }),
+          { status: 400 }
+        )
+      return new Response(
+        JSON.stringify({
+          access_token: 'AT',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        })
+      )
+    })
+    // Inject fetchImpl by wrapping startDeviceFlow at the module level (test fixture).
+    // ... see device-code.test.ts pattern; or thread fetchImpl through Registry opts.
+    // Simplified: we assert the immediate envelope here; background-poll is covered in
+    // device-code.test.ts.
+    const credentials = inMemoryCredentialStore()
+    credentials.setClientCredentials('mock', {
+      clientId: 'cid',
+      clientSecret: 'sec',
+    })
+    const reg = createRegistry({
+      credentials,
+      publicUrl: 'http://r:4448',
+      deviceFlowFetch: fetchImpl /* new opt for testing — see step 6 */,
+    } as any)
+    const r = await reg.addServer({
+      name: 'mock',
+      transport: 'http',
+      url: 'https://mock/mcp',
+      auth: {
+        mode: 'authorizationCode',
+        flow: 'device',
+        scopes: ['mcp:read'],
+        // @ts-expect-error — extension for device flow
+        deviceEndpoints: {
+          deviceAuthorizationEndpoint: 'https://x/device_authorization',
+          tokenEndpoint: 'https://x/token',
+        },
+      },
+    })
+    expect(r.state).toBe('authenticating')
+    if (r.state === 'authenticating') {
+      expect(r.deviceCode?.userCode).toBe('CODE-1234')
+      expect(r.authUrl).toBe('https://x/device')
+    }
+  })
+})
+```
+
+- [ ] **Step 6: Thread an optional `deviceFlowFetch` through `RegistryOpts`** so tests can inject the fetch implementation. In production this defaults to global `fetch`.
+
+- [ ] **Step 7: Run — PASS**
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/agents-mcp/src/registry.ts packages/agents-mcp/src/types.ts packages/agents-mcp/test/registry-device-flow.test.ts
+git commit -m "feat(agents-mcp): wire RFC 8628 device flow into registry"
+```
+
+---
+
+### Task 42: Runtime endpoint `POST /oauth/device/:server/start`
+
+**Files:**
+
+- Modify: `packages/agents-mcp/src/http/mount.ts`
+- Modify: `packages/agents-mcp/test/http/mount.test.ts`
+
+- [ ] **Step 1: Add the route**
+
+```ts
+// inside mountMcpHttp's request handler, alongside existing routes:
+const dev = u.pathname.match(/^\/oauth\/device\/([^/]+)\/start$/)
+if (dev && req.method === 'POST') {
+  const serverName = decodeURIComponent(dev[1]!)
+  const entry = opts.registry.get(serverName)
+  if (!entry) {
+    send(res, 404, { error: 'unknown server' })
+    return
+  }
+  // Re-trigger by removing + adding the server. addServer returns the device code
+  // in `deviceCode` when the server is in device flow.
+  await opts.registry.removeServer(serverName)
+  const result = await opts.registry.addServer(entry.config)
+  send(res, 200, result)
+  return
+}
+```
+
+- [ ] **Step 2: Add a test**
+
+In `mount.test.ts`, register a device-flow server and POST to `/oauth/device/<name>/start`; assert the response includes `state: 'authenticating'` and `deviceCode.userCode`.
+
+- [ ] **Step 3: Run — PASS**
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/agents-mcp/src/http/mount.ts packages/agents-mcp/test/http/mount.test.ts
+git commit -m "feat(agents-mcp): /oauth/device/:server/start endpoint"
+```
+
+---
+
+### Task 43: UI surface for device flow
+
+**Files:**
+
+- Modify: `packages/agents-server-ui/src/hooks/useMcpServers.ts` — add optional `deviceCode` field
+- Modify: `packages/agents-server-ui/src/components/connected-services/ServerRow.tsx`
+
+- [ ] **Step 1: Extend the `McpServerRow` type**
+
+```ts
+// add to McpServerRow:
+deviceCode?: {
+  userCode: string
+  expiresAt: number
+  verificationUriComplete?: string
+}
+```
+
+- [ ] **Step 2: Render device-code details in `ServerRow`**
+
+```tsx
+{
+  server.deviceCode && (
+    <div role="region" aria-label="Device authorization">
+      <p>
+        Enter code <code>{server.deviceCode.userCode}</code> at{' '}
+        <a
+          href={server.deviceCode.verificationUriComplete ?? server.authUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          the verification URL
+        </a>
+        .
+      </p>
+      <p>
+        Expires at{' '}
+        {new Date(server.deviceCode.expiresAt * 1000).toLocaleTimeString()}.
+      </p>
+    </div>
+  )
+}
+```
+
+The "Re-authorize" button already POSTs to `/api/mcp/servers/:name/authorize` for browser flow; for device flow, also wire a "Restart device flow" affordance that POSTs to `/oauth/device/${name}/start`.
+
+- [ ] **Step 3: Manual smoke (best-effort if a device-flow MCP server is reachable)**
+
+Configure a device-flow server with `auth.deviceEndpoints`; expect the UI to show the user code and the verification link, and to flip to `ready` after the user completes consent on another device.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/agents-server-ui/src/components/connected-services/ServerRow.tsx packages/agents-server-ui/src/hooks/useMcpServers.ts
+git commit -m "feat(agents-server-ui): surface device-code (user_code + verification URL) in Connected Services"
+```
+
+---
+
+### Task 44: Phase 5 verification
+
+- [ ] **Step 1: Run the full test sweep**
+
+```bash
+pnpm -r typecheck
+pnpm -r test --run
+```
+
+- [ ] **Step 2: Manual smoke (depends on access to a device-flow MCP server)**
+
+If no device-flow MCP server is reachable, validate via the unit + integration tests added in Tasks 40–42.
+
+- [ ] **Step 3: Commit milestone**
+
+```bash
+git commit --allow-empty -m "milestone: agents-mcp phase 5 complete — device-code flow"
+```
+
+---
+
+## Cross-cutting verification
+
+Run after each phase, and again at the end:
+
+- [ ] `pnpm install` clean
+- [ ] `pnpm -r typecheck` clean
+- [ ] `pnpm -r test --run` passes
+- [ ] All three user stories from the spec smoke-tested manually:
+  - **US-1 (Incident response factory)**: webhook spawns an agent that uses two MCP servers, produces a summary.
+  - **US-2 (Coding agent factory)**: developer chats with Horton; agent uses GitHub MCP via `authorizationCode` flow.
+  - **US-3 (Continuous knowledge factory)**: scheduled agent runs against multiple MCP sources, produces a digest.
+
+## Open implementation choices
+
+- **OS keychain library.** `keytar` is the de facto choice but has native deps. We treat it as an optional peer; without it, the file store covers local dev (chmod 0600).
+- **Token cache persistence.** Tokens persist via `CredentialStore`. Refresh tokens survive across runtime restarts; access tokens are re-derived from refresh tokens.
+- **Resource Indicators (RFC 8707).** Already passable via `auth.resource` in `mcp.json`; the SDK provider forwards them on `clientMetadata` / token requests.
+- **Device-flow endpoint discovery.** Phase 5 requires explicit `auth.deviceEndpoints` in `mcp.json`. RFC 8414 metadata discovery could replace this once we encounter a real-world server that publishes it.
+
+## Future / out of scope (tracked for later iterations)
+
+- **Stream-based MCP registration** via the `entity_types` shape pattern. Considered, deferred — direct calls ship first; revisit with multi-runtime + multi-tab UI in real use.
+- **Bearer-token auth on the runtime API.** Hook reserved (`requireAuth` on `mountMcpHttp`); implementation when we deploy a non-localhost setup.
+- **SSE on `/api/mcp/events`.** Polling is fine until it isn't.
+- **Tunnel the OAuth callback through agents-server** so the runtime doesn't need a public URL.
+- **Wake-level suspend for long-running tool calls.** Spec Non-goal.
+- **User identity / per-user credentials.** Spec Non-goal until the project gains a user record.
