@@ -9,6 +9,9 @@ import type { McpTransport } from './transports/types'
 import { createHttpTransport } from './transports/http'
 import { createStdioTransport } from './transports/stdio'
 import { buildApiKeyHeader } from './auth/api-key'
+import { createSdkOAuthProvider } from './auth/sdk-provider'
+import type { SdkOAuthProvider } from './auth/sdk-provider'
+import { createClientCredentialsProvider } from './auth/client-credentials'
 import type { McpConfig } from './config/loader'
 
 interface Entry {
@@ -20,16 +23,18 @@ interface Entry {
   transport?: McpTransport
   tools: Array<{ name: string; description?: string; inputSchema: unknown }>
   capabilities?: unknown
+  provider?: SdkOAuthProvider
 }
 
 export interface RegistryOpts {
   credentials: CredentialStore
+  /** Base URL of this registry process, used to construct OAuth redirect URIs. */
+  publicUrl?: string
   transportFactoryOverride?: (
     cfg: McpServerConfig,
-    hp?: HeaderProvider
+    hp?: HeaderProvider,
+    provider?: SdkOAuthProvider
   ) => McpTransport
-  /** Reserved for Phase 3 — supplies an OAuthClientProvider per server. */
-  oauthProviderFactory?: (cfg: McpServerConfig) => unknown
 }
 
 export type HeaderProvider = () => Promise<
@@ -77,20 +82,23 @@ function makeError(kind: McpToolError[`kind`], message: string): McpToolError {
   return { kind, message }
 }
 
+interface BuildTransportResult {
+  transport?: McpTransport
+  error?: McpToolError
+  authUrl?: string
+  provider?: SdkOAuthProvider
+}
+
 export function createRegistry(opts: RegistryOpts): Registry {
   const entries = new Map<string, Entry>()
 
   const buildTransport = async (
     cfg: McpServerConfig
-  ): Promise<{
-    transport?: McpTransport
-    error?: McpToolError
-    authUrl?: string
-  }> => {
-    if (opts.transportFactoryOverride) {
-      return { transport: opts.transportFactoryOverride(cfg) }
-    }
+  ): Promise<BuildTransportResult> => {
     if (cfg.transport === `stdio`) {
+      if (opts.transportFactoryOverride) {
+        return { transport: opts.transportFactoryOverride(cfg) }
+      }
       return {
         transport: createStdioTransport({
           name: cfg.name,
@@ -100,12 +108,21 @@ export function createRegistry(opts: RegistryOpts): Registry {
         }),
       }
     }
+
+    // HTTP transport from here on
     if (cfg.auth.mode === `none`) {
+      if (opts.transportFactoryOverride) {
+        return { transport: opts.transportFactoryOverride(cfg) }
+      }
       return {
         transport: createHttpTransport({ name: cfg.name, url: cfg.url }),
       }
     }
+
     if (cfg.auth.mode === `apiKey`) {
+      if (opts.transportFactoryOverride) {
+        return { transport: opts.transportFactoryOverride(cfg) }
+      }
       const key = await opts.credentials.getApiKey?.(cfg.name)
       if (!key)
         return {
@@ -124,15 +141,77 @@ export function createRegistry(opts: RegistryOpts): Registry {
         }),
       }
     }
+
+    if (cfg.auth.mode === `authorizationCode`) {
+      const publicUrl = opts.publicUrl ?? `http://localhost`
+      const provider = createSdkOAuthProvider({
+        server: cfg.name,
+        publicUrl,
+        credentials: opts.credentials,
+        scopes: cfg.auth.scopes,
+        redirectUri: cfg.auth.redirectUri,
+        resource: cfg.auth.resource,
+      })
+      if (opts.transportFactoryOverride) {
+        return {
+          transport: opts.transportFactoryOverride(cfg, undefined, provider),
+          provider,
+        }
+      }
+      return {
+        transport: createHttpTransport({
+          name: cfg.name,
+          url: cfg.url,
+          authProvider: provider,
+        }),
+        provider,
+      }
+    }
+
+    if (cfg.auth.mode === `clientCredentials`) {
+      const cc = await opts.credentials.getClientCredentials?.(cfg.name)
+      if (!cc) {
+        return {
+          error: makeError(
+            `auth_unavailable`,
+            `no clientCredentials for ${cfg.name}`
+          ),
+        }
+      }
+      const ccProvider = createClientCredentialsProvider({
+        tokenUrl: cfg.auth.tokenUrl,
+        clientId: cc.clientId,
+        clientSecret: cc.clientSecret,
+        scopes: cfg.auth.scopes,
+        audience: cfg.auth.audience,
+        resource: cfg.auth.resource,
+      })
+      if (opts.transportFactoryOverride) {
+        return {
+          transport: opts.transportFactoryOverride(cfg, undefined, undefined),
+        }
+      }
+      return {
+        transport: createHttpTransport({
+          name: cfg.name,
+          url: cfg.url,
+          authProvider: ccProvider,
+        }),
+      }
+    }
+
     return {
       error: makeError(
         `auth_unavailable`,
-        `auth.mode=${cfg.auth.mode} not implemented in Phase 1`
+        `auth.mode=${(cfg.auth as any).mode} not implemented`
       ),
     }
   }
 
-  const connectAndList = async (entry: Entry): Promise<AddServerResult> => {
+  const connectAndList = async (
+    entry: Entry,
+    provider?: SdkOAuthProvider
+  ): Promise<AddServerResult> => {
     if (!entry.transport) {
       return {
         state: `error`,
@@ -158,6 +237,14 @@ export function createRegistry(opts: RegistryOpts): Registry {
         toolCount: entry.tools.length,
       }
     } catch (err) {
+      // Check if an OAuth provider captured a redirect URL
+      const authUrl = provider?.peekAuthUrl()
+      if (authUrl) {
+        entry.status = `authenticating`
+        entry.authUrl = authUrl
+        entry.provider = provider
+        return { state: `authenticating`, id: entry.config.name, authUrl }
+      }
       entry.status = `error`
       const e = makeError(`transport_error`, (err as Error).message)
       entry.error = e
@@ -193,6 +280,7 @@ export function createRegistry(opts: RegistryOpts): Registry {
         error: built.error,
         authUrl: built.authUrl,
         tools: [],
+        provider: built.provider,
       }
       entries.set(cfg.name, entry)
       if (built.error)
@@ -201,7 +289,7 @@ export function createRegistry(opts: RegistryOpts): Registry {
         entry.status = `authenticating`
         return { state: `authenticating`, id: cfg.name, authUrl: built.authUrl }
       }
-      return await connectAndList(entry)
+      return await connectAndList(entry, built.provider)
     },
 
     async applyConfig(cfg) {
