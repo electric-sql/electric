@@ -6,6 +6,12 @@
     "paths": {
       "@electric-ax/agents-server-ui/src/embed/SessionDomEmbed": [
         "src/types/server-ui-dom"
+      ],
+      "@electric-ax/agents-server-ui/src/embed/SessionChatLogDomEmbed": [
+        "src/types/server-ui-dom"
+      ],
+      "@electric-ax/agents-server-ui/src/embed/SessionStateInspectorDomEmbed": [
+        "src/types/server-ui-dom"
       ]
     }
   },
