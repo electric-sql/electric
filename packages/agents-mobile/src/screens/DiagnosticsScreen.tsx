@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  ActivityIndicator,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Constants from 'expo-constants'
-import { Asset } from 'expo-asset'
 import { Header, HeaderBackButton } from '../components/Header'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
@@ -24,8 +16,6 @@ type HealthState =
   | { kind: `ok`; latencyMs: number; checkedAt: number }
   | { kind: `error`; message: string; checkedAt: number }
 
-const EMBED_ASSET: number = require(`../../assets/embed.html`)
-
 /**
  * "What's broken?" view.
  *
@@ -33,8 +23,6 @@ const EMBED_ASSET: number = require(`../../assets/embed.html`)
  * session without attaching a debugger:
  *
  *   - Active server URL + a one-shot health probe with latency
- *   - Embed bundle source URI + on-disk size (lets us tell the
- *     placeholder apart from the real ~5 MB build)
  *   - App / Expo / OS version strings
  *
  * Everything is plain text + monospaced values so the user can
@@ -51,11 +39,6 @@ export function DiagnosticsScreen({
   const styles = useMemo(() => createStyles(tokens), [tokens])
 
   const [health, setHealth] = useState<HealthState>({ kind: `idle` })
-  const [embed, setEmbed] = useState<{
-    uri: string | null
-    sizeKb: number | null
-    error: string | null
-  }>({ uri: null, sizeKb: null, error: null })
 
   const probe = useCallback(async () => {
     setHealth({ kind: `pending` })
@@ -79,58 +62,6 @@ export function DiagnosticsScreen({
   useEffect(() => {
     void probe()
   }, [probe])
-
-  useEffect(() => {
-    let cancelled = false
-    const asset = Asset.fromModule(EMBED_ASSET)
-    asset
-      .downloadAsync()
-      .then((resolved) => {
-        if (cancelled) return
-        const uri = resolved.localUri ?? resolved.uri
-        // `Asset.downloadAsync` doesn't expose size, so we re-fetch
-        // the resolved file via fetch + content-length to keep this
-        // dependency-free. Falls back to `null` on a failure.
-        if (typeof fetch === `function` && uri) {
-          fetch(uri)
-            .then(
-              (res) =>
-                res.headers.get(`content-length`) ??
-                res.text().then((t) => `${t.length}`)
-            )
-            .then((value) =>
-              typeof value === `string`
-                ? Number(value)
-                : (value as Promise<string>).then(Number)
-            )
-            .then((bytes) => {
-              if (cancelled || !Number.isFinite(bytes)) return
-              setEmbed({
-                uri,
-                sizeKb: Math.round(bytes / 1024),
-                error: null,
-              })
-            })
-            .catch(() => {
-              if (cancelled) return
-              setEmbed({ uri, sizeKb: null, error: null })
-            })
-        } else {
-          setEmbed({ uri, sizeKb: null, error: null })
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setEmbed({
-          uri: null,
-          sizeKb: null,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const appVersion = Constants.expoConfig?.version ?? `0.0.0`
   const sdkVersion = Constants.expoConfig?.sdkVersion ?? Constants.sdkVersion
@@ -176,28 +107,6 @@ export function DiagnosticsScreen({
               onPress={() => void probe()}
             />
           </View>
-        </Section>
-
-        <Section label="Embed bundle" tokens={tokens}>
-          {embed.uri ? (
-            <>
-              <Field label="URI" value={embed.uri} mono tokens={tokens} />
-              <Field
-                label="Size"
-                value={embed.sizeKb ? `${embed.sizeKb} KB` : `unknown`}
-                tokens={tokens}
-              />
-            </>
-          ) : embed.error ? (
-            <Field
-              label="Error"
-              value={embed.error}
-              tone="error"
-              tokens={tokens}
-            />
-          ) : (
-            <ActivityIndicator color={tokens.text3} />
-          )}
         </Section>
 
         <Section label="System" tokens={tokens}>

@@ -10,15 +10,13 @@ import { useAgents } from '../lib/AgentsProvider'
 import { getEntityDisplayTitle } from '../lib/agentsClient'
 import { useTokens } from '../lib/ThemeProvider'
 import type { Tokens } from '../lib/theme'
-import type { EmbedViewId } from '../webview/embedSource'
+import type { EmbedViewId } from '../lib/embedView'
 
 /**
- * Native chrome for an active session — the chat WebView itself
- * lives in `<PersistentEmbed>` (mounted once at the app root). This
- * screen contributes the safe-area top inset, an iOS-style
- * `<Header>` (back chevron, centered title, kebab), and a
- * `KeyboardAvoidingView` that resizes the embed body when the
- * keyboard appears.
+ * Native chrome for an active session. This screen contributes the
+ * safe-area top inset, an iOS-style `<Header>` (back chevron, centered
+ * title, kebab), and a `KeyboardAvoidingView` that resizes the embed
+ * body when the keyboard appears.
  *
  * View toggling (chat ↔ state explorer) used to live in the toolbar
  * as `<IconToggle>`s; we moved it into the kebab `<SessionMenu>` so
@@ -69,11 +67,10 @@ export function SessionScreen({
       />
 
       {/*
-        Empty body — the actual chat / state-explorer surface lives
-        in the app-level `<PersistentEmbed>`, absolutely positioned
-        at `top = safe-area-top + 44px`. The KeyboardAvoidingView
-        shares its insets with the embed so the composer follows the
-        keyboard on iOS.
+        Empty body — the actual chat / state-explorer surface lives in the
+        app-level DOM component, absolutely positioned at
+        `top = safe-area-top + 44px`. The KeyboardAvoidingView shares its
+        insets with the embed so the composer follows the keyboard on iOS.
       */}
       <KeyboardAvoidingView
         behavior={Platform.OS === `ios` ? `padding` : undefined}

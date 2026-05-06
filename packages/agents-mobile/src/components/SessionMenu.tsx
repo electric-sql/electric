@@ -8,7 +8,7 @@ import {
 import { Icon } from './Icon'
 import { useTokens } from '../lib/ThemeProvider'
 import type { ElectricEntity } from '../lib/agentsClient'
-import type { EmbedViewId } from '../webview/embedSource'
+import type { EmbedViewId } from '../lib/embedView'
 
 const STATUS_DOT_COLORS: Record<string, `green` | `blue` | `amber` | `gray`> = {
   running: `blue`,

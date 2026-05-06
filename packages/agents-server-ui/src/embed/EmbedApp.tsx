@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactElement,
-} from 'react'
+import { createContext, useContext, useMemo, type ReactElement } from 'react'
 import {
   RouterProvider,
   createMemoryHistory,
@@ -22,44 +15,12 @@ import {
 import { ThemeProvider } from '../ui/ThemeProvider'
 import { ChatView } from '../components/views/ChatView'
 import { StateExplorerView } from '../components/views/StateExplorerView'
-import { readEmbedConfig, type MobileEmbedConfig } from './config'
-import {
-  postEmbedToNative,
-  subscribeNativeToEmbed,
-  type EmbedTheme,
-  type EmbedView,
-} from './bridge'
 import styles from './EmbedApp.module.css'
 
 const TILE_ID = `mobile-embed`
 
-/**
- * Root of the bundled mobile embed.
- *
- * The native shell injects the initial config (server URL, entity,
- * view, theme) via `window.__MOBILE_EMBED__` BEFORE this script runs,
- * so the first paint matches the current native state. After mount we
- * announce `{ type: 'ready' }` so the host can start sending live
- * updates (`set-view`, `set-entity`, `set-theme`) without re-parsing
- * the multi-MB bundle on every navigation.
- */
-export function EmbedApp(): ReactElement {
-  const initial = useMemo(readEmbedConfig, [])
-
-  // The initial values come from `__MOBILE_EMBED__`. Subsequent
-  // updates from the native side (`set-*` messages) are routed through
-  // `useEmbedState` below.
-  const state = useEmbedState(initial)
-
-  return (
-    <EmbedSessionRoot
-      {...state}
-      onNavigatePathname={(pathname) =>
-        postEmbedToNative({ type: `navigate`, pathname })
-      }
-    />
-  )
-}
+type EmbedView = `chat` | `state-explorer`
+type EmbedTheme = `light` | `dark`
 
 export type EmbedSessionProps = EmbedState & {
   onNavigatePathname?: (pathname: string) => void | Promise<void>
@@ -93,52 +54,6 @@ function useCurrentEmbedState(): EmbedState {
     throw new Error(`useCurrentEmbedState must be used inside EmbeddedRouter`)
   }
   return state
-}
-
-/**
- * Centralised in-embed state machine for everything the native side
- * can change at runtime. Reads `initial` once and then mirrors the
- * subset of native messages that update visible content.
- */
-function useEmbedState(initial: MobileEmbedConfig): EmbedState {
-  const [view, setView] = useState<EmbedView>(initial.view)
-  const [entityUrl, setEntityUrl] = useState<string>(initial.entityUrl)
-  const [theme, setTheme] = useState<EmbedTheme>(initial.theme)
-
-  useEffect(() => {
-    const unsub = subscribeNativeToEmbed((msg) => {
-      switch (msg.type) {
-        case `set-view`:
-          if (msg.view === `chat` || msg.view === `state-explorer`) {
-            setView(msg.view)
-          }
-          return
-        case `set-entity`:
-          if (typeof msg.entityUrl === `string`) {
-            setEntityUrl(msg.entityUrl)
-          }
-          return
-        case `set-theme`:
-          if (msg.theme === `light` || msg.theme === `dark`) {
-            setTheme(msg.theme)
-          }
-          return
-      }
-    })
-
-    // Tell the host the listener is wired up. The host queues
-    // `set-*` updates until it sees `ready` so no message is lost
-    // between mount and the first user interaction.
-    postEmbedToNative({ type: `ready` })
-
-    return unsub
-  }, [])
-
-  // `serverUrl` is part of the initial config but never updated at
-  // runtime — changing the active server requires a full WebView
-  // reload because Electric collections, websocket streams and the
-  // ElectricAgentsProvider all key on it.
-  return { serverUrl: initial.serverUrl, view, entityUrl, theme }
 }
 
 /**
