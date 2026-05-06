@@ -609,6 +609,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
+  // Tracks when subscriber callbacks are actively being delivered from
+  // #messageChain. requestSnapshot can inject a nested batch from inside a
+  // subscriber; in that reentrant case #publish uses this as an intentional
+  // escape hatch to deliver the nested snapshot batch immediately rather than
+  // queueing it behind the subscriber that is awaiting it.
   #isPublishing = false
   #snapshotTracker = new SnapshotTracker()
   #pauseLock: PauseLock
