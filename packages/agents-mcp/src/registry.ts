@@ -12,6 +12,15 @@ export interface ServerEntry {
   transport?: McpTransportHandle
   tools?: Array<{ name: string; description?: string; inputSchema?: unknown }>
   resources?: Array<{ uri: string; name?: string; mimeType?: string }>
+  prompts?: Array<{
+    name: string
+    description?: string
+    arguments?: Array<{
+      name: string
+      description?: string
+      required?: boolean
+    }>
+  }>
 }
 
 export type GetAuthHeader = () => Promise<{
@@ -104,11 +113,29 @@ export function createRegistry(opts: RegistryOpts): Registry {
       } catch {
         entry.resources = undefined
       }
+      // Prompts are also optional — many MCP servers don't expose them.
+      // Failures here should not flip status to `error`; just leave
+      // `prompts` undefined.
+      try {
+        const pr = await client.listPrompts()
+        entry.prompts = (pr.prompts ?? []).map((p) => ({
+          name: p.name,
+          description: p.description,
+          arguments: p.arguments?.map((a) => ({
+            name: a.name,
+            description: a.description,
+            required: a.required,
+          })),
+        }))
+      } catch {
+        entry.prompts = undefined
+      }
     } catch (err) {
       entry.status = `error`
       entry.lastError = err instanceof Error ? err.message : String(err)
       entry.tools = undefined
       entry.resources = undefined
+      entry.prompts = undefined
     }
   }
 

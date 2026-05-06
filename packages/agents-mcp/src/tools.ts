@@ -1,6 +1,7 @@
 import type { Registry } from './registry'
 import { bridgeMcpTool, type BridgedTool } from './bridge/tool-bridge'
 import { bridgeResourceTools } from './bridge/resource-bridge'
+import { bridgePromptTools } from './bridge/prompt-bridge'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -38,6 +39,17 @@ export function createMcpTools(
           })
         ),
         ...bridgeResourceTools({
+          server: s.name,
+          invoke: (server, method, args, tm) =>
+            registry.invokeMethod(
+              server,
+              method,
+              args as Record<string, unknown>,
+              tm
+            ),
+          timeoutMs,
+        }),
+        ...bridgePromptTools({
           server: s.name,
           invoke: (server, method, args, tm) =>
             registry.invokeMethod(

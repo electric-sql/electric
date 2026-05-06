@@ -31,6 +31,8 @@ describe(`createMcpTools`, () => {
       `github.get_pr`,
       `github.list_resources`,
       `github.read_resource`,
+      `github.list_prompts`,
+      `github.get_prompt`,
     ])
   })
 
@@ -41,9 +43,13 @@ describe(`createMcpTools`, () => {
       `github.get_pr`,
       `github.list_resources`,
       `github.read_resource`,
+      `github.list_prompts`,
+      `github.get_prompt`,
       `sentry.list_events`,
       `sentry.list_resources`,
       `sentry.read_resource`,
+      `sentry.list_prompts`,
+      `sentry.get_prompt`,
     ])
   })
 
