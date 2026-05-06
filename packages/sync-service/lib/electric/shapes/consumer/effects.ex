@@ -13,6 +13,7 @@ defmodule Electric.Shapes.Consumer.Effects do
   alias Electric.ShapeCache
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -263,7 +264,14 @@ defmodule Electric.Shapes.Consumer.Effects do
       stack_id: stack_id
     })
 
+    # Propagate OTel context so spans created inside the task are linked to the
+    # caller's trace. OTel context is per-process, so without this any
+    # `with_child_span` calls in the task would be silently dropped.
+    trace_context = OpenTelemetry.get_current_context()
+
     Task.Supervisor.start_child(supervisor, fn ->
+      OpenTelemetry.set_current_context(trace_context)
+
       snapshot_name = Electric.Utils.uuid4()
 
       try do

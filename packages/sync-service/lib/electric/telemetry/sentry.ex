@@ -2,7 +2,6 @@ defmodule Electric.Telemetry.Sentry do
   use Electric.Telemetry
 
   @default_handler_id :electric_sentry_handler
-  @default_config %{metadata: :all, capture_log_messages: true, level: :error}
 
   @typedoc """
   Extra entries for the `Sentry.LoggerHandler` config map (e.g.
@@ -19,6 +18,8 @@ defmodule Electric.Telemetry.Sentry do
   def add_logger_handler(id \\ @default_handler_id, opts \\ [])
 
   with_telemetry Sentry.LoggerHandler do
+    @default_config %{metadata: :all, capture_log_messages: true, level: :error}
+
     def add_logger_handler(id, opts) do
       config = Map.merge(@default_config, Map.new(opts))
       :logger.add_handler(id, Sentry.LoggerHandler, %{config: config})

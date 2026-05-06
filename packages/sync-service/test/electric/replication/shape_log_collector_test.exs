@@ -228,7 +228,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         Electric.ShapeCache,
         :start_consumer_for_handle,
         [mode: :shared],
-        fn shape_handle, ^stack_id ->
+        fn shape_handle, ^stack_id, _opts ->
           id = System.unique_integer([:positive, :monotonic])
 
           with {:ok, pid} <-

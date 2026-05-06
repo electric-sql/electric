@@ -264,7 +264,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
       ["shape.handle": handle],
       state.stack_id,
       fn ->
-        case ShapeCache.start_consumer_for_handle(handle, stack_id) do
+        otel_ctx = OpenTelemetry.get_current_context()
+
+        case ShapeCache.start_consumer_for_handle(handle, stack_id, otel_ctx: otel_ctx) do
           {:ok, pid} ->
             Logger.debug(fn -> ["Started consumer for existing handle ", handle] end)
 
