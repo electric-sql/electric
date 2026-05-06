@@ -511,7 +511,7 @@ During a move, exception memory is proportional to the number of moved values an
 | **How can a new participant safely adopt the base?** | Adopt directly; remain fallback until quiescent; seed sparse diff; separate cohort | Define the readiness contract during implementation and add tests for registration during active moves. |
 | **Where should base membership be stored?** | Shared ETS table; per-cohort ETS table; cohort owner process | Choose based on cleanup behavior and ETS key locality. Avoid synchronous O(V) cleanup when the last participant leaves a cohort. |
 | **Should promotion happen during removal?** | Only for values touched by removed exceptions; never on removal; background compactor | Correctness does not require promotion on removal. Start with promotion only when values are touched by updates/removal of exceptions. Add compaction if needed. |
-| **How do we measure false fallback amplification?** | Count fallback candidates; count fallback duration; compare old/new candidate volume | Add telemetry before rollout. Fallback should be rare and short-lived after participants are ready. |
+| **How do we measure false fallback amplification?** | Count fallback candidates; count fallback duration; compare old/new candidate volume | Add telemetry during implementation and validate it in test/staging. Fallback should be rare and short-lived after participants are ready. |
 | **Do we need versioned lazy promotion?** | Physical clearing; base/exception versions | Start with physical clearing. Add versions only if promotion clearing becomes a measured bottleneck. |
 | **Do we need tombstones for strict removal latency?** | Exact exception cleanup; inactive-participant tombstone | Do not add initially. Reconsider only if `E` can be very large in production and removal latency remains problematic. |
 
@@ -539,7 +539,7 @@ During a move, exception memory is proportional to the number of moved values an
 | No tombstones in v1 | Removed participants are deleted from participant and exception indexes rather than marked dead. |
 | No generations or move epochs in v1 | Promotion physically clears exceptions for a value. No versioned lazy clearing is required for initial correctness. |
 | Empty cohort cleanup is off the critical path | Removing the last participant from a cohort does not synchronously scan/delete a large base view on the replication-critical path. |
-| Telemetry is sufficient for rollout | Metrics expose removal duration, base size, exception size, fallback size/duration, and promotion cost. |
+| Telemetry is sufficient for validation and operations | Metrics expose removal duration, base size, exception size, fallback size/duration, and promotion cost. |
 
 ### Learning Goals
 
@@ -583,7 +583,9 @@ During a move, exception memory is proportional to the number of moved values an
 
 ## Implementation Plan
 
-### Phase 1: Instrument and model
+This change ships as a single cutover release, not a staged rollout behind a feature flag. The development work can still happen in sequence:
+
+### 1. Instrument and model
 
 - Add telemetry around current SubqueryIndex shape removal latency and ETS row counts by row kind.
 - Add debug/instrumentation to estimate duplicate dependency views or cohort-sharing potential.
@@ -594,19 +596,27 @@ During a move, exception memory is proportional to the number of moved values an
   - promotion;
   - fallback exclusion from promotion counts.
 
-### Phase 2: Introduce the new index behind a feature flag
+### 2. Implement the new index
 
 - Add cohort and participant registration structures.
 - Add base membership and sparse exception indexes.
 - Implement `set_membership/4`, `add_value`, and `remove_value` wrappers.
 - Implement affected-shape routing for positive and negated participants.
 - Keep existing fallback behavior for unready participants.
-- Run old and new index implementations side by side in tests where practical.
+- Compare candidate routing and shape logs against the old implementation in tests where practical.
 
-### Phase 3: Integrate with shape consumer move handling
+### 3. Integrate move handling and cut over
 
 - Replace full per-shape membership seeding/updating with base adoption plus sparse exception updates.
 - Define and implement the participant readiness contract.
+- Land telemetry dashboards for:
+  - removal duration;
+  - `base_member` count;
+  - exception count and oldest exception age;
+  - fallback participant count and duration;
+  - promotion duration;
+  - WAL lag correlation.
+- Remove the old full per-shape membership representation as part of the same release.
 - Add tests for:
   - move-in with one lagging consumer;
   - move-out with one lagging consumer;
@@ -615,19 +625,6 @@ During a move, exception memory is proportional to the number of moved values an
   - shape removal during active divergence;
   - shape registration during active divergence;
   - fallback-to-ready transitions.
-
-### Phase 4: Roll out and remove old representation
-
-- Gate the new index behind configuration.
-- Compare candidate routing and shape logs against the old implementation in test/staging.
-- Roll out with telemetry dashboards for:
-  - removal duration;
-  - `base_member` count;
-  - exception count and oldest exception age;
-  - fallback participant count and duration;
-  - promotion duration;
-  - WAL lag correlation.
-- Remove the old full per-shape membership representation once confidence is high.
 
 ## Test Plan
 
