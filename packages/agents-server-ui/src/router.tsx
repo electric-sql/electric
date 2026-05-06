@@ -43,6 +43,7 @@ import {
 import { GeneralPage } from './components/settings/pages/GeneralPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
 import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
+import { ConnectedServicesPage } from './components/connected-services/ConnectedServicesPage'
 import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
@@ -387,11 +388,18 @@ function SettingsCategoryPage(): React.ReactElement {
   }
 }
 
+const connectedServicesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: `/connected-services`,
+  component: ConnectedServicesPage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   entityRoute,
   settingsIndexRoute,
   settingsCategoryRoute,
+  connectedServicesRoute,
 ])
 
 export const router = createRouter({
