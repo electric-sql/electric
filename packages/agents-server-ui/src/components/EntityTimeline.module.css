@@ -29,6 +29,13 @@
   overflow: hidden;
 }
 
+.nativeScroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 /* Fade the bottom of the scrolling viewport so chat content
  * dissolves into the page bg as it approaches the docked
  * drawer + composer below.

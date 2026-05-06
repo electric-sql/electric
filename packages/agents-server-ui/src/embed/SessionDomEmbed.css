@@ -40,7 +40,7 @@ html[data-electric-mobile-dom='true'] {
 
 html[data-electric-mobile-dom='true']
   [class*='EntityTimeline'][class*='_content_'] {
-  padding: var(--ds-space-4) !important;
+  padding: var(--ds-space-4) var(--ds-space-4) 96px !important;
   max-width: 100% !important;
 }
 

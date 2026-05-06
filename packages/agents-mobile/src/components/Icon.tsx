@@ -29,6 +29,7 @@ export type IconName =
   | `swap`
   | `chat`
   | `database`
+  | `arrow-up`
 
 const PATHS: Record<IconName, string> = {
   back: `M15 18l-6-6 6-6`,
@@ -48,6 +49,7 @@ const PATHS: Record<IconName, string> = {
   swap: `M7 4l-3 3 3 3M4 7h13M17 14l3 3-3 3M20 17H7`,
   chat: `M4 4h16v12H8l-4 4Z`,
   database: `M5 5c0-1.1 3.1-2 7-2s7 .9 7 2v14c0 1.1-3.1 2-7 2s-7-.9-7-2V5ZM5 12c0 1.1 3.1 2 7 2s7-.9 7-2`,
+  'arrow-up': `M12 19V5M5 12l7-7 7 7`,
 }
 
 export function Icon({

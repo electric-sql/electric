@@ -13,13 +13,13 @@ import {
   useElectricAgents,
 } from '../lib/ElectricAgentsProvider'
 import { ThemeProvider } from '../ui/ThemeProvider'
-import { ChatView } from '../components/views/ChatView'
+import { ChatLogView, ChatView } from '../components/views/ChatView'
 import { StateExplorerView } from '../components/views/StateExplorerView'
 import styles from './EmbedApp.module.css'
 
 const TILE_ID = `mobile-embed`
 
-type EmbedView = `chat` | `state-explorer`
+type EmbedView = `chat` | `chat-log` | `state-explorer`
 type EmbedTheme = `light` | `dark`
 
 export type EmbedSessionProps = EmbedState & {
@@ -39,11 +39,24 @@ export function EmbedSessionRoot({
   )
 }
 
+export type EmbedSurfaceProps = Omit<EmbedSessionProps, `view`>
+
+export function EmbedChatLogRoot(props: EmbedSurfaceProps): ReactElement {
+  return <EmbedSessionRoot {...props} view="chat-log" />
+}
+
+export function EmbedStateInspectorRoot(
+  props: EmbedSurfaceProps
+): ReactElement {
+  return <EmbedSessionRoot {...props} view="state-explorer" />
+}
+
 type EmbedState = {
   serverUrl: string
   entityUrl: string
   view: EmbedView
   theme: EmbedTheme
+  scrollToBottomSignal?: number
 }
 
 const EmbedStateContext = createContext<EmbedState | null>(null)
@@ -128,6 +141,7 @@ function EmbedSurface({ state }: { state: EmbedState }): ReactElement {
       entityUrl={state.entityUrl}
       view={state.view}
       serverUrl={state.serverUrl}
+      scrollToBottomSignal={state.scrollToBottomSignal}
     />
   )
 }
@@ -136,10 +150,12 @@ function EntityHost({
   entityUrl,
   view,
   serverUrl,
+  scrollToBottomSignal,
 }: {
   entityUrl: string
   view: EmbedView
   serverUrl: string
+  scrollToBottomSignal?: number
 }): ReactElement {
   const { entitiesCollection } = useElectricAgents()
   const { data: matches = [], isLoading } = useLiveQuery(
@@ -172,6 +188,13 @@ function EntityHost({
     return (
       <div className={styles.scroll}>
         <StateExplorerView {...props} />
+      </div>
+    )
+  }
+  if (view === `chat-log`) {
+    return (
+      <div className={styles.column}>
+        <ChatLogView {...props} scrollToBottomSignal={scrollToBottomSignal} />
       </div>
     )
   }

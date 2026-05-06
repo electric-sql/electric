@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   ActivityIndicator,
+  Keyboard,
+  Platform,
   StyleSheet,
   View,
   useWindowDimensions,
+  type KeyboardEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
@@ -23,17 +26,23 @@ import { DiagnosticsScreen } from './src/screens/DiagnosticsScreen'
 import { NewSessionScreen } from './src/screens/NewSessionScreen'
 import { ServerSetupScreen } from './src/screens/ServerSetupScreen'
 import { SessionListScreen } from './src/screens/SessionListScreen'
-import { SessionScreen } from './src/screens/SessionScreen'
+import {
+  CHAT_COMPOSER_BASE_HEIGHT,
+  CHAT_COMPOSER_OVERLAP,
+  ChatSessionScreen,
+  StateInspectorSessionScreen,
+} from './src/screens/SessionScreen'
 import type { EmbedViewId } from './src/lib/embedView'
-import SessionDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionDomEmbed'
+import SessionChatLogDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionChatLogDomEmbed'
+import SessionStateInspectorDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionStateInspectorDomEmbed'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
 
 type SessionDomEmbedProps = {
   serverUrl: string
   entityUrl: string
-  view: EmbedViewId
   theme: `light` | `dark`
+  scrollToBottomSignal?: number
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
@@ -43,8 +52,10 @@ type SessionDomEmbedProps = {
 // Treat the Expo DOM component as an opaque runtime boundary from the native
 // package. Letting `tsc` follow this source import pulls in duplicate
 // TanStack DB type identities under pnpm; Metro still sees the real module.
-const SessionDomEmbed =
-  SessionDomEmbedModule as ComponentType<SessionDomEmbedProps>
+const SessionChatLogDomEmbed =
+  SessionChatLogDomEmbedModule as ComponentType<SessionDomEmbedProps>
+const SessionStateInspectorDomEmbed =
+  SessionStateInspectorDomEmbedModule as ComponentType<SessionDomEmbedProps>
 
 /**
  * Pixel height of the `<Header>` strip — kept in lockstep with
@@ -190,20 +201,37 @@ function RoutedShell({
   onSetView: (view: EmbedViewId) => void
 }): React.ReactElement {
   const { serverUrl } = useAgents()
+  const tokens = useTokens()
   const scheme = useColorSchemeMode()
   const insets = useSafeAreaInsets()
   const windowDimensions = useWindowDimensions()
+  const keyboardInset = useKeyboardBottomInset(windowDimensions.height)
+  const [chatComposerHeight, setChatComposerHeight] = useState(
+    CHAT_COMPOSER_BASE_HEIGHT + insets.bottom
+  )
+  const [chatLogScrollSignal, setChatLogScrollSignal] = useState(0)
   // The DOM component slots into the body of `SessionScreen`,
   // i.e. directly under the safe-area top inset and the 44px
   // `<Header>` strip.
   const embedTop = insets.top + HEADER_HEIGHT
+  const active = useMemo(
+    () =>
+      route.name === `session`
+        ? { entityUrl: route.entityUrl, view: route.view }
+        : null,
+    [route]
+  )
+  const composerInset =
+    active?.view === `chat`
+      ? Math.max(0, chatComposerHeight + keyboardInset - CHAT_COMPOSER_OVERLAP)
+      : 0
   const embedFrame = useMemo(
     () => ({
       top: embedTop,
       width: windowDimensions.width,
-      height: Math.max(0, windowDimensions.height - embedTop),
+      height: Math.max(0, windowDimensions.height - embedTop - composerInset),
     }),
-    [embedTop, windowDimensions.height, windowDimensions.width]
+    [composerInset, embedTop, windowDimensions.height, windowDimensions.width]
   )
   const embedSize = useMemo(
     () => ({
@@ -212,16 +240,77 @@ function RoutedShell({
     }),
     [embedFrame.height, embedFrame.width]
   )
-  const active = useMemo(
-    () =>
-      route.name === `session`
-        ? { entityUrl: route.entityUrl, view: route.view }
-        : null,
-    [route]
-  )
-
   return (
-    <View style={styles.shell}>
+    <View style={[styles.shell, { backgroundColor: tokens.bg }]}>
+      {active && (
+        <View
+          style={[
+            styles.domEmbedHost,
+            embedFrame,
+            { backgroundColor: tokens.bg },
+          ]}
+        >
+          {active.view === `chat` ? (
+            <SessionChatLogDomEmbed
+              style={[styles.domEmbedWeb, embedSize]}
+              matchContents={false}
+              serverUrl={serverUrl}
+              entityUrl={active.entityUrl}
+              theme={scheme}
+              scrollToBottomSignal={chatLogScrollSignal}
+              onRequestOpenEntity={async (target) => onOpenSession(target)}
+              dom={{
+                useExpoDOMWebView: false,
+                matchContents: false,
+                scrollEnabled: false,
+                bounces: false,
+                automaticallyAdjustContentInsets: false,
+                automaticallyAdjustsScrollIndicatorInsets: false,
+                contentInsetAdjustmentBehavior: `never`,
+                style: [
+                  styles.domEmbedWeb,
+                  embedSize,
+                  { backgroundColor: tokens.bg },
+                ],
+                containerStyle: [
+                  styles.domEmbedWeb,
+                  embedSize,
+                  { backgroundColor: tokens.bg },
+                ],
+              }}
+            />
+          ) : (
+            <SessionStateInspectorDomEmbed
+              style={[styles.domEmbedWeb, embedSize]}
+              matchContents={false}
+              serverUrl={serverUrl}
+              entityUrl={active.entityUrl}
+              theme={scheme}
+              onRequestOpenEntity={async (target) => onOpenSession(target)}
+              dom={{
+                useExpoDOMWebView: false,
+                matchContents: false,
+                scrollEnabled: false,
+                bounces: false,
+                automaticallyAdjustContentInsets: false,
+                automaticallyAdjustsScrollIndicatorInsets: false,
+                contentInsetAdjustmentBehavior: `never`,
+                style: [
+                  styles.domEmbedWeb,
+                  embedSize,
+                  { backgroundColor: tokens.bg },
+                ],
+                containerStyle: [
+                  styles.domEmbedWeb,
+                  embedSize,
+                  { backgroundColor: tokens.bg },
+                ],
+              }}
+            />
+          )}
+        </View>
+      )}
+
       {route.name === `sessions` ? (
         <SessionListScreen
           onOpenSession={(entityUrl) => onOpenSession(entityUrl)}
@@ -236,41 +325,55 @@ function RoutedShell({
         />
       ) : route.name === `diagnostics` ? (
         <DiagnosticsScreen onBack={onBackToSessions} />
-      ) : (
-        <SessionScreen
+      ) : route.view === `chat` ? (
+        <ChatSessionScreen
           entityUrl={route.entityUrl}
-          view={route.view}
+          onBack={onBackToSessions}
+          onSetView={onSetView}
+          onComposerHeightChange={setChatComposerHeight}
+          onSendMessage={() => setChatLogScrollSignal(Date.now())}
+        />
+      ) : (
+        <StateInspectorSessionScreen
+          entityUrl={route.entityUrl}
           onBack={onBackToSessions}
           onSetView={onSetView}
         />
       )}
-
-      {active && (
-        <View style={[styles.domEmbedHost, embedFrame]}>
-          <SessionDomEmbed
-            style={[styles.domEmbedWeb, embedSize]}
-            matchContents={false}
-            serverUrl={serverUrl}
-            entityUrl={active.entityUrl}
-            view={active.view}
-            theme={scheme}
-            onRequestOpenEntity={async (target) => onOpenSession(target)}
-            dom={{
-              useExpoDOMWebView: false,
-              matchContents: false,
-              scrollEnabled: false,
-              bounces: false,
-              automaticallyAdjustContentInsets: false,
-              automaticallyAdjustsScrollIndicatorInsets: false,
-              contentInsetAdjustmentBehavior: `never`,
-              style: [styles.domEmbedWeb, embedSize],
-              containerStyle: [styles.domEmbedWeb, embedSize],
-            }}
-          />
-        </View>
-      )}
     </View>
   )
+}
+
+function useKeyboardBottomInset(windowHeight: number): number {
+  const [keyboardInset, setKeyboardInset] = useState(0)
+
+  useEffect(() => {
+    const showOrChange = (event: KeyboardEvent): void => {
+      Keyboard.scheduleLayoutAnimation(event)
+      setKeyboardInset(Math.max(0, windowHeight - event.endCoordinates.screenY))
+    }
+    const hide = (event?: KeyboardEvent): void => {
+      if (event) Keyboard.scheduleLayoutAnimation(event)
+      setKeyboardInset(0)
+    }
+
+    const subscriptions =
+      Platform.OS === `ios`
+        ? [
+            Keyboard.addListener(`keyboardWillChangeFrame`, showOrChange),
+            Keyboard.addListener(`keyboardWillHide`, hide),
+          ]
+        : [
+            Keyboard.addListener(`keyboardDidShow`, showOrChange),
+            Keyboard.addListener(`keyboardDidHide`, hide),
+          ]
+
+    return () => {
+      for (const subscription of subscriptions) subscription.remove()
+    }
+  }, [windowHeight])
+
+  return keyboardInset
 }
 
 const styles = StyleSheet.create({
@@ -287,6 +390,7 @@ const styles = StyleSheet.create({
     left: 0,
     overflow: `hidden`,
     display: `flex`,
+    zIndex: 0,
   },
   domEmbedWeb: {
     flex: 1,
