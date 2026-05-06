@@ -598,6 +598,12 @@ defmodule Electric.Shapes.ConsumerTest do
         Map.get(ctx, :hibernate_after, 10_000)
       )
 
+      Electric.StackConfig.put(
+        ctx.stack_id,
+        :shape_suspend_after,
+        Map.get(ctx, :shape_suspend_after, 10_000)
+      )
+
       if not Map.get(ctx, :allow_subqueries, true) do
         Electric.StackConfig.put(ctx.stack_id, :feature_flags, [])
       end
@@ -1375,7 +1381,8 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:flush_boundary_updated, 301}, 1_000
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10, shape_suspend_after: 10
+    @tag with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "should terminate after :hibernate_after ms", ctx do
       register_as_replication_client(ctx.stack_id)
@@ -1409,7 +1416,8 @@ defmodule Electric.Shapes.ConsumerTest do
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10, shape_suspend_after: 10
+    @tag with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "should hibernate not suspend if has dependencies", ctx do
       register_as_replication_client(ctx.stack_id)
@@ -1494,7 +1502,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert Consumer.whereis(ctx.stack_id, shape_handle)
 
-      Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 10)
+      Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 5, 10)
 
       Process.sleep(60)
 

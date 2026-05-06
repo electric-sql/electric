@@ -42,8 +42,10 @@ defmodule Electric.Shapes.Consumer.State do
     # transaction, we defer the notification and store the max flushed offset
     # here. Multiple deferred notifications are collapsed into a single most recent offset.
     pending_flush_offset: nil,
-    # Timer reference for scheduled suspend, set when entering hibernation
-    suspend_timer: nil,
+    # Generation counter for suspend timers - incremented each time we schedule
+    # a new suspend timer. When a timer fires, it checks if its generation matches
+    # the current one; if not, activity occurred and the timer is stale (ignored).
+    suspend_generation: 0,
     # How long after hibernation to suspend (in ms)
     suspend_after: nil
   ]
