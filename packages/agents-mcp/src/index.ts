@@ -13,3 +13,9 @@ function warnExperimental(): void {
 warnExperimental()
 
 export * from './types'
+export * from './credentials/types'
+export { inMemoryCredentialStore } from './credentials/in-memory'
+export { envCredentialStore } from './credentials/env'
+export { fileCredentialStore } from './credentials/file'
+export { osKeychainCredentialStore } from './credentials/os-keychain'
+export { composedCredentialStore } from './credentials/composed'
