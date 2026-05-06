@@ -1,5 +1,6 @@
 ---
 '@electric-ax/agents-desktop': patch
+'@electric-ax/agents-server': patch
 '@electric-ax/agents-server-ui': patch
 '@electric-ax/agents-runtime': patch
 '@electric-ax/agents': patch
@@ -14,6 +15,8 @@ working-directory picker.
     native menus, About dialog, on-launch API key prompt
     (Anthropic / OpenAI / Brave), localhost agent-server discovery,
     and HMR via `vite-plugin-electron`.
+  - `@electric-ax/agents-server`: entrypoint support for the local
+    desktop runtime wiring.
   - `@electric-ax/agents-server-ui`: tile-based workspace (DnD,
     splits, persisted layouts, shareable URLs), redesigned new-
     session screen, refreshed dropdown chrome (`Combobox`

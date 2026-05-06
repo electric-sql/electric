@@ -12,6 +12,7 @@
     "dev:desktop": "wait-on -d 200 http-get://localhost:5183 && vite",
     "ensure:electron": "node ./node_modules/electron/install.js",
     "start": "pnpm run ensure:electron && electron .",
+    "coverage": "true",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
