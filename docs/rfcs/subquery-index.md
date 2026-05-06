@@ -1,6 +1,6 @@
 ---
 title: Shared SubqueryIndex Base View with Sparse XOR Exceptions
-version: "0.1"
+version: "0.2"
 status: draft
 owner: robacourt
 contributors: []
@@ -146,6 +146,8 @@ if two participants can have different steady-state dependency views for reasons
 
 Later versions can intern cohorts more aggressively across equivalent nodes or equivalent subquery dependency plans, but that is not required for this RFC.
 
+The important implementation detail is that the logical cohort identity should be interned to a compact runtime identifier. Hot ETS rows should store a small integer `cohort_id`, not the full `{node_id, subquery_ref, dep_index}` tuple.
+
 #### Participant
 
 A participant is a shape's position in a subquery filter node, not necessarily just the shape handle.
@@ -175,42 +177,67 @@ participant = {
 }
 ```
 
+As with cohorts, the hot ETS rows should not store that full tuple repeatedly. They should store a compact small integer `participant_id` and keep the larger routing metadata only once.
+
 ### Data model
 
-The following is a conceptual ETS layout. The implementation can split these across ETS tables if that gives better key locality or simpler cleanup.
+The first draft of this RFC used a tag-heavy conceptual ETS layout with rows like:
 
 ```text
-# Participants registered on a cohort, split by polarity for routing.
 {{:participants, cohort_id, :positive}, participant} -> true
-{{:participants, cohort_id, :negated}, participant} -> true
+{{:exception_by_value, cohort_id, value}, participant} -> true
+```
+
+Local ETS measurements on OTP 28 showed that this layout gives back too much of the memory win because it repeats atoms, nested key tuples, and full participant tuples in hot rows. The implementation should therefore use dedicated tables and interned small integer ids.
+
+Recommended hot-path ETS layout:
+
+```text
+# Positive routing candidates.
+# `next_condition_id` is inlined so routing does not need an extra lookup.
+positive_participants:
+  {cohort_id, participant_id, next_condition_id}
+
+# Negated routing candidates.
+negated_participants:
+  {cohort_id, participant_id, next_condition_id}
 
 # Reverse lookup for removal.
-{{:participants_by_shape, shape_handle}, participant} -> true
+# `polarity` tells removal which participant table to touch.
+participants_by_shape:
+  {shape_handle, participant_id, cohort_id, polarity}
+
+# Exact membership lookup for `member?(shape_handle, subquery_ref, value)`.
+shape_ref_participant:
+  {{shape_handle, subquery_ref}, participant_id, cohort_id}
 
 # Count of indexed participants in a cohort.
 # This excludes fallback participants that are not yet safely represented by base + exceptions.
-{:participant_count, cohort_id} -> non_neg_integer
+participant_count:
+  {cohort_id, non_neg_integer}
 
-# Shared base dependency membership.
-{{:base_member, cohort_id, value}, true}
+# Shared base membership plus the current sparse exception count for that value.
+# If the row is absent, the base is false and the exception count is zero.
+cohort_value:
+  {{cohort_id, value}, base_member?, exception_count}
 
 # Sparse exceptions by value, used during routing and promotion.
-{{:exception_by_value, cohort_id, value}, participant} -> true
+exception_by_value:
+  {{cohort_id, value}, participant_id}
 
 # Sparse exceptions by participant, used during shape removal.
-{{:exception_by_participant, participant}, {cohort_id, value}} -> true
+exception_by_participant:
+  {participant_id, cohort_id, value}
 
-# Count of exceptions for a value, used to decide when to promote.
-{:exception_count, cohort_id, value} -> non_neg_integer
-
-# Existing conservative fallback routing remains.
-{{:node_fallback, node_id}, {shape_handle, next_condition_id}} -> true
+# Existing conservative fallback routing remains unchanged.
+node_fallback:
+  {{:node_fallback, node_id}, {shape_handle, next_condition_id}}
 ```
 
-The new reverse index is intentionally sparse:
+This keeps the reverse index intentionally sparse:
 
 ```text
-participant -> outstanding exception values only
+participant_id -> outstanding exception values only
 ```
 
 It is not the rejected memory-heavy reverse index:
@@ -218,6 +245,10 @@ It is not the rejected memory-heavy reverse index:
 ```text
 shape_handle -> all values in the full dependency view
 ```
+
+It also removes an avoidable constant factor from the proposed design itself. On the local benchmark described below, the compact layout above used 64-82% less ETS memory than the earlier tagged layout while preserving the same `O(V + P + E)` asymptotic shape.
+
+The pseudocode below continues to use logical operations like `base_member?(cohort, value)` and `exception_count(cohort, value)`. In the compact layout those can be implemented from the `cohort_value` row rather than from separate ETS objects.
 
 ### Membership operation
 
@@ -497,6 +528,52 @@ E ~= 0
 
 During a move, exception memory is proportional to the number of moved values and the number of participants that are temporarily out of sync with the base.
 
+The asymptotic change is the main point, but the constant factor matters because ETS rows are not free. The Erlang documentation notes that ETS table memory is measured in words, that a word is 4 or 8 bytes depending on the runtime, and that an ETS table starts with a fixed base cost plus per-element overhead. The local measurements below were taken on:
+
+```text
+OTP 28
+Elixir 1.19.5
+aarch64-apple-darwin24.5.0
+internal word size = 8 bytes
+```
+
+Benchmark script:
+
+```text
+packages/sync-service/scripts/subquery_index_memory.exs
+```
+
+The benchmark uses small integer dependency values, so these figures are conservative. UUID/text-heavy workloads should benefit more because the current layout duplicates those larger values once per shape, while the proposed layout stores them once per cohort plus sparse exceptions.
+
+#### Local measurements: current vs compact proposed layout
+
+| Scenario | Current | Compact proposed | Savings |
+|----------|---------|------------------|---------|
+| 1 participant, 1k values, steady state | 474.7 KiB | 121.5 KiB | 74.4% |
+| 10 participants, 1k values, steady state | 4.6 MiB | 124.8 KiB | 97.3% |
+| 100 participants, 1k values, steady state | 45.9 MiB | 157.8 KiB | 99.7% |
+| 100 participants, 10k values, steady state | 458.06 MiB | 995.3 KiB | 99.8% |
+| 100 participants, 1k values, 100 moved x 1 lagging | 45.9 MiB | 171.9 KiB | 99.6% |
+| 100 participants, 1k values, 100 moved x 10 lagging | 45.9 MiB | 334.6 KiB | 99.3% |
+| 100 participants, 1k values, 100 moved x 99 lagging | 45.9 MiB | 1.67 MiB | 96.4% |
+| 100 participants, 1k values, 1k moved x 99 lagging | 45.9 MiB | 15.28 MiB | 66.7% |
+
+Interpretation:
+
+- In the common steady-state case, the memory win is dramatic because the current layout stores the full dependency view once per participant, while the proposed layout stores it once per cohort.
+- The proposed layout grows with `E` during divergence, as expected, but it remained materially smaller than the current layout even in the intentionally harsh `1k moved x 99 lagging` scenario.
+- The current layout is flat across the move scenarios because it already pays the full per-participant exact-membership cost all the time.
+
+#### Local measurements: compact layout vs earlier tagged RFC layout
+
+| Scenario | Tagged RFC layout | Compact proposed | Savings |
+|----------|-------------------|------------------|---------|
+| 10 participants, 1k values, steady state | 350.3 KiB | 124.8 KiB | 64.4% |
+| 100 participants, 1k values, steady state | 490.2 KiB | 157.8 KiB | 67.8% |
+| 100 participants, 1k values, 100 moved x 10 lagging | 1.76 MiB | 334.6 KiB | 81.5% |
+
+This is why the RFC now specifies compact `cohort_id` and `participant_id` values plus dedicated ETS tables rather than storing full participant tuples in hot rows.
+
 ### Complexity Check
 
 - **Is this the simplest approach?** No. The simplest approach is adding `shape_handle -> values` or tombstoning stale rows. Those approaches reduce removal latency but do not address the structural memory duplication. This proposal is the simplest approach that addresses both memory and removal latency while preserving per-consumer move correctness.
@@ -708,6 +785,7 @@ proposed removal: O(P + E)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.2 | 2026-05-06 | robacourt | Added measured ETS memory tables, switched the proposed layout to compact interned ids plus dedicated tables, and clarified the single-release cutover plan. |
 | 0.1 | 2026-05-06 | robacourt | Initial draft based on issue #4279 and design discussion. |
 
 ---
