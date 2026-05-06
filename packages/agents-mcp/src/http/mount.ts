@@ -101,7 +101,27 @@ export function mountMcpHttp(opts: MountMcpHttpOpts): void {
           send(res, 200, result)
           return
         }
-        // disable/enable/authorize wired in later phases
+        if (req.method === `POST` && action === `authorize`) {
+          const entry = opts.registry.get(name)
+          if (!entry) {
+            send(res, 404, { error: `unknown server` })
+            return
+          }
+          await opts.registry.removeServer(name)
+          const result = await opts.registry.addServer(entry.config)
+          send(res, 200, result)
+          return
+        }
+        if (req.method === `POST` && action === `disable`) {
+          await opts.registry.disable(name)
+          send(res, 200, { ok: true, status: `disabled` })
+          return
+        }
+        if (req.method === `POST` && action === `enable`) {
+          const result = await opts.registry.enable(name)
+          send(res, 200, result)
+          return
+        }
         send(res, 501, { error: `action ${action} not yet implemented` })
         return
       }

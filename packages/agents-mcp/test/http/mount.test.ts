@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import http from 'node:http'
 import { createRegistry } from '../../src/registry'
 import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
@@ -16,6 +16,41 @@ async function startServer(reg: ReturnType<typeof createRegistry>) {
   const addr = server.address()
   if (!addr || typeof addr === `string`) throw new Error(`no addr`)
   return { server, base: `http://127.0.0.1:${addr.port}` }
+}
+
+function makeFakeTransport(toolNames: string[] = [`t1`]) {
+  return {
+    client: {
+      listTools: async () => ({
+        tools: toolNames.map((name) => ({
+          name,
+          description: name,
+          inputSchema: { type: `object` },
+        })),
+      }),
+      callTool: async () => ({ content: [{ type: `text`, text: `ok` }] }),
+      close: async () => {},
+    } as any,
+    connect: async () => {},
+    close: vi.fn(),
+  }
+}
+
+async function startReadyServer() {
+  const credentials = inMemoryCredentialStore()
+  credentials.setApiKey(`mock`, `KEY`)
+  const reg = createRegistry({
+    credentials,
+    transportFactoryOverride: () => makeFakeTransport(),
+  })
+  await reg.addServer({
+    name: `mock`,
+    transport: `http`,
+    url: `https://mock/mcp`,
+    auth: { mode: `apiKey` },
+  })
+  const { server, base } = await startServer(reg)
+  return { server, base, reg }
 }
 
 describe(`mountMcpHttp — Phase 1 surface`, () => {
@@ -78,6 +113,52 @@ describe(`mountMcpHttp — Phase 1 surface`, () => {
       })
       expect(res.status).toBe(204)
       expect(res.headers.get(`access-control-allow-origin`)).toBe(`*`)
+    } finally {
+      server.close()
+    }
+  })
+})
+
+describe(`mountMcpHttp — action endpoints`, () => {
+  it(`POST /api/mcp/servers/:name/disable sets status to disabled`, async () => {
+    const { server, base } = await startReadyServer()
+    try {
+      const res = await fetch(`${base}/api/mcp/servers/mock/disable`, {
+        method: `POST`,
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { ok: boolean; status: string }
+      expect(body.ok).toBe(true)
+      expect(body.status).toBe(`disabled`)
+    } finally {
+      server.close()
+    }
+  })
+
+  it(`POST /api/mcp/servers/:name/enable restores a disabled server`, async () => {
+    const { server, base, reg } = await startReadyServer()
+    try {
+      await reg.disable(`mock`)
+      const res = await fetch(`${base}/api/mcp/servers/mock/enable`, {
+        method: `POST`,
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { state: string }
+      expect(body.state).toBe(`ready`)
+    } finally {
+      server.close()
+    }
+  })
+
+  it(`POST /api/mcp/servers/:name/authorize re-adds the server`, async () => {
+    const { server, base } = await startReadyServer()
+    try {
+      const res = await fetch(`${base}/api/mcp/servers/mock/authorize`, {
+        method: `POST`,
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { state: string }
+      expect(body.state).toBe(`ready`)
     } finally {
       server.close()
     }

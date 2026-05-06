@@ -102,6 +102,33 @@ describe(`Registry`, () => {
   })
 })
 
+it(`disable closes the transport and zeroes the tool count; enable restores`, async () => {
+  const credentials = inMemoryCredentialStore()
+  credentials.setApiKey(`mock`, `KEY`)
+  const closeSpy = vi.fn()
+  const reg = createRegistry({
+    credentials,
+    transportFactoryOverride: () => ({
+      ...makeFakeTransport([`t1`]),
+      close: closeSpy,
+    }),
+  })
+  await reg.addServer({
+    name: `mock`,
+    transport: `http`,
+    url: `https://m/mcp`,
+    auth: { mode: `apiKey` },
+  })
+  expect(reg.list()[0]!.status).toBe(`ready`)
+  await reg.disable(`mock`)
+  expect(closeSpy).toHaveBeenCalled()
+  expect(reg.list()[0]!.status).toBe(`disabled`)
+  expect(reg.list()[0]!.toolCount).toBe(0)
+  const r = await reg.enable(`mock`)
+  expect(r.state).toBe(`ready`)
+  expect(reg.list()[0]!.status).toBe(`ready`)
+})
+
 function mkCfg(url: string) {
   return {
     servers: [
