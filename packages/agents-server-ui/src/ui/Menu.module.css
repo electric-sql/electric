@@ -14,15 +14,24 @@
    item highlight and the inner button highlight share a center
    point and look like one nested rounded rectangle. */
 .item {
+  --ds-menu-item-fg: color-mix(
+    in oklab,
+    var(--ds-text-1) 86%,
+    var(--ds-text-2)
+  );
+  --ds-text-color: var(--ds-menu-item-fg);
+
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: 30px;
   padding: 3px 3px 3px 8px;
   border-radius: 7px;
   font-size: var(--ds-text-sm);
   line-height: 1.3;
   font-family: var(--ds-font-body);
-  color: var(--ds-text-1);
+  color: var(--ds-menu-item-fg);
+  font-weight: 400;
   cursor: pointer;
   outline: none;
   user-select: none;
@@ -32,6 +41,10 @@
      layout so width:100% works in popups. */
   width: 100%;
   box-sizing: border-box;
+}
+
+.item svg {
+  stroke-width: 1.75;
 }
 
 .item[data-highlighted] {
@@ -44,6 +57,7 @@
 }
 
 .item[data-tone='danger'] {
+  --ds-text-color: var(--ds-red-11);
   color: var(--ds-red-11);
 }
 .item[data-tone='danger'][data-highlighted] {
@@ -52,7 +66,7 @@
 
 .separator {
   height: 1px;
-  background: var(--ds-divider);
+  background: color-mix(in oklab, var(--ds-gray-12) 10%, transparent);
   margin: 3px -3px;
 }
 

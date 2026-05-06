@@ -75,7 +75,7 @@ function estimateRowHeight(
   return Math.max(120, 32 + lines * lineHeight)
 }
 
-const SCROLL_THRESHOLD = 80
+const SCROLL_THRESHOLD = 200
 const ROW_GAP = 24
 const ROW_SETTLE_MS = 500
 
@@ -598,16 +598,17 @@ export function EntityTimeline({
         </div>
       </ScrollArea>
 
-      {showJumpToBottom && (
-        <button
-          type="button"
-          className={styles.jumpToBottom}
-          onClick={jumpToBottom}
-          aria-label="Jump to latest"
-        >
-          <ArrowDown size={16} />
-        </button>
-      )}
+      <button
+        type="button"
+        className={styles.jumpToBottom}
+        data-visible={showJumpToBottom ? `true` : undefined}
+        onClick={jumpToBottom}
+        aria-label="Jump to latest"
+        aria-hidden={!showJumpToBottom}
+        tabIndex={showJumpToBottom ? 0 : -1}
+      >
+        <ArrowDown size={16} />
+      </button>
     </div>
   )
 }

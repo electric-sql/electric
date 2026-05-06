@@ -101,10 +101,12 @@
    padding can stay symmetric (8px), but the radius is bumped to 7px
    so the highlight radius matches the rest of the system. */
 .item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
+  min-height: 30px;
+  padding: 3px 28px 3px 8px;
   border-radius: 7px;
   font-size: var(--ds-text-sm);
   line-height: var(--ds-text-sm-lh);
@@ -113,15 +115,23 @@
   cursor: pointer;
   outline: none;
   user-select: none;
+  box-sizing: border-box;
 }
 
 .item[data-highlighted] {
   background: var(--ds-bg-hover);
 }
-.item[data-selected] {
-  font-weight: 500;
-}
 .item[data-disabled] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.indicator {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  color: var(--ds-text-2);
 }

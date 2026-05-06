@@ -1,5 +1,6 @@
 .shortcut {
   margin-left: auto;
+  margin-right: 5px;
   color: var(--ds-gray-11);
   font-size: var(--ds-font-size-1, 12px);
   padding-left: 16px;
@@ -30,6 +31,7 @@
 }
 
 .viewActiveTick {
+  margin-right: 5px;
   color: var(--ds-gray-11);
   font-size: var(--ds-font-size-1, 12px);
 }

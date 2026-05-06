@@ -177,25 +177,19 @@
      paired with a layered (but ring-less) drop shadow below.
      Stacking a border and a tight ring shadow at similar opacities
      reads as a "double rim" and was an explicit visual bug, so the
-     ring layer was removed and the border opacity nudged up to
-     11% to keep the edge crisp on its own. The dark-mode override
-     uses 12% white so the same border doubles as a soft rim
-     highlight against the raised surface. */
-  --ds-overlay-border: color-mix(in oklab, var(--ds-gray-12) 11%, transparent);
+     ring layer was removed so this can match the rest of the UI's
+     standard border weight. The dark-mode override uses 12% white
+     so the same border doubles as a soft rim highlight against the
+     raised surface. */
+  --ds-overlay-border: var(--ds-border-1);
 
   /* Shadow used by floating surfaces — popovers, menus, dialogs,
      dropdowns. PURE drop-shadow stack (no ring layer) so the
-     border above is the single defined edge:
-       1. Tight near-shadow (1px) — slight grounding under the edge.
-       2. Mid-distance shadow (12px blur) — the primary lift.
-       3. Far ambient shadow (32px blur) — soft penumbra that
-          gives the popup real depth without darkening the page.
-     Slightly stronger than the previous version so the loss of
-     the ring layer is compensated by a more pronounced lift —
-     definition now comes from edge + elevation, not edge + ring. */
+     border above is the single defined edge. Keep the shadow tight:
+     the border provides definition while the shadow only grounds the
+     floating surface. */
   --ds-overlay-shadow:
-    0 1px 2px rgba(15, 15, 30, 0.05), 0 4px 12px rgba(15, 15, 30, 0.08),
-    0 16px 32px rgba(15, 15, 30, 0.1);
+    0 1px 2px rgba(15, 15, 30, 0.05), 0 5px 12px rgba(15, 15, 30, 0.035);
 
   /* ---- Accent (light = brand ink) ----------------------------------- *
    * In light mode the marketing site's brand reads as the deep navy
@@ -447,10 +441,8 @@
   --ds-shadow-3: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
   --ds-shadow-4: 0 16px 40px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.5);
 
-  /* Dark-mode overlay shadow — same shape as light mode (pure
-     drop-shadow stack, no ring) but with much darker stops since
-     the popup needs to lift off a near-black background. */
+  /* Dark-mode overlay shadow — same compact shape as light mode
+     with darker stops so popups still lift off a near-black page. */
   --ds-overlay-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.55),
-    0 16px 32px rgba(0, 0, 0, 0.5);
+    0 1px 2px rgba(0, 0, 0, 0.36), 0 3px 6px rgba(0, 0, 0, 0.34);
 }

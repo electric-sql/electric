@@ -3,6 +3,7 @@
 
 .activeMark {
   margin-left: auto;
+  margin-right: 5px;
   color: var(--ds-text-2);
 }
 
@@ -10,6 +11,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: 30px;
   padding: 3px 3px 3px 8px;
   border-radius: 7px;
   font-size: var(--ds-text-sm);
@@ -28,5 +30,6 @@
 }
 .submenuChevron {
   margin-left: auto;
+  margin-right: 5px;
   color: var(--ds-text-3);
 }

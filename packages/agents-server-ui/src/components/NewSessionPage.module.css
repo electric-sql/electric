@@ -116,7 +116,7 @@
   padding: var(--ds-space-3) var(--ds-space-4);
   background: transparent;
   border: 1px solid var(--ds-border-1);
-  border-radius: var(--ds-radius-3);
+  border-radius: var(--ds-radius-5);
   cursor: pointer;
   transition:
     background 0.12s ease,
@@ -200,7 +200,7 @@
   padding: var(--ds-space-3) var(--ds-space-4);
   background: var(--ds-input-bg);
   border: 1px solid var(--ds-gray-a4);
-  border-radius: var(--ds-radius-4);
+  border-radius: var(--ds-radius-5);
   transition: border-color 0.15s ease;
   margin: 0 calc(-1 * var(--ds-space-4));
 }
@@ -250,12 +250,19 @@
   gap: 4px;
   flex-wrap: wrap;
   min-width: 0;
+  /* Pill triggers have 8px inline padding. Shift the overlay left by
+     that amount so the first pill's label aligns with the textarea
+     text column, then drop it 4px so the chip edge has the same
+     8px inset from the composer bottom as it has from the side. */
+  margin-left: -8px;
+  transform: translateY(4px);
 }
 .composerSendCluster {
   display: flex;
   align-items: center;
   gap: var(--ds-space-3);
   margin-left: auto;
+  margin-right: -4px;
 }
 .composerHint {
   font-size: var(--ds-text-xs);
@@ -321,17 +328,21 @@
   width: 24px;
   height: 24px;
   border-radius: var(--ds-radius-full);
-  color: var(--ds-gray-8);
+  background: var(--ds-gray-a3);
+  color: var(--ds-text-3);
   cursor: not-allowed;
-  transition: color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
   flex-shrink: 0;
 }
 .composerSendActive {
-  color: var(--ds-accent-9);
+  background: var(--ds-accent-9);
+  color: var(--ds-text-on-accent);
   cursor: pointer;
 }
 .composerSendActive:hover {
-  color: var(--ds-accent-10);
+  background: var(--ds-accent-10);
 }
 
 /* Other-agents section under the composer ----------------------- */

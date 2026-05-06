@@ -89,31 +89,38 @@
   width: 100%;
 }
 
-/* Jump-to-bottom affordance — small bordered surface tucked into the
-   bottom-right corner so it doesn't compete with the centred chat
-   column. Opaque enough to read against the bottom-fade mask but
-   uses the page's normal surface tones rather than an inverted
-   high-contrast pill. */
+/* Jump-to-bottom affordance — centered over the chat column so it
+   relates to the conversation rather than the viewport edge. It stays
+   mounted and toggles visibility with opacity/translate for a soft
+   fade in/out. */
 .jumpToBottom {
   position: absolute;
-  bottom: 24px;
-  right: 24px;
+  bottom: 32px;
+  left: 50%;
   z-index: 10;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--ds-gray-a3);
+  border: 1px solid var(--ds-border-1);
   border-radius: 9999px;
   background: var(--ds-surface);
   color: var(--ds-gray-9);
   cursor: pointer;
   box-shadow: var(--ds-shadow-2);
-  opacity: 0.85;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 6px);
   transition:
-    opacity 120ms ease,
+    opacity 160ms ease,
+    transform 160ms ease,
     background 120ms ease;
+}
+.jumpToBottom[data-visible='true'] {
+  opacity: 0.85;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
 }
 .jumpToBottom:hover {
   opacity: 1;

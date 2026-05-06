@@ -1,5 +1,5 @@
 import { Select as BaseSelect } from '@base-ui/react/select'
-import { ChevronDown } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 import popoverStyles from './Popover.module.css'
 import styles from './Select.module.css'
@@ -135,6 +135,9 @@ function Item<V extends string>({
   return (
     <BaseSelect.Item value={value} className={cls} {...rest}>
       <BaseSelect.ItemText>{children}</BaseSelect.ItemText>
+      <BaseSelect.ItemIndicator className={styles.indicator}>
+        <Check size={14} />
+      </BaseSelect.ItemIndicator>
     </BaseSelect.Item>
   )
 }

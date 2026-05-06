@@ -1,7 +1,7 @@
 .text {
   margin: 0;
   font-family: var(--ds-font-body);
-  color: var(--ds-text-1);
+  color: var(--ds-text-color, var(--ds-text-1));
   /* min-width:0 prevents shrink-overflow inside flex containers */
   min-width: 0;
 }

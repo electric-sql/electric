@@ -130,7 +130,7 @@ export function WorkingDirectoryPicker({
           </button>
         }
       />
-      <Combobox.Content side="top" align="start" className={styles.popup}>
+      <Combobox.Content side="bottom" align="start" className={styles.popup}>
         <Combobox.Input
           placeholder="Filter recents or paste a path…"
           spellCheck={false}

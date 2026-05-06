@@ -118,13 +118,17 @@ export function MessageInput({
           rows={1}
           className={styles.textarea}
         />
-        <ArrowUp
-          size={18}
-          className={[styles.sendIcon, isActive ? styles.active : null]
+        <button
+          type="button"
+          aria-label="Send message"
+          onClick={handleSubmit}
+          disabled={!isActive}
+          className={[styles.composerSend, isActive ? styles.active : null]
             .filter(Boolean)
             .join(` `)}
-          onClick={handleSubmit}
-        />
+        >
+          <ArrowUp size={16} />
+        </button>
       </Stack>
     </Stack>
   )

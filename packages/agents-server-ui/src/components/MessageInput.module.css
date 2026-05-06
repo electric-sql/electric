@@ -101,13 +101,27 @@
   color: var(--ds-text-3);
 }
 
-.sendIcon {
-  color: var(--ds-gray-7);
-  cursor: default;
-  transition: color 0.15s ease;
+.composerSend {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-gray-a3);
+  color: var(--ds-text-3);
+  cursor: not-allowed;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
   flex-shrink: 0;
 }
-.sendIcon.active {
-  color: var(--ds-accent-9);
+.composerSend.active {
+  background: var(--ds-accent-9);
+  color: var(--ds-text-on-accent);
   cursor: pointer;
+}
+.composerSend.active:hover {
+  background: var(--ds-accent-10);
 }
