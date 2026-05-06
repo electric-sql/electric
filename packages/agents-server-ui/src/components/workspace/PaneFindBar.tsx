@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { usePaneFind, usePaneFindRegistration } from '../../hooks/usePaneFind'
 import styles from './PaneFindBar.module.css'
 import type { PaneFindAdapter, PaneFindMatch } from '../../hooks/usePaneFind'
@@ -149,11 +150,12 @@ export function PaneFindBar({
 
   return (
     <div className={styles.bar} data-pane-find-bar>
+      <Search size={16} className={styles.searchIcon} aria-hidden="true" />
       <input
         ref={inputRef}
         className={styles.input}
         value={query}
-        placeholder="Find in pane"
+        placeholder="Find in pane..."
         onChange={(e) => setQuery(e.currentTarget.value)}
         onKeyDown={(e) => {
           if (e.key === `Escape`) close()
@@ -166,14 +168,33 @@ export function PaneFindBar({
       <span className={styles.count}>
         {count ? `${Math.min(index + 1, count)}/${count}` : query ? `0/0` : ``}
       </span>
-      <button className={styles.button} onClick={previous} title="Previous">
-        ↑
+      <button
+        type="button"
+        className={styles.button}
+        onClick={previous}
+        title="Previous"
+        aria-label="Previous match"
+      >
+        <ChevronUp size={16} />
       </button>
-      <button className={styles.button} onClick={next} title="Next">
-        ↓
+      <button
+        type="button"
+        className={styles.button}
+        onClick={next}
+        title="Next"
+        aria-label="Next match"
+      >
+        <ChevronDown size={16} />
       </button>
-      <button className={styles.button} onClick={close} title="Close">
-        ×
+      <span className={styles.divider} aria-hidden="true" />
+      <button
+        type="button"
+        className={`${styles.button} ${styles.closeButton}`}
+        onClick={close}
+        title="Close"
+        aria-label="Close find"
+      >
+        <X size={17} />
       </button>
     </div>
   )
