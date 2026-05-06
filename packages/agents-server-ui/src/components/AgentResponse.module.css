@@ -21,24 +21,16 @@
   opacity: 0.7;
 }
 
+.metaRow {
+  width: 100%;
+}
+
 .copyButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  border-radius: 6px;
-  padding: 2px 6px;
-  background: transparent;
+  margin-left: auto;
   color: var(--ds-text-4, var(--ds-text-3));
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  opacity: 0.75;
-  -webkit-app-region: no-drag;
+  opacity: 0.7;
 }
 
 .copyButton:hover {
-  background: var(--ds-gray-a2);
-  color: var(--ds-text-2);
   opacity: 1;
 }

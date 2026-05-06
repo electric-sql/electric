@@ -20,7 +20,7 @@ import {
   streamdownControls,
   streamdownPlugins,
 } from '../lib/streamdownConfig'
-import { Stack, Text } from '../ui'
+import { IconButton, Stack, Text, Tooltip } from '../ui'
 import { ToolCallView } from './ToolCallView'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
@@ -301,7 +301,7 @@ export const AgentResponse = memo(function AgentResponse({
         return <ToolCallView key={item.toolCallId} item={item} />
       })}
 
-      <Stack align="center" gap={3}>
+      <Stack align="center" gap={3} className={styles.metaRow}>
         {showThinking && <ThinkingIndicator />}
         {section.done && (
           <Text size={1} tone="muted" className={styles.doneText}>
@@ -321,16 +321,18 @@ export const AgentResponse = memo(function AgentResponse({
           <TimeText ts={timestamp} className={styles.timeText} />
         )}
         {section.done && copyText && (
-          <button
-            type="button"
-            className={styles.copyButton}
-            onClick={() => void copyResponseText()}
-            aria-label="Copy response text"
-            title={copied ? `Copied` : `Copy all response text`}
-          >
-            {copied ? <Check size={12} /> : <Copy size={12} />}
-            <span>{copied ? `Copied` : `Copy`}</span>
-          </button>
+          <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
+            <IconButton
+              size={1}
+              variant="ghost"
+              tone="neutral"
+              className={styles.copyButton}
+              onClick={() => void copyResponseText()}
+              aria-label="Copy response text"
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+            </IconButton>
+          </Tooltip>
         )}
       </Stack>
     </Stack>
