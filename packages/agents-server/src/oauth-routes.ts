@@ -1,6 +1,9 @@
 import {
   buildAuthorizationUrl,
   exchangeAuthorizationCode,
+  pollDeviceFlow,
+  startDeviceFlow,
+  type DeviceFlowStart,
   type KeyVault,
   type OAuthCoordinator,
   type PendingAuthStore,
@@ -170,11 +173,17 @@ export interface OAuthInitiateLookupDeps {
 
 export function mountOAuthRoutes(
   deps: OAuthRouteDeps,
-  lookup?: OAuthInitiateLookupDeps
+  lookup?: OAuthInitiateLookupDeps,
+  deviceLookup?: DeviceFlowLookup
 ): OAuthRouteMount {
+  const deviceDeps: DeviceFlowDeps | null = deviceLookup
+    ? { coordinator: deps.coordinator, lookup: deviceLookup }
+    : null
   return {
     handle: async (req, res) => {
       if (await handleOAuthInitiateRequest(deps, req, res, lookup)) return true
+      if (deviceDeps && (await handleDeviceFlowRequest(deviceDeps, req, res)))
+        return true
       return handleOAuthCallbackRequest(deps, req, res)
     },
   }
@@ -376,4 +385,229 @@ export async function handleOAuthInitiateRequest(
   })
   res.end(JSON.stringify(result.body))
   return true
+}
+
+/* -------------------------------------------------------------------------- *
+ * Device-code flow
+ *
+ * RFC 8628. The user visits a verification URL on a second device, types a
+ * short user code, and we poll the token endpoint in the background until
+ * the device authorisation completes (or expires/errors).
+ *
+ * Storage: in-memory `Map<server, DeviceFlowState>` lives at module scope.
+ * One in-flight flow per server at a time — a second `start` for a server
+ * already in `pending` returns the same state so the UI can recover from
+ * a refresh without restarting the whole dance. After a flow reaches
+ * `completed` or `failed` the slot is left in place (so the UI sees the
+ * result on its next poll); a fresh `start` after that overwrites it.
+ *
+ * Note (Task 30): only the pure handlers + native-node binding land here.
+ * Wiring `mountOAuthRoutes` into `server.ts` is deferred to a later task,
+ * so these endpoints will return 404 from the live server until that lands.
+ * -------------------------------------------------------------------------- */
+
+export interface DeviceFlowState {
+  start: DeviceFlowStart
+  status: `pending` | `completed` | `failed`
+  error?: string
+}
+
+/**
+ * Lookup function returning the OAuth endpoints + clientId for a
+ * device-flow server. The agents-server bootstrap supplies an
+ * implementation that reads from registry+vault; the route module stays
+ * agnostic so the unit tests can stub it directly.
+ */
+export type DeviceFlowLookup = (server: string) => Promise<{
+  deviceAuthorizationUrl: string
+  tokenUrl: string
+  clientId: string
+  scopes?: string[]
+} | null>
+
+export interface DeviceFlowDeps {
+  coordinator: OAuthCoordinator
+  lookup: DeviceFlowLookup
+}
+
+/**
+ * Module-scope state. Tests reach in via `_resetDeviceFlowState` to keep
+ * cases isolated. Production code only ever talks to it through the
+ * handlers below.
+ */
+const deviceFlowState = new Map<string, DeviceFlowState>()
+
+/** Test-only: clear the in-flight state map between cases. */
+export function _resetDeviceFlowState(): void {
+  deviceFlowState.clear()
+}
+
+/**
+ * Pure handler for `POST /oauth/device/:server/start`.
+ *
+ * Returns the user-facing fields (`userCode`, `verificationUri`,
+ * `verificationUriComplete`, `expiresAt`) so the UI can render its
+ * "go visit this URL and type this code" panel. The token polling runs
+ * fire-and-forget; the UI checks `…/status` to find out when it's done.
+ *
+ * Idempotency: if a `pending` flow already exists for `server`, we return
+ * its existing state rather than starting a second device authorization.
+ */
+export async function handleDeviceFlowStart(
+  deps: DeviceFlowDeps,
+  server: string
+): Promise<{ status: number; body: unknown }> {
+  const existing = deviceFlowState.get(server)
+  if (existing?.status === `pending`) {
+    return {
+      status: 200,
+      body: {
+        status: `pending`,
+        userCode: existing.start.userCode,
+        verificationUri: existing.start.verificationUri,
+        verificationUriComplete: existing.start.verificationUriComplete,
+        expiresAt: existing.start.expiresAt.toISOString(),
+      },
+    }
+  }
+
+  const cfg = await deps.lookup(server)
+  if (!cfg) {
+    return {
+      status: 404,
+      body: { error: `server config not found or not OAuth/device flow` },
+    }
+  }
+
+  let start: DeviceFlowStart
+  try {
+    start = await startDeviceFlow({
+      deviceAuthorizationUrl: cfg.deviceAuthorizationUrl,
+      clientId: cfg.clientId,
+      scopes: cfg.scopes,
+    })
+  } catch (err) {
+    return {
+      status: 502,
+      body: {
+        error: `device authorization failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      },
+    }
+  }
+
+  deviceFlowState.set(server, { start, status: `pending` })
+
+  // Fire-and-forget: poll for the token in the background. The status
+  // endpoint surfaces completion/failure to the UI.
+  void pollDeviceFlow({
+    tokenUrl: cfg.tokenUrl,
+    clientId: cfg.clientId,
+    deviceCode: start.deviceCode,
+    intervalSec: start.intervalSec,
+    expiresAt: start.expiresAt,
+  })
+    .then((tokens) => {
+      deps.coordinator.setToken(server, cfg.scopes, tokens)
+      deviceFlowState.set(server, { start, status: `completed` })
+    })
+    .catch((err) => {
+      deviceFlowState.set(server, {
+        start,
+        status: `failed`,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
+
+  return {
+    status: 200,
+    body: {
+      status: `pending`,
+      userCode: start.userCode,
+      verificationUri: start.verificationUri,
+      verificationUriComplete: start.verificationUriComplete,
+      expiresAt: start.expiresAt.toISOString(),
+    },
+  }
+}
+
+/**
+ * Pure handler for `GET /oauth/device/:server/status`.
+ *
+ * Returns `idle` when no flow has ever been started for `server`. The
+ * `pending` / `completed` / `failed` states echo the in-memory map.
+ */
+export function handleDeviceFlowStatus(
+  _deps: unknown,
+  server: string
+): { status: number; body: unknown } {
+  const state = deviceFlowState.get(server)
+  if (!state) return { status: 200, body: { status: `idle` } }
+  return {
+    status: 200,
+    body: {
+      status: state.status,
+      userCode: state.start.userCode,
+      verificationUri: state.start.verificationUri,
+      verificationUriComplete: state.start.verificationUriComplete,
+      error: state.error,
+    },
+  }
+}
+
+/** Match `POST /oauth/device/:server/start`. */
+export function matchDeviceFlowStartPath(
+  path: string
+): { server: string } | null {
+  const m = path.match(/^\/oauth\/device\/([^/]+)\/start$/)
+  return m ? { server: decodeURIComponent(m[1]!) } : null
+}
+
+/** Match `GET /oauth/device/:server/status`. */
+export function matchDeviceFlowStatusPath(
+  path: string
+): { server: string } | null {
+  const m = path.match(/^\/oauth\/device\/([^/]+)\/status$/)
+  return m ? { server: decodeURIComponent(m[1]!) } : null
+}
+
+/**
+ * Native-node HTTP binding for both device-flow endpoints.
+ *
+ * Returns `true` when the request matched (and a response was written),
+ * `false` otherwise so the caller can chain to other routes.
+ */
+export async function handleDeviceFlowRequest(
+  deps: DeviceFlowDeps,
+  req: IncomingMessage,
+  res: ServerResponse
+): Promise<boolean> {
+  const method = req.method?.toUpperCase()
+  const url = new URL(req.url ?? `/`, `http://localhost`)
+  const path = url.pathname
+
+  if (method === `POST`) {
+    const m = matchDeviceFlowStartPath(path)
+    if (m) {
+      const out = await handleDeviceFlowStart(deps, m.server)
+      res.writeHead(out.status, {
+        'content-type': `application/json; charset=utf-8`,
+      })
+      res.end(JSON.stringify(out.body))
+      return true
+    }
+  }
+  if (method === `GET`) {
+    const m = matchDeviceFlowStatusPath(path)
+    if (m) {
+      const out = handleDeviceFlowStatus(deps, m.server)
+      res.writeHead(out.status, {
+        'content-type': `application/json; charset=utf-8`,
+      })
+      res.end(JSON.stringify(out.body))
+      return true
+    }
+  }
+  return false
 }

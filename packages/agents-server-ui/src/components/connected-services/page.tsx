@@ -15,6 +15,12 @@ interface ServerRow {
   name: string
   transport: string
   authMode: string | null
+  /**
+   * Sub-mode for `authorizationCode` servers. Lets the UI choose between
+   * popping a browser tab and the device-code panel. `null` for non-OAuth
+   * servers and any older agents-server that doesn't ship this field.
+   */
+  oauthFlow?: `browser` | `device` | null
   status: string
   lastError?: string
   toolCount: number
@@ -23,7 +29,37 @@ interface ServerRow {
 }
 
 /** A per-row action handler. Tightly bound to the buttons rendered below. */
-type ActionKind = `authorize` | `disable` | `enable` | `disconnect`
+type ActionKind = `authorize` | `device` | `disable` | `enable` | `disconnect`
+
+/**
+ * In-flight device-flow info kept on the page while the user completes
+ * authorization on a second device. Cleared when status flips to
+ * `completed` or when the user dismisses the panel.
+ */
+interface DeviceFlowPanelState {
+  server: string
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  status: `pending` | `failed`
+  error?: string
+}
+
+interface DeviceFlowStartResponse {
+  status?: string
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  expiresAt?: string
+}
+
+interface DeviceFlowStatusResponse {
+  status: `idle` | `pending` | `completed` | `failed`
+  userCode?: string
+  verificationUri?: string
+  verificationUriComplete?: string
+  error?: string
+}
 
 /**
  * Connected Services page.
@@ -51,6 +87,9 @@ export function ConnectedServicesPage(): React.ReactElement {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [devicePanel, setDevicePanel] = useState<DeviceFlowPanelState | null>(
+    null
+  )
 
   const reload = useCallback(async (): Promise<void> => {
     try {
@@ -105,6 +144,28 @@ export function ConnectedServicesPage(): React.ReactElement {
 
             alert(`Failed to start auth: ${text}`)
           }
+        } else if (kind === `device`) {
+          const r = await fetch(
+            `${baseUrl}/oauth/device/${encodeURIComponent(server)}/start`,
+            {
+              method: `POST`,
+              headers: { 'Content-Type': `application/json` },
+              body: `{}`,
+            }
+          )
+          if (r.ok) {
+            const data = (await r.json()) as DeviceFlowStartResponse
+            setDevicePanel({
+              server,
+              userCode: data.userCode,
+              verificationUri: data.verificationUri,
+              verificationUriComplete: data.verificationUriComplete,
+              status: `pending`,
+            })
+          } else {
+            const text = await r.text()
+            alert(`Failed to start device flow: ${text}`)
+          }
         } else {
           const method = kind === `disconnect` ? `DELETE` : `POST`
           const path = kind === `disconnect` ? `credentials` : kind
@@ -121,6 +182,47 @@ export function ConnectedServicesPage(): React.ReactElement {
     [baseUrl, reload]
   )
 
+  /**
+   * Poll the device-flow status endpoint while a panel is open. When the
+   * server reports `completed` we dismiss the panel and force a list
+   * reload so the row's status flips from `needs_auth` to `healthy`.
+   * `failed` keeps the panel up with the error so the user can read it
+   * before dismissing.
+   */
+  useEffect(() => {
+    if (!devicePanel) return undefined
+    let cancelled = false
+    const tick = async (): Promise<void> => {
+      try {
+        const r = await fetch(
+          `${baseUrl}/oauth/device/${encodeURIComponent(devicePanel.server)}/status`
+        )
+        if (!r.ok) return
+        const data = (await r.json()) as DeviceFlowStatusResponse
+        if (cancelled) return
+        if (data.status === `completed`) {
+          setDevicePanel(null)
+          void reload()
+        } else if (data.status === `failed`) {
+          setDevicePanel((prev) =>
+            prev && prev.server === devicePanel.server
+              ? { ...prev, status: `failed`, error: data.error }
+              : prev
+          )
+        }
+      } catch {
+        // Ignore transient errors; the next tick will retry.
+      }
+    }
+    const t = setInterval(() => {
+      void tick()
+    }, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [devicePanel, baseUrl, reload])
+
   return (
     <div className={styles.shell}>
       <MainHeader title={<Text size={2}>Connected Services</Text>} />
@@ -136,6 +238,12 @@ export function ConnectedServicesPage(): React.ReactElement {
               </span>
             </div>
 
+            {devicePanel && (
+              <DeviceFlowPanel
+                state={devicePanel}
+                onDismiss={() => setDevicePanel(null)}
+              />
+            )}
             {loading && <div className={styles.placeholder}>Loading…</div>}
             {error && (
               <div className={styles.error}>Error loading servers: {error}</div>
@@ -253,13 +361,19 @@ function RowActions({
 }: RowActionsProps): React.ReactElement {
   const isHttp = row.transport === `http`
   const isAuthCode = row.authMode === `authorizationCode`
+  const isDeviceFlow = row.oauthFlow === `device`
+  // Default OAuth sub-mode is browser; only show the browser button when
+  // the row says so explicitly, *or* when the server didn't ship the
+  // `oauthFlow` field at all (older agents-server). That preserves
+  // backward compat with older deployments.
+  const isBrowserFlow = isAuthCode && (row.oauthFlow ?? `browser`) === `browser`
   const isDisabled = row.status === `disabled`
   const needsAuth = row.status === `needs_auth`
   const busyFor = (kind: ActionKind): boolean => busy === `${row.name}:${kind}`
 
   return (
     <Stack gap={2}>
-      {isAuthCode && (
+      {isAuthCode && isBrowserFlow && (
         <Button
           size={1}
           variant="soft"
@@ -270,6 +384,19 @@ function RowActions({
           }}
         >
           {needsAuth ? `Authorize` : `Re-authorize`}
+        </Button>
+      )}
+      {isAuthCode && isDeviceFlow && (
+        <Button
+          size={1}
+          variant="soft"
+          tone="accent"
+          disabled={busyFor(`device`)}
+          onClick={() => {
+            void onAction(row.name, `device`)
+          }}
+        >
+          {needsAuth ? `Device flow` : `Re-authorize (device)`}
         </Button>
       )}
       {isDisabled ? (
@@ -311,5 +438,73 @@ function RowActions({
         </Button>
       )}
     </Stack>
+  )
+}
+
+interface DeviceFlowPanelProps {
+  state: DeviceFlowPanelState
+  onDismiss: () => void
+}
+
+/**
+ * Panel rendered while a device-code flow is in flight.
+ *
+ * Shows the user code (large, click-to-copy) plus a link to the
+ * verification URL. When the flow fails the panel switches to an error
+ * message so the user can read it before dismissing.
+ *
+ * The page-level effect polls `…/status` every 2s and clears this panel
+ * automatically on `completed`.
+ */
+function DeviceFlowPanel({
+  state,
+  onDismiss,
+}: DeviceFlowPanelProps): React.ReactElement {
+  const verifyHref = state.verificationUriComplete ?? state.verificationUri
+  const onCopy = (): void => {
+    void navigator.clipboard?.writeText(state.userCode)
+  }
+  return (
+    <div className={styles.devicePanel} role="status">
+      <Stack direction="column" gap={3}>
+        <Text size={3} as="h2">
+          Device authorization for {state.server}
+        </Text>
+        {state.status === `pending` && (
+          <>
+            <Text size={1}>
+              Visit{` `}
+              <a
+                href={verifyHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.deviceLink}
+              >
+                {verifyHref}
+              </a>
+              {` `}and enter the code below.
+            </Text>
+            <button
+              type="button"
+              className={styles.deviceCode}
+              onClick={onCopy}
+              title="Click to copy"
+            >
+              {state.userCode}
+            </button>
+          </>
+        )}
+        {state.status === `failed` && (
+          <Text size={1}>
+            Device flow failed: {state.error ?? `unknown error`}
+          </Text>
+        )}
+        <Stack gap={2}>
+          <Button size={1} variant="soft" tone="neutral" onClick={onDismiss}>
+            {state.status === `failed` ? `Dismiss` : `Cancel`}
+          </Button>
+        </Stack>
+      </Stack>
+    </div>
   )
 }

@@ -7,12 +7,19 @@ import {
   type TokenCache,
 } from '@electric-ax/agents-mcp'
 import {
+  handleDeviceFlowRequest,
+  handleDeviceFlowStart,
+  handleDeviceFlowStatus,
   handleOAuthCallback,
   handleOAuthInitiate,
   handleOAuthInitiateRequest,
+  matchDeviceFlowStartPath,
+  matchDeviceFlowStatusPath,
   matchOAuthCallbackPath,
   matchOAuthInitiatePath,
   mountOAuthRoutes,
+  _resetDeviceFlowState,
+  type DeviceFlowDeps,
 } from '../src/oauth-routes'
 
 interface SetupOpts {
@@ -559,5 +566,358 @@ describe(`mountOAuthRoutes initiate dispatch`, () => {
     expect(url).toMatch(/state=/)
     const state = new URL(url).searchParams.get(`state`)!
     expect(pending.consume(state)?.server).toBe(`gh`)
+  })
+})
+
+describe(`device flow path matching`, () => {
+  it(`matches the start path`, () => {
+    expect(matchDeviceFlowStartPath(`/oauth/device/gh/start`)).toEqual({
+      server: `gh`,
+    })
+    expect(matchDeviceFlowStartPath(`/oauth/device/my%20s/start`)).toEqual({
+      server: `my s`,
+    })
+  })
+
+  it(`matches the status path`, () => {
+    expect(matchDeviceFlowStatusPath(`/oauth/device/gh/status`)).toEqual({
+      server: `gh`,
+    })
+  })
+
+  it(`rejects unrelated paths`, () => {
+    expect(matchDeviceFlowStartPath(`/oauth/device/gh/status`)).toBeNull()
+    expect(matchDeviceFlowStatusPath(`/oauth/device/gh/start`)).toBeNull()
+    expect(matchDeviceFlowStartPath(`/oauth/callback/gh`)).toBeNull()
+  })
+})
+
+/**
+ * Build a fetch double that walks a script of canned responses, one per
+ * call. Each entry is either a `device-auth` start payload or a
+ * `token-poll` payload. Anything off-script throws so accidental extra
+ * calls fail loudly.
+ */
+function scriptedFetch(
+  steps: Array<
+    | {
+        kind: `device-auth`
+        body: Record<string, unknown>
+        ok?: boolean
+        status?: number
+      }
+    | {
+        kind: `token-poll`
+        body: Record<string, unknown>
+        ok?: boolean
+        status?: number
+      }
+  >
+): typeof globalThis.fetch {
+  let i = 0
+  return (async () => {
+    const step = steps[i++]
+    if (!step) throw new Error(`scriptedFetch: out of steps`)
+    return {
+      ok: step.ok ?? true,
+      status: step.status ?? 200,
+      json: async () => step.body,
+      text: async () => JSON.stringify(step.body),
+    }
+  }) as unknown as typeof globalThis.fetch
+}
+
+function makeDeviceDeps(lookup: DeviceFlowDeps[`lookup`]): {
+  deps: DeviceFlowDeps
+  cache: TokenCache
+} {
+  const cache = createInMemoryTokenCache()
+  const coordinator = createOAuthCoordinator({
+    cache,
+    doRefresh: async () => {
+      throw new Error(`should not refresh`)
+    },
+  })
+  return { deps: { coordinator, lookup }, cache }
+}
+
+describe(`handleDeviceFlowStart`, () => {
+  it(`returns 404 when lookup yields null`, async () => {
+    _resetDeviceFlowState()
+    const { deps } = makeDeviceDeps(async () => null)
+    const out = await handleDeviceFlowStart(deps, `unknown`)
+    expect(out.status).toBe(404)
+    expect((out.body as { error: string }).error).toMatch(/not found/)
+  })
+
+  it(`starts the flow, returns user code, and stores token on poll success`, async () => {
+    _resetDeviceFlowState()
+    const { deps, cache } = makeDeviceDeps(async () => ({
+      deviceAuthorizationUrl: `http://x/device`,
+      tokenUrl: `http://x/token`,
+      clientId: `cid`,
+      scopes: [`repo`],
+    }))
+    const fetchScript = scriptedFetch([
+      {
+        kind: `device-auth`,
+        body: {
+          device_code: `dc`,
+          user_code: `WDJB-MJHT`,
+          verification_uri: `https://example.com/device`,
+          verification_uri_complete: `https://example.com/device?user_code=WDJB-MJHT`,
+          interval: 0,
+          expires_in: 600,
+        },
+      },
+      {
+        kind: `token-poll`,
+        body: { access_token: `AT`, expires_in: 3600 },
+      },
+    ])
+
+    let out: { status: number; body: unknown } | undefined
+    await withFetch(fetchScript, async () => {
+      out = await handleDeviceFlowStart(deps, `gh`)
+      // Allow the fire-and-forget poll promise to settle.
+      await new Promise((r) => setTimeout(r, 0))
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    expect(out?.status).toBe(200)
+    const body = out!.body as {
+      status: string
+      userCode: string
+      verificationUri: string
+      verificationUriComplete?: string
+      expiresAt: string
+    }
+    expect(body.status).toBe(`pending`)
+    expect(body.userCode).toBe(`WDJB-MJHT`)
+    expect(body.verificationUri).toBe(`https://example.com/device`)
+    expect(body.verificationUriComplete).toBe(
+      `https://example.com/device?user_code=WDJB-MJHT`
+    )
+
+    // Coordinator should have the token under the requested scopes.
+    // The coordinator stores under the sorted-joined scope key.
+    expect(cache.get(`gh`, `repo`)?.accessToken).toBe(`AT`)
+
+    // Status should now report completed.
+    const status = handleDeviceFlowStatus(null, `gh`)
+    expect((status.body as { status: string }).status).toBe(`completed`)
+  })
+
+  it(`reports failed status when the polling errors out`, async () => {
+    _resetDeviceFlowState()
+    const { deps } = makeDeviceDeps(async () => ({
+      deviceAuthorizationUrl: `http://x/device`,
+      tokenUrl: `http://x/token`,
+      clientId: `cid`,
+    }))
+    const fetchScript = scriptedFetch([
+      {
+        kind: `device-auth`,
+        body: {
+          device_code: `dc`,
+          user_code: `UC`,
+          verification_uri: `https://example.com/device`,
+          interval: 0,
+          expires_in: 600,
+        },
+      },
+      {
+        kind: `token-poll`,
+        ok: false,
+        status: 400,
+        body: { error: `access_denied`, error_description: `user denied` },
+      },
+    ])
+
+    await withFetch(fetchScript, async () => {
+      const out = await handleDeviceFlowStart(deps, `gh`)
+      expect(out.status).toBe(200)
+      // Allow the polling promise to reject and update state.
+      await new Promise((r) => setTimeout(r, 0))
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    const status = handleDeviceFlowStatus(null, `gh`)
+    const body = status.body as { status: string; error?: string }
+    expect(body.status).toBe(`failed`)
+    expect(body.error).toMatch(/user denied|access_denied/)
+  })
+
+  it(`reuses the existing pending state on a duplicate start`, async () => {
+    _resetDeviceFlowState()
+    let lookups = 0
+    const { deps } = makeDeviceDeps(async () => {
+      lookups++
+      return {
+        deviceAuthorizationUrl: `http://x/device`,
+        tokenUrl: `http://x/token`,
+        clientId: `cid`,
+      }
+    })
+    // Token-poll never resolves within this test (interval ticks until
+    // expiry, but we never advance time), so the flow stays `pending`.
+    const fetchScript = scriptedFetch([
+      {
+        kind: `device-auth`,
+        body: {
+          device_code: `dc`,
+          user_code: `UC1`,
+          verification_uri: `https://example.com/device`,
+          interval: 60,
+          expires_in: 600,
+        },
+      },
+    ])
+
+    await withFetch(fetchScript, async () => {
+      const first = await handleDeviceFlowStart(deps, `gh`)
+      const second = await handleDeviceFlowStart(deps, `gh`)
+      expect(first.status).toBe(200)
+      expect(second.status).toBe(200)
+      const a = first.body as { userCode: string }
+      const b = second.body as { userCode: string; status: string }
+      expect(b.userCode).toBe(a.userCode)
+      expect(b.status).toBe(`pending`)
+      expect(lookups).toBe(1)
+    })
+  })
+
+  it(`returns 502 when the device authorization endpoint fails`, async () => {
+    _resetDeviceFlowState()
+    const { deps } = makeDeviceDeps(async () => ({
+      deviceAuthorizationUrl: `http://x/device`,
+      tokenUrl: `http://x/token`,
+      clientId: `cid`,
+    }))
+    const fetchScript = scriptedFetch([
+      {
+        kind: `device-auth`,
+        ok: false,
+        status: 500,
+        body: { error: `server_error` },
+      },
+    ])
+
+    await withFetch(fetchScript, async () => {
+      const out = await handleDeviceFlowStart(deps, `gh`)
+      expect(out.status).toBe(502)
+      expect((out.body as { error: string }).error).toMatch(
+        /device authorization failed/
+      )
+    })
+  })
+})
+
+describe(`handleDeviceFlowStatus`, () => {
+  it(`returns idle when no flow has been started`, () => {
+    _resetDeviceFlowState()
+    const out = handleDeviceFlowStatus(null, `none`)
+    expect(out.status).toBe(200)
+    expect((out.body as { status: string }).status).toBe(`idle`)
+  })
+})
+
+describe(`handleDeviceFlowRequest`, () => {
+  function fakeReq(method: string, url: string): IncomingMessage {
+    return { method, url } as unknown as IncomingMessage
+  }
+  function fakeRes(): {
+    res: ServerResponse
+    captured: { status?: number; body?: string }
+  } {
+    const captured: { status?: number; body?: string } = {}
+    const res = {
+      writeHead(status: number) {
+        captured.status = status
+      },
+      end(body: string) {
+        captured.body = body
+      },
+    } as unknown as ServerResponse
+    return { res, captured }
+  }
+
+  it(`dispatches GET status to the status handler`, async () => {
+    _resetDeviceFlowState()
+    const { deps } = makeDeviceDeps(async () => null)
+    const { res, captured } = fakeRes()
+    const handled = await handleDeviceFlowRequest(
+      deps,
+      fakeReq(`GET`, `/oauth/device/gh/status`),
+      res
+    )
+    expect(handled).toBe(true)
+    expect(captured.status).toBe(200)
+    expect(JSON.parse(captured.body!).status).toBe(`idle`)
+  })
+
+  it(`dispatches POST start to the start handler`, async () => {
+    _resetDeviceFlowState()
+    const { deps } = makeDeviceDeps(async () => null)
+    const { res, captured } = fakeRes()
+    const handled = await handleDeviceFlowRequest(
+      deps,
+      fakeReq(`POST`, `/oauth/device/gh/start`),
+      res
+    )
+    expect(handled).toBe(true)
+    expect(captured.status).toBe(404)
+  })
+
+  it(`returns false for unrelated paths`, async () => {
+    _resetDeviceFlowState()
+    const { deps } = makeDeviceDeps(async () => null)
+    const { res } = fakeRes()
+    const handled = await handleDeviceFlowRequest(
+      deps,
+      fakeReq(`GET`, `/something/else`),
+      res
+    )
+    expect(handled).toBe(false)
+  })
+})
+
+describe(`mountOAuthRoutes device flow dispatch`, () => {
+  it(`only routes device endpoints when deviceLookup is provided`, async () => {
+    _resetDeviceFlowState()
+    const { pending, coordinator } = setup()
+    const mountWithoutDevice = mountOAuthRoutes({ pending, coordinator })
+
+    let handled = await mountWithoutDevice.handle(
+      { method: `POST`, url: `/oauth/device/gh/start` } as any,
+      {
+        writeHead() {
+          throw new Error(`should not write`)
+        },
+        end() {},
+      } as any
+    )
+    expect(handled).toBe(false)
+
+    const mountWithDevice = mountOAuthRoutes(
+      { pending, coordinator },
+      undefined,
+      async () => null
+    )
+    const captured: { status?: number; body?: string } = {}
+    handled = await mountWithDevice.handle(
+      { method: `GET`, url: `/oauth/device/gh/status` } as any,
+      {
+        writeHead(s: number) {
+          captured.status = s
+        },
+        end(b: string) {
+          captured.body = b
+        },
+      } as any
+    )
+    expect(handled).toBe(true)
+    expect(captured.status).toBe(200)
+    expect(JSON.parse(captured.body!).status).toBe(`idle`)
   })
 })

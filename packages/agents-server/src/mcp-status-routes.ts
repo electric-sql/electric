@@ -27,16 +27,31 @@ export interface ServerSummary {
   name: string
   transport: string
   authMode: string | null
+  /**
+   * Sub-mode for `authorizationCode` servers. Indicates whether the
+   * authorize action should pop a browser tab (`browser`) or kick off the
+   * device-code flow (`device`). `null` for non-OAuth servers and for
+   * OAuth servers where the flow isn't an authorization-code variant.
+   */
+  oauthFlow: `browser` | `device` | null
   status: string
   lastError?: string
   toolCount: number
 }
 
 function summarize(e: ReturnType<Registry[`list`]>[number]): ServerSummary {
+  let oauthFlow: `browser` | `device` | null = null
+  if (
+    e.config.transport === `http` &&
+    e.config.auth.mode === `authorizationCode`
+  ) {
+    oauthFlow = e.config.auth.flow
+  }
   return {
     name: e.name,
     transport: e.config.transport,
     authMode: e.config.transport === `http` ? e.config.auth.mode : null,
+    oauthFlow,
     status: e.status,
     lastError: e.lastError,
     toolCount: e.tools?.length ?? 0,

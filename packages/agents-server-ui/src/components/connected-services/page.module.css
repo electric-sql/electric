@@ -107,3 +107,33 @@
   width: 1%;
   white-space: nowrap;
 }
+
+.devicePanel {
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3, 8px);
+  background: var(--ds-surface-1, var(--ds-bg));
+  padding: var(--ds-space-5);
+}
+
+.deviceCode {
+  font-family: var(--ds-font-mono, monospace);
+  font-size: var(--ds-text-xl, 24px);
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  background: var(--ds-surface-2, transparent);
+  border: 1px dashed var(--ds-border-1);
+  border-radius: var(--ds-radius-2, 6px);
+  padding: var(--ds-space-3) var(--ds-space-4);
+  cursor: pointer;
+  align-self: flex-start;
+  color: var(--ds-text-1);
+}
+
+.deviceCode:hover {
+  background: var(--ds-surface-3, var(--ds-surface-2, transparent));
+}
+
+.deviceLink {
+  color: var(--ds-text-accent, currentColor);
+  text-decoration: underline;
+}
