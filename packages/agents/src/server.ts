@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { createServer } from 'node:http'
 import { serverLog } from './log.js'
 import {
@@ -5,6 +6,18 @@ import {
   createBuiltinAgentHandler,
   registerBuiltinAgentTypes,
 } from './bootstrap.js'
+import {
+  composedCredentialStore,
+  envCredentialStore,
+  fileCredentialStore,
+  osKeychainCredentialStore,
+  createRegistry as createMcpRegistry,
+  loadConfig as loadMcpConfig,
+  watchConfig as watchMcpConfig,
+  mountMcpHttp,
+  bridgeMcpTool,
+} from '@electric-ax/agents-mcp'
+import { registerToolProvider } from '@electric-ax/agents-runtime'
 import type {
   AgentTool,
   EntityStreamDBWithActions,
@@ -115,12 +128,84 @@ export class BuiltinAgentsServer {
               : `${this.publicBaseUrl}/`
           ).toString()
 
+          const publicUrl =
+            process.env.MCP_RUNTIME_PUBLIC_URL ?? this.publicBaseUrl
+
+          // --- MCP wiring ---
+          const credentials = composedCredentialStore(
+            envCredentialStore(),
+            osKeychainCredentialStore({ service: `electric-agents` }),
+            fileCredentialStore(
+              path.resolve(`.electric-agents/credentials.json`)
+            )
+          )
+
+          const mcpRegistry = createMcpRegistry({ credentials })
+          const mcpConfigPath = path.resolve(`mcp.json`)
+
+          try {
+            const cfg = await loadMcpConfig(mcpConfigPath, process.env)
+            await mcpRegistry.applyConfig(cfg)
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== `ENOENT`) throw err
+            serverLog.info(
+              `[mcp] no ${mcpConfigPath} — starting with no servers`
+            )
+          }
+
+          watchMcpConfig(mcpConfigPath, {
+            onChange: (cfg) =>
+              mcpRegistry
+                .applyConfig(cfg)
+                .catch((e) => serverLog.error(`[mcp] applyConfig:`, e)),
+            onError: (e) => serverLog.error(`[mcp] config error:`, e),
+          }).catch(() => {})
+
+          mountMcpHttp({
+            server: this.server!,
+            registry: mcpRegistry,
+            credentials,
+            publicUrl,
+            corsOrigin: process.env.MCP_CORS_ORIGIN?.split(`,`) ?? `*`,
+          })
+
+          registerToolProvider({
+            name: `mcp`,
+            tools: () => {
+              const tools: ReturnType<typeof bridgeMcpTool>[] = []
+              for (const entry of mcpRegistry.list()) {
+                if (entry.status !== `ready`) continue
+                const live = mcpRegistry.get(entry.name)
+                if (!live?.transport) continue
+                for (const t of entry.tools) {
+                  tools.push(
+                    bridgeMcpTool({
+                      server: entry.name,
+                      tool: t,
+                      client: live.transport.client as {
+                        callTool: (args: {
+                          name: string
+                          arguments?: unknown
+                        }) => Promise<unknown>
+                      },
+                      timeoutMs: live.config.timeoutMs,
+                    })
+                  )
+                }
+              }
+              return tools
+            },
+          })
+          // --- end MCP wiring ---
+
           this.bootstrap = await createBuiltinAgentHandler({
             agentServerUrl: this.options.agentServerUrl,
             serveEndpoint,
             workingDirectory: this.options.workingDirectory,
             streamFn: this.options.mockStreamFn,
             createElectricTools: this.options.createElectricTools,
+            publicUrl,
+            runtimeName: `builtin-agents`,
           })
           if (!this.bootstrap) {
             throw new Error(
@@ -168,18 +253,24 @@ export class BuiltinAgentsServer {
     res: ServerResponse
   ): Promise<void> {
     const method = req.method?.toUpperCase()
-    const path = new URL(req.url ?? `/`, `http://localhost`).pathname
+    const pathname = new URL(req.url ?? `/`, `http://localhost`).pathname
     const webhookPath =
       this.options.webhookPath ?? DEFAULT_BUILTIN_AGENT_HANDLER_PATH
 
-    if (path === `/_electric/health` && method === `GET`) {
+    if (pathname === `/_electric/health` && method === `GET`) {
       res.writeHead(200, { 'content-type': `application/json` })
       res.end(JSON.stringify({ status: `ok` }))
       return
     }
 
-    if (path === webhookPath && method === `POST` && this.bootstrap) {
+    if (pathname === webhookPath && method === `POST` && this.bootstrap) {
       await this.bootstrap.handler(req, res)
+      return
+    }
+
+    // MCP and OAuth routes are handled by the mountMcpHttp `request` listener.
+    // Do not respond here so that listener can handle them.
+    if (pathname.startsWith(`/api/mcp/`) || pathname.startsWith(`/oauth/`)) {
       return
     }
 

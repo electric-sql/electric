@@ -27,3 +27,23 @@ export {
   MCP_TOOLS_SENTINEL,
 } from './tools'
 export type { McpToolsSentinel } from './tools'
+
+export { createRegistry } from './registry'
+export type {
+  Registry,
+  RegistryOpts,
+  ListedEntry,
+  HeaderProvider,
+} from './registry'
+
+export { loadConfig, parseConfig } from './config/loader'
+export type { McpConfig } from './config/loader'
+
+export { watchConfig } from './config/watcher'
+export type { WatchOpts } from './config/watcher'
+
+export { mountMcpHttp } from './http/mount'
+export type { MountMcpHttpOpts } from './http/mount'
+
+export { bridgeMcpTool, prefixToolName } from './bridge/tool-bridge'
+export type { BridgeToolOpts, BridgedTool } from './bridge/tool-bridge'
