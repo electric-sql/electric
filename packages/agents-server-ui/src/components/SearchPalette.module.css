@@ -109,10 +109,40 @@
   text-overflow: ellipsis;
 }
 
+.rowIconSlot {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rowIcon {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+
 .rowType {
   flex-shrink: 0;
   font-size: 10px;
   letter-spacing: 0.04em;
   color: var(--ds-text-3);
   text-transform: lowercase;
+}
+
+.rowSubtitle {
+  flex-shrink: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+}
+
+.rowShortcut {
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
 }
