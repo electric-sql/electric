@@ -19,3 +19,11 @@ export { envCredentialStore } from './credentials/env'
 export { fileCredentialStore } from './credentials/file'
 export { osKeychainCredentialStore } from './credentials/os-keychain'
 export { composedCredentialStore } from './credentials/composed'
+
+export {
+  mcp,
+  isMcpToolsSentinel,
+  filterByAllowlist,
+  MCP_TOOLS_SENTINEL,
+} from './tools'
+export type { McpToolsSentinel } from './tools'
