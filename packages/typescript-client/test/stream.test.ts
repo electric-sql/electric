@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ShapeStream,
   isChangeMessage,
+  isControlMessage,
   Message,
   Row,
   _resetHttpWarningForTesting,
@@ -23,6 +24,185 @@ describe(`ShapeStream`, () => {
   })
 
   afterEach(() => aborter.abort())
+
+  it(`requestSnapshot waits for snapshot messages to be published to subscribers before resolving`, async () => {
+    const snapshotRow = {
+      key: `test-1`,
+      value: { id: `1` },
+      headers: {
+        operation: `insert`,
+        relation: [`public`, `test`],
+      },
+      offset: `0_0`,
+    }
+
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            metadata: {
+              snapshot_mark: 1,
+              xmin: `1`,
+              xmax: `2`,
+              xip_list: [],
+              database_lsn: `0`,
+            },
+            data: [snapshotRow],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': `application/json`,
+              'electric-handle': `handle-1`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{"id":{"type":"text"}}`,
+            },
+          }
+        )
+      )
+    )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      log: `changes_only`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    let releaseSubscriber!: () => void
+    const subscriberFinished = new Promise<void>((resolve) => {
+      releaseSubscriber = resolve
+    })
+    let snapshotRequestResolved = false
+    let publishedMessages: Message<Row>[] = []
+
+    stream.subscribe(async (messages) => {
+      if (messages.some(isChangeMessage)) {
+        publishedMessages = messages
+        await subscriberFinished
+      }
+    })
+
+    const snapshotRequest = stream.requestSnapshot({ limit: 1 }).then(() => {
+      snapshotRequestResolved = true
+    })
+
+    await resolveInMacrotask(undefined)
+    expect(snapshotRequestResolved).toBe(false)
+
+    releaseSubscriber()
+    await snapshotRequest
+
+    expect(publishedMessages.some(isChangeMessage)).toBe(true)
+    expect(
+      publishedMessages.some(
+        (message) =>
+          isControlMessage(message) &&
+          message.headers.control === `snapshot-end`
+      )
+    ).toBe(true)
+    expect(
+      publishedMessages.some(
+        (message) =>
+          isControlMessage(message) && message.headers.control === `subset-end`
+      )
+    ).toBe(true)
+  })
+
+  it(`requestSnapshot can be awaited reentrantly from a subscriber`, async () => {
+    const streamRow = {
+      key: `stream-1`,
+      value: { id: `1` },
+      headers: {
+        operation: `insert`,
+        relation: [`public`, `test`],
+      },
+      offset: `0_0`,
+    }
+    const snapshotRow = {
+      key: `snapshot-1`,
+      value: { id: `2` },
+      headers: {
+        operation: `insert`,
+        relation: [`public`, `test`],
+      },
+      offset: `0_1`,
+    }
+
+    let requestCount = 0
+    const fetchMock = vi.fn(() => {
+      requestCount++
+
+      if (requestCount === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              streamRow,
+              { headers: { control: `up-to-date` }, offset: `0_0` },
+            ]),
+            {
+              status: 200,
+              headers: {
+                'content-type': `application/json`,
+                'electric-handle': `handle-1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":{"type":"text"}}`,
+              },
+            }
+          )
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            metadata: {
+              snapshot_mark: 1,
+              xmin: `1`,
+              xmax: `2`,
+              xip_list: [],
+              database_lsn: `0`,
+            },
+            data: [snapshotRow],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': `application/json`,
+              'electric-handle': `handle-1`,
+              'electric-offset': `0_1`,
+              'electric-schema': `{"id":{"type":"text"}}`,
+            },
+          }
+        )
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      log: `changes_only`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    let requestedSnapshot = false
+    let reentrantSnapshotResolved = false
+    stream.subscribe(async (messages) => {
+      if (requestedSnapshot || !messages.some(isChangeMessage)) return
+
+      requestedSnapshot = true
+      await stream.requestSnapshot({ limit: 1 })
+      reentrantSnapshotResolved = true
+    })
+
+    await vi.waitFor(() => {
+      expect(reentrantSnapshotResolved).toBe(true)
+    })
+  })
 
   it(`should attach specified headers to requests`, async () => {
     const eventTarget = new EventTarget()

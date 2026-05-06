@@ -609,6 +609,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
+  #isPublishing = false
   #snapshotTracker = new SnapshotTracker()
   #pauseLock: PauseLock
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
@@ -1719,11 +1720,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #publish(messages: Message<T>[]): Promise<void[]> {
-    // We process messages asynchronously
-    // but SSE's `onmessage` handler is synchronous.
-    // We use a promise chain to ensure that the handlers
-    // execute sequentially in the order the messages were received.
-    this.#messageChain = this.#messageChain.then(() =>
+    const deliver = () =>
       Promise.all(
         Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
           try {
@@ -1735,7 +1732,25 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
         })
       )
-    )
+
+    // We process messages asynchronously but SSE's `onmessage` handler is
+    // synchronous. Use a promise chain to ensure handlers execute sequentially
+    // in the order messages were received. If a subscriber reentrantly requests
+    // a snapshot, deliver that nested batch immediately instead of appending it
+    // behind the currently-running subscriber callback, which would deadlock
+    // when requestSnapshot awaits publication.
+    if (this.#isPublishing) {
+      return deliver()
+    }
+
+    this.#messageChain = this.#messageChain.then(async () => {
+      this.#isPublishing = true
+      try {
+        return await deliver()
+      } finally {
+        this.#isPublishing = false
+      }
+    })
 
     return this.#messageChain
   }
@@ -1901,7 +1916,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         metadata,
         new Set(data.map((message) => message.key))
       )
-      this.#onMessages(dataWithEndBoundary, false)
+      await this.#onMessages(dataWithEndBoundary, false)
 
       // On cold start the stream's offset is still at "now". Advance it
       // to the snapshot's position so no updates are missed in between.
