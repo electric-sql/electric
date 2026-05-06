@@ -1,16 +1,11 @@
----
-'@electric-ax/agents-desktop': patch
-'@electric-ax/agents-server': patch
-'@electric-ax/agents-server-ui': patch
-'@electric-ax/agents-runtime': patch
-'@electric-ax/agents': patch
-'@electric-sql/experimental': patch
-'@electric-sql/react': patch
----
+# @electric-ax/agents-desktop
 
-Electron desktop shell, tile-based workspace, and per-session
-working-directory picker.
+## 0.0.1
 
+### Patch Changes
+
+- 28d127b: Electron desktop shell, tile-based workspace, and per-session
+  working-directory picker.
   - `@electric-ax/agents-desktop`: new package — Electron app
     bundling a local Horton runtime, system-tray status, multi-
     window support, frameless windows with in-app title bars,
@@ -34,3 +29,11 @@ working-directory picker.
     surfaced while building the desktop UI).
   - `@electric-sql/experimental`, `@electric-sql/react`: align test
     type configuration with DOM AbortSignal types used by the client.
+
+- Updated dependencies [65f0cf0]
+- Updated dependencies [f509387]
+- Updated dependencies [f509387]
+- Updated dependencies [28d127b]
+- Updated dependencies [a3cee92]
+  - @electric-ax/agents@0.2.5
+  - @electric-ax/agents-server-ui@0.2.9

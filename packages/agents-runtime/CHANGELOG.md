@@ -1,5 +1,39 @@
 # @electric-ax/agents-runtime
 
+## 0.1.3
+
+### Patch Changes
+
+- f509387: Stabilise chat section identity across streaming updates: `buildSections` / `buildTimelineEntries` in `use-chat` now key a fingerprint-based section cache by `run.key` / `msg.key`, so settled rows return the same reference even when the upstream pipeline rebuilds row objects. Adds a bounded prune pass + a `__resetSectionCachesForTesting` hook for test isolation. Also small cleanups in `tools/context-tools.ts`.
+- 28d127b: Electron desktop shell, tile-based workspace, and per-session
+  working-directory picker.
+  - `@electric-ax/agents-desktop`: new package — Electron app
+    bundling a local Horton runtime, system-tray status, multi-
+    window support, frameless windows with in-app title bars,
+    native menus, About dialog, on-launch API key prompt
+    (Anthropic / OpenAI / Brave), localhost agent-server discovery,
+    and HMR via `vite-plugin-electron`.
+  - `@electric-ax/agents-server`: entrypoint support for the local
+    desktop runtime wiring.
+  - `@electric-ax/agents-server-ui`: tile-based workspace (DnD,
+    splits, persisted layouts, shareable URLs), redesigned new-
+    session screen, refreshed dropdown chrome (`Combobox`
+    primitive, sentence-case section headings, ServerPicker-style
+    rows), sidebar filter & view menu with grouping by date /
+    type / status / working dir, full Settings screen with
+    General / Appearance / Local Runtime categories.
+  - `@electric-ax/agents`: Horton accepts an optional
+    `workingDirectory` spawn arg so each session can run against
+    its own project root without restarting the runtime.
+  - `@electric-ax/agents-runtime`: tool-pair preservation during
+    compaction and matching tool-call events by id (bug fixes
+    surfaced while building the desktop UI).
+  - `@electric-sql/experimental`, `@electric-sql/react`: align test
+    type configuration with DOM AbortSignal types used by the client.
+
+- 6399147: Preserve the caller's HOME environment variable when running bash tool commands so CLIs can find user-level config and credentials.
+- a3cee92: Remove the coder entity (coding-session). The `registerCodingSession`, `useCodingAgent`, `CodingSessionHandle`, and related types/tools (`spawn_coder`, `prompt_coder`) are no longer available. The `agent-session-protocol` dependency is also removed.
+
 ## 0.1.2
 
 ### Patch Changes

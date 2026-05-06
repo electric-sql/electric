@@ -2,7 +2,7 @@
   "name": "@electric-ax/agents-desktop",
   "productName": "Electric Agents",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "main": "./dist/main.cjs",
   "scripts": {
