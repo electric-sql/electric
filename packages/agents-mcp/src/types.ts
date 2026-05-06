@@ -73,5 +73,14 @@ export interface McpToolError {
 
 export type AddServerResult =
   | { state: `ready`; id: string; toolCount: number }
-  | { state: `authenticating`; id: string; authUrl: string }
+  | {
+      state: `authenticating`
+      id: string
+      authUrl: string
+      deviceCode?: {
+        userCode: string
+        expiresAt: number
+        verificationUriComplete?: string
+      }
+    }
   | { state: `error`; id: string; error: McpToolError }

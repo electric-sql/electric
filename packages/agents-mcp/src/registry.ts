@@ -12,6 +12,8 @@ import { buildApiKeyHeader } from './auth/api-key'
 import { createSdkOAuthProvider } from './auth/sdk-provider'
 import type { SdkOAuthProvider } from './auth/sdk-provider'
 import { createClientCredentialsProvider } from './auth/client-credentials'
+import { startDeviceFlow } from './auth/device-code'
+import type { DeviceFlowHandle } from './auth/device-code'
 import type { McpConfig } from './config/loader'
 
 interface Entry {
@@ -24,6 +26,7 @@ interface Entry {
   tools: Array<{ name: string; description?: string; inputSchema: unknown }>
   capabilities?: unknown
   provider?: SdkOAuthProvider
+  deviceHandle?: DeviceFlowHandle
 }
 
 export interface RegistryOpts {
@@ -35,6 +38,8 @@ export interface RegistryOpts {
     hp?: HeaderProvider,
     provider?: SdkOAuthProvider
   ) => McpTransport
+  /** fetch implementation to use for RFC 8628 device-code polling requests. */
+  deviceFlowFetch?: typeof fetch
 }
 
 export type HeaderProvider = () => Promise<
@@ -49,6 +54,11 @@ export interface ListedEntry {
   error?: McpToolError
   tools: Entry[`tools`]
   capabilities?: unknown
+  deviceCode?: {
+    userCode: string
+    expiresAt: number
+    verificationUriComplete?: string
+  }
 }
 
 export interface Registry {
@@ -94,6 +104,7 @@ interface BuildTransportResult {
   error?: McpToolError
   authUrl?: string
   provider?: SdkOAuthProvider
+  deviceHandle?: DeviceFlowHandle
 }
 
 export function createRegistry(opts: RegistryOpts): Registry {
@@ -147,6 +158,59 @@ export function createRegistry(opts: RegistryOpts): Registry {
           headerProvider,
         }),
       }
+    }
+
+    if (cfg.auth.mode === `authorizationCode` && cfg.auth.flow === `device`) {
+      const eps = (cfg.auth as any).deviceEndpoints as
+        | { deviceAuthorizationEndpoint: string; tokenEndpoint: string }
+        | undefined
+      if (!eps) {
+        return {
+          error: makeError(
+            `auth_unavailable`,
+            `device flow requires auth.deviceEndpoints in mcp.json`
+          ),
+        }
+      }
+      const cc = await opts.credentials.getClientCredentials?.(cfg.name)
+      if (!cc) {
+        return {
+          error: makeError(
+            `auth_unavailable`,
+            `no clientCredentials for ${cfg.name} (device flow needs at minimum a clientId)`
+          ),
+        }
+      }
+      const handle = await startDeviceFlow({
+        deviceAuthorizationEndpoint: eps.deviceAuthorizationEndpoint,
+        tokenEndpoint: eps.tokenEndpoint,
+        clientId: cc.clientId,
+        clientSecret: cc.clientSecret,
+        scopes: cfg.auth.scopes,
+        resource: cfg.auth.resource,
+        fetchImpl: opts.deviceFlowFetch,
+      })
+      void handle
+        .poll()
+        .then(async (tokens) => {
+          await opts.credentials.saveOAuthTokens?.(cfg.name, {
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token,
+            expiresAt: tokens.expires_in
+              ? Math.floor(Date.now() / 1000) + tokens.expires_in
+              : undefined,
+            tokenType: tokens.token_type,
+          })
+          void registry.addServer(cfg).catch(() => {})
+        })
+        .catch((err) => {
+          const e = entries.get(cfg.name)
+          if (e) {
+            e.status = `error`
+            e.error = makeError(`auth_unavailable`, String(err))
+          }
+        })
+      return { authUrl: handle.verificationUri, deviceHandle: handle }
     }
 
     if (cfg.auth.mode === `authorizationCode`) {
@@ -288,10 +352,26 @@ export function createRegistry(opts: RegistryOpts): Registry {
         authUrl: built.authUrl,
         tools: [],
         provider: built.provider,
+        deviceHandle: built.deviceHandle,
       }
       entries.set(cfg.name, entry)
       if (built.error)
         return { state: `error`, id: cfg.name, error: built.error }
+      if (built.authUrl && built.deviceHandle) {
+        entry.status = `authenticating`
+        entry.authUrl = built.authUrl
+        entry.deviceHandle = built.deviceHandle
+        return {
+          state: `authenticating`,
+          id: cfg.name,
+          authUrl: built.authUrl,
+          deviceCode: {
+            userCode: built.deviceHandle.userCode,
+            expiresAt: built.deviceHandle.expiresAt,
+            verificationUriComplete: built.deviceHandle.verificationUriComplete,
+          },
+        }
+      }
       if (built.authUrl) {
         entry.status = `authenticating`
         return { state: `authenticating`, id: cfg.name, authUrl: built.authUrl }
@@ -312,6 +392,7 @@ export function createRegistry(opts: RegistryOpts): Registry {
     async removeServer(name) {
       const e = entries.get(name)
       if (!e) return
+      e.deviceHandle?.cancel()
       await Promise.resolve(e.transport?.close()).catch(() => {})
       entries.delete(name)
     },
@@ -325,6 +406,13 @@ export function createRegistry(opts: RegistryOpts): Registry {
         error: e.error,
         tools: e.tools,
         capabilities: e.capabilities,
+        deviceCode: e.deviceHandle
+          ? {
+              userCode: e.deviceHandle.userCode,
+              expiresAt: e.deviceHandle.expiresAt,
+              verificationUriComplete: e.deviceHandle.verificationUriComplete,
+            }
+          : undefined,
       }))
     },
 
@@ -355,10 +443,11 @@ export function createRegistry(opts: RegistryOpts): Registry {
     async disable(name) {
       const e = entries.get(name)
       if (!e) throw new Error(`unknown server "${name}"`)
+      e.deviceHandle?.cancel()
+      e.deviceHandle = undefined
       await Promise.resolve(e.transport?.close()).catch(() => {})
       e.transport = undefined
       e.tools = []
-      // (Phase 5: e.deviceHandle?.cancel(); e.deviceHandle = undefined;)
       e.authUrl = undefined
       e.status = `disabled`
       e.error = undefined
