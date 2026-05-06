@@ -1,8 +1,19 @@
-import { useMemo, type ReactNode } from 'react'
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  Animated,
+  Easing,
+  Modal,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { useTokens } from '../lib/ThemeProvider'
 import { fontSize, radii, rowHeight, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
+
+const SHEET_CLOSED_OFFSET = 420
 
 /**
  * Lightweight bottom-sheet menu — slides up over the current screen
@@ -27,25 +38,136 @@ export function BottomSheet({
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
+  const [rendered, setRendered] = useState(open)
+  const sheetTranslateY = useRef(
+    new Animated.Value(SHEET_CLOSED_OFFSET)
+  ).current
+  const dragTranslateY = useRef(new Animated.Value(0)).current
+  const backdropOpacity = useRef(new Animated.Value(0)).current
+
+  const animateOpen = (): void => {
+    setRendered(true)
+    dragTranslateY.setValue(0)
+    Animated.parallel([
+      Animated.timing(sheetTranslateY, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }
+
+  const animateClosed = (afterClose?: () => void, startOffset = 0): void => {
+    if (startOffset > 0) {
+      sheetTranslateY.setValue(startOffset)
+    }
+    dragTranslateY.setValue(0)
+    Animated.parallel([
+      Animated.timing(sheetTranslateY, {
+        toValue: SHEET_CLOSED_OFFSET,
+        duration: 190,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 160,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setRendered(false)
+      afterClose?.()
+    })
+  }
+
+  const requestClose = (): void => {
+    animateClosed(onClose)
+  }
+
+  useEffect(() => {
+    if (open) {
+      animateOpen()
+      return
+    }
+
+    if (rendered) animateClosed()
+  }, [open])
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderMove: (_, gesture) => {
+        dragTranslateY.setValue(Math.max(0, gesture.dy))
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 48 || gesture.vy > 0.6) {
+          animateClosed(onClose, Math.max(0, gesture.dy))
+          return
+        }
+
+        Animated.spring(dragTranslateY, {
+          toValue: 0,
+          damping: 18,
+          stiffness: 260,
+          mass: 0.7,
+          useNativeDriver: true,
+        }).start()
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragTranslateY, {
+          toValue: 0,
+          damping: 18,
+          stiffness: 260,
+          mass: 0.7,
+          useNativeDriver: true,
+        }).start()
+      },
+    })
+  ).current
+
+  const sheetTransform = {
+    transform: [{ translateY: Animated.add(sheetTranslateY, dragTranslateY) }],
+  }
+
+  if (!rendered) {
+    return <Modal visible={false} transparent />
+  }
+
   return (
     <Modal
-      visible={open}
+      visible={rendered}
       transparent
-      animationType="fade"
-      onRequestClose={onClose}
+      animationType="none"
+      onRequestClose={requestClose}
       statusBarTranslucent
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        {/* Stop the press from bubbling so taps inside the sheet
-            don't dismiss it. */}
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          {title && (
-            <Text style={styles.title} numberOfLines={1}>
-              {title}
-            </Text>
-          )}
-          <View style={styles.body}>{children}</View>
-        </Pressable>
+      <Pressable style={styles.backdropTapTarget} onPress={requestClose}>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.backdrop, { opacity: backdropOpacity }]}
+        />
+        <Animated.View
+          style={[styles.sheet, sheetTransform]}
+          {...panResponder.panHandlers}
+        >
+          <Pressable onPress={() => {}}>
+            {title && (
+              <Text style={styles.title} numberOfLines={1}>
+                {title}
+              </Text>
+            )}
+            <View style={styles.body}>{children}</View>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   )
@@ -132,10 +254,13 @@ function CheckGlyph({ color }: { color: string }): React.ReactElement {
 
 function createStyles(tokens: Tokens) {
   return StyleSheet.create({
-    backdrop: {
+    backdropTapTarget: {
       flex: 1,
-      backgroundColor: tokens.overlay,
       justifyContent: `flex-end`,
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: tokens.overlay,
     },
     sheet: {
       paddingTop: spacing.sm,
