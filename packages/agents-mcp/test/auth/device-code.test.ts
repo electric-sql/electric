@@ -29,8 +29,8 @@ describe(`startDeviceFlow`, () => {
 
   it(`poll resolves with tokens after success`, async () => {
     let pollCount = 0
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes(`device_authorization`)) {
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo) => {
+      if (String(url).includes(`device_authorization`)) {
         return new Response(
           JSON.stringify({
             device_code: `DEV`,
@@ -67,8 +67,8 @@ describe(`startDeviceFlow`, () => {
   })
 
   it(`poll rejects on access_denied`, async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes(`device_authorization`)) {
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo) => {
+      if (String(url).includes(`device_authorization`)) {
         return new Response(
           JSON.stringify({
             device_code: `DEV`,

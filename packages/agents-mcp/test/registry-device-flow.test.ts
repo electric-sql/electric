@@ -4,8 +4,8 @@ import { inMemoryCredentialStore } from '../src/credentials/in-memory'
 
 describe(`Registry — device flow`, () => {
   it(`addServer with device flow returns user code (envelope-only assertion)`, async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes(`device_authorization`)) {
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo) => {
+      if (String(url).includes(`device_authorization`)) {
         return new Response(
           JSON.stringify({
             device_code: `DEV`,

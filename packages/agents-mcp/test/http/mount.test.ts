@@ -170,8 +170,8 @@ describe(`mountMcpHttp — action endpoints`, () => {
 
 describe(`mountMcpHttp — device flow endpoint`, () => {
   it(`POST /oauth/device/:server/start returns authenticating with deviceCode.userCode`, async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes(`device_authorization`)) {
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo) => {
+      if (String(url).includes(`device_authorization`)) {
         return new Response(
           JSON.stringify({
             device_code: `DEV`,
