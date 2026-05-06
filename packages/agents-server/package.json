@@ -46,6 +46,7 @@
     "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.1",
     "@durable-streams/server": "npm:@electric-ax/durable-streams-server-beta@^0.3.2",
     "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.1",
+    "@electric-ax/agents-mcp": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.16",
     "@mariozechner/pi-agent-core": "^0.70.2",

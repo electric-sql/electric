@@ -29,3 +29,13 @@ export { discoverAuthServer } from './auth/discovery'
 export type { AuthServerMetadata } from './auth/discovery'
 export { registerClient } from './auth/dcr'
 export type { RegisteredClient } from './auth/dcr'
+export { createPendingAuthStore } from './auth/pending-auth'
+export type { PendingAuth, PendingAuthStore } from './auth/pending-auth'
+export {
+  exchangeAuthorizationCode,
+  buildAuthorizationUrl,
+  refreshToken,
+} from './auth/authorization-code'
+export type { AuthRequest } from './auth/authorization-code'
+export { exchangeClientCredentials } from './auth/client-credentials'
+export { generatePkcePair, codeChallengeS256 } from './auth/pkce'
