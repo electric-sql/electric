@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.1",
-    "@electric-sql/client": "^1.5.16",
+    "@electric-sql/client": "^1.5.17",
     "fast-check": "^4.6.0",
     "vitest": "^4.1.0"
   },

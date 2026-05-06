@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.10.2
+
+### Patch Changes
+
+- 4d5c855: Add support for electric v1.6
+
 ## 0.10.1
 
 ### Patch Changes
