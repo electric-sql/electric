@@ -4,7 +4,7 @@ import type { McpConfig } from './config/loader'
 import type { KeyVault } from './vault/types'
 import type { McpServerConfig, McpServerStatus, ProgressEvent } from './types'
 import type { McpTransportHandle } from './transports/types'
-import { withTimeout } from './transports/timeout'
+import { TimeoutError } from './transports/timeout'
 
 export interface ServerEntry {
   name: string
@@ -50,6 +50,20 @@ export interface Registry {
     args: Record<string, unknown>,
     timeoutMs: number
   ): Promise<unknown>
+  /**
+   * Disable a server: closes its transport (which causes any in-flight
+   * SDK requests to surface as aborted, prompting the SDK to send
+   * `notifications/cancelled`) and flips its status to `disabled`.
+   * Future `invokeMethod` calls against a disabled server will throw.
+   */
+  disable(name: string): void
+  /**
+   * Re-enable a previously disabled server. Status flips out of
+   * `disabled`; the caller is responsible for re-applying config (or
+   * calling `invokeMethod`, which lazily re-connects) to bring it back
+   * online.
+   */
+  enable(name: string): void
   /**
    * Subscribe to progress events emitted by any connected MCP server.
    * Returns an unsubscribe function. Consumers (e.g. the agents-server-ui)
@@ -236,6 +250,9 @@ export function createRegistry(opts: RegistryOpts): Registry {
     ): Promise<unknown> {
       const e = entries.get(server)
       if (!e) throw new Error(`unknown server: ${server}`)
+      if (e.status === `disabled`) {
+        throw new Error(`server is disabled: ${server}`)
+      }
       if (!e.transport) throw new Error(`server not connected: ${server}`)
       if (!e.transport.client) {
         await e.transport.connect()
@@ -243,48 +260,92 @@ export function createRegistry(opts: RegistryOpts): Registry {
       const client = e.transport.client
       if (!client) throw new Error(`transport not connected: ${server}`)
 
-      switch (method) {
-        case `tools/list`:
-          return withTimeout(client.listTools(), timeoutMs)
-        case `tools/call`: {
-          // Inject a unique progressToken into `_meta`. The MCP server may
-          // emit `notifications/progress` referencing this token; the
-          // notification handler installed in `eagerConnect` fans those out
-          // to `progressSubscribers`.
-          const progressToken = randomUUID()
-          const callArgs = args as {
-            name: string
-            arguments?: Record<string, unknown>
-            _meta?: Record<string, unknown>
+      // Drive cancellation via AbortSignal: when the timeout fires, we
+      // abort the controller. The SDK's Protocol layer listens on the
+      // signal and, on abort, sends `notifications/cancelled` with the
+      // in-flight request id (per MCP spec) before rejecting our promise.
+      // We then translate the abort into a `TimeoutError` so callers
+      // continue to see a stable error type.
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        switch (method) {
+          case `tools/list`:
+            return await client.listTools(undefined, {
+              signal: controller.signal,
+            })
+          case `tools/call`: {
+            // Inject a unique progressToken into `_meta`. The MCP server
+            // may emit `notifications/progress` referencing this token;
+            // the notification handler installed in `eagerConnect` fans
+            // those out to `progressSubscribers`.
+            const progressToken = randomUUID()
+            const callArgs = args as {
+              name: string
+              arguments?: Record<string, unknown>
+              _meta?: Record<string, unknown>
+            }
+            return await client.callTool(
+              {
+                name: callArgs.name,
+                arguments: callArgs.arguments,
+                _meta: { ...(callArgs._meta ?? {}), progressToken },
+              },
+              undefined,
+              { signal: controller.signal }
+            )
           }
-          return withTimeout(
-            client.callTool({
-              name: callArgs.name,
-              arguments: callArgs.arguments,
-              _meta: { ...(callArgs._meta ?? {}), progressToken },
-            }),
-            timeoutMs
-          )
+          case `resources/list`:
+            return await client.listResources(undefined, {
+              signal: controller.signal,
+            })
+          case `resources/read`:
+            return await client.readResource(args as { uri: string }, {
+              signal: controller.signal,
+            })
+          case `prompts/list`:
+            return await client.listPrompts(undefined, {
+              signal: controller.signal,
+            })
+          case `prompts/get`:
+            return await client.getPrompt(
+              args as { name: string; arguments?: Record<string, string> },
+              { signal: controller.signal }
+            )
+          default:
+            throw new Error(`unsupported method: ${method}`)
         }
-        case `resources/list`:
-          return withTimeout(client.listResources(), timeoutMs)
-        case `resources/read`:
-          return withTimeout(
-            client.readResource(args as { uri: string }),
-            timeoutMs
-          )
-        case `prompts/list`:
-          return withTimeout(client.listPrompts(), timeoutMs)
-        case `prompts/get`:
-          return withTimeout(
-            client.getPrompt(
-              args as { name: string; arguments?: Record<string, string> }
-            ),
-            timeoutMs
-          )
-        default:
-          throw new Error(`unsupported method: ${method}`)
+      } catch (err) {
+        // Map AbortError (or any error following an aborted signal) to
+        // TimeoutError so downstream handling stays consistent.
+        if (controller.signal.aborted) {
+          throw new TimeoutError(timeoutMs)
+        }
+        throw err
+      } finally {
+        clearTimeout(timer)
       }
+    },
+
+    disable(name: string): void {
+      const entry = entries.get(name)
+      if (!entry) return
+      entry.status = `disabled`
+      // Close the transport so any in-flight SDK requests' AbortSignals
+      // fire as part of teardown — the SDK then emits
+      // `notifications/cancelled` automatically per MCP spec.
+      void entry.transport?.close().catch(() => {
+        // Closing during disable is best-effort; ignore errors.
+      })
+    },
+
+    enable(name: string): void {
+      const entry = entries.get(name)
+      if (!entry) return
+      if (entry.status !== `disabled`) return
+      // Re-enable: revert to `healthy` optimistically. The next
+      // `invokeMethod` lazy-reconnects via `transport.connect()`.
+      entry.status = `healthy`
     },
 
     subscribeToProgress(cb: (e: ProgressEvent) => void): () => void {

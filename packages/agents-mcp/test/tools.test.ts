@@ -21,6 +21,8 @@ const fakeRegistry: Registry = {
   get: (n: string) => fakeRegistry.list().find((s) => s.name === n),
   applyConfig: async () => {},
   invokeMethod: async () => ({}),
+  disable: () => {},
+  enable: () => {},
   subscribeToProgress: () => () => {},
 }
 
