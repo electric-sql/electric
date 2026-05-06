@@ -3,44 +3,36 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { McpStdioConfig } from '../types'
 import type { McpTransportHandle } from './types'
 
-type ClientRequestArgs = Parameters<Client[`request`]>
-
 /**
  * Wraps the official MCP SDK `StdioClientTransport` + `Client` into a
- * minimal {@link McpTransportHandle}. The `send` method delegates to
- * `Client.request`; callers must pass an already-shaped request payload
- * (and result schema) compatible with the SDK's `request` signature.
- *
- * Note: `Client.request` requires a Zod-style result schema as its second
- * argument. Because the wrapper's `send` accepts an opaque `unknown`
- * message, we forward through casts. Real call sites that need typed
- * responses should call `Client.request` directly.
+ * minimal {@link McpTransportHandle}. After `connect()` resolves, callers
+ * use the exposed `client` directly to invoke MCP methods (e.g.
+ * `client.callTool(...)`, `client.listTools(...)`) so they benefit from
+ * the SDK's typed, schema-validated responses.
  */
 export function createStdioTransport(cfg: McpStdioConfig): McpTransportHandle {
-  let client: Client | undefined
-  let transport: StdioClientTransport | undefined
+  let _client: Client | undefined
+  let _transport: StdioClientTransport | undefined
   return {
+    get client(): Client | null {
+      return _client ?? null
+    },
     async connect() {
-      transport = new StdioClientTransport({
+      _transport = new StdioClientTransport({
         command: cfg.command,
         args: cfg.args ?? [],
         env: cfg.env,
       })
-      client = new Client(
+      _client = new Client(
         { name: `agents-mcp`, version: `0.1.0` },
         { capabilities: {} }
       )
-      await client.connect(transport)
-    },
-    async send(message) {
-      if (!client) throw new Error(`not connected`)
-      const args = [message, undefined] as unknown as ClientRequestArgs
-      return client.request(...args)
+      await _client.connect(_transport)
     },
     async close() {
-      await client?.close()
-      client = undefined
-      transport = undefined
+      await _client?.close()
+      _client = undefined
+      _transport = undefined
     },
   }
 }
