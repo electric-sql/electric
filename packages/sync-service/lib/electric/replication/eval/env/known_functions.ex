@@ -137,6 +137,17 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
     end
   end
 
+  def concat_text(parts) when is_list(parts) do
+    parts
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join()
+  end
+
+  defpostgres("concat(VARIADIC text) -> text",
+    strict?: false,
+    delegate: &__MODULE__.concat_text/1
+  )
+
   defpostgres("lower(text) -> text", delegate: &String.downcase/1)
   defpostgres("upper(text) -> text", delegate: &String.upcase/1)
   defpostgres("text ~~ text -> bool", delegate: &Casting.like?/2)
