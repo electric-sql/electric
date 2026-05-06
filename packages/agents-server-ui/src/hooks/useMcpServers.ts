@@ -17,6 +17,11 @@ export interface McpServerRow {
   error?: { kind: string; message: string }
   toolCount: number
   tools?: Array<{ name: string; description?: string }>
+  deviceCode?: {
+    userCode: string
+    expiresAt: number
+    verificationUriComplete?: string
+  }
 }
 
 export interface UseMcpServersOpts {

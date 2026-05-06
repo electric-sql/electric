@@ -32,6 +32,17 @@ export function ServerRow({
       setBusy(false)
     }
   }
+  const restartDeviceFlow = async () => {
+    setBusy(true)
+    try {
+      await fetch(
+        `${runtimeUrl}/oauth/device/${encodeURIComponent(server.name)}/start`,
+        { method: `POST` }
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <article>
@@ -61,12 +72,41 @@ export function ServerRow({
             </dd>
           </>
         )}
+        {server.deviceCode && (
+          <>
+            <dt>Device code</dt>
+            <dd>
+              <strong>{server.deviceCode.userCode}</strong>
+            </dd>
+            <dt>Verify at</dt>
+            <dd>
+              {server.deviceCode.verificationUriComplete ? (
+                <a
+                  href={server.deviceCode.verificationUriComplete}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {server.deviceCode.verificationUriComplete}
+                </a>
+              ) : (
+                server.authUrl
+              )}
+            </dd>
+          </>
+        )}
       </dl>
       <div role="group" aria-label="Actions">
-        {server.status === `authenticating` && server.authUrl && (
-          <a href={server.authUrl} target="_blank" rel="noopener noreferrer">
-            Authorize
-          </a>
+        {server.status === `authenticating` &&
+          server.authUrl &&
+          !server.deviceCode && (
+            <a href={server.authUrl} target="_blank" rel="noopener noreferrer">
+              Authorize
+            </a>
+          )}
+        {server.deviceCode && (
+          <button disabled={busy} onClick={() => void restartDeviceFlow()}>
+            Restart device flow
+          </button>
         )}
         <button disabled={busy} onClick={() => void post(`authorize`)}>
           Re-authorize
