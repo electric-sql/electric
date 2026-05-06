@@ -116,21 +116,3 @@
   color: var(--ds-text-3);
   text-transform: lowercase;
 }
-
-.footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  border-top: 1px solid var(--ds-divider);
-  font-size: var(--ds-text-xs);
-  color: var(--ds-text-3);
-  flex-shrink: 0;
-  background: var(--ds-bg-subtle);
-}
-
-.hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}

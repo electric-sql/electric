@@ -10,7 +10,6 @@ import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
 import { Search } from 'lucide-react'
-import { Kbd } from '../ui'
 import { StatusDot } from './StatusDot'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
@@ -189,18 +188,6 @@ export function SearchPalette(): React.ReactElement | null {
                 })}
               </div>
             ))}
-          </div>
-          <div className={styles.footer}>
-            <span className={styles.hint}>
-              <Kbd>↑</Kbd>
-              <Kbd>↓</Kbd> Navigate
-            </span>
-            <span className={styles.hint}>
-              <Kbd>↵</Kbd> Open
-            </span>
-            <span className={styles.hint}>
-              <Kbd>esc</Kbd> Close
-            </span>
           </div>
         </BaseDialog.Popup>
       </BaseDialog.Portal>
