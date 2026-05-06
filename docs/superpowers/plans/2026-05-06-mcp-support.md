@@ -4650,3 +4650,529 @@ git commit --allow-empty -m "milestone: agents-mcp phase 3 complete — OAuth vi
 ```
 
 ---
+
+## Phase 4 — Connected Services UI
+
+End state: A new "Connected Services" page in `agents-server-ui` that fetches `/api/runtimes` from agents-server, then talks to each runtime's `${publicUrl}/api/mcp/*` endpoints **directly** (CORS). Each row shows server status, tool count, last error, and per-row actions (Authorize / Re-authorize / Disable / Enable / Reconnect / Disconnect). Polling: 10s when idle, ramps to 2s when any row is in `authenticating` state.
+
+> The UI is build-time isolated from `@electric-ax/agents-mcp` (it doesn't import the package). It only knows the HTTP contract.
+
+### Task 36: `useRuntimes` hook
+
+**Files:**
+
+- Create: `packages/agents-server-ui/src/hooks/useRuntimes.ts`
+- Create: `packages/agents-server-ui/src/hooks/useRuntimes.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// src/hooks/useRuntimes.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { useRuntimes } from './useRuntimes'
+
+describe('useRuntimes', () => {
+  it('fetches /api/runtimes once on mount', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            runtimes: [
+              { name: 'r', publicUrl: 'http://r:1', types: ['horton'] },
+            ],
+            experimental: true,
+          })
+        )
+    )
+    const { result } = renderHook(() =>
+      useRuntimes({ baseUrl: 'http://server', fetchImpl })
+    )
+    await waitFor(() => expect(result.current.runtimes.length).toBe(1))
+    expect(result.current.runtimes[0]).toMatchObject({
+      name: 'r',
+      publicUrl: 'http://r:1',
+    })
+  })
+
+  it('reports an error when the discovery endpoint is down', async () => {
+    const fetchImpl = vi.fn(async () => new Response('', { status: 500 }))
+    const { result } = renderHook(() =>
+      useRuntimes({ baseUrl: 'http://server', fetchImpl })
+    )
+    await waitFor(() => expect(result.current.error).toBeTruthy())
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement**
+
+```ts
+// src/hooks/useRuntimes.ts
+import { useEffect, useState } from 'react'
+
+export interface Runtime {
+  name: string
+  publicUrl: string
+  types: string[]
+}
+
+export interface UseRuntimesOpts {
+  baseUrl?: string /* default: '' (same-origin) */
+  fetchImpl?: typeof fetch
+  /** ms; default 60000. */
+  refreshIntervalMs?: number
+}
+
+export function useRuntimes(opts: UseRuntimesOpts = {}) {
+  const [runtimes, setRuntimes] = useState<Runtime[]>([])
+  const [error, setError] = useState<Error | undefined>()
+  const fetchImpl = opts.fetchImpl ?? fetch
+  const baseUrl = opts.baseUrl ?? ''
+  const interval = opts.refreshIntervalMs ?? 60_000
+
+  useEffect(() => {
+    let cancelled = false
+
+    const load = async () => {
+      try {
+        const res = await fetchImpl(`${baseUrl}/api/runtimes`)
+        if (!res.ok) throw new Error(`/api/runtimes ${res.status}`)
+        const json = (await res.json()) as { runtimes: Runtime[] }
+        if (!cancelled) {
+          setRuntimes(json.runtimes)
+          setError(undefined)
+        }
+      } catch (err) {
+        if (!cancelled) setError(err as Error)
+      }
+    }
+
+    void load()
+    const onFocus = () => void load()
+    window.addEventListener('focus', onFocus)
+    const timer = setInterval(load, interval)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', onFocus)
+      clearInterval(timer)
+    }
+  }, [baseUrl, fetchImpl, interval])
+
+  return { runtimes, error }
+}
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-server-ui/src/hooks/useRuntimes.ts packages/agents-server-ui/src/hooks/useRuntimes.test.ts
+git commit -m "feat(agents-server-ui): useRuntimes — discovery via /api/runtimes"
+```
+
+---
+
+### Task 37: `useMcpServers` hook (per-runtime polling)
+
+**Files:**
+
+- Create: `packages/agents-server-ui/src/hooks/useMcpServers.ts`
+- Create: `packages/agents-server-ui/src/hooks/useMcpServers.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// src/hooks/useMcpServers.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { useMcpServers } from './useMcpServers'
+
+describe('useMcpServers', () => {
+  it('polls every 10s when idle and 2s when a row is authenticating', async () => {
+    let calls = 0
+    let phase: 'idle' | 'auth' = 'idle'
+    const fetchImpl = vi.fn(async () => {
+      calls += 1
+      const status = phase === 'idle' ? 'ready' : 'authenticating'
+      return new Response(
+        JSON.stringify({ servers: [{ name: 'a', status, toolCount: 0 }] })
+      )
+    })
+    vi.useFakeTimers()
+    const { result } = renderHook(() =>
+      useMcpServers({
+        runtimeUrl: 'http://r:1',
+        fetchImpl,
+        idleMs: 10_000,
+        authMs: 2_000,
+      })
+    )
+    await waitFor(() => expect(result.current.servers.length).toBe(1))
+    const baseline = calls
+
+    vi.advanceTimersByTime(9_000)
+    expect(calls).toBe(baseline)
+
+    vi.advanceTimersByTime(1_000)
+    await waitFor(() => expect(calls).toBe(baseline + 1))
+
+    phase = 'auth'
+    vi.advanceTimersByTime(10_000)
+    await waitFor(() =>
+      expect(result.current.servers[0]!.status).toBe('authenticating')
+    )
+
+    const after = calls
+    vi.advanceTimersByTime(2_000)
+    await waitFor(() => expect(calls).toBeGreaterThan(after))
+
+    vi.useRealTimers()
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement**
+
+```ts
+// src/hooks/useMcpServers.ts
+import { useEffect, useState } from 'react'
+
+export type McpStatus =
+  | 'connecting'
+  | 'authenticating'
+  | 'ready'
+  | 'error'
+  | 'disabled'
+
+export interface McpServerRow {
+  name: string
+  transport?: 'http' | 'stdio'
+  url?: string
+  authMode?: string
+  status: McpStatus
+  authUrl?: string
+  error?: { kind: string; message: string }
+  toolCount: number
+  tools?: Array<{ name: string; description?: string }>
+}
+
+export interface UseMcpServersOpts {
+  runtimeUrl: string
+  fetchImpl?: typeof fetch
+  idleMs?: number /* default 10_000 */
+  authMs?: number /* default 2_000 */
+}
+
+export function useMcpServers(opts: UseMcpServersOpts) {
+  const [servers, setServers] = useState<McpServerRow[]>([])
+  const [error, setError] = useState<Error | undefined>()
+  const fetchImpl = opts.fetchImpl ?? fetch
+  const idle = opts.idleMs ?? 10_000
+  const authMs = opts.authMs ?? 2_000
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const load = async () => {
+      try {
+        const res = await fetchImpl(`${opts.runtimeUrl}/api/mcp/servers`)
+        if (!res.ok) throw new Error(`servers ${res.status}`)
+        const json = (await res.json()) as { servers: McpServerRow[] }
+        if (cancelled) return
+        setServers(json.servers)
+        setError(undefined)
+        const wait = json.servers.some((s) => s.status === 'authenticating')
+          ? authMs
+          : idle
+        timer = setTimeout(load, wait)
+      } catch (err) {
+        if (cancelled) return
+        setError(err as Error)
+        timer = setTimeout(load, idle)
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [opts.runtimeUrl, fetchImpl, idle, authMs])
+
+  return { servers, error }
+}
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-server-ui/src/hooks/useMcpServers.ts packages/agents-server-ui/src/hooks/useMcpServers.test.ts
+git commit -m "feat(agents-server-ui): useMcpServers — polling 10s idle / 2s during OAuth"
+```
+
+---
+
+### Task 38: Connected Services route + page
+
+**Files:**
+
+- Create: `packages/agents-server-ui/src/components/connected-services/ConnectedServicesPage.tsx`
+- Create: `packages/agents-server-ui/src/components/connected-services/ServerRow.tsx`
+- Create: `packages/agents-server-ui/src/components/connected-services/ConnectedServicesPage.module.css`
+- Modify: `packages/agents-server-ui/src/router.tsx` — add `/connected-services` route + sidebar entry
+
+- [ ] **Step 1: Implement the page**
+
+```tsx
+// src/components/connected-services/ConnectedServicesPage.tsx
+import { useRuntimes } from '../../hooks/useRuntimes'
+import { useMcpServers } from '../../hooks/useMcpServers'
+import { ServerRow } from './ServerRow'
+import styles from './ConnectedServicesPage.module.css'
+
+export function ConnectedServicesPage(): JSX.Element {
+  const { runtimes, error: runtimesError } = useRuntimes()
+
+  return (
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <h1>Connected Services</h1>
+        <span className={styles.experimental}>experimental</span>
+      </header>
+      {runtimesError && (
+        <p className={styles.error}>
+          Discovery failed: {runtimesError.message}
+        </p>
+      )}
+      {runtimes.length === 0 && !runtimesError && (
+        <p>No runtimes registered.</p>
+      )}
+      {runtimes.map((rt) => (
+        <RuntimeSection key={rt.name} runtime={rt} />
+      ))}
+    </main>
+  )
+}
+
+function RuntimeSection({
+  runtime,
+}: {
+  runtime: { name: string; publicUrl: string }
+}): JSX.Element {
+  const { servers, error } = useMcpServers({ runtimeUrl: runtime.publicUrl })
+  return (
+    <section className={styles.runtime}>
+      <h2>{runtime.name}</h2>
+      <p className={styles.publicUrl}>{runtime.publicUrl}</p>
+      {error && <p className={styles.error}>{error.message}</p>}
+      {servers.length === 0 ? (
+        <p className={styles.empty}>
+          No MCP servers registered on this runtime.
+        </p>
+      ) : (
+        <ul className={styles.list}>
+          {servers.map((s) => (
+            <li key={s.name}>
+              <ServerRow server={s} runtimeUrl={runtime.publicUrl} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+```
+
+- [ ] **Step 2: Implement `ServerRow`**
+
+```tsx
+// src/components/connected-services/ServerRow.tsx
+import { useState } from 'react'
+import type { McpServerRow } from '../../hooks/useMcpServers'
+
+export function ServerRow({
+  server,
+  runtimeUrl,
+}: {
+  server: McpServerRow
+  runtimeUrl: string
+}): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const post = async (action: string) => {
+    setBusy(true)
+    try {
+      await fetch(
+        `${runtimeUrl}/api/mcp/servers/${encodeURIComponent(server.name)}/${action}`,
+        { method: 'POST' }
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async () => {
+    if (!confirm(`Remove ${server.name}?`)) return
+    setBusy(true)
+    try {
+      await fetch(
+        `${runtimeUrl}/api/mcp/servers/${encodeURIComponent(server.name)}`,
+        { method: 'DELETE' }
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <article>
+      <h3>{server.name}</h3>
+      <dl>
+        <dt>Status</dt>
+        <dd>{server.status}</dd>
+        <dt>Tools</dt>
+        <dd>{server.toolCount}</dd>
+        {server.transport && (
+          <>
+            <dt>Transport</dt>
+            <dd>{server.transport}</dd>
+          </>
+        )}
+        {server.authMode && (
+          <>
+            <dt>Auth</dt>
+            <dd>{server.authMode}</dd>
+          </>
+        )}
+        {server.error && (
+          <>
+            <dt>Error</dt>
+            <dd>
+              {server.error.kind}: {server.error.message}
+            </dd>
+          </>
+        )}
+      </dl>
+      <div role="group" aria-label="Actions">
+        {server.status === 'authenticating' && server.authUrl && (
+          <a href={server.authUrl} target="_blank" rel="noopener noreferrer">
+            Authorize
+          </a>
+        )}
+        <button disabled={busy} onClick={() => post('authorize')}>
+          Re-authorize
+        </button>
+        <button disabled={busy} onClick={() => post('reconnect')}>
+          Reconnect
+        </button>
+        {server.status === 'disabled' ? (
+          <button disabled={busy} onClick={() => post('enable')}>
+            Enable
+          </button>
+        ) : (
+          <button disabled={busy} onClick={() => post('disable')}>
+            Disable
+          </button>
+        )}
+        <button disabled={busy} onClick={remove}>
+          Disconnect
+        </button>
+      </div>
+    </article>
+  )
+}
+```
+
+- [ ] **Step 3: Add the route in `router.tsx`**
+
+Locate the existing route definitions in `packages/agents-server-ui/src/router.tsx`. Add `/connected-services` → `<ConnectedServicesPage />`. Add a sidebar entry alongside other nav items.
+
+- [ ] **Step 4: Add the CSS module**
+
+```css
+/* src/components/connected-services/ConnectedServicesPage.module.css */
+.page {
+  padding: var(--spacing-6);
+  display: grid;
+  gap: var(--spacing-6);
+}
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-3);
+}
+.experimental {
+  font-size: var(--font-size-1);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 2px 6px;
+}
+.runtime {
+  display: grid;
+  gap: var(--spacing-2);
+}
+.publicUrl {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-1);
+}
+.error {
+  color: var(--color-danger);
+}
+.empty {
+  color: var(--color-text-muted);
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--spacing-3);
+}
+```
+
+- [ ] **Step 5: Manual smoke**
+
+Boot agents-server, agents runtime, and the UI dev server. Visit `/connected-services`. Confirm it renders the runtime, polls `/api/mcp/servers`, and per-row buttons issue requests to the runtime (visible cross-origin requests in devtools).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/agents-server-ui/src/components/connected-services packages/agents-server-ui/src/router.tsx
+git commit -m "feat(agents-server-ui): Connected Services page (talks to runtimes directly)"
+```
+
+---
+
+### Task 39: Phase 4 verification
+
+- [ ] **Step 1: Run UI tests**
+
+```bash
+pnpm -C packages/agents-server-ui test --run
+```
+
+- [ ] **Step 2: Manual smoke — full flow**
+
+1. Boot agents-server + agents runtime + UI dev server.
+2. Add an apiKey-mode server in `mcp.json`; set the env var; verify it shows `ready` in the UI without reloading.
+3. Add Honeycomb (`authorizationCode`); confirm the row shows `authenticating` with an Authorize link.
+4. Click Authorize, complete OAuth in the popup, return to the page; within 2s the row should flip to `ready`.
+5. Click Reconnect on the Honeycomb row; confirm a fresh connect happens.
+6. Click Disconnect; confirm the row disappears from the list.
+
+- [ ] **Step 3: Commit milestone**
+
+```bash
+git commit --allow-empty -m "milestone: agents-mcp phase 4 complete — Connected Services UI talks directly to runtimes"
+```
+
+---
