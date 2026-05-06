@@ -49,8 +49,23 @@ export type EmbedSource = {
 export function useEmbedSource(config: EmbedConfig): EmbedSource {
   const [uri, setUri] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  // We deliberately freeze the injection script after the first call.
+  // The embed picks the initial config up synchronously on first
+  // paint; subsequent runtime updates flow through `set-*` postMessages
+  // so the asset (= bundle) never has to re-parse. `config` is read
+  // only on first render — the deps array is intentionally empty.
+  const initialConfigRef = useMemo(() => config, [])
+  const devEmbedUri = useMemo(
+    () => getDevEmbedUri(initialConfigRef),
+    [initialConfigRef]
+  )
 
   useEffect(() => {
+    if (devEmbedUri) {
+      setUri(devEmbedUri)
+      return
+    }
+
     let cancelled = false
     const asset = Asset.fromModule(EMBED_ASSET)
     if (asset.localUri) {
@@ -70,14 +85,8 @@ export function useEmbedSource(config: EmbedConfig): EmbedSource {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [devEmbedUri])
 
-  // We deliberately freeze the injection script after the first call.
-  // The embed picks the initial config up synchronously on first
-  // paint; subsequent runtime updates flow through `set-*` postMessages
-  // so the asset (= bundle) never has to re-parse. `config` is read
-  // only on first render — the deps array is intentionally empty.
-  const initialConfigRef = useMemo(() => config, [])
   const injectedJavaScriptBeforeContentLoaded = useMemo(
     () => buildConfigInjection(initialConfigRef),
     [initialConfigRef]
@@ -96,4 +105,25 @@ function buildConfigInjection(config: EmbedConfig): string {
   // Trailing `true;` is required by react-native-webview iOS so the
   // injected script returns a JSON-serialisable value.
   return `(function(){try{window.__MOBILE_EMBED__=${payload};}catch(_){}})();true;`
+}
+
+function getDevEmbedUri(config: EmbedConfig): string | null {
+  const base = process.env.EXPO_PUBLIC_AGENTS_MOBILE_EMBED_URL
+  if (!base) return null
+
+  try {
+    const url = new URL(base)
+    if (!url.pathname.endsWith(`/embed.html`)) {
+      url.pathname = `${url.pathname.replace(/\/+$/, ``)}/embed.html`
+    }
+    url.hash = new URLSearchParams({
+      serverUrl: config.serverUrl,
+      entityUrl: config.entityUrl,
+      view: config.view,
+      theme: config.theme,
+    }).toString()
+    return url.toString()
+  } catch {
+    return null
+  }
 }

@@ -1,7 +1,13 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@electric-ax/agents-server-ui/src/embed/SessionDomEmbed": [
+        "src/types/server-ui-dom"
+      ]
+    }
   },
   "include": ["App.tsx", "index.ts", "src"]
 }

@@ -79,13 +79,19 @@
 .column {
   display: flex;
   flex-direction: column;
+  flex: 1;
   height: 100%;
+  width: 100%;
+  min-width: 0;
   background: var(--ds-bg);
 }
 
 .scroll {
   display: block;
+  flex: 1;
   height: 100%;
+  width: 100%;
+  min-width: 0;
   overflow: auto;
   background: var(--ds-bg);
 }

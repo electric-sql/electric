@@ -56,8 +56,16 @@ export default defineConfig(({ command, mode }) => {
           // swapped for tiny stubs in `src/embed/stubs/`. Mobile chat
           // shows code as plain monospace and skips math/diagrams,
           // which trims the embed bundle from ~13 MB to ~3 MB.
-          resolve: {
-            alias: [
+        }
+      : {}),
+    resolve: {
+      alias: [
+        {
+          find: /^@electric-ax\/agents-runtime\/client$/,
+          replacement: resolve(__dirname, `../agents-runtime/src/client.ts`),
+        },
+        ...(mobileEmbed
+          ? [
               {
                 find: `mermaid`,
                 replacement: resolve(__dirname, `src/embed/stubs/mermaid.ts`),
@@ -77,10 +85,10 @@ export default defineConfig(({ command, mode }) => {
                   `src/embed/stubs/streamdown-math.ts`
                 ),
               },
-            ],
-          },
-        }
-      : {}),
+            ]
+          : []),
+      ],
+    },
     plugins: [
       react(),
       ...(desktop ? [desktopHtmlMarker()] : []),

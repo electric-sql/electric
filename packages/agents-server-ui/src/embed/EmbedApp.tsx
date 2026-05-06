@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from 'react'
 import {
   RouterProvider,
   createMemoryHistory,
@@ -12,7 +19,7 @@ import {
   ElectricAgentsProvider,
   useElectricAgents,
 } from '../lib/ElectricAgentsProvider'
-import { ThemeProvider } from '../ui'
+import { ThemeProvider } from '../ui/ThemeProvider'
 import { ChatView } from '../components/views/ChatView'
 import { StateExplorerView } from '../components/views/StateExplorerView'
 import { readEmbedConfig, type MobileEmbedConfig } from './config'
@@ -45,9 +52,27 @@ export function EmbedApp(): ReactElement {
   const state = useEmbedState(initial)
 
   return (
+    <EmbedSessionRoot
+      {...state}
+      onNavigatePathname={(pathname) =>
+        postEmbedToNative({ type: `navigate`, pathname })
+      }
+    />
+  )
+}
+
+export type EmbedSessionProps = EmbedState & {
+  onNavigatePathname?: (pathname: string) => void | Promise<void>
+}
+
+export function EmbedSessionRoot({
+  onNavigatePathname,
+  ...state
+}: EmbedSessionProps): ReactElement {
+  return (
     <ThemeProvider appearance={state.theme}>
       <ElectricAgentsProvider baseUrl={state.serverUrl}>
-        <EmbeddedRouter state={state} />
+        <EmbeddedRouter state={state} onNavigatePathname={onNavigatePathname} />
       </ElectricAgentsProvider>
     </ThemeProvider>
   )
@@ -58,6 +83,16 @@ type EmbedState = {
   entityUrl: string
   view: EmbedView
   theme: EmbedTheme
+}
+
+const EmbedStateContext = createContext<EmbedState | null>(null)
+
+function useCurrentEmbedState(): EmbedState {
+  const state = useContext(EmbedStateContext)
+  if (!state) {
+    throw new Error(`useCurrentEmbedState must be used inside EmbeddedRouter`)
+  }
+  return state
 }
 
 /**
@@ -116,10 +151,16 @@ function useEmbedState(initial: MobileEmbedConfig): EmbedState {
  * the intent over `postMessage` instead of changing the embedded view
  * underneath the user.
  */
-function EmbeddedRouter({ state }: { state: EmbedState }): ReactElement {
+function EmbeddedRouter({
+  state,
+  onNavigatePathname,
+}: {
+  state: EmbedState
+  onNavigatePathname?: (pathname: string) => void | Promise<void>
+}): ReactElement {
   const router = useMemo(() => {
     const rootRoute = createRootRoute({
-      component: () => <EmbedSurface state={state} />,
+      component: EmbedRouteSurface,
     })
     const indexRoute = createRoute({
       getParentRoute: () => rootRoute,
@@ -139,16 +180,21 @@ function EmbeddedRouter({ state }: { state: EmbedState }): ReactElement {
     // Forward in-embed navigations to the native shell. The host
     // decides whether to swap entity, push a new screen, or ignore.
     router.subscribe(`onResolved`, ({ toLocation }) => {
-      postEmbedToNative({ type: `navigate`, pathname: toLocation.pathname })
+      void onNavigatePathname?.(toLocation.pathname)
     })
 
     return router
-  }, [])
+  }, [onNavigatePathname])
 
-  // Re-create the surface (not the router) when state changes — keeps
-  // the route tree stable while the rendered view follows the host.
-  void state
-  return <RouterProvider router={router} />
+  return (
+    <EmbedStateContext.Provider value={state}>
+      <RouterProvider router={router} />
+    </EmbedStateContext.Provider>
+  )
+}
+
+function EmbedRouteSurface(): ReactElement {
+  return <EmbedSurface state={useCurrentEmbedState()} />
 }
 
 function EmbedSurface({ state }: { state: EmbedState }): ReactElement {
