@@ -3779,3 +3779,874 @@ git commit --allow-empty -m "milestone: agents-mcp phase 2 complete — protocol
 ```
 
 ---
+
+## Phase 3 — OAuth via SDK provider
+
+End state: An MCP server declared with `auth.mode: 'authorizationCode'` (browser flow) goes through PKCE + DCR + RFC 9728 discovery + token exchange + 401-retry / refresh transparently — and **none of that code lives in our repo**. The MCP SDK does it all via its `OAuthClientProvider` interface; we provide a thin adapter that persists tokens and client info via `CredentialStore`. `clientCredentials` mode is also wired in this phase (simpler — it's just a token-fetch using stored client credentials).
+
+The OAuth callback (`GET /oauth/callback/:server`) lives on the **runtime**, not agents-server.
+
+### Task 30: SDK `OAuthClientProvider` adapter
+
+**Files:**
+
+- Create: `packages/agents-mcp/src/auth/sdk-provider.ts`
+- Create: `packages/agents-mcp/test/auth/sdk-provider.test.ts`
+
+> The MCP SDK exports `OAuthClientProvider` (interface) and supporting types (`OAuthClientInformation`, `OAuthTokens`). Methods we implement:
+>
+> - `redirectUrl` — getter returning the per-server redirect URL.
+> - `clientMetadata` — getter returning DCR client metadata.
+> - `clientInformation()` — load saved client info (or undefined → triggers DCR).
+> - `saveClientInformation(info)` — persist DCR result.
+> - `tokens()` — load saved tokens.
+> - `saveTokens(tokens)` — persist after refresh / first auth.
+> - `redirectToAuthorization(url)` — invoked on first auth; we record the URL so `addServer` can return it in the `authenticating` envelope.
+> - `saveCodeVerifier(v)` / `codeVerifier()` — round-trip the PKCE verifier in memory keyed by server.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/auth/sdk-provider.test.ts
+import { describe, expect, it } from 'vitest'
+import { createSdkOAuthProvider } from '../../src/auth/sdk-provider'
+import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
+
+describe('createSdkOAuthProvider', () => {
+  it('round-trips tokens via CredentialStore', async () => {
+    const credentials = inMemoryCredentialStore()
+    const p = createSdkOAuthProvider({
+      server: 'mock',
+      publicUrl: 'http://r:4448',
+      credentials,
+      scopes: ['mcp:read'],
+    })
+    expect(p.redirectUrl).toBe('http://r:4448/oauth/callback/mock')
+    await p.saveTokens({ access_token: 'AT', token_type: 'Bearer' } as any)
+    expect((await p.tokens())?.access_token).toBe('AT')
+  })
+
+  it('captures the authorize URL via redirectToAuthorization for the addServer envelope', async () => {
+    const credentials = inMemoryCredentialStore()
+    const p = createSdkOAuthProvider({
+      server: 'mock',
+      publicUrl: 'http://r:4448',
+      credentials,
+      scopes: ['mcp:read'],
+    })
+    p.redirectToAuthorization(new URL('https://provider/authorize?x=1'))
+    expect(p.peekAuthUrl()).toBe('https://provider/authorize?x=1')
+  })
+
+  it('round-trips DCR client info', async () => {
+    const credentials = inMemoryCredentialStore()
+    const p = createSdkOAuthProvider({
+      server: 'mock',
+      publicUrl: 'http://r:4448',
+      credentials,
+      scopes: ['mcp:read'],
+    })
+    await p.saveClientInformation({ client_id: 'cid' } as any)
+    expect((await p.clientInformation())?.client_id).toBe('cid')
+  })
+
+  it('honors a redirectUri override from auth config', () => {
+    const credentials = inMemoryCredentialStore()
+    const p = createSdkOAuthProvider({
+      server: 'mock',
+      publicUrl: 'http://r:4448',
+      credentials,
+      scopes: ['mcp:read'],
+      redirectUri: 'http://custom/cb',
+    })
+    expect(p.redirectUrl).toBe('http://custom/cb')
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement**
+
+```ts
+// src/auth/sdk-provider.ts
+import type {
+  OAuthClientInformation,
+  OAuthClientInformationFull,
+  OAuthClientMetadata,
+  OAuthTokens as SdkOAuthTokens,
+} from '@modelcontextprotocol/sdk/shared/auth.js'
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
+import type {
+  CredentialStore,
+  OAuthClientInfo,
+  OAuthTokens,
+} from '../credentials/types'
+
+export interface CreateSdkOAuthProviderOpts {
+  server: string
+  publicUrl: string
+  credentials: CredentialStore
+  scopes?: string[]
+  redirectUri?: string
+  /** RFC 8707 resource indicator. */
+  resource?: string
+}
+
+/**
+ * Adapter that implements MCP SDK's OAuthClientProvider, persisting via CredentialStore.
+ * The SDK handles PKCE, DCR (RFC 7591), discovery (RFC 9728), token exchange, refresh,
+ * and 401-retry. We only persist.
+ */
+export interface SdkOAuthProvider extends OAuthClientProvider {
+  /** Returns the most recent authorize URL captured by redirectToAuthorization. */
+  peekAuthUrl(): string | undefined
+  /** Resets the captured authorize URL. */
+  clearAuthUrl(): void
+}
+
+export function createSdkOAuthProvider(
+  opts: CreateSdkOAuthProviderOpts
+): SdkOAuthProvider {
+  const redirect =
+    opts.redirectUri ??
+    `${opts.publicUrl.replace(/\/$/, '')}/oauth/callback/${opts.server}`
+  let codeVerifier: string | undefined
+  let lastAuthUrl: string | undefined
+
+  const toSdkTokens = (t: OAuthTokens): SdkOAuthTokens =>
+    ({
+      access_token: t.accessToken,
+      refresh_token: t.refreshToken,
+      expires_in: t.expiresAt
+        ? Math.max(0, t.expiresAt - Math.floor(Date.now() / 1000))
+        : undefined,
+      token_type: t.tokenType,
+      scope: t.scope,
+    }) as SdkOAuthTokens
+
+  const fromSdkTokens = (t: SdkOAuthTokens): OAuthTokens => ({
+    accessToken: t.access_token,
+    refreshToken: t.refresh_token,
+    expiresAt: t.expires_in
+      ? Math.floor(Date.now() / 1000) + t.expires_in
+      : undefined,
+    tokenType: t.token_type,
+    scope: t.scope,
+  })
+
+  const toSdkClientInfo = (c: OAuthClientInfo): OAuthClientInformationFull =>
+    ({
+      client_id: c.clientId,
+      client_secret: c.clientSecret,
+      redirect_uris: c.redirectUris ?? [redirect],
+    }) as OAuthClientInformationFull
+
+  const fromSdkClientInfo = (c: OAuthClientInformation): OAuthClientInfo => ({
+    clientId: c.client_id,
+    clientSecret: (c as OAuthClientInformationFull).client_secret,
+    redirectUris: (c as OAuthClientInformationFull).redirect_uris,
+    registeredAt: Math.floor(Date.now() / 1000),
+  })
+
+  return {
+    get redirectUrl() {
+      return redirect
+    },
+    get clientMetadata(): OAuthClientMetadata {
+      return {
+        client_name: '@electric-ax/agents-mcp',
+        redirect_uris: [redirect],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_post',
+        scope: opts.scopes?.join(' '),
+      } as OAuthClientMetadata
+    },
+
+    async clientInformation() {
+      const saved = await opts.credentials.getOAuthClientInfo?.(opts.server)
+      return saved ? toSdkClientInfo(saved) : undefined
+    },
+
+    async saveClientInformation(info: OAuthClientInformationFull) {
+      if (!opts.credentials.saveOAuthClientInfo) {
+        throw new Error(
+          `No CredentialStore.saveOAuthClientInfo available — cannot persist DCR result for "${opts.server}"`
+        )
+      }
+      await opts.credentials.saveOAuthClientInfo(
+        opts.server,
+        fromSdkClientInfo(info)
+      )
+    },
+
+    async tokens(): Promise<SdkOAuthTokens | undefined> {
+      const saved = await opts.credentials.getOAuthTokens?.(opts.server)
+      return saved ? toSdkTokens(saved) : undefined
+    },
+
+    async saveTokens(tokens: SdkOAuthTokens) {
+      if (!opts.credentials.saveOAuthTokens) {
+        throw new Error(
+          `No CredentialStore.saveOAuthTokens available — cannot persist tokens for "${opts.server}"`
+        )
+      }
+      await opts.credentials.saveOAuthTokens(opts.server, fromSdkTokens(tokens))
+    },
+
+    redirectToAuthorization(url: URL) {
+      lastAuthUrl = url.toString()
+    },
+
+    saveCodeVerifier(v: string) {
+      codeVerifier = v
+    },
+    async codeVerifier() {
+      if (!codeVerifier)
+        throw new Error(`No PKCE codeVerifier set for "${opts.server}"`)
+      return codeVerifier
+    },
+
+    peekAuthUrl() {
+      return lastAuthUrl
+    },
+    clearAuthUrl() {
+      lastAuthUrl = undefined
+    },
+  }
+}
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-mcp/src/auth/sdk-provider.ts packages/agents-mcp/test/auth/sdk-provider.test.ts
+git commit -m "feat(agents-mcp): SDK OAuthClientProvider adapter — persists via CredentialStore"
+```
+
+---
+
+### Task 31: Wire OAuth into the registry
+
+**Files:**
+
+- Modify: `packages/agents-mcp/src/registry.ts` — handle `authorizationCode` (browser) + `clientCredentials`
+- Modify: `packages/agents-mcp/src/transports/http.ts` — accept an `oauthProvider` and let the SDK transport handle auth automatically
+- Modify: `packages/agents-mcp/test/registry.test.ts` — extend with OAuth scenarios
+
+> The MCP SDK's `StreamableHTTPClientTransport` accepts an `authProvider` (the `OAuthClientProvider` instance). When supplied, the SDK auto-handles the OAuth dance: 401-retry, refresh, DCR if no client info present, etc. Our registry's job is to construct the provider, hand it to the transport, and translate "needs first authorization" into an `authenticating` envelope.
+
+- [ ] **Step 1: Update `createHttpTransport` to accept `authProvider`**
+
+```ts
+// src/transports/http.ts
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
+
+export interface HttpTransportOpts {
+  name: string
+  url: string
+  headerProvider?: () => Promise<{ name: string; value: string } | undefined>
+  authProvider?: OAuthClientProvider
+  fetchImpl?: typeof fetch
+}
+
+export function createHttpTransport(opts: HttpTransportOpts): McpTransport {
+  const fetchImpl = opts.fetchImpl ?? fetch
+  const transport = new StreamableHTTPClientTransport(new URL(opts.url), {
+    authProvider: opts.authProvider,
+    fetch: opts.headerProvider
+      ? async (url, init) => {
+          const headers = new Headers(init?.headers)
+          const h = await opts.headerProvider!()
+          if (h) headers.set(h.name, h.value)
+          return fetchImpl(url, { ...init, headers })
+        }
+      : fetchImpl,
+  })
+  // ... rest unchanged
+}
+```
+
+- [ ] **Step 2: Extend the registry — handle `authorizationCode` + `clientCredentials`**
+
+```ts
+// inside src/registry.ts buildTransport(), add to the http branch:
+
+if (cfg.auth.mode === 'authorizationCode') {
+  const provider = createSdkOAuthProvider({
+    server: cfg.name,
+    publicUrl: opts.publicUrl ?? '',
+    credentials: opts.credentials,
+    scopes: cfg.auth.scopes,
+    redirectUri: cfg.auth.redirectUri,
+    resource: cfg.auth.resource,
+  })
+  // Bind the provider into the transport. After connect(), if the SDK had to
+  // call redirectToAuthorization, peekAuthUrl() will have a URL.
+  return {
+    transport: createHttpTransport({
+      name: cfg.name,
+      url: cfg.url,
+      authProvider: provider,
+    }),
+    provider,
+  }
+}
+
+if (cfg.auth.mode === 'clientCredentials') {
+  const cc = await opts.credentials.getClientCredentials?.(cfg.name)
+  if (!cc)
+    return {
+      error: makeError(
+        'auth_unavailable',
+        `no clientCredentials for ${cfg.name}`
+      ),
+    }
+  // The SDK's clientCredentials grant lives in the auth provider. We construct
+  // a provider-shaped object here that fetches a token using cc.
+  const provider = createClientCredentialsProvider({
+    tokenUrl: cfg.auth.tokenUrl,
+    clientId: cc.clientId,
+    clientSecret: cc.clientSecret,
+    scopes: cfg.auth.scopes,
+    audience: cfg.auth.audience,
+    resource: cfg.auth.resource,
+  })
+  return {
+    transport: createHttpTransport({
+      name: cfg.name,
+      url: cfg.url,
+      authProvider: provider,
+    }),
+  }
+}
+```
+
+The registry must also pass `publicUrl` through. Add it to `RegistryOpts`:
+
+```ts
+export interface RegistryOpts {
+  credentials: CredentialStore
+  /** Used as the base for OAuth callback URLs. */
+  publicUrl?: string
+  // ...
+}
+```
+
+- [ ] **Step 3: After `connectAndList`, check `peekAuthUrl()` and surface in the result**
+
+The flow: the SDK transport may, on first connect, call `redirectToAuthorization` and then throw an `UnauthorizedError`. Catch it, read `provider.peekAuthUrl()`, and return `{ state: 'authenticating', authUrl }` from `addServer`.
+
+Update the connect flow:
+
+```ts
+async function connectAndList(
+  entry: Entry,
+  provider?: SdkOAuthProvider
+): Promise<AddServerResult> {
+  if (!entry.transport) return { state: 'error' /* ... */ }
+  try {
+    await entry.transport.connect()
+    // ... list tools, ready
+  } catch (err) {
+    const url = provider?.peekAuthUrl()
+    if (url) {
+      entry.status = 'authenticating'
+      entry.authUrl = url
+      return { state: 'authenticating', id: entry.config.name, authUrl: url }
+    }
+    // ... error path
+  }
+}
+```
+
+Pass `provider` from `buildTransport` through `addServer` into `connectAndList`.
+
+- [ ] **Step 4: Implement the clientCredentials provider**
+
+```ts
+// src/auth/client-credentials.ts (helper used by sdk-provider.ts via direct construction)
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
+
+export interface ClientCredentialsOpts {
+  tokenUrl: string
+  clientId: string
+  clientSecret: string
+  scopes?: string[]
+  audience?: string
+  resource?: string
+}
+
+/**
+ * Minimal OAuthClientProvider implementing only what's needed for clientCredentials:
+ * lazy fetches a token on `tokens()`. The SDK's transport uses `tokens()` to attach
+ * Authorization headers and re-calls on 401.
+ */
+export function createClientCredentialsProvider(
+  opts: ClientCredentialsOpts
+): OAuthClientProvider {
+  let cached: { access_token: string; expiresAt: number } | undefined
+  return {
+    get redirectUrl() {
+      return ''
+    },
+    get clientMetadata() {
+      return {} as any
+    },
+    async clientInformation() {
+      return {
+        client_id: opts.clientId,
+        client_secret: opts.clientSecret,
+      } as any
+    },
+    async saveClientInformation() {},
+    async tokens() {
+      const now = Math.floor(Date.now() / 1000)
+      if (cached && cached.expiresAt - 30 > now) {
+        return {
+          access_token: cached.access_token,
+          token_type: 'Bearer',
+        } as any
+      }
+      const body = new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: opts.clientId,
+        client_secret: opts.clientSecret,
+      })
+      if (opts.scopes?.length) body.set('scope', opts.scopes.join(' '))
+      if (opts.audience) body.set('audience', opts.audience)
+      if (opts.resource) body.set('resource', opts.resource)
+      const res = await fetch(opts.tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      })
+      if (!res.ok)
+        throw new Error(`clientCredentials token endpoint ${res.status}`)
+      const json = (await res.json()) as {
+        access_token: string
+        expires_in?: number
+      }
+      cached = {
+        access_token: json.access_token,
+        expiresAt: now + (json.expires_in ?? 300),
+      }
+      return { access_token: json.access_token, token_type: 'Bearer' } as any
+    },
+    async saveTokens() {},
+    redirectToAuthorization() {
+      /* unused */
+    },
+    saveCodeVerifier() {},
+    async codeVerifier() {
+      return ''
+    },
+  }
+}
+```
+
+- [ ] **Step 5: Add registry tests for OAuth modes**
+
+```ts
+// test/registry-oauth.test.ts
+import { describe, expect, it } from 'vitest'
+import { createRegistry } from '../src/registry'
+import { inMemoryCredentialStore } from '../src/credentials/in-memory'
+
+describe('Registry — OAuth', () => {
+  it('authorizationCode without saved tokens returns authenticating + authUrl', async () => {
+    const credentials = inMemoryCredentialStore()
+    // Register a synthetic clientInfo so the SDK doesn't try DCR in the unit test.
+    await credentials.saveOAuthClientInfo?.('mock', { clientId: 'cid' })
+    const reg = createRegistry({
+      credentials,
+      publicUrl: 'http://r:4448',
+      // Use a transport override that synthesizes an authentication redirect when the
+      // provider has no tokens yet. (Wires the SDK provider's redirectToAuthorization.)
+      transportFactoryOverride: (cfg, hp, provider) => ({
+        client: {
+          listTools: async () => ({ tools: [] }),
+          close: async () => {},
+        } as any,
+        connect: async () => {
+          provider!.redirectToAuthorization(
+            new URL('https://provider/authorize?x=1')
+          )
+          throw new Error('UnauthorizedError')
+        },
+        close: async () => {},
+      }),
+    } as any)
+    const r = await reg.addServer({
+      name: 'mock',
+      transport: 'http',
+      url: 'https://mock/mcp',
+      auth: {
+        mode: 'authorizationCode',
+        flow: 'browser',
+        scopes: ['mcp:read'],
+      },
+    })
+    expect(r.state).toBe('authenticating')
+    if (r.state === 'authenticating') expect(r.authUrl).toContain('authorize')
+  })
+
+  it('clientCredentials: connects when tokens exchange succeeds', async () => {
+    const credentials = inMemoryCredentialStore()
+    credentials.setClientCredentials('mock', {
+      clientId: 'cid',
+      clientSecret: 'sec',
+    })
+    const reg = createRegistry({
+      credentials,
+      publicUrl: 'http://r:4448',
+      transportFactoryOverride: () => ({
+        client: {
+          listTools: async () => ({ tools: [{ name: 't', inputSchema: {} }] }),
+          close: async () => {},
+        } as any,
+        connect: async () => {},
+        close: async () => {},
+      }),
+    } as any)
+    const r = await reg.addServer({
+      name: 'mock',
+      transport: 'http',
+      url: 'https://mock/mcp',
+      auth: { mode: 'clientCredentials', tokenUrl: 'https://x/token' },
+    })
+    expect(r.state).toBe('ready')
+  })
+})
+```
+
+- [ ] **Step 6: Update `transportFactoryOverride` signature** to receive the provider as third argument so unit tests can drive `redirectToAuthorization`. Update existing override callsites in `test/registry.test.ts` accordingly.
+
+- [ ] **Step 7: Run — PASS**
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/agents-mcp/src/registry.ts packages/agents-mcp/src/transports/http.ts packages/agents-mcp/src/auth/client-credentials.ts packages/agents-mcp/test/registry-oauth.test.ts packages/agents-mcp/test/registry.test.ts
+git commit -m "feat(agents-mcp): wire authorizationCode + clientCredentials via SDK OAuthClientProvider"
+```
+
+---
+
+### Task 32: Runtime-side `/oauth/callback/:server`
+
+**Files:**
+
+- Create: `packages/agents-mcp/src/http/oauth-callback.ts`
+- Create: `packages/agents-mcp/test/http/oauth-callback.test.ts`
+- Modify: `packages/agents-mcp/src/http/mount.ts` — mount the callback route
+
+> The callback endpoint receives the authorization code from the OAuth provider's redirect, hands it to the SDK's `auth.finishAuth(code)` flow (which performs PKCE-protected token exchange and persists via `saveTokens`), then renders a "you can close this tab" page. The registry retries the connect after callback completes.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/http/oauth-callback.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import http from 'node:http'
+import { createRegistry } from '../../src/registry'
+import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
+import { mountMcpHttp } from '../../src/http/mount'
+
+describe('GET /oauth/callback/:server', () => {
+  it('completes auth via the registry hook and renders success', async () => {
+    const credentials = inMemoryCredentialStore()
+    const reg = createRegistry({ credentials, publicUrl: 'http://localhost:0' })
+    const finishAuthSpy = vi.fn(async () => ({
+      state: 'ready',
+      id: 'mock',
+      toolCount: 1,
+    }))
+    ;(reg as any).finishAuth = finishAuthSpy
+
+    const server = http.createServer()
+    mountMcpHttp({
+      server,
+      registry: reg,
+      publicUrl: 'http://localhost:0',
+      corsOrigin: '*',
+    })
+    await new Promise<void>((r) => server.listen(0, r))
+    const addr = server.address()!
+    const port = typeof addr === 'string' ? 0 : addr.port
+
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${port}/oauth/callback/mock?code=AC&state=S`
+      )
+      expect(res.status).toBe(200)
+      expect(await res.text()).toMatch(/close this/i)
+      expect(finishAuthSpy).toHaveBeenCalledWith('mock', 'AC', 'S')
+    } finally {
+      server.close()
+    }
+  })
+
+  it('renders a 400 when the provider returned an error', async () => {
+    const credentials = inMemoryCredentialStore()
+    const reg = createRegistry({ credentials, publicUrl: 'http://localhost:0' })
+    const server = http.createServer()
+    mountMcpHttp({
+      server,
+      registry: reg,
+      publicUrl: 'http://localhost:0',
+      corsOrigin: '*',
+    })
+    await new Promise<void>((r) => server.listen(0, r))
+    const addr = server.address()!
+    const port = typeof addr === 'string' ? 0 : addr.port
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${port}/oauth/callback/mock?error=access_denied`
+      )
+      expect(res.status).toBe(400)
+    } finally {
+      server.close()
+    }
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement `oauth-callback.ts`**
+
+```ts
+// src/http/oauth-callback.ts
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Registry } from '../registry'
+
+export async function handleOAuthCallback(
+  req: IncomingMessage,
+  res: ServerResponse,
+  registry: Registry,
+  serverName: string
+): Promise<void> {
+  const u = new URL(req.url ?? '/', 'http://x')
+  const code = u.searchParams.get('code')
+  const state = u.searchParams.get('state') ?? undefined
+  const error = u.searchParams.get('error')
+
+  if (error) {
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'text/html')
+    res.end(renderPage(`Authorization failed: ${error}`, 'error'))
+    return
+  }
+  if (!code) {
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'text/html')
+    res.end(renderPage('Missing authorization code.', 'error'))
+    return
+  }
+
+  try {
+    await (
+      registry as Registry & {
+        finishAuth: (s: string, c: string, st?: string) => Promise<unknown>
+      }
+    ).finishAuth(serverName, code, state)
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'text/html')
+    res.end(
+      renderPage(`Authorized "${serverName}". You can close this tab.`, 'ok')
+    )
+  } catch (err) {
+    res.statusCode = 500
+    res.setHeader('Content-Type', 'text/html')
+    res.end(
+      renderPage(`Token exchange failed: ${(err as Error).message}`, 'error')
+    )
+  }
+}
+
+function renderPage(body: string, kind: 'ok' | 'error'): string {
+  const color = kind === 'ok' ? '#0a7' : '#a00'
+  return `<!doctype html><meta charset=utf-8><title>MCP OAuth</title>
+<style>body{font:14px system-ui;padding:2rem;color:${color}}</style><p>${body}</p>`
+}
+```
+
+- [ ] **Step 4: Add `finishAuth(serverName, code, state)` to the registry**
+
+```ts
+// src/registry.ts — extend the Registry interface and impl:
+
+export interface Registry {
+  // ... existing
+  finishAuth(serverName: string, code: string, state?: string): Promise<AddServerResult>
+}
+
+// impl:
+async finishAuth(serverName, code, state) {
+  const e = entries.get(serverName)
+  if (!e) throw new Error(`unknown server "${serverName}"`)
+  // The SDK's auth.finishAuth wraps the token exchange; we get there via the
+  // transport that holds the provider. The MCP SDK exposes the helper via
+  // `auth.finishAuth(provider, { authorizationCode: code })`.
+  const { auth } = await import('@modelcontextprotocol/sdk/client/auth.js')
+  const provider = e.provider as SdkOAuthProvider | undefined
+  if (!provider) throw new Error(`server "${serverName}" has no OAuth provider`)
+  await auth.finishAuth(provider, { authorizationCode: code })
+  provider.clearAuthUrl()
+  // After tokens are persisted, retry connect:
+  return await registry.addServer(e.config)
+}
+```
+
+Add `provider?: SdkOAuthProvider` to `Entry`. Set it in `buildTransport` for `authorizationCode` mode.
+
+- [ ] **Step 5: Mount `/oauth/callback/:server` in `mount.ts`**
+
+Inside `mountMcpHttp`'s request handler, before the `/api/mcp/*` routing:
+
+```ts
+const cb = u.pathname.match(/^\/oauth\/callback\/([^/]+)$/)
+if (cb && req.method === 'GET') {
+  const serverName = decodeURIComponent(cb[1]!)
+  await handleOAuthCallback(req, res, opts.registry, serverName)
+  return
+}
+```
+
+- [ ] **Step 6: Run — PASS**
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/agents-mcp/src/http/oauth-callback.ts packages/agents-mcp/src/http/mount.ts packages/agents-mcp/src/registry.ts packages/agents-mcp/test/http/oauth-callback.test.ts
+git commit -m "feat(agents-mcp): /oauth/callback/:server on the runtime; registry.finishAuth"
+```
+
+---
+
+### Task 33: Wire `addServer` `authorize` action
+
+**Files:**
+
+- Modify: `packages/agents-mcp/src/http/mount.ts`
+- Modify: `packages/agents-mcp/test/http/mount.test.ts`
+
+> Phase 1 mounted `POST /api/mcp/servers/:name/authorize` as 501. Phase 3 wires it: re-run `addServer` for an existing entry to re-trigger the OAuth flow, returning the `authenticating` envelope.
+
+- [ ] **Step 1: Update the action handler**
+
+```ts
+// inside mount.ts where action === 'authorize':
+if (req.method === 'POST' && action === 'authorize') {
+  const entry = opts.registry.get(name)
+  if (!entry) {
+    send(res, 404, { error: 'unknown server' })
+    return
+  }
+  // Force a re-auth: clear tokens via CredentialStore so the SDK provider runs the dance.
+  if (opts.credentials?.saveOAuthTokens) {
+    // We can't "delete" via CredentialStore — just expire by overwriting with empty.
+    // Better approach: call provider.clearAuthUrl() and removeServer + addServer.
+  }
+  await opts.registry.removeServer(name)
+  const result = await opts.registry.addServer(entry.config)
+  send(res, 200, result)
+  return
+}
+```
+
+- [ ] **Step 2: Update test**
+
+Add a test in `mount.test.ts` that POSTs to `/api/mcp/servers/mock/authorize` for an OAuth-mode server and asserts it returns `state: 'authenticating'` with an `authUrl`.
+
+- [ ] **Step 3: Run — PASS**
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/agents-mcp/src/http/mount.ts packages/agents-mcp/test/http/mount.test.ts
+git commit -m "feat(agents-mcp): authorize action re-triggers OAuth (re-add + capture authUrl)"
+```
+
+---
+
+### Task 34: Bootstrap — pass `publicUrl` to the registry
+
+**Files:**
+
+- Modify: `packages/agents/src/bootstrap.ts`
+
+- [ ] **Step 1: Add `publicUrl` when constructing the registry**
+
+```ts
+const mcpRegistry = createMcpRegistry({ credentials, publicUrl: PUBLIC_URL })
+```
+
+- [ ] **Step 2: Run typecheck + tests**
+
+```bash
+pnpm -r typecheck && pnpm -C packages/agents test
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packages/agents/src/bootstrap.ts
+git commit -m "feat(agents): pass publicUrl into MCP registry for OAuth callback URLs"
+```
+
+---
+
+### Task 35: Phase 3 verification — Honeycomb manual E2E
+
+- [ ] **Step 1: Test sweep**
+
+```bash
+pnpm -r test --run
+```
+
+Expected: green.
+
+- [ ] **Step 2: Manual E2E against Honeycomb**
+
+1. Create `mcp.json`:
+
+```jsonc
+{
+  "servers": {
+    "honeycomb": {
+      "transport": "http",
+      "url": "https://mcp.honeycomb.io/mcp",
+      "auth": {
+        "mode": "authorizationCode",
+        "flow": "browser",
+        "scopes": ["mcp:read", "mcp:write"],
+      },
+    },
+  },
+}
+```
+
+2. Boot the runtime; `curl http://localhost:4448/api/mcp/servers` should show `status: 'authenticating'` with an `authUrl`.
+
+3. Open `authUrl` in a browser, consent, get redirected to `http://localhost:4448/oauth/callback/honeycomb?code=...&state=...`.
+
+4. Page should render "Authorized — you can close this tab".
+
+5. `curl http://localhost:4448/api/mcp/servers` should now show `status: 'ready'` with `toolCount > 0`.
+
+6. Restart the runtime — Honeycomb should come back up `ready` (tokens persisted in OS keychain or `.electric-agents/credentials.json`).
+
+7. From a Horton chat, ask the agent to call a Honeycomb tool (`mcp__honeycomb__list_datasets`). Confirm it succeeds.
+
+- [ ] **Step 3: Commit milestone**
+
+```bash
+git commit --allow-empty -m "milestone: agents-mcp phase 3 complete — OAuth via SDK provider, Honeycomb E2E green"
+```
+
+---
