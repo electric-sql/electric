@@ -20,7 +20,7 @@ export function createBashTool(workingDirectory: string): AgentTool {
           cwd: workingDirectory,
           timeout: TIMEOUT_MS,
           maxBuffer: 1024 * 1024,
-          env: { ...process.env, HOME: workingDirectory },
+          env: { ...process.env },
         })
 
         let stdout = ``
