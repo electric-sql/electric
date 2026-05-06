@@ -1,5 +1,5 @@
-import { type ViewProps } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { View, type ViewProps } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTokens } from '../lib/ThemeProvider'
 
 /**
@@ -17,15 +17,24 @@ export function Screen({
   ...props
 }: ViewProps): React.ReactElement {
   const tokens = useTokens()
+  const insets = useSafeAreaInsets()
   return (
-    <SafeAreaView
+    <View
       {...props}
-      // Bottom is owned by `KeyboardAvoidingView` + the SidebarFooter,
-      // so we only opt into top/horizontal insets here.
-      edges={[`top`, `left`, `right`]}
-      style={[{ flex: 1, backgroundColor: tokens.bg }, style]}
+      // Bottom is owned by screen-specific controls (FABs, composers, sheets),
+      // so we only apply top/horizontal keep-out areas here.
+      style={[
+        {
+          flex: 1,
+          paddingTop: insets.top,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+          backgroundColor: tokens.bg,
+        },
+        style,
+      ]}
     >
       {children}
-    </SafeAreaView>
+    </View>
   )
 }
