@@ -12,19 +12,22 @@ export function watchConfig(
 ): () => void {
   const debounceMs = opts.debounceMs ?? 500
   let timer: NodeJS.Timeout | undefined
+  let stopped = false
   const reload = (): void => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(async () => {
       try {
-        onChange(await loadConfig(path))
+        const cfg = await loadConfig(path)
+        if (!stopped) onChange(cfg)
       } catch (err) {
-        console.error(`mcp.json reload failed:`, err)
+        if (!stopped) console.error(`mcp.json reload failed:`, err)
       }
     }, debounceMs)
   }
   reload()
   const watcher = watch(path, () => reload())
   return () => {
+    stopped = true
     watcher.close()
     if (timer) clearTimeout(timer)
   }
