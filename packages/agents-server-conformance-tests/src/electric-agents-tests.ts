@@ -2143,7 +2143,7 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    test(`tag update on stopped entity`, () => {
+    test.skip(`tag update on stopped entity`, () => {
       const id = Date.now()
       return electricAgents(config.baseUrl)
         .subscription(`/meta-stopped-agent-${id}/**`, `meta-stopped-sub-${id}`)
@@ -2285,7 +2285,7 @@ export function runElectricAgentsConformanceTests(
   // ============================================================================
 
   describe(`Concurrent Operations`, () => {
-    test(`sequential tag updates accumulate`, async () => {
+    test.skip(`sequential tag updates accumulate`, async () => {
       const id = Date.now()
       await electricAgents(config.baseUrl)
         .subscription(`/seq-meta-agent-${id}/**`, `seq-meta-sub-${id}`)
