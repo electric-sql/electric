@@ -772,6 +772,16 @@ describe(`Wake Registry Integration`, () => {
     return events.filter((event) => event.type === `wake`)
   }
 
+  async function appendInternalEvent(
+    streamPath: string,
+    event: Record<string, unknown>
+  ): Promise<void> {
+    await electricAgentsServer.streamClient.append(
+      streamPath,
+      JSON.stringify(event)
+    )
+  }
+
   it(`spawn with wake registers condition and delivers wake on child run completion`, async () => {
     const startCount = wakeCount
     const ts = Date.now()
@@ -911,7 +921,6 @@ describe(`Wake Registry Integration`, () => {
       body: JSON.stringify({ parent: parent.url }),
     })
     expect(childRes.status).toBe(201)
-    const childWriteToken = childRes.headers.get(`x-write-token`)!
     const child = (await childRes.json()) as {
       url: string
       streams: { main: string }
@@ -922,50 +931,29 @@ describe(`Wake Registry Integration`, () => {
     const textId = `text-1`
 
     // Write run started
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: runId,
-        value: { status: `started` },
-        headers: { operation: `insert` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: runId,
+      value: { status: `started` },
+      headers: { operation: `insert` },
     })
 
     // Write text deltas
     for (const delta of [`Hello `, `from `, `child!`]) {
-      await fetch(`${baseUrl}${child.streams.main}`, {
-        method: `POST`,
-        headers: {
-          'content-type': `application/json`,
-          authorization: `Bearer ${childWriteToken}`,
-        },
-        body: JSON.stringify({
-          type: `text_delta`,
-          key: `${textId}:${Math.random().toString(36).slice(2, 6)}`,
-          value: { text_id: textId, run_id: runId, delta },
-          headers: { operation: `insert` },
-        }),
+      await appendInternalEvent(child.streams.main, {
+        type: `text_delta`,
+        key: `${textId}:${Math.random().toString(36).slice(2, 6)}`,
+        value: { text_id: textId, run_id: runId, delta },
+        headers: { operation: `insert` },
       })
     }
 
     // Write run completed to child stream
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: runId,
-        value: { status: `completed` },
-        headers: { operation: `update` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: runId,
+      value: { status: `completed` },
+      headers: { operation: `update` },
     })
 
     // Register runFinished wake condition: parent subscribes to child
@@ -1036,52 +1024,30 @@ describe(`Wake Registry Integration`, () => {
       body: JSON.stringify({ parent: parent.url }),
     })
     expect(childRes.status).toBe(201)
-    const childWriteToken = childRes.headers.get(`x-write-token`)!
     const child = (await childRes.json()) as {
       url: string
       streams: { main: string }
     }
 
     // Write text deltas to child's stream
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: `run-1`,
-        value: { status: `started` },
-        headers: { operation: `insert` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `started` },
+      headers: { operation: `insert` },
     })
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `text_delta`,
-        key: `td-1`,
-        value: { text_id: `t1`, run_id: `run-1`, delta: `Some text` },
-        headers: { operation: `insert` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `text_delta`,
+      key: `td-1`,
+      value: { text_id: `t1`, run_id: `run-1`, delta: `Some text` },
+      headers: { operation: `insert` },
     })
     // Write run completed to child stream
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: `run-1`,
-        value: { status: `completed` },
-        headers: { operation: `update` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
     })
 
     // Register with includeResponse: false
@@ -1151,74 +1117,45 @@ describe(`Wake Registry Integration`, () => {
       body: JSON.stringify({ parent: parent.url }),
     })
     expect(childRes.status).toBe(201)
-    const childWriteToken = childRes.headers.get(`x-write-token`)!
     const child = (await childRes.json()) as {
       url: string
       streams: { main: string }
     }
 
     // Write run started
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: `run-1`,
-        value: { status: `started` },
-        headers: { operation: `insert` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `started` },
+      headers: { operation: `insert` },
     })
 
     // Write some text before failure
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `text_delta`,
-        key: `td-1`,
-        value: { text_id: `t1`, run_id: `run-1`, delta: `Partial output` },
-        headers: { operation: `insert` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `text_delta`,
+      key: `td-1`,
+      value: { text_id: `t1`, run_id: `run-1`, delta: `Partial output` },
+      headers: { operation: `insert` },
     })
 
     // Write error event
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
+    await appendInternalEvent(child.streams.main, {
+      type: `error`,
+      key: `err-1`,
+      value: {
+        error_code: `RATE_LIMIT`,
+        message: `Rate limit exceeded`,
+        run_id: `run-1`,
       },
-      body: JSON.stringify({
-        type: `error`,
-        key: `err-1`,
-        value: {
-          error_code: `RATE_LIMIT`,
-          message: `Rate limit exceeded`,
-          run_id: `run-1`,
-        },
-        headers: { operation: `insert` },
-      }),
+      headers: { operation: `insert` },
     })
 
     // Write run failed to child stream
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: `run-1`,
-        value: { status: `failed` },
-        headers: { operation: `update` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `failed` },
+      headers: { operation: `update` },
     })
 
     const manager = getElectricAgentsManager()
@@ -1287,75 +1224,46 @@ describe(`Wake Registry Integration`, () => {
       body: JSON.stringify({ parent: parent.url }),
     })
     expect(childRes.status).toBe(201)
-    const childWriteToken = childRes.headers.get(`x-write-token`)!
     const child = (await childRes.json()) as {
       url: string
       streams: { main: string }
     }
 
     // Write an OLD unscoped error (no run_id) — simulating HANDLER_FAILED from a previous cycle
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
+    await appendInternalEvent(child.streams.main, {
+      type: `error`,
+      key: `old-err-1`,
+      value: {
+        error_code: `HANDLER_FAILED`,
+        message: `Old handler failure from previous cycle`,
       },
-      body: JSON.stringify({
-        type: `error`,
-        key: `old-err-1`,
-        value: {
-          error_code: `HANDLER_FAILED`,
-          message: `Old handler failure from previous cycle`,
-        },
-        headers: { operation: `insert` },
-      }),
+      headers: { operation: `insert` },
     })
 
     // Now a new run starts, produces text, has a scoped error, and fails
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: `run-1`,
-        value: { status: `started` },
-        headers: { operation: `insert` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `started` },
+      headers: { operation: `insert` },
     })
 
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
+    await appendInternalEvent(child.streams.main, {
+      type: `error`,
+      key: `err-scoped`,
+      value: {
+        error_code: `API_ERROR`,
+        message: `Actual run error`,
+        run_id: `run-1`,
       },
-      body: JSON.stringify({
-        type: `error`,
-        key: `err-scoped`,
-        value: {
-          error_code: `API_ERROR`,
-          message: `Actual run error`,
-          run_id: `run-1`,
-        },
-        headers: { operation: `insert` },
-      }),
+      headers: { operation: `insert` },
     })
 
-    await fetch(`${baseUrl}${child.streams.main}`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${childWriteToken}`,
-      },
-      body: JSON.stringify({
-        type: `run`,
-        key: `run-1`,
-        value: { status: `failed` },
-        headers: { operation: `update` },
-      }),
+    await appendInternalEvent(child.streams.main, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `failed` },
+      headers: { operation: `update` },
     })
 
     const manager = getElectricAgentsManager()

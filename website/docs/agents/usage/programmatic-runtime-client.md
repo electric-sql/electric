@@ -202,7 +202,7 @@ await client.deleteSchedule({
 
 ## Tags
 
-`setTag()` and `removeTag()` require the entity write token. Handler code should prefer `ctx.setTag()` and `ctx.removeTag()` because the runtime already has the write token.
+`setTag()` and `removeTag()` are primarily for handler/runtime-owned flows that already hold the current claim-scoped write token. External clients should prefer `send()` and write only to an entity's inbox rather than writing entity state directly.
 
 ```ts
 await client.setTag("/horton/onboarding", "title", "Onboarding", writeToken)

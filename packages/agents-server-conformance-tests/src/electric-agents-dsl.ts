@@ -1519,7 +1519,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
         main: string
         error: string
       }
-      ctx.currentWriteToken = res.headers.get(`x-write-token`) ?? null
+      ctx.currentWriteToken = null
 
       ctx.history.push({
         type: `entity_spawned`,
@@ -2187,12 +2187,9 @@ export type ElectricAgentsAction =
   | `delete_type`
   | `spawn`
   | `send`
-  | `write`
   | `kill`
-  | `set_tag`
   | `check_status`
   | `list`
-  | `writeStateProtocol`
 
 /**
  * Model of a single entity type's state.
@@ -2232,9 +2229,7 @@ export interface ElectricAgentsWorldModel {
  * - delete_type: when entity types exist and no running entities use them
  * - spawn: when at least one entity type is registered (up to a cap)
  * - send: when at least one entity is running
- * - write: when at least one entity is running
  * - kill: when at least one entity is running
- * - set_tag: when at least one entity is running
  * - check_status: when at least one entity exists
  * - list: always
  */
@@ -2263,14 +2258,7 @@ export function enabledElectricAgentsActions(
 
   const hasRunning = model.entities.some((e) => e.status === `running`)
   if (hasRunning) {
-    enabled.push(
-      `send`,
-      `write`,
-      `kill`,
-      `set_tag`,
-      `check_status`,
-      `writeStateProtocol`
-    )
+    enabled.push(`send`, `kill`, `check_status`)
   }
 
   const hasAny = model.entities.length > 0
@@ -2353,9 +2341,6 @@ export function applyElectricAgentsAction(
       entities[targetIdx] = { ...e, status: `stopped` }
       return { ...model, entities }
     }
-    case `write`:
-    case `writeStateProtocol`:
-    case `set_tag`:
     case `check_status`:
     case `list`:
       return model
