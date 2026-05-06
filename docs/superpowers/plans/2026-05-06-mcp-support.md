@@ -2340,6 +2340,122 @@ git commit -m "feat(agents-mcp): tool bridge with mcp__server__tool naming + tim
 
 ---
 
+### Task 16b: `mcp.tools(...)` allowlist factory
+
+**Files:**
+
+- Create: `packages/agents-mcp/src/tools.ts`
+- Create: `packages/agents-mcp/test/tools.test.ts`
+- Modify: `packages/agents-mcp/src/index.ts` — re-export
+
+> **Why this exists:** spec §"Per-agent allowlist" — entity types opt into MCP servers explicitly via `tools: [...mcp.tools(['sentry', 'github'])]` (or `mcp.tools('*')` for all). Without this, every entity type sees every server's tools, which is a footgun for spawn-isolation and prompt-budget.
+>
+> The factory returns a _sentinel_ (a tagged object) that the wake-time tool composer (Task 17) recognizes and expands by querying the live registry. The sentinel's payload is just the allowlist; resolution happens at compose time so hot-reloaded servers light up without re-running compose.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/tools.test.ts
+import { describe, expect, it } from 'vitest'
+import { mcp, isMcpToolsSentinel } from '../src/tools'
+
+describe('mcp.tools', () => {
+  it('returns a sentinel array containing the allowlist', () => {
+    const out = mcp.tools(['sentry', 'github'])
+    expect(out.length).toBe(1)
+    const s = out[0]!
+    expect(isMcpToolsSentinel(s)).toBe(true)
+    expect((s as any).allowlist).toEqual(['sentry', 'github'])
+  })
+
+  it("'*' produces a wildcard sentinel", () => {
+    const [s] = mcp.tools('*')
+    expect((s as any).allowlist).toBe('*')
+  })
+
+  it('filterByAllowlist returns matching servers (or all when "*")', () => {
+    const { filterByAllowlist } = require('../src/tools')
+    expect(filterByAllowlist(['a', 'b', 'c'], ['a', 'c'])).toEqual(['a', 'c'])
+    expect(filterByAllowlist(['a', 'b'], '*')).toEqual(['a', 'b'])
+    expect(filterByAllowlist(['a', 'b'], ['nope'])).toEqual([])
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement**
+
+```ts
+// src/tools.ts
+export const MCP_TOOLS_SENTINEL = Symbol.for(
+  '@electric-ax/agents-mcp/tools-sentinel'
+)
+
+export interface McpToolsSentinel {
+  [MCP_TOOLS_SENTINEL]: true
+  allowlist: string[] | '*'
+}
+
+export function isMcpToolsSentinel(x: unknown): x is McpToolsSentinel {
+  return (
+    !!x &&
+    typeof x === 'object' &&
+    (x as Record<symbol, unknown>)[MCP_TOOLS_SENTINEL] === true
+  )
+}
+
+export const mcp = {
+  /**
+   * Returns a sentinel array suitable for `tools: [...mcp.tools(['sentry'])]` in
+   * an entity-type definition. Resolution happens at wake time via the runtime's
+   * tool-provider hook.
+   */
+  tools(allowlist: string[] | '*'): McpToolsSentinel[] {
+    return [{ [MCP_TOOLS_SENTINEL]: true, allowlist }]
+  },
+}
+
+export function filterByAllowlist(
+  serverNames: string[],
+  allowlist: string[] | '*'
+): string[] {
+  if (allowlist === '*') return [...serverNames]
+  const set = new Set(allowlist)
+  return serverNames.filter((n) => set.has(n))
+}
+```
+
+- [ ] **Step 4: Re-export from `src/index.ts`**
+
+```ts
+export {
+  mcp,
+  isMcpToolsSentinel,
+  filterByAllowlist,
+  MCP_TOOLS_SENTINEL,
+} from './tools'
+export type { McpToolsSentinel } from './tools'
+```
+
+- [ ] **Step 5: Run — PASS**
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/agents-mcp/src/tools.ts packages/agents-mcp/src/index.ts packages/agents-mcp/test/tools.test.ts
+git commit -m "feat(agents-mcp): mcp.tools(allowlist|'*') sentinel factory for per-agent allowlists"
+```
+
+> **Note for Task 17 / Task 20:** the sentinel must be expanded by the wake-time composer:
+>
+> - When the entity type's `tools` array contains an `McpToolsSentinel`, replace it in-place with `BridgedTool[]` for the servers matching the sentinel's allowlist.
+> - The bootstrap's `registerToolProvider` callback must filter the live registry by the per-entity allowlist instead of returning everything (see Task 20 step 2 — updated to read allowlists from the entity's tool array via `isMcpToolsSentinel`).
+>
+> Both task bodies are updated below to consume the sentinel.
+
+---
+
 ### Task 17: `registerToolProvider` in `agents-runtime`
 
 **Files:**
@@ -2435,36 +2551,75 @@ export function __resetToolProvidersForTest(): void {
 }
 ```
 
-- [ ] **Step 4: Wire into wake-time tool composition**
+- [ ] **Step 4: Wire into wake-time tool composition (sentinel-aware)**
 
-Grep for the place where the runtime builds `tools` for an entity type at wake time. The change is:
+Grep for the place where the runtime builds `tools` for an entity type at wake time (typically `packages/agents-runtime/src/create-handler.ts` — the wake-time setup path). The composer must:
+
+1. Walk `entityType.tools` for `McpToolsSentinel` markers (defined in `@electric-ax/agents-mcp`).
+2. Replace each sentinel in-place with the bridged MCP tools whose `server` matches the sentinel's allowlist (`'*'` matches all).
+3. Leave non-sentinel entries untouched.
+
+Sketch:
 
 ```ts
 import { resolveToolProviders } from './tool-providers'
+import { isMcpToolsSentinel, filterByAllowlist } from '@electric-ax/agents-mcp'
 
-// when composing the per-wake tool list:
-const providerTools = await resolveToolProviders()
-const composedTools = [...entityType.tools, ...providerTools]
+const providerTools = await resolveToolProviders() // returns BridgedTool[] with .server
+const composedTools = entityType.tools.flatMap((t) => {
+  if (isMcpToolsSentinel(t)) {
+    const matchingServers = filterByAllowlist(
+      [...new Set(providerTools.map((p) => (p as { server: string }).server))],
+      t.allowlist
+    )
+    return providerTools.filter((p) =>
+      matchingServers.includes((p as { server: string }).server)
+    )
+  }
+  return [t]
+})
 ```
 
-If the runtime currently constructs the tool list synchronously, lift the call site into the async setup path (the wake-time setup in `create-handler.ts` is the right place).
+> **Behavioural change vs the prior plan**: entity types must now _explicitly_ opt into MCP via `mcp.tools(...)`. Entity types that don't include the sentinel see no MCP tools (matches the spec's "Per-agent allowlist" section). This is also why bridged tools must carry their `server` name — see updated Task 16 below.
 
-Add an integration test asserting that an entity type with no `tools` gets the registered provider's tools at runtime — mirror an existing `create-handler` test.
+Add an integration test that:
 
-- [ ] **Step 5: Export from `src/index.ts`**
+- Defines a fake entity type with `tools: [...mcp.tools(['a'])]` and asserts that `composedTools` contains tools from server `a` only.
+- Defines a second entity type with `tools: [...mcp.tools('*')]` and asserts it gets all tools.
+- Defines a third entity type with `tools: []` and asserts it gets none.
+
+- [ ] **Step 5: Augment `BridgedTool` to carry its server name**
+
+Modify `packages/agents-mcp/src/bridge/tool-bridge.ts` (Task 16):
+
+```ts
+export interface BridgedTool {
+  name: string
+  server: string // NEW — used by sentinel filter
+  description?: string
+  inputSchema: unknown
+  call(args: unknown): Promise<unknown>
+}
+
+// in bridgeMcpTool, set server: opts.server alongside name.
+```
+
+Update Task 16's tests to assert `tool.server === 'mock'`. Resource and prompt bridges (Tasks 22 / 23) similarly tag their synthetic tools with `server`.
+
+- [ ] **Step 6: Export from `src/index.ts`**
 
 ```ts
 export { registerToolProvider, unregisterToolProvider } from './tool-providers'
 export type { ToolProviderEntry } from './tool-providers'
 ```
 
-- [ ] **Step 6: Run — PASS** (`pnpm -C packages/agents-runtime test tool-providers`)
+- [ ] **Step 7: Run — PASS** (`pnpm -C packages/agents-runtime test tool-providers && pnpm -C packages/agents-mcp test`)
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add packages/agents-runtime/src/tool-providers.ts packages/agents-runtime/src/index.ts packages/agents-runtime/test/tool-providers.test.ts packages/agents-runtime/src/create-handler.ts
-git commit -m "feat(agents-runtime): registerToolProvider hook for wake-time tool composition"
+git add packages/agents-runtime/src/tool-providers.ts packages/agents-runtime/src/index.ts packages/agents-runtime/test/tool-providers.test.ts packages/agents-runtime/src/create-handler.ts packages/agents-mcp/src/bridge/tool-bridge.ts packages/agents-mcp/test/bridge/tool-bridge.test.ts
+git commit -m "feat(agents-runtime,agents-mcp): wake-time sentinel-aware MCP tool composition"
 ```
 
 ---
@@ -4034,10 +4189,86 @@ git commit -m "feat(agents-mcp): SDK OAuthClientProvider adapter — persists vi
 **Files:**
 
 - Modify: `packages/agents-mcp/src/registry.ts` — handle `authorizationCode` (browser) + `clientCredentials`
-- Modify: `packages/agents-mcp/src/transports/http.ts` — accept an `oauthProvider` and let the SDK transport handle auth automatically
+- Modify: `packages/agents-mcp/src/transports/http.ts` — accept an `authProvider` and let the SDK transport handle auth automatically
 - Modify: `packages/agents-mcp/test/registry.test.ts` — extend with OAuth scenarios
 
 > The MCP SDK's `StreamableHTTPClientTransport` accepts an `authProvider` (the `OAuthClientProvider` instance). When supplied, the SDK auto-handles the OAuth dance: 401-retry, refresh, DCR if no client info present, etc. Our registry's job is to construct the provider, hand it to the transport, and translate "needs first authorization" into an `authenticating` envelope.
+
+#### Consolidated registry interfaces (after Phase 3)
+
+This task extends several types from Phase 1. After Phase 3 the canonical shapes are:
+
+```ts
+// src/registry.ts — after Phase 3
+export interface RegistryOpts {
+  credentials: CredentialStore
+  /** Used as the base for OAuth callback URLs (`${publicUrl}/oauth/callback/<server>`). */
+  publicUrl?: string
+  /**
+   * Test-only override. Signature changed from Phase 1's `(cfg) => McpTransport` to
+   * accept the SDK provider so tests can drive `redirectToAuthorization` and inspect
+   * `peekAuthUrl()`. Existing test callsites (Task 15 fakeTransport helpers, Task 18
+   * mount.test.ts fixtures) need updating — see Step 6.
+   */
+  transportFactoryOverride?: (
+    cfg: McpServerConfig,
+    headerProvider?: HeaderProvider,
+    provider?: SdkOAuthProvider
+  ) => McpTransport
+  /** Reserved for the per-server `oauthProvider` escape hatch — surfaces in Phase 4 if needed. */
+  oauthProviderFactory?: (cfg: McpServerConfig) => unknown
+  // (Phase 5 will add `deviceFlowFetch?: typeof fetch` here.)
+}
+
+interface Entry {
+  config: McpServerConfig
+  configHash: string
+  status: McpServerStatus
+  error?: McpToolError
+  authUrl?: string
+  transport?: McpTransport
+  capabilities?: unknown // added in Task 26
+  provider?: SdkOAuthProvider // added here
+  // (Phase 5 will add `deviceHandle?: DeviceFlowHandle`.)
+  tools: Array<{ name: string; description?: string; inputSchema: unknown }>
+}
+
+export interface ListedEntry {
+  name: string
+  status: McpServerStatus
+  toolCount: number
+  authUrl?: string
+  error?: McpToolError
+  capabilities?: unknown // added in Task 26
+  tools: Entry['tools']
+}
+
+export interface Registry {
+  addServer(cfg: McpServerConfig): Promise<AddServerResult>
+  applyConfig(cfg: McpConfig): Promise<AddServerResult[]>
+  removeServer(name: string): Promise<void>
+  list(): ReadonlyArray<ListedEntry>
+  get(name: string): Entry | undefined
+  finishAuth(
+    serverName: string,
+    code: string,
+    state?: string
+  ): Promise<AddServerResult> // added in Task 32
+  disable(name: string): Promise<void> // added in Task 33
+  enable(name: string): Promise<AddServerResult> // added in Task 33
+}
+
+// buildTransport return shape (private helper):
+type BuildTransportResult = {
+  transport?: McpTransport
+  error?: McpToolError
+  authUrl?: string
+  provider?: SdkOAuthProvider // added here
+  // (Phase 5 adds `deviceHandle?: DeviceFlowHandle`.)
+}
+```
+
+When making the edits below, treat this block as the source of truth — restate any field listed above when you touch the type.
 
 - [ ] **Step 1: Update `createHttpTransport` to accept `authProvider`**
 
@@ -4323,7 +4554,15 @@ describe('Registry — OAuth', () => {
 })
 ```
 
-- [ ] **Step 6: Update `transportFactoryOverride` signature** to receive the provider as third argument so unit tests can drive `redirectToAuthorization`. Update existing override callsites in `test/registry.test.ts` accordingly.
+- [ ] **Step 6: Update `transportFactoryOverride` callsites**
+
+The signature changed from `(cfg) => McpTransport` to `(cfg, headerProvider?, provider?) => McpTransport`. Every existing test fixture passing `transportFactoryOverride` needs the third parameter (it can be ignored — just `_provider` — for non-OAuth scenarios):
+
+- `packages/agents-mcp/test/registry.test.ts` — five fixtures: the addServer-with-apiKey test, the idempotency test, the drift test, the removeServer test, plus `makeFakeTransport` if it's invoked through the override.
+- `packages/agents-mcp/test/http/mount.test.ts` — the addServer test fixture in the "POST returns AddServerResult envelope" case.
+- (Phase 2) `packages/agents-mcp/test/registry-capabilities.test.ts` — the capabilities-recording fixture.
+
+For each, change `() => makeFakeTransport(...)` to `(_cfg, _hp, _provider) => makeFakeTransport(...)` (or accept the args explicitly when the test drives `provider!.redirectToAuthorization(...)`).
 
 - [ ] **Step 7: Run — PASS**
 
@@ -4528,48 +4767,136 @@ git commit -m "feat(agents-mcp): /oauth/callback/:server on the runtime; registr
 
 ---
 
-### Task 33: Wire `addServer` `authorize` action
+### Task 33: Wire `authorize` / `disable` / `enable` actions
 
 **Files:**
 
-- Modify: `packages/agents-mcp/src/http/mount.ts`
+- Modify: `packages/agents-mcp/src/registry.ts` — add `disable` / `enable` methods
+- Modify: `packages/agents-mcp/src/http/mount.ts` — wire all three actions
 - Modify: `packages/agents-mcp/test/http/mount.test.ts`
+- Modify: `packages/agents-mcp/test/registry.test.ts` — disable/enable lifecycle
 
-> Phase 1 mounted `POST /api/mcp/servers/:name/authorize` as 501. Phase 3 wires it: re-run `addServer` for an existing entry to re-trigger the OAuth flow, returning the `authenticating` envelope.
+> Phase 1 mounted `POST /api/mcp/servers/:name/{authorize,disable,enable}` as 501. Phase 3 wires all three:
+>
+> - `authorize` — re-run `addServer` for an existing entry to retrigger the OAuth flow.
+> - `disable` — close the transport, set `status: 'disabled'`. The entry stays in the registry. The tool provider's `tools()` callback skips disabled entries.
+> - `enable` — re-run `addServer(entry.config)` for a previously-disabled entry.
 
-- [ ] **Step 1: Update the action handler**
+- [ ] **Step 1: Add `disable(name)` and `enable(name)` to the registry**
 
 ```ts
-// inside mount.ts where action === 'authorize':
+// src/registry.ts — extend the Registry interface and impl:
+
+export interface Registry {
+  // ... existing
+  disable(name: string): Promise<void>
+  enable(name: string): Promise<AddServerResult>
+}
+
+// impl:
+async disable(name) {
+  const e = entries.get(name)
+  if (!e) throw new Error(`unknown server "${name}"`)
+  await e.transport?.close().catch(() => {})
+  e.transport = undefined
+  e.tools = []
+  e.deviceHandle?.cancel()
+  e.deviceHandle = undefined
+  e.authUrl = undefined
+  e.status = 'disabled'
+  e.error = undefined
+},
+
+async enable(name) {
+  const e = entries.get(name)
+  if (!e) throw new Error(`unknown server "${name}"`)
+  if (e.status !== 'disabled') return { state: 'ready', id: name, toolCount: e.tools.length }
+  // Reset for re-add — clear configHash so addServer treats this as fresh.
+  entries.delete(name)
+  return await registry.addServer(e.config)
+},
+```
+
+> Important: the bootstrap-registered tool provider in Task 20 already filters by `entry.status === 'ready'`, so disabled servers contribute zero tools without further changes.
+
+- [ ] **Step 2: Add a registry test**
+
+```ts
+// extend test/registry.test.ts
+it('disable closes the transport and zeroes the tool count; enable restores', async () => {
+  const credentials = inMemoryCredentialStore()
+  credentials.setApiKey('mock', 'KEY')
+  const closeSpy = vi.fn()
+  const reg = createRegistry({
+    credentials,
+    transportFactoryOverride: () => ({
+      ...makeFakeTransport(['t1']),
+      close: closeSpy,
+    }),
+  })
+  await reg.addServer({
+    name: 'mock',
+    transport: 'http',
+    url: 'https://m/mcp',
+    auth: { mode: 'apiKey' },
+  })
+  expect(reg.list()[0]!.status).toBe('ready')
+  await reg.disable('mock')
+  expect(closeSpy).toHaveBeenCalled()
+  expect(reg.list()[0]!.status).toBe('disabled')
+  expect(reg.list()[0]!.toolCount).toBe(0)
+  const r = await reg.enable('mock')
+  expect(r.state).toBe('ready')
+  expect(reg.list()[0]!.status).toBe('ready')
+})
+```
+
+- [ ] **Step 3: Wire all three actions in `mount.ts`**
+
+Replace the placeholder branch at the bottom of the action handler:
+
+```ts
+// inside mount.ts where the action match is decoded:
 if (req.method === 'POST' && action === 'authorize') {
   const entry = opts.registry.get(name)
   if (!entry) {
     send(res, 404, { error: 'unknown server' })
     return
   }
-  // Force a re-auth: clear tokens via CredentialStore so the SDK provider runs the dance.
-  if (opts.credentials?.saveOAuthTokens) {
-    // We can't "delete" via CredentialStore — just expire by overwriting with empty.
-    // Better approach: call provider.clearAuthUrl() and removeServer + addServer.
-  }
   await opts.registry.removeServer(name)
   const result = await opts.registry.addServer(entry.config)
   send(res, 200, result)
   return
 }
+if (req.method === 'POST' && action === 'disable') {
+  await opts.registry.disable(name)
+  send(res, 200, { ok: true, status: 'disabled' })
+  return
+}
+if (req.method === 'POST' && action === 'enable') {
+  const result = await opts.registry.enable(name)
+  send(res, 200, result)
+  return
+}
 ```
 
-- [ ] **Step 2: Update test**
+Remove the prior `send(res, 501, { error: \`action ${action} not yet implemented\` })` fallback for these three actions; the catch-all 501 stays for any unrecognized action so future additions fail loudly.
 
-Add a test in `mount.test.ts` that POSTs to `/api/mcp/servers/mock/authorize` for an OAuth-mode server and asserts it returns `state: 'authenticating'` with an `authUrl`.
+- [ ] **Step 4: Update mount tests**
 
-- [ ] **Step 3: Run — PASS**
+Add three tests in `mount.test.ts`:
 
-- [ ] **Step 4: Commit**
+- POST `/api/mcp/servers/:name/disable` → `200 { ok: true, status: 'disabled' }`; subsequent `GET /api/mcp/servers` shows `status: 'disabled'`.
+- POST `/api/mcp/servers/:name/enable` → `200 { state: 'ready', ... }`.
+- POST `/api/mcp/servers/:name/authorize` for an OAuth server → `200 { state: 'authenticating', authUrl: ... }`.
+
+- [ ] **Step 5: Run — PASS**
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/agents-mcp/src/http/mount.ts packages/agents-mcp/test/http/mount.test.ts
-git commit -m "feat(agents-mcp): authorize action re-triggers OAuth (re-add + capture authUrl)"
+git add packages/agents-mcp/src/registry.ts packages/agents-mcp/src/http/mount.ts packages/agents-mcp/test
+git commit -m "feat(agents-mcp): wire authorize/disable/enable actions on the runtime HTTP surface"
 ```
 
 ---
@@ -5537,7 +5864,22 @@ if (built.authUrl && built.deviceHandle) {
 
 Extend `ListedEntry` with optional `deviceCode` and include it in the projection.
 
-- [ ] **Step 5: Add a registry test for device flow**
+- [ ] **Step 5: Thread an optional `deviceFlowFetch` through `RegistryOpts`**
+
+So tests can inject the `fetch` implementation that drives the device-authorization + polling endpoints. In production it defaults to global `fetch`.
+
+```ts
+// src/registry.ts — extend RegistryOpts
+export interface RegistryOpts {
+  // ... (existing fields from the consolidated block in Task 31)
+  /** Test-only override for the device-flow `fetch` implementation. */
+  deviceFlowFetch?: typeof fetch
+}
+```
+
+In the device-flow branch of `buildTransport`, pass `opts.deviceFlowFetch` into the `startDeviceFlow({ ..., fetchImpl: opts.deviceFlowFetch })` call.
+
+- [ ] **Step 6: Add a registry test for device flow**
 
 ```ts
 // test/registry-device-flow.test.ts
@@ -5546,8 +5888,7 @@ import { createRegistry } from '../src/registry'
 import { inMemoryCredentialStore } from '../src/credentials/in-memory'
 
 describe('Registry — device flow', () => {
-  it('addServer with device flow returns user code; background poll completes', async () => {
-    let pollCount = 0
+  it('addServer with device flow returns user code (envelope-only assertion)', async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.includes('device_authorization')) {
         return new Response(
@@ -5560,24 +5901,10 @@ describe('Registry — device flow', () => {
           })
         )
       }
-      pollCount += 1
-      if (pollCount < 2)
-        return new Response(
-          JSON.stringify({ error: 'authorization_pending' }),
-          { status: 400 }
-        )
-      return new Response(
-        JSON.stringify({
-          access_token: 'AT',
-          expires_in: 3600,
-          token_type: 'Bearer',
-        })
-      )
+      return new Response(JSON.stringify({ error: 'authorization_pending' }), {
+        status: 400,
+      })
     })
-    // Inject fetchImpl by wrapping startDeviceFlow at the module level (test fixture).
-    // ... see device-code.test.ts pattern; or thread fetchImpl through Registry opts.
-    // Simplified: we assert the immediate envelope here; background-poll is covered in
-    // device-code.test.ts.
     const credentials = inMemoryCredentialStore()
     credentials.setClientCredentials('mock', {
       clientId: 'cid',
@@ -5586,8 +5913,8 @@ describe('Registry — device flow', () => {
     const reg = createRegistry({
       credentials,
       publicUrl: 'http://r:4448',
-      deviceFlowFetch: fetchImpl /* new opt for testing — see step 6 */,
-    } as any)
+      deviceFlowFetch: fetchImpl,
+    })
     const r = await reg.addServer({
       name: 'mock',
       transport: 'http',
@@ -5608,11 +5935,13 @@ describe('Registry — device flow', () => {
       expect(r.deviceCode?.userCode).toBe('CODE-1234')
       expect(r.authUrl).toBe('https://x/device')
     }
+    // Stop the background poll so the test exits cleanly.
+    await reg.removeServer('mock')
   })
 })
 ```
 
-- [ ] **Step 6: Thread an optional `deviceFlowFetch` through `RegistryOpts`** so tests can inject the fetch implementation. In production this defaults to global `fetch`.
+> The end-to-end success path (background poll completes → tokens persist → server transitions to `ready`) is covered by `auth/device-code.test.ts`. The registry test only asserts the immediate `addServer` envelope shape and that `deviceFlowFetch` is correctly threaded.
 
 - [ ] **Step 7: Run — PASS**
 
