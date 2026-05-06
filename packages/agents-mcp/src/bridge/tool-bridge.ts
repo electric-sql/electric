@@ -25,6 +25,7 @@ export interface BridgeToolOpts {
 
 export interface BridgedTool {
   name: string
+  server: string
   description?: string
   inputSchema: unknown
   call(args: unknown): Promise<unknown>
@@ -35,6 +36,7 @@ export function bridgeMcpTool(opts: BridgeToolOpts): BridgedTool {
   const ms = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   return {
     name,
+    server: opts.server,
     description: opts.tool.description,
     inputSchema: opts.tool.inputSchema,
     async call(args) {

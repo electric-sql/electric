@@ -13,6 +13,8 @@ import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
+import { resolveToolProviders } from './tool-providers'
+import { isMcpToolsSentinel, filterByAllowlist } from '@electric-ax/agents-mcp'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -325,13 +327,28 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         messages: Array<LLMMessage>,
         extraTools: Array<AgentTool> = []
       ): Promise<AgentRunResult> {
+        const providerTools = await resolveToolProviders()
+        const composedTools = activeAgentConfig.tools.flatMap((t) => {
+          if (isMcpToolsSentinel(t)) {
+            const allServers = [
+              ...new Set(
+                providerTools.map((p) => (p as { server: string }).server)
+              ),
+            ]
+            const matching = filterByAllowlist(allServers, t.allowlist)
+            return providerTools.filter((p) =>
+              matching.includes((p as { server: string }).server)
+            ) as Array<AgentTool>
+          }
+          return [t]
+        })
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
 
           provider: activeAgentConfig.provider,
 
-          tools: [...activeAgentConfig.tools, ...extraTools] as Array<never>,
+          tools: [...composedTools, ...extraTools] as Array<never>,
 
           streamFn: activeAgentConfig.streamFn,
 
@@ -362,7 +379,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             `wakeType=${config.wakeEvent.type} wakeOffset=${config.wakeOffset} ` +
             `triggerMessageLen=${messageText.length} ` +
             `runInputLen=${runInput?.length ?? 0} ` +
-            `tools=${activeAgentConfig.tools.length + extraTools.length}`
+            `tools=${composedTools.length + extraTools.length}`
         )
         if (messages.length > 0) {
           const tail = messages.slice(-3)

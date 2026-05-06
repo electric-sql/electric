@@ -34,6 +34,7 @@ describe(`bridgeMcpTool`, () => {
       timeoutMs: 1000,
     })
     expect(tool.name).toBe(`mcp__mock__echo`)
+    expect(tool.server).toBe(`mock`)
     const result = await tool.call({ msg: `hi` })
     expect(callTool).toHaveBeenCalledWith({
       name: `echo`,
