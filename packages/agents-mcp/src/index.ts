@@ -39,3 +39,5 @@ export {
 export type { AuthRequest } from './auth/authorization-code'
 export { exchangeClientCredentials } from './auth/client-credentials'
 export { generatePkcePair, codeChallengeS256 } from './auth/pkce'
+export { startDeviceFlow, pollDeviceFlow } from './auth/device-code'
+export type { DeviceFlowStart } from './auth/device-code'
