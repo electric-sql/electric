@@ -9,7 +9,7 @@ describe(`http transport`, () => {
         url: `http://x`,
         auth: { mode: `apiKey`, headerName: `X`, valueRef: `v` },
       },
-      async () => `token`
+      async () => ({ name: `X`, value: `token` })
     )
     expect(typeof t.connect).toBe(`function`)
     expect(typeof t.close).toBe(`function`)

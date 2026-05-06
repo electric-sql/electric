@@ -3,7 +3,10 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { McpHttpConfig } from '../types'
 import type { McpTransportHandle } from './types'
 
-export type GetToken = () => Promise<string | null>
+export type GetAuthHeader = () => Promise<{
+  name: string
+  value: string
+} | null>
 
 /**
  * Wraps the official MCP SDK `StreamableHTTPClientTransport` + `Client`
@@ -12,15 +15,15 @@ export type GetToken = () => Promise<string | null>
  * `client.callTool(...)`, `client.listTools(...)`) so they benefit from
  * the SDK's typed, schema-validated responses.
  *
- * The `getToken` adapter resolves the bearer token to attach as
- * `Authorization: Bearer <token>` on each request. For `apiKey` modes
- * where the header is not `Authorization: Bearer …`, the registry layer
- * (Task 11/21) selects the right adapter; here we simply slot a Bearer
- * header when a token is available.
+ * The `getAuthHeader` adapter resolves the auth header (name + value) to
+ * attach on each request. The registry layer (Task 11/21) selects the
+ * right adapter for each auth mode (e.g. `Authorization: Bearer …` for
+ * OAuth modes, or arbitrary header names like `X-Honeycomb-Team` for
+ * apiKey modes); here we simply slot whatever header is provided.
  */
 export function createHttpTransport(
   cfg: McpHttpConfig,
-  getToken: GetToken
+  getAuthHeader: GetAuthHeader
 ): McpTransportHandle {
   let _client: Client | undefined
   let _transport: StreamableHTTPClientTransport | undefined
@@ -29,12 +32,12 @@ export function createHttpTransport(
       return _client ?? null
     },
     async connect() {
-      const token = await getToken()
-      _transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
-        requestInit: token
-          ? { headers: { Authorization: `Bearer ${token}` } }
-          : {},
-      })
+      const auth = await getAuthHeader()
+      const headers = auth ? { [auth.name]: auth.value } : undefined
+      _transport = new StreamableHTTPClientTransport(
+        new URL(cfg.url),
+        headers ? { requestInit: { headers } } : {}
+      )
       _client = new Client(
         { name: `agents-mcp`, version: `0.1.0` },
         { capabilities: {} }
