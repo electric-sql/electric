@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Badge, Button, Stack, Text } from '../../ui'
 import type { BadgeTone } from '../../ui'
 import { useServerConnection } from '../../hooks/useServerConnection'
@@ -22,13 +22,27 @@ interface ServerRow {
   lastRefreshedAt?: string
 }
 
+/** A per-row action handler. Tightly bound to the buttons rendered below. */
+type ActionKind = `authorize` | `disable` | `enable` | `disconnect`
+
 /**
- * Connected Services page (Task 26 — shell only).
+ * Connected Services page.
  *
- * Lists every registered MCP server with its transport, auth mode,
- * status, tool count, and (when surfaced by the server) last-refresh
- * time. Per-row actions (Authorize / Disable / etc) are placeholders
- * here and get wired up in Task 27.
+ * Lists every registered MCP server (transport / auth / status / tools /
+ * last-refresh / last-error) and exposes per-row actions:
+ *
+ *   - Authorize / Re-authorize: `authorizationCode` mode only. Hits
+ *     `POST /api/mcp/servers/:server/authorize` (empty body — the server
+ *     resolves OAuth params from registry+vault, see Option B in
+ *     `oauth-routes.ts`) and opens the returned URL in a new tab.
+ *   - Disable / Enable: `POST .../disable` or `.../enable` depending on
+ *     current status.
+ *   - Disconnect: `DELETE .../credentials`. Always available for HTTP
+ *     servers; clears the vault entry (or token cache) and disables the
+ *     server.
+ *
+ * The list also auto-refreshes every 5 seconds so status flips after an
+ * authorize round-trip become visible without a manual reload.
  */
 export function ConnectedServicesPage(): React.ReactElement {
   const { activeServer } = useServerConnection()
@@ -36,31 +50,76 @@ export function ConnectedServicesPage(): React.ReactElement {
   const [rows, setRows] = useState<Array<ServerRow>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    fetch(`${baseUrl}/api/mcp/servers`)
-      .then((r) =>
-        r.ok
-          ? (r.json() as Promise<Array<ServerRow>>)
-          : Promise.reject(new Error(`HTTP ${r.status}`))
-      )
-      .then((data) => {
-        if (cancelled) return
-        setRows(data)
-        setLoading(false)
-      })
-      .catch((err: Error) => {
-        if (cancelled) return
-        setError(err.message)
-        setLoading(false)
-      })
-    return () => {
-      cancelled = true
+  const reload = useCallback(async (): Promise<void> => {
+    try {
+      const r = await fetch(`${baseUrl}/api/mcp/servers`)
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const data = (await r.json()) as Array<ServerRow>
+      setRows(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
     }
   }, [baseUrl])
+
+  useEffect(() => {
+    setLoading(true)
+    void reload()
+    const t = setInterval(() => {
+      void reload()
+    }, 5000)
+    return () => clearInterval(t)
+  }, [reload])
+
+  /**
+   * Wire a click on a row button to the matching server endpoint.
+   *
+   * `authorize` is special: the server returns `{ url }` and we open it
+   * in a new tab so the user can complete the OAuth dance. The other
+   * three are fire-and-forget; we just re-fetch the list to pick up the
+   * new status.
+   */
+  const action = useCallback(
+    async (server: string, kind: ActionKind): Promise<void> => {
+      const key = `${server}:${kind}`
+      setBusy(key)
+      try {
+        if (kind === `authorize`) {
+          const r = await fetch(
+            `${baseUrl}/api/mcp/servers/${encodeURIComponent(server)}/authorize`,
+            {
+              method: `POST`,
+              headers: { 'Content-Type': `application/json` },
+              body: `{}`,
+            }
+          )
+          if (r.ok) {
+            const { url } = (await r.json()) as { url: string }
+            window.open(url, `_blank`, `noopener,noreferrer`)
+          } else {
+            const text = await r.text()
+
+            alert(`Failed to start auth: ${text}`)
+          }
+        } else {
+          const method = kind === `disconnect` ? `DELETE` : `POST`
+          const path = kind === `disconnect` ? `credentials` : kind
+          await fetch(
+            `${baseUrl}/api/mcp/servers/${encodeURIComponent(server)}/${path}`,
+            { method }
+          )
+        }
+        await reload()
+      } finally {
+        setBusy(null)
+      }
+    },
+    [baseUrl, reload]
+  )
 
   return (
     <div className={styles.shell}>
@@ -116,7 +175,7 @@ export function ConnectedServicesPage(): React.ReactElement {
                           {r.lastError ?? `—`}
                         </td>
                         <td className={styles.actionsCol}>
-                          <RowActions />
+                          <RowActions row={r} busy={busy} onAction={action} />
                         </td>
                       </tr>
                     ))}
@@ -142,8 +201,7 @@ function formatRefreshed(value: string | undefined): string {
  * Status -> tone mapping for the design-system `Badge`.
  *
  * Kept in one place so we can keep the colour vocabulary consistent
- * (Task 27 will use the same mapping when it adds row actions that
- * change the displayed status).
+ * across the table and any future status displays.
  */
 function statusTone(status: string): BadgeTone {
   switch (status) {
@@ -170,19 +228,88 @@ function StatusPill({ status }: { status: string }): React.ReactElement {
   )
 }
 
+interface RowActionsProps {
+  row: ServerRow
+  busy: string | null
+  onAction: (server: string, kind: ActionKind) => Promise<void>
+}
+
 /**
- * Placeholder action cluster — Task 27 wires up Authorize / Disable / etc.
- * Rendered disabled here so the layout / spacing already settle.
+ * The per-row action cluster.
+ *
+ * Buttons are shown / hidden / labelled based on the row's current state:
+ *
+ *   - `Authorize` / `Re-authorize` only renders for `authorizationCode`
+ *     servers. The label flips to `Re-authorize` once the server has
+ *     credentials (any status that isn't `needs_auth`).
+ *   - `Disable` / `Enable` flips on the `disabled` status.
+ *   - `Disconnect` renders only for HTTP servers — stdio servers don't
+ *     have credentials to clear.
  */
-function RowActions(): React.ReactElement {
+function RowActions({
+  row,
+  busy,
+  onAction,
+}: RowActionsProps): React.ReactElement {
+  const isHttp = row.transport === `http`
+  const isAuthCode = row.authMode === `authorizationCode`
+  const isDisabled = row.status === `disabled`
+  const needsAuth = row.status === `needs_auth`
+  const busyFor = (kind: ActionKind): boolean => busy === `${row.name}:${kind}`
+
   return (
     <Stack gap={2}>
-      <Button size={1} variant="soft" tone="neutral" disabled>
-        Authorize
-      </Button>
-      <Button size={1} variant="soft" tone="neutral" disabled>
-        Disable
-      </Button>
+      {isAuthCode && (
+        <Button
+          size={1}
+          variant="soft"
+          tone="accent"
+          disabled={busyFor(`authorize`)}
+          onClick={() => {
+            void onAction(row.name, `authorize`)
+          }}
+        >
+          {needsAuth ? `Authorize` : `Re-authorize`}
+        </Button>
+      )}
+      {isDisabled ? (
+        <Button
+          size={1}
+          variant="soft"
+          tone="neutral"
+          disabled={busyFor(`enable`)}
+          onClick={() => {
+            void onAction(row.name, `enable`)
+          }}
+        >
+          Enable
+        </Button>
+      ) : (
+        <Button
+          size={1}
+          variant="soft"
+          tone="neutral"
+          disabled={busyFor(`disable`)}
+          onClick={() => {
+            void onAction(row.name, `disable`)
+          }}
+        >
+          Disable
+        </Button>
+      )}
+      {isHttp && (
+        <Button
+          size={1}
+          variant="soft"
+          tone="danger"
+          disabled={busyFor(`disconnect`)}
+          onClick={() => {
+            void onAction(row.name, `disconnect`)
+          }}
+        >
+          Disconnect
+        </Button>
+      )}
     </Stack>
   )
 }
