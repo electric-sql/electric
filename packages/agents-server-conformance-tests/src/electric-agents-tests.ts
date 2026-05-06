@@ -2296,7 +2296,10 @@ export function runElectricAgentsConformanceTests(
           const notification = ctx.notification!
           const claimRes = await fetch(notification.parsed.callback, {
             method: `POST`,
-            headers: { 'content-type': `application/json` },
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer ${notification.parsed.token}`,
+            },
             body: JSON.stringify({
               epoch: notification.parsed.epoch,
               wakeId: notification.parsed.wake_id,
