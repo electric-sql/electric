@@ -223,9 +223,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   To re-enable consumer suspend:
 
-      # set the hibernation timeout to 1 minute, suspend 1 minute after hibernation,
+      # set the hibernation timeout to 1 minute, suspend 4 minutes after hibernation,
       # and phase the suspension of existing consumers over a 20 minute period
-      Electric.Shapes.ConsumerRegistry.enable_suspend(stack_id, 60_000, 60_000, 60_000 * 20)
+      Electric.Shapes.ConsumerRegistry.enable_suspend(stack_id, 60_000, 4 * 60_000, 60_000 * 20)
 
   Disabling suspension is as easy as:
 
