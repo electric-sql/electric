@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest'
+import http from 'node:http'
+import { createRegistry } from '../../src/registry'
+import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
+import { mountMcpHttp } from '../../src/http/mount'
+
+async function startServer(reg: ReturnType<typeof createRegistry>) {
+  const server = http.createServer()
+  mountMcpHttp({
+    server,
+    registry: reg,
+    publicUrl: `http://localhost:0`,
+    corsOrigin: `*`,
+  })
+  await new Promise<void>((r) => server.listen(0, r))
+  const addr = server.address()
+  if (!addr || typeof addr === `string`) throw new Error(`no addr`)
+  return { server, base: `http://127.0.0.1:${addr.port}` }
+}
+
+describe(`mountMcpHttp — Phase 1 surface`, () => {
+  it(`GET /api/mcp/servers returns []`, async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const { server, base } = await startServer(reg)
+    try {
+      const res = await fetch(`${base}/api/mcp/servers`)
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { servers: unknown[] }
+      expect(body.servers).toEqual([])
+    } finally {
+      server.close()
+    }
+  })
+
+  it(`POST /api/mcp/servers returns AddServerResult envelope`, async () => {
+    const credentials = inMemoryCredentialStore()
+    credentials.setApiKey(`mock`, `KEY`)
+    const reg = createRegistry({
+      credentials,
+      transportFactoryOverride: () => ({
+        client: {
+          listTools: async () => ({
+            tools: [{ name: `t`, inputSchema: { type: `object` } }],
+          }),
+          callTool: async () => ({ content: [] }),
+          close: async () => {},
+        } as any,
+        connect: async () => {},
+        close: async () => {},
+      }),
+    })
+    const { server, base } = await startServer(reg)
+    try {
+      const res = await fetch(`${base}/api/mcp/servers`, {
+        method: `POST`,
+        headers: { 'Content-Type': `application/json` },
+        body: JSON.stringify({
+          name: `mock`,
+          transport: `http`,
+          url: `https://mock/mcp`,
+          auth: { mode: `apiKey` },
+        }),
+      })
+      const body = (await res.json()) as { state: string }
+      expect(body.state).toBe(`ready`)
+    } finally {
+      server.close()
+    }
+  })
+
+  it(`CORS preflight returns 204 with allowed origin`, async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const { server, base } = await startServer(reg)
+    try {
+      const res = await fetch(`${base}/api/mcp/servers`, {
+        method: `OPTIONS`,
+        headers: { origin: `http://example` },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get(`access-control-allow-origin`)).toBe(`*`)
+    } finally {
+      server.close()
+    }
+  })
+})
