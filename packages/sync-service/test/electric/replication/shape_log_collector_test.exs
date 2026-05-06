@@ -1345,6 +1345,235 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  describe "FlushTracker stalling when tracked consumer dies out-of-band" do
+    @two_table_inspector Support.StubInspector.new(%{
+                           {1234, {"public", "table_a"}} => [
+                             %{name: "id", type: "int8", pk_position: 0}
+                           ],
+                           {5678, {"public", "table_b"}} => [
+                             %{name: "id", type: "int8", pk_position: 0}
+                           ]
+                         })
+
+    @shape_a Shape.new!("table_a", inspector: @two_table_inspector)
+    @shape_b Shape.new!("table_b", inspector: @two_table_inspector)
+
+    @describetag inspector: @two_table_inspector
+    setup :setup_log_collector
+
+    setup ctx do
+      parent = self()
+
+      consumers = [
+        {:alive,
+         start_supervised!(
+           {Support.TransactionConsumer,
+            id: :alive,
+            stack_id: ctx.stack_id,
+            parent: parent,
+            shape: @shape_a,
+            shape_handle: "shape-alive"},
+           id: {:consumer, :alive}
+         )},
+        {:doomed,
+         start_supervised!(
+           {Support.TransactionConsumer,
+            id: :doomed,
+            stack_id: ctx.stack_id,
+            parent: parent,
+            shape: @shape_b,
+            shape_handle: "shape-doomed"},
+           id: {:consumer, :doomed}
+         )}
+      ]
+
+      %{consumers: consumers}
+    end
+
+    # This test documents a known bug (electric-sql/electric#3980):
+    # when a consumer dies without calling remove_shape (e.g. via handle_materializer_down
+    # with :shutdown reason), and no subsequent transactions touch that shape's table,
+    # FlushTracker stays stuck indefinitely. When a fix is implemented (e.g. PID monitoring
+    # or periodic liveness sweep), this test should be updated to assert the fix instead.
+    test "consumer killed out-of-band after delivery permanently blocks flush advancement", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      lsn = Lsn.from_integer(10)
+
+      # Transaction that inserts into both tables → both shapes get tracked in FlushTracker
+      txn =
+        transaction(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "table_a"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "table_b"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 1)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # Both consumers receive the transaction
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}
+
+      # Kill the doomed consumer with :kill to prevent terminate from running.
+      # This simulates a consumer dying via handle_materializer_down → {:stop, :shutdown}
+      # where handle_writer_termination clause 3 returns :ok without cleanup.
+      # Using :kill here achieves the same end state: dead process, no remove_shape call.
+      {_, doomed_pid} = List.keyfind!(ctx.consumers, :doomed, 0)
+      kill_consumer(doomed_pid, :kill)
+
+      # The alive consumer flushes its data
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn, 1))
+
+      # Flush boundary partially advances: the alive shape caught up, but the dead
+      # shape pins the global offset at its prev_log_offset (tx_offset=9) minus 1 = 8.
+      assert_receive {:flush_boundary_updated, 8}, 100
+
+      # Send more transactions that ONLY affect table_a (the alive shape).
+      # Since no transaction touches table_b, SLC never discovers the dead consumer.
+      for i <- 11..15 do
+        lsn_i = Lsn.from_integer(i)
+
+        txn_i =
+          transaction(100 + i, lsn_i, [
+            %Changes.NewRecord{
+              relation: {"public", "table_a"},
+              record: %{"id" => "#{i}"},
+              log_offset: LogOffset.new(lsn_i, 0)
+            }
+          ])
+
+        assert :ok = ShapeLogCollector.handle_event(txn_i, ctx.stack_id)
+        assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+        ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn_i, 0))
+      end
+
+      # Despite 5 more fully-flushed transactions through lsn 15, the flush boundary
+      # is permanently stuck at 8. It never reaches the current lsn (15).
+      # This is the bug: the dead consumer's stale FlushTracker entry blocks WAL flush.
+      refute_receive {:flush_boundary_updated, _}, 100
+    end
+
+    # NOTE: This test uses Support.TransactionConsumer whose terminate/2 always
+    # calls ShapeLogCollector.remove_shape. The real Consumer does NOT do this
+    # when dying with :shutdown (handle_writer_termination clause 3 returns :ok).
+    # This test demonstrates that the cleanup mechanism works when invoked,
+    # serving as a contrast to the "killed out-of-band" test above where it isn't.
+    test "consumer that calls remove_shape on termination allows flush to advance", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      lsn = Lsn.from_integer(10)
+
+      # Transaction affecting both tables
+      txn =
+        transaction(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "table_a"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "table_b"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 1)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}
+
+      # Alive consumer flushes — partial advance to 8 (doomed still pending)
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn, 1))
+      assert_receive {:flush_boundary_updated, 8}, 100
+
+      # Stop the doomed consumer gracefully — terminate runs, calls remove_shape,
+      # which triggers FlushTracker.handle_shape_removed. This is the CORRECT path.
+      {_, doomed_pid} = List.keyfind!(ctx.consumers, :doomed, 0)
+      Process.unlink(doomed_pid)
+      stop_supervised!({:consumer, :doomed})
+
+      # Now the flush boundary advances all the way to lsn because the stale shape
+      # was cleaned up by the graceful termination path
+      expected_lsn = Lsn.to_integer(lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}, 200
+    end
+
+    test "transaction to dead shape's table eventually unblocks flush via undeliverable detection",
+         ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      lsn = Lsn.from_integer(10)
+
+      txn =
+        transaction(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "table_a"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "table_b"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 1)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}
+
+      # Kill the doomed consumer out-of-band
+      {_, doomed_pid} = List.keyfind!(ctx.consumers, :doomed, 0)
+      kill_consumer(doomed_pid, :kill)
+
+      # Alive flushes — partial advance to 8
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn, 1))
+      assert_receive {:flush_boundary_updated, 8}, 100
+
+      # Now a NEW transaction comes that affects BOTH tables.
+      # ConsumerRegistry.broadcast detects the dead doomed consumer → undeliverable.
+      # SLC calls FlushTracker.handle_shape_removed for undeliverable shapes.
+      lsn2 = Lsn.from_integer(20)
+
+      txn2 =
+        transaction(200, lsn2, [
+          %Changes.NewRecord{
+            relation: {"public", "table_a"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn2, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "table_b"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn2, 1)
+          }
+        ])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
+        end)
+
+      assert log =~ "Consumer processes crashed or missing during broadcast"
+
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+
+      # The stale entry was removed by the undeliverable detection in publish/1.
+      # The alive consumer flushes the second transaction.
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn2, 1))
+
+      expected_lsn = Lsn.to_integer(lsn2)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}, 100
+    end
+  end
+
   defp transaction(xid, lsn, changes) do
     last_log_offset =
       case Enum.reverse(changes) do

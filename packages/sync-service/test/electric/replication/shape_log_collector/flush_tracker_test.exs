@@ -269,6 +269,83 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
     end
   end
 
+  describe "out-of-band consumer death leaves stale FlushTracker entry" do
+    test "shape tracked across many transactions never advances global offset", %{
+      tracker: tracker
+    } do
+      # Simulate: two shapes receive txn at lsn 10. One shape's consumer dies
+      # out-of-band (no handle_shape_removed ever called). Subsequent txns only
+      # affect the alive shape. The dead shape's entry pins the global offset.
+      tracker = handle_txn(tracker, batch(lsn: 10, last_offset: 10), ["alive", "dead"])
+
+      # alive flushes lsn 10
+      tracker = FlushTracker.handle_flush_notification(tracker, "alive", LogOffset.new(10, 10))
+      # Global offset is pinned one below dead's initial position (tx_offset=9)
+      assert_receive {:flush_confirmed, 8}
+
+      # Many subsequent transactions only affect the alive shape
+      tracker =
+        Enum.reduce(11..20, tracker, fn lsn, tracker ->
+          tracker
+          |> handle_txn(batch(lsn: lsn, last_offset: 10), ["alive"])
+          |> FlushTracker.handle_flush_notification("alive", LogOffset.new(lsn, 10))
+        end)
+
+      # Despite 10 more transactions fully flushed by the alive shape,
+      # global offset has not moved past the dead shape's stuck position
+      refute_receive {:flush_confirmed, 10}
+      refute FlushTracker.empty?(tracker)
+    end
+
+    test "removing the stale shape after prolonged stall unblocks to latest seen offset", %{
+      tracker: tracker
+    } do
+      # Same setup: dead shape pins the offset
+      tracker = handle_txn(tracker, batch(lsn: 10, last_offset: 10), ["alive", "dead"])
+
+      tracker = FlushTracker.handle_flush_notification(tracker, "alive", LogOffset.new(10, 10))
+      assert_receive {:flush_confirmed, 8}
+
+      # More txns flow through alive shape only
+      tracker =
+        Enum.reduce(11..15, tracker, fn lsn, tracker ->
+          tracker
+          |> handle_txn(batch(lsn: lsn, last_offset: 10), ["alive"])
+          |> FlushTracker.handle_flush_notification("alive", LogOffset.new(lsn, 10))
+        end)
+
+      # Now simulate detection of the dead consumer (e.g. a sweep or monitor)
+      tracker = FlushTracker.handle_shape_removed(tracker, "dead")
+
+      # Global offset jumps all the way to the latest seen offset (lsn 15)
+      assert_receive {:flush_confirmed, 15}
+      assert FlushTracker.empty?(tracker)
+    end
+
+    test "stale shape blocks advancement even when its tracked offset is much older than current",
+         %{tracker: tracker} do
+      # Dead shape gets tracked at a very early offset
+      tracker = handle_txn(tracker, batch(lsn: 1, last_offset: 10), ["dead"])
+
+      # Alive shape joins later and processes many transactions
+      tracker =
+        Enum.reduce(2..50, tracker, fn lsn, tracker ->
+          tracker
+          |> handle_txn(batch(lsn: lsn, last_offset: 10), ["alive"])
+          |> FlushTracker.handle_flush_notification("alive", LogOffset.new(lsn, 10))
+        end)
+
+      # The global offset is still stuck at lsn 1's prev_log_offset position
+      # because the dead shape was never removed
+      refute_receive {:flush_confirmed, 2}
+      refute FlushTracker.empty?(tracker)
+
+      # Clean it up
+      _tracker = FlushTracker.handle_shape_removed(tracker, "dead")
+      assert_receive {:flush_confirmed, 50}
+    end
+  end
+
   # Helper: calls handle_txn_fragment with shapes_with_changes defaulting to
   # all affected shapes (the common case for single-fragment transactions).
   defp handle_txn(tracker, fragment, affected_shapes) do
