@@ -1,5 +1,7 @@
 .DS_store
 .vscode
+/mcp.json
+/.electric-agents
 **/*.vitest-temp.json
 **/dist/**
 /packages/sync-service/state/
