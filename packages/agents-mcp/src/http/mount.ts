@@ -66,6 +66,20 @@ export function mountMcpHttp(opts: MountMcpHttpOpts): void {
         return
       }
 
+      const dev = u.pathname.match(/^\/oauth\/device\/([^/]+)\/start$/)
+      if (dev && req.method === `POST`) {
+        const serverName = decodeURIComponent(dev[1]!)
+        const entry = opts.registry.get(serverName)
+        if (!entry) {
+          send(res, 404, { error: `unknown server` })
+          return
+        }
+        await opts.registry.removeServer(serverName)
+        const result = await opts.registry.addServer(entry.config)
+        send(res, 200, result)
+        return
+      }
+
       if (req.method === `GET` && u.pathname === `/api/mcp/servers`) {
         send(res, 200, { servers: opts.registry.list() })
         return
