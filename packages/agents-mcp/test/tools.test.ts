@@ -29,6 +29,8 @@ describe(`createMcpTools`, () => {
     expect(tools.map((t) => t.name)).toEqual([
       `github.create_issue`,
       `github.get_pr`,
+      `github.list_resources`,
+      `github.read_resource`,
     ])
   })
 
@@ -37,7 +39,11 @@ describe(`createMcpTools`, () => {
     expect(tools.map((t) => t.name)).toEqual([
       `github.create_issue`,
       `github.get_pr`,
+      `github.list_resources`,
+      `github.read_resource`,
       `sentry.list_events`,
+      `sentry.list_resources`,
+      `sentry.read_resource`,
     ])
   })
 

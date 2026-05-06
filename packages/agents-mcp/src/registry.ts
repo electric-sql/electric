@@ -11,6 +11,7 @@ export interface ServerEntry {
   lastError?: string
   transport?: McpTransportHandle
   tools?: Array<{ name: string; description?: string; inputSchema?: unknown }>
+  resources?: Array<{ uri: string; name?: string; mimeType?: string }>
 }
 
 export type GetAuthHeader = () => Promise<{
@@ -90,10 +91,24 @@ export function createRegistry(opts: RegistryOpts): Registry {
         description: t.description,
         inputSchema: t.inputSchema,
       }))
+      // Resources are optional — many MCP servers don't expose them. Failures
+      // here should not flip status to `error`; just leave `resources`
+      // undefined.
+      try {
+        const res = await client.listResources()
+        entry.resources = (res.resources ?? []).map((r) => ({
+          uri: r.uri,
+          name: r.name,
+          mimeType: r.mimeType,
+        }))
+      } catch {
+        entry.resources = undefined
+      }
     } catch (err) {
       entry.status = `error`
       entry.lastError = err instanceof Error ? err.message : String(err)
       entry.tools = undefined
+      entry.resources = undefined
     }
   }
 

@@ -1,5 +1,6 @@
 import type { Registry } from './registry'
 import { bridgeMcpTool, type BridgedTool } from './bridge/tool-bridge'
+import { bridgeResourceTools } from './bridge/resource-bridge'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -18,8 +19,8 @@ export function createMcpTools(
       const all = registry.list()
       const selected =
         allowlist === `*` ? all : all.filter((s) => allowlist.includes(s.name))
-      return selected.flatMap((s) =>
-        (s.tools ?? []).map((t) =>
+      return selected.flatMap((s) => [
+        ...(s.tools ?? []).map((t) =>
           bridgeMcpTool({
             server: s.name,
             tool: t,
@@ -35,8 +36,19 @@ export function createMcpTools(
               ),
             timeoutMs,
           })
-        )
-      )
+        ),
+        ...bridgeResourceTools({
+          server: s.name,
+          invoke: (server, method, args, tm) =>
+            registry.invokeMethod(
+              server,
+              method,
+              args as Record<string, unknown>,
+              tm
+            ),
+          timeoutMs,
+        }),
+      ])
     },
   }
 }
