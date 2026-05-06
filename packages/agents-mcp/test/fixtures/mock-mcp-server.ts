@@ -1,24 +1,25 @@
 /**
- * Mock MCP server fixture used by the agents-mcp E2E tests.
+ * Trimmed mock MCP server fixture for the agents-mcp E2E edge-case suite.
+ *
+ * Happy-path protocol coverage now lives in `test/e2e/everything.e2e.test.ts`
+ * (against `@modelcontextprotocol/server-everything`). This fixture exists
+ * only for scenarios the reference server cannot easily simulate:
+ *
+ *   - `auth-required`: returns a JSON-RPC `Unauthorized` error on
+ *     `tools/call`. Used to verify the bridge's `auth_unavailable` mapping.
+ *   - `tools-changed`: returns a different tool list on each `tools/list`
+ *     call. Used to verify that re-applying config (or a fresh connect)
+ *     picks up changed tool inventories.
  *
  * Can be used two ways:
- *  1. As a stdio subprocess: `tsx ./test/fixtures/mock-mcp-server.ts [scenario]`
- *     reads JSON-RPC lines from stdin and writes responses (and notifications)
- *     to stdout, one JSON object per line.
- *  2. As an in-process handler: `createMockServer({ scenario })` returns a
- *     `MockServer` whose `handle(req)` resolves with a JSON-RPC response, and
- *     whose `onNotification` is invoked for server-initiated notifications.
- *
- * Scenarios encode behaviors used by transport / registry tests.
+ *   1. As a stdio subprocess: `tsx ./test/fixtures/mock-mcp-server.ts <scenario>`
+ *      reads JSON-RPC lines from stdin and writes responses to stdout, one
+ *      JSON object per line.
+ *   2. As an in-process handler: `createMockServer({ scenario })` returns a
+ *      `MockServer` whose `handle(req)` resolves with a JSON-RPC response.
  */
 
-export type Scenario =
-  | `default`
-  | `error`
-  | `slow`
-  | `progress`
-  | `auth-required`
-  | `tools-changed`
+export type Scenario = `auth-required` | `tools-changed`
 
 export interface JsonRpcRequest {
   jsonrpc: `2.0`
@@ -39,62 +40,40 @@ export interface MockServer {
   setScenario(s: Scenario): void
 }
 
-const TOOLS = {
-  default: [
-    {
-      name: `echo`,
-      description: `echo input`,
-      inputSchema: {
-        type: `object`,
-        properties: { msg: { type: `string` } },
-        required: [`msg`],
-      },
+const TOOLS_INITIAL = [
+  {
+    name: `echo`,
+    description: `echo input`,
+    inputSchema: {
+      type: `object`,
+      properties: { msg: { type: `string` } },
+      required: [`msg`],
     },
-    {
-      name: `add`,
-      description: `add two numbers`,
-      inputSchema: {
-        type: `object`,
-        properties: { a: { type: `number` }, b: { type: `number` } },
-        required: [`a`, `b`],
-      },
-    },
-    {
-      name: `long`,
-      description: `long-running tool`,
-      inputSchema: { type: `object`, properties: {} },
-    },
-  ],
-  changed: [
-    {
-      name: `echo2`,
-      description: `echo v2`,
-      inputSchema: { type: `object`, properties: {} },
-    },
-  ],
-}
-
-const RESOURCES = [
-  { uri: `mock://config.json`, name: `config`, mimeType: `application/json` },
-  { uri: `mock://readme.md`, name: `readme`, mimeType: `text/markdown` },
+  },
 ]
 
-const PROMPTS = [
+const TOOLS_AFTER_CHANGE = [
   {
-    name: `greet`,
-    description: `greet user`,
-    arguments: [{ name: `name`, required: true }],
+    name: `echo2`,
+    description: `echo v2`,
+    inputSchema: { type: `object`, properties: {} },
   },
 ]
 
 export function createMockServer(
   opts: { scenario?: Scenario } = {}
 ): MockServer {
-  let scenario: Scenario = opts.scenario ?? `default`
+  let scenario: Scenario = opts.scenario ?? `auth-required`
+  // For `tools-changed`: the first `tools/list` returns the initial set, and
+  // every subsequent call returns the changed set. This lets a test verify
+  // that re-fetching the tool list (e.g. via a fresh connect) picks up the
+  // new shape.
+  let toolsListCalls = 0
 
   const server: MockServer = {
     setScenario(s) {
       scenario = s
+      toolsListCalls = 0
     },
     async handle(req) {
       switch (req.method) {
@@ -104,20 +83,23 @@ export function createMockServer(
             id: req.id,
             result: {
               protocolVersion: `2024-11-05`,
-              capabilities: {
-                tools: {},
-                resources: {},
-                prompts: {},
-                logging: {},
-              },
+              capabilities: { tools: {} },
               serverInfo: { name: `mock`, version: `0` },
             },
           }
 
         case `tools/list`: {
-          const tools =
-            scenario === `tools-changed` ? TOOLS.changed : TOOLS.default
-          return { jsonrpc: `2.0`, id: req.id, result: { tools } }
+          if (scenario === `tools-changed`) {
+            toolsListCalls += 1
+            const tools =
+              toolsListCalls === 1 ? TOOLS_INITIAL : TOOLS_AFTER_CHANGE
+            return { jsonrpc: `2.0`, id: req.id, result: { tools } }
+          }
+          return {
+            jsonrpc: `2.0`,
+            id: req.id,
+            result: { tools: TOOLS_INITIAL },
+          }
         }
 
         case `tools/call`: {
@@ -128,41 +110,11 @@ export function createMockServer(
               error: { code: -32001, message: `Unauthorized` },
             }
           }
-          if (scenario === `error`) {
-            return {
-              jsonrpc: `2.0`,
-              id: req.id,
-              error: { code: -32603, message: `tool failed` },
-            }
-          }
-          if (scenario === `slow`) {
-            await new Promise((r) => setTimeout(r, 100))
-          }
-          if (scenario === `progress` && req.params?._meta?.progressToken) {
-            const token = req.params._meta.progressToken
-            for (let i = 1; i <= 3; i++) {
-              await new Promise((r) => setTimeout(r, 5))
-              server.onNotification?.({
-                jsonrpc: `2.0`,
-                method: `notifications/progress`,
-                params: { progressToken: token, progress: i, total: 3 },
-              })
-            }
-          }
-
+          // tools-changed: simple echo so callers can verify the new tool
+          // shape. Not the focus of this fixture, but keeps tools/call
+          // functional in that scenario.
           const name = req.params?.name
-          if (name === `echo`) {
-            return {
-              jsonrpc: `2.0`,
-              id: req.id,
-              result: {
-                content: [
-                  { type: `text`, text: String(req.params.arguments.msg) },
-                ],
-              },
-            }
-          }
-          if (name === `add`) {
+          if (name === `echo` || name === `echo2`) {
             return {
               jsonrpc: `2.0`,
               id: req.id,
@@ -170,19 +122,10 @@ export function createMockServer(
                 content: [
                   {
                     type: `text`,
-                    text: String(
-                      req.params.arguments.a + req.params.arguments.b
-                    ),
+                    text: String(req.params?.arguments?.msg ?? ``),
                   },
                 ],
               },
-            }
-          }
-          if (name === `long`) {
-            return {
-              jsonrpc: `2.0`,
-              id: req.id,
-              result: { content: [{ type: `text`, text: `done` }] },
             }
           }
           return {
@@ -191,70 +134,6 @@ export function createMockServer(
             error: { code: -32602, message: `unknown tool: ${name}` },
           }
         }
-
-        case `resources/list`:
-          return {
-            jsonrpc: `2.0`,
-            id: req.id,
-            result: { resources: RESOURCES },
-          }
-
-        case `resources/read`: {
-          const uri = req.params?.uri
-          if (uri === `mock://config.json`) {
-            return {
-              jsonrpc: `2.0`,
-              id: req.id,
-              result: {
-                contents: [
-                  {
-                    uri,
-                    mimeType: `application/json`,
-                    text: `{"hello":1}`,
-                  },
-                ],
-              },
-            }
-          }
-          if (uri === `mock://readme.md`) {
-            return {
-              jsonrpc: `2.0`,
-              id: req.id,
-              result: {
-                contents: [{ uri, mimeType: `text/markdown`, text: `# mock` }],
-              },
-            }
-          }
-          return {
-            jsonrpc: `2.0`,
-            id: req.id,
-            error: { code: -32602, message: `unknown resource` },
-          }
-        }
-
-        case `prompts/list`:
-          return {
-            jsonrpc: `2.0`,
-            id: req.id,
-            result: { prompts: PROMPTS },
-          }
-
-        case `prompts/get`:
-          return {
-            jsonrpc: `2.0`,
-            id: req.id,
-            result: {
-              messages: [
-                {
-                  role: `user`,
-                  content: {
-                    type: `text`,
-                    text: `Hello, ${req.params.arguments.name}!`,
-                  },
-                },
-              ],
-            },
-          }
 
         default:
           return {
@@ -279,7 +158,7 @@ if (
   process.argv[1] &&
   import.meta.url === `file://${process.argv[1]}`
 ) {
-  const scenario = (process.argv[2] as Scenario) ?? `default`
+  const scenario = (process.argv[2] as Scenario) ?? `auth-required`
   const srv = createMockServer({ scenario })
   srv.onNotification = (n) => process.stdout.write(JSON.stringify(n) + `\n`)
   let buf = ``

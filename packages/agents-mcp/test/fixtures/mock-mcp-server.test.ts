@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createMockServer } from './mock-mcp-server'
 
-describe(`mock MCP server`, () => {
+describe(`mock MCP server (edge-case fixture)`, () => {
   it(`responds to initialize with capabilities`, async () => {
-    const srv = createMockServer({ scenario: `default` })
+    const srv = createMockServer({ scenario: `auth-required` })
     const res = await srv.handle({
       jsonrpc: `2.0`,
       id: 1,
@@ -17,40 +17,35 @@ describe(`mock MCP server`, () => {
     expect(res.result.capabilities.tools).toBeDefined()
   })
 
-  it(`lists tools`, async () => {
-    const srv = createMockServer({ scenario: `default` })
+  it(`auth-required: tools/call returns Unauthorized`, async () => {
+    const srv = createMockServer({ scenario: `auth-required` })
     const res = await srv.handle({
       jsonrpc: `2.0`,
       id: 2,
-      method: `tools/list`,
-      params: {},
-    })
-    expect(res.result.tools).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: `echo` })])
-    )
-  })
-
-  it(`echoes tools/call`, async () => {
-    const srv = createMockServer({ scenario: `default` })
-    const res = await srv.handle({
-      jsonrpc: `2.0`,
-      id: 3,
       method: `tools/call`,
       params: { name: `echo`, arguments: { msg: `hi` } },
     })
-    expect(res.result.content[0]).toEqual({ type: `text`, text: `hi` })
+    expect(res.error).toMatchObject({ message: `Unauthorized` })
   })
 
-  it(`emits progress notifications when scenario=progress`, async () => {
-    const srv = createMockServer({ scenario: `progress` })
-    const events: Array<{ method: string; params?: unknown }> = []
-    srv.onNotification = (n) => events.push(n)
-    await srv.handle({
+  it(`tools-changed: tools/list returns a different set on the second call`, async () => {
+    const srv = createMockServer({ scenario: `tools-changed` })
+    const first = await srv.handle({
+      jsonrpc: `2.0`,
+      id: 3,
+      method: `tools/list`,
+      params: {},
+    })
+    const second = await srv.handle({
       jsonrpc: `2.0`,
       id: 4,
-      method: `tools/call`,
-      params: { name: `long`, arguments: {}, _meta: { progressToken: `p1` } },
+      method: `tools/list`,
+      params: {},
     })
-    expect(events.some((e) => e.method === `notifications/progress`)).toBe(true)
+    const firstNames = first.result.tools.map((t: { name: string }) => t.name)
+    const secondNames = second.result.tools.map((t: { name: string }) => t.name)
+    expect(firstNames).toContain(`echo`)
+    expect(secondNames).toContain(`echo2`)
+    expect(firstNames).not.toEqual(secondNames)
   })
 })
