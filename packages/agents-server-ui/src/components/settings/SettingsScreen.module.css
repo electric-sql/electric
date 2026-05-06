@@ -17,18 +17,43 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  gap: var(--ds-space-2);
   height: 44px;
-  padding: 0 16px;
+  padding: 0 10px;
   background: var(--ds-bg);
+}
+
+/* Sidebar-toggle cluster — only rendered on narrow viewports, so
+   the chrome cluster pushes the title text right by one icon
+   slot when it's present and disappears entirely on wide. Same
+   24x24 icon column as MainHeader so the toggle lands at the
+   exact same screen-x as the workspace one. */
+.chrome {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 :global(html[data-electric-desktop='true']) .header {
   -webkit-app-region: drag;
 }
 
+/* On Electron the SettingsScreen header is the only window-drag
+   region in the right column, so we need to push past the macOS
+   traffic lights when the SettingsSidebar is collapsed (overlay
+   on narrow viewports) — otherwise our header content would sit
+   under the lights. We *also* shift the toggle past the lights
+   when it's the leftmost element. Mirrors MainHeader's `:has`
+   rule. */
+:global(html[data-electric-desktop='true']) .header:has(.chrome) {
+  padding-left: 84px;
+}
+
 :global(html[data-electric-desktop='true']) .header button,
 :global(html[data-electric-desktop='true']) .header a,
 :global(html[data-electric-desktop='true']) .header input,
+:global(html[data-electric-desktop='true']) .header [role='button'],
 :global(html[data-electric-desktop='true']) .header [data-no-drag] {
   -webkit-app-region: no-drag;
 }

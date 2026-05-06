@@ -5,6 +5,76 @@
   border-right: 1px solid var(--ds-border-1);
 }
 
+/* Narrow-viewport overlay mode — see `useNarrowViewport`. The
+   sidebar pops out of flex flow and floats over the main column
+   (with a backdrop sibling, `.backdrop` below) so it can stay open
+   without compressing the chat area on small screens. The shadow
+   provides the elevation cue, and the higher z-index ensures we
+   sit above the main content but below modals/toasts (which use
+   `--ds-z-modal` / `--ds-z-popover`).
+
+   The slide-in/out transition is driven by `data-state` toggled in
+   Sidebar.tsx (`open` ↔ `closed`). The parent keeps us mounted in
+   overlay mode regardless of `collapsed` so the exit transition
+   has time to run before unmount. `will-change` keeps the GPU
+   layer warm so the first frame of either direction doesn't jank. */
+.overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--ds-z-overlay);
+  box-shadow: var(--ds-overlay-shadow);
+  transition:
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 220ms ease;
+  will-change: transform;
+}
+.overlay[data-state='closed'] {
+  /* Translate by 100% of the sidebar's own width — slides exactly
+     off the left edge regardless of the user's saved width or the
+     viewport cap. Drop the shadow simultaneously so it doesn't
+     bleed into the dimmed backdrop. */
+  transform: translateX(-100%);
+  box-shadow: none;
+  pointer-events: none;
+}
+.overlay[data-state='open'] {
+  transform: translateX(0);
+}
+
+/* Backdrop sibling rendered next to `.overlay` (see Sidebar.tsx).
+   Sits above the main content but below the sidebar so a click
+   anywhere outside the sidebar dismisses it. Uses the same
+   `--ds-overlay` scrim token as Dialog so the dimming reads
+   consistently with other modal-style overlays. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--ds-z-overlay) - 1);
+  background: var(--ds-overlay);
+  cursor: pointer;
+  transition: opacity 220ms ease;
+}
+.backdrop[data-state='closed'] {
+  opacity: 0;
+  pointer-events: none;
+}
+.backdrop[data-state='open'] {
+  opacity: 1;
+}
+
+/* Respect the OS-level "reduce motion" preference — snap the
+   sidebar in/out instead of sliding. The sidebar still hides
+   correctly because the `transform` and `opacity` rules above
+   still apply, just without the animated interpolation. */
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .backdrop {
+    transition: none;
+  }
+}
+
 .resizeHandle {
   position: absolute;
   top: 0;

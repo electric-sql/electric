@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react'
-import { ScrollArea, Stack, Text } from '../../ui'
+import { PanelLeft } from 'lucide-react'
+import { IconButton, ScrollArea, Stack, Text, Tooltip } from '../../ui'
+import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
+import { useNarrowViewport } from '../../hooks/useNarrowViewport'
+import { modKeyLabel } from '../../lib/keyLabels'
 import styles from './SettingsScreen.module.css'
 
 /**
@@ -24,9 +28,34 @@ export function SettingsScreen({
   title: string
   children: ReactNode
 }): React.ReactElement {
+  // On narrow viewports the SettingsSidebar floats over the
+  // content as an overlay (see SettingsSidebar.tsx). Once dismissed
+  // via the backdrop, the SettingsScreen is the only thing on
+  // screen — without an affordance here the user has no visual
+  // way to bring the sidebar back. Mirrors MainHeader's pattern
+  // of only showing the chrome cluster when the sidebar is
+  // collapsed; while it's open the backdrop is the close UX.
+  const narrow = useNarrowViewport()
+  const { collapsed, toggle: toggleSidebar } = useSidebarCollapsed()
+  const showToggle = narrow && collapsed
   return (
     <div className={styles.root}>
       <div className={styles.header}>
+        {showToggle && (
+          <span className={styles.chrome}>
+            <Tooltip content="Show sidebar" shortcut={modKeyLabel(`b`)}>
+              <IconButton
+                variant="ghost"
+                tone="neutral"
+                size={1}
+                onClick={toggleSidebar}
+                aria-label="Show sidebar"
+              >
+                <PanelLeft size={16} />
+              </IconButton>
+            </Tooltip>
+          </span>
+        )}
         <Text size={2} weight={`medium`} className={styles.headerTitle}>
           {title}
         </Text>

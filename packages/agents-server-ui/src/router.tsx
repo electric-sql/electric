@@ -17,6 +17,7 @@ import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
 } from './hooks/useSidebarCollapsed'
+import { useNarrowViewport } from './hooks/useNarrowViewport'
 import { useHotkey } from './hooks/useHotkey'
 import {
   SearchPaletteProvider,
@@ -237,12 +238,22 @@ function RootShell(): React.ReactElement {
   const settingsCategory = parseSettingsCategory(location.pathname)
   const inSettings = settingsCategory !== null
 
+  // On narrow viewports the sidebar floats over content as an
+  // overlay (see Sidebar.tsx + useNarrowViewport). We keep the
+  // component mounted regardless of `collapsed` while in overlay
+  // mode so the exit transition (slide-out + backdrop fade) can
+  // run before unmount. In wide mode we keep the existing
+  // mount-on-demand behaviour — there's no animation, so unmounting
+  // immediately on collapse is the cheapest correct option.
+  const narrow = useNarrowViewport()
+  const showWorkspaceSidebar = narrow || !collapsed
+
   return (
     <div className={styles.appShell}>
       {inSettings ? (
         <SettingsSidebar activeCategory={settingsCategory} />
       ) : (
-        !collapsed && (
+        showWorkspaceSidebar && (
           <Sidebar
             selectedEntityUrl={selectedEntityUrl}
             onSelectEntity={navigateToEntity}

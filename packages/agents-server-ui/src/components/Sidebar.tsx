@@ -10,6 +10,8 @@ import {
   groupByWorkingDirectory,
 } from '../lib/sessionGroups'
 import { useSidebarView } from '../hooks/useSidebarView'
+import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
+import { useNarrowViewport } from '../hooks/useNarrowViewport'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
 import { setDragPayload } from '../lib/workspace/dragPayload'
@@ -71,6 +73,42 @@ export function Sidebar({
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
+  // Narrow viewports flip the sidebar from a push-displace flex
+  // column into an absolute-positioned overlay that floats above
+  // the main content with a backdrop. Selecting any sidebar row
+  // auto-collapses the sidebar in overlay mode (standard mobile
+  // drawer pattern) so the user is dropped straight into the new
+  // content without an extra dismiss tap.
+  const narrow = useNarrowViewport()
+  const { collapsed, setCollapsed } = useSidebarCollapsed()
+  // `data-state` drives the slide/fade transitions in CSS.
+  // - In wide mode the sidebar is always visible (or unmounted by
+  //   the parent), so no transition state is needed.
+  // - In narrow mode the parent keeps us mounted regardless of
+  //   `collapsed` so the exit transition can run before unmount,
+  //   and we toggle between `open`/`closed` here.
+  const overlayState: `open` | `closed` | undefined = narrow
+    ? collapsed
+      ? `closed`
+      : `open`
+    : undefined
+  const closeIfOverlay = useCallback(() => {
+    if (narrow) setCollapsed(true)
+  }, [narrow, setCollapsed])
+  const wrappedSelectEntity = useCallback(
+    (url: string) => {
+      onSelectEntity(url)
+      closeIfOverlay()
+    },
+    [onSelectEntity, closeIfOverlay]
+  )
+  const wrappedOpenInSplit = useMemo(() => {
+    if (!onOpenEntityInSplit) return undefined
+    return (url: string) => {
+      onOpenEntityInSplit(url)
+      closeIfOverlay()
+    }
+  }, [onOpenEntityInSplit, closeIfOverlay])
 
   const hoverHandle = HoverCard.useHandle<SidebarRowInfoPayload>()
 
@@ -157,123 +195,154 @@ export function Sidebar({
 
   const handleNewSession = useCallback(() => {
     navigate({ to: `/` })
-  }, [navigate])
+    closeIfOverlay()
+  }, [navigate, closeIfOverlay])
 
   const treeProps = {
     childrenByParent,
     selectedEntityUrl,
-    onSelectEntity,
-    onOpenEntityInSplit,
+    onSelectEntity: wrappedSelectEntity,
+    onOpenEntityInSplit: wrappedOpenInSplit,
     pinnedUrls,
     onTogglePin,
     hoverHandle,
   }
 
   return (
-    <Stack
-      direction="column"
-      className={styles.root}
-      style={{ width, minWidth: SIDEBAR_MIN_WIDTH }}
-    >
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        onMouseDown={startResize}
-        onMouseEnter={() => setResizeHandleHover(true)}
-        onMouseLeave={() => setResizeHandleHover(false)}
-        className={`${styles.resizeHandle} ${
-          resizing || resizeHandleHover ? styles.resizeHandleActive : ``
-        }`}
-      />
-      <SidebarHeader />
-
-      <ScrollArea className={styles.scrollFlex}>
-        <Stack direction="column" className={styles.treeRow}>
-          <button
-            type="button"
-            onClick={handleNewSession}
-            // Draggable so the user can drop a fresh new-session tile
-            // into any quadrant of an existing tile (creating a split)
-            // — gives them multiple new-session tiles at once. The
-            // browser only fires `dragstart` after the cursor moves,
-            // so a click that doesn't drag still triggers `onClick`.
-            draggable
-            onDragStart={(e) =>
-              setDragPayload(e, { kind: `sidebar-new-session` })
-            }
-            className={styles.newSessionRow}
-          >
-            <span className={styles.newSessionIconSlot}>
-              <SquarePen size={16} />
-            </span>
-            <span className={styles.newSessionLabel}>New session</span>
-            <span className={styles.newSessionKbd} aria-hidden="true">
-              <NewSessionKey />
-            </span>
-          </button>
-
-          {pinnedEntities.length > 0 && (
-            <>
-              <SectionLabel>Pinned</SectionLabel>
-              {pinnedEntities.map((entity) => (
-                <SidebarTree
-                  key={`pinned:${entity.url}`}
-                  entity={entity}
-                  {...treeProps}
-                />
-              ))}
-            </>
-          )}
-
-          {ungroupedBuckets.map((group) => (
-            <div key={group.id}>
-              <SectionLabel title={group.title}>{group.label}</SectionLabel>
-              {group.items.map((root) => (
-                <SidebarTree key={root.url} entity={root} {...treeProps} />
-              ))}
-            </div>
-          ))}
-
-          {entities.length === 0 && (
-            <Text
-              size={1}
-              tone="muted"
-              align="center"
-              className={styles.emptyTreeText}
-            >
-              No sessions
-            </Text>
-          )}
-          {entities.length > 0 && visibleEntities.length === 0 && (
-            <Text
-              size={1}
-              tone="muted"
-              align="center"
-              className={styles.emptyTreeText}
-            >
-              No sessions match the current filters
-            </Text>
-          )}
-        </Stack>
-      </ScrollArea>
-
-      <SidebarFooter />
-
-      <HoverCard.Root handle={hoverHandle}>
-        {({ payload }: { payload: SidebarRowInfoPayload | undefined }) => (
-          <HoverCard.Content
-            side="right"
-            align="start"
-            sideOffset={8}
-            padded={false}
-            className={sidebarRowStyles.infoCard}
-          >
-            {payload ? <SidebarRowInfo {...payload} /> : null}
-          </HoverCard.Content>
+    <>
+      {narrow && (
+        <div
+          className={styles.backdrop}
+          data-state={overlayState}
+          onClick={() => setCollapsed(true)}
+          aria-hidden={collapsed ? `true` : undefined}
+        />
+      )}
+      <Stack
+        direction="column"
+        data-state={overlayState}
+        className={`${styles.root} ${narrow ? styles.overlay : ``}`}
+        style={
+          narrow
+            ? {
+                // Floating overlay — cap width so a visible chunk
+                // of backdrop remains for the user to tap-dismiss.
+                // The user's saved width still applies up to the
+                // cap. We deliberately drop `minWidth` so the
+                // sidebar can shrink to the cap on viewports
+                // narrower than `SIDEBAR_MIN_WIDTH`.
+                width,
+                minWidth: 0,
+                maxWidth: `min(85vw, 320px)`,
+              }
+            : { width, minWidth: SIDEBAR_MIN_WIDTH }
+        }
+      >
+        {/* Resize handle is push-mode-only — dragging an overlaid
+            sidebar wider doesn't make sense when there's no flex
+            sibling to take the displaced space. */}
+        {!narrow && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            onMouseDown={startResize}
+            onMouseEnter={() => setResizeHandleHover(true)}
+            onMouseLeave={() => setResizeHandleHover(false)}
+            className={`${styles.resizeHandle} ${
+              resizing || resizeHandleHover ? styles.resizeHandleActive : ``
+            }`}
+          />
         )}
-      </HoverCard.Root>
-    </Stack>
+        <SidebarHeader />
+
+        <ScrollArea className={styles.scrollFlex}>
+          <Stack direction="column" className={styles.treeRow}>
+            <button
+              type="button"
+              onClick={handleNewSession}
+              // Draggable so the user can drop a fresh new-session tile
+              // into any quadrant of an existing tile (creating a split)
+              // — gives them multiple new-session tiles at once. The
+              // browser only fires `dragstart` after the cursor moves,
+              // so a click that doesn't drag still triggers `onClick`.
+              draggable
+              onDragStart={(e) =>
+                setDragPayload(e, { kind: `sidebar-new-session` })
+              }
+              className={styles.newSessionRow}
+            >
+              <span className={styles.newSessionIconSlot}>
+                <SquarePen size={16} />
+              </span>
+              <span className={styles.newSessionLabel}>New session</span>
+              <span className={styles.newSessionKbd} aria-hidden="true">
+                <NewSessionKey />
+              </span>
+            </button>
+
+            {pinnedEntities.length > 0 && (
+              <>
+                <SectionLabel>Pinned</SectionLabel>
+                {pinnedEntities.map((entity) => (
+                  <SidebarTree
+                    key={`pinned:${entity.url}`}
+                    entity={entity}
+                    {...treeProps}
+                  />
+                ))}
+              </>
+            )}
+
+            {ungroupedBuckets.map((group) => (
+              <div key={group.id}>
+                <SectionLabel title={group.title}>{group.label}</SectionLabel>
+                {group.items.map((root) => (
+                  <SidebarTree key={root.url} entity={root} {...treeProps} />
+                ))}
+              </div>
+            ))}
+
+            {entities.length === 0 && (
+              <Text
+                size={1}
+                tone="muted"
+                align="center"
+                className={styles.emptyTreeText}
+              >
+                No sessions
+              </Text>
+            )}
+            {entities.length > 0 && visibleEntities.length === 0 && (
+              <Text
+                size={1}
+                tone="muted"
+                align="center"
+                className={styles.emptyTreeText}
+              >
+                No sessions match the current filters
+              </Text>
+            )}
+          </Stack>
+        </ScrollArea>
+
+        <SidebarFooter />
+
+        <HoverCard.Root handle={hoverHandle}>
+          {({ payload }: { payload: SidebarRowInfoPayload | undefined }) => (
+            <HoverCard.Content
+              side="right"
+              align="start"
+              sideOffset={8}
+              padded={false}
+              className={sidebarRowStyles.infoCard}
+            >
+              {payload ? <SidebarRowInfo {...payload} /> : null}
+            </HoverCard.Content>
+          )}
+        </HoverCard.Root>
+      </Stack>
+    </>
   )
 }
 

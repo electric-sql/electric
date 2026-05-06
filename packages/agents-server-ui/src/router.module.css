@@ -4,6 +4,11 @@
   min-height: 0;
   overflow: hidden;
   background: var(--ds-bg);
+  /* Positioning context for the sidebar's narrow-viewport overlay
+     (`Sidebar.module.css → .overlay` + `.backdrop`). Without this,
+     the absolutely-positioned overlay would resolve against the
+     viewport and end up floating over modals/toasts higher up. */
+  position: relative;
 }
 
 .entityShell {
