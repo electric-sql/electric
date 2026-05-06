@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "x": {
+      "transport": "http",
+      "url": "https://x",
+      "auth": { "mode": "bogus" }
+    }
+  }
+}

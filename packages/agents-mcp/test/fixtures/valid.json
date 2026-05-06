@@ -1,0 +1,18 @@
+{
+  "servers": {
+    "github": {
+      "transport": "http",
+      "url": "https://api.example.com/mcp",
+      "auth": {
+        "mode": "apiKey",
+        "headerName": "Authorization",
+        "valueRef": "vault://github/token"
+      }
+    },
+    "git-local": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git"]
+    }
+  }
+}
