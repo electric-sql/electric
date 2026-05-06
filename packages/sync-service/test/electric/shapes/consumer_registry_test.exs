@@ -42,7 +42,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     Repatch.patch(
       Electric.ShapeCache,
       :start_consumer_for_handle,
-      fn handle, ^stack_id ->
+      fn handle, ^stack_id, _opts ->
         send(parent, {:start_consumer, handle})
 
         {:ok, pid} =
@@ -219,10 +219,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
         :start_consumer_for_handle,
         [force: true],
         fn
-          "handle-removed", ^stack_id ->
+          "handle-removed", ^stack_id, _opts ->
             {:error, :no_shape}
 
-          handle, ^stack_id ->
+          handle, ^stack_id, _opts ->
             send(parent, {:start_consumer, handle})
 
             {:ok, pid} =
@@ -374,7 +374,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
         Electric.ShapeCache,
         :start_consumer_for_handle,
         [force: true],
-        fn handle, stack_id ->
+        fn handle, stack_id, _opts ->
           {:ok, pid} =
             start_supervised(
               {TestSubscriber, {stack_id, handle, always_suspend.(handle)}},
