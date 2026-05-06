@@ -14,6 +14,10 @@ export { defaultTransportFactory } from './transports/factory'
 export { TimeoutError, withTimeout } from './transports/timeout'
 export { bridgeMcpTool } from './bridge/tool-bridge'
 export type { BridgedTool, BridgeOpts } from './bridge/tool-bridge'
+export { bridgeResourceTools } from './bridge/resource-bridge'
+export type { ResourceBridgeOpts } from './bridge/resource-bridge'
+export { bridgePromptTools } from './bridge/prompt-bridge'
+export type { PromptBridgeOpts } from './bridge/prompt-bridge'
 export {
   createOAuthCoordinator,
   createInMemoryTokenCache,
