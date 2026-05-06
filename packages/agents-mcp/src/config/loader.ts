@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import { expandEnv } from './env-expand'
-import type { McpServerConfig } from '../types'
+import type { McpAuthConfig, McpServerConfig } from '../types'
 
 export interface McpConfig {
   servers: McpServerConfig[]
@@ -56,7 +56,7 @@ export function parseConfig(
         name,
         transport: `http`,
         url: expandEnv(e.url, env),
-        auth: expandEnv.deep(auth, env) as McpServerConfig[`auth`],
+        auth: expandEnv.deep(auth, env) as McpAuthConfig,
         timeoutMs: typeof e.timeoutMs === `number` ? e.timeoutMs : undefined,
       })
     } else {
@@ -78,7 +78,7 @@ export function parseConfig(
                 )
               )
             : undefined,
-        auth: expandEnv.deep(auth, env) as McpServerConfig[`auth`],
+        auth: expandEnv.deep(auth, env) as McpAuthConfig,
         timeoutMs: typeof e.timeoutMs === `number` ? e.timeoutMs : undefined,
       })
     }

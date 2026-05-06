@@ -20,7 +20,7 @@ import {
   context as otelContext,
   trace,
 } from '@opentelemetry/api'
-import { sendJsonError } from './electric-agents-http.js'
+import { sendJson, sendJsonError } from './electric-agents-http.js'
 import { PostgresRegistry } from './electric-agents-registry.js'
 import { WakeRegistry } from './wake-registry.js'
 import { createDb, runMigrations } from './db/index.js'
