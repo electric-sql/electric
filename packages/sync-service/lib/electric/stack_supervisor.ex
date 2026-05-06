@@ -136,6 +136,10 @@ defmodule Electric.StackSupervisor do
                        type: :boolean,
                        default: Electric.Config.default(:shape_enable_suspend?)
                      ],
+                     shape_suspend_after: [
+                       type: :non_neg_integer,
+                       default: Electric.Config.default(:shape_suspend_after)
+                     ],
                      snapshot_timeout_to_first_data: [
                        type: :pos_integer,
                        default: Electric.Config.default(:snapshot_timeout_to_first_data)
@@ -352,6 +356,7 @@ defmodule Electric.StackSupervisor do
 
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
     shape_enable_suspend? = Keyword.fetch!(config.tweaks, :shape_enable_suspend?)
+    shape_suspend_after = Keyword.fetch!(config.tweaks, :shape_suspend_after)
     process_spawn_opts = Keyword.fetch!(config.tweaks, :process_spawn_opts)
 
     shape_cache_opts = [
@@ -401,6 +406,7 @@ defmodule Electric.StackSupervisor do
            inspector: inspector,
            shape_hibernate_after: shape_hibernate_after,
            shape_enable_suspend?: shape_enable_suspend?,
+           shape_suspend_after: shape_suspend_after,
            process_spawn_opts: process_spawn_opts,
            feature_flags: Map.get(config, :feature_flags, [])
          ]},

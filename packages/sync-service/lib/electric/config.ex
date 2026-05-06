@@ -89,6 +89,8 @@ defmodule Electric.Config do
     # Should we terminate consumer processes after `shape_hibernate_after` ms
     # or just hibernate them?
     shape_enable_suspend?: false,
+    # How long after hibernation before suspending (terminating) the consumer
+    shape_suspend_after: :timer.minutes(10),
     # Sets max_requests for Bandit handler processes:
     # https://hexdocs.pm/bandit/Bandit.html#t:http_1_options/0
     # "The maximum number of requests to serve in a single HTTP/{1,2}
