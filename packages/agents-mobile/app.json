@@ -12,7 +12,6 @@
     },
     "android": {
       "edgeToEdgeEnabled": true
-    },
-    "plugins": ["expo-asset"]
+    }
   }
 }

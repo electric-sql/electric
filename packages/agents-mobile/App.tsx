@@ -24,12 +24,10 @@ import { NewSessionScreen } from './src/screens/NewSessionScreen'
 import { ServerSetupScreen } from './src/screens/ServerSetupScreen'
 import { SessionListScreen } from './src/screens/SessionListScreen'
 import { SessionScreen } from './src/screens/SessionScreen'
-import { PersistentEmbed } from './src/webview/PersistentEmbed'
-import type { EmbedViewId } from './src/webview/embedSource'
+import type { EmbedViewId } from './src/lib/embedView'
 import SessionDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionDomEmbed'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
-const USE_DOM_EMBED = process.env.EXPO_PUBLIC_AGENTS_MOBILE_DOM_EMBED === `1`
 
 type SessionDomEmbedProps = {
   serverUrl: string
@@ -50,9 +48,9 @@ const SessionDomEmbed =
 
 /**
  * Pixel height of the `<Header>` strip — kept in lockstep with
- * `rowHeight.xl` (44px) so we can position the persistent WebView
- * directly below it without measuring at runtime. If you change the
- * header height in `Header.tsx`, change this constant too.
+ * `rowHeight.xl` (44px) so we can position the DOM component directly
+ * below it without measuring at runtime. If you change the header
+ * height in `Header.tsx`, change this constant too.
  */
 const HEADER_HEIGHT = 44
 
@@ -65,8 +63,8 @@ type Route =
 
 /**
  * Subset of routes handled by `<RoutedShell>` — `server-setup` is
- * intercepted before we get there so the persistent embed never has
- * to worry about a missing serverUrl.
+ * intercepted before we get there so the embed never has to worry about
+ * a missing serverUrl.
  */
 type ShellRoute = Exclude<Route, { name: `server-setup` }>
 
@@ -170,13 +168,9 @@ function AppShell(): React.ReactElement {
  * Two-layer screen renderer:
  *
  *   1. The currently routed native screen.
- *   2. A single, app-level `<PersistentEmbed>` WebView that survives
- *      navigation. Hidden via `display: 'none'` on non-session routes,
- *      revealed and `set-entity` / `set-view` posted on session routes.
+ *   2. An Expo DOM component that renders the server UI session surface.
  *
- * The bundle therefore parses **once** per app launch — every later
- * open of a session is just a postMessage round-trip away. The native
- * shell still owns the chrome (header, back button, view toggle).
+ * The native shell still owns the chrome (header, back button, view toggle).
  */
 function RoutedShell({
   route,
@@ -199,7 +193,7 @@ function RoutedShell({
   const scheme = useColorSchemeMode()
   const insets = useSafeAreaInsets()
   const windowDimensions = useWindowDimensions()
-  // The persistent WebView slots into the body of `SessionScreen`,
+  // The DOM component slots into the body of `SessionScreen`,
   // i.e. directly under the safe-area top inset and the 44px
   // `<Header>` strip.
   const embedTop = insets.top + HEADER_HEIGHT
@@ -251,7 +245,7 @@ function RoutedShell({
         />
       )}
 
-      {USE_DOM_EMBED && active ? (
+      {active && (
         <View style={[styles.domEmbedHost, embedFrame]}>
           <SessionDomEmbed
             style={[styles.domEmbedWeb, embedSize]}
@@ -274,12 +268,6 @@ function RoutedShell({
             }}
           />
         </View>
-      ) : (
-        <PersistentEmbed
-          active={active}
-          containerStyle={{ top: embedTop }}
-          onNavigateToEntity={(target) => onOpenSession(target)}
-        />
       )}
     </View>
   )

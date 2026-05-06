@@ -10,7 +10,6 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "embed:build": "pnpm --filter @electric-ax/agents-server-ui build:mobile-embed",
     "doctor": "expo-doctor"
   },
   "dependencies": {
@@ -21,7 +20,6 @@
     "@tanstack/electric-db-collection": "^0.3.3",
     "@tanstack/react-db": "^0.1.83",
     "expo": "54.0.34",
-    "expo-asset": "~12.0.13",
     "expo-constants": "~18.0.13",
     "expo-status-bar": "~3.0.9",
     "react": "^19.1.0",

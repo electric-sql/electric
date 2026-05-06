@@ -6,6 +6,10 @@ Build a mobile Electric Agents client using Expo and React Native. The mobile ap
 
 The app should feel like the existing Electric Agents desktop/web UI, but with a native mobile shell: mobile navigation, native toolbar controls, drawer/sidebar behavior, and one active view at a time.
 
+## Current Architecture Note
+
+The implementation has moved from the original static `react-native-webview` embed plan to Expo DOM Components. The native shell now renders the session surface through `packages/agents-server-ui/src/embed/SessionDomEmbed.tsx`; the old generated `assets/embed.html` bundle, WebView bridge, and `build:mobile-embed` flow have been removed.
+
 ## Product Decisions
 
 - Use Expo for the mobile app.
