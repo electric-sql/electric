@@ -4,6 +4,8 @@
 '@electric-ax/agents-server-ui': patch
 '@electric-ax/agents-runtime': patch
 '@electric-ax/agents': patch
+'@electric-sql/experimental': patch
+'@electric-sql/react': patch
 ---
 
 Electron desktop shell, tile-based workspace, and per-session
@@ -30,3 +32,5 @@ working-directory picker.
   - `@electric-ax/agents-runtime`: tool-pair preservation during
     compaction and matching tool-call events by id (bug fixes
     surfaced while building the desktop UI).
+  - `@electric-sql/experimental`, `@electric-sql/react`: align test
+    type configuration with DOM AbortSignal types used by the client.
