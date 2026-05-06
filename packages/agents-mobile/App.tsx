@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import {
   SafeAreaProvider,
+  initialWindowMetrics,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -85,7 +86,7 @@ export default function App(): React.ReactElement {
     // hooks/components to read insets on iOS notches and Android
     // edge-to-edge mode (set via `android.edgeToEdgeEnabled` in
     // `app.json`).
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ThemeProvider>
         <AppShell />
       </ThemeProvider>

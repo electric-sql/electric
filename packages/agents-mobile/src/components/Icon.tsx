@@ -1,4 +1,4 @@
-import Svg, { Path } from 'react-native-svg'
+import Svg, { Circle, Path } from 'react-native-svg'
 
 /**
  * Tiny inline SVG icon set — sized like Lucide's stroke icons so they
@@ -8,8 +8,9 @@ import Svg, { Path } from 'react-native-svg'
  * should reconsider.
  *
  * All paths assume a 24×24 viewBox so the `size` prop scales them
- * uniformly. `color` maps to the SVG `stroke` attribute (Lucide-style
- * icons are stroked, not filled).
+ * uniformly. `color` maps to the SVG `stroke` attribute for Lucide-style
+ * icons; the overflow menu uses filled dots so it stays readable at nav-bar
+ * size.
  */
 export type IconName =
   | `back`
@@ -63,6 +64,16 @@ export function Icon({
   color: string
   strokeWidth?: number
 }): React.ReactElement {
+  if (name === `more`) {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Circle cx={5} cy={12} r={1.7} fill={color} />
+        <Circle cx={12} cy={12} r={1.7} fill={color} />
+        <Circle cx={19} cy={12} r={1.7} fill={color} />
+      </Svg>
+    )
+  }
+
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path
