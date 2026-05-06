@@ -57,4 +57,25 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
 
     expect(validationError).toBeNull()
   })
+
+  it(`supports overriding entity write-token validation`, () => {
+    const manager = createManager()
+    const entity = { write_token: `entity-token` } as any
+
+    expect((manager as any).isValidWriteToken(entity, `entity-token`)).toBe(
+      true
+    )
+    expect((manager as any).isValidWriteToken(entity, `claim-token`)).toBe(
+      false
+    )
+
+    manager.setWriteTokenValidator((_currentEntity, token) => {
+      return token === `claim-token`
+    })
+
+    expect((manager as any).isValidWriteToken(entity, `entity-token`)).toBe(
+      false
+    )
+    expect((manager as any).isValidWriteToken(entity, `claim-token`)).toBe(true)
+  })
 })

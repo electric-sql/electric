@@ -125,6 +125,12 @@ interface MockAgentBootstrap {
   registry: EntityRegistry
 }
 
+interface ActiveClaimWriteToken {
+  token: string
+  consumerId: string
+  issuedAt: number
+}
+
 const MOCK_CHAT_MODEL: AgentModel = {
   id: `mock-chat`,
   name: `Mock Chat`,
@@ -189,6 +195,8 @@ export class ElectricAgentsServer {
   private _url: string | null = null
   private shuttingDown = false
   private streamsAgent: Agent | null = null
+  private activeClaimWriteTokens = new Map<string, ActiveClaimWriteToken>()
+  private activeClaimWriteTokensByConsumer = new Map<string, string>()
 
   streamClient: StreamClient
   readonly options: ElectricAgentsServerOptions
@@ -295,6 +303,13 @@ export class ElectricAgentsServer {
           )
           this.electricAgentsManager.setEntityBridgeManager(
             this.entityBridgeManager
+          )
+          this.electricAgentsManager.setWriteTokenValidator((entity, token) =>
+            this.isValidEntityWriteToken(
+              entity.streams.main,
+              entity.write_token,
+              token
+            )
           )
           this.tagStreamOutboxDrainer = new TagStreamOutboxDrainer(
             this.registry,
@@ -418,7 +433,12 @@ export class ElectricAgentsServer {
           serverLog.info(`[agent-server] scheduler started`)
 
           this.electricAgentsRoutes = new ElectricAgentsRoutes(
-            this.electricAgentsManager
+            this.electricAgentsManager,
+            {
+              onEntityKilled: (entityUrl) => {
+                this.clearActiveClaimForStream(`${entityUrl}/main`)
+              },
+            }
           )
           this.electricAgentsEntityTypeRoutes =
             new ElectricAgentsEntityTypeRoutes(this.electricAgentsManager)
@@ -784,6 +804,23 @@ export class ElectricAgentsServer {
     await this.proxyRequest(req, res)
   }
 
+  private isValidEntityWriteToken(
+    streamPath: string,
+    _entityWriteToken: string,
+    token: string
+  ): boolean {
+    const activeClaim = this.activeClaimWriteTokens.get(streamPath)
+    return activeClaim?.token === token
+  }
+
+  private clearActiveClaimForStream(streamPath: string): void {
+    const activeClaim = this.activeClaimWriteTokens.get(streamPath)
+    if (!activeClaim) return
+
+    this.activeClaimWriteTokens.delete(streamPath)
+    this.activeClaimWriteTokensByConsumer.delete(activeClaim.consumerId)
+  }
+
   private async handleStreamAppend(
     path: string,
     req: IncomingMessage,
@@ -811,7 +848,7 @@ export class ElectricAgentsServer {
 
     if (entity) {
       const token = req.headers.authorization?.replace(/^Bearer\s+/i, ``) ?? ``
-      if (token !== entity.write_token) {
+      if (!this.isValidEntityWriteToken(path, entity.write_token, token)) {
         sendJsonError(res, 401, `UNAUTHORIZED`, `Invalid write token`)
         return true
       }
@@ -1573,9 +1610,6 @@ export class ElectricAgentsServer {
       const callbackUrl =
         typeof payload.callback === `string` ? payload.callback : null
       const publicUrl = this.publicUrl
-      const isInternalAgentHandlerTarget =
-        targetWebhookUrl.startsWith(`${this._url}/_electric/agent-handler`) ||
-        targetWebhookUrl.startsWith(`${publicUrl}/_electric/agent-handler`)
 
       if (primaryStream) {
         rootSpan?.setAttribute(ATTR.STREAM_PATH, primaryStream)
@@ -1667,9 +1701,6 @@ export class ElectricAgentsServer {
 
         if (consumerId && callbackUrl) {
           enriched.callback = `${publicUrl}/_electric/callback-forward/${encodeURIComponent(consumerId)}`
-        }
-        if (isInternalAgentHandlerTarget && entity) {
-          enriched.writeToken = entity.write_token
         }
         forwardBody = new TextEncoder().encode(JSON.stringify(enriched))
       }
@@ -1790,7 +1821,30 @@ export class ElectricAgentsServer {
             target.primaryStream
           )
         if (entity) {
-          responseBody.writeToken = entity.write_token
+          const writeToken = randomUUID()
+          const previousClaimForStream = this.activeClaimWriteTokens.get(
+            target.primaryStream
+          )
+          if (previousClaimForStream) {
+            this.activeClaimWriteTokensByConsumer.delete(
+              previousClaimForStream.consumerId
+            )
+          }
+          const previousStreamForConsumer =
+            this.activeClaimWriteTokensByConsumer.get(consumerId)
+          if (previousStreamForConsumer) {
+            this.activeClaimWriteTokens.delete(previousStreamForConsumer)
+          }
+          this.activeClaimWriteTokens.set(target.primaryStream, {
+            token: writeToken,
+            consumerId,
+            issuedAt: Date.now(),
+          })
+          this.activeClaimWriteTokensByConsumer.set(
+            consumerId,
+            target.primaryStream
+          )
+          responseBody.writeToken = writeToken
           responseBytes = new TextEncoder().encode(JSON.stringify(responseBody))
         }
       }
@@ -1801,11 +1855,18 @@ export class ElectricAgentsServer {
         serverLog.info(
           `[callback-forward] done received for stream=${target.primaryStream} consumer=${consumerId}`
         )
+        const activeClaim = this.activeClaimWriteTokens.get(
+          target.primaryStream
+        )
+        const stillOwnsClaim = activeClaim?.consumerId === consumerId
+        if (stillOwnsClaim) {
+          this.clearActiveClaimForStream(target.primaryStream)
+        }
         const entity =
           await this.electricAgentsManager!.registry.getEntityByStream(
             target.primaryStream
           )
-        if (entity) {
+        if (entity && stillOwnsClaim) {
           await this.electricAgentsManager!.registry.updateStatus(
             entity.url,
             `idle`
@@ -1814,6 +1875,10 @@ export class ElectricAgentsServer {
             `[callback-forward] status updated to idle for ${entity.url}`
           )
           await this.entityBridgeManager?.onEntityChanged(entity.url)
+        } else if (entity) {
+          serverLog.info(
+            `[callback-forward] done ignored for stale claim stream=${target.primaryStream} consumer=${consumerId}`
+          )
         } else {
           serverLog.warn(
             `[callback-forward] done received but no entity found for stream=${target.primaryStream}`
