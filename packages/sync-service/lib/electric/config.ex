@@ -85,11 +85,14 @@ defmodule Electric.Config do
     otel_sampling_ratio: 0.01,
     metrics_sampling_ratio: 1,
     ## Memory
+    # After this duration of inactivity, consumer processes will hibernate
+    # to allow garbage collection
     shape_hibernate_after: :timer.seconds(30),
-    # Should we terminate consumer processes after `shape_hibernate_after` ms
-    # or just hibernate them?
+    # If enabled, terminate (suspend) consumer processes after hibernating.
+    # This frees memory more aggressively than hibernation alone.
     shape_enable_suspend?: false,
-    # How long after hibernation before suspending (terminating) the consumer
+    # After hibernating, wait this duration before suspending (terminating).
+    # Only applies when shape_enable_suspend? is true.
     shape_suspend_after: :timer.minutes(10),
     # Sets max_requests for Bandit handler processes:
     # https://hexdocs.pm/bandit/Bandit.html#t:http_1_options/0
