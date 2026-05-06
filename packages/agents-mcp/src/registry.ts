@@ -57,6 +57,13 @@ export interface Registry {
   removeServer(name: string): Promise<void>
   list(): ReadonlyArray<ListedEntry>
   get(name: string): Entry | undefined
+  finishAuth(
+    serverName: string,
+    code: string,
+    state?: string
+  ): Promise<AddServerResult>
+  disable(name: string): Promise<void>
+  enable(name: string): Promise<AddServerResult>
 }
 
 function hashConfig(c: McpServerConfig): string {
@@ -323,6 +330,47 @@ export function createRegistry(opts: RegistryOpts): Registry {
 
     get(name) {
       return entries.get(name)
+    },
+
+    async finishAuth(serverName, code, _state) {
+      const e = entries.get(serverName)
+      if (!e) throw new Error(`unknown server "${serverName}"`)
+      const provider = e.provider
+      if (!provider)
+        throw new Error(`server "${serverName}" has no OAuth provider`)
+      // The MCP SDK's `auth` function handles the token exchange when
+      // authorizationCode is provided. It needs the server URL to re-discover
+      // the token endpoint.
+      const serverUrl = (e.config as any).url as string | undefined
+      if (!serverUrl)
+        throw new Error(
+          `server "${serverName}" has no URL — cannot complete token exchange`
+        )
+      const { auth } = await import(`@modelcontextprotocol/sdk/client/auth.js`)
+      await auth(provider, { serverUrl, authorizationCode: code })
+      provider.clearAuthUrl()
+      return await registry.addServer(e.config)
+    },
+
+    async disable(name) {
+      const e = entries.get(name)
+      if (!e) throw new Error(`unknown server "${name}"`)
+      await Promise.resolve(e.transport?.close()).catch(() => {})
+      e.transport = undefined
+      e.tools = []
+      // (Phase 5: e.deviceHandle?.cancel(); e.deviceHandle = undefined;)
+      e.authUrl = undefined
+      e.status = `disabled`
+      e.error = undefined
+    },
+
+    async enable(name) {
+      const e = entries.get(name)
+      if (!e) throw new Error(`unknown server "${name}"`)
+      if (e.status !== `disabled`)
+        return { state: `ready`, id: name, toolCount: e.tools.length }
+      entries.delete(name)
+      return await registry.addServer(e.config)
     },
   }
 

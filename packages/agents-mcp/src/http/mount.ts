@@ -2,6 +2,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { Registry } from '../registry'
 import type { CredentialStore } from '../credentials/types'
 import { applyCors } from './cors'
+import { handleOAuthCallback } from './oauth-callback'
 
 export interface MountMcpHttpOpts {
   /** Plain Node http.Server. Caller is responsible for `listen`. */
@@ -57,6 +58,13 @@ export function mountMcpHttp(opts: MountMcpHttpOpts): void {
 
     try {
       const u = new URL(req.url, `http://x`)
+
+      const cb = u.pathname.match(/^\/oauth\/callback\/([^/]+)$/)
+      if (cb && req.method === `GET`) {
+        const serverName = decodeURIComponent(cb[1]!)
+        await handleOAuthCallback(req, res, opts.registry, serverName)
+        return
+      }
 
       if (req.method === `GET` && u.pathname === `/api/mcp/servers`) {
         send(res, 200, { servers: opts.registry.list() })
