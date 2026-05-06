@@ -22,7 +22,9 @@ describe(`bash tool`, () => {
     })
 
     expect(result.details).toMatchObject({ exitCode: 0, timedOut: false })
-    const lines = (result.content[0] as { text: string }).text.trim().split(`\n`)
+    const lines = (result.content[0] as { text: string }).text
+      .trim()
+      .split(`\n`)
     expect(lines).toEqual([await realpath(cwd), process.env.HOME ?? homedir()])
   })
 })
