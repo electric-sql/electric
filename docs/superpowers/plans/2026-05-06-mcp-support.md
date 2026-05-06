@@ -1281,6 +1281,592 @@ git add . && git commit --allow-empty -m "milestone: agents-mcp phase 1 complete
 
 ---
 
+## Phase 1.5 — MCP Protocol Coverage and E2E Tests
+
+End state: a hermetic mock MCP server fixture exercises the registry + bridge across the entire MCP protocol surface (tools, resources, prompts, progress notifications, cancellation, capability negotiation). E2E tests run in CI without external network or subprocess flake.
+
+### Task 15a: Mock MCP server fixture (stdio + HTTP modes)
+
+**Files:**
+- Create: `packages/agents-mcp/test/fixtures/mock-mcp-server.ts`
+- Create: `packages/agents-mcp/test/fixtures/mock-mcp-server.test.ts`
+
+The fixture is a single TypeScript module that can be invoked two ways:
+1. **As a stdio subprocess** — `node dist/test-fixtures/mock-mcp-server.js [scenario]` reads JSON-RPC from stdin and writes to stdout.
+2. **As an in-process HTTP handler** — exposes a `Fetch`-style handler the HTTP transport tests can call directly without a real server.
+
+Scenarios encode behaviors: `default`, `error`, `slow`, `progress`, `auth-required`, `tools-changed`.
+
+- [ ] **Step 1: Test the fixture itself**
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { createMockServer } from './mock-mcp-server'
+
+describe('mock MCP server', () => {
+  it('responds to initialize with capabilities', async () => {
+    const srv = createMockServer({ scenario: 'default' })
+    const res = await srv.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '0' } } })
+    expect(res.result.capabilities.tools).toBeDefined()
+  })
+
+  it('lists tools', async () => {
+    const srv = createMockServer({ scenario: 'default' })
+    const res = await srv.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
+    expect(res.result.tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'echo' })]))
+  })
+
+  it('echoes tools/call', async () => {
+    const srv = createMockServer({ scenario: 'default' })
+    const res = await srv.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: { msg: 'hi' } } })
+    expect(res.result.content[0]).toEqual({ type: 'text', text: 'hi' })
+  })
+
+  it('emits progress notifications when scenario=progress', async () => {
+    const srv = createMockServer({ scenario: 'progress' })
+    const events: any[] = []
+    srv.onNotification = (n) => events.push(n)
+    await srv.handle({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'long', arguments: {}, _meta: { progressToken: 'p1' } } })
+    expect(events.some((e) => e.method === 'notifications/progress')).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Implement the fixture**
+
+```ts
+// test/fixtures/mock-mcp-server.ts
+export type Scenario = 'default' | 'error' | 'slow' | 'progress' | 'auth-required' | 'tools-changed'
+
+export interface MockServer {
+  handle(req: { jsonrpc: '2.0'; id: number | string; method: string; params?: any }): Promise<any>
+  onNotification?: (n: { jsonrpc: '2.0'; method: string; params?: any }) => void
+  setScenario(s: Scenario): void
+}
+
+const TOOLS = {
+  default: [
+    { name: 'echo', description: 'echo input', inputSchema: { type: 'object', properties: { msg: { type: 'string' } }, required: ['msg'] } },
+    { name: 'add', description: 'add two numbers', inputSchema: { type: 'object', properties: { a: { type: 'number' }, b: { type: 'number' } }, required: ['a', 'b'] } },
+  ],
+  changed: [
+    { name: 'echo2', description: 'echo v2', inputSchema: { type: 'object' } },
+  ],
+}
+
+const RESOURCES = [
+  { uri: 'mock://config.json', name: 'config', mimeType: 'application/json' },
+  { uri: 'mock://readme.md', name: 'readme', mimeType: 'text/markdown' },
+]
+
+const PROMPTS = [
+  { name: 'greet', description: 'greet user', arguments: [{ name: 'name', required: true }] },
+]
+
+export function createMockServer(opts: { scenario?: Scenario } = {}): MockServer {
+  let scenario: Scenario = opts.scenario ?? 'default'
+  const server: MockServer = {
+    setScenario(s) { scenario = s },
+    async handle(req) {
+      switch (req.method) {
+        case 'initialize':
+          return { jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: {}, resources: {}, prompts: {}, logging: {} }, serverInfo: { name: 'mock', version: '0' } } }
+        case 'tools/list': {
+          const tools = scenario === 'tools-changed' ? TOOLS.changed : TOOLS.default
+          return { jsonrpc: '2.0', id: req.id, result: { tools } }
+        }
+        case 'tools/call': {
+          if (scenario === 'auth-required') return { jsonrpc: '2.0', id: req.id, error: { code: -32001, message: 'Unauthorized' } }
+          if (scenario === 'error') return { jsonrpc: '2.0', id: req.id, error: { code: -32603, message: 'tool failed' } }
+          if (scenario === 'slow') { await new Promise((r) => setTimeout(r, 100)); /* fallthrough */ }
+          if (scenario === 'progress' && req.params?._meta?.progressToken) {
+            const token = req.params._meta.progressToken
+            for (let i = 1; i <= 3; i++) {
+              await new Promise((r) => setTimeout(r, 5))
+              server.onNotification?.({ jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: token, progress: i, total: 3 } })
+            }
+          }
+          const name = req.params?.name
+          if (name === 'echo') return { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: String(req.params.arguments.msg) }] } }
+          if (name === 'add') return { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: String(req.params.arguments.a + req.params.arguments.b) }] } }
+          if (name === 'long') return { jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: 'done' }] } }
+          return { jsonrpc: '2.0', id: req.id, error: { code: -32602, message: `unknown tool: ${name}` } }
+        }
+        case 'resources/list':
+          return { jsonrpc: '2.0', id: req.id, result: { resources: RESOURCES } }
+        case 'resources/read': {
+          const uri = req.params?.uri
+          if (uri === 'mock://config.json') return { jsonrpc: '2.0', id: req.id, result: { contents: [{ uri, mimeType: 'application/json', text: '{"hello":1}' }] } }
+          if (uri === 'mock://readme.md') return { jsonrpc: '2.0', id: req.id, result: { contents: [{ uri, mimeType: 'text/markdown', text: '# mock' }] } }
+          return { jsonrpc: '2.0', id: req.id, error: { code: -32602, message: 'unknown resource' } }
+        }
+        case 'prompts/list':
+          return { jsonrpc: '2.0', id: req.id, result: { prompts: PROMPTS } }
+        case 'prompts/get':
+          return { jsonrpc: '2.0', id: req.id, result: { messages: [{ role: 'user', content: { type: 'text', text: `Hello, ${req.params.arguments.name}!` } }] } }
+        default:
+          return { jsonrpc: '2.0', id: req.id, error: { code: -32601, message: `method not found: ${req.method}` } }
+      }
+    },
+  }
+  return server
+}
+
+// Stdio mode entry point — when run as a subprocess.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const scenario = (process.argv[2] as Scenario) ?? 'default'
+  const srv = createMockServer({ scenario })
+  srv.onNotification = (n) => process.stdout.write(JSON.stringify(n) + '\n')
+  let buf = ''
+  process.stdin.setEncoding('utf8')
+  process.stdin.on('data', async (chunk) => {
+    buf += chunk
+    let nl: number
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, nl)
+      buf = buf.slice(nl + 1)
+      if (!line.trim()) continue
+      const req = JSON.parse(line)
+      const res = await srv.handle(req)
+      process.stdout.write(JSON.stringify(res) + '\n')
+    }
+  })
+}
+```
+
+- [ ] **Step 3: Add fixture build to tsdown / vitest config**
+
+Make sure the fixture is buildable as an ESM file we can spawn. Add a `test:fixtures` script that compiles `test/fixtures/mock-mcp-server.ts` to `dist/test-fixtures/mock-mcp-server.js` for stdio testing, OR have tests use `tsx` to run the TypeScript directly. (Pick whichever matches the repo's existing pattern.)
+
+- [ ] **Step 4: Run, commit**
+
+```bash
+git add . && git commit -m "test(agents-mcp): mock MCP server fixture with scenarios"
+```
+
+### Task 15b: Resources bridge
+
+**Files:**
+- Create: `packages/agents-mcp/src/bridge/resource-bridge.ts`
+- Create: `packages/agents-mcp/test/bridge/resource-bridge.test.ts`
+- Modify: `packages/agents-mcp/src/registry.ts` (track resources alongside tools)
+- Modify: `packages/agents-mcp/src/tools.ts` (expose resource tools)
+
+MCP resources are exposed to the agent as two synthetic tools per server: `<server>.list_resources()` and `<server>.read_resource({ uri })`.
+
+- [ ] **Step 1: Test**
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { bridgeResourceTools } from '../../src/bridge/resource-bridge'
+
+describe('bridgeResourceTools', () => {
+  it('exposes list + read', async () => {
+    const invoked: any[] = []
+    const tools = bridgeResourceTools({
+      server: 'gh',
+      invoke: async (s, method, args) => { invoked.push({ s, method, args }); return method === 'resources/list' ? { resources: [{ uri: 'x://y' }] } : { contents: [{ uri: args.uri, text: 'hi' }] } },
+      timeoutMs: 30_000,
+    })
+    expect(tools.map((t) => t.name)).toEqual(['gh.list_resources', 'gh.read_resource'])
+    const list = await tools[0].run({})
+    expect((list as any).resources).toHaveLength(1)
+    const read = await tools[1].run({ uri: 'x://y' })
+    expect((read as any).contents[0].text).toBe('hi')
+  })
+})
+```
+
+- [ ] **Step 2: Implement**
+
+```ts
+// src/bridge/resource-bridge.ts
+import { TimeoutError } from '../transports/timeout'
+
+export interface ResourceBridgeOpts {
+  server: string
+  invoke: (server: string, method: string, args: any, timeoutMs: number) => Promise<unknown>
+  timeoutMs: number
+}
+
+export function bridgeResourceTools(opts: ResourceBridgeOpts) {
+  return [
+    {
+      name: `${opts.server}.list_resources`,
+      description: `List resources exposed by ${opts.server}`,
+      async run() {
+        try { return await opts.invoke(opts.server, 'resources/list', {}, opts.timeoutMs) }
+        catch (err) { return { error: { kind: err instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(err) } } }
+      },
+    },
+    {
+      name: `${opts.server}.read_resource`,
+      description: `Read a resource by URI from ${opts.server}`,
+      async run(args: any) {
+        try { return await opts.invoke(opts.server, 'resources/read', { uri: args.uri }, opts.timeoutMs) }
+        catch (err) { return { error: { kind: err instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(err) } } }
+      },
+    },
+  ]
+}
+```
+
+- [ ] **Step 3: Update registry to support arbitrary methods, not just tools/call**
+
+In `registry.ts`, generalize `invokeTool` to `invokeMethod(server, method, args, timeoutMs)`. Keep `invokeTool` as a thin wrapper. Update the tool-bridge call site in `tools.ts`.
+
+- [ ] **Step 4: Update `tools.ts` to include resource tools**
+
+```ts
+// In createMcpTools.tools():
+return selected.flatMap((s) => [
+  ...(s.tools ?? []).map((t) => bridgeMcpTool({ server: s.name, tool: t, invoke: registry.invokeMethod, timeoutMs })),
+  ...bridgeResourceTools({ server: s.name, invoke: registry.invokeMethod, timeoutMs }),
+])
+```
+
+- [ ] **Step 5: Run, commit**
+
+```bash
+git add . && git commit -m "feat(agents-mcp): expose resources/list and resources/read as agent tools"
+```
+
+### Task 15c: Prompts bridge
+
+**Files:**
+- Create: `packages/agents-mcp/src/bridge/prompt-bridge.ts`
+- Create: `packages/agents-mcp/test/bridge/prompt-bridge.test.ts`
+- Modify: `packages/agents-mcp/src/tools.ts`
+
+Symmetric to resources — expose `<server>.list_prompts()` and `<server>.get_prompt({ name, arguments })`.
+
+- [ ] **Step 1: Test (mirrors resource-bridge.test.ts pattern)**
+
+- [ ] **Step 2: Implement (mirrors `bridgeResourceTools` shape)**
+
+```ts
+// src/bridge/prompt-bridge.ts
+import { TimeoutError } from '../transports/timeout'
+
+export function bridgePromptTools(opts: { server: string; invoke: (s: string, m: string, a: any, t: number) => Promise<unknown>; timeoutMs: number }) {
+  return [
+    { name: `${opts.server}.list_prompts`, description: `List prompts exposed by ${opts.server}`, async run() { try { return await opts.invoke(opts.server, 'prompts/list', {}, opts.timeoutMs) } catch (e) { return { error: { kind: e instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(e) } } } } },
+    { name: `${opts.server}.get_prompt`, description: `Get a prompt by name from ${opts.server}`, async run(args: any) { try { return await opts.invoke(opts.server, 'prompts/get', { name: args.name, arguments: args.arguments }, opts.timeoutMs) } catch (e) { return { error: { kind: e instanceof TimeoutError ? 'timeout' : 'transport_error', server: opts.server, detail: String(e) } } } } },
+  ]
+}
+```
+
+- [ ] **Step 3: Wire into `tools.ts`**
+
+Add `...bridgePromptTools({ server: s.name, invoke: registry.invokeMethod, timeoutMs })` to the flat-map in `createMcpTools.tools()`.
+
+- [ ] **Step 4: Run, commit**
+
+```bash
+git add . && git commit -m "feat(agents-mcp): expose prompts/list and prompts/get as agent tools"
+```
+
+### Task 15d: Progress notifications passthrough
+
+**Files:**
+- Modify: `packages/agents-mcp/src/registry.ts`
+- Modify: `packages/agents-mcp/src/types.ts`
+- Create: `packages/agents-mcp/test/registry-progress.test.ts`
+
+The bridge generates a unique `progressToken` per call, includes it in the `_meta` of the request, and accepts `notifications/progress` from the server. It exposes a `subscribeToProgress(callback)` hook so the agents-server-ui can render progress events on the entity timeline.
+
+- [ ] **Step 1: Test**
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { createRegistry } from '../src/registry'
+import { createMockServer } from './fixtures/mock-mcp-server'
+
+describe('progress passthrough', () => {
+  it('emits progress events to subscribers', async () => {
+    // Build a transport that delegates to createMockServer({ scenario: 'progress' })
+    // and forwards onNotification callbacks to the registry.
+    const events: any[] = []
+    const reg = createRegistry({ /* … */ })
+    reg.subscribeToProgress((e) => events.push(e))
+    await reg.applyConfig({ servers: { mock: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'progress'] } } })
+    await reg.invokeMethod('mock', 'tools/call', { name: 'long', arguments: {} }, 5_000)
+    expect(events.length).toBe(3)
+    expect(events.every((e) => e.server === 'mock')).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Implement**
+
+Add to `Registry`:
+
+```ts
+export interface ProgressEvent { server: string; progressToken: string | number; progress: number; total?: number; message?: string }
+
+interface Registry {
+  // … existing
+  subscribeToProgress(cb: (e: ProgressEvent) => void): () => void
+}
+```
+
+Implementation: keep an internal `Set<callback>`. The transport layer (stdio + HTTP) needs an `onNotification` hook so the registry receives `notifications/progress` and dispatches to subscribers. Add `progressToken` generation to `invokeMethod` (UUID per call) and include it as `_meta.progressToken` in the request.
+
+- [ ] **Step 3: Run, commit**
+
+```bash
+git add . && git commit -m "feat(agents-mcp): progress notifications passthrough with subscriber API"
+```
+
+### Task 15e: Cancellation
+
+**Files:**
+- Modify: `packages/agents-mcp/src/registry.ts`
+- Modify: `packages/agents-mcp/src/transports/types.ts` (add cancel method)
+- Create: `packages/agents-mcp/test/cancellation.test.ts`
+
+When a tool call times out, the bridge sends `notifications/cancelled` to the server (per MCP spec) so the server can stop work. Same when an operator disables the server.
+
+- [ ] **Step 1: Test**
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { createRegistry } from '../src/registry'
+
+describe('cancellation', () => {
+  it('sends notifications/cancelled to the server on timeout', async () => {
+    // Configure registry to use a transport that records notifications/cancelled.
+    const sent: any[] = []
+    // … set up registry with mock transport that resolves slowly
+    const reg = createRegistry({ /* … with transport that captures onNotificationSent */ })
+    await reg.applyConfig({ servers: { mock: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'slow'] } } })
+    await expect(reg.invokeMethod('mock', 'tools/call', { name: 'long', arguments: {} }, 10)).rejects.toBeInstanceOf((await import('../src/transports/timeout')).TimeoutError)
+    // After timeout: assert cancelled was sent for the request id.
+  })
+})
+```
+
+- [ ] **Step 2: Implement**
+
+In `invokeMethod`: generate a request id, use it for the call. If the timeout fires (caught at the registry layer), send `{ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId, reason: 'timeout' } }` via the transport before returning the error to the caller.
+
+- [ ] **Step 3: Run, commit**
+
+```bash
+git add . && git commit -m "feat(agents-mcp): send notifications/cancelled on timeout and disable"
+```
+
+### Task 15f: Capability negotiation assertions
+
+**Files:**
+- Modify: `packages/agents-mcp/src/registry.ts`
+- Create: `packages/agents-mcp/test/capabilities.test.ts`
+
+After connecting a server, the registry inspects the server's declared capabilities. Servers that don't advertise `tools` capability are flagged `error: server has no tools capability`; ditto resources/prompts (warning, not error — those are optional).
+
+- [ ] **Step 1: Test**
+
+```ts
+it('flags server without tools capability as error', async () => {
+  // mock server returns capabilities: { resources: {} } but no tools
+  // expect status === 'error', lastError contains 'tools'
+})
+```
+
+- [ ] **Step 2: Implement**
+
+In the registry connect path, after the MCP SDK's `client.connect(transport)`, read `client.getServerCapabilities()`. If the server config implies tools usage but `capabilities.tools` is undefined, mark the server `error`.
+
+- [ ] **Step 3: Run, commit**
+
+```bash
+git add . && git commit -m "feat(agents-mcp): capability negotiation status checks"
+```
+
+### Task 15g: End-to-end tests against the mock server (stdio)
+
+**Files:**
+- Create: `packages/agents-mcp/test/e2e/stdio.e2e.test.ts`
+
+A complete E2E suite that starts the mock server as a stdio subprocess and exercises the full registry → bridge → tool path.
+
+- [ ] **Step 1: Write the test suite**
+
+```ts
+import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import { createRegistry } from '../../src/registry'
+import { createFileVault } from '../../src/vault/file-vault'
+import { createMcpTools } from '../../src/tools'
+import { mkdtempSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+
+describe('E2E: stdio mock server', () => {
+  let registry: ReturnType<typeof createRegistry>
+  let vaultDir = ''
+
+  beforeAll(async () => {
+    vaultDir = mkdtempSync(join(tmpdir(), 'mcp-e2e-'))
+    const vault = createFileVault(join(vaultDir, 'vault.json'))
+    registry = createRegistry({ vault, oauth: nullOAuth(), transportFactory: defaultTransportFactory })
+    await registry.applyConfig({
+      servers: {
+        mock: {
+          transport: 'stdio',
+          command: 'node',
+          args: ['./dist/test-fixtures/mock-mcp-server.js', 'default'],
+        },
+      },
+    })
+  })
+
+  afterAll(async () => {
+    for (const s of registry.list()) await s.transport?.close()
+  })
+
+  it('lists tools via mcp.tools(...)', () => {
+    const tools = createMcpTools(registry, ['mock']).tools()
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(['mock.echo', 'mock.add', 'mock.list_resources', 'mock.read_resource', 'mock.list_prompts', 'mock.get_prompt']))
+  })
+
+  it('echo round-trip', async () => {
+    const tools = createMcpTools(registry, ['mock']).tools()
+    const echo = tools.find((t) => t.name === 'mock.echo')!
+    const result = await echo.run({ msg: 'hello' })
+    expect(result).toMatchObject({ content: [{ type: 'text', text: 'hello' }] })
+  })
+
+  it('add round-trip', async () => {
+    const tools = createMcpTools(registry, ['mock']).tools()
+    const add = tools.find((t) => t.name === 'mock.add')!
+    expect(await add.run({ a: 2, b: 3 })).toMatchObject({ content: [{ type: 'text', text: '5' }] })
+  })
+
+  it('lists resources', async () => {
+    const tools = createMcpTools(registry, ['mock']).tools()
+    const list = tools.find((t) => t.name === 'mock.list_resources')!
+    const r = await list.run({}) as any
+    expect(r.resources.length).toBeGreaterThan(0)
+  })
+
+  it('reads a resource', async () => {
+    const tools = createMcpTools(registry, ['mock']).tools()
+    const read = tools.find((t) => t.name === 'mock.read_resource')!
+    const r = await read.run({ uri: 'mock://config.json' }) as any
+    expect(r.contents[0].text).toContain('hello')
+  })
+
+  it('returns timeout error on slow scenario', async () => {
+    await registry.applyConfig({ servers: { slow: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'slow'] } } })
+    const tools = createMcpTools(registry, ['slow'], { timeoutMs: 10 }).tools()
+    const echo = tools.find((t) => t.name === 'slow.echo')!
+    const r = await echo.run({ msg: 'x' }) as any
+    expect(r.error).toMatchObject({ kind: 'timeout', server: 'slow' })
+  })
+
+  it('returns server_error on error scenario', async () => {
+    await registry.applyConfig({ servers: { err: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'error'] } } })
+    const tools = createMcpTools(registry, ['err']).tools()
+    const echo = tools.find((t) => t.name === 'err.echo')!
+    const r = await echo.run({ msg: 'x' }) as any
+    expect(r.error).toBeDefined()
+  })
+
+  it('hot-reload picks up new server within applyConfig', async () => {
+    await registry.applyConfig({ servers: { ...currentConfig, late: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'default'] } } })
+    expect(registry.list().some((s) => s.name === 'late')).toBe(true)
+  })
+
+  it('progress notifications fire during a tool call', async () => {
+    await registry.applyConfig({ servers: { p: { transport: 'stdio', command: 'node', args: ['./dist/test-fixtures/mock-mcp-server.js', 'progress'] } } })
+    const events: any[] = []
+    const unsub = registry.subscribeToProgress((e) => events.push(e))
+    const tools = createMcpTools(registry, ['p']).tools()
+    await tools.find((t) => t.name === 'p.echo')!.run({ msg: 'x' })
+    unsub()
+    expect(events.some((e) => e.server === 'p')).toBe(true)
+  })
+})
+```
+
+Note: the test uses `defaultTransportFactory` and `nullOAuth` helpers to be defined in test/helpers.ts (a shared utility module). Phase 2 will replace `nullOAuth` with the real coordinator.
+
+- [ ] **Step 2: Implement test helpers**
+
+```ts
+// test/helpers.ts
+import { createOAuthCoordinator } from '../src/auth/coordinator'
+import { createStdioTransport } from '../src/transports/stdio'
+import { createHttpTransport } from '../src/transports/http'
+import type { McpServerConfig } from '../src/types'
+import type { KeyVault } from '../src/vault/types'
+
+export function nullOAuth() {
+  return createOAuthCoordinator({
+    cache: { get: () => undefined, set: () => {} },
+    doRefresh: async () => { throw new Error('OAuth not configured for this test') },
+  })
+}
+
+export function defaultTransportFactory(name: string, cfg: McpServerConfig, vault: KeyVault) {
+  if (cfg.transport === 'stdio') return createStdioTransport(cfg)
+  return createHttpTransport(cfg, async () => null)
+}
+```
+
+- [ ] **Step 3: Run, commit**
+
+```bash
+pnpm -C packages/agents-mcp test --run
+git add . && git commit -m "test(agents-mcp): E2E suite against stdio mock server"
+```
+
+### Task 15h: End-to-end tests against the mock server (HTTP)
+
+**Files:**
+- Create: `packages/agents-mcp/test/e2e/http.e2e.test.ts`
+
+Same scenarios but driving the HTTP transport against an in-process HTTP server that wraps the mock fixture.
+
+- [ ] **Step 1: Write the test using `node:http`**
+
+```ts
+import { createServer } from 'node:http'
+import { createMockServer } from '../fixtures/mock-mcp-server'
+// … boots an http.Server that bridges Streamable HTTP semantics to the mock
+// (HTTP request body = JSON-RPC; response = JSON-RPC; SSE for notifications).
+// Register the server with the registry under transport: 'http' + auth: { mode: 'apiKey', ... }
+// Re-run the same battery of tool / resource / prompt / timeout / error / progress assertions.
+```
+
+- [ ] **Step 2: Implement HTTP wrapper**
+
+A small adapter that turns `MockServer.handle` + `MockServer.onNotification` into a Streamable HTTP-compatible server. ~50 lines.
+
+- [ ] **Step 3: Run, commit**
+
+```bash
+git add . && git commit -m "test(agents-mcp): E2E suite against HTTP mock server"
+```
+
+### Task 15i: Phase 1.5 verification
+
+- [ ] **Step 1: Test suite green**
+
+Run: `pnpm -C packages/agents-mcp test --run`
+All E2E + unit tests pass.
+
+- [ ] **Step 2: Coverage check**
+
+Run: `pnpm -C packages/agents-mcp coverage`
+Confirm `src/registry.ts`, `src/bridge/*`, `src/transports/*` all >80% line coverage.
+
+- [ ] **Step 3: Commit milestone**
+
+```bash
+git add . && git commit --allow-empty -m "milestone: agents-mcp phase 1.5 complete (protocol coverage + E2E)"
+```
+
 ## Phase 2 — OAuth (clientCredentials + authorizationCode browser)
 
 End state: HTTP MCP servers using OAuth `clientCredentials` or `authorizationCode (browser)` work. Silent refresh on every call. Auth failures resolve as `auth_unavailable`.
