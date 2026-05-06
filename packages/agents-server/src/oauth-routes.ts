@@ -1,4 +1,5 @@
 import {
+  buildAuthorizationUrl,
   exchangeAuthorizationCode,
   type OAuthCoordinator,
   type PendingAuthStore,
@@ -148,6 +149,138 @@ export interface OAuthRouteMount {
 
 export function mountOAuthRoutes(deps: OAuthRouteDeps): OAuthRouteMount {
   return {
-    handle: (req, res) => handleOAuthCallbackRequest(deps, req, res),
+    handle: async (req, res) => {
+      if (await handleOAuthInitiateRequest(deps, req, res)) return true
+      return handleOAuthCallbackRequest(deps, req, res)
+    },
   }
+}
+
+/**
+ * Parameters for the authorization-code initiate endpoint.
+ *
+ * The `server` is taken from the URL path (`/api/mcp/servers/:server/authorize`);
+ * the rest are supplied in the request body. We capture `tokenUrl` here so that
+ * later, when the browser redirect comes back to `/oauth/callback/:server`, we
+ * can complete the code exchange without re-loading server config.
+ */
+export interface OAuthInitiateParams {
+  server: string
+  authorizationUrl: string
+  tokenUrl: string
+  clientId: string
+  redirectUri: string
+  scopes?: string[]
+}
+
+export interface OAuthInitiateResult {
+  status: 200 | 400
+  body: { url: string } | { error: string }
+}
+
+/**
+ * Pure handler for `POST /api/mcp/servers/:server/authorize`.
+ *
+ * Builds an authorization URL (with PKCE + a fresh `state`), stashes the
+ * per-flow context in the pending-auth store keyed by that `state`, and
+ * returns the URL for the caller (UI or curl) to redirect the user to.
+ */
+export async function handleOAuthInitiate(
+  deps: { pending: PendingAuthStore },
+  params: OAuthInitiateParams
+): Promise<OAuthInitiateResult> {
+  if (
+    !params.server ||
+    !params.authorizationUrl ||
+    !params.tokenUrl ||
+    !params.clientId ||
+    !params.redirectUri
+  ) {
+    return { status: 400, body: { error: `missing required fields` } }
+  }
+  const { url, state, verifier } = buildAuthorizationUrl({
+    authorizationUrl: params.authorizationUrl,
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+    scopes: params.scopes,
+  })
+  deps.pending.put({
+    state,
+    server: params.server,
+    verifier,
+    clientId: params.clientId,
+    tokenUrl: params.tokenUrl,
+    redirectUri: params.redirectUri,
+  })
+  return { status: 200, body: { url } }
+}
+
+/**
+ * Match `POST /api/mcp/servers/:server/authorize` paths.
+ */
+export function matchOAuthInitiatePath(
+  path: string
+): { server: string } | null {
+  const m = path.match(/^\/api\/mcp\/servers\/([^/]+)\/authorize$/)
+  return m ? { server: decodeURIComponent(m[1]) } : null
+}
+
+/**
+ * Read the entire request body as a UTF-8 string. Bounded by the request
+ * stream's natural backpressure; callers should impose their own size limit
+ * if untrusted clients can hit this endpoint.
+ */
+async function readJsonBody(req: IncomingMessage): Promise<string> {
+  const chunks: Array<Buffer> = []
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === `string` ? Buffer.from(chunk) : chunk)
+  }
+  return Buffer.concat(chunks).toString(`utf-8`)
+}
+
+/**
+ * Native-node HTTP request handler for the OAuth initiate endpoint.
+ *
+ * Returns `true` if the request was handled (the response has been written),
+ * `false` otherwise. Mirrors `handleOAuthCallbackRequest`'s shape so both can
+ * be wired through the same `mountOAuthRoutes` dispatch chain.
+ */
+export async function handleOAuthInitiateRequest(
+  deps: { pending: PendingAuthStore },
+  req: IncomingMessage,
+  res: ServerResponse
+): Promise<boolean> {
+  if (req.method?.toUpperCase() !== `POST`) return false
+  const url = new URL(req.url ?? `/`, `http://localhost`)
+  const match = matchOAuthInitiatePath(url.pathname)
+  if (!match) return false
+
+  const raw = await readJsonBody(req)
+  let parsed: unknown
+  if (raw.length === 0) {
+    parsed = {}
+  } else {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      res.writeHead(400, { 'content-type': `application/json; charset=utf-8` })
+      res.end(JSON.stringify({ error: `invalid JSON body` }))
+      return true
+    }
+  }
+  if (typeof parsed !== `object` || parsed === null) {
+    res.writeHead(400, { 'content-type': `application/json; charset=utf-8` })
+    res.end(JSON.stringify({ error: `request body must be a JSON object` }))
+    return true
+  }
+
+  const result = await handleOAuthInitiate(deps, {
+    server: match.server,
+    ...(parsed as Omit<OAuthInitiateParams, `server`>),
+  })
+  res.writeHead(result.status, {
+    'content-type': `application/json; charset=utf-8`,
+  })
+  res.end(JSON.stringify(result.body))
+  return true
 }
