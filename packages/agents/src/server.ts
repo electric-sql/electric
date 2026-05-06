@@ -142,7 +142,7 @@ export class BuiltinAgentsServer {
             )
           )
 
-          const mcpRegistry = createMcpRegistry({ credentials })
+          const mcpRegistry = createMcpRegistry({ credentials, publicUrl })
           const mcpConfigPath = path.resolve(`mcp.json`)
 
           try {
