@@ -3018,3 +3018,764 @@ git commit --allow-empty -m "milestone: agents-mcp phase 1 complete — apiKey d
 ```
 
 ---
+
+## Phase 2 — Protocol coverage + E2E
+
+End state: Resources, prompts, progress notifications, cancellation, and capability negotiation all work. The package has a comprehensive end-to-end test suite that runs the bridge against the **official MCP `everything` server** in both stdio and HTTP modes.
+
+We use the official server (`@modelcontextprotocol/server-everything`) instead of a hand-rolled mock to keep tests aligned with the real protocol. Phase 2 adds no public API surface that the runtime cares about — these are SDK-driven protocol features the bridge needs to forward correctly.
+
+### Task 22: Resources bridge
+
+**Files:**
+
+- Create: `packages/agents-mcp/src/bridge/resource-bridge.ts`
+- Create: `packages/agents-mcp/test/bridge/resource-bridge.test.ts`
+
+> The bridge surfaces two synthetic tools per server: `mcp__<server>__list_resources` and `mcp__<server>__read_resource`. The model uses these like any other tool to enumerate and fetch resources.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/bridge/resource-bridge.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { buildResourceTools } from '../../src/bridge/resource-bridge'
+
+describe('resource bridge', () => {
+  it('emits list_resources and read_resource tools with correct prefixed names', () => {
+    const client = {
+      listResources: vi.fn(async () => ({
+        resources: [{ uri: 'file:///a', name: 'a' }],
+      })),
+      readResource: vi.fn(async () => ({
+        contents: [{ uri: 'file:///a', text: 'data' }],
+      })),
+    } as any
+    const tools = buildResourceTools({ server: 'mock', client })
+    expect(tools.map((t) => t.name)).toEqual([
+      'mcp__mock__list_resources',
+      'mcp__mock__read_resource',
+    ])
+  })
+
+  it('list_resources returns the raw SDK result', async () => {
+    const client = {
+      listResources: vi.fn(async () => ({
+        resources: [{ uri: 'u', name: 'n' }],
+      })),
+    } as any
+    const [list] = buildResourceTools({ server: 'mock', client })
+    expect(await list!.call({})).toEqual({
+      resources: [{ uri: 'u', name: 'n' }],
+    })
+  })
+
+  it('read_resource forwards uri', async () => {
+    const readResource = vi.fn(async () => ({
+      contents: [{ uri: 'u', text: 'x' }],
+    }))
+    const client = {
+      listResources: async () => ({ resources: [] }),
+      readResource,
+    } as any
+    const [, read] = buildResourceTools({ server: 'mock', client })
+    await read!.call({ uri: 'u' })
+    expect(readResource).toHaveBeenCalledWith({ uri: 'u' })
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement**
+
+```ts
+// src/bridge/resource-bridge.ts
+import { prefixToolName } from './tool-bridge'
+import { withTimeout, DEFAULT_TIMEOUT_MS } from '../transports/timeout'
+
+export interface BuildResourceToolsOpts {
+  server: string
+  client: {
+    listResources: () => Promise<unknown>
+    readResource: (args: { uri: string }) => Promise<unknown>
+  }
+  timeoutMs?: number
+}
+
+export interface BridgedTool {
+  name: string
+  description?: string
+  inputSchema: unknown
+  call(args: unknown): Promise<unknown>
+}
+
+export function buildResourceTools(
+  opts: BuildResourceToolsOpts
+): BridgedTool[] {
+  const ms = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  return [
+    {
+      name: prefixToolName(opts.server, 'list_resources'),
+      description: `List resources on ${opts.server}`,
+      inputSchema: { type: 'object', properties: {} },
+      call: () => withTimeout(opts.client.listResources(), ms),
+    },
+    {
+      name: prefixToolName(opts.server, 'read_resource'),
+      description: `Read a resource from ${opts.server}`,
+      inputSchema: {
+        type: 'object',
+        properties: { uri: { type: 'string' } },
+        required: ['uri'],
+      },
+      call: (args) =>
+        withTimeout(opts.client.readResource(args as { uri: string }), ms),
+    },
+  ]
+}
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-mcp/src/bridge/resource-bridge.ts packages/agents-mcp/test/bridge/resource-bridge.test.ts
+git commit -m "feat(agents-mcp): resource bridge — list_resources + read_resource synthetic tools"
+```
+
+---
+
+### Task 23: Prompts bridge
+
+**Files:**
+
+- Create: `packages/agents-mcp/src/bridge/prompt-bridge.ts`
+- Create: `packages/agents-mcp/test/bridge/prompt-bridge.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/bridge/prompt-bridge.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { buildPromptTools } from '../../src/bridge/prompt-bridge'
+
+describe('prompt bridge', () => {
+  it('emits list_prompts and get_prompt tools with prefixed names', () => {
+    const client = {
+      listPrompts: async () => ({ prompts: [] }),
+      getPrompt: async () => ({ messages: [] }),
+    } as any
+    const tools = buildPromptTools({ server: 'mock', client })
+    expect(tools.map((t) => t.name)).toEqual([
+      'mcp__mock__list_prompts',
+      'mcp__mock__get_prompt',
+    ])
+  })
+
+  it('get_prompt forwards name and arguments', async () => {
+    const getPrompt = vi.fn(async () => ({ messages: [] }))
+    const client = {
+      listPrompts: async () => ({ prompts: [] }),
+      getPrompt,
+    } as any
+    const [, get] = buildPromptTools({ server: 'mock', client })
+    await get!.call({ name: 'p', arguments: { a: 1 } })
+    expect(getPrompt).toHaveBeenCalledWith({ name: 'p', arguments: { a: 1 } })
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement**
+
+```ts
+// src/bridge/prompt-bridge.ts
+import { prefixToolName } from './tool-bridge'
+import { withTimeout, DEFAULT_TIMEOUT_MS } from '../transports/timeout'
+import type { BridgedTool } from './tool-bridge'
+
+export interface BuildPromptToolsOpts {
+  server: string
+  client: {
+    listPrompts: () => Promise<unknown>
+    getPrompt: (args: {
+      name: string
+      arguments?: Record<string, unknown>
+    }) => Promise<unknown>
+  }
+  timeoutMs?: number
+}
+
+export function buildPromptTools(opts: BuildPromptToolsOpts): BridgedTool[] {
+  const ms = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  return [
+    {
+      name: prefixToolName(opts.server, 'list_prompts'),
+      description: `List prompts on ${opts.server}`,
+      inputSchema: { type: 'object', properties: {} },
+      call: () => withTimeout(opts.client.listPrompts(), ms),
+    },
+    {
+      name: prefixToolName(opts.server, 'get_prompt'),
+      description: `Get a prompt template from ${opts.server}`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          arguments: { type: 'object', additionalProperties: true },
+        },
+        required: ['name'],
+      },
+      call: (args) =>
+        withTimeout(
+          opts.client.getPrompt(
+            args as { name: string; arguments?: Record<string, unknown> }
+          ),
+          ms
+        ),
+    },
+  ]
+}
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Wire resources + prompts into the bootstrap tool provider**
+
+Modify the `tools()` callback registered in Task 20 (`packages/agents/src/bootstrap.ts`) to include resource and prompt tools per server when the server's capabilities advertise them:
+
+```ts
+import { buildResourceTools, buildPromptTools } from '@electric-ax/agents-mcp'
+
+// inside the tools() callback, per ready server:
+const caps = live.transport.client.getServerCapabilities()
+if (caps?.resources) {
+  tools.push(
+    ...buildResourceTools({
+      server: entry.name,
+      client: live.transport.client as any,
+      timeoutMs: live.config.timeoutMs,
+    })
+  )
+}
+if (caps?.prompts) {
+  tools.push(
+    ...buildPromptTools({
+      server: entry.name,
+      client: live.transport.client as any,
+      timeoutMs: live.config.timeoutMs,
+    })
+  )
+}
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/agents-mcp/src/bridge/prompt-bridge.ts packages/agents-mcp/test/bridge/prompt-bridge.test.ts packages/agents/src/bootstrap.ts
+git commit -m "feat(agents-mcp): prompt bridge + bootstrap wires resources/prompts when advertised"
+```
+
+---
+
+### Task 24: Progress notifications passthrough
+
+**Files:**
+
+- Modify: `packages/agents-mcp/src/bridge/tool-bridge.ts`
+- Create: `packages/agents-mcp/test/bridge/progress.test.ts`
+
+> MCP servers can emit progress notifications during a long tool call. The SDK exposes them via a callback on `callTool`. Phase 2 forwards progress to a per-call optional callback so callers (the runtime, eventually the UI) can surface them. Phase 1 callers ignore progress; Phase 2 keeps that the default but adds the hook.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/bridge/progress.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
+
+describe('progress passthrough', () => {
+  it('forwards progress notifications to the optional callback', async () => {
+    const callTool = vi.fn(
+      async (_args, opts: { onProgress?: (p: unknown) => void }) => {
+        opts.onProgress?.({ progress: 0.5 })
+        return { content: [{ type: 'text', text: 'done' }] }
+      }
+    )
+    const onProgress = vi.fn()
+    const tool = bridgeMcpTool({
+      server: 'mock',
+      tool: { name: 'long', description: 'd', inputSchema: { type: 'object' } },
+      client: { callTool } as any,
+      timeoutMs: 1000,
+      onProgress,
+    })
+    await tool.call({})
+    expect(onProgress).toHaveBeenCalledWith({ progress: 0.5 })
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Update `bridgeMcpTool` to accept `onProgress`**
+
+```ts
+// edit src/bridge/tool-bridge.ts BridgeToolOpts:
+export interface BridgeToolOpts {
+  server: string
+  tool: { name: string; description?: string; inputSchema: unknown }
+  client: {
+    callTool: (
+      args: { name: string; arguments?: unknown },
+      opts?: { onProgress?: (p: unknown) => void; signal?: AbortSignal }
+    ) => Promise<unknown>
+  }
+  timeoutMs?: number
+  onProgress?: (p: unknown) => void
+}
+
+// In the call() body:
+return await withTimeout(
+  opts.client.callTool(
+    { name: opts.tool.name, arguments: args },
+    opts.onProgress ? { onProgress: opts.onProgress } : undefined
+  ),
+  ms
+)
+```
+
+- [ ] **Step 4: Run — PASS** (existing tool-bridge tests still pass; new progress test passes)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-mcp/src/bridge/tool-bridge.ts packages/agents-mcp/test/bridge/progress.test.ts
+git commit -m "feat(agents-mcp): forward MCP progress notifications via optional onProgress hook"
+```
+
+---
+
+### Task 25: Cancellation
+
+**Files:**
+
+- Modify: `packages/agents-mcp/src/bridge/tool-bridge.ts`
+- Modify: `packages/agents-mcp/src/transports/timeout.ts`
+- Create: `packages/agents-mcp/test/bridge/cancellation.test.ts`
+
+> Two cancellation paths: (a) the timeout helper aborts the call when the budget is exceeded; (b) callers can pass an `AbortSignal` they control. The SDK's `callTool` accepts `signal`; we surface it.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/bridge/cancellation.test.ts
+import { describe, expect, it, vi } from 'vitest'
+import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
+
+describe('cancellation', () => {
+  it('aborts the SDK call when the caller-supplied signal aborts', async () => {
+    let abortedFromSdk = false
+    const callTool = vi.fn(async (_args, o: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        o.signal?.addEventListener('abort', () => {
+          abortedFromSdk = true
+          reject(new Error('aborted'))
+        })
+      })
+    })
+    const ctrl = new AbortController()
+    const tool = bridgeMcpTool({
+      server: 'mock',
+      tool: { name: 't', description: 'd', inputSchema: { type: 'object' } },
+      client: { callTool } as any,
+      timeoutMs: 5000,
+      signal: ctrl.signal,
+    })
+    const p = tool.call({})
+    ctrl.abort()
+    await expect(p).rejects.toBeDefined()
+    expect(abortedFromSdk).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Add `signal` to `BridgeToolOpts` and forward it**
+
+```ts
+// In BridgeToolOpts:
+signal?: AbortSignal
+
+// In call():
+return await withTimeout(
+  opts.client.callTool(
+    { name: opts.tool.name, arguments: args },
+    {
+      onProgress: opts.onProgress,
+      signal: opts.signal,
+    },
+  ),
+  ms,
+)
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-mcp/src/bridge/tool-bridge.ts packages/agents-mcp/test/bridge/cancellation.test.ts
+git commit -m "feat(agents-mcp): forward AbortSignal to SDK callTool for cancellation"
+```
+
+---
+
+### Task 26: Capability negotiation assertions
+
+**Files:**
+
+- Modify: `packages/agents-mcp/src/registry.ts` — record server capabilities on connect
+- Create: `packages/agents-mcp/test/registry-capabilities.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/registry-capabilities.test.ts
+import { describe, expect, it } from 'vitest'
+import { createRegistry } from '../src/registry'
+import { inMemoryCredentialStore } from '../src/credentials/in-memory'
+
+describe('Registry — capabilities', () => {
+  it('records the server-advertised capabilities after connect', async () => {
+    const credentials = inMemoryCredentialStore()
+    credentials.setApiKey('mock', 'KEY')
+    const reg = createRegistry({
+      credentials,
+      transportFactoryOverride: () => ({
+        client: {
+          listTools: async () => ({ tools: [] }),
+          getServerCapabilities: () => ({ resources: {}, prompts: {} }),
+          callTool: async () => ({ content: [] }),
+          close: async () => {},
+        } as any,
+        connect: async () => {},
+        close: async () => {},
+      }),
+    })
+    await reg.addServer({
+      name: 'mock',
+      transport: 'http',
+      url: 'https://mock/mcp',
+      auth: { mode: 'apiKey' },
+    })
+    const entry = reg.get('mock')
+    expect(entry?.capabilities).toEqual({ resources: {}, prompts: {} })
+  })
+})
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Capture capabilities in the registry**
+
+```ts
+// In Entry interface, add:
+capabilities?: unknown
+
+// In connectAndList(), after listTools():
+entry.capabilities = entry.transport.client.getServerCapabilities?.()
+```
+
+Update `ListedEntry` to include `capabilities` and the `list()` projection to surface it.
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/agents-mcp/src/registry.ts packages/agents-mcp/test/registry-capabilities.test.ts
+git commit -m "feat(agents-mcp): record server capabilities at connect time"
+```
+
+---
+
+### Task 27: E2E suite — official `everything` server (stdio)
+
+**Files:**
+
+- Create: `packages/agents-mcp/test/e2e/everything-stdio.test.ts`
+
+> The everything server is the official protocol-coverage reference. It exposes a known-good set of tools, resources, prompts, and sampling. We use it for both stdio and HTTP transport coverage.
+
+- [ ] **Step 1: Write the test**
+
+```ts
+// test/e2e/everything-stdio.test.ts
+import { describe, expect, it } from 'vitest'
+import { createRegistry } from '../../src/registry'
+import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
+import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
+import { buildResourceTools } from '../../src/bridge/resource-bridge'
+import { buildPromptTools } from '../../src/bridge/prompt-bridge'
+
+describe('E2E — everything server (stdio)', () => {
+  it('connects, lists tools, calls echo', async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const result = await reg.addServer({
+      name: 'everything',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-everything'],
+    })
+    expect(result.state).toBe('ready')
+    const entry = reg.get('everything')!
+    expect(entry.tools.length).toBeGreaterThan(0)
+
+    const echoTool = entry.tools.find((t) => t.name === 'echo')
+    expect(echoTool).toBeDefined()
+    const tool = bridgeMcpTool({
+      server: 'everything',
+      tool: echoTool!,
+      client: entry.transport!.client as any,
+      timeoutMs: 5000,
+    })
+    const out = (await tool.call({ message: 'hi' })) as {
+      content: Array<{ type: string; text: string }>
+    }
+    expect(
+      out.content.some((c) => c.type === 'text' && c.text.includes('hi'))
+    ).toBe(true)
+
+    await reg.removeServer('everything')
+  }, 60_000)
+
+  it('lists resources and reads one', async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    await reg.addServer({
+      name: 'everything',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-everything'],
+    })
+    const entry = reg.get('everything')!
+    const [list, read] = buildResourceTools({
+      server: 'everything',
+      client: entry.transport!.client as any,
+      timeoutMs: 5000,
+    })
+    const listed = (await list!.call({})) as {
+      resources: Array<{ uri: string }>
+    }
+    expect(listed.resources.length).toBeGreaterThan(0)
+    const first = listed.resources[0]!
+    const got = (await read!.call({ uri: first.uri })) as {
+      contents: unknown[]
+    }
+    expect(got.contents.length).toBeGreaterThan(0)
+    await reg.removeServer('everything')
+  }, 60_000)
+
+  it('lists prompts and gets one', async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    await reg.addServer({
+      name: 'everything',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-everything'],
+    })
+    const entry = reg.get('everything')!
+    const [list, get] = buildPromptTools({
+      server: 'everything',
+      client: entry.transport!.client as any,
+      timeoutMs: 5000,
+    })
+    const listed = (await list!.call({})) as {
+      prompts: Array<{ name: string }>
+    }
+    expect(listed.prompts.length).toBeGreaterThan(0)
+    const first = listed.prompts[0]!
+    const out = (await get!.call({ name: first.name })) as {
+      messages: unknown[]
+    }
+    expect(out.messages.length).toBeGreaterThan(0)
+    await reg.removeServer('everything')
+  }, 60_000)
+
+  it('connection idempotency: re-adding the same config does not respawn the subprocess', async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const cfg = {
+      name: 'everything',
+      transport: 'stdio' as const,
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-everything'],
+    }
+    await reg.addServer(cfg)
+    const transportBefore = reg.get('everything')?.transport
+    await reg.addServer(cfg)
+    const transportAfter = reg.get('everything')?.transport
+    expect(transportAfter).toBe(transportBefore)
+    await reg.removeServer('everything')
+  }, 60_000)
+})
+```
+
+- [ ] **Step 2: Run — `pnpm -C packages/agents-mcp test e2e/everything-stdio`**
+
+Expected: PASS. (Tests are slow because of `npx`; allow 60s.)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packages/agents-mcp/test/e2e/everything-stdio.test.ts
+git commit -m "test(agents-mcp): e2e — everything server over stdio (tools, resources, prompts, idempotency)"
+```
+
+---
+
+### Task 28: E2E suite — official `everything` server (HTTP)
+
+**Files:**
+
+- Create: `packages/agents-mcp/test/e2e/everything-http.test.ts`
+
+> The everything server can run as an HTTP server (`npx ... --port=NNNN`). Phase 2's HTTP E2E spawns it as a subprocess in `beforeAll`, points the registry at `http://127.0.0.1:NNNN/mcp`, and reuses the stdio test's coverage shape.
+
+- [ ] **Step 1: Write the test**
+
+```ts
+// test/e2e/everything-http.test.ts
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { createRegistry } from '../../src/registry'
+import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
+import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
+
+const PORT = 38421
+
+async function waitFor(url: string, timeoutMs = 15_000): Promise<void> {
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeoutMs) {
+    try {
+      const res = await fetch(url, { method: 'GET' })
+      if (res.status < 500) return
+    } catch {
+      /* keep polling */
+    }
+    await new Promise((r) => setTimeout(r, 200))
+  }
+  throw new Error(`server not ready: ${url}`)
+}
+
+describe('E2E — everything server (HTTP)', () => {
+  let proc: ChildProcess
+
+  beforeAll(async () => {
+    proc = spawn(
+      'npx',
+      [
+        '-y',
+        '@modelcontextprotocol/server-everything',
+        '--transport=http',
+        `--port=${PORT}`,
+      ],
+      { stdio: 'pipe' }
+    )
+    await waitFor(`http://127.0.0.1:${PORT}/`, 30_000)
+  }, 60_000)
+
+  afterAll(() => {
+    proc?.kill('SIGTERM')
+  })
+
+  it('connects via HTTP and lists tools', async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const r = await reg.addServer({
+      name: 'everything-http',
+      transport: 'http',
+      url: `http://127.0.0.1:${PORT}/mcp`,
+      auth: { mode: 'none' },
+    })
+    expect(r.state).toBe('ready')
+    expect(reg.get('everything-http')?.tools.length).toBeGreaterThan(0)
+    await reg.removeServer('everything-http')
+  }, 60_000)
+
+  it('calls echo via HTTP', async () => {
+    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    await reg.addServer({
+      name: 'everything-http',
+      transport: 'http',
+      url: `http://127.0.0.1:${PORT}/mcp`,
+      auth: { mode: 'none' },
+    })
+    const entry = reg.get('everything-http')!
+    const echoTool = entry.tools.find((t) => t.name === 'echo')!
+    const tool = bridgeMcpTool({
+      server: 'everything-http',
+      tool: echoTool,
+      client: entry.transport!.client as any,
+      timeoutMs: 5000,
+    })
+    const out = (await tool.call({ message: 'hello' })) as {
+      content: Array<{ type: string; text: string }>
+    }
+    expect(out.content.some((c) => c.text.includes('hello'))).toBe(true)
+    await reg.removeServer('everything-http')
+  }, 60_000)
+})
+```
+
+- [ ] **Step 2: Allow `auth.mode: 'none'` in the registry's HTTP path**
+
+`createRegistry`'s `buildTransport` for `transport: 'http'` currently only handles `apiKey`. Add an explicit branch:
+
+```ts
+if (cfg.auth.mode === 'none') {
+  return { transport: createHttpTransport({ name: cfg.name, url: cfg.url }) }
+}
+```
+
+Also update the parser/types if `auth: { mode: 'none' }` isn't already accepted on http servers (`McpHttpServerConfig.auth` already permits it via `McpAuthConfig`).
+
+- [ ] **Step 3: Run — PASS**
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/agents-mcp/src/registry.ts packages/agents-mcp/test/e2e/everything-http.test.ts
+git commit -m "test(agents-mcp): e2e — everything server over HTTP; allow auth.mode='none' for unauth http"
+```
+
+---
+
+### Task 29: Phase 2 verification
+
+- [ ] **Step 1: Test suite green across the package**
+
+Run: `pnpm -C packages/agents-mcp test --run`
+Expected: PASS, including the slow E2E tests.
+
+- [ ] **Step 2: Confirm protocol coverage map**
+
+Manually walk the spec's "MCP spec conformance" section and check:
+
+- [x] Tools listing + invocation (Phase 1).
+- [x] Resources list + read (Task 22, E2E).
+- [x] Prompts list + get (Task 23, E2E).
+- [x] Progress notifications (Task 24).
+- [x] Cancellation (Task 25).
+- [x] Capability negotiation (Task 26).
+- [ ] OAuth 2.1 + PKCE + DCR + RFC 9728 + RFC 8707 — **Phase 3**.
+
+- [ ] **Step 3: Commit milestone**
+
+```bash
+git commit --allow-empty -m "milestone: agents-mcp phase 2 complete — protocol coverage + E2E"
+```
+
+---
