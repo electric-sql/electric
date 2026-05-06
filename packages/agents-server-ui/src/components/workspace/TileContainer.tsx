@@ -8,7 +8,7 @@ import { getView } from '../../lib/workspace/viewRegistry'
 import { setDragPayload } from '../../lib/workspace/dragPayload'
 import { EntityHeader } from '../EntityHeader'
 import { MainHeader } from '../MainHeader'
-import { Stack } from '../../ui'
+import { Stack, Text } from '../../ui'
 import { SplitMenu } from './SplitMenu'
 import { DropOverlay } from './DropOverlay'
 import { PaneFindBar } from './PaneFindBar'
@@ -99,7 +99,9 @@ function EntityTileBody({
   if (!entity) {
     return (
       <Stack align="center" justify="center" grow className={styles.body}>
-        <span>Loading entity...</span>
+        <Text tone="muted" size={2}>
+          Loading entity...
+        </Text>
       </Stack>
     )
   }

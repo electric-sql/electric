@@ -8,6 +8,7 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { decodeLayout } from '../../lib/workspace/layoutCodec'
 import { NEW_SESSION_VIEW_ID } from '../../lib/workspace/types'
+import { Text } from '../../ui'
 import { NodeRenderer } from './NodeRenderer'
 import styles from './Workspace.module.css'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
@@ -197,7 +198,9 @@ export function Workspace(): React.ReactElement {
     return (
       <div className={styles.workspace}>
         <div className={styles.empty}>
-          <span>Loading workspace...</span>
+          <Text tone="muted" size={2}>
+            Loading workspace...
+          </Text>
         </div>
       </div>
     )
