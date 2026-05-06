@@ -6,8 +6,6 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
-  Eye,
-  EyeOff,
   Folder,
   ListFilter,
   Tag,
@@ -148,7 +146,6 @@ export function SidebarViewMenu(): React.ReactElement {
                       key={t}
                       onSelect={() => toggleSidebarTypeVisibility(t)}
                     >
-                      {visible ? <Eye size={14} /> : <EyeOff size={14} />}
                       <Text size={2}>{formatLabel(t)}</Text>
                       {visible && (
                         <Check size={14} className={styles.activeMark} />
@@ -174,7 +171,6 @@ export function SidebarViewMenu(): React.ReactElement {
                     key={s}
                     onSelect={() => toggleSidebarStatusVisibility(s)}
                   >
-                    {visible ? <Eye size={14} /> : <EyeOff size={14} />}
                     <Text size={2}>{formatLabel(s)}</Text>
                     {visible && (
                       <Check size={14} className={styles.activeMark} />
