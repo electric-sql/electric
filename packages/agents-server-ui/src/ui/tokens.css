@@ -35,6 +35,7 @@
   --ds-radius-4: 8px;
   --ds-radius-5: 12px;
   --ds-radius-6: 16px;
+  --ds-radius-item: 7px;
   --ds-radius-full: 9999px;
 
   /* ---- Type scale (flat — no Capsize trim) --------------------------- *
@@ -42,6 +43,7 @@
    * controlled by the parent container's `gap`, not per-element trim.
    * Sizes intentionally keep close to Radix's font-size-1..6 mapping
    * so existing `size="1"`..`size="6"` migrations are visually 1:1.   */
+  --ds-text-2xs: 10px;
   --ds-text-xs: 11px;
   --ds-text-xs-lh: 1.45;
   --ds-text-sm: 13px;

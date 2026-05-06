@@ -34,7 +34,7 @@
      semantic. */
   background: var(--ds-surface-raised);
   border: 1px solid var(--ds-border-1);
-  border-radius: 12px;
+  border-radius: var(--ds-radius-5);
   /* Soft drop shadow lifts the composer slightly off the chat
      surface so the docked feel reads even when the bottom-fade mask
      thins out the chat content right above it. */

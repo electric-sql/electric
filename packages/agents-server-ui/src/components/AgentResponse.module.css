@@ -12,12 +12,12 @@
 }
 
 .doneText {
-  color: var(--ds-text-4, var(--ds-text-3));
+  color: var(--ds-text-4);
   opacity: 0.8;
 }
 
 .timeText {
-  color: var(--ds-text-4, var(--ds-text-3));
+  color: var(--ds-text-4);
   opacity: 0.7;
 }
 
@@ -27,7 +27,7 @@
 
 .copyButton {
   margin-left: auto;
-  color: var(--ds-text-4, var(--ds-text-3));
+  color: var(--ds-text-4);
   opacity: 0.7;
 }
 

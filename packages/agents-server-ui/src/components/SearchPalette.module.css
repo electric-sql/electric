@@ -125,7 +125,7 @@
 
 .rowType {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--ds-text-2xs);
   letter-spacing: 0.04em;
   color: var(--ds-text-3);
   text-transform: lowercase;

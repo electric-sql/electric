@@ -107,7 +107,7 @@
   gap: 6px;
   min-height: 30px;
   padding: 3px 28px 3px 8px;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-item);
   font-size: var(--ds-text-sm);
   line-height: var(--ds-text-sm-lh);
   font-family: var(--ds-font-body);

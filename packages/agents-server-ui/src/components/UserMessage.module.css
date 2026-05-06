@@ -15,7 +15,7 @@
 .bubble {
   background: var(--ds-input-bg);
   border: 1px solid var(--ds-gray-a3);
-  border-radius: 12px;
+  border-radius: var(--ds-radius-5);
 }
 
 .body {

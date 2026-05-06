@@ -128,7 +128,7 @@
   gap: 8px;
   height: var(--ds-row-height-md);
   padding: 0 8px;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
   transition: background 0.08s ease;

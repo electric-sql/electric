@@ -25,7 +25,7 @@
   gap: 6px;
   height: var(--ds-row-height-md);
   padding-right: 3px;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-item);
   cursor: pointer;
   user-select: none;
   color: var(--ds-text-1);
@@ -130,7 +130,7 @@
   /* Sized so the type label's cap-height optically matches the
      x-height of the title text next to it — 10px caps ≈ 7px tall,
      same height as the lowercase letters of the 13px title. */
-  font-size: 10px;
+  font-size: var(--ds-text-2xs);
   color: var(--ds-text-3);
   text-transform: lowercase;
   line-height: 1;

@@ -108,7 +108,7 @@
    x=22 — exactly where the SidebarHeader chrome icons (padding-left
    11px) and the SidebarRow status dots (BASE_PADDING_LEFT 3px) live.
 
-   `padding-right: 3px` and `border-radius: 7px` follow the same
+   `padding-right: 3px` and the item radius follow the same
    concentric-halo rule as `.row` in SidebarRow.module.css, so the
    New session row rounds identically to the entity rows below it. */
 .newSessionRow {
@@ -119,7 +119,7 @@
   height: var(--ds-row-height-md);
   padding-left: 3px;
   padding-right: 3px;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
   transition: background 0.08s ease;
@@ -179,14 +179,13 @@
  * lower-density auxiliary nav and its 8px gutter still leaves room
  * to spare. Targets Base UI's `<Scrollbar>` via its `data-orientation`
  * attribute (the inner class name is module-hashed and not reachable
- * from here). `!important` because the ScrollArea module's
- * `.scrollbar[data-orientation=...]` rule is the same specificity —
- * cascade order between sibling CSS modules isn't guaranteed across
- * builds, so we make the intent explicit. The 1px inner padding
- * keeps the thumb at 4px, in proportion with the narrower track. */
-.scrollFlex [data-orientation='vertical'] {
-  width: 6px !important;
-  padding: 1px !important;
+ * from here). `.root` increases specificity beyond the shared
+ * ScrollArea rule, so the override is deterministic without a
+ * priority escape hatch. The 1px inner padding keeps the thumb at 4px, in
+ * proportion with the narrower track. */
+.root .scrollFlex [data-orientation='vertical'] {
+  width: 6px;
+  padding: 1px;
 }
 
 .emptyTreeText {
