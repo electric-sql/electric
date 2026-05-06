@@ -4,6 +4,7 @@ import type { McpConfig } from './config/loader'
 import type { KeyVault } from './vault/types'
 import type { McpServerConfig, McpServerStatus, ProgressEvent } from './types'
 import type { McpTransportHandle } from './transports/types'
+import type { OAuthCoordinator } from './auth/coordinator'
 import { TimeoutError } from './transports/timeout'
 
 export interface ServerEntry {
@@ -32,6 +33,12 @@ export type GetAuthHeader = () => Promise<{
 
 export interface RegistryOpts {
   vault: KeyVault
+  /**
+   * Optional. If provided, the registry uses it to fetch access tokens for
+   * OAuth-mode HTTP servers (`clientCredentials`, `authorizationCode`).
+   * When absent, OAuth-mode servers fall back to `needs_auth`.
+   */
+  oauth?: OAuthCoordinator
   /** Builds a transport handle for a given server. Receives the resolved auth header (or null). */
   transportFactory: (
     name: string,
@@ -94,7 +101,7 @@ export function createRegistry(opts: RegistryOpts): Registry {
     }
   }
 
-  function buildAuthHeader(cfg: McpServerConfig): GetAuthHeader {
+  function buildAuthHeader(name: string, cfg: McpServerConfig): GetAuthHeader {
     return async () => {
       if (cfg.transport !== `http`) return null
       const auth = cfg.auth
@@ -103,20 +110,37 @@ export function createRegistry(opts: RegistryOpts): Registry {
         if (value === null) return null
         return { name: auth.headerName, value }
       }
-      // OAuth modes: deferred to Task 21.
-      return null
+      // OAuth modes: clientCredentials or authorizationCode.
+      if (!opts.oauth) return null
+      try {
+        const accessToken = await opts.oauth.getToken(name, auth.scopes)
+        return { name: `Authorization`, value: `Bearer ${accessToken}` }
+      } catch {
+        // AuthUnavailableError or anything else → no header.
+        return null
+      }
     }
   }
 
-  async function resolveStatus(cfg: McpServerConfig): Promise<McpServerStatus> {
+  async function resolveStatus(
+    name: string,
+    cfg: McpServerConfig
+  ): Promise<McpServerStatus> {
     if (cfg.transport === `stdio`) return `healthy`
     const auth = cfg.auth
     if (auth.mode === `apiKey`) {
       const value = await opts.vault.get(auth.valueRef)
       return value === null ? `needs_auth` : `healthy`
     }
-    // clientCredentials / authorizationCode: defer to Task 21.
-    return `needs_auth`
+    // clientCredentials / authorizationCode: try the OAuth coordinator.
+    if (!opts.oauth) return `needs_auth`
+    try {
+      await opts.oauth.getToken(name, auth.scopes)
+      return `healthy`
+    } catch {
+      // AuthUnavailableError or anything else → needs_auth.
+      return `needs_auth`
+    }
   }
 
   async function eagerConnect(entry: ServerEntry): Promise<void> {
@@ -252,9 +276,9 @@ export function createRegistry(opts: RegistryOpts): Registry {
           }
         }
 
-        const getAuthHeader = buildAuthHeader(serverCfg)
+        const getAuthHeader = buildAuthHeader(name, serverCfg)
         const transport = opts.transportFactory(name, serverCfg, getAuthHeader)
-        const status = await resolveStatus(serverCfg)
+        const status = await resolveStatus(name, serverCfg)
         const entry: ServerEntry = {
           name,
           config: serverCfg,

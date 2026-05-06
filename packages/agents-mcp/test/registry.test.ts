@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createRegistry } from '../src/registry'
+import {
+  createOAuthCoordinator,
+  createInMemoryTokenCache,
+} from '../src/auth/coordinator'
 import type { KeyVault } from '../src/vault/types'
 import type { McpServerConfig } from '../src/types'
 import type { McpTransportHandle } from '../src/transports/types'
@@ -125,5 +129,79 @@ describe(`registry`, () => {
     const list = reg.list()
     expect(list.find((s) => s.name === `cc`)?.status).toBe(`needs_auth`)
     expect(list.find((s) => s.name === `ac`)?.status).toBe(`needs_auth`)
+  })
+
+  it(`clientCredentials: healthy when coordinator returns a token`, async () => {
+    const oauth = createOAuthCoordinator({
+      cache: createInMemoryTokenCache(),
+      doRefresh: async () => ({
+        accessToken: `AT`,
+        expiresAt: new Date(Date.now() + 60_000),
+        tokenType: `Bearer`,
+      }),
+    })
+    const reg = createRegistry({
+      vault,
+      oauth,
+      transportFactory: fakeFactory(),
+    })
+    await reg.applyConfig({
+      servers: {
+        cc: {
+          transport: `http`,
+          url: `http://x`,
+          auth: {
+            mode: `clientCredentials`,
+            clientIdRef: `a`,
+            clientSecretRef: `b`,
+            tokenUrl: `http://t`,
+          },
+        },
+      },
+    })
+    expect(reg.list().find((s) => s.name === `cc`)?.status).toBe(`healthy`)
+  })
+
+  it(`clientCredentials: needs_auth when refresh fails`, async () => {
+    const oauth = createOAuthCoordinator({
+      cache: createInMemoryTokenCache(),
+      doRefresh: async () => {
+        throw new Error(`server down`)
+      },
+    })
+    const reg = createRegistry({
+      vault,
+      oauth,
+      transportFactory: fakeFactory(),
+    })
+    await reg.applyConfig({
+      servers: {
+        cc: {
+          transport: `http`,
+          url: `http://x`,
+          auth: {
+            mode: `clientCredentials`,
+            clientIdRef: `a`,
+            clientSecretRef: `b`,
+            tokenUrl: `http://t`,
+          },
+        },
+      },
+    })
+    expect(reg.list().find((s) => s.name === `cc`)?.status).toBe(`needs_auth`)
+  })
+
+  it(`authorizationCode: needs_auth when no oauth coordinator`, async () => {
+    const reg = createRegistry({ vault, transportFactory: fakeFactory() })
+    await reg.applyConfig({
+      servers: {
+        ac: {
+          transport: `http`,
+          url: `http://x`,
+          auth: { mode: `authorizationCode`, flow: `browser` },
+        },
+      },
+    })
+    expect(reg.list().find((s) => s.name === `ac`)?.status).toBe(`needs_auth`)
   })
 })

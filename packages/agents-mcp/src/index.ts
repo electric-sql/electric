@@ -14,3 +14,14 @@ export { defaultTransportFactory } from './transports/factory'
 export { TimeoutError, withTimeout } from './transports/timeout'
 export { bridgeMcpTool } from './bridge/tool-bridge'
 export type { BridgedTool, BridgeOpts } from './bridge/tool-bridge'
+export {
+  createOAuthCoordinator,
+  createInMemoryTokenCache,
+  AuthUnavailableError,
+} from './auth/coordinator'
+export type {
+  OAuthCoordinator,
+  TokenCache,
+  CoordinatorOpts,
+} from './auth/coordinator'
+export type { TokenSet } from './auth/client-credentials'
