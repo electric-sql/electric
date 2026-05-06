@@ -1,0 +1,109 @@
+.shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-bg);
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.container {
+  width: 100%;
+  max-width: 1100px;
+  padding: var(--ds-space-7) var(--ds-space-5) var(--ds-space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-5);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+}
+
+.headingTitle {
+  font-weight: 400;
+  margin: 0;
+}
+
+.headingSubtitle {
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-sm);
+}
+
+.placeholder {
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-sm);
+  padding: var(--ds-space-5) 0;
+}
+
+.error {
+  color: var(--ds-danger-text, #c00);
+  font-size: var(--ds-text-sm);
+  padding: var(--ds-space-3) var(--ds-space-4);
+  border: 1px solid var(--ds-danger-border, rgba(200, 0, 0, 0.3));
+  border-radius: var(--ds-radius-2, 6px);
+  background: var(--ds-danger-bg, rgba(200, 0, 0, 0.05));
+}
+
+.tableWrap {
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3, 8px);
+  overflow: hidden;
+  background: var(--ds-surface-1, var(--ds-bg));
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ds-text-sm);
+}
+
+.table thead th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--ds-space-3) var(--ds-space-4);
+  border-bottom: 1px solid var(--ds-border-1);
+  background: var(--ds-surface-2, transparent);
+}
+
+.table tbody td {
+  padding: var(--ds-space-3) var(--ds-space-4);
+  border-bottom: 1px solid var(--ds-border-1);
+  vertical-align: middle;
+  color: var(--ds-text-1);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.nameCell {
+  font-weight: 500;
+}
+
+.errorCell {
+  color: var(--ds-text-3);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionsCol {
+  width: 1%;
+  white-space: nowrap;
+}

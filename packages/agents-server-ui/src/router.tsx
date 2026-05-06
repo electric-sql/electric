@@ -32,6 +32,7 @@ import { EntityContextDrawer } from './components/EntityContextDrawer'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
 import { NewSessionPage } from './components/NewSessionPage'
+import { ConnectedServicesPage } from './components/connected-services/page'
 import { Stack } from './ui'
 import styles from './router.module.css'
 
@@ -302,7 +303,17 @@ const entityRoute = createRoute({
   component: EntityPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, entityRoute])
+const connectedServicesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: `/connected-services`,
+  component: ConnectedServicesPage,
+})
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  entityRoute,
+  connectedServicesRoute,
+])
 
 export const router = createRouter({
   routeTree,
