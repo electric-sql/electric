@@ -1,4 +1,6 @@
 import { BuiltinAgentsServer } from '@electric-ax/agents'
+import type { RegistrySnapshot } from '@electric-ax/agents'
+import { openAuthorizeWindow } from './oauth-window'
 import {
   BrowserWindow,
   Menu,
@@ -181,6 +183,8 @@ let state: DesktopState = {
 }
 let runtime: BuiltinAgentsServer | null = null
 let runtimeGeneration = 0
+let mcpUnsubscribe: (() => void) | null = null
+let lastMcpSnapshot: RegistrySnapshot | null = null
 let tray: Tray | null = null
 let aboutWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -602,8 +606,51 @@ function showOrCreateWindow(): void {
 async function stopExistingRuntime(): Promise<void> {
   const current = runtime
   runtime = null
+  if (mcpUnsubscribe) {
+    mcpUnsubscribe()
+    mcpUnsubscribe = null
+  }
+  lastMcpSnapshot = null
+  // Renderers should know the MCP list is empty while the runtime is
+  // down; otherwise they keep showing the last-known servers.
+  broadcastMcpSnapshot({ seq: 0, servers: [] })
   if (current) {
     await current.stop()
+  }
+}
+
+function broadcastMcpSnapshot(snapshot: RegistrySnapshot): void {
+  lastMcpSnapshot = snapshot
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(`desktop:mcp-state`, snapshot)
+    }
+  }
+}
+
+async function handleAuthorizeUrl(url: string, server: string): Promise<void> {
+  const reg = runtime?.mcpRegistry
+  if (!reg) return
+  // Redirect URI the SDK registered with the auth server matches the
+  // runtime's `${publicUrl}/oauth/callback/<server>` — that's the prefix
+  // we watch for in the BrowserWindow.
+  const runtimeUrl = state.runtimeUrl ?? ``
+  const redirectUriPrefix = runtimeUrl
+    ? `${runtimeUrl.replace(/\/$/, ``)}/oauth/callback/${server}`
+    : `http://127.0.0.1`
+  try {
+    const focused = BrowserWindow.getFocusedWindow() ?? undefined
+    const result = await openAuthorizeWindow({
+      server,
+      authorizeUrl: url,
+      redirectUriPrefix,
+      parent: focused ?? undefined,
+    })
+    await reg.finishAuth(result.server, result.code, result.state)
+  } catch (err) {
+    // Cancelled / closed without completing. The registry stays in
+    // `authenticating`; the user can click Authorize again to retry.
+    console.warn(`[agents-desktop] OAuth flow for ${server}:`, err)
   }
 }
 
@@ -624,6 +671,9 @@ async function restartRuntime(): Promise<void> {
     host: `127.0.0.1`,
     port: 0,
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
+    openAuthorizeUrl: (url, server) => {
+      void handleAuthorizeUrl(url, server)
+    },
   })
   runtime = nextRuntime
 
@@ -634,6 +684,15 @@ async function restartRuntime(): Promise<void> {
       return
     }
     setState({ runtimeStatus: `running`, runtimeUrl, error: null })
+    // Subscribe to MCP registry state changes and forward to renderers.
+    // The handler is invoked synchronously with the initial empty
+    // snapshot on subscribe, so renderers always see *something*.
+    const reg = nextRuntime.mcpRegistry
+    if (reg) {
+      mcpUnsubscribe = reg.subscribe((snapshot) => {
+        broadcastMcpSnapshot(snapshot)
+      })
+    }
   } catch (error) {
     if (runtime === nextRuntime) {
       runtime = null
@@ -882,6 +941,42 @@ function registerIpcHandlers(): void {
       }
     }
   )
+
+  // ── MCP registry IPC ─────────────────────────────────────────────
+  // Renderers subscribe to `desktop:mcp-state` push events; this handler
+  // returns the most recent snapshot so the renderer can render before
+  // the next push lands. Empty list when no runtime is running.
+  ipcMain.handle(`desktop:mcp-snapshot`, () => {
+    return lastMcpSnapshot ?? { seq: 0, servers: [] }
+  })
+  // Mutation handlers — translate IPC calls into registry methods.
+  // No-op gracefully when no runtime is running; renderer should not
+  // depend on these throwing.
+  ipcMain.handle(`desktop:mcp-authorize`, async (_event, name: string) => {
+    const reg = runtime?.mcpRegistry
+    const entry = reg?.get(name)
+    if (!reg || !entry) return
+    // Same shape as the old HTTP /authorize: tear down + re-add to
+    // rotate PKCE state, registry's openAuthorizeUrl hook then opens
+    // the new authorize URL in a BrowserWindow.
+    await reg.removeServer(name)
+    await reg.addServer(entry.config)
+  })
+  ipcMain.handle(`desktop:mcp-reconnect`, async (_event, name: string) => {
+    const reg = runtime?.mcpRegistry
+    const entry = reg?.get(name)
+    if (!reg || !entry) return
+    await reg.addServer(entry.config)
+  })
+  ipcMain.handle(`desktop:mcp-disable`, async (_event, name: string) => {
+    await runtime?.mcpRegistry?.disable(name).catch(() => {})
+  })
+  ipcMain.handle(`desktop:mcp-enable`, async (_event, name: string) => {
+    await runtime?.mcpRegistry?.enable(name).catch(() => {})
+  })
+  ipcMain.handle(`desktop:mcp-disconnect`, async (_event, name: string) => {
+    await runtime?.mcpRegistry?.removeServer(name).catch(() => {})
+  })
 }
 
 function windowDisplayLabel(win: BrowserWindow): string {

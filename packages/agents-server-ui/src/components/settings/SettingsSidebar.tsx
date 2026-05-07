@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Cpu, Palette, Settings as SettingsIcon } from 'lucide-react'
+import {
+  ArrowLeft,
+  Cpu,
+  Palette,
+  Plug,
+  Settings as SettingsIcon,
+} from 'lucide-react'
 import { Icon, ScrollArea, Stack, Text } from '../../ui'
 import {
   loadDesktopState,
@@ -11,7 +17,11 @@ import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
 import styles from './SettingsSidebar.module.css'
 
-export type SettingsCategoryId = `general` | `appearance` | `local-runtime`
+export type SettingsCategoryId =
+  | `general`
+  | `appearance`
+  | `local-runtime`
+  | `mcp-servers`
 
 interface CategoryDef {
   id: SettingsCategoryId
@@ -81,6 +91,15 @@ export function SettingsSidebar({
       label: `Local Runtime`,
       icon: <Icon icon={Cpu} size={2} />,
       visible: isDesktop || Boolean(desktopState),
+    },
+    {
+      id: `mcp-servers`,
+      label: `MCP Servers`,
+      icon: <Plug size={14} />,
+      // Push-based view of the in-process MCP registry — desktop only.
+      // The web build doesn't have access to BuiltinAgentsServer's
+      // registry over IPC, and remote runtimes are no longer aggregated.
+      visible: isDesktop,
     },
   ]
 

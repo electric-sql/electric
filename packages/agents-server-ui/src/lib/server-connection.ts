@@ -106,6 +106,29 @@ declare global {
       onDesktopCommand?: (
         callback: (command: DesktopCommand) => void
       ) => () => void
+      /**
+       * Push-based view of the in-process MCP registry. `getSnapshot`
+       * returns the latest state (or empty when no runtime is running);
+       * `onState` subscribes to subsequent updates. Mutation verbs map
+       * 1:1 to the registry methods that back them.
+       */
+      mcp?: {
+        getSnapshot: () => Promise<{
+          seq: number
+          servers: ReadonlyArray<unknown>
+        }>
+        onState: (
+          callback: (snapshot: {
+            seq: number
+            servers: ReadonlyArray<unknown>
+          }) => void
+        ) => () => void
+        authorize: (name: string) => Promise<void>
+        reconnect: (name: string) => Promise<void>
+        disable: (name: string) => Promise<void>
+        enable: (name: string) => Promise<void>
+        disconnect: (name: string) => Promise<void>
+      }
     }
   }
 }

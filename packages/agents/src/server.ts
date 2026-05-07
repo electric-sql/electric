@@ -7,17 +7,18 @@ import {
   registerBuiltinAgentTypes,
 } from './bootstrap.js'
 import {
-  composedCredentialStore,
-  envCredentialStore,
-  fileCredentialStore,
-  osKeychainCredentialStore,
   createRegistry as createMcpRegistry,
   loadConfig as loadMcpConfig,
   watchConfig as watchMcpConfig,
-  mountMcpHttp,
   bridgeMcpTool,
   buildResourceTools,
   buildPromptTools,
+  keychainPersistence,
+} from '@electric-ax/agents-mcp'
+import type {
+  McpConfig,
+  McpServerConfig,
+  Registry as McpRegistry,
 } from '@electric-ax/agents-mcp'
 import { registerToolProvider } from '@electric-ax/agents-runtime'
 import type {
@@ -36,6 +37,13 @@ export interface BuiltinAgentsServerOptions {
   workingDirectory?: string
   mockStreamFn?: StreamFn
   webhookPath?: string
+  /**
+   * Forwarded to the embedded MCP registry. Invoked when an
+   * authorizationCode-flow server first needs the user to consent.
+   * The Electron desktop app sets this to "open a sandboxed
+   * BrowserWindow"; headless embedders can leave it undefined.
+   */
+  openAuthorizeUrl?: (url: string, server: string) => void
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -69,10 +77,20 @@ export class BuiltinAgentsServer {
   > | null = null
   private _url: string | null = null
   private publicBaseUrl: string | null = null
+  private _mcpRegistry: McpRegistry | null = null
   readonly options: BuiltinAgentsServerOptions
 
   constructor(options: BuiltinAgentsServerOptions) {
     this.options = options
+  }
+
+  /**
+   * Read-only access to the embedded MCP registry. `null` until `start()`
+   * has run. The Electron desktop uses this to subscribe to state changes
+   * and forward them to renderer windows over IPC.
+   */
+  get mcpRegistry(): McpRegistry | null {
+    return this._mcpRegistry
   }
 
   get url(): string {
@@ -134,20 +152,50 @@ export class BuiltinAgentsServer {
             process.env.MCP_RUNTIME_PUBLIC_URL ?? this.publicBaseUrl
 
           // --- MCP wiring ---
-          const credentials = composedCredentialStore(
-            envCredentialStore(),
-            osKeychainCredentialStore({ service: `electric-agents` }),
-            fileCredentialStore(
-              path.resolve(`.electric-agents/credentials.json`)
-            )
-          )
-
-          const mcpRegistry = createMcpRegistry({ credentials, publicUrl })
+          // No credential store. The registry's private auth cache holds
+          // OAuth tokens for the lifetime of this process; cross-restart
+          // persistence is opted into per-server via keychainPersistence
+          // (or whatever the operator wires onto onTokensChanged) below.
+          const mcpRegistry = createMcpRegistry({
+            publicUrl,
+            openAuthorizeUrl: this.options.openAuthorizeUrl,
+          })
+          this._mcpRegistry = mcpRegistry
           const mcpConfigPath = path.resolve(`mcp.json`)
+
+          // Walks an mcp.json-loaded config and, for every authorizationCode
+          // server, awaits keychainPersistence(server) and merges the
+          // returned auth-config slice (tokens / client / hooks) into the
+          // server's auth config. Tokens then survive process restarts via
+          // the OS keychain — operator opts in to that simply by having
+          // OAuth servers in mcp.json.
+          const wirePersistence = async (
+            cfg: McpConfig
+          ): Promise<McpConfig> => {
+            const servers: McpServerConfig[] = []
+            for (const s of cfg.servers) {
+              if (
+                s.transport === `http` &&
+                s.auth?.mode === `authorizationCode`
+              ) {
+                const persist = await keychainPersistence({ server: s.name })
+                servers.push({
+                  ...s,
+                  auth: { ...s.auth, ...persist },
+                })
+              } else {
+                servers.push(s)
+              }
+            }
+            return { ...cfg, servers }
+          }
 
           try {
             const cfg = await loadMcpConfig(mcpConfigPath, process.env)
-            await mcpRegistry.applyConfig(cfg)
+            // Fire-and-forget: HTTPS discovery + DCR can take seconds.
+            void wirePersistence(cfg)
+              .then((wired) => mcpRegistry.applyConfig(wired))
+              .catch((e) => serverLog.error(`[mcp] applyConfig:`, e))
           } catch (err) {
             if ((err as NodeJS.ErrnoException).code !== `ENOENT`) throw err
             serverLog.info(
@@ -157,19 +205,20 @@ export class BuiltinAgentsServer {
 
           watchMcpConfig(mcpConfigPath, {
             onChange: (cfg) =>
-              mcpRegistry
-                .applyConfig(cfg)
+              wirePersistence(cfg)
+                .then((wired) => mcpRegistry.applyConfig(wired))
                 .catch((e) => serverLog.error(`[mcp] applyConfig:`, e)),
             onError: (e) => serverLog.error(`[mcp] config error:`, e),
-          }).catch(() => {})
+          }).catch((e) =>
+            serverLog.error(`[mcp] config watcher failed to start:`, e)
+          )
 
-          mountMcpHttp({
-            server: this.server!,
-            registry: mcpRegistry,
-            credentials,
-            publicUrl,
-            corsOrigin: process.env.MCP_CORS_ORIGIN?.split(`,`) ?? `*`,
-          })
+          // No HTTP admin / OAuth-callback surface anymore. The browser
+          // OAuth flow is hosted by the Electron desktop (which intercepts
+          // the redirect_uri navigation in a sandboxed BrowserWindow);
+          // headless embedders that hosted this BuiltinAgentsServer
+          // directly only see api-key / clientCredentials / pre-fed-token
+          // flows, none of which need an HTTP listener.
 
           registerToolProvider({
             name: `mcp`,
@@ -185,10 +234,14 @@ export class BuiltinAgentsServer {
                       server: entry.name,
                       tool: t,
                       client: live.transport.client as {
-                        callTool: (args: {
-                          name: string
-                          arguments?: unknown
-                        }) => Promise<unknown>
+                        callTool: (
+                          args: { name: string; arguments?: unknown },
+                          resultSchema?: unknown,
+                          opts?: {
+                            onProgress?: (p: unknown) => void
+                            signal?: AbortSignal
+                          }
+                        ) => Promise<unknown>
                       },
                       timeoutMs: live.config.timeoutMs,
                     })
@@ -269,6 +322,7 @@ export class BuiltinAgentsServer {
 
     this._url = null
     this.publicBaseUrl = null
+    this._mcpRegistry = null
   }
 
   private async handleRequest(
@@ -288,12 +342,6 @@ export class BuiltinAgentsServer {
 
     if (pathname === webhookPath && method === `POST` && this.bootstrap) {
       await this.bootstrap.handler(req, res)
-      return
-    }
-
-    // MCP and OAuth routes are handled by the mountMcpHttp `request` listener.
-    // Do not respond here so that listener can handle them.
-    if (pathname.startsWith(`/api/mcp/`) || pathname.startsWith(`/oauth/`)) {
       return
     }
 
