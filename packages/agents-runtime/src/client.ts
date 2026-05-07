@@ -1,4 +1,5 @@
 export { createEntityStreamDB } from './entity-stream-db'
+export { createAgentsClient } from './agents-client'
 export {
   compareTimelineOrders,
   createEntityErrorsQuery,
@@ -7,13 +8,24 @@ export {
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
 } from './entity-timeline'
+export { db, entities, entity, tagged } from './observation-sources'
 export { buildSections, buildTimelineEntries } from './use-chat'
 
 export type {
   EntityStreamDB,
   EntityStreamDBWithActions,
 } from './entity-stream-db'
+export type { ObservationStreamDB } from './types'
+export type { AgentsClient, AgentsClientConfig } from './agents-client'
 export type { Manifest } from './entity-schema'
+export type {
+  DbObservationSource,
+  EntitiesObservationSource,
+  EntityObservationSource,
+  EntitiesQuery,
+  TaggedObservationSource,
+  TaggedQuery,
+} from './observation-sources'
 export type {
   EntityTimelineContentItem,
   EntityTimelineData,

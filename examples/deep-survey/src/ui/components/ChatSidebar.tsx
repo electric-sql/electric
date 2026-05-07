@@ -4,13 +4,13 @@ import {
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
   buildTimelineEntries,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 import { useLiveQuery } from '@tanstack/react-db'
 import type {
   EntityStreamDB,
   EntityTimelineData,
   EntityTimelineSection,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 
 interface ChatSidebarProps {
   orchestratorUrl: string | null
@@ -242,7 +242,7 @@ function ChatTurn({ section }: { section: EntityTimelineSection }) {
   let text = ``
   if (section.kind === `user_message`) {
     text = section.text
-  } else {
+  } else if (section.kind === `agent_response`) {
     text = section.items
       .filter((item) => item.kind === `text`)
       .map((item) => (item as { kind: `text`; text: string }).text)
@@ -250,6 +250,15 @@ function ChatTurn({ section }: { section: EntityTimelineSection }) {
     if (section.error) {
       text += `\n[error: ${section.error}]`
     }
+  } else {
+    const reason = section.payload.timeout
+      ? `timeout`
+      : section.payload.finished_child
+        ? `child ${section.payload.finished_child.run_status}`
+        : section.payload.changes.length > 0
+          ? `${section.payload.changes.length} ${section.payload.changes.length === 1 ? `change` : `changes`}`
+          : section.payload.source
+    text = `woke: ${reason}`
   }
 
   if (!text.trim()) return null
