@@ -75,7 +75,7 @@ function estimateRowHeight(
   return Math.max(120, 32 + lines * lineHeight)
 }
 
-const SCROLL_THRESHOLD = 200
+const BOTTOM_PIN_THRESHOLD = 8
 const ROW_GAP = 24
 const ROW_SETTLE_MS = 500
 
@@ -193,6 +193,7 @@ export function EntityTimeline({
   const [viewportWidth, setViewportWidth] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
   const isNearBottom = useRef(true)
+  const lastScrollTopRef = useRef(0)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const cachedSizeMapRef = useRef(new Map<string, number>())
   const lastMeasureAtRef = useRef(new Map<string, number>())
@@ -457,17 +458,40 @@ export function EntityTimeline({
   useEffect(() => {
     if (!viewport) return
 
+    const detachFromBottom = () => {
+      isNearBottom.current = false
+      setShowJumpToBottom(true)
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0 && viewport.scrollTop > 0) {
+        detachFromBottom()
+      }
+    }
+
     const handleScroll = () => {
-      const nearBottom =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
-        SCROLL_THRESHOLD
-      isNearBottom.current = nearBottom
-      setShowJumpToBottom(!nearBottom)
+      const distanceFromBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      const scrollingUp = viewport.scrollTop < lastScrollTopRef.current - 1
+      const pinnedToBottom = distanceFromBottom <= BOTTOM_PIN_THRESHOLD
+
+      if (scrollingUp && !pinnedToBottom) {
+        detachFromBottom()
+      } else if (pinnedToBottom) {
+        isNearBottom.current = true
+      }
+
+      lastScrollTopRef.current = viewport.scrollTop
+      setShowJumpToBottom(!isNearBottom.current)
     }
 
     handleScroll()
+    viewport.addEventListener(`wheel`, handleWheel, { passive: true })
     viewport.addEventListener(`scroll`, handleScroll, { passive: true })
-    return () => viewport.removeEventListener(`scroll`, handleScroll)
+    return () => {
+      viewport.removeEventListener(`wheel`, handleWheel)
+      viewport.removeEventListener(`scroll`, handleScroll)
+    }
   }, [viewport])
 
   useLayoutEffect(() => {
@@ -492,6 +516,8 @@ export function EntityTimeline({
 
   const jumpToBottom = useCallback(() => {
     if (rows.length > 0) {
+      isNearBottom.current = true
+      setShowJumpToBottom(false)
       rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
     }
   }, [rowVirtualizer, rows.length])
