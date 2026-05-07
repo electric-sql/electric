@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useSearch } from '@tanstack/react-router'
 import { useWorkspace, listTiles } from './useWorkspace'
 import { useServerConnection } from './useServerConnection'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
@@ -47,6 +48,7 @@ function storageKey(serverId: string | null): string | null {
 
 export function useWorkspacePersistence(): void {
   const { workspace, helpers } = useWorkspace()
+  const search = useSearch({ strict: false }) as { layout?: string }
   const { activeServer } = useServerConnection()
   const { entitiesCollection } = useElectricAgents()
   // Use the server's URL (URI-safe-encoded) as the persistence key
@@ -80,6 +82,10 @@ export function useWorkspacePersistence(): void {
     if (hydratedFor.current === serverId) return
     hydratedFor.current = serverId
 
+    // Explicit layout links are higher priority than local restore.
+    // `<Workspace>` imports the URL payload and then strips `?layout=`.
+    if (search.layout) return
+
     let raw: string | null = null
     try {
       raw = window.localStorage.getItem(key)
@@ -104,11 +110,10 @@ export function useWorkspacePersistence(): void {
         liveUrls.current.size === 0
           ? env.workspace
           : pruneWorkspace(env.workspace, liveUrls.current)
-      // Don't override an existing non-empty workspace — that would
-      // wipe out the tile that the URL → workspace effect just opened
-      // for the current route. We only restore when the workspace is
-      // currently empty (the common case on cold load).
-      if (workspace.root === null && pruned.root !== null) {
+      // Restore even if the URL → workspace effect already bootstrapped
+      // a single route tile. On app refresh the URL only represents the
+      // active tile, while localStorage holds the full split tree.
+      if (pruned.root !== null) {
         helpers.replaceWorkspace(pruned)
       }
     } catch {
@@ -120,7 +125,7 @@ export function useWorkspacePersistence(): void {
     // try to fire after every state change. Reading the latest
     // `workspace.root` via the live closure rather than declaring it
     // a dep is what we want for this read-once-on-mount semantics.
-  }, [serverId, helpers, workspace.root])
+  }, [serverId, helpers, search.layout])
 
   // Debounced write on workspace change. We always write; even
   // workspace.root === null is a meaningful state to remember (so
@@ -129,6 +134,7 @@ export function useWorkspacePersistence(): void {
   useEffect(() => {
     const key = storageKey(serverId)
     if (!key) return
+    if (hydratedFor.current !== serverId) return
     const handle = setTimeout(() => {
       try {
         const env: Envelope = { v: SCHEMA_VERSION, workspace }
