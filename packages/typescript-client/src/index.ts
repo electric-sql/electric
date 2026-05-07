@@ -17,3 +17,4 @@ export {
   camelToSnake,
 } from './column-mapper'
 export { compileExpression, compileOrderBy } from './expression-compiler'
+export { defaultParser } from './parser'
