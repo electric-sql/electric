@@ -1686,14 +1686,17 @@ export class ElectricAgentsManager {
       payload: req.payload,
       timestamp: now,
       mode: req.mode ?? `immediate`,
-      status: req.mode === `queued` ? `pending` : `processed`,
+      status:
+        req.mode === `queued` || req.mode === `paused`
+          ? `pending`
+          : `processed`,
     }
     if (req.type) {
       value.message_type = req.type
     }
     if (req.position) {
       value.position = req.position
-    } else if (value.mode === `queued`) {
+    } else if (value.mode === `queued` || value.mode === `paused`) {
       value.position = createInitialQueuePosition(new Date(now))
     }
     if (value.status === `processed`) {
@@ -1733,7 +1736,7 @@ export class ElectricAgentsManager {
     req: {
       payload?: unknown
       position?: string
-      mode?: `immediate` | `queued` | `steer`
+      mode?: `immediate` | `queued` | `paused` | `steer`
       status?: `pending` | `processed` | `cancelled`
     }
   ): Promise<void> {

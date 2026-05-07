@@ -109,7 +109,7 @@ export interface IncludesInboxMessage {
   from: string
   payload: unknown
   timestamp: string
-  mode?: `immediate` | `queued` | `steer`
+  mode?: `immediate` | `queued` | `paused` | `steer`
   status?: `pending` | `processed` | `cancelled`
   position?: string
   processed_at?: string

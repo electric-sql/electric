@@ -372,7 +372,7 @@ export class ElectricAgentsRoutes {
       payload?: unknown
       key?: string
       type?: string
-      mode?: `immediate` | `queued` | `steer`
+      mode?: `immediate` | `queued` | `paused` | `steer`
       position?: string
       afterMs?: number
     }>(req, res)
@@ -418,7 +418,7 @@ export class ElectricAgentsRoutes {
     const parsed = await parseJsonBody<{
       payload?: unknown
       position?: string
-      mode?: `immediate` | `queued` | `steer`
+      mode?: `immediate` | `queued` | `paused` | `steer`
       status?: `pending` | `processed` | `cancelled`
     }>(req, res)
     if (!parsed) return
