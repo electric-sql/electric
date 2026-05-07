@@ -78,7 +78,7 @@ function estimateRowHeight(
     return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
   }
   if (row.section.kind === `wake`) {
-    return 28 + timelineRowGap(row)
+    return 76 + timelineRowGap(row)
   }
   if (row.section.kind === `manifest`) {
     return 76 + timelineRowGap(row)
@@ -100,7 +100,9 @@ const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
 
 function timelineRowGap(row: TimelineEntry): number {
-  return row.section.kind === `manifest` ? MANIFEST_ROW_GAP : ROW_GAP
+  return row.section.kind === `manifest` || row.section.kind === `wake`
+    ? MANIFEST_ROW_GAP
+    : ROW_GAP
 }
 
 type TimelinePaneFindMatch = PaneFindMatch & {
@@ -162,7 +164,12 @@ function wakeReason(
 function wakeSectionText(
   section: Extract<TimelineEntry[`section`], { kind: `wake` }>
 ): string {
-  return [`woke`, wakeReason(section), section.payload.source].join(` `)
+  return [
+    `woke`,
+    wakeReason(section),
+    section.payload.source,
+    ...wakeDetails(section).map((detail) => `${detail.label} ${detail.value}`),
+  ].join(` `)
 }
 
 function WakeTimelineRow({
@@ -171,27 +178,93 @@ function WakeTimelineRow({
   section: Extract<TimelineEntry[`section`], { kind: `wake` }>
 }): React.ReactElement {
   const reason = wakeReason(section)
+  const details = wakeDetails(section)
+  const childOutput = wakeChildOutput(section)
   return (
-    <Tooltip content={formatAbsoluteDateTimeVerbose(section.timestamp)}>
-      <span className={styles.statusPill}>
-        <Text size={1} tone="muted" className={styles.statusText}>
-          woke
-        </Text>
-        <Text size={1} tone="muted" className={styles.statusText}>
-          ·
-        </Text>
-        <Text size={1} tone="muted" className={styles.statusText}>
-          {reason}
-        </Text>
-        <Text size={1} tone="muted" className={styles.statusText}>
-          ·
-        </Text>
-        <Text size={1} tone="muted" className={styles.statusText}>
-          {formatChatTimestamp(section.timestamp)}
-        </Text>
-      </span>
-    </Tooltip>
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={Radio}
+        title="woke"
+        summary={`${reason} · ${formatChatTimestamp(section.timestamp)}`}
+        defaultExpanded={false}
+        headerSurface
+      >
+        <div className={styles.manifestDetails}>
+          {details.map((detail) => (
+            <div key={detail.label} className={styles.manifestDetail}>
+              <span>{detail.label}</span>
+              <strong>{detail.value}</strong>
+            </div>
+          ))}
+        </div>
+        {childOutput ? (
+          <pre className={styles.manifestJson}>{childOutput.value}</pre>
+        ) : null}
+      </InlineEventCard>
+    </div>
   )
+}
+
+function wakeDetails(
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+): Array<{ label: string; value: string }> {
+  const { payload } = section
+  const details = [
+    { label: `Source`, value: payload.source },
+    { label: `Trigger`, value: wakeReason(section) },
+    { label: `Time`, value: formatAbsoluteDateTimeVerbose(section.timestamp) },
+  ]
+
+  if (payload.changes.length > 0) {
+    details.push({
+      label: `Changes`,
+      value: payload.changes
+        .map((change) => `${change.kind} ${change.collection}:${change.key}`)
+        .join(`, `),
+    })
+  }
+
+  if (payload.finished_child) {
+    const childOutput = wakeChildOutput(section)
+    details.push(
+      { label: `Child`, value: payload.finished_child.url },
+      { label: `Child type`, value: payload.finished_child.type },
+      { label: `Child status`, value: payload.finished_child.run_status }
+    )
+    if (childOutput) {
+      details.push({
+        label: childOutput.label,
+        value: `${childOutput.value.length} chars`,
+      })
+    }
+  }
+
+  if (payload.other_children && payload.other_children.length > 0) {
+    details.push({
+      label: `Other children`,
+      value: payload.other_children
+        .map((child) => `${child.status} ${child.url}`)
+        .join(`, `),
+    })
+  }
+
+  return details.map((detail) => ({
+    ...detail,
+    value:
+      detail.value.length > 120
+        ? `${detail.value.slice(0, 117)}...`
+        : detail.value,
+  }))
+}
+
+function wakeChildOutput(
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+): { label: string; value: string } | null {
+  const child = section.payload.finished_child
+  if (!child) return null
+  if (child.error) return { label: `Child error`, value: child.error }
+  if (child.response) return { label: `Child response`, value: child.response }
+  return null
 }
 
 function excerptAround(
