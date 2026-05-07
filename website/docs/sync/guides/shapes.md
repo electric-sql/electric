@@ -51,7 +51,7 @@ Shapes are defined by:
 A shape contains all of the rows in the table that match the where clause, if provided. If a columns clause is provided, the synced rows will only contain those selected columns.
 
 > [!Warning] Limitations
-> Shapes are currently [single table](#single-table), though you can use [subqueries](#subqueries) to filter based on related data. Shape definitions are [immutable](#immutable).
+> Shapes are currently [single table](#single-table), though you can use [subqueries](#subqueries-preview) to filter based on related data. Shape definitions are [immutable](#immutable).
 
 > [!Warning] Security
 > Production apps should request shapes through your backend API for authorization and security. See the [auth guide](/docs/sync/guides/auth).
@@ -120,7 +120,6 @@ Where clauses have the following constraints:
 
 1. can't use non-deterministic SQL functions like `count()` or `now()`
 
-<a id="subqueries-experimental"></a>
 #### Subqueries (preview)
 
 Electric has preview support for subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables relational filtering patterns such as memberships, sharing rules, parent-child traversal, and exclusions while the feature remains gated behind flags.
@@ -496,7 +495,7 @@ We currently optimize the evaluation of the following clauses:
 
 ### Single table
 
-Shapes sync data from a single table. While you can use [subqueries](#subqueries) to filter rows based on data in other tables, the shape only contains rows from the root table—not the related data itself.
+Shapes sync data from a single table. While you can use [subqueries](#subqueries-preview) to filter rows based on data in other tables, the shape only contains rows from the root table—not the related data itself.
 
 For syncing related data across tables, you currently need to use multiple shapes. In the [old version of Electric](https://legacy.electric-sql.com/docs/usage/data-access/shapes), Shapes had an include tree that allowed you to sync nested relations. The new Electric has not yet implemented support for include trees.
 
