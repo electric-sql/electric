@@ -4,6 +4,18 @@
   position: relative;
   border-right: 1px solid var(--ds-border-1);
 }
+.root::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 4px;
+  pointer-events: none;
+  box-shadow: inset -1px 0 2px
+    color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
+  z-index: 10;
+}
 
 /* Narrow-viewport overlay mode — see `useNarrowViewport`. The
    sidebar pops out of flex flow and floats over the main column
