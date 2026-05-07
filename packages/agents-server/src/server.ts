@@ -128,7 +128,6 @@ interface MockAgentBootstrap {
 interface ActiveClaimWriteToken {
   token: string
   consumerId: string
-  issuedAt: number
 }
 
 const MOCK_CHAT_MODEL: AgentModel = {
@@ -1838,7 +1837,6 @@ export class ElectricAgentsServer {
           this.activeClaimWriteTokens.set(target.primaryStream, {
             token: writeToken,
             consumerId,
-            issuedAt: Date.now(),
           })
           this.activeClaimWriteTokensByConsumer.set(
             consumerId,
