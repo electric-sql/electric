@@ -235,20 +235,59 @@
   padding-top: 20px;
 }
 
-/* Section label ("Pinned", "Today", "Last 7 days", …) — text
-   aligns with the icon column above so the column reads cleanly
-   from top to bottom. Sentence-case (no `text-transform`) so
-   working-dir labels like `~/Code/electric` render naturally;
-   font-weight is the prominence cue instead of uppercase letterforms.
-   Single-line ellipsis is a safety net for the working-dir grouping
-   mode where a label can be a long abbreviated path. */
+.sectionGroup {
+  min-width: 0;
+}
+
+/* Section header ("Pinned", "Today", "Last 7 days", …) — text
+   aligns with the old label position while the chevron stays quiet
+   until hover/focus. Sentence-case (no `text-transform`) so working-dir
+   labels like `~/Code/electric` render naturally. */
+.sectionHeader {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 4px 4px 8px;
+  border-radius: var(--ds-radius-item);
+  color: var(--ds-text-3);
+  cursor: pointer;
+}
+.sectionHeader:hover,
+.sectionHeader:focus-visible {
+  color: var(--ds-text-2);
+}
+
 .sectionLabel {
-  display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   font-weight: 500;
-  padding: 14px 4px 4px 8px;
-  color: var(--ds-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sectionChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--ds-text-3);
+  transform: rotate(90deg);
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+}
+.sectionChevron[data-collapsed='true'] {
+  transform: rotate(0deg);
+}
+.sectionHeader:hover .sectionChevron,
+.sectionHeader:focus-visible .sectionChevron {
+  opacity: 0.75;
 }

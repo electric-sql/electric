@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SquarePen } from 'lucide-react'
+import { ChevronRight, SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
@@ -139,6 +139,9 @@ export function Sidebar({
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
   const [showTopDivider, setShowTopDivider] = useState(false)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    () => new Set()
+  )
   const scrollViewportRef = useRef<HTMLDivElement>(null)
   // Narrow viewports flip the sidebar from a push-displace flex
   // column into an absolute-positioned overlay that floats above
@@ -265,6 +268,18 @@ export function Sidebar({
     closeIfOverlay()
   }, [navigate, closeIfOverlay])
 
+  const toggleSection = useCallback((id: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     const viewport = scrollViewportRef.current
     if (!viewport) return
@@ -351,24 +366,39 @@ export function Sidebar({
             />
 
             {pinnedEntities.length > 0 && (
-              <>
-                <SectionLabel>Pinned</SectionLabel>
-                {pinnedEntities.map((entity) => (
-                  <SidebarTree
-                    key={`pinned:${entity.url}`}
-                    entity={entity}
-                    {...treeProps}
-                  />
-                ))}
-              </>
+              <div className={styles.sectionGroup}>
+                <SectionHeader
+                  id="pinned"
+                  title="Pinned"
+                  collapsed={collapsedSections.has(`pinned`)}
+                  onToggle={toggleSection}
+                />
+                {!collapsedSections.has(`pinned`) &&
+                  pinnedEntities.map((entity) => (
+                    <SidebarTree
+                      key={`pinned:${entity.url}`}
+                      entity={entity}
+                      {...treeProps}
+                    />
+                  ))}
+              </div>
             )}
 
             {ungroupedBuckets.map((group) => (
-              <div key={group.id}>
-                <SectionLabel title={group.title}>{group.label}</SectionLabel>
-                {group.items.map((root) => (
-                  <SidebarTree key={root.url} entity={root} {...treeProps} />
-                ))}
+              <div key={group.id} className={styles.sectionGroup}>
+                <SectionHeader
+                  id={`${view.groupBy}:${group.id}`}
+                  title={group.label}
+                  tooltip={group.title}
+                  collapsed={collapsedSections.has(
+                    `${view.groupBy}:${group.id}`
+                  )}
+                  onToggle={toggleSection}
+                />
+                {!collapsedSections.has(`${view.groupBy}:${group.id}`) &&
+                  group.items.map((root) => (
+                    <SidebarTree key={root.url} entity={root} {...treeProps} />
+                  ))}
               </div>
             ))}
 
@@ -435,22 +465,37 @@ function buildEntityTree(entities: ReadonlyArray<ElectricEntity>): {
   return { roots, childrenByParent }
 }
 
-function SectionLabel({
-  children,
+function SectionHeader({
+  id,
   title,
+  tooltip,
+  collapsed,
+  onToggle,
 }: {
-  children: React.ReactNode
+  id: string
+  title: string
   /**
    * Optional longer-form text surfaced as a native tooltip on hover.
-   * Used by the working-directory grouping mode where `children` is
+   * Used by the working-directory grouping mode where `title` is
    * an abbreviated path (e.g. `…/projects/acme`) and the full path
    * is worth showing on hover.
    */
-  title?: string
+  tooltip?: string
+  collapsed: boolean
+  onToggle: (id: string) => void
 }): React.ReactElement {
   return (
-    <Text size={1} tone="muted" className={styles.sectionLabel} title={title}>
-      {children}
-    </Text>
+    <button
+      type="button"
+      className={styles.sectionHeader}
+      title={tooltip}
+      aria-expanded={!collapsed}
+      onClick={() => onToggle(id)}
+    >
+      <span className={styles.sectionLabel}>{title}</span>
+      <span className={styles.sectionChevron} data-collapsed={collapsed}>
+        <Icon icon={ChevronRight} size={1} />
+      </span>
+    </button>
   )
 }
