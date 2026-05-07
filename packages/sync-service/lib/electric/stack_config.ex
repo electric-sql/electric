@@ -30,6 +30,7 @@ defmodule Electric.StackConfig do
       snapshot_timeout_to_first_data: :timer.seconds(30),
       shape_hibernate_after: Electric.Config.default(:shape_hibernate_after),
       shape_enable_suspend?: Electric.Config.default(:shape_enable_suspend?),
+      shape_suspend_after: Electric.Config.default(:shape_suspend_after),
       chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
       feature_flags: [],
       process_spawn_opts: %{}

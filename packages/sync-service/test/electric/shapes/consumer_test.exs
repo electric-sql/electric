@@ -598,6 +598,12 @@ defmodule Electric.Shapes.ConsumerTest do
         Map.get(ctx, :hibernate_after, 10_000)
       )
 
+      Electric.StackConfig.put(
+        ctx.stack_id,
+        :shape_suspend_after,
+        Map.get(ctx, :shape_suspend_after, 60_000)
+      )
+
       if not Map.get(ctx, :allow_subqueries, true) do
         Electric.StackConfig.put(ctx.stack_id, :feature_flags, [])
       end
@@ -1375,9 +1381,10 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:flush_boundary_updated, 301}, 1_000
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10, shape_suspend_after: 20
+    @tag with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
-    test "should terminate after :hibernate_after ms", ctx do
+    test "should suspend after hibernate_after + shape_suspend_after ms", ctx do
       register_as_replication_client(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
@@ -1409,7 +1416,8 @@ defmodule Electric.Shapes.ConsumerTest do
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
 
-    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10, shape_suspend_after: 10
+    @tag with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "should hibernate not suspend if has dependencies", ctx do
       register_as_replication_client(ctx.stack_id)
@@ -1494,13 +1502,126 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert Consumer.whereis(ctx.stack_id, shape_handle)
 
-      Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 10)
+      # hibernate_after=5, shape_suspend_after=5, jitter_period=10
+      Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 5, 10)
 
       Process.sleep(60)
 
       assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
 
       refute Consumer.whereis(ctx.stack_id, shape_handle)
+    end
+
+    @tag hibernate_after: 10, shape_suspend_after: 150, with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: true
+    test "should hibernate first then suspend after shape_suspend_after ms", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      lsn1 = Lsn.from_integer(300)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      txn =
+        complete_txn_fragment(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      # Wait for hibernate_after (10ms) + small buffer
+      # Suspend won't happen until hibernate_after + shape_suspend_after = 10 + 150 = 160ms
+      Process.sleep(50)
+
+      # Should be hibernated, not suspended yet (we're at ~50ms, suspend at ~160ms)
+      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
+               Process.info(consumer_pid, :current_function)
+
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 0
+
+      # Wait for shape_suspend_after (150ms from hibernate) to complete
+      # We're at ~50ms, need to wait another ~150ms to be past 160ms
+      Process.sleep(180)
+
+      # Now should be suspended
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+
+      refute Consumer.whereis(ctx.stack_id, shape_handle)
+    end
+
+    @tag hibernate_after: 10, shape_suspend_after: 200, with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: true
+    test "activity during hibernation cancels pending suspend", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      lsn1 = Lsn.from_integer(300)
+      lsn2 = Lsn.from_integer(301)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      txn1 =
+        complete_txn_fragment(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn1, ctx.stack_id)
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      # Wait for hibernate (hibernate_after=10ms + buffer)
+      Process.sleep(30)
+
+      # Should be hibernated
+      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
+               Process.info(consumer_pid, :current_function)
+
+      # Wait ~50ms so suspend timer has been running but not fired yet
+      # (shape_suspend_after=200ms, so we're at ~80ms total, well before 200ms)
+      Process.sleep(50)
+
+      # Send another transaction - this should cancel the suspend timer
+      txn2 =
+        complete_txn_fragment(3, lsn2, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "22"},
+            log_offset: LogOffset.new(lsn2, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
+      assert_receive {:flush_boundary_updated, 301}, 1_000
+
+      # Wait past what would have been the original shape_suspend_after window
+      # Original timer started at ~30ms, would fire at ~230ms
+      # We're now at ~80ms, wait 160ms to reach ~240ms
+      # But new timer started at ~80ms, would fire at ~280ms
+      # So at ~240ms the process should still be alive
+      Process.sleep(160)
+
+      # Should NOT have suspended because activity reset the timer
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 0
+
+      # Process should still be alive (hibernated again)
+      assert Process.alive?(consumer_pid)
     end
 
     @tag with_pure_file_storage_opts: [compaction_period: 5, keep_complete_chunks: 133]
