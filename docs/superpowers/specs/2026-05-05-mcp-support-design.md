@@ -154,11 +154,11 @@ In local-dev, the runtime is the developer's machine, so stdio servers can read 
 
 Three auth modes per server:
 
-| Mode                | Initial setup                                                                                     | Steady state                                             | Operator action when fails |
-| ------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------- |
-| `apiKey`            | Operator passes the key inline in `auth.key`                                                      | Never expires until rotated                              | Rotate key                 |
-| `clientCredentials` | Operator passes `clientId` + `clientSecret` inline                                                | Runtime exchanges for short-lived access tokens silently | Rotate client secret       |
-| `authorizationCode` | Browser flow in a sandboxed Electron BrowserWindow → user approves → main intercepts the redirect | Silent refresh on each use; refresh tokens rotate        | Re-authorize via the page  |
+| Mode                | Initial setup                                                                                     | Steady state                                             | Operator action when fails                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| `apiKey`            | Operator passes the key inline in `auth.key`                                                      | Never expires until rotated                              | Rotate key                                                   |
+| `clientCredentials` | Operator passes `clientId` + `clientSecret` inline                                                | Runtime exchanges for short-lived access tokens silently | Rotate client secret                                         |
+| `authorizationCode` | Browser flow in a sandboxed Electron BrowserWindow → user approves → main intercepts the redirect | Silent refresh on each use; refresh tokens rotate        | Authorize via the page when status flips to `authenticating` |
 
 The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out). Device-code flow (RFC 8628) is not currently part of the public surface; a device-flow path was prototyped but removed pending a concrete need in a non-desktop deployment.
 
@@ -433,7 +433,7 @@ Settings → MCP Servers, in agents-server-ui. **Desktop-only:** in non-Electron
   - `disabled` — operator paused the server.
 - **Tool count + expandable tool list** (name + description per tool).
 - **Per-row actions:**
-  - **Authorize / Re-authorize** — visible whenever the server's `authMode` is `authorizationCode`. Calls `Registry.reauthorize(name)`, which closes the transport, drops the in-memory tokens, and rebuilds the entry in place (no flicker), causing the SDK to surface a fresh authorize URL.
+  - **Authorize** — visible only when `status === 'authenticating'`. Calls `Registry.reauthorize(name)`, which closes the transport, drops the in-memory tokens, and rebuilds the entry in place (no flicker), causing the SDK to surface a fresh authorize URL. There's no manual "force a fresh token" affordance for healthy servers — the registry reauthorizes automatically when the SDK can't refresh the existing one.
   - **Reconnect** — drops the transport and re-runs `addServer(entry.config)`; tokens stay put.
   - **Disable / Enable** — pause/resume the server. Tokens stay put either way.
 

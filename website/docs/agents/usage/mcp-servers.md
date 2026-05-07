@@ -310,7 +310,7 @@ Editing `mcp.json` (or calling `applyConfig` programmatically) takes effect imme
 
 Calling `Registry.reauthorize(name)` forces a fresh OAuth flow without removing the entry from the registry. The transport is closed, tokens are dropped from the in-memory cache (hooks remain registered), and the SDK produces a new authorize URL that fires through the `openAuthorizeUrl` hook. The entry stays in every snapshot throughout, so subscribers don't see it disappear and reappear.
 
-The desktop's **Re-authorize** button calls this method. Useful when you want a fresh token without waiting for the existing one to fail.
+The desktop's **Authorize** button (visible whenever a server is in `authenticating`) routes through this method. There's no manual "force a fresh token" affordance for healthy servers — the registry reauthorizes automatically when the SDK can't refresh the existing one.
 
 ### Per-call timeouts
 
@@ -326,7 +326,7 @@ The Electron desktop ships a **Settings → MCP Servers** page that mirrors `Reg
 - **Auth mode** (apiKey / clientCredentials / authorizationCode).
 - **Status** — `connecting`, `authenticating`, `ready`, `error`, or `disabled`.
 - **Tool count + expandable tool list.**
-- **Per-row actions:** Authorize / Re-authorize, Reconnect, Disable / Enable.
+- **Per-row actions:** Authorize (only when a server is in `authenticating`), Reconnect, Disable / Enable.
 
 The page is the operator's primary mechanism for noticing and fixing broken credentials, and the developer's primary surface for kicking off initial OAuth flows. There is no Disconnect action: removal of an entry happens via editing the config file. Disable pauses without losing state and is recoverable from the UI.
 

@@ -187,17 +187,16 @@ function ServerEntry({
           padding: `0 16px 16px`,
         }}
       >
-        {server.status === `authenticating` ||
-        server.authMode === `authorizationCode` ? (
+        {server.status === `authenticating` && (
           <Button
-            variant={server.status === `authenticating` ? `solid` : `soft`}
-            tone={server.status === `authenticating` ? `accent` : `neutral`}
+            variant="solid"
+            tone="accent"
             onClick={wrap(() => ipc.authorize(server.name))}
             disabled={busy}
           >
-            {server.status === `authenticating` ? `Authorize` : `Re-authorize`}
+            Authorize
           </Button>
-        ) : null}
+        )}
         {server.status !== `disabled` && server.status !== `authenticating` && (
           <Button
             variant="soft"
