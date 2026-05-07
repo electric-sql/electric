@@ -4,6 +4,18 @@
   position: relative;
   border-right: 1px solid var(--ds-border-1);
 }
+.root::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 4px;
+  pointer-events: none;
+  box-shadow: inset -1px 0 2px
+    color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
+  z-index: 10;
+}
 
 /* Narrow-viewport overlay mode — see `useNarrowViewport`. The
    sidebar pops out of flex flow and floats over the main column
@@ -91,6 +103,27 @@
   background: var(--ds-accent-a6);
 }
 
+.topDivider {
+  position: relative;
+  height: 0;
+  flex-shrink: 0;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.topDivider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--ds-divider);
+}
+.topDivider[data-visible='true'] {
+  opacity: 1;
+}
+
 /* Inner column wrapping the new-session row + session list.
    Each child handles its own left padding (4px) so all icons
    line up at a single column inside the sidebar. */
@@ -112,20 +145,30 @@
    concentric-halo rule as `.row` in SidebarRow.module.css, so the
    New session row rounds identically to the entity rows below it. */
 .newSessionRow {
-  all: unset;
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: var(--ds-row-height-md);
   padding-left: 3px;
   padding-right: 3px;
   border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
+  background: transparent;
   transition: background 0.08s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.newSessionRow > * {
+  pointer-events: none;
 }
 .newSessionRow:hover {
   background: var(--ds-bg-hover);
+}
+.newSessionRowSelected,
+.newSessionRowSelected:hover {
+  background: var(--ds-accent-a3);
 }
 /* Same 22px slot, same 16px glyph and the SAME `--ds-text-1` colour
    as the sidebar/search IconButtons in SidebarHeader so the three
@@ -192,20 +235,59 @@
   padding-top: 20px;
 }
 
-/* Section label ("Pinned", "Today", "Last 7 days", …) — text
-   aligns with the icon column above so the column reads cleanly
-   from top to bottom. Sentence-case (no `text-transform`) so
-   working-dir labels like `~/Code/electric` render naturally;
-   font-weight is the prominence cue instead of uppercase letterforms.
-   Single-line ellipsis is a safety net for the working-dir grouping
-   mode where a label can be a long abbreviated path. */
+.sectionGroup {
+  min-width: 0;
+}
+
+/* Section header ("Pinned", "Today", "Last 7 days", …) — text
+   aligns with the old label position while the chevron stays quiet
+   until hover/focus. Sentence-case (no `text-transform`) so working-dir
+   labels like `~/Code/electric` render naturally. */
+.sectionHeader {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 4px 4px 8px;
+  border-radius: var(--ds-radius-item);
+  color: var(--ds-text-3);
+  cursor: pointer;
+}
+.sectionHeader:hover,
+.sectionHeader:focus-visible {
+  color: var(--ds-text-2);
+}
+
 .sectionLabel {
-  display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   font-weight: 500;
-  padding: 14px 4px 4px 8px;
-  color: var(--ds-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sectionChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--ds-text-3);
+  transform: rotate(90deg);
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+}
+.sectionChevron[data-collapsed='true'] {
+  transform: rotate(0deg);
+}
+.sectionHeader:hover .sectionChevron,
+.sectionHeader:focus-visible .sectionChevron {
+  opacity: 0.75;
 }

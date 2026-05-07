@@ -49,6 +49,11 @@ export type EntityTimelineSection =
       done?: true
       error?: string
     }
+  | {
+      kind: `wake`
+      payload: WakeMessage & { type: `wake` }
+      timestamp: number
+    }
 
 export interface IncludesRun {
   key: string

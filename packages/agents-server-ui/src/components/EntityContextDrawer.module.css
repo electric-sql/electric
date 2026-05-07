@@ -10,11 +10,11 @@
  * `padding-bottom: 24px`, giving the visual effect that the composer
  * is a tray pulled forward over the drawer.
  *
- * Corner geometry: drawer outer radius is 12px and uniform inner
- * padding is 4px, so the inner content area's effective radius is
- * 12 - 4 = 8px. Rows pick up `border-radius: 8px` (see `.row`) so
+ * Corner geometry: drawer outer radius is 12px and inner padding
+ * matches dropdown menus at 3px. Rows pick up `border-radius: 8px`
+ * (12px outer - 1px border - 3px padding) so
  * their hover background curves CONCENTRICALLY with the drawer edge —
- * the gap between row and drawer is the same uniform 4px around all
+ * the gap between row and drawer is the same uniform 3px around all
  * four corners and along all four sides. This is the "constant space
  * around the radius" the design calls for.
  */
@@ -25,10 +25,13 @@
   background: var(--ds-bg);
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-5);
-  padding: 4px;
+  box-shadow:
+    0 1px 3px rgba(15, 15, 30, 0.04),
+    0 1px 1px rgba(15, 15, 30, 0.02);
+  padding: 3px;
   /* Bottom padding = composer overlap (20px) + 1px drawer bottom
      border (covered by the composer) + 4px breathing room so the
-     visible gap below the last row matches the 4px gap on the top
+     visible gap below the last row matches the 3px gap on the top
      and sides exactly. With `box-sizing: content-box` (the default),
      the bottom border + padding both sit above the negative-margin
      overlap, so we have to pay the border in `padding-bottom` to
@@ -78,9 +81,9 @@
   width: 100%;
   border: 0;
   background: transparent;
-  /* Concentric with drawer corner: 1px border + 4px drawer padding
-     + item row radius = 12px outer drawer radius. */
-  border-radius: var(--ds-radius-item);
+  /* Concentric with drawer corner: 1px border + 3px drawer padding
+     + 8px row radius = 12px outer drawer radius. */
+  border-radius: var(--ds-radius-4);
   cursor: pointer;
   font: inherit;
   color: var(--ds-text-1);
@@ -94,6 +97,30 @@
 .row:focus-visible {
   outline: 2px solid var(--ds-accent-a6);
   outline-offset: -2px;
+}
+
+.rowShell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.rowShell > .row {
+  flex: 1;
+}
+
+.sideButton {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: -2px;
+  border-radius: 4px;
+  color: var(--ds-gray-11);
+}
+
+.sideButton:hover {
+  background: var(--ds-gray-a5);
+  color: var(--ds-gray-12);
 }
 
 /* Fixed-width slot for the row's leading glyph. Both the chevron in

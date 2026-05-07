@@ -5,7 +5,7 @@ import {
   onDesktopStateChanged,
   type DesktopState,
 } from '../../../lib/server-connection'
-import { Badge, Button, Stack, Text } from '../../../ui'
+import { Badge, Button, Icon, Stack, Text } from '../../../ui'
 import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
 
 const STATUS_TONES: Record<
@@ -114,7 +114,7 @@ export function LocalRuntimePage(): React.ReactElement {
                 tone="accent"
                 onClick={() => void window.electronAPI?.restartRuntime?.()}
               >
-                <Play size={14} /> Start runtime
+                <Icon icon={Play} size={2} /> Start runtime
               </Button>
             ) : (
               <Button
@@ -123,7 +123,7 @@ export function LocalRuntimePage(): React.ReactElement {
                 onClick={() => void window.electronAPI?.restartRuntime?.()}
                 disabled={isStarting}
               >
-                <RefreshCw size={14} /> Restart runtime
+                <Icon icon={RefreshCw} size={2} /> Restart runtime
               </Button>
             )}
             <Button
@@ -132,7 +132,7 @@ export function LocalRuntimePage(): React.ReactElement {
               onClick={() => void window.electronAPI?.stopRuntime?.()}
               disabled={!isRunning && !isStarting}
             >
-              <Square size={14} /> Stop runtime
+              <Icon icon={Square} size={2} /> Stop runtime
             </Button>
           </Stack>
         </div>

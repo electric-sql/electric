@@ -18,8 +18,7 @@
    rather than a nested form field; the popup's own border is the
    edge.
 
-   Sized to match an item row exactly (`height: 30px` = 24px content
-   + 6px padding-y) so the input + first row sit on a uniform pitch
+   Sized to match an item row exactly so the input + first row sit on a uniform pitch
    and the popup doesn't have a visibly different "header" zone.
    `padding-left: 12px` aligns the placeholder text with the item
    labels' icon column (which sits at 1px border + 3px popup padding
@@ -29,7 +28,7 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  height: 30px;
+  height: var(--ds-row-height-md);
   padding: 0 12px;
   margin: 0;
   border: none;
@@ -37,9 +36,8 @@
   color: var(--ds-text-1);
   font-family: var(--ds-font-body);
   font-size: var(--ds-text-sm);
-  /* `line-height: 30px` vertical-centers the single-line text in
-     the 30px input box without needing flex on a native `input`. */
-  line-height: 30px;
+  /* Matches the fixed row height without needing flex on a native `input`. */
+  line-height: var(--ds-row-height-md);
   outline: none;
 }
 .input::placeholder {
@@ -70,7 +68,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
+  min-height: var(--ds-row-height-md);
   padding: 3px 3px 3px 12px;
   border-radius: var(--ds-radius-item);
   font-size: var(--ds-text-sm);

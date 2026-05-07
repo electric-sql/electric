@@ -56,6 +56,10 @@
   background: var(--ds-gray-a1);
 }
 
+.card[data-header-surface='true'] .header {
+  background: var(--ds-surface);
+}
+
 /* Strip `<button>`'s built-in chrome (background, border, UA
    padding). Font properties are intentionally NOT reset here —
    `.header` is also on this element and supplies the explicit
@@ -96,17 +100,46 @@
   justify-content: center;
   width: 16px;
   height: 16px;
+  margin-left: auto;
   flex-shrink: 0;
   color: var(--ds-text-3);
+}
+
+.headerIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-top: -2px;
+  margin-bottom: -2px;
+  margin-right: -4px;
+  flex-shrink: 0;
 }
 
 /* Tool name is the only mono token in the row — it's an identifier,
    so reading it as code helps. Summary + everything else stays in the
    body font for legibility at small sizes. */
-.toolName {
-  font-family: var(--ds-font-mono);
-  font-weight: 500;
+.toolName,
+.toolNameMono {
   flex-shrink: 0;
+}
+
+.toolName {
+  font-family: var(--ds-font-body);
+}
+
+.toolNameMono {
+  font-family: var(--ds-font-mono);
 }
 
 .summary {
@@ -121,14 +154,35 @@
 }
 
 .statusBadge {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.header .statusBadge {
   margin-left: auto;
+  margin-top: -2px;
+  margin-bottom: -2px;
+}
+
+.header .statusBadge + .toggleArrow {
+  margin-left: 0;
+}
+
+.badgeDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
   flex-shrink: 0;
 }
 
 .body {
-  padding: 10px 12px 12px;
+  padding: 8px 12px 10px;
   border-top: 1px solid var(--ds-gray-a3);
-  background: var(--ds-bg);
+  background: color-mix(in oklab, var(--ds-bg) 72%, var(--ds-surface));
 }
 
 /* Small caps section heading inside the tool body ("Input", "Output"
@@ -146,11 +200,12 @@
   margin: 0;
   padding: 8px 10px;
   /* Recessed code well — slightly darker than the body panel so the
-     code reads as inset content rather than a raised chrome bar.
-     Mixing bg-subtle with surface gives a tone that always falls
-     between the two regardless of theme. */
-  background: color-mix(in oklab, var(--ds-bg-subtle) 70%, var(--ds-surface));
+     code reads as inset content without adding another visible border
+     layer inside the tool card. */
+  background: color-mix(in oklab, var(--ds-bg-subtle) 88%, var(--ds-gray-a2));
   border-radius: var(--ds-radius-3);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
   font-size: var(--ds-text-xs);
   line-height: 1.6;
   font-family: var(--ds-font-mono);

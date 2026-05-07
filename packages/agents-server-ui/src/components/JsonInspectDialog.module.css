@@ -1,0 +1,84 @@
+.dialog {
+  padding: 0;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 10px 8px 12px;
+  border-bottom: 1px solid var(--ds-gray-a3);
+  background: var(--ds-gray-a1);
+}
+
+.headerText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  color: var(--ds-text-1);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  margin: -3px -3px 0 0;
+  color: var(--ds-text-3);
+}
+
+.details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px 9px;
+  border-bottom: 1px solid var(--ds-gray-a3);
+  background: color-mix(in oklab, var(--ds-bg) 72%, var(--ds-surface));
+}
+
+.detail {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ds-text-3);
+  font-size: 12px;
+}
+
+.detail span,
+.detail strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail span {
+  color: var(--ds-text-4);
+}
+
+.detail strong {
+  color: var(--ds-text-2);
+  font-weight: 400;
+}
+
+.pre {
+  max-height: min(62vh, 560px);
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  background: color-mix(in oklab, var(--ds-bg-subtle) 88%, var(--ds-gray-a2));
+  font-family: var(--ds-font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 2;
+}

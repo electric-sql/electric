@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
-import { Badge, IconButton, Text, Tooltip } from '../ui'
+import { Icon as UiIcon, IconButton, Text, Tooltip } from '../ui'
 import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
+import { InlineStatusBadge } from './InlineStatusBadge'
 import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
@@ -28,6 +29,8 @@ type EntityHeaderProps = {
    * header doesn't need to know about tiles / groups / splits.
    */
   menu?: ReactNode
+  /** Optional leading affordance before the title, e.g. a tile drag handle. */
+  leading?: ReactNode
   /** Optional banner of error messages displayed below the strip. */
   errors?: Array<string>
 }
@@ -46,11 +49,13 @@ export function EntityHeader({
   currentViewId,
   onSetView,
   menu,
+  leading,
   errors,
 }: EntityHeaderProps): React.ReactElement | null {
   return (
     <>
       <MainHeader
+        leading={leading}
         title={<EntityTitle entity={entity} />}
         actions={
           <EntityActions
@@ -121,7 +126,11 @@ function EntityTitle({
           onClick={copy}
           data-no-drag
         >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? (
+            <UiIcon icon={Check} size={1} />
+          ) : (
+            <UiIcon icon={Copy} size={1} />
+          )}
         </span>
       </span>
     </span>
@@ -149,13 +158,12 @@ function EntityActions({
 
   return (
     <span className={styles.actions}>
-      <Badge
+      <InlineStatusBadge
         tone={STATUS_TONE[entity.status] ?? `neutral`}
-        variant="soft"
         className={styles.statusBadge}
       >
         {entity.status}
-      </Badge>
+      </InlineStatusBadge>
 
       {showViewStrip &&
         availableViews.map((view) => {
@@ -172,7 +180,7 @@ function EntityActions({
                 aria-pressed={active}
                 className={active ? styles.activeBg : undefined}
               >
-                <Icon size={14} />
+                <UiIcon icon={Icon} size={2} />
               </IconButton>
             </Tooltip>
           )

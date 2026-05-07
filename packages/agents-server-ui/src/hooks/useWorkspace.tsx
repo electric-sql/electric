@@ -16,6 +16,7 @@ import type {
   DropTarget,
   SplitDirection,
   Tile,
+  TileViewParams,
   Workspace,
 } from '../lib/workspace/types'
 import type { ViewId } from '../lib/workspace/viewRegistry'
@@ -31,7 +32,11 @@ export type WorkspaceHelpers = {
   /** Open `entityUrl` (with `viewId`) — defaults to replacing the active tile. */
   openEntity: (
     entityUrl: string,
-    options?: { viewId?: ViewId; target?: DropTarget }
+    options?: {
+      viewId?: ViewId
+      target?: DropTarget
+      viewParams?: TileViewParams
+    }
   ) => void
   /**
    * Open a standalone "new session" tile — defaults to replacing the
@@ -47,7 +52,11 @@ export type WorkspaceHelpers = {
   /** Mark a tile as the active tile (drives URL sync + ⌘W target). */
   setActiveTile: (tileId: string) => void
   /** Swap a tile's view in place — preserves tile id (and per-tile state). */
-  setTileView: (tileId: string, viewId: ViewId) => void
+  setTileView: (
+    tileId: string,
+    viewId: ViewId,
+    options?: { viewParams?: TileViewParams }
+  ) => void
   /** Split a tile and put a different view in the new tile. */
   splitTileWithView: (
     tileId: string,
@@ -80,7 +89,11 @@ export function WorkspaceProvider({
     (entityUrl, options) => {
       dispatch({
         type: `open-tile`,
-        tile: { entityUrl, viewId: options?.viewId ?? `chat` },
+        tile: {
+          entityUrl,
+          viewId: options?.viewId ?? `chat`,
+          viewParams: options?.viewParams,
+        },
         target: options?.target,
       })
     },
@@ -113,8 +126,13 @@ export function WorkspaceProvider({
   )
 
   const setTileView = useCallback<WorkspaceHelpers[`setTileView`]>(
-    (tileId, viewId) => {
-      dispatch({ type: `set-tile-view`, tileId, viewId })
+    (tileId, viewId, options) => {
+      dispatch({
+        type: `set-tile-view`,
+        tileId,
+        viewId,
+        viewParams: options?.viewParams,
+      })
     },
     []
   )

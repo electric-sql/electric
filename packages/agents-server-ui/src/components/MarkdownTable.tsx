@@ -12,7 +12,7 @@ import {
   tableDataToMarkdown,
   tableDataToTSV,
 } from 'streamdown'
-import { Dialog, IconButton, Menu, Text, Tooltip } from '../ui'
+import { Dialog, Icon, IconButton, Menu, Text, Tooltip } from '../ui'
 import styles from './MarkdownTable.module.css'
 
 // Streamdown threads its rehype `Element` through every component
@@ -142,20 +142,20 @@ export function MarkdownTable({
               />
             }
           >
-            <Copy size={12} />
+            <Icon icon={Copy} size={1} />
           </Menu.Trigger>
         </Tooltip>
         <Menu.Content side="bottom" align="end" sideOffset={4}>
           <Menu.Item onSelect={() => copy(`md`)}>
-            <FileText size={14} />
+            <Icon icon={FileText} size={2} />
             <Text size={2}>Markdown</Text>
           </Menu.Item>
           <Menu.Item onSelect={() => copy(`csv`)}>
-            <FileSpreadsheet size={14} />
+            <Icon icon={FileSpreadsheet} size={2} />
             <Text size={2}>CSV</Text>
           </Menu.Item>
           <Menu.Item onSelect={() => copy(`tsv`)}>
-            <FileSpreadsheet size={14} />
+            <Icon icon={FileSpreadsheet} size={2} />
             <Text size={2}>TSV</Text>
           </Menu.Item>
         </Menu.Content>
@@ -173,16 +173,16 @@ export function MarkdownTable({
               />
             }
           >
-            <Download size={12} />
+            <Icon icon={Download} size={1} />
           </Menu.Trigger>
         </Tooltip>
         <Menu.Content side="bottom" align="end" sideOffset={4}>
           <Menu.Item onSelect={() => download(`md`)}>
-            <FileText size={14} />
+            <Icon icon={FileText} size={2} />
             <Text size={2}>Markdown</Text>
           </Menu.Item>
           <Menu.Item onSelect={() => download(`csv`)}>
-            <FileSpreadsheet size={14} />
+            <Icon icon={FileSpreadsheet} size={2} />
             <Text size={2}>CSV</Text>
           </Menu.Item>
         </Menu.Content>
@@ -196,7 +196,7 @@ export function MarkdownTable({
           aria-label="View table fullscreen"
           onClick={() => setFullscreen(true)}
         >
-          <Maximize2 size={12} />
+          <Icon icon={Maximize2} size={1} />
         </IconButton>
       </Tooltip>
     </div>

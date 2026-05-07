@@ -75,9 +75,8 @@
   gap: 2px;
 }
 
-/* Native Badge size=2 height (24px) matches the IconButton size=1
-   triggers next to it exactly — no overrides needed; just stop the
-   pill from shrinking when the title row gets tight. */
+/* Keep the shared status pill from shrinking when the title row gets tight,
+   with a little breathing room before the icon controls. */
 .statusBadge {
   flex-shrink: 0;
   margin-right: 4px;

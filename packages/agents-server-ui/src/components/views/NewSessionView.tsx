@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { ArrowUp } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
@@ -7,7 +14,9 @@ import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
-import { Select, Stack, Text } from '../../ui'
+import { connectEntityStream } from '../../lib/entity-connection'
+import { createSendMessageAction } from '../../lib/sendMessage'
+import { Icon, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import styles from '../NewSessionPage.module.css'
@@ -84,6 +93,7 @@ interface SchemaProperty {
  */
 export function NewSessionView({
   tileId,
+  setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
   const { entityTypesCollection, spawnEntity } = useElectricAgents()
   const { activeServer } = useServerConnection()
@@ -151,17 +161,18 @@ export function NewSessionView({
       try {
         await tx.isPersisted.promise
         if (initialUserText && baseUrl) {
-          const res = await fetch(`${baseUrl}/${typeName}/${name}/send`, {
-            method: `POST`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              from: `user`,
-              payload: { text: initialUserText },
-            }),
-          })
-          if (!res.ok) {
-            const body = await res.text().catch(() => ``)
-            throw new Error(body || `Send failed (${res.status})`)
+          const connection = await connectEntityStream({ baseUrl, entityUrl })
+          try {
+            const sendInitialMessage = createSendMessageAction({
+              db: connection.db,
+              baseUrl,
+              entityUrl,
+            })
+            await sendInitialMessage({
+              text: initialUserText,
+            }).isPersisted.promise
+          } finally {
+            connection.close()
           }
         }
       } catch (err) {
@@ -183,6 +194,31 @@ export function NewSessionView({
     },
     [doSpawn]
   )
+
+  const handleCancelSelected = useCallback(() => {
+    setSelected(null)
+  }, [])
+
+  useEffect(() => {
+    if (!setToolbarTitle) return
+
+    if (!selected) {
+      setToolbarTitle(null)
+      return
+    }
+
+    setToolbarTitle(
+      <button
+        type="button"
+        className={styles.toolbarBackLink}
+        onClick={handleCancelSelected}
+      >
+        ← Back to agents
+      </button>
+    )
+
+    return () => setToolbarTitle(null)
+  }, [handleCancelSelected, selected, setToolbarTitle])
 
   const handleStartDefault = useCallback(
     (text: string, args: Record<string, unknown>) => {
@@ -206,7 +242,7 @@ export function NewSessionView({
         {selected ? (
           <SelectedAgentForm
             entityType={selected}
-            onCancel={() => setSelected(null)}
+            onCancel={handleCancelSelected}
             onSubmit={(args) => void doSpawn(selected.name, args)}
             error={error}
           />
@@ -257,11 +293,11 @@ function Picker({
         <Text size={7} as="h1" className={styles.headingTitle}>
           {heroTitle}
         </Text>
-        <span className={styles.headingSubtitle}>
-          {defaultAgent
-            ? `Type a message to start a new ${defaultAgent.name} chat, or pick another agent below.`
-            : `Pick the kind of agent you want to spawn.`}
-        </span>
+        {!defaultAgent && (
+          <span className={styles.headingSubtitle}>
+            Pick the kind of agent you want to spawn.
+          </span>
+        )}
       </div>
 
       {error && <div className={styles.error}>{error}</div>}
@@ -326,7 +362,7 @@ function SelectedAgentForm({
   error: string | null
 }): React.ReactElement {
   return (
-    <Stack direction="column" gap={4}>
+    <Stack direction="column" gap={4} className={styles.selectedFlow}>
       <div className={styles.heading}>
         <Text size={5} as="h1" className={styles.headingTitle}>
           Start a new {entityType.name} session
@@ -345,9 +381,6 @@ function SelectedAgentForm({
           <div className={styles.formHeaderText}>
             <Text size={3}>{entityType.name}</Text>
           </div>
-          <button type="button" className={styles.backLink} onClick={onCancel}>
-            ← Back
-          </button>
         </div>
         <SchemaForm
           schema={entityType.creation_schema}
@@ -510,7 +543,7 @@ function DefaultAgentComposer({
               .filter(Boolean)
               .join(` `)}
           >
-            <ArrowUp size={16} />
+            <Icon icon={ArrowUp} size={3} />
           </button>
         </div>
       </div>

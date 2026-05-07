@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { PanelLeft } from 'lucide-react'
-import { IconButton, ScrollArea, Stack, Text, Tooltip } from '../../ui'
+import { Icon, IconButton, ScrollArea, Stack, Tooltip } from '../../ui'
 import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { modKeyLabel } from '../../lib/keyLabels'
@@ -51,14 +51,11 @@ export function SettingsScreen({
                 onClick={toggleSidebar}
                 aria-label="Show sidebar"
               >
-                <PanelLeft size={16} />
+                <Icon icon={PanelLeft} size={3} />
               </IconButton>
             </Tooltip>
           </span>
         )}
-        <Text size={2} weight={`medium`} className={styles.headerTitle}>
-          {title}
-        </Text>
       </div>
       <ScrollArea className={styles.scroll}>
         <div className={styles.body}>

@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { EntityTimelineSection } from '@electric-ax/agents-runtime'
+import type { EntityTimelineSection } from '@electric-ax/agents-runtime/client'
 import { Stack, Text } from '../ui'
 import { TimeText } from './TimeText'
 import styles from './UserMessage.module.css'

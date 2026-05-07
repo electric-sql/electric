@@ -1,6 +1,7 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { ElectricEntity } from '../ElectricAgentsProvider'
+import type { TileViewParams } from './types'
 
 /**
  * `ViewId` is a free-form string rather than a string-literal union so the
@@ -25,6 +26,7 @@ export type EntityViewProps = {
   entityStopped: boolean
   isSpawning: boolean
   tileId: string
+  viewParams?: TileViewParams
 }
 
 /**
@@ -34,6 +36,7 @@ export type EntityViewProps = {
 export type StandaloneViewProps = {
   baseUrl: string
   tileId: string
+  setToolbarTitle?: (content: ReactNode | null) => void
 }
 
 /** Discriminated union — `kind` distinguishes which props shape applies. */

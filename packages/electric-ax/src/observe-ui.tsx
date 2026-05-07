@@ -317,6 +317,43 @@ function AgentResponseView({
   )
 }
 
+function wakeReason(
+  section: Extract<EntityTimelineSection, { kind: `wake` }>
+): string {
+  const { payload } = section
+  if (payload.timeout) return `timeout`
+  if (payload.finished_child) {
+    return `child ${payload.finished_child.run_status}`
+  }
+  if (payload.changes.length > 0) {
+    return `${payload.changes.length} ${payload.changes.length === 1 ? `change` : `changes`}`
+  }
+  if (payload.other_children && payload.other_children.length > 0) {
+    return `${payload.other_children.length} child ${payload.other_children.length === 1 ? `update` : `updates`}`
+  }
+  return payload.source
+}
+
+function WakeView({
+  section,
+}: {
+  section: Extract<EntityTimelineSection, { kind: `wake` }>
+}): React.ReactElement {
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text>
+        <Text bold color="magenta">{`┌ wake`}</Text>
+        <Text dimColor>
+          {`  ${formatTime(new Date(section.timestamp).toISOString())}`}
+        </Text>
+      </Text>
+      <Text dimColor>
+        {`│ ${wakeReason(section)} from ${section.payload.source}`}
+      </Text>
+    </Box>
+  )
+}
+
 // ============================================================================
 // Main observe component — reads from StreamDB collections
 // ============================================================================
@@ -400,6 +437,10 @@ function ObserveView({
                 }}
               />
             )
+          }
+
+          if (section.kind === `wake`) {
+            return <WakeView key={`wake-${i}`} section={section} />
           }
 
           return (

@@ -17,6 +17,10 @@ export default defineConfig({
     alias: {
       '@electric-ax/agents-runtime': resolve(__dirname, `./src/index.ts`),
       '@electric-ax/agents-runtime/react': resolve(__dirname, `./src/react.ts`),
+      '@electric-ax/agents-runtime/client': resolve(
+        __dirname,
+        `./src/client.ts`
+      ),
       '@electric-sql/client': resolve(
         __dirname,
         `../typescript-client/src/index.ts`

@@ -1,8 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import { serverLog } from '../log'
 import { parsePreamble } from './preamble'
-
-const EXTRACT_MODEL = `claude-haiku-4-5-20251001`
 
 interface ExtractedMeta {
   description: string
@@ -34,14 +32,12 @@ export async function extractSkillMeta(
     }
   }
 
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      return await llmExtract(name, content, preamble)
-    } catch (err) {
-      serverLog.warn(
-        `[skills] LLM metadata extraction failed for "${name}": ${err instanceof Error ? err.message : String(err)}`
-      )
-    }
+  try {
+    return await llmExtract(name, content, preamble)
+  } catch (err) {
+    serverLog.warn(
+      `[skills] LLM metadata extraction failed for "${name}": ${err instanceof Error ? err.message : String(err)}`
+    )
   }
 
   return {
@@ -63,7 +59,6 @@ async function llmExtract(
     max?: number
   }
 ): Promise<ExtractedMeta> {
-  const client = new Anthropic()
   const truncated = content.slice(0, 8_000)
 
   const prompt = `Analyze this skill document and extract metadata. The skill is named "${name}".
@@ -79,13 +74,14 @@ Return ONLY a JSON object with these fields:
 
 Return raw JSON, no markdown fences.`
 
-  const res = await client.messages.create({
-    model: EXTRACT_MODEL,
-    max_tokens: 256,
-    messages: [{ role: `user`, content: prompt }],
+  const text = await completeWithLowCostModel({
+    purpose: `skill metadata extraction`,
+    prompt,
+    maxTokens: 256,
+    log: (message) => serverLog.info(message),
+    logPrefix: `[skills]`,
   })
 
-  const text = res.content[0]?.type === `text` ? res.content[0].text : ``
   const parsed = JSON.parse(text)
 
   return {

@@ -291,6 +291,8 @@ function parseSettingsCategory(pathname: string): SettingsCategoryId | null {
  * - `view`   optional view id (e.g. `state-explorer`). Omitted from
  *            the URL when it matches the default view (`chat`) so
  *            `/entity/foo` stays clean for the common case.
+ * - `source` optional State Explorer source id. Only meaningful with
+ *            `view=state-explorer`; ignored by other views.
  * - `layout` optional shareable layout payload. When present we
  *            hydrate the workspace from it and *strip the param*
  *            (see `<Workspace>`'s ?layout effect) so the address bar
@@ -302,6 +304,7 @@ function parseSettingsCategory(pathname: string): SettingsCategoryId | null {
  */
 const workspaceSearchSchema = z.object({
   view: z.string().optional(),
+  source: z.string().optional(),
   layout: z.string().optional(),
 })
 

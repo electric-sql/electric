@@ -1,6 +1,13 @@
 import { nanoid } from 'nanoid'
 import { NEW_SESSION_VIEW_ID } from './types'
-import type { DropTarget, Split, Tile, Workspace, WorkspaceNode } from './types'
+import type {
+  DropTarget,
+  Split,
+  Tile,
+  TileViewParams,
+  Workspace,
+  WorkspaceNode,
+} from './types'
 import type { ViewId } from './viewRegistry'
 
 // ---------------------------------------------------------------------------
@@ -21,7 +28,11 @@ import type { ViewId } from './viewRegistry'
 export type WorkspaceAction =
   | {
       type: `open-tile`
-      tile: { entityUrl: string | null; viewId: ViewId }
+      tile: {
+        entityUrl: string | null
+        viewId: ViewId
+        viewParams?: TileViewParams
+      }
       target?: DropTarget
     }
   | {
@@ -31,7 +42,12 @@ export type WorkspaceAction =
   | { type: `close-tile`; tileId: string }
   | { type: `move-tile`; tileId: string; target: DropTarget }
   | { type: `set-active-tile`; tileId: string }
-  | { type: `set-tile-view`; tileId: string; viewId: ViewId }
+  | {
+      type: `set-tile-view`
+      tileId: string
+      viewId: ViewId
+      viewParams?: TileViewParams
+    }
   | {
       type: `split-tile-with-view`
       tileId: string
@@ -65,7 +81,7 @@ export function workspaceReducer(
     case `set-active-tile`:
       return setActiveTile(state, action.tileId)
     case `set-tile-view`:
-      return setTileView(state, action.tileId, action.viewId)
+      return setTileView(state, action.tileId, action.viewId, action.viewParams)
     case `split-tile-with-view`:
       return splitTileWithView(
         state,
@@ -92,8 +108,12 @@ export function makeSplitId(): string {
   return `spl_${nanoid(8)}`
 }
 
-export function makeTile(entityUrl: string | null, viewId: ViewId): Tile {
-  return { kind: `tile`, id: makeTileId(), entityUrl, viewId }
+export function makeTile(
+  entityUrl: string | null,
+  viewId: ViewId,
+  viewParams?: TileViewParams
+): Tile {
+  return { kind: `tile`, id: makeTileId(), entityUrl, viewId, viewParams }
 }
 
 /** Returns true iff the tile is a standalone (no entity attached). */
@@ -131,10 +151,14 @@ export function listTiles(node: WorkspaceNode | null): Array<Tile> {
 
 function openTile(
   state: Workspace,
-  tile: { entityUrl: string | null; viewId: ViewId },
+  tile: {
+    entityUrl: string | null
+    viewId: ViewId
+    viewParams?: TileViewParams
+  },
   target?: DropTarget
 ): Workspace {
-  const newTile = makeTile(tile.entityUrl, tile.viewId)
+  const newTile = makeTile(tile.entityUrl, tile.viewId, tile.viewParams)
 
   // Empty workspace → bootstrap with the new tile as the root.
   if (state.root === null) {
@@ -304,10 +328,13 @@ function setActiveTile(state: Workspace, tileId: string): Workspace {
 function setTileView(
   state: Workspace,
   tileId: string,
-  viewId: ViewId
+  viewId: ViewId,
+  viewParams?: TileViewParams
 ): Workspace {
   return applyToTile(state, tileId, (tile) =>
-    tile.viewId === viewId ? tile : { ...tile, viewId }
+    tile.viewId === viewId && tile.viewParams === viewParams
+      ? tile
+      : { ...tile, viewId, viewParams }
   )
 }
 

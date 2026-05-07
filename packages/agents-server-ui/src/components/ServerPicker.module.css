@@ -2,12 +2,12 @@
   all: unset;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
   height: var(--ds-row-height-md);
-  padding: 0 8px;
-  border-radius: var(--ds-radius-2);
+  padding: 0 3px;
+  border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
   transition: background 0.08s ease;
@@ -21,8 +21,17 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   font-size: var(--ds-text-sm);
+}
+
+.tileStatusSlot {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tileName {
@@ -33,8 +42,8 @@
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   flex-shrink: 0;
   border-radius: 50%;
 }

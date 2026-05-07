@@ -1,10 +1,14 @@
 import { getModels } from '@mariozechner/pi-ai'
-import type { AgentConfig } from '@electric-ax/agents-runtime'
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import {
+  detectAvailableProviders,
+  readCodexAccessToken,
+} from '@electric-ax/agents-runtime'
+import type {
+  AgentConfig,
+  AvailableProvider,
+} from '@electric-ax/agents-runtime'
 
-export type BuiltinModelProvider = `anthropic` | `openai` | `openai-codex`
+export type BuiltinModelProvider = AvailableProvider
 
 export interface BuiltinModelChoice {
   provider: BuiltinModelProvider
@@ -45,32 +49,6 @@ const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
 const DEFAULT_CODEX_MODEL = `gpt-5.4`
 
-function hasEnv(name: string): boolean {
-  return (process.env[name]?.trim().length ?? 0) > 0
-}
-
-function codexAuthPath(): string {
-  return process.env.CODEX_AUTH_PATH ?? join(homedir(), `.codex`, `auth.json`)
-}
-
-function readCodexAccessToken(): string | undefined {
-  try {
-    const raw = readFileSync(codexAuthPath(), `utf-8`)
-    const data = JSON.parse(raw) as {
-      auth_mode?: string
-      tokens?: { access_token?: string }
-    }
-    if (data.auth_mode !== `chatgpt`) return undefined
-    return data.tokens?.access_token?.trim() || undefined
-  } catch {
-    return undefined
-  }
-}
-
-function hasCodexAuth(): boolean {
-  return readCodexAccessToken() !== undefined
-}
-
 function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
 }
@@ -82,11 +60,7 @@ function providerLabel(provider: BuiltinModelProvider): string {
 }
 
 function configuredProviders(): Array<BuiltinModelProvider> {
-  const providers: Array<BuiltinModelProvider> = []
-  if (hasEnv(`ANTHROPIC_API_KEY`)) providers.push(`anthropic`)
-  if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
-  if (hasCodexAuth()) providers.push(`openai-codex`)
-  return providers
+  return detectAvailableProviders()
 }
 
 function mockFallbackCatalog(): BuiltinModelCatalog {

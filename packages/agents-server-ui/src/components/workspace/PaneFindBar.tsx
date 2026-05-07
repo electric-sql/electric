@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { usePaneFind, usePaneFindRegistration } from '../../hooks/usePaneFind'
+import { Icon } from '../../ui'
 import styles from './PaneFindBar.module.css'
 import type { PaneFindAdapter, PaneFindMatch } from '../../hooks/usePaneFind'
 
@@ -150,7 +151,7 @@ export function PaneFindBar({
 
   return (
     <div className={styles.bar} data-pane-find-bar>
-      <Search size={16} className={styles.searchIcon} aria-hidden="true" />
+      <Icon icon={Search} size={3} className={styles.searchIcon} />
       <input
         ref={inputRef}
         className={styles.input}
@@ -175,7 +176,7 @@ export function PaneFindBar({
         title="Previous"
         aria-label="Previous match"
       >
-        <ChevronUp size={16} />
+        <Icon icon={ChevronUp} size={3} />
       </button>
       <button
         type="button"
@@ -184,7 +185,7 @@ export function PaneFindBar({
         title="Next"
         aria-label="Next match"
       >
-        <ChevronDown size={16} />
+        <Icon icon={ChevronDown} size={3} />
       </button>
       <span className={styles.divider} aria-hidden="true" />
       <button
@@ -194,7 +195,7 @@ export function PaneFindBar({
         title="Close"
         aria-label="Close find"
       >
-        <X size={17} />
+        <Icon icon={X} size={3} />
       </button>
     </div>
   )

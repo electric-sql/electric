@@ -20,7 +20,7 @@ import {
   streamdownControls,
   streamdownPlugins,
 } from '../lib/streamdownConfig'
-import { IconButton, Stack, Text, Tooltip } from '../ui'
+import { Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import { ToolCallView } from './ToolCallView'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
@@ -28,7 +28,7 @@ import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
   EntityTimelineSection,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 
 type AgentResponseSection = Extract<
   EntityTimelineSection,
@@ -279,6 +279,8 @@ export const AgentResponse = memo(function AgentResponse({
     lastItem?.kind === `text` && lastItem.text.trim().length > 0
   const showThinking =
     isStreaming && !section.done && !section.error && !lastTextHasContent
+  const showTimestamp = timestamp != null && !isStreaming
+  const hasLeadingMeta = showThinking || section.done || Boolean(section.error)
 
   return (
     <Stack direction="column" gap={2} className={styles.root}>
@@ -301,7 +303,7 @@ export const AgentResponse = memo(function AgentResponse({
         return <ToolCallView key={item.toolCallId} item={item} />
       })}
 
-      <Stack align="center" gap={3} className={styles.metaRow}>
+      <Stack align="center" gap={2} className={styles.metaRow}>
         {showThinking && <ThinkingIndicator />}
         {section.done && (
           <Text size={1} tone="muted" className={styles.doneText}>
@@ -317,8 +319,15 @@ export const AgentResponse = memo(function AgentResponse({
             still streaming we let `ThinkingIndicator` (or the
             streaming text itself) own the meta row so it doesn't sit
             inline with a timestamp that hasn't really happened yet. */}
-        {timestamp != null && !isStreaming && (
-          <TimeText ts={timestamp} className={styles.timeText} />
+        {showTimestamp && (
+          <>
+            {hasLeadingMeta && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <TimeText ts={timestamp} className={styles.timeText} />
+          </>
         )}
         {section.done && copyText && (
           <Tooltip content={copied ? `Copied!` : `Copy response`} side="top">
@@ -330,7 +339,11 @@ export const AgentResponse = memo(function AgentResponse({
               onClick={() => void copyResponseText()}
               aria-label="Copy response text"
             >
-              {copied ? <Check size={12} /> : <Copy size={12} />}
+              {copied ? (
+                <Icon icon={Check} size={1} />
+              ) : (
+                <Icon icon={Copy} size={1} />
+              )}
             </IconButton>
           </Tooltip>
         )}

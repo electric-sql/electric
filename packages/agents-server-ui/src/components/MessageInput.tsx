@@ -1,8 +1,8 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
-import { createOptimisticAction } from '@tanstack/db'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
-import { Stack, Text } from '../ui'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
+import { createSendMessageAction } from '../lib/sendMessage'
+import { Icon, Stack, Text } from '../ui'
 import styles from './MessageInput.module.css'
 
 export function MessageInput({
@@ -44,35 +44,10 @@ export function MessageInput({
 
   const sendAction = useMemo(() => {
     if (!db) return null
-    return createOptimisticAction<{ text: string }>({
-      onMutate: ({ text }) => {
-        ;(db.collections as any).inbox.insert({
-          key: `optimistic-${Date.now()}`,
-          from: `user`,
-          payload: { text },
-          timestamp: new Date().toISOString(),
-        })
-      },
-      mutationFn: async ({ text }) => {
-        const res = await fetch(`${baseUrl}${entityUrl}/send`, {
-          method: `POST`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({ from: `user`, payload: { text } }),
-        })
-        if (!res.ok) {
-          const body = await res.text().catch(() => ``)
-          let message = `Send failed (${res.status})`
-          if (body) {
-            try {
-              const data = JSON.parse(body) as Record<string, unknown>
-              if (data.message) message = String(data.message)
-            } catch {
-              message = body
-            }
-          }
-          throw new Error(message)
-        }
-      },
+    return createSendMessageAction({
+      db,
+      baseUrl,
+      entityUrl,
     })
   }, [db, baseUrl, entityUrl])
 
@@ -127,7 +102,7 @@ export function MessageInput({
             .filter(Boolean)
             .join(` `)}
         >
-          <ArrowUp size={16} />
+          <Icon icon={ArrowUp} size={3} />
         </button>
       </Stack>
     </Stack>

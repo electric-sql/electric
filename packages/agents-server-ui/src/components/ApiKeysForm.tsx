@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { Sparkles } from 'lucide-react'
-import { Button, Field, Input, Stack, Text } from '../ui'
+import { Button, Field, Icon, Input, Stack, Text } from '../ui'
 import styles from './ApiKeysForm.module.css'
 
 export type ApiKeysFormValues = {
@@ -81,7 +81,7 @@ export function ApiKeysForm({
     <form onSubmit={handleSubmit} className={styles.form}>
       {showSuggestionHint && (
         <div className={styles.hint}>
-          <Sparkles size={14} />
+          <Icon icon={Sparkles} size={2} />
           <Text size={1} tone="muted">
             Pre-filled from your environment. Click save to persist them.
           </Text>

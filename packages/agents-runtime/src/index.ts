@@ -207,6 +207,18 @@ export { createContextEntriesApi } from './context-entries'
 export { assembleContext } from './context-assembly'
 export { approxTokens, sliceChars } from './token-budget'
 export { createContextTools } from './tools/context-tools'
+export {
+  completeWithLowCostModel,
+  detectAvailableProviders,
+  readCodexAccessToken,
+  selectLowCostModelChoice,
+} from './model-runner'
+export type {
+  AvailableProvider,
+  LowCostModelCatalog,
+  LowCostModelChoice,
+  LowCostModelConfig,
+} from './model-runner'
 
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
 export type {

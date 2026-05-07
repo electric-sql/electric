@@ -1,5 +1,5 @@
 import { PanelLeftClose, Search } from 'lucide-react'
-import { IconButton, Tooltip } from '../ui'
+import { Icon, IconButton, Tooltip } from '../ui'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { modKeyLabel } from '../lib/keyLabels'
@@ -24,7 +24,7 @@ export function SidebarHeader(): React.ReactElement {
           onClick={toggleSidebar}
           aria-label="Hide sidebar"
         >
-          <PanelLeftClose size={16} />
+          <Icon icon={PanelLeftClose} size={3} />
         </IconButton>
       </Tooltip>
       <Tooltip content="Search sessions" shortcut={modKeyLabel(`k`)}>
@@ -35,7 +35,7 @@ export function SidebarHeader(): React.ReactElement {
           onClick={search.open}
           aria-label="Search sessions"
         >
-          <Search size={16} />
+          <Icon icon={Search} size={3} />
         </IconButton>
       </Tooltip>
     </div>

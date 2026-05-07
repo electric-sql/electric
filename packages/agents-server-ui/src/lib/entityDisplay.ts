@@ -1,5 +1,7 @@
 import type { ElectricEntity } from './ElectricAgentsProvider'
 
+type EntityDisplayFields = Pick<ElectricEntity, `url` | `tags` | `spawn_args`>
+
 const NOISE_TAGS = new Set([`swarm_id`, `source`, `parent`])
 const SPAWN_ARG_TITLE_KEYS = [
   `prompt`,
@@ -24,7 +26,7 @@ const SPAWN_ARG_TITLE_KEYS = [
  * the UI (e.g. as a secondary label) — only useful when the title was
  * derived from something more meaningful than the slug itself.
  */
-export function getEntityDisplayTitle(entity: ElectricEntity): {
+export function getEntityDisplayTitle(entity: EntityDisplayFields): {
   title: string
   isFromSlug: boolean
 } {

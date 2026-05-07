@@ -7,30 +7,47 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useLiveQuery } from '@tanstack/react-db'
+import { inArray } from '@tanstack/db'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
 } from '@tanstack/react-virtual'
-import { ArrowDown } from 'lucide-react'
+import {
+  ArrowDown,
+  Database,
+  ExternalLink,
+  FileJson,
+  GitBranch,
+  Radio,
+} from 'lucide-react'
 import {
   loadTimelineRowHeights,
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
+import { useWorkspace } from '../hooks/useWorkspace'
+import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
-import { ScrollArea, Stack, Text, Tooltip } from '../ui'
+import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
+import { InlineEventCard } from './InlineEventCard'
+import { InlineStatusBadge } from './InlineStatusBadge'
 import {
   getCurrentMatchIndexInRoot,
   getTextMatchStarts,
 } from './workspace/PaneFindBar'
 import {
   formatAbsoluteDateTimeVerbose,
-  formatShortTime,
+  formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
-import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
+import type {
+  IncludesEntity,
+  Manifest,
+} from '@electric-ax/agents-runtime/client'
+import type { TimelineEntry } from '../lib/timelineEntries'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
 /**
@@ -48,7 +65,7 @@ import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
  * width and multiply by the body line height.
  */
 function estimateRowHeight(
-  row: EntityTimelineEntry | undefined,
+  row: TimelineEntry | undefined,
   contentWidth: number
 ): number {
   if (!row) return 120
@@ -62,7 +79,13 @@ function estimateRowHeight(
   if (row.section.kind === `user_message`) {
     const lines = Math.max(1, Math.ceil(row.section.text.length / charsPerLine))
     // bubble padding (24) + meta row (~24) + content
-    return Math.max(64, 48 + lines * lineHeight)
+    return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
+  }
+  if (row.section.kind === `wake`) {
+    return 76 + timelineRowGap(row)
+  }
+  if (row.section.kind === `manifest`) {
+    return 76 + timelineRowGap(row)
   }
 
   const textLength = row.section.items.reduce((total: number, item) => {
@@ -72,12 +95,19 @@ function estimateRowHeight(
   }, 0)
   const lines = Math.max(2, Math.ceil(textLength / charsPerLine))
   // status row (~24) + content + a little breathing room
-  return Math.max(120, 32 + lines * lineHeight)
+  return Math.max(120, 32 + lines * lineHeight) + timelineRowGap(row)
 }
 
-const SCROLL_THRESHOLD = 200
+const BOTTOM_PIN_THRESHOLD = 8
 const ROW_GAP = 24
+const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
+
+function timelineRowGap(row: TimelineEntry): number {
+  return row.section.kind === `manifest` || row.section.kind === `wake`
+    ? MANIFEST_ROW_GAP
+    : ROW_GAP
+}
 
 type TimelinePaneFindMatch = PaneFindMatch & {
   rowKey: string
@@ -85,9 +115,11 @@ type TimelinePaneFindMatch = PaneFindMatch & {
   rowOccurrence: number
 }
 
-function timelineRowSearchText(row: EntityTimelineEntry): string {
+function timelineRowSearchText(row: TimelineEntry): string {
   const { section } = row
   if (section.kind === `user_message`) return section.text
+  if (section.kind === `wake`) return wakeSectionText(section)
+  if (section.kind === `manifest`) return manifestSearchText(section.manifest)
 
   return section.items
     .map((item) => {
@@ -103,8 +135,140 @@ function timelineRowSearchText(row: EntityTimelineEntry): string {
     .join(`\n\n`)
 }
 
-function timelineRowLabel(row: EntityTimelineEntry): string {
-  return row.section.kind === `user_message` ? `User message` : `Agent response`
+function timelineRowLabel(row: TimelineEntry): string {
+  switch (row.section.kind) {
+    case `user_message`:
+      return `User message`
+    case `wake`:
+      return `Wake`
+    case `manifest`:
+      return `Manifest item`
+    case `agent_response`:
+      return `Agent response`
+  }
+}
+
+function wakeReason(
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+): string {
+  const { payload } = section
+  if (payload.timeout) return `timeout`
+  if (payload.finished_child) {
+    return `child ${payload.finished_child.run_status}`
+  }
+  if (payload.changes.length > 0) {
+    return `${payload.changes.length} ${payload.changes.length === 1 ? `change` : `changes`}`
+  }
+  if (payload.other_children && payload.other_children.length > 0) {
+    return `${payload.other_children.length} child ${payload.other_children.length === 1 ? `update` : `updates`}`
+  }
+  return payload.source
+}
+
+function wakeSectionText(
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+): string {
+  return [
+    `woke`,
+    wakeReason(section),
+    section.payload.source,
+    ...wakeDetails(section).map((detail) => `${detail.label} ${detail.value}`),
+  ].join(` `)
+}
+
+function WakeTimelineRow({
+  section,
+}: {
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+}): React.ReactElement {
+  const reason = wakeReason(section)
+  const details = wakeDetails(section)
+  const childOutput = wakeChildOutput(section)
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={Radio}
+        title="woke"
+        summary={`${reason} · ${formatChatTimestamp(section.timestamp)}`}
+        defaultExpanded={false}
+        headerSurface
+      >
+        <div className={styles.manifestDetails}>
+          {details.map((detail) => (
+            <div key={detail.label} className={styles.manifestDetail}>
+              <span>{detail.label}</span>
+              <strong>{detail.value}</strong>
+            </div>
+          ))}
+        </div>
+        {childOutput ? (
+          <pre className={styles.manifestJson}>{childOutput.value}</pre>
+        ) : null}
+      </InlineEventCard>
+    </div>
+  )
+}
+
+function wakeDetails(
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+): Array<{ label: string; value: string }> {
+  const { payload } = section
+  const details = [
+    { label: `Source`, value: payload.source },
+    { label: `Trigger`, value: wakeReason(section) },
+    { label: `Time`, value: formatAbsoluteDateTimeVerbose(section.timestamp) },
+  ]
+
+  if (payload.changes.length > 0) {
+    details.push({
+      label: `Changes`,
+      value: payload.changes
+        .map((change) => `${change.kind} ${change.collection}:${change.key}`)
+        .join(`, `),
+    })
+  }
+
+  if (payload.finished_child) {
+    const childOutput = wakeChildOutput(section)
+    details.push(
+      { label: `Child`, value: payload.finished_child.url },
+      { label: `Child type`, value: payload.finished_child.type },
+      { label: `Child status`, value: payload.finished_child.run_status }
+    )
+    if (childOutput) {
+      details.push({
+        label: childOutput.label,
+        value: `${childOutput.value.length} chars`,
+      })
+    }
+  }
+
+  if (payload.other_children && payload.other_children.length > 0) {
+    details.push({
+      label: `Other children`,
+      value: payload.other_children
+        .map((child) => `${child.status} ${child.url}`)
+        .join(`, `),
+    })
+  }
+
+  return details.map((detail) => ({
+    ...detail,
+    value:
+      detail.value.length > 120
+        ? `${detail.value.slice(0, 117)}...`
+        : detail.value,
+  }))
+}
+
+function wakeChildOutput(
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
+): { label: string; value: string } | null {
+  const child = section.payload.finished_child
+  if (!child) return null
+  if (child.error) return { label: `Child error`, value: child.error }
+  if (child.response) return { label: `Child response`, value: child.response }
+  return null
 }
 
 function excerptAround(
@@ -133,6 +297,295 @@ function isTimelineFindMatch(
   )
 }
 
+function ManifestTimelineRow({
+  manifest,
+  entityUrl,
+  entityStatus,
+}: {
+  manifest: Manifest
+  entityUrl: string | null
+  tileId: string | null
+  entityStatus?: IncludesEntity[`status`]
+}): React.ReactElement {
+  const { helpers } = useWorkspace()
+  const entityTarget = getManifestEntityUrl(manifest)
+  const stateSourceId = getManifestStateSourceId(manifest)
+  const isEntity = entityTarget !== null
+  const title = manifestTitle(manifest)
+  const meta = manifestMeta(manifest)
+  const summary =
+    isEntity || stateSourceId ? null : [title, meta].filter(Boolean).join(` · `)
+
+  const openEntity = useCallback(() => {
+    if (!entityTarget) return
+    helpers.openEntity(entityTarget)
+  }, [entityTarget, helpers])
+
+  const openStateInspector = useCallback(() => {
+    if (!entityUrl || !stateSourceId) return
+    helpers.openEntity(entityUrl, {
+      viewId: `state-explorer`,
+      viewParams: { source: stateSourceId },
+    })
+  }, [entityUrl, helpers, stateSourceId])
+
+  const statusBadge = entityStatus ? (
+    <InlineStatusBadge tone={statusTone(entityStatus)}>
+      {entityStatus}
+    </InlineStatusBadge>
+  ) : null
+
+  const openAction = stateSourceId ? (
+    <Tooltip content="Open State Explorer">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.manifestActionButton}
+        aria-label="Open State Explorer"
+        onClick={openStateInspector}
+        disabled={!entityUrl}
+      >
+        <Icon icon={ExternalLink} size={1} />
+      </IconButton>
+    </Tooltip>
+  ) : entityTarget ? (
+    <Tooltip content="Open entity">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.manifestActionButton}
+        aria-label="Open entity"
+        onClick={openEntity}
+      >
+        <Icon icon={ExternalLink} size={1} />
+      </IconButton>
+    </Tooltip>
+  ) : null
+  const actions =
+    statusBadge || openAction ? (
+      <>
+        {statusBadge}
+        {openAction}
+      </>
+    ) : undefined
+
+  const details = <ManifestDetailGrid manifest={manifest} />
+
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={manifestIcon(manifest)}
+        title={manifestKindLabel(manifest)}
+        summary={summary}
+        actions={actions}
+        collapsible={!isEntity && !stateSourceId}
+        headerSurface
+      >
+        {isEntity || stateSourceId ? (
+          details
+        ) : (
+          <>
+            {details}
+            <pre className={styles.manifestJson}>
+              {JSON.stringify(manifest, null, 2)}
+            </pre>
+          </>
+        )}
+      </InlineEventCard>
+    </div>
+  )
+}
+
+function ManifestDetailGrid({
+  manifest,
+}: {
+  manifest: Manifest
+}): React.ReactElement | null {
+  const details = manifestDetails(manifest)
+  if (details.length === 0) return null
+  return (
+    <div className={styles.manifestDetails}>
+      {details.map((detail) => (
+        <div key={detail.label} className={styles.manifestDetail}>
+          <span>{detail.label}</span>
+          <strong>{detail.value}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function manifestSearchText(manifest: Manifest): string {
+  return [
+    manifestKindLabel(manifest),
+    manifestTitle(manifest),
+    manifestMeta(manifest),
+  ]
+    .filter(Boolean)
+    .join(` `)
+}
+
+function manifestKindLabel(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return `Child entity`
+    case `source`:
+      return manifest.sourceType === `db`
+        ? `Database source`
+        : `${titleCase(manifest.sourceType)} source`
+    case `shared-state`:
+      return `Shared state`
+    case `effect`:
+      return `Effect`
+    case `context`:
+      return `Context`
+    case `schedule`:
+      return `Schedule`
+  }
+}
+
+function manifestTitle(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return manifest.id
+    case `source`:
+      return manifest.sourceRef
+    case `shared-state`:
+    case `effect`:
+    case `context`:
+    case `schedule`:
+      return manifest.id
+  }
+}
+
+function manifestMeta(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return `${manifest.entity_type}${manifest.observed ? `` : ` · unobserved`}`
+    case `source`:
+      return describeSourceConfig(manifest.config)
+    case `shared-state`:
+      return `${manifest.mode} · ${Object.keys(manifest.collections).join(`, `)}`
+    case `effect`:
+      return manifest.function_ref
+    case `context`:
+      return `${Object.keys(manifest.attrs).length} attrs`
+    case `schedule`:
+      return manifest.scheduleType === `cron`
+        ? `${manifest.expression}${manifest.timezone ? ` · ${manifest.timezone}` : ``}`
+        : `${manifest.fireAt} · ${manifest.status}`
+  }
+}
+
+function manifestDetails(
+  manifest: Manifest
+): Array<{ label: string; value: string }> {
+  switch (manifest.kind) {
+    case `child`:
+      return [
+        { label: `Id`, value: manifest.id },
+        { label: `Type`, value: manifest.entity_type },
+      ]
+    case `shared-state`:
+      return [
+        { label: `Mode`, value: manifest.mode },
+        {
+          label: `Collections`,
+          value: Object.keys(manifest.collections).join(`, `) || `none`,
+        },
+      ]
+    case `source`:
+      return [
+        { label: `Type`, value: manifest.sourceType },
+        { label: `Ref`, value: manifest.sourceRef },
+      ]
+    case `effect`:
+      return [
+        { label: `Function`, value: manifest.function_ref },
+        { label: `Config`, value: shortJson(manifest.config) },
+      ]
+    case `context`:
+      return [
+        { label: `Name`, value: manifest.name },
+        { label: `Content`, value: `${manifest.content.length} chars` },
+      ]
+    case `schedule`:
+      return manifest.scheduleType === `cron`
+        ? [
+            { label: `Cron`, value: manifest.expression },
+            { label: `Timezone`, value: manifest.timezone ?? `local` },
+          ]
+        : [
+            { label: `Fire at`, value: manifest.fireAt },
+            { label: `Target`, value: manifest.targetUrl },
+            { label: `Status`, value: manifest.status ?? `pending` },
+          ]
+  }
+}
+
+function manifestIcon(manifest: Manifest) {
+  if (getManifestStateSourceId(manifest)) return Database
+  if (getManifestEntityUrl(manifest)) return GitBranch
+  if (manifest.kind === `schedule`) return Radio
+  return FileJson
+}
+
+function getManifestEntityUrl(manifest: Manifest): string | null {
+  if (manifest.kind === `child`) return manifest.entity_url
+  if (manifest.kind === `source` && manifest.sourceType === `entity`) {
+    return manifest.sourceRef
+  }
+  return null
+}
+
+function getManifestStateSourceId(manifest: Manifest): string | null {
+  if (manifest.kind === `shared-state`) return manifest.id
+  if (manifest.kind === `source` && manifest.sourceType === `db`) {
+    return manifest.sourceRef
+  }
+  return null
+}
+
+function statusTone(status: NonNullable<IncludesEntity[`status`]>) {
+  switch (status) {
+    case `idle`:
+      return `success`
+    case `spawning`:
+      return `warning`
+    case `running`:
+      return `info`
+    case `stopped`:
+      return `neutral`
+    default:
+      return `neutral`
+  }
+}
+
+function describeSourceConfig(config: Record<string, unknown>): string {
+  const cache = typeof config.cache === `string` ? config.cache : null
+  const keys = Object.keys(config).filter((key) => key !== `cache`)
+  return [cache, keys.length > 0 ? `${keys.length} config keys` : null]
+    .filter(Boolean)
+    .join(` · `)
+}
+
+function shortJson(value: unknown): string {
+  const json = JSON.stringify(value)
+  return json.length > 80 ? `${json.slice(0, 77)}...` : json
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(` `)
+}
+
 // `section` and `responseTimestamp` are pulled out of the parent
 // `EntityTimelineEntry` so React.memo's shallow compare can hit on
 // the *section* identity. `buildTimelineEntries` returns a fresh
@@ -149,15 +602,38 @@ const TimelineRow = memo(function TimelineRow({
   entityStopped,
   isStreaming,
   renderWidth,
+  entityUrl,
+  tileId,
+  entityStatusByUrl,
 }: {
-  section: EntityTimelineEntry[`section`]
-  responseTimestamp: EntityTimelineEntry[`responseTimestamp`]
+  section: TimelineEntry[`section`]
+  responseTimestamp: TimelineEntry[`responseTimestamp`]
   entityStopped: boolean
   isStreaming: boolean
   renderWidth: number
+  entityUrl: string | null
+  tileId: string | null
+  entityStatusByUrl: Map<string, IncludesEntity[`status`]>
 }): React.ReactElement {
   if (section.kind === `user_message`) {
     return <UserMessage section={section} />
+  }
+  if (section.kind === `wake`) {
+    return <WakeTimelineRow section={section} />
+  }
+  if (section.kind === `manifest`) {
+    return (
+      <ManifestTimelineRow
+        manifest={section.manifest}
+        entityUrl={entityUrl}
+        tileId={tileId}
+        entityStatus={
+          getManifestEntityUrl(section.manifest)
+            ? entityStatusByUrl.get(getManifestEntityUrl(section.manifest)!)
+            : undefined
+        }
+      />
+    )
   }
 
   return (
@@ -177,15 +653,49 @@ export function EntityTimeline({
   entityStopped,
   cacheKey,
   tileId,
+  entityUrl = null,
+  entities = [],
 }: {
-  entries: Array<EntityTimelineEntry>
+  entries: Array<TimelineEntry>
   loading: boolean
   error: string | null
   entityStopped: boolean
   cacheKey?: string | null
   tileId?: string | null
+  entityUrl?: string | null
+  entities?: Array<IncludesEntity>
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
+  const { entitiesCollection } = useElectricAgents()
+  const referencedEntityUrls = useMemo(
+    () => Array.from(new Set(entities.map((entity) => entity.url))),
+    [entities]
+  )
+  const { data: entityStatuses = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || referencedEntityUrls.length === 0) {
+        return undefined
+      }
+      return q
+        .from({ e: entitiesCollection })
+        .where(({ e }) => inArray(e.url, referencedEntityUrls))
+        .select(({ e }) => ({
+          url: e.url,
+          status: e.status,
+        }))
+    },
+    [entitiesCollection, referencedEntityUrls]
+  )
+  const entityStatusByUrl = useMemo(() => {
+    const statusByUrl = new Map<string, IncludesEntity[`status`]>()
+    for (const entity of entities) {
+      statusByUrl.set(entity.url, entity.status)
+    }
+    for (const entity of entityStatuses) {
+      statusByUrl.set(entity.url, entity.status)
+    }
+    return statusByUrl
+  }, [entities, entityStatuses])
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(
     null
@@ -193,7 +703,10 @@ export function EntityTimeline({
   const [viewportWidth, setViewportWidth] = useState(0)
   const [contentWidth, setContentWidth] = useState(0)
   const isNearBottom = useRef(true)
+  const lastScrollTopRef = useRef(0)
+  const spawnMarkerRef = useRef<HTMLSpanElement | null>(null)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  const [showTopDivider, setShowTopDivider] = useState(false)
   const cachedSizeMapRef = useRef(new Map<string, number>())
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
@@ -202,8 +715,8 @@ export function EntityTimeline({
   const firstMessage = rows.find(
     (
       row
-    ): row is EntityTimelineEntry & {
-      section: Extract<EntityTimelineEntry[`section`], { kind: `user_message` }>
+    ): row is TimelineEntry & {
+      section: Extract<TimelineEntry[`section`], { kind: `user_message` }>
     } => row.section.kind === `user_message`
   )
   const spawnTime = firstMessage?.section.timestamp ?? null
@@ -290,7 +803,7 @@ export function EntityTimeline({
       cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
       estimateRowHeight(rows[index], contentWidth),
     getItemKey: (index) => rows[index]?.key ?? index,
-    gap: ROW_GAP,
+    gap: 0,
     overscan: 6,
     measureElement: measureRowElement,
     enabled: rows.length > 0,
@@ -457,17 +970,48 @@ export function EntityTimeline({
   useEffect(() => {
     if (!viewport) return
 
+    const detachFromBottom = () => {
+      isNearBottom.current = false
+      setShowJumpToBottom(true)
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0 && viewport.scrollTop > 0) {
+        detachFromBottom()
+      }
+    }
+
     const handleScroll = () => {
-      const nearBottom =
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
-        SCROLL_THRESHOLD
-      isNearBottom.current = nearBottom
-      setShowJumpToBottom(!nearBottom)
+      const distanceFromBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      const scrollingUp = viewport.scrollTop < lastScrollTopRef.current - 1
+      const pinnedToBottom = distanceFromBottom <= BOTTOM_PIN_THRESHOLD
+
+      if (scrollingUp && !pinnedToBottom) {
+        detachFromBottom()
+      } else if (pinnedToBottom) {
+        isNearBottom.current = true
+      }
+
+      lastScrollTopRef.current = viewport.scrollTop
+      const spawnMarker = spawnMarkerRef.current
+      if (spawnMarker) {
+        const markerRect = spawnMarker.getBoundingClientRect()
+        const viewportRect = viewport.getBoundingClientRect()
+        setShowTopDivider(markerRect.top <= viewportRect.top)
+      } else {
+        setShowTopDivider(false)
+      }
+      setShowJumpToBottom(!isNearBottom.current)
     }
 
     handleScroll()
+    viewport.addEventListener(`wheel`, handleWheel, { passive: true })
     viewport.addEventListener(`scroll`, handleScroll, { passive: true })
-    return () => viewport.removeEventListener(`scroll`, handleScroll)
+    return () => {
+      viewport.removeEventListener(`wheel`, handleWheel)
+      viewport.removeEventListener(`scroll`, handleScroll)
+    }
   }, [viewport])
 
   useLayoutEffect(() => {
@@ -492,6 +1036,8 @@ export function EntityTimeline({
 
   const jumpToBottom = useCallback(() => {
     if (rows.length > 0) {
+      isNearBottom.current = true
+      setShowJumpToBottom(false)
       rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
     }
   }, [rowVirtualizer, rows.length])
@@ -517,7 +1063,12 @@ export function EntityTimeline({
   }
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-desktop-selection-context="">
+      <div
+        className={styles.topDivider}
+        data-visible={showTopDivider ? `true` : undefined}
+        aria-hidden="true"
+      />
       <ScrollArea
         viewportRef={scrollAreaRef}
         className={styles.scroll}
@@ -528,14 +1079,24 @@ export function EntityTimeline({
           <Stack>
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
-                <Text size={1} tone="muted" className={styles.statusPill}>
-                  {`spawned · ${formatShortTime(spawnTime)}`}
-                </Text>
+                <span ref={spawnMarkerRef} className={styles.statusPill}>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    spawned
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    ·
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    {formatChatTimestamp(spawnTime)}
+                  </Text>
+                </span>
               </Tooltip>
             ) : (
-              <Text size={1} tone="muted" className={styles.statusPill}>
-                spawned
-              </Text>
+              <span ref={spawnMarkerRef} className={styles.statusPill}>
+                <Text size={1} tone="muted" className={styles.statusText}>
+                  spawned
+                </Text>
+              </span>
             )}
           </Stack>
 
@@ -573,7 +1134,10 @@ export function EntityTimeline({
                     data-item-key={row.key}
                     data-pane-find-row-key={row.key}
                     className={styles.virtualRow}
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                      paddingBottom: timelineRowGap(row),
+                    }}
                   >
                     <TimelineRow
                       section={row.section}
@@ -581,6 +1145,9 @@ export function EntityTimeline({
                       entityStopped={entityStopped}
                       isStreaming={row.key === lastStreamingAgentKey}
                       renderWidth={contentWidth}
+                      entityUrl={entityUrl}
+                      tileId={tileId ?? null}
+                      entityStatusByUrl={entityStatusByUrl}
                     />
                   </div>
                 )
@@ -607,7 +1174,7 @@ export function EntityTimeline({
         aria-hidden={!showJumpToBottom}
         tabIndex={showJumpToBottom ? 0 : -1}
       >
-        <ArrowDown size={16} />
+        <Icon icon={ArrowDown} size={3} />
       </button>
     </div>
   )

@@ -1,21 +1,21 @@
 import type { CSSProperties } from 'react'
 
 const STATUS_COLORS: Record<string, string> = {
-  active: `#3b82f6`,
-  running: `#3b82f6`,
-  idle: `#22c55e`,
-  spawning: `#eab308`,
-  stopped: `#cbd5e1`,
+  active: `var(--ds-blue-9)`,
+  running: `var(--ds-blue-9)`,
+  idle: `var(--ds-green-9)`,
+  spawning: `var(--ds-amber-9)`,
+  stopped: `var(--ds-gray-8)`,
 }
 
 export function StatusDot({
   status,
-  size = 7,
+  size = 6,
 }: {
   status: string
   size?: number
 }): React.ReactElement {
-  const color = STATUS_COLORS[status] ?? `#cbd5e1`
+  const color = STATUS_COLORS[status] ?? `var(--ds-gray-8)`
   const style: CSSProperties = {
     width: size,
     height: size,

@@ -1,5 +1,7 @@
 import type { ViewId } from './viewRegistry'
 
+export type TileViewParams = Record<string, string>
+
 /**
  * A `Tile` is a leaf in the workspace tree, rendered through one view.
  * Tiles do not group: each leaf is its own thing. Two tiles can show
@@ -22,6 +24,7 @@ export type Tile = {
   id: string
   entityUrl: string | null
   viewId: ViewId
+  viewParams?: TileViewParams
 }
 
 /**

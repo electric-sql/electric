@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Check, Folder, FolderOpen, Home, X } from 'lucide-react'
-import { Combobox, IconButton } from '../ui'
+import { Combobox, Icon, IconButton } from '../ui'
 import { useRecentWorkingDirectories } from '../hooks/useRecentWorkingDirectories'
 import { detectHomeDir, tildifyPath } from '../lib/pathDisplay'
 import styles from './WorkingDirectoryPicker.module.css'
@@ -125,7 +125,7 @@ export function WorkingDirectoryPicker({
             }
             title={value ?? `Use the server's default working directory`}
           >
-            <Folder size={12} className={styles.triggerIcon} />
+            <Icon icon={Folder} size={1} className={styles.triggerIcon} />
             <span className={styles.triggerLabel}>{triggerLabel}</span>
           </button>
         }
@@ -139,19 +139,20 @@ export function WorkingDirectoryPicker({
           {/* Every row uses the same `.menuRow` inner wrapper as
               ServerPicker's saved-server rows. The wrapper is what
               carries `min-height: 24px` (sized to match an inline
-              `IconButton size={1}`), so rows with a trailing control
-              and rows without one stay on a uniform 30px row pitch
-              (24px content + 6px item padding). Mirrors the trick
+              `IconButton size={1}`). The item class trims vertical
+              padding to 2px so rows with a trailing control and rows
+              without one stay on the shared 28px dropdown row pitch.
+              Mirrors the trick
               `ServerPicker.module.css → .menuRow` uses to stop the
               menu jumping between saved and discovered groups. */}
-          <Combobox.Item value={NONE_VALUE}>
+          <Combobox.Item value={NONE_VALUE} className={styles.pathItem}>
             <span className={styles.menuRow}>
-              <Home size={14} className={styles.menuRowIcon} />
+              <Icon icon={Home} size={2} className={styles.menuRowIcon} />
               <span className={styles.menuRowLabel}>None</span>
               <span className={styles.trailing}>
                 {value === null && (
                   <span className={styles.trailingCheck}>
-                    <Check size={14} />
+                    <Icon icon={Check} size={2} />
                   </span>
                 )}
               </span>
@@ -165,10 +166,10 @@ export function WorkingDirectoryPicker({
                 key={path}
                 value={path}
                 title={path}
-                className={styles.recentItem}
+                className={[styles.pathItem, styles.recentItem].join(` `)}
               >
                 <span className={styles.menuRow}>
-                  <Folder size={14} className={styles.menuRowIcon} />
+                  <Icon icon={Folder} size={2} className={styles.menuRowIcon} />
                   <span className={styles.menuRowLabel}>
                     {tildifyPath(path, homeDir)}
                   </span>
@@ -181,7 +182,7 @@ export function WorkingDirectoryPicker({
                   <span className={styles.trailing}>
                     {isSelected && (
                       <span className={styles.trailingCheck}>
-                        <Check size={14} />
+                        <Icon icon={Check} size={2} />
                       </span>
                     )}
                     <IconButton
@@ -202,7 +203,7 @@ export function WorkingDirectoryPicker({
                       aria-label={`Remove ${path} from recents`}
                       title="Remove from recents"
                     >
-                      <X size={14} />
+                      <Icon icon={X} size={2} />
                     </IconButton>
                   </span>
                 </span>
@@ -213,9 +214,13 @@ export function WorkingDirectoryPicker({
           {isDesktop && (
             <>
               <Combobox.Separator />
-              <Combobox.Item value={BROWSE_VALUE}>
+              <Combobox.Item value={BROWSE_VALUE} className={styles.pathItem}>
                 <span className={styles.menuRow}>
-                  <FolderOpen size={14} className={styles.menuRowIcon} />
+                  <Icon
+                    icon={FolderOpen}
+                    size={2}
+                    className={styles.menuRowIcon}
+                  />
                   <span className={styles.menuRowLabel}>Open folder…</span>
                 </span>
               </Combobox.Item>

@@ -14,6 +14,11 @@
   -webkit-app-region: no-drag;
 }
 
+:global(html[data-electric-desktop='true']) .tile {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .body {
   display: flex;
   flex-direction: column;
@@ -33,4 +38,25 @@
   .body {
     --chat-col-width: 80ch;
   }
+}
+
+.dragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--ds-text-4);
+  opacity: 0.65;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-app-region: no-drag;
+}
+.dragHandle:active {
+  cursor: grabbing;
+}
+.dragHandle > * {
+  pointer-events: none;
 }

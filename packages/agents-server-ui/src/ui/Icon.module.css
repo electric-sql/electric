@@ -1,0 +1,18 @@
+.icon {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  flex-shrink: 0;
+}
+
+.size1 {
+  --icon-size: var(--ds-icon-xs);
+}
+.size2 {
+  --icon-size: var(--ds-icon-sm);
+}
+.size3 {
+  --icon-size: var(--ds-icon-md);
+}
+.size4 {
+  --icon-size: var(--ds-icon-lg);
+}

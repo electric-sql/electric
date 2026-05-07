@@ -3,7 +3,7 @@ import {
   useDarkModeContext,
   type ThemePreference,
 } from '../../../hooks/useDarkMode'
-import { Text } from '../../../ui'
+import { Icon, Text } from '../../../ui'
 import { SettingsScreen, SettingsSection } from '../SettingsScreen'
 import styles from './AppearancePage.module.css'
 
@@ -16,19 +16,19 @@ const THEME_OPTIONS: ReadonlyArray<{
   {
     value: `light`,
     label: `Light`,
-    icon: <Sun size={20} />,
+    icon: <Icon icon={Sun} size={4} />,
     hint: `Always use the light palette.`,
   },
   {
     value: `dark`,
     label: `Dark`,
-    icon: <Moon size={20} />,
+    icon: <Icon icon={Moon} size={4} />,
     hint: `Always use the dark palette.`,
   },
   {
     value: `system`,
     label: `System`,
-    icon: <Monitor size={20} />,
+    icon: <Icon icon={Monitor} size={4} />,
     hint: `Follow your OS setting.`,
   },
 ]
@@ -68,7 +68,7 @@ export function AppearancePage(): React.ReactElement {
                 </span>
                 {active && (
                   <span className={styles.tileMark} aria-hidden>
-                    <Check size={14} />
+                    <Icon icon={Check} size={2} />
                   </span>
                 )}
               </button>

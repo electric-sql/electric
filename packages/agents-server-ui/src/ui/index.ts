@@ -14,6 +14,9 @@ export { Stack } from './Stack'
 
 export { Kbd } from './Kbd'
 
+export { Icon } from './Icon'
+export type { IconSize } from './Icon'
+
 export { Text } from './Text'
 export type {
   TextSize,

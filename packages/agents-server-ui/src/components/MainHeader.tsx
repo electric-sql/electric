@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 import { PanelLeft, Search } from 'lucide-react'
-import { IconButton, Tooltip } from '../ui'
+import { Icon, IconButton, Tooltip } from '../ui'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { modKeyLabel } from '../lib/keyLabels'
 import styles from './MainHeader.module.css'
 
 type MainHeaderProps = {
+  leading?: ReactNode
   title?: ReactNode
   actions?: ReactNode
 }
@@ -24,6 +25,7 @@ type MainHeaderProps = {
  * body so the header reads as part of the same surface.
  */
 export function MainHeader({
+  leading,
   title,
   actions,
 }: MainHeaderProps): React.ReactElement {
@@ -42,7 +44,7 @@ export function MainHeader({
               onClick={toggleSidebar}
               aria-label="Show sidebar"
             >
-              <PanelLeft size={16} />
+              <Icon icon={PanelLeft} size={3} />
             </IconButton>
           </Tooltip>
           <Tooltip content="Search sessions" shortcut={modKeyLabel(`k`)}>
@@ -53,11 +55,12 @@ export function MainHeader({
               onClick={search.open}
               aria-label="Search sessions"
             >
-              <Search size={16} />
+              <Icon icon={Search} size={3} />
             </IconButton>
           </Tooltip>
         </span>
       )}
+      {leading}
       <div className={styles.title}>{title}</div>
       {actions !== undefined && <div className={styles.actions}>{actions}</div>}
     </header>

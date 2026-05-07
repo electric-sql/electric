@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react'
 import { Text, Tooltip, type TextSize, type TextTone } from '../ui'
 import {
   formatAbsoluteDateTimeVerbose,
-  formatShortTime,
+  formatChatTimestamp,
 } from '../lib/formatTime'
 
 type TimeTextProps = {
@@ -24,17 +24,15 @@ type TimeTextProps = {
 }
 
 /**
- * Render a short clock-style timestamp (e.g. `14:18`) with a tooltip
- * exposing the full date / time on hover.
+ * Render a compact chat timestamp (e.g. `14:18`, or `Mon, 14:18`
+ * when not today) with a tooltip exposing the full date / time on hover.
  *
  * Used by chat surfaces (user + assistant message metadata, spawn
  * pill) so every short timestamp in the UI
  * has a consistent way to surface the absolute time without taking
  * up extra horizontal space at rest.
  *
- * The label is the user's locale `HH:MM` (24-hour where the locale
- * prefers it, am/pm otherwise — `toLocaleTimeString` decides). The
- * tooltip content is the verbose date + time with seconds, e.g.
+ * The tooltip content is the verbose date + time with seconds, e.g.
  * `Monday, 4 May 2026 at 14:18:05` — formatted in the same locale
  * so it matches the rest of the timestamps in the app.
  */
@@ -50,7 +48,7 @@ export const TimeText = memo(function TimeText({
   // memoise on a row that re-renders during streaming.
   const { short, full } = useMemo(
     () => ({
-      short: formatShortTime(ts),
+      short: formatChatTimestamp(ts),
       full: formatAbsoluteDateTimeVerbose(ts),
     }),
     [ts]
