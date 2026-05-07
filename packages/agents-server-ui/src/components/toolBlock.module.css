@@ -153,19 +153,30 @@
   min-width: 0;
 }
 
-.header .statusBadge {
-  margin-left: auto;
-  flex-shrink: 0;
+.statusBadge {
   height: 20px;
   padding: 0 8px;
-  margin-top: -2px;
-  margin-bottom: -2px;
   font-size: 11px;
   line-height: 1;
+  flex-shrink: 0;
+}
+
+.header .statusBadge {
+  margin-left: auto;
+  margin-top: -2px;
+  margin-bottom: -2px;
 }
 
 .header .statusBadge + .toggleArrow {
   margin-left: 0;
+}
+
+.badgeDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .body {

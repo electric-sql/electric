@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
-import { Badge, Icon as UiIcon, IconButton, Text, Tooltip } from '../ui'
+import { Icon as UiIcon, IconButton, Text, Tooltip } from '../ui'
 import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
+import { InlineStatusBadge } from './InlineStatusBadge'
 import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
 import styles from './EntityHeader.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
@@ -157,13 +158,12 @@ function EntityActions({
 
   return (
     <span className={styles.actions}>
-      <Badge
+      <InlineStatusBadge
         tone={STATUS_TONE[entity.status] ?? `neutral`}
-        variant="soft"
         className={styles.statusBadge}
       >
         {entity.status}
-      </Badge>
+      </InlineStatusBadge>
 
       {showViewStrip &&
         availableViews.map((view) => {

@@ -3,6 +3,7 @@ import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime'
 import { Badge, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
 import { InlineEventCard } from './InlineEventCard'
+import { InlineStatusBadge } from './InlineStatusBadge'
 import toolBlock from './toolBlock.module.css'
 import styles from './ToolCallView.module.css'
 
@@ -250,14 +251,9 @@ export function ToolCallView({
         collapsible={false}
         badge={
           badge ? (
-            <Badge
-              tone={badge.tone}
-              variant="soft"
-              size={1}
-              className={toolBlock.statusBadge}
-            >
+            <InlineStatusBadge tone={badge.tone}>
               {badge.label}
-            </Badge>
+            </InlineStatusBadge>
           ) : null
         }
       >
@@ -284,14 +280,7 @@ export function ToolCallView({
       defaultExpanded={shouldDefaultExpand}
       badge={
         badge ? (
-          <Badge
-            tone={badge.tone}
-            variant="soft"
-            size={1}
-            className={toolBlock.statusBadge}
-          >
-            {badge.label}
-          </Badge>
+          <InlineStatusBadge tone={badge.tone}>{badge.label}</InlineStatusBadge>
         ) : null
       }
     >

@@ -28,19 +28,11 @@ import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
-import {
-  Badge,
-  Icon,
-  IconButton,
-  ScrollArea,
-  Stack,
-  Text,
-  Tooltip,
-} from '../ui'
+import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
-import { StatusDot } from './StatusDot'
+import { InlineStatusBadge } from './InlineStatusBadge'
 import {
   getCurrentMatchIndexInRoot,
   getTextMatchStarts,
@@ -261,15 +253,9 @@ function ManifestTimelineRow({
   }, [entityUrl, helpers, stateSourceId])
 
   const statusBadge = entityStatus ? (
-    <Badge
-      size={1}
-      variant="soft"
-      tone={statusTone(entityStatus)}
-      className={styles.manifestStatusBadge}
-    >
-      <StatusDot status={entityStatus} size={5} />
+    <InlineStatusBadge tone={statusTone(entityStatus)}>
       {entityStatus}
-    </Badge>
+    </InlineStatusBadge>
   ) : null
 
   const openAction = stateSourceId ? (
