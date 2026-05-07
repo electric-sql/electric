@@ -28,7 +28,7 @@ export interface CreateSdkOAuthProviderOpts {
  * into the store from the per-server auth config.
  */
 export interface SdkOAuthProvider extends OAuthClientProvider {
-  /** Always implemented — persists DCR response via CredentialStore. */
+  /** Always implemented — persists the DCR response via the internal AuthStore. */
   saveClientInformation(
     clientInformation: OAuthClientInformationMixed
   ): void | Promise<void>

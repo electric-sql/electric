@@ -46,7 +46,7 @@ export function parseConfig(
     for (const k of FORBIDDEN_REF_KEYS) {
       if (k in auth)
         fail(
-          `server "${name}" uses forbidden "${k}" — secrets are not configured in mcp.json (use the CredentialStore at bootstrap)`
+          `server "${name}" uses forbidden "${k}" — secrets are not configured in mcp.json (pass them inline on the auth config at the call site)`
         )
     }
 

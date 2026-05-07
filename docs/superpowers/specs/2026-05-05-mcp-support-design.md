@@ -1,20 +1,10 @@
 # MCP Support for Electric Agents — Design Spec
 
 **Status:** Draft — **Experimental feature**
-**Date:** 2026-05-05 (last revised 2026-05-07)
+**Date:** 2026-05-07
 **Author:** Valter Balegas (with Claude)
 
 > **Experimental.** This is the first cut of MCP integration. We expect to evolve the registration model (e.g. stream-based registration via the existing `entity_types` shape pattern, server-side delegated discovery, multi-tenant credential scopes) once the design has been used in anger. Public surfaces marked here may change without a deprecation cycle while the feature carries the experimental flag.
-
-> **2026-05-07 revision.** The spec was originally written around an
-> HTTP-exposed runtime with a public `CredentialStore` and polled UI
-> state. The implementation collapsed that into an Electron-embedded
-> runtime with push-based IPC and operator-owned persistence. This
-> revision rewrites the architecture, runtime-discovery, OAuth-callback,
-> Connected Services UI, and process-boundaries sections to match what
-> shipped on `balegas/mcp-impl-v2`. The "What's gone" subsection inside
-> "Credential handling" intentionally retains the prior contract for
-> readers tracking the change.
 
 ## Summary
 
@@ -117,57 +107,31 @@ _MCP's hot-reload support means the factory's "what we research" surface evolves
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-The agents-runtime tool-provider hook auto-injects MCP tools into every
-entity-type's tool list at wake time — no per-agent wiring.
+The agents-runtime tool-provider hook auto-injects MCP tools into every entity-type's tool list at wake time — no per-agent wiring.
 
 ### Embedding model
 
-`agents-mcp` is a Node library. The desktop app is the v1 embedder; it
-wraps the registry with Electron-specific glue (BrowserWindow OAuth
-interception + IPC broadcast). The library is embedder-agnostic — a
-deployed-runtime embedder could mount its own HTTP routes against the
-`Registry` interface — but `agents-mcp` no longer ships an
-`mountMcpHttp` helper or any built-in HTTP/OAuth-callback surface.
-That path was tried, then removed in favour of in-process embedding;
-operators wanting it back write the routes themselves.
+`agents-mcp` is a Node library. The desktop app is the v1 embedder; it wraps the registry with Electron-specific glue (BrowserWindow OAuth interception + IPC broadcast). The library is embedder-agnostic — a deployed-runtime embedder could mount its own HTTP routes against the `Registry` interface — but `agents-mcp` no longer ships an `mountMcpHttp` helper or any built-in HTTP/OAuth-callback surface. That path was tried, then removed in favour of in-process embedding; operators wanting it back write the routes themselves.
 
 ### Push-based state (registry → renderer)
 
-The registry is the single source of truth for MCP state. State sync
-to the UI is push-based and travels over Electron IPC:
+The registry is the single source of truth for MCP state. State sync to the UI is push-based and travels over Electron IPC:
 
-1. **Subscribe.** On runtime startup, the Electron main process calls
-   `registry.subscribe((snapshot) => broadcast(snapshot))`. The
-   handler fires synchronously with the current state, then on every
-   mutation: `addServer`, `removeServer`, `applyConfig`, `finishAuth`,
-   `reauthorize`, `disable`, `enable`, and every connection-state
-   transition during `connectAndList`.
+1. **Subscribe.** On runtime startup, the Electron main process calls `registry.subscribe((snapshot) => broadcast(snapshot))`. The handler fires synchronously with the current state, then on every mutation: `addServer`, `removeServer`, `applyConfig`, `finishAuth`, `reauthorize`, `disable`, `enable`, and every connection-state transition during `connectAndList`.
 
-2. **Broadcast.** Main sends each snapshot over the
-   `desktop:mcp-state` IPC channel to every BrowserWindow.
+2. **Broadcast.** Main sends each snapshot over the `desktop:mcp-state` IPC channel to every BrowserWindow.
 
-3. **Render.** The `useMcpServersIpc` hook in the renderer holds the
-   latest snapshot and renders the Connected Services page from it.
-   `getSnapshot()` is provided as a one-shot fallback so the page can
-   render before the first push event arrives.
+3. **Render.** The `useMcpServersIpc` hook in the renderer holds the latest snapshot and renders the Connected Services page from it. `getSnapshot()` is provided as a one-shot fallback so the page can render before the first push event arrives.
 
-The snapshot envelope is `{ seq: number, servers: ListedEntry[] }`.
-`seq` is monotonic per-registry — useful for downstream dedup or
-"I have seq N already" checks.
+The snapshot envelope is `{ seq: number, servers: ListedEntry[] }`. `seq` is monotonic per-registry — useful for downstream dedup or "I have seq N already" checks.
 
 #### Why this closes the "tool count always 0" gap
 
-The renderer reads from the same registry that owns the live tools.
-There is no second copy to keep in sync, no proxy state to invalidate,
-no polling cadence to tune. Disable / enable / reauthorize hit the
-actual registry, so they stop being cosmetic.
+The renderer reads from the same registry that owns the live tools. There is no second copy to keep in sync, no proxy state to invalidate, no polling cadence to tune. Disable / enable / reauthorize hit the actual registry, so they stop being cosmetic.
 
 #### Auth on the IPC surface
 
-The desktop embedding has no cross-process auth concern — IPC is the
-process boundary. A future deployed-runtime embedding that exposes
-HTTP routes against the registry would own its own auth model;
-`agents-mcp` does not prescribe one.
+The desktop embedding has no cross-process auth concern — IPC is the process boundary. A future deployed-runtime embedding that exposes HTTP routes against the registry would own its own auth model; `agents-mcp` does not prescribe one.
 
 ### Package boundaries
 
@@ -411,18 +375,7 @@ await mcpRegistry.addServer({
 
 If neither helper is wired, OAuth tokens live only for the lifetime of the process — `dev.sh restart` sends the developer back through the Authorize button. That's an acceptable default for the "developer owns persistence" model: the SDK doesn't decide where their secrets sleep.
 
-For Vault / SSM / a custom secret system, the operator writes their own `onTokensChanged` and `onClientRegistered` directly. There is no `CredentialStore` interface to extend; the contract is two callbacks and two optional values.
-
-### What's gone
-
-The earlier design exposed a `CredentialStore` interface plus five public store implementations (`inMemoryCredentialStore`, `envCredentialStore`, `fileCredentialStore`, `osKeychainCredentialStore`, `composedCredentialStore`) and required the embedder to compose them at bootstrap. All of that is removed:
-
-- `CredentialStore` is no longer a public type.
-- All five built-in stores are removed from the public surface; the keychain and file behaviours live on as the persistence presets above.
-- `createRegistry` no longer accepts a `credentials` option.
-- Static secrets that previously came from `envCredentialStore`'s opinionated naming convention (`MCP_<SERVER>_API_KEY`, etc.) now come from inline auth-config fields. The developer reads `process.env` themselves at the call site.
-
-The internal token cache used by the registry is the same data structure as the old `inMemoryCredentialStore`, just no longer crossing the public boundary. Tests use a small `testCredentials` helper kept under `test/helpers/`.
+For Vault / SSM / a custom secret system, the operator writes their own `onTokensChanged` and `onClientRegistered` directly. The contract is two callbacks and two optional values.
 
 ### Per-agent allowlist
 
@@ -531,7 +484,7 @@ What shipped on `balegas/mcp-impl-v2`:
 1. **Registry and bridge.** MCP Registry with `mcp.json` loading + file-watch, stdio + HTTP transports with per-call timeout / cancellation / progress, per-agent allowlist, hot-reload, idempotent re-add. `apiKey` mode end-to-end.
 2. **OAuth (browser).** SDK-backed `OAuthClientProvider` adapter with PKCE / RFC 7591 DCR / RFC 9728 discovery / RFC 8707 resource indicators / silent refresh / 401-retry. `clientCredentials` and `authorizationCode` modes.
 3. **Push-based state.** `Registry.subscribe(handler)` emits monotonic snapshots on every mutation; `Registry.reauthorize(name)` rebuilds an entry in place to avoid UI flicker on re-auth.
-4. **Persistence presets.** `keychainPersistence` (macOS / Linux, no native deps) and `filePersistence` (mode-0600 JSON) — both produce auth-config slices via callbacks. The public `CredentialStore` surface was removed.
+4. **Persistence presets.** `keychainPersistence` (macOS / Linux, no native deps) and `filePersistence` (mode-0600 JSON) — both produce auth-config slices via callbacks.
 5. **Desktop integration.** `agents-desktop` opens authorize URLs in a sandboxed `BrowserWindow` and intercepts the redirect URI client-side; broadcasts registry snapshots to all renderer windows; exposes IPC action verbs (`authorize`, `reconnect`, `disable`, `enable`).
 6. **Settings → MCP Servers.** Single flat list driven by `useMcpServersIpc`; gated on Electron; sidebar entry hidden on web.
 
@@ -547,62 +500,34 @@ A device-code path (RFC 8628) and an HTTP `mountMcpHttp` surface were both proto
 
 ## Process boundaries and where credentials live
 
-The v1 deployment target is the Electron desktop app. There is one OS
-process (the Electron main process) hosting:
+The v1 deployment target is the Electron desktop app. There is one OS process (the Electron main process) hosting:
 
-- **The renderer (agents-server-ui)** in a sandboxed `BrowserWindow`,
-  with `contextBridge`-exposed IPC verbs and no Node access.
-- **The agents runtime** (`BuiltinAgentsServer`) running in-process in
-  main, owning the `Registry`, the private auth cache, all MCP
-  transports (stdio subprocesses + HTTP clients), and the SDK
-  `OAuthClientProvider`.
-- **The OAuth window** — a separate sandboxed `BrowserWindow` opened
-  on demand to host the auth provider's login page; main intercepts
-  the redirect URI before the renderer ever fetches it.
+- **The renderer (agents-server-ui)** in a sandboxed `BrowserWindow`, with `contextBridge`-exposed IPC verbs and no Node access.
+- **The agents runtime** (`BuiltinAgentsServer`) running in-process in main, owning the `Registry`, the private auth cache, all MCP transports (stdio subprocesses + HTTP clients), and the SDK `OAuthClientProvider`.
+- **The OAuth window** — a separate sandboxed `BrowserWindow` opened on demand to host the auth provider's login page; main intercepts the redirect URI before the renderer ever fetches it.
 
-**Credentials live in the runtime owned by main. They never leave it.**
-The renderer reads its view of MCP state via push-based IPC snapshots;
-it has no access to tokens, the auth cache, or transport handles.
-OAuth providers redirect to a sentinel URL inside the OAuth window —
-never to a real network endpoint — and main extracts the code from
-the navigation event.
+**Credentials live in the runtime owned by main. They never leave it.** The renderer reads its view of MCP state via push-based IPC snapshots; it has no access to tokens, the auth cache, or transport handles. OAuth providers redirect to a sentinel URL inside the OAuth window — never to a real network endpoint — and main extracts the code from the navigation event.
 
 Why this matters:
 
-- Single source of truth for tokens and tool state. No cross-process
-  sync, no second coordinator to race against, no HTTP listener that
-  could be exploited.
-- The renderer's IPC surface is a small, explicit allowlist:
-  `desktop:mcp-{snapshot,state,authorize,reconnect,disable,enable}`.
-  Anything else stays in main.
-- Tests against the registry are pure Node — no Electron required —
-  because the registry knows nothing about IPC; it just emits
-  snapshots through `subscribe(handler)`.
+- Single source of truth for tokens and tool state. No cross-process sync, no second coordinator to race against, no HTTP listener that could be exploited.
+- The renderer's IPC surface is a small, explicit allowlist: `desktop:mcp-{snapshot,state,authorize,reconnect,disable,enable}`. Anything else stays in main.
+- Tests against the registry are pure Node — no Electron required — because the registry knows nothing about IPC; it just emits snapshots through `subscribe(handler)`.
 
 Trade-offs and the deployed-runtime case:
 
-- This shape ties first-class MCP management to the desktop app. The
-  web build of agents-server-ui (no `electronAPI`) hides the page and
-  shows a hint to launch the desktop app.
-- A future deployed-runtime embedder (HTTP-only, multi-user) can wrap
-  the same `Registry` with its own HTTP routes for state and OAuth
-  callback handling, plus its own auth model on those routes.
-  `agents-mcp` keeps the registry embedder-agnostic for that path.
+- This shape ties first-class MCP management to the desktop app. The web build of agents-server-ui (no `electronAPI`) hides the page and shows a hint to launch the desktop app.
+- A future deployed-runtime embedder (HTTP-only, multi-user) can wrap the same `Registry` with its own HTTP routes for state and OAuth callback handling, plus its own auth model on those routes. `agents-mcp` keeps the registry embedder-agnostic for that path.
 
 ### Tool-provider injection (no per-agent wiring)
 
-`agents-runtime` exposes `registerToolProvider({ name, tools })`. The
-runtime's wake-time tool composition appends every registered
-provider's tools to whatever the entity type declared statically. The
-bootstrap registers an MCP provider once:
+`agents-runtime` exposes `registerToolProvider({ name, tools })`. The runtime's wake-time tool composition appends every registered provider's tools to whatever the entity type declared statically. The bootstrap registers an MCP provider once:
 
 ```ts
 registerToolProvider({ name: `mcp`, tools: () => mcpHandle.tools() })
 ```
 
-After that, every entity type — `horton`, `worker`, `coding-agent`,
-and any future addition — sees MCP tools transparently. Agent
-definitions don't import or mention `agents-mcp`.
+After that, every entity type — `horton`, `worker`, `coding-agent`, and any future addition — sees MCP tools transparently. Agent definitions don't import or mention `agents-mcp`.
 
 ## Appendix: prior-art summary
 
