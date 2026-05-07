@@ -136,7 +136,7 @@ function changeEventToWakeEvent(
       | {
           from?: string
           payload?: unknown
-          mode?: `immediate` | `queued` | `steer`
+          mode?: `immediate` | `queued` | `paused` | `steer`
           message_type?: string
           status?: `pending` | `processed` | `cancelled`
         }
@@ -144,7 +144,11 @@ function changeEventToWakeEvent(
     if (value?.status === `cancelled`) {
       return null
     }
-    if (value?.payload === undefined && value?.mode !== `steer`) {
+    if (
+      value?.payload === undefined &&
+      value?.mode !== `queued` &&
+      value?.mode !== `steer`
+    ) {
       return null
     }
     return {
@@ -491,13 +495,15 @@ export async function processWebhookWake(
         const value = event.value as
           | {
               payload?: unknown
-              mode?: `immediate` | `queued` | `steer`
+              mode?: `immediate` | `queued` | `paused` | `steer`
               status?: `pending` | `processed` | `cancelled`
             }
           | undefined
         if (
           value?.status !== `cancelled` &&
-          (value?.payload !== undefined || value?.mode === `steer`)
+          (value?.payload !== undefined ||
+            value?.mode === `queued` ||
+            value?.mode === `steer`)
         ) {
           return `inbox`
         }
@@ -1262,14 +1268,16 @@ export async function processWebhookWake(
       }
     }
     let currentWakeIsPromotedQueueMessage = false
+    let queueHeadPaused = false
     const promotedQueuedMessageKeys = new Set<string>()
     const promoteNextPendingInboxMessage = async (): Promise<boolean> => {
+      queueHeadPaused = false
       const rows = [...db.collections.inbox.toArray].filter((row) => {
         const status = row.status ?? `processed`
         const mode = row.mode ?? `immediate`
         return (
           status === `pending` &&
-          mode === `queued` &&
+          (mode === `queued` || mode === `paused`) &&
           !promotedQueuedMessageKeys.has(String(row.key))
         )
       })
@@ -1292,6 +1300,11 @@ export async function processWebhookWake(
       })
 
       const next = rows[0]!
+      if ((next.mode ?? `immediate`) === `paused`) {
+        queueHeadPaused = true
+        log.info(`queued inbox message paused, closing wake`)
+        return false
+      }
       promotedQueuedMessageKeys.add(String(next.key))
       const processedAt = new Date().toISOString()
       writeEvent(
@@ -1584,6 +1597,9 @@ export async function processWebhookWake(
         log.info(`queued inbox message pending, continuing in-process`)
         currentWakeEvents = []
         continue
+      }
+      if (queueHeadPaused) {
+        break
       }
 
       const resumed = await awaitIdleForFreshWork(

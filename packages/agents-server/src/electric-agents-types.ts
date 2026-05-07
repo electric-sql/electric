@@ -121,7 +121,7 @@ export interface SendRequest {
   payload?: unknown
   key?: string
   type?: string
-  mode?: `immediate` | `queued` | `steer`
+  mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
 }
 

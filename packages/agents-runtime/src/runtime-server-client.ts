@@ -40,7 +40,7 @@ export interface SendEntityMessageOptions {
   from?: string
   type?: string
   afterMs?: number
-  mode?: `immediate` | `queued` | `steer`
+  mode?: `immediate` | `queued` | `paused` | `steer`
   position?: string
 }
 

@@ -92,7 +92,12 @@ export function MessageInput({
     const shouldSendImmediately =
       !generationActive && pendingMessages.length === 0
     const tx = editingMessage
-      ? updateAction?.({ key: editingMessage.key, text })
+      ? updateAction?.({
+          key: editingMessage.key,
+          text,
+          mode: `queued`,
+          status: `pending`,
+        })
       : sendAction?.({
           text,
           mode: shouldSendImmediately ? `immediate` : `queued`,
@@ -116,17 +121,35 @@ export function MessageInput({
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {
       const text = readTextPayload(message.payload)
+      setError(null)
+      updateAction?.({
+        key: message.key,
+        mode: `paused`,
+        status: `pending`,
+      }).isPersisted.promise.catch((err: Error) => {
+        setError(err.message)
+      })
       setEditingMessage({ key: message.key, originalText: text })
       setValue(text)
       textareaRef.current?.focus()
     },
-    []
+    [updateAction]
   )
 
   const cancelEditing = useCallback(() => {
+    if (editingMessage) {
+      setError(null)
+      updateAction?.({
+        key: editingMessage.key,
+        mode: `queued`,
+        status: `pending`,
+      }).isPersisted.promise.catch((err: Error) => {
+        setError(err.message)
+      })
+    }
     setEditingMessage(null)
     setValue(``)
-  }, [])
+  }, [editingMessage, updateAction])
 
   const deleteMessage = useCallback(
     (key: string) => {

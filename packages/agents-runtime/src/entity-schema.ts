@@ -135,7 +135,7 @@ type MessageReceivedValue = {
   payload?: unknown
   timestamp?: string
   message_type?: string
-  mode?: `immediate` | `queued` | `steer`
+  mode?: `immediate` | `queued` | `paused` | `steer`
   status?: `pending` | `processed` | `cancelled`
   position?: string
   processed_at?: string
@@ -400,7 +400,7 @@ function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
     payload: z.unknown().optional(),
     timestamp: z.string().optional(),
     message_type: z.string().optional(),
-    mode: z.enum([`immediate`, `queued`, `steer`]).optional(),
+    mode: z.enum([`immediate`, `queued`, `paused`, `steer`]).optional(),
     status: z.enum([`pending`, `processed`, `cancelled`]).optional(),
     position: z.string().optional(),
     processed_at: z.string().optional(),

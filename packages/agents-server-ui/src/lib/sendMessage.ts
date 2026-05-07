@@ -15,7 +15,7 @@ type OptimisticInboxMessage = {
   from: string
   payload: { text: string }
   timestamp: string
-  mode: `immediate` | `queued` | `steer`
+  mode: `immediate` | `queued` | `paused` | `steer`
   status: `pending` | `processed` | `cancelled`
   position?: string
   processed_at?: string
@@ -23,7 +23,7 @@ type OptimisticInboxMessage = {
 
 type SendMessageInput = {
   text: string
-  mode: `immediate` | `queued` | `steer`
+  mode: `immediate` | `queued` | `paused` | `steer`
   key: string
   seq: number
   position?: string
@@ -33,6 +33,8 @@ type UpdateInboxMessageInput = {
   key: string
   text?: string
   position?: string
+  mode?: `immediate` | `queued` | `paused` | `steer`
+  status?: `pending` | `processed` | `cancelled`
 }
 
 type InboxMessageKeyInput = {
@@ -161,9 +163,12 @@ export function createSendMessageAction({
         payload: { text },
         timestamp: now,
         mode,
-        status: mode === `queued` ? `pending` : `processed`,
+        status:
+          mode === `queued` || mode === `paused` ? `pending` : `processed`,
         ...(position ? { position } : {}),
-        ...(mode === `queued` ? {} : { processed_at: now }),
+        ...(mode === `queued` || mode === `paused`
+          ? {}
+          : { processed_at: now }),
       }
       db.collections.inbox.insert(message)
     },
@@ -186,12 +191,15 @@ export function createSendMessageAction({
     position,
   }: {
     text: string
-    mode?: `immediate` | `queued` | `steer`
+    mode?: `immediate` | `queued` | `paused` | `steer`
     position?: string
   }) => {
     const seq = nextOptimisticInboxSeq()
     const effectivePosition =
-      position ?? (mode === `queued` ? createInitialQueuePosition() : undefined)
+      position ??
+      (mode === `queued` || mode === `paused`
+        ? createInitialQueuePosition()
+        : undefined)
     return action({
       text,
       mode,
@@ -212,7 +220,7 @@ export function createUpdateInboxMessageAction({
   entityUrl: string
 }) {
   return createOptimisticAction<UpdateInboxMessageInput>({
-    onMutate: ({ key, text, position }) => {
+    onMutate: ({ key, text, position, mode, status }) => {
       db.collections.inbox.update(key, (draft) => {
         if (text !== undefined) {
           draft.payload = { text }
@@ -220,15 +228,32 @@ export function createUpdateInboxMessageAction({
         if (position !== undefined) {
           draft.position = position
         }
+        if (mode !== undefined) {
+          draft.mode = mode
+        }
+        if (status !== undefined) {
+          draft.status = status
+        }
       })
     },
-    mutationFn: async ({ key, text, position }) => {
-      const body: { payload?: { text: string }; position?: string } = {}
+    mutationFn: async ({ key, text, position, mode, status }) => {
+      const body: {
+        payload?: { text: string }
+        position?: string
+        mode?: `immediate` | `queued` | `paused` | `steer`
+        status?: `pending` | `processed` | `cancelled`
+      } = {}
       if (text !== undefined) {
         body.payload = { text }
       }
       if (position !== undefined) {
         body.position = position
+      }
+      if (mode !== undefined) {
+        body.mode = mode
+      }
+      if (status !== undefined) {
+        body.status = status
       }
       const res = await fetch(
         `${baseUrl}${entityUrl}/inbox/${encodeURIComponent(key)}`,
