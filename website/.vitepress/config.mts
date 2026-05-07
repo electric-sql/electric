@@ -329,6 +329,10 @@ const agentsDocsSidebar = [
         link: '/docs/agents/reference/runtime-handler',
       },
       {
+        text: 'McpRegistry',
+        link: '/docs/agents/reference/mcp-registry',
+      },
+      {
         text: 'McpServerConfig',
         link: '/docs/agents/reference/mcp-server-config',
       },

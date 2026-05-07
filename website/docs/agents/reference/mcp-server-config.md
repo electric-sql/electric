@@ -221,5 +221,6 @@ await registry.addServer({
 
 ## See also
 
-- [MCP servers usage guide](/docs/agents/usage/mcp-servers) — declarative, programmatic, and desktop-settings paths end-to-end.
+- [MCP servers usage guide](/docs/agents/usage/mcp-servers) — programmatic, file-based, and desktop-settings paths end-to-end.
+- [`McpRegistry`](/docs/agents/reference/mcp-registry) — the API that consumes this config (`addServer` / `applyConfig` / lifecycle).
 - [`BuiltinAgentsServer`](/docs/agents/usage/embedded-builtins) — host options that affect MCP, including `extraMcpServers` and `openAuthorizeUrl`.

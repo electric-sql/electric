@@ -306,34 +306,6 @@ Agents handle these like any other tool error: retry, fall back, give up gracefu
 
 ## Reference
 
-- [`McpServerConfig`](/docs/agents/reference/mcp-server-config) — full schema for declarative + programmatic server definitions.
+- [`McpRegistry`](/docs/agents/reference/mcp-registry) — full API: `addServer`, `applyConfig`, `subscribe`, `reauthorize`, the lifecycle, snapshot envelope, and `RegistryOpts` for custom embedders.
+- [`McpServerConfig`](/docs/agents/reference/mcp-server-config) — schema for the `cfg` argument to `addServer` / `applyConfig`.
 - [`BuiltinAgentsServer` options](/docs/agents/usage/embedded-builtins) — the `extraMcpServers` and `openAuthorizeUrl` options used to wire embedder-specific MCP behavior.
-
-## Types reference
-
-### `AddServerResult`
-
-```ts
-type AddServerResult =
-  | { state: "ready"; id: string; toolCount: number }
-  | { state: "authenticating"; id: string; authUrl: string }
-  | { state: "error"; id: string; error: McpToolError }
-```
-
-### `Registry` (key methods)
-
-```ts
-interface Registry {
-  addServer(cfg: McpServerConfig): Promise<AddServerResult>
-  applyConfig(cfg: McpConfig): Promise<AddServerResult[]>
-  removeServer(name: string): Promise<void>
-  list(): ReadonlyArray<ListedEntry>
-  finishAuth(server: string, code: string, state?: string): Promise<AddServerResult>
-  reauthorize(name: string): Promise<void>
-  disable(name: string): Promise<void>
-  enable(name: string): Promise<AddServerResult>
-  subscribe(handler: (snapshot: RegistrySnapshot) => void): () => void
-}
-```
-
-`subscribe` delivers a synchronous initial envelope with `seq: 0` (sentinel), then a monotonic stream of `seq: 1, 2, 3, …` snapshots on every mutation.
