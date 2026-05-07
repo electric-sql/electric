@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { ArrowUp } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
@@ -86,6 +93,7 @@ interface SchemaProperty {
  */
 export function NewSessionView({
   tileId,
+  setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
   const { entityTypesCollection, spawnEntity } = useElectricAgents()
   const { activeServer } = useServerConnection()
@@ -187,6 +195,31 @@ export function NewSessionView({
     [doSpawn]
   )
 
+  const handleCancelSelected = useCallback(() => {
+    setSelected(null)
+  }, [])
+
+  useEffect(() => {
+    if (!setToolbarTitle) return
+
+    if (!selected) {
+      setToolbarTitle(null)
+      return
+    }
+
+    setToolbarTitle(
+      <button
+        type="button"
+        className={styles.toolbarBackLink}
+        onClick={handleCancelSelected}
+      >
+        ← Back to agents
+      </button>
+    )
+
+    return () => setToolbarTitle(null)
+  }, [handleCancelSelected, selected, setToolbarTitle])
+
   const handleStartDefault = useCallback(
     (text: string, args: Record<string, unknown>) => {
       if (!defaultAgent) return
@@ -209,7 +242,7 @@ export function NewSessionView({
         {selected ? (
           <SelectedAgentForm
             entityType={selected}
-            onCancel={() => setSelected(null)}
+            onCancel={handleCancelSelected}
             onSubmit={(args) => void doSpawn(selected.name, args)}
             error={error}
           />
@@ -329,7 +362,7 @@ function SelectedAgentForm({
   error: string | null
 }): React.ReactElement {
   return (
-    <Stack direction="column" gap={4}>
+    <Stack direction="column" gap={4} className={styles.selectedFlow}>
       <div className={styles.heading}>
         <Text size={5} as="h1" className={styles.headingTitle}>
           Start a new {entityType.name} session
@@ -348,9 +381,6 @@ function SelectedAgentForm({
           <div className={styles.formHeaderText}>
             <Text size={3}>{entityType.name}</Text>
           </div>
-          <button type="button" className={styles.backLink} onClick={onCancel}>
-            ← Back
-          </button>
         </div>
         <SchemaForm
           schema={entityType.creation_schema}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { PanelLeft } from 'lucide-react'
-import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../../ui'
+import { Icon, IconButton, ScrollArea, Stack, Tooltip } from '../../ui'
 import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { modKeyLabel } from '../../lib/keyLabels'
@@ -56,9 +56,6 @@ export function SettingsScreen({
             </Tooltip>
           </span>
         )}
-        <Text size={2} weight={`medium`} className={styles.headerTitle}>
-          {title}
-        </Text>
       </div>
       <ScrollArea className={styles.scroll}>
         <div className={styles.body}>

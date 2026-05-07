@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { ElectricEntity } from '../ElectricAgentsProvider'
 
@@ -34,6 +34,7 @@ export type EntityViewProps = {
 export type StandaloneViewProps = {
   baseUrl: string
   tileId: string
+  setToolbarTitle?: (content: ReactNode | null) => void
 }
 
 /** Discriminated union — `kind` distinguishes which props shape applies. */

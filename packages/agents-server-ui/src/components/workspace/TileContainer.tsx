@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
@@ -14,6 +14,7 @@ import { DropOverlay } from './DropOverlay'
 import { PaneFindBar } from './PaneFindBar'
 import type { Tile } from '../../lib/workspace/types'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
+import type { ReactNode } from 'react'
 import styles from './TileContainer.module.css'
 
 /**
@@ -168,6 +169,7 @@ function StandaloneTileBody({
   const { activeServer } = useServerConnection()
   const viewDef = getView(tile.viewId)
   const baseUrl = activeServer?.url ?? ``
+  const [toolbarTitle, setToolbarTitle] = useState<ReactNode | null>(null)
 
   // Same drag-by-header trick as the entity tile body — the whole
   // surface is draggable, but the actual `dragstart` doesn't fire
@@ -190,10 +192,17 @@ function StandaloneTileBody({
   return (
     <Stack direction="column" className={styles.body} data-tile-id={tile.id}>
       <div draggable onDragStart={onHeaderDragStart}>
-        <MainHeader actions={<SplitMenu tile={tile} entity={null} />} />
+        <MainHeader
+          title={toolbarTitle}
+          actions={<SplitMenu tile={tile} entity={null} />}
+        />
       </div>
       <PaneFindBar tileId={tile.id} rootRef={rootRef} />
-      <View baseUrl={baseUrl} tileId={tile.id} />
+      <View
+        baseUrl={baseUrl}
+        tileId={tile.id}
+        setToolbarTitle={setToolbarTitle}
+      />
     </Stack>
   )
 }

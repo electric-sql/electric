@@ -58,10 +58,6 @@
   -webkit-app-region: no-drag;
 }
 
-.headerTitle {
-  color: var(--ds-text-2);
-}
-
 .scroll {
   flex: 1;
   min-height: 0;
@@ -120,7 +116,7 @@
 .sectionBody {
   border: 1px solid var(--ds-border-1);
   border-radius: var(--ds-radius-3);
-  background: var(--ds-bg);
+  background: color-mix(in oklab, var(--ds-surface-raised) 35%, var(--ds-bg));
   overflow: hidden;
 }
 
