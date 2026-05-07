@@ -85,7 +85,7 @@ function GenericChatBody({
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
-        drawer={<EntityContextDrawer entity={entity} />}
+        drawer={<EntityContextDrawer entity={entity} db={db} tileId={tileId} />}
       />
     </>
   )

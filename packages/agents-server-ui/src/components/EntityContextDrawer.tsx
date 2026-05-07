@@ -1,14 +1,56 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight, CornerUpLeft } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, SplitSquareHorizontal } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
-import { eq } from '@tanstack/db'
-import { useNavigate } from '@tanstack/react-router'
+import { useWorkspace } from '../hooks/useWorkspace'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { Icon, Text } from '../ui'
+import { Icon, IconButton, Text, Tooltip } from '../ui'
 import { StatusDot } from './StatusDot'
+import { JsonInspectDialog } from './JsonInspectDialog'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import styles from './EntityContextDrawer.module.css'
+import type {
+  EntityStreamDBWithActions,
+  Manifest,
+} from '@electric-ax/agents-runtime'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
+
+type DrawerEntry =
+  | {
+      key: string
+      groupKey: string
+      groupLabel: string
+      title: string
+      meta: string
+      manifest: Manifest
+      action:
+        | { kind: `entity`; url: string }
+        | { kind: `state`; sourceId: string }
+        | { kind: `inspect` }
+      entity: ElectricEntity | null
+    }
+  | {
+      key: string
+      groupKey: `parent`
+      groupLabel: `Parent`
+      title: string
+      meta: string
+      manifest: null
+      action: { kind: `entity`; url: string }
+      entity: ElectricEntity
+    }
+
+type ManifestDrawerEntry = Extract<DrawerEntry, { manifest: Manifest }>
+
+type DrawerGroup = {
+  key: string
+  label: string
+  entries: Array<DrawerEntry>
+}
+
+type InspectTarget = {
+  title: string
+  value: unknown
+}
 
 /**
  * Drawer that docks ABOVE the chat composer at the bottom of an entity
@@ -30,107 +72,352 @@ import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
  */
 export function EntityContextDrawer({
   entity,
+  db,
+  tileId,
 }: {
   entity: ElectricEntity
+  db: EntityStreamDBWithActions | null
+  tileId: string
 }): React.ReactElement | null {
   const { entitiesCollection } = useElectricAgents()
-  const navigate = useNavigate()
+  const { helpers } = useWorkspace()
+  const [inspectTarget, setInspectTarget] = useState<InspectTarget | null>(null)
 
-  const entityUrl = entity.url
   const parentUrl = entity.parent
 
-  // Sub-agents: any entity whose `parent` points back at us. Sorted by
-  // creation time so the order matches the sidebar tree.
-  const { data: subAgents = [] } = useLiveQuery(
+  const { data: allEntities = [] } = useLiveQuery(
     (q) => {
       if (!entitiesCollection) return undefined
-      return q
-        .from({ e: entitiesCollection })
-        .where(({ e }) => eq(e.parent, entityUrl))
-        .orderBy(({ e }) => e.created_at, `asc`)
+      return q.from({ e: entitiesCollection })
     },
-    [entitiesCollection, entityUrl]
+    [entitiesCollection]
   )
 
-  // Parent: at most one row. We still go through the live collection so
-  // status changes upstream reflect here without a refetch.
-  const { data: parentMatches = [] } = useLiveQuery(
+  const entitiesByUrl = useMemo(() => {
+    return new Map(allEntities.map((e) => [e.url, e]))
+  }, [allEntities])
+
+  const { data: manifests = [] } = useLiveQuery(
     (q) => {
-      if (!entitiesCollection || !parentUrl) return undefined
+      if (!db) return undefined
       return q
-        .from({ e: entitiesCollection })
-        .where(({ e }) => eq(e.url, parentUrl))
+        .from({ manifest: db.collections.manifests })
+        .orderBy(({ manifest }) => manifest._seq, `asc`)
     },
-    [entitiesCollection, parentUrl]
+    [db]
   )
-  const parent = parentMatches.at(0) ?? null
 
-  if (!parent && subAgents.length === 0) return null
+  const parent = parentUrl ? (entitiesByUrl.get(parentUrl) ?? null) : null
+  const groups = useMemo(
+    () => buildDrawerGroups(parent, manifests, entitiesByUrl),
+    [parent, manifests, entitiesByUrl]
+  )
 
-  const goTo = (url: string): void => {
-    navigate({
-      to: `/entity/$`,
-      params: { _splat: url.replace(/^\//, ``) },
+  if (groups.length === 0) return null
+
+  const openEntity = (url: string, side = false): void => {
+    helpers.openEntity(url, {
+      ...(side ? { target: { tileId, position: `split-right` as const } } : {}),
     })
   }
 
+  const openStateInspector = (sourceId: string, side = false): void => {
+    helpers.openEntity(entity.url, {
+      viewId: `state-explorer`,
+      viewParams: { source: sourceId },
+      ...(side ? { target: { tileId, position: `split-right` as const } } : {}),
+    })
+  }
+
+  const handleEntry = (entry: DrawerEntry): void => {
+    if (entry.action.kind === `entity`) {
+      openEntity(entry.action.url)
+    } else if (entry.action.kind === `state`) {
+      openStateInspector(entry.action.sourceId)
+    } else {
+      setInspectTarget({ title: entry.title, value: entry.manifest })
+    }
+  }
+
+  const handleSide = (entry: DrawerEntry): void => {
+    if (entry.action.kind === `entity`) {
+      openEntity(entry.action.url, true)
+    } else if (entry.action.kind === `state`) {
+      openStateInspector(entry.action.sourceId, true)
+    }
+  }
+
   return (
-    <div className={styles.drawer}>
-      {parent && <ParentRow parent={parent} onSelect={goTo} />}
-      {subAgents.length > 0 && (
-        <SubAgentsSection agents={subAgents} onSelect={goTo} />
-      )}
-    </div>
+    <>
+      <div className={styles.drawer}>
+        {groups.map((group) => (
+          <ManifestSection
+            key={group.key}
+            group={group}
+            onSelect={handleEntry}
+            onOpenSide={handleSide}
+          />
+        ))}
+      </div>
+      <JsonInspectDialog
+        open={inspectTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setInspectTarget(null)
+        }}
+        title={inspectTarget?.title ?? `Manifest entry`}
+        value={inspectTarget?.value ?? null}
+      />
+    </>
   )
 }
 
-/**
- * Non-expandable parent row. The whole row is the link — clicking
- * navigates to the parent. The leading `CornerUpLeft` icon visually
- * marks "go up to the parent"; the rest of the row matches the
- * sub-agent rows (status dot + title + type/id meta) so the parent
- * reads as the same kind of thing as a child, just from a different
- * direction.
- */
-function ParentRow({
-  parent,
-  onSelect,
-}: {
-  parent: ElectricEntity
-  onSelect: (url: string) => void
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      className={styles.row}
-      onClick={() => onSelect(parent.url)}
-      title={`Open parent: ${parent.url}`}
-    >
-      <span className={styles.iconSlot}>
-        <Icon icon={CornerUpLeft} size={2} className={styles.parentIcon} />
-      </span>
-      <EntityRowBody entity={parent} />
-    </button>
+function buildDrawerGroups(
+  parent: ElectricEntity | null,
+  manifests: ReadonlyArray<Manifest>,
+  entitiesByUrl: Map<string, ElectricEntity>
+): Array<DrawerGroup> {
+  const grouped = new Map<string, DrawerGroup>()
+
+  if (parent) {
+    grouped.set(`parent`, {
+      key: `parent`,
+      label: `Parent`,
+      entries: [createParentEntry(parent)],
+    })
+  }
+
+  for (const manifest of manifests) {
+    const rawEntry = createManifestEntry(manifest, entitiesByUrl)
+    if (!rawEntry) continue
+    const entry: DrawerEntry =
+      rawEntry.manifest.kind !== `child`
+        ? {
+            ...rawEntry,
+            groupKey: `manifest`,
+            groupLabel: `Manifest items`,
+            title: `${manifestKindLabel(rawEntry.manifest)} · ${rawEntry.title}`,
+          }
+        : rawEntry
+
+    const group = grouped.get(entry.groupKey)
+    if (group) {
+      group.entries.push(entry)
+    } else {
+      grouped.set(entry.groupKey, {
+        key: entry.groupKey,
+        label: entry.groupLabel,
+        entries: [entry],
+      })
+    }
+  }
+
+  const groups = Array.from(grouped.values()).filter(
+    (group) => group.entries.length > 0
   )
+  const manifestGroupIndex = groups.findIndex(
+    (group) => group.key === `manifest`
+  )
+  if (manifestGroupIndex >= 0) {
+    const [manifestGroup] = groups.splice(manifestGroupIndex, 1)
+    groups.push(manifestGroup!)
+  }
+
+  return groups
 }
 
-/**
- * Expandable sub-agents section. Collapsed shows a count; expanded
- * lists each child as a full-width clickable row. Local state — not
- * persisted across navigations because the drawer's purpose is
- * "context for THIS session" and the right default for a new session
- * is collapsed.
- */
-function SubAgentsSection({
-  agents,
+function manifestKindLabel(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return `Child`
+    case `source`:
+      return `${titleCase(manifest.sourceType)} source`
+    case `shared-state`:
+      return `Shared state`
+    case `effect`:
+      return `Effect`
+    case `context`:
+      return `Context`
+    case `schedule`:
+      return manifest.scheduleType === `cron` ? `Cron schedule` : `Future send`
+  }
+}
+
+function createParentEntry(parent: ElectricEntity): DrawerEntry {
+  const { title, isFromSlug } = getEntityDisplayTitle(parent)
+  const id = parent.url.split(`/`).pop() ?? parent.url
+  return {
+    key: `parent:${parent.url}`,
+    groupKey: `parent`,
+    groupLabel: `Parent`,
+    title,
+    meta: isFromSlug ? parent.type : `${parent.type} · ${id}`,
+    manifest: null,
+    action: { kind: `entity`, url: parent.url },
+    entity: parent,
+  }
+}
+
+function createManifestEntry(
+  manifest: Manifest,
+  entitiesByUrl: Map<string, ElectricEntity>
+): ManifestDrawerEntry | null {
+  switch (manifest.kind) {
+    case `child`: {
+      const url = manifest.entity_url
+      const entity = entitiesByUrl.get(url) ?? null
+      return {
+        key: manifest.key,
+        groupKey: `child`,
+        groupLabel: `Children`,
+        title: manifest.id,
+        meta: `${manifest.entity_type}${manifest.observed ? `` : ` · unobserved`}`,
+        manifest,
+        action: { kind: `entity`, url },
+        entity,
+      }
+    }
+
+    case `source`: {
+      if (manifest.sourceType === `entity`) {
+        const entity = entitiesByUrl.get(manifest.sourceRef) ?? null
+        return {
+          key: manifest.key,
+          groupKey: `source:entity`,
+          groupLabel: `Entity Sources`,
+          title: manifest.sourceRef.split(`/`).pop() ?? manifest.sourceRef,
+          meta: manifest.sourceRef,
+          manifest,
+          action: { kind: `entity`, url: manifest.sourceRef },
+          entity,
+        }
+      }
+
+      if (manifest.sourceType === `db`) {
+        return {
+          key: manifest.key,
+          groupKey: `source:db`,
+          groupLabel: `Database Sources`,
+          title: manifest.sourceRef,
+          meta: describeSourceConfig(manifest.config),
+          manifest,
+          action: { kind: `state`, sourceId: manifest.sourceRef },
+          entity: null,
+        }
+      }
+
+      return {
+        key: manifest.key,
+        groupKey: `source:${manifest.sourceType}`,
+        groupLabel: `${titleCase(manifest.sourceType)} Sources`,
+        title: manifest.sourceRef,
+        meta: describeSourceConfig(manifest.config),
+        manifest,
+        action: { kind: `inspect` },
+        entity: null,
+      }
+    }
+
+    case `shared-state`:
+      return {
+        key: manifest.key,
+        groupKey: `shared-state`,
+        groupLabel: `Shared State`,
+        title: manifest.id,
+        meta: `${manifest.mode} · ${Object.keys(manifest.collections).join(`, `)}`,
+        manifest,
+        action: { kind: `state`, sourceId: manifest.id },
+        entity: null,
+      }
+
+    case `effect`:
+      return {
+        key: manifest.key,
+        groupKey: `effect`,
+        groupLabel: `Effects`,
+        title: manifest.id,
+        meta: manifest.function_ref,
+        manifest,
+        action: { kind: `inspect` },
+        entity: null,
+      }
+
+    case `context`:
+      return {
+        key: manifest.key,
+        groupKey: `context`,
+        groupLabel: `Context`,
+        title: manifest.name,
+        meta: manifest.id,
+        manifest,
+        action: { kind: `inspect` },
+        entity: null,
+      }
+
+    case `schedule`:
+      return {
+        key: manifest.key,
+        groupKey: `schedule:${manifest.scheduleType}`,
+        groupLabel:
+          manifest.scheduleType === `cron` ? `Cron Schedules` : `Future Sends`,
+        title: manifest.id,
+        meta: describeSchedule(manifest),
+        manifest,
+        action: { kind: `inspect` },
+        entity: null,
+      }
+  }
+}
+
+function describeSourceConfig(config: unknown): string {
+  if (!isRecord(config)) return `source`
+  const collections = getCollections(config.collections)
+  if (collections.length > 0) return collections.join(`, `)
+  return `source`
+}
+
+function describeSchedule(manifest: Manifest): string {
+  if (manifest.kind !== `schedule`) return `schedule`
+  if (manifest.scheduleType === `cron`) {
+    return manifest.timezone
+      ? `${manifest.expression} · ${manifest.timezone}`
+      : manifest.expression
+  }
+  return manifest.status
+    ? `${manifest.fireAt} · ${manifest.status}`
+    : manifest.fireAt
+}
+
+function getCollections(value: unknown): Array<string> {
+  if (!isRecord(value)) return []
+  return Object.keys(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === `object` && value !== null
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(` `)
+}
+
+function ManifestSection({
+  group,
   onSelect,
+  onOpenSide,
 }: {
-  agents: ReadonlyArray<ElectricEntity>
-  onSelect: (url: string) => void
+  group: DrawerGroup
+  onSelect: (entry: DrawerEntry) => void
+  onOpenSide: (entry: DrawerEntry) => void
 }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
   const Chevron = expanded ? ChevronDown : ChevronRight
-  const label = agents.length === 1 ? `Sub Agent` : `Sub Agents`
+  const canOpenSide = group.entries.some(
+    (entry) => entry.action.kind !== `inspect`
+  )
 
   return (
     <div className={styles.section}>
@@ -144,52 +431,72 @@ function SubAgentsSection({
           <Icon icon={Chevron} size={2} className={styles.chevron} />
         </span>
         <Text size={2} className={styles.headerLabel}>
-          {agents.length} {label}
+          {group.entries.length} {group.label}
         </Text>
       </button>
       {expanded &&
-        agents.map((agent) => (
-          <button
-            key={agent.url}
-            type="button"
-            className={styles.row}
-            onClick={() => onSelect(agent.url)}
-            title={agent.url}
-          >
-            <span className={styles.iconSlot}>
-              <StatusDot status={agent.status} />
-            </span>
-            <EntityRowBody entity={agent} />
-          </button>
+        group.entries.map((entry) => (
+          <ManifestRow
+            key={entry.key}
+            entry={entry}
+            canOpenSide={canOpenSide && entry.action.kind !== `inspect`}
+            onSelect={onSelect}
+            onOpenSide={onOpenSide}
+          />
         ))}
     </div>
   )
 }
 
-/**
- * Shared body layout for every entity-bearing row in the drawer
- * (parent + sub-agents). Title on the left (truncated), meta on the
- * right (`type` plus the URL slug when the title doesn't already come
- * from the slug — avoids "agent · agent" duplicates). The leading
- * icon slot is owned by the parent component since it varies per row
- * type (CornerUpLeft / chevron / status dot).
- */
-function EntityRowBody({
-  entity,
+function ManifestRow({
+  entry,
+  canOpenSide,
+  onSelect,
+  onOpenSide,
 }: {
-  entity: ElectricEntity
+  entry: DrawerEntry
+  canOpenSide: boolean
+  onSelect: (entry: DrawerEntry) => void
+  onOpenSide: (entry: DrawerEntry) => void
 }): React.ReactElement {
-  const { title, isFromSlug } = getEntityDisplayTitle(entity)
-  const id = entity.url.split(`/`).pop() ?? entity.url
-  const meta = isFromSlug ? entity.type : `${entity.type} · ${id}`
   return (
-    <span className={styles.rowMain}>
-      <Text size={2} className={styles.rowTitle}>
-        {title}
-      </Text>
-      <Text size={1} tone="muted" className={styles.rowMeta}>
-        {meta}
-      </Text>
-    </span>
+    <div className={styles.rowShell}>
+      <button
+        type="button"
+        className={styles.row}
+        onClick={() => onSelect(entry)}
+        title={entry.meta}
+      >
+        <span className={styles.iconSlot}>
+          {entry.entity ? <StatusDot status={entry.entity.status} /> : null}
+        </span>
+        <span className={styles.rowMain}>
+          <Text size={2} className={styles.rowTitle}>
+            {entry.title}
+          </Text>
+          <Text size={1} tone="muted" className={styles.rowMeta}>
+            {entry.meta}
+          </Text>
+        </span>
+      </button>
+      {canOpenSide && (
+        <Tooltip content="Open to side">
+          <IconButton
+            type="button"
+            size={1}
+            variant="ghost"
+            tone="neutral"
+            className={styles.sideButton}
+            aria-label={`Open ${entry.title} to side`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenSide(entry)
+            }}
+          >
+            <Icon icon={SplitSquareHorizontal} size={1} />
+          </IconButton>
+        </Tooltip>
+      )}
+    </div>
   )
 }

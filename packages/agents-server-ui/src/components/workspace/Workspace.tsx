@@ -30,12 +30,14 @@ export function Workspace(): React.ReactElement {
   const params = useParams({ strict: false })
   const search = useSearch({ strict: false }) as {
     view?: string
+    source?: string
     layout?: string
   }
   const navigate = useNavigate()
   const splat = (params as Record<string, string | undefined>)._splat
   const entityUrl = splat ? `/${splat}` : null
   const requestedViewId = (search.view as ViewId | undefined) ?? null
+  const requestedSource = (search.source as string | undefined) ?? null
   const layoutParam = (search.layout as string | undefined) ?? null
 
   // ---- ?layout=<DSL> import -------------------------------------------
@@ -62,7 +64,10 @@ export function Workspace(): React.ReactElement {
       void navigate({
         to: `/entity/$`,
         params: { _splat: splat ?? `` },
-        search: requestedViewId ? { view: requestedViewId } : {},
+        search: {
+          ...(requestedViewId ? { view: requestedViewId } : {}),
+          ...(requestedSource ? { source: requestedSource } : {}),
+        },
         replace: true,
       })
     } else {
@@ -132,14 +137,21 @@ export function Workspace(): React.ReactElement {
       requestedViewId && availableViews.some((v) => v.id === requestedViewId)
         ? requestedViewId
         : defaultViewId
-    const key = `${entityUrl}::${desiredViewId}`
+    const desiredViewParams =
+      desiredViewId === `state-explorer` && requestedSource
+        ? { source: requestedSource }
+        : undefined
+    const key = `${entityUrl}::${desiredViewId}::${requestedSource ?? ``}`
     if (lastSyncedKey.current === key) return
 
     const tiles = listTiles(workspace.root)
 
     // B1. Exact (entity, view) match anywhere in the tree → refocus.
     const exactMatch = tiles.find(
-      (t) => t.entityUrl === entityUrl && t.viewId === desiredViewId
+      (t) =>
+        t.entityUrl === entityUrl &&
+        t.viewId === desiredViewId &&
+        (desiredViewParams?.source ?? ``) === (t.viewParams?.source ?? ``)
     )
     if (exactMatch) {
       helpers.setActiveTile(exactMatch.id)
@@ -152,7 +164,9 @@ export function Workspace(): React.ReactElement {
     // might want to keep).
     const activeTile = helpers.activeTile
     if (activeTile && activeTile.entityUrl === entityUrl) {
-      helpers.setTileView(activeTile.id, desiredViewId)
+      helpers.setTileView(activeTile.id, desiredViewId, {
+        viewParams: desiredViewParams,
+      })
       lastSyncedKey.current = key
       return
     }
@@ -160,9 +174,19 @@ export function Workspace(): React.ReactElement {
     // B3. New entity entirely → replace the active tile (or bootstrap
     // the empty workspace). `openEntity` with no target defaults to
     // 'replace' on the active tile.
-    helpers.openEntity(entityUrl, { viewId: desiredViewId })
+    helpers.openEntity(entityUrl, {
+      viewId: desiredViewId,
+      viewParams: desiredViewParams,
+    })
     lastSyncedKey.current = key
-  }, [entityUrl, requestedViewId, entity, workspace.root, helpers])
+  }, [
+    entityUrl,
+    requestedViewId,
+    requestedSource,
+    entity,
+    workspace.root,
+    helpers,
+  ])
 
   // ---- Workspace → URL -------------------------------------------------
   // Whenever the active tile changes, mirror its (entityUrl, viewId)
@@ -179,7 +203,7 @@ export function Workspace(): React.ReactElement {
     const expectedKey =
       tile.entityUrl === null
         ? `::${tile.viewId}`
-        : `${tile.entityUrl}::${tile.viewId}`
+        : `${tile.entityUrl}::${tile.viewId}::${tile.viewParams?.source ?? ``}`
     if (lastSyncedKey.current === expectedKey) return
     lastSyncedKey.current = expectedKey
     if (tile.entityUrl === null) {
@@ -189,7 +213,10 @@ export function Workspace(): React.ReactElement {
     void navigate({
       to: `/entity/$`,
       params: { _splat: tile.entityUrl.replace(/^\//, ``) },
-      search: tile.viewId === `chat` ? {} : { view: tile.viewId },
+      search: {
+        ...(tile.viewId === `chat` ? {} : { view: tile.viewId }),
+        ...(tile.viewParams?.source ? { source: tile.viewParams.source } : {}),
+      },
       replace: true,
     })
   }, [helpers.activeTile, navigate])

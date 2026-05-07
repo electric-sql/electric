@@ -147,6 +147,7 @@ function EntityTileBody({
           entityStopped={entityStopped}
           isSpawning={isSpawning}
           tileId={tile.id}
+          viewParams={tile.viewParams}
         />
       ) : (
         <Stack align="center" justify="center" grow>

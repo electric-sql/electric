@@ -17,6 +17,7 @@ import { useWorkspace, listTiles } from '../../hooks/useWorkspace'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../../hooks/usePinnedEntities'
 import { listViews } from '../../lib/workspace/viewRegistry'
+import { JsonInspectDialog } from '../JsonInspectDialog'
 import type { EntityViewDefinition } from '../../lib/workspace/viewRegistry'
 import { encodeLayout } from '../../lib/workspace/layoutCodec'
 import {
@@ -268,23 +269,12 @@ export function SplitMenu({
       </Menu.Root>
 
       {hasEntity && entity && (
-        <Dialog.Root open={showInspect} onOpenChange={setShowInspect}>
-          <Dialog.Content maxWidth={600}>
-            <Dialog.Title>Entity details</Dialog.Title>
-            <pre className={styles.inspectPre}>
-              {JSON.stringify(entity, null, 2)}
-            </pre>
-            <Stack justify="end" className={styles.dialogActions}>
-              <Dialog.Close
-                render={
-                  <Button variant="soft" tone="neutral">
-                    Close
-                  </Button>
-                }
-              />
-            </Stack>
-          </Dialog.Content>
-        </Dialog.Root>
+        <JsonInspectDialog
+          open={showInspect}
+          onOpenChange={setShowInspect}
+          title="Entity details"
+          value={entity}
+        />
       )}
 
       {hasEntity && entity && (

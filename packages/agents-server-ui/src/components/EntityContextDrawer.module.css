@@ -99,6 +99,30 @@
   outline-offset: -2px;
 }
 
+.rowShell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.rowShell > .row {
+  flex: 1;
+}
+
+.sideButton {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: -2px;
+  border-radius: 4px;
+  color: var(--ds-gray-11);
+}
+
+.sideButton:hover {
+  background: var(--ds-gray-a5);
+  color: var(--ds-gray-12);
+}
+
 /* Fixed-width slot for the row's leading glyph. Both the chevron in
    the sub-agents header and the status dot in each child row sit
    inside the same slot, so the dots column-align with the chevron

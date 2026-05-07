@@ -1,4 +1,5 @@
 import { StateExplorerPanel } from '../stateExplorer/StateExplorerPanel'
+import { useWorkspace } from '../../hooks/useWorkspace'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
 
 /**
@@ -9,6 +10,22 @@ import type { ViewProps } from '../../lib/workspace/viewRegistry'
 export function StateExplorerView({
   baseUrl,
   entityUrl,
+  tileId,
+  viewParams,
 }: ViewProps): React.ReactElement {
-  return <StateExplorerPanel baseUrl={baseUrl} entityUrl={entityUrl} />
+  const { helpers } = useWorkspace()
+  const selectedSourceId = viewParams?.source
+
+  return (
+    <StateExplorerPanel
+      baseUrl={baseUrl}
+      entityUrl={entityUrl}
+      selectedSourceId={selectedSourceId}
+      onSelectedSourceIdChange={(sourceId) => {
+        helpers.setTileView(tileId, `state-explorer`, {
+          viewParams: sourceId ? { source: sourceId } : undefined,
+        })
+      }}
+    />
+  )
 }
