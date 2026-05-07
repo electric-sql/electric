@@ -551,6 +551,50 @@ describe(`Claim-scoped write tokens`, () => {
     expect(writeRes.status).toBe(401)
   }, 20_000)
 
+  it(`done retries still transition to idle when updateStatus fails on first attempt`, async () => {
+    const typeName = `done-retry-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+    const registry = (electricAgentsServer as any).electricAgentsManager!
+      .registry
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-done-retry`,
+    })
+    expect(claim.writeToken).toBeTruthy()
+
+    await registry.updateStatus(entity.url, `running`)
+    expect(await getEntityStatus(entity.url)).toBe(`running`)
+
+    const origUpdateStatus = registry.updateStatus.bind(registry)
+    let shouldFail = true
+    registry.updateStatus = async (...args: [string, string]) => {
+      if (shouldFail) {
+        shouldFail = false
+        throw new Error(`simulated DB failure`)
+      }
+      return origUpdateStatus(...args)
+    }
+
+    const firstDone = await sendDone({
+      consumerId: `consumer-done-retry`,
+      epoch: 4,
+      streamPath: entity.streams.main,
+    })
+    expect(firstDone.status).toBe(200)
+    expect(await getEntityStatus(entity.url)).toBe(`running`)
+
+    registry.updateStatus = origUpdateStatus
+
+    const retryDone = await sendDone({
+      consumerId: `consumer-done-retry`,
+      epoch: 4,
+      streamPath: entity.streams.main,
+    })
+    expect(retryDone.status).toBe(200)
+    expect(await getEntityStatus(entity.url)).toBe(`idle`)
+  }, 20_000)
+
   it(`claim-scoped tag writes reject non-string values and support merge/delete`, async () => {
     const typeName = `claim-tag-semantics-${Date.now()}`
     const entity = await createEntity(typeName, `owner`)

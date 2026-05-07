@@ -1859,9 +1859,6 @@ export class ElectricAgentsServer {
           target.primaryStream
         )
         const stillOwnsClaim = activeClaim?.consumerId === consumerId
-        if (stillOwnsClaim) {
-          this.clearActiveClaimForStream(target.primaryStream)
-        }
         const entity =
           await this.electricAgentsManager!.registry.getEntityByStream(
             target.primaryStream
@@ -1871,10 +1868,13 @@ export class ElectricAgentsServer {
             entity.url,
             `idle`
           )
+          this.clearActiveClaimForStream(target.primaryStream)
           serverLog.info(
             `[callback-forward] status updated to idle for ${entity.url}`
           )
           await this.entityBridgeManager?.onEntityChanged(entity.url)
+        } else if (stillOwnsClaim) {
+          this.clearActiveClaimForStream(target.primaryStream)
         } else if (entity) {
           serverLog.info(
             `[callback-forward] done ignored for stale claim stream=${target.primaryStream} consumer=${consumerId}`
