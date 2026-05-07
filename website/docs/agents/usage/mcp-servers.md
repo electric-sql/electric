@@ -42,17 +42,11 @@ const result = await server.mcpRegistry?.addServer({
     key: process.env.STRIPE_MCP_KEY!,
   },
 })
-
-if (result?.state === "authenticating") {
-  // OAuth flow needed — `result.authUrl` is the URL to send the
-  // user to. The desktop app opens it in a sandboxed BrowserWindow
-  // automatically; headless embedders surface it themselves.
-} else if (result?.state === "ready") {
-  // Tools are listed and available to every entity at the next wake.
-}
 ```
 
-`addServer` returns a discriminated [`AddServerResult`](#addserverresult), so callers don't have to introspect status to decide whether a redirect is needed. The bulk methods are:
+`addServer` returns a discriminated [`AddServerResult`](#addserverresult) — `{ state: "ready" | "authenticating" | "error", … }`. The state landscape is described in [Server states](#server-states) below; the full lifecycle (hot-reload, reauthorize, timeouts) lives in [Lifecycle](#lifecycle).
+
+The bulk methods are:
 
 - `applyConfig(cfg)` — replace the full set of servers. Idempotent on unchanged entries; removes anything not in the supplied config. This is what file-based config layers compile down to.
 - `subscribe(handler)` — push-based view of the live state, including `ready` / `authenticating` / `error` transitions. Useful when an embedder renders its own UI on top of the registry.
@@ -253,6 +247,52 @@ await mcpRegistry.addServer({
 | `filePersistence({ path, server })` | Mode-`0600` JSON file                                           | CI / containers without an OS keychain                   |
 
 For Vault, SSM, or a custom secret system, write your own `onTokensChanged` and `onClientRegistered` directly. The contract is two callbacks and two optional values.
+
+## Server states
+
+Every server entry the registry tracks is in exactly one of five states. The state is the `status` field on `ListedEntry` (returned by `Registry.list()` and emitted on every snapshot through `subscribe`), and it's the discriminator on the `AddServerResult` envelope returned from `addServer` / `applyConfig` / `finishAuth` / `enable`.
+
+| State            | Meaning                                                                                                                            | Side data                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `connecting`     | Transport is being built (RFC 9728 discovery, RFC 7591 DCR, stdio spawn, HTTP handshake) or rebuilt after `reauthorize` / `enable`. | —                                               |
+| `authenticating` | An `authorizationCode` server needs the user. The SDK has produced an authorize URL; the embedder's `openAuthorizeUrl` hook fired. | `authUrl: string`                               |
+| `ready`          | Connected. Tools listed. Calls succeed and stream through the bridge.                                                              | `toolCount: number`, `tools: [...]`             |
+| `error`          | Transport, auth-config, or `addServer` validation failure. The entry stays in `list()` so the UI can surface the failure.          | `error: { kind, message, details? }`            |
+| `disabled`       | Operator paused the server via `Registry.disable(name)`. Transport closed; tokens stay in the cache.                                | —                                               |
+
+Transitions are driven by registry methods. The high-level shape:
+
+```
+                    ┌──────────────┐    success     ┌──────────┐
+   addServer ──────▶│  connecting  │───────────────▶│  ready   │
+   applyConfig      └──────┬───────┘                └────┬─────┘
+   enable                  │                             │
+                           │ no tokens / 401             │
+                           ▼                             │
+                    ┌──────────────┐  finishAuth         │
+                    │authenticating│───────────────────▶─┘
+                    └──────┬───────┘  (retries connect)
+                           │
+                           │ unrecoverable
+                           ▼
+                    ┌──────────────┐
+                    │    error     │
+                    └──────────────┘
+
+   reauthorize:  any non-disabled  ──▶ connecting ──▶ authenticating
+   disable:      any               ──▶ disabled
+   enable:       disabled          ──▶ connecting ──▶ ready (or authenticating, or error)
+   removeServer: any               ──▶ (entry gone)
+```
+
+A few specifics worth knowing:
+
+- **`error` is sticky.** It doesn't auto-recover. Reach `ready` again by calling `addServer` with the same config (idempotency picks up changes), `reauthorize(name)`, or — for transient transport issues — re-running through `applyConfig`. The entry stays in the snapshot the whole time.
+- **`reauthorize` always lands in `connecting` first**, then typically `authenticating` because tokens are intentionally cleared. The mutation is in-place — subscribers never see the entry disappear, so renderers don't flicker.
+- **`disable` is recoverable.** It closes the transport but keeps tokens, hooks, and the entry. `enable` rebuilds the transport from the same config; if tokens are still valid, the next state is `ready` without an OAuth round-trip.
+- **`removeServer` is destructive.** It clears tokens from the in-memory cache (persisted tokens via `onTokensChanged` stay where the operator put them) and removes the entry. There is no UI affordance for it on the desktop — Disable is the recoverable equivalent.
+
+For the full per-method API (including `subscribe`, `RegistrySnapshot`, and `RegistryOpts`), see the [`McpRegistry` reference](/docs/agents/reference/mcp-registry).
 
 ## Lifecycle
 
