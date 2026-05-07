@@ -103,16 +103,6 @@ function ServerEntry({
     }
   }
 
-  const remove = async () => {
-    if (!window.confirm(`Disconnect ${server.name}?`)) return
-    setBusy(true)
-    try {
-      await ipc.disconnect(server.name)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const metaPieces: string[] = []
   if (server.transport) metaPieces.push(server.transport)
   if (server.authMode) metaPieces.push(`auth: ${server.authMode}`)
@@ -237,14 +227,6 @@ function ServerEntry({
             Disable
           </Button>
         )}
-        <Button
-          variant="soft"
-          tone="danger"
-          onClick={() => void remove()}
-          disabled={busy}
-        >
-          Disconnect
-        </Button>
       </div>
     </>
   )

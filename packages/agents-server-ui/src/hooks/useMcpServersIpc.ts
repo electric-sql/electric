@@ -14,7 +14,6 @@ export interface UseMcpServersIpcResult {
   reconnect(name: string): Promise<void>
   disable(name: string): Promise<void>
   enable(name: string): Promise<void>
-  disconnect(name: string): Promise<void>
 }
 
 const noopAction = async () => {}
@@ -63,7 +62,6 @@ export function useMcpServersIpc(): UseMcpServersIpcResult {
       reconnect: noopAction,
       disable: noopAction,
       enable: noopAction,
-      disconnect: noopAction,
     }
   }
 
@@ -74,6 +72,5 @@ export function useMcpServersIpc(): UseMcpServersIpcResult {
     reconnect: mcp.reconnect,
     disable: mcp.disable,
     enable: mcp.enable,
-    disconnect: mcp.disconnect,
   }
 }

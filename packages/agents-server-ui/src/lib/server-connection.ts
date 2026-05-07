@@ -127,7 +127,6 @@ declare global {
         reconnect: (name: string) => Promise<void>
         disable: (name: string) => Promise<void>
         enable: (name: string) => Promise<void>
-        disconnect: (name: string) => Promise<void>
       }
     }
   }

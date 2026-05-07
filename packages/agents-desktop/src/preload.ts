@@ -200,8 +200,6 @@ const api = {
       ipcRenderer.invoke(`desktop:mcp-disable`, name),
     enable: (name: string): Promise<void> =>
       ipcRenderer.invoke(`desktop:mcp-enable`, name),
-    disconnect: (name: string): Promise<void> =>
-      ipcRenderer.invoke(`desktop:mcp-disconnect`, name),
   },
 }
 
