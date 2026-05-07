@@ -7,6 +7,8 @@ import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
+import { connectEntityStream } from '../../lib/entity-connection'
+import { createSendMessageAction } from '../../lib/sendMessage'
 import { Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
@@ -151,17 +153,18 @@ export function NewSessionView({
       try {
         await tx.isPersisted.promise
         if (initialUserText && baseUrl) {
-          const res = await fetch(`${baseUrl}/${typeName}/${name}/send`, {
-            method: `POST`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              from: `user`,
-              payload: { text: initialUserText },
-            }),
-          })
-          if (!res.ok) {
-            const body = await res.text().catch(() => ``)
-            throw new Error(body || `Send failed (${res.status})`)
+          const connection = await connectEntityStream({ baseUrl, entityUrl })
+          try {
+            const sendInitialMessage = createSendMessageAction({
+              db: connection.db,
+              baseUrl,
+              entityUrl,
+            })
+            await sendInitialMessage({
+              text: initialUserText,
+            }).isPersisted.promise
+          } finally {
+            connection.close()
           }
         }
       } catch (err) {
