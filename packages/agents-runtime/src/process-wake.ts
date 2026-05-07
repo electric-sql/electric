@@ -262,6 +262,7 @@ export async function processWebhookWake(
   // Create producer BEFORE the StreamDB so state actions can write through it.
   const producer = new IdempotentProducer(stream, `entity-${entityUrl}`, {
     epoch,
+    autoClaim: true,
     fetch: (input, init) => {
       const headers = new Headers(init?.headers)
       if (writeToken) {
@@ -670,11 +671,7 @@ export async function processWebhookWake(
 
     if (!claimed.ok) return null
     claimedWake = true
-    writeToken =
-      claimed.writeToken ??
-      notification.writeToken ??
-      notification.entity?.writeToken ??
-      ``
+    writeToken = claimed.writeToken ?? ``
 
     // 3b. Start heartbeat once this worker owns the wake
     heartbeat = setInterval(() => {
@@ -856,6 +853,7 @@ export async function processWebhookWake(
           `shared-state-${entityUrl}-${ssId}`,
           {
             epoch,
+            autoClaim: true,
             onError: (error) => {
               failBackgroundWake(error, `WRITE_FAILED`)
             },

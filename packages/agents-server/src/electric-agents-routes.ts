@@ -18,9 +18,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export class ElectricAgentsRoutes {
   private manager: ElectricAgentsManager
+  private onEntityKilled?: (entityUrl: string) => void | Promise<void>
 
-  constructor(manager: ElectricAgentsManager) {
+  constructor(
+    manager: ElectricAgentsManager,
+    opts?: {
+      onEntityKilled?: (entityUrl: string) => void | Promise<void>
+    }
+  ) {
     this.manager = manager
+    this.onEntityKilled = opts?.onEntityKilled
   }
 
   async handleRequest(
@@ -263,7 +270,6 @@ export class ElectricAgentsRoutes {
         initialMessage: parsed.initialMessage,
         wake: parsed.wake,
       })
-      res.setHeader(`x-write-token`, entity.write_token)
       sendJson(res, 201, { ...toPublicEntity(entity), txid: entity.txid })
     } catch (err) {
       handleElectricAgentsError(err, res)
@@ -522,6 +528,7 @@ export class ElectricAgentsRoutes {
   ): Promise<void> {
     try {
       const result = await this.manager.kill(entityUrl)
+      await this.onEntityKilled?.(entityUrl)
       sendJson(res, 200, result)
     } catch (err) {
       handleElectricAgentsError(err, res)

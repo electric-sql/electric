@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTransaction } from '@durable-streams/state'
 import { getCronSourceRef } from '../src/cron-utils'
 import { manifestSourceKey } from '../src/manifest-helpers'
+import { db } from '../src/observation-sources'
 import { processWake } from '../src/process-wake'
 import { clearRegistry, defineEntity } from '../src/define-entity'
-import { entityStateSchema } from '../src/entity-schema'
+import { entityStateSchema, passthrough } from '../src/entity-schema'
 import { runtimeLog } from '../src/log'
 import { ev } from './helpers/event-fixtures'
 import { createLocalOnlyTestCollection } from './helpers/local-only'
@@ -21,6 +22,7 @@ const {
   mockProducerAppend,
   mockProducerFlush,
   mockProducerDetach,
+  mockConstructedProducers,
   mockDbClose,
   mockDbPreload,
   mockStreamSubscribeJson,
@@ -35,6 +37,10 @@ const {
   mockProducerAppend: vi.fn(),
   mockProducerFlush: vi.fn().mockResolvedValue(undefined),
   mockProducerDetach: vi.fn().mockResolvedValue(undefined),
+  mockConstructedProducers: [] as Array<{
+    producerId: string
+    opts?: Record<string, unknown>
+  }>,
   mockDbClose: vi.fn(),
   mockDbPreload: vi.fn().mockResolvedValue(undefined),
   mockStreamSubscribeJson: vi.fn().mockReturnValue(() => {}),
@@ -72,6 +78,14 @@ vi.mock(`@durable-streams/client`, async (importOriginal) => {
     head = mockStreamHead
   }
   class MockIdempotentProducer {
+    constructor(
+      _stream: unknown,
+      producerId: string,
+      opts?: Record<string, unknown>
+    ) {
+      mockConstructedProducers.push({ producerId, opts })
+    }
+
     append = mockProducerAppend
     flush = mockProducerFlush
     detach = mockProducerDetach
@@ -321,6 +335,14 @@ const BASE_CONFIG: ProcessWakeConfig = {
   idleTimeout: 100,
 }
 
+const sharedFindingsSchema = {
+  findings: {
+    schema: passthrough<Record<string, unknown>>(),
+    type: `finding`,
+    primaryKey: `key`,
+  },
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -332,6 +354,7 @@ describe(`processWake`, () => {
     vi.clearAllMocks()
     vi.useRealTimers()
     clearRegistry()
+    mockConstructedProducers.length = 0
     mockDbPreload.mockResolvedValue(undefined)
     mockStreamOffset.value = `10_100`
     mockDbOffset.value = `10_100`
@@ -859,6 +882,41 @@ describe(`processWake`, () => {
 
     expect(mockProducerFlush).toHaveBeenCalled()
     expect(mockProducerDetach).toHaveBeenCalledOnce()
+  })
+
+  it(`creates the main entity producer with autoClaim enabled`, async () => {
+    defineEntity(`test-agent`, {
+      handler: () => {},
+    })
+
+    await processWake(makeNotification(), BASE_CONFIG)
+
+    expect(mockConstructedProducers).toContainEqual({
+      producerId: `entity-http://localhost:3000/test-agent/agent-1`,
+      opts: expect.objectContaining({
+        epoch: 1,
+        autoClaim: true,
+      }),
+    })
+  })
+
+  it(`creates shared-state producers with autoClaim enabled`, async () => {
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        ctx.mkdb(`board-1`, sharedFindingsSchema)
+        await ctx.observe(db(`board-1`, sharedFindingsSchema))
+      },
+    })
+
+    await processWake(makeNotification(), BASE_CONFIG)
+
+    expect(mockConstructedProducers).toContainEqual({
+      producerId: `shared-state-http://localhost:3000/test-agent/agent-1-board-1`,
+      opts: expect.objectContaining({
+        epoch: 1,
+        autoClaim: true,
+      }),
+    })
   })
 
   it(`returns persisted manifest rows when manifest is non-empty`, async () => {

@@ -37,7 +37,6 @@ describe(`Scheduler Integration`, () => {
   ): Promise<{
     url: string
     streams: { main: string }
-    writeToken: string
   }> {
     const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
       method: `POST`,
@@ -61,10 +60,7 @@ describe(`Scheduler Integration`, () => {
       streams: { main: string }
     }
 
-    return {
-      ...entity,
-      writeToken: entityRes.headers.get(`x-write-token`) ?? ``,
-    }
+    return entity
   }
 
   async function registerEntityType(opts: {
@@ -76,28 +72,6 @@ describe(`Scheduler Integration`, () => {
       headers: { 'content-type': `application/json` },
       body: JSON.stringify(opts),
     })
-  }
-
-  async function appendEntityEvent(opts: {
-    entityUrl: string
-    writeToken: string
-    event: Record<string, unknown>
-  }): Promise<void> {
-    const res = await fetch(`${baseUrl}${opts.entityUrl}/main`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${opts.writeToken}`,
-      },
-      body: JSON.stringify({
-        specversion: `1.0`,
-        source: `electric_agents:${opts.entityUrl}`,
-        id: `${opts.entityUrl}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: new Date().toISOString(),
-        ...opts.event,
-      }),
-    })
-    expect(res.status).toBe(204)
   }
 
   beforeAll(async () => {
@@ -202,51 +176,35 @@ describe(`Scheduler Integration`, () => {
     const entity = await createEntity(typeName, `owner`)
     const manifestKey = `schedule:demo-send`
 
-    await appendEntityEvent({
-      entityUrl: entity.url,
-      writeToken: entity.writeToken,
-      event: {
-        type: `manifest`,
-        key: manifestKey,
-        value: {
-          key: manifestKey,
-          kind: `schedule`,
-          id: `demo-send`,
+    const firstRes = await fetch(
+      `${baseUrl}${entity.url}/schedules/${encodeURIComponent(`demo-send`)}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
           scheduleType: `future_send`,
           fireAt: new Date(Date.now() + 2_000).toISOString(),
           targetUrl: entity.url,
           payload: { body: `old payload` },
-          producerId: `future-send-demo`,
-          status: `pending`,
-        },
-        headers: {
-          operation: `insert`,
-        },
-      },
-    })
+        }),
+      }
+    )
+    expect(firstRes.status).toBe(200)
 
-    await appendEntityEvent({
-      entityUrl: entity.url,
-      writeToken: entity.writeToken,
-      event: {
-        type: `manifest`,
-        key: manifestKey,
-        value: {
-          key: manifestKey,
-          kind: `schedule`,
-          id: `demo-send`,
+    const secondRes = await fetch(
+      `${baseUrl}${entity.url}/schedules/${encodeURIComponent(`demo-send`)}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
           scheduleType: `future_send`,
           fireAt: new Date(Date.now() + 600).toISOString(),
           targetUrl: entity.url,
           payload: { body: `new payload` },
-          producerId: `future-send-demo`,
-          status: `pending`,
-        },
-        headers: {
-          operation: `update`,
-        },
-      },
-    })
+        }),
+      }
+    )
+    expect(secondRes.status).toBe(200)
 
     await waitFor(
       async () => {
@@ -304,25 +262,20 @@ describe(`Scheduler Integration`, () => {
     const timezone = `America/Denver`
     const sourceUrl = getCronStreamPath(expression, timezone)
 
-    await appendEntityEvent({
-      entityUrl: entity.url,
-      writeToken: entity.writeToken,
-      event: {
-        type: `manifest`,
-        key: `schedule:demo-cron`,
-        value: {
-          key: `schedule:demo-cron`,
-          kind: `schedule`,
-          id: `demo-cron`,
+    const scheduleRes = await fetch(
+      `${baseUrl}${entity.url}/schedules/${encodeURIComponent(`demo-cron`)}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
           scheduleType: `cron`,
           expression,
           timezone,
-        },
-        headers: {
-          operation: `insert`,
-        },
-      },
-    })
+          payload: { kind: `tick` },
+        }),
+      }
+    )
+    expect(scheduleRes.status).toBe(200)
 
     await waitFor(
       async () => {

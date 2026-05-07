@@ -582,7 +582,6 @@ export interface WebhookNotification {
   triggeredBy?: Array<string>
   callback: string
   claimToken: string
-  writeToken?: string
   triggerEvent?: string
   wakeEvent?: WakeEvent
   entity?: {
@@ -592,7 +591,6 @@ export interface WebhookNotification {
     streams: { main: string; error: string }
     tags?: Record<string, string>
     spawnArgs?: Record<string, unknown>
-    writeToken?: string
   }
 }
 
