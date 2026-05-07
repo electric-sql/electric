@@ -139,12 +139,13 @@ export function WorkingDirectoryPicker({
           {/* Every row uses the same `.menuRow` inner wrapper as
               ServerPicker's saved-server rows. The wrapper is what
               carries `min-height: 24px` (sized to match an inline
-              `IconButton size={1}`), so rows with a trailing control
-              and rows without one stay on a uniform 30px row pitch
-              (24px content + 6px item padding). Mirrors the trick
+              `IconButton size={1}`). The item class trims vertical
+              padding to 2px so rows with a trailing control and rows
+              without one stay on the shared 28px dropdown row pitch.
+              Mirrors the trick
               `ServerPicker.module.css → .menuRow` uses to stop the
               menu jumping between saved and discovered groups. */}
-          <Combobox.Item value={NONE_VALUE}>
+          <Combobox.Item value={NONE_VALUE} className={styles.pathItem}>
             <span className={styles.menuRow}>
               <Icon icon={Home} size={2} className={styles.menuRowIcon} />
               <span className={styles.menuRowLabel}>None</span>
@@ -165,7 +166,7 @@ export function WorkingDirectoryPicker({
                 key={path}
                 value={path}
                 title={path}
-                className={styles.recentItem}
+                className={[styles.pathItem, styles.recentItem].join(` `)}
               >
                 <span className={styles.menuRow}>
                   <Icon icon={Folder} size={2} className={styles.menuRowIcon} />
@@ -213,7 +214,7 @@ export function WorkingDirectoryPicker({
           {isDesktop && (
             <>
               <Combobox.Separator />
-              <Combobox.Item value={BROWSE_VALUE}>
+              <Combobox.Item value={BROWSE_VALUE} className={styles.pathItem}>
                 <span className={styles.menuRow}>
                   <Icon
                     icon={FolderOpen}
