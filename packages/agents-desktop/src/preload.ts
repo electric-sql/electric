@@ -95,7 +95,7 @@ function selectionIntersectsContext(
 function isSelectionContextControl(target: Element): boolean {
   return (
     target.closest(
-      `button, [role="button"], [data-md-code-block-actions], [data-md-table-toolbar]`
+      `a[href], button, [role="button"], [data-md-code-block-actions], [data-md-table-toolbar]`
     ) !== null
   )
 }

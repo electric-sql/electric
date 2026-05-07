@@ -144,6 +144,8 @@ type DesktopContextMenuRequest = {
   selectionText: string
 }
 
+const EXTERNAL_LINK_PROTOCOLS = new Set([`http:`, `https:`, `mailto:`])
+
 const DEFAULT_SETTINGS: DesktopSettings = {
   servers: [],
   activeServer: null,
@@ -446,6 +448,7 @@ function createWindow(): BrowserWindow {
 
   windows.add(win)
   installEditableContextMenu(win)
+  installExternalLinkHandler(win)
   win.on(`closed`, () => {
     windows.delete(win)
     buildApplicationMenu()
@@ -460,7 +463,6 @@ function createWindow(): BrowserWindow {
   win.on(`focus`, () => {
     buildApplicationMenu()
   })
-  win.webContents.setWindowOpenHandler(() => ({ action: `deny` }))
   // Dev: load from the running Vite dev server so the renderer gets
   // HMR (CSS / React Refresh / module replacement). Production: load
   // the prebuilt `dist-desktop/index.html` from disk via file://.
@@ -478,8 +480,36 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+function isExternalLink(url: string): boolean {
+  try {
+    return EXTERNAL_LINK_PROTOCOLS.has(new URL(url).protocol)
+  } catch {
+    return false
+  }
+}
+
+function installExternalLinkHandler(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalLink(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: `deny` }
+  })
+
+  win.webContents.on(`will-navigate`, (event, url) => {
+    if (!isExternalLink(url)) return
+    event.preventDefault()
+    void shell.openExternal(url)
+  })
+}
+
 function installEditableContextMenu(win: BrowserWindow): void {
   win.webContents.on(`context-menu`, (_event, params) => {
+    if (params.linkURL && isExternalLink(params.linkURL)) {
+      showLinkContextMenu(win, params.linkURL)
+      return
+    }
+
     if (!params.isEditable) return
 
     const template: Array<Electron.MenuItemConstructorOptions> = []
@@ -526,6 +556,21 @@ function installEditableContextMenu(win: BrowserWindow): void {
 
     Menu.buildFromTemplate(template).popup({ window: win })
   })
+}
+
+function showLinkContextMenu(win: BrowserWindow, url: string): void {
+  Menu.buildFromTemplate([
+    {
+      label: `Open Link in Browser`,
+      click: () => {
+        void shell.openExternal(url)
+      },
+    },
+    {
+      label: `Copy Link`,
+      click: () => clipboard.writeText(url),
+    },
+  ]).popup({ window: win })
 }
 
 function showSelectionContextMenu(
