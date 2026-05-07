@@ -54,10 +54,8 @@ function GenericChatBody({
   isSpawning: boolean
   tileId: string
 }): React.ReactElement {
-  const { entries, entities, db, loading, error } = useEntityTimeline(
-    baseUrl || null,
-    entityUrl
-  )
+  const { entries, pendingInbox, entities, db, loading, error } =
+    useEntityTimeline(baseUrl || null, entityUrl)
   const navigate = useNavigate()
 
   // If the timeline subscription errors out for an entity that isn't
@@ -87,7 +85,21 @@ function GenericChatBody({
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
-        drawer={<EntityContextDrawer entity={entity} db={db} tileId={tileId} />}
+        pendingMessages={pendingInbox}
+        generationActive={entity.status === `running`}
+        drawer={(pending) => (
+          <EntityContextDrawer
+            entity={entity}
+            db={db}
+            tileId={tileId}
+            pendingMessages={pending.pendingMessages}
+            pendingEditingKey={pending.editingKey}
+            onEditPending={pending.onEdit}
+            onDeletePending={pending.onDelete}
+            onSteerPending={pending.onSteer}
+            onReorderPending={pending.onReorder}
+          />
+        )}
       />
     </>
   )

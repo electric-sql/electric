@@ -131,10 +131,15 @@ type ErrorEventValue = {
 }
 type MessageReceivedValue = {
   key?: string
-  from: string
+  from?: string
   payload?: unknown
-  timestamp: string
+  timestamp?: string
   message_type?: string
+  mode?: `immediate` | `queued` | `steer`
+  status?: `pending` | `processed` | `cancelled`
+  position?: string
+  processed_at?: string
+  cancelled_at?: string
 }
 type WakeEntryValue = {
   key?: string
@@ -391,10 +396,15 @@ function createErrorEventSchema(): Schema<ErrorEventValue> {
 function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
   return z.object({
     key: z.string().optional(),
-    from: z.string(),
+    from: z.string().optional(),
     payload: z.unknown().optional(),
-    timestamp: z.string(),
+    timestamp: z.string().optional(),
     message_type: z.string().optional(),
+    mode: z.enum([`immediate`, `queued`, `steer`]).optional(),
+    status: z.enum([`pending`, `processed`, `cancelled`]).optional(),
+    position: z.string().optional(),
+    processed_at: z.string().optional(),
+    cancelled_at: z.string().optional(),
   })
 }
 
@@ -671,6 +681,8 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   reasoning:
     createReasoningSchema() as unknown as BuiltInEntitySchema<Reasoning>,
   error: createErrorEventSchema() as unknown as BuiltInEntitySchema<ErrorEvent>,
+  inbox:
+    createMessageReceivedSchema() as unknown as BuiltInEntitySchema<MessageReceived>,
   message_received:
     createMessageReceivedSchema() as unknown as BuiltInEntitySchema<MessageReceived>,
   wake: createWakeSchema() as unknown as BuiltInEntitySchema<WakeEntry>,
@@ -760,7 +772,7 @@ export const builtInCollections: EntityCollectionsDefinition = {
   inbox: {
     schema:
       BUILT_IN_EVENT_SCHEMAS.message_received as StandardSchemaV1<MessageReceived>,
-    type: `message_received`,
+    type: `inbox`,
     primaryKey: `key`,
   },
   wakes: {

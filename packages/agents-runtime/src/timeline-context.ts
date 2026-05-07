@@ -214,11 +214,13 @@ export function materializeTimeline(
         item: IncludesContextRemoved
       }
   > = [
-    ...data.inbox.map((item) => ({
-      kind: `inbox` as const,
-      order: item.order,
-      item,
-    })),
+    ...data.inbox
+      .filter((item) => (item.status ?? `processed`) === `processed`)
+      .map((item) => ({
+        kind: `inbox` as const,
+        order: item.order,
+        item,
+      })),
     ...data.wakes.map((item) => ({
       kind: `wake` as const,
       order: item.order,

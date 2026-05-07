@@ -109,6 +109,11 @@ export interface IncludesInboxMessage {
   from: string
   payload: unknown
   timestamp: string
+  mode?: `immediate` | `queued` | `steer`
+  status?: `pending` | `processed` | `cancelled`
+  position?: string
+  processed_at?: string
+  cancelled_at?: string
 }
 
 export interface IncludesWakeMessage {
@@ -654,9 +659,14 @@ function buildInboxMessages(
   return [...inbox].sort(compareTimelineOrder).map((message) => ({
     key: message.key,
     order: message.order,
-    from: message.from,
+    from: message.from ?? `unknown`,
     payload: message.payload,
-    timestamp: message.timestamp,
+    timestamp: message.timestamp ?? new Date(0).toISOString(),
+    mode: message.mode ?? `immediate`,
+    status: message.status ?? `processed`,
+    position: message.position,
+    processed_at: message.processed_at,
+    cancelled_at: message.cancelled_at,
   }))
 }
 
@@ -953,6 +963,11 @@ const getEntityInboxCollection = cachedCollectionFactory((db: EntityStreamDB) =>
         from: inbox.from,
         payload: inbox.payload,
         timestamp: inbox.timestamp,
+        mode: coalesce(inbox.mode, `immediate`),
+        status: coalesce(inbox.status, `processed`),
+        position: inbox.position,
+        processed_at: inbox.processed_at,
+        cancelled_at: inbox.cancelled_at,
       })),
   })
 )
@@ -1087,6 +1102,11 @@ export function createEntityIncludesQuery(
             from: inbox.from,
             payload: inbox.payload,
             timestamp: inbox.timestamp,
+            mode: inbox.mode,
+            status: inbox.status,
+            position: inbox.position,
+            processed_at: inbox.processed_at,
+            cancelled_at: inbox.cancelled_at,
           }))
       ),
       wakes: toArray(

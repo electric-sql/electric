@@ -170,6 +170,7 @@ export function NewSessionView({
             })
             await sendInitialMessage({
               text: initialUserText,
+              mode: `immediate`,
             }).isPersisted.promise
           } finally {
             connection.close()

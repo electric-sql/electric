@@ -6,11 +6,13 @@ import {
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
 } from '@electric-ax/agents-runtime/client'
+import { eq } from '@tanstack/db'
 import { connectEntityStream } from '../lib/entity-connection'
 import type { TimelineEntry } from '../lib/timelineEntries'
 import type {
   EntityStreamDBWithActions,
   EntityTimelineData,
+  IncludesInboxMessage,
   IncludesEntity,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
@@ -20,6 +22,7 @@ export function useEntityTimeline(
   entityUrl: string | null
 ): {
   entries: Array<TimelineEntry>
+  pendingInbox: EntityTimelineData[`inbox`]
   entities: Array<IncludesEntity>
   db: EntityStreamDBWithActions | null
   loading: boolean
@@ -84,6 +87,16 @@ export function useEntityTimeline(
         : undefined,
     [db]
   )
+  const { data: pendingInboxRows = [] } = useLiveQuery(
+    (q) =>
+      db
+        ? q
+            .from({ inbox: db.collections.inbox })
+            .where(({ inbox }) => eq(inbox.status, `pending`))
+            .orderBy(({ inbox }) => inbox._seq, `asc`)
+        : undefined,
+    [db]
+  )
   const timelineData = useMemo(
     () =>
       normalizeEntityTimelineData(
@@ -137,5 +150,52 @@ export function useEntityTimeline(
       .map(({ entry }) => entry)
   }, [manifests, timelineData.runs, timelineData.inbox, timelineData.wakes])
 
-  return { entries, entities: timelineData.entities, db, loading, error }
+  const pendingInbox = useMemo(
+    () =>
+      (pendingInboxRows as Array<Record<string, any>>)
+        .map(
+          (msg): IncludesInboxMessage => ({
+            key: msg.key,
+            order: msg._seq ?? Number.MAX_SAFE_INTEGER,
+            from: msg.from,
+            payload: msg.payload,
+            timestamp: msg.timestamp,
+            mode: msg.mode ?? `queued`,
+            status: msg.status ?? `pending`,
+            position: msg.position,
+            processed_at: msg.processed_at,
+            cancelled_at: msg.cancelled_at,
+          })
+        )
+        .filter((msg) => msg.status === `pending`)
+        .sort((left, right) => {
+          if (
+            left.position &&
+            right.position &&
+            left.position !== right.position
+          ) {
+            return left.position < right.position ? -1 : 1
+          }
+          if (left.position && !right.position) return -1
+          if (!left.position && right.position) return 1
+          if (
+            left.timestamp &&
+            right.timestamp &&
+            left.timestamp !== right.timestamp
+          ) {
+            return left.timestamp < right.timestamp ? -1 : 1
+          }
+          return compareTimelineOrders(left.order, right.order)
+        }),
+    [pendingInboxRows]
+  )
+
+  return {
+    entries,
+    pendingInbox,
+    entities: timelineData.entities,
+    db,
+    loading,
+    error,
+  }
 }
