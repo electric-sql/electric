@@ -250,6 +250,7 @@ export function ToolCallView({
             <Badge
               tone={badge.tone}
               variant="soft"
+              size={1}
               className={toolBlock.statusBadge}
             >
               {badge.label}
@@ -292,6 +293,7 @@ export function ToolCallView({
           <Badge
             tone={badge.tone}
             variant="soft"
+            size={1}
             className={toolBlock.statusBadge}
           >
             {badge.label}
