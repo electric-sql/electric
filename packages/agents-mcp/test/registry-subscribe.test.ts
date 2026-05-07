@@ -94,6 +94,26 @@ describe(`Registry — subscribe`, () => {
     }
   })
 
+  it(`a late subscriber still receives seq 0 as the bootstrap sentinel`, async () => {
+    const reg = createRegistry({
+      transportFactoryOverride: () => fakeTransport([`a`]),
+    })
+    // Drive several mutations before the subscriber attaches; the
+    // internal seq counter advances each time a snapshot would have
+    // been emitted, but no subscriber means notify() is a no-op.
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: { mode: `apiKey`, key: `KEY` },
+    })
+    await reg.removeServer(`mock`)
+    const handler = vi.fn()
+    reg.subscribe(handler)
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler.mock.calls[0]![0]!.seq).toBe(0)
+  })
+
   it(`a buggy subscriber does not break the registry`, async () => {
     const reg = createRegistry({
       transportFactoryOverride: () => fakeTransport([`a`]),

@@ -99,6 +99,20 @@ export interface Registry {
   disable(name: string): Promise<void>
   enable(name: string): Promise<AddServerResult>
   /**
+   * Force a fresh OAuth flow for a server. Closes the current transport,
+   * forgets cached tokens (and DCR client info) for this server, and
+   * rebuilds the transport in place — keeping the entry visible in
+   * snapshots throughout, so renderers don't see a brief
+   * "server gone, server back" blip the way `removeServer` + `addServer`
+   * would. The SDK provider then has nothing to authenticate with on the
+   * next connect, and surfaces a fresh authorize URL via the
+   * `openAuthorizeUrl` hook.
+   *
+   * No-op when the server is unknown, not authorizationCode, or
+   * disabled.
+   */
+  reauthorize(name: string): Promise<void>
+  /**
    * Subscribe to registry state changes. The handler is invoked
    * synchronously with the current snapshot on subscribe (so callers
    * can render an initial UI without a round-trip), and again on every
@@ -346,11 +360,14 @@ export function createRegistry(opts: RegistryOpts): Registry {
   const registry: Registry = {
     subscribe(handler) {
       subscribers.add(handler)
-      // Synchronous initial snapshot so callers can render without a
-      // round-trip; seq is reused (not bumped) for the initial deliver
-      // so that downstream "I have seq N already" logic stays simple.
+      // Synchronous initial delivery so callers can render without a
+      // round-trip. The initial envelope always carries `seq: 0` as a
+      // sentinel — emitted snapshots start at 1 and increase
+      // monotonically. A late subscriber thus doesn't collide with the
+      // last broadcast seq, and any downstream "skip if newSeq <= last"
+      // logic safely treats the bootstrap as outside the event stream.
       try {
-        handler({ seq, servers: registry.list() })
+        handler({ seq: 0, servers: registry.list() })
       } catch {
         // ignored — see notify()
       }
@@ -496,6 +513,53 @@ export function createRegistry(opts: RegistryOpts): Registry {
         return { state: `ready`, id: name, toolCount: e.tools.length }
       entries.delete(name)
       return await registry.addServer(e.config)
+    },
+
+    async reauthorize(name) {
+      const e = entries.get(name)
+      if (!e) return
+      if (e.config.auth?.mode !== `authorizationCode`) return
+      if (e.status === `disabled`) return
+      await Promise.resolve(e.transport?.close()).catch(() => {})
+      // Drop only the tokens + DCR client cache. Hooks stay registered
+      // so future refresh / re-DCR still hit the operator's persistence
+      // callbacks. Skipping the token re-seed is the whole point — we
+      // want the SDK to discover it has no credentials and produce a
+      // fresh authorize URL on the next connect.
+      authStore.clearCredentials(name)
+      // Make the in-progress flash visible: buildTransport may take a
+      // beat (RFC 9728 discovery / RFC 7591 DCR), and during that beat
+      // the entry is no longer connected.
+      e.status = `connecting`
+      e.tools = []
+      e.capabilities = undefined
+      e.authUrl = undefined
+      e.error = undefined
+      notify()
+      const built = await buildTransport(e.config)
+      // Mutate in place so the snapshot never loses the entry.
+      e.transport = built.transport
+      e.error = built.error
+      e.authUrl = built.authUrl
+      e.provider = built.provider
+      if (built.error || !built.transport) {
+        e.status = `error`
+        notify()
+        return
+      }
+      if (built.authUrl) {
+        e.status = `authenticating`
+        notify()
+        try {
+          opts.openAuthorizeUrl?.(built.authUrl, name)
+        } catch {
+          // see notify()
+        }
+        return
+      }
+      // connectAndList notifies on its own status transitions, including
+      // the peekAuthUrl → authenticating path that opens the browser.
+      await connectAndList(e, built.provider)
     },
   }
 

@@ -11,6 +11,14 @@ export interface InternalAuthStore extends AuthStore {
   seedClient(server: string, client: OAuthClientInfo): void
   /** Register per-server hooks declared on the auth config. */
   registerHooks(server: string, hooks: AuthStoreHooks): void
+  /**
+   * Drop only the cached tokens + DCR client info for a server. Hooks
+   * stay registered, so future `saveOAuthTokens` / `saveOAuthClientInfo`
+   * calls still notify the operator's persistence callbacks. Used by
+   * `Registry.reauthorize` to force a fresh OAuth flow without losing
+   * the persistence wiring.
+   */
+  clearCredentials(server: string): void
   /** Drop everything we know about a server (used by `removeServer`). */
   forget(server: string): void
 }
@@ -29,6 +37,10 @@ export function createAuthStore(): InternalAuthStore {
     },
     registerHooks(server, h) {
       hooks.set(server, h)
+    },
+    clearCredentials(server) {
+      tokens.delete(server)
+      clients.delete(server)
     },
     forget(server) {
       tokens.delete(server)

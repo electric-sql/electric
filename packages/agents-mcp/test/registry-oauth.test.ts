@@ -278,3 +278,207 @@ describe(`Registry — OAuth`, () => {
     )
   })
 })
+
+describe(`Registry — reauthorize`, () => {
+  // Helper: a transport whose connect always triggers redirectToAuthorization
+  // and throws, so the registry's connectAndList → peekAuthUrl path fires.
+  const redirectingTransport: RegistryOpts[`transportFactoryOverride`] = (
+    _cfg,
+    _hp,
+    provider
+  ) => ({
+    client: {
+      listTools: async () => ({ tools: [] }),
+      close: async () => {},
+    } as any,
+    connect: async () => {
+      provider!.redirectToAuthorization(
+        new URL(`https://provider/authorize?nonce=${Math.random()}`)
+      )
+      throw new Error(`UnauthorizedError`)
+    },
+    close: async () => {},
+  })
+
+  // Helper: a transport that always succeeds (no auth challenge).
+  const happyTransport: RegistryOpts[`transportFactoryOverride`] = () => ({
+    client: {
+      listTools: async () => ({ tools: [] }),
+      close: async () => {},
+    } as any,
+    connect: async () => {},
+    close: async () => {},
+  })
+
+  // Helper: a transport that always throws without redirecting — drives
+  // the entry to `error` so we can inspect post-reauthorize state without
+  // the SDK writing new tokens behind our back.
+  const failingTransport: RegistryOpts[`transportFactoryOverride`] = () => ({
+    client: {
+      listTools: async () => ({ tools: [] }),
+      close: async () => {},
+    } as any,
+    connect: async () => {
+      throw new Error(`boom`)
+    },
+    close: async () => {},
+  })
+
+  it(`is a no-op when the server is unknown`, async () => {
+    const reg = createRegistry({ publicUrl: `http://r:4448` })
+    await expect(reg.reauthorize(`nope`)).resolves.toBeUndefined()
+    expect(reg.list()).toEqual([])
+  })
+
+  it(`is a no-op for non-authorizationCode servers`, async () => {
+    const openAuthorizeUrl = vi.fn()
+    const reg = createRegistry({
+      publicUrl: `http://r:4448`,
+      transportFactoryOverride: happyTransport,
+      openAuthorizeUrl,
+    })
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+    })
+    openAuthorizeUrl.mockClear()
+    await reg.reauthorize(`mock`)
+    expect(openAuthorizeUrl).not.toHaveBeenCalled()
+    expect(reg.list()[0]?.status).toBe(`ready`)
+  })
+
+  it(`is a no-op when the server is disabled`, async () => {
+    const reg = createRegistry({
+      publicUrl: `http://r:4448`,
+      transportFactoryOverride: redirectingTransport,
+    })
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: {
+        mode: `authorizationCode`,
+        scopes: [`mcp:read`],
+        client: { clientId: `cid` },
+      },
+    })
+    await reg.disable(`mock`)
+    await reg.reauthorize(`mock`)
+    expect(reg.list()[0]?.status).toBe(`disabled`)
+  })
+
+  it(`clears cached tokens for the server`, async () => {
+    const authStore = testAuthStore({
+      tokens: {
+        mock: { accessToken: `OLD`, refreshToken: `R`, expiresAt: 1 },
+      },
+    })
+    const reg = createRegistry({
+      publicUrl: `http://r:4448`,
+      authStore,
+      transportFactoryOverride: failingTransport,
+    })
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: {
+        mode: `authorizationCode`,
+        scopes: [`mcp:read`],
+        client: { clientId: `cid` },
+      },
+    })
+    expect(authStore.getOAuthTokens(`mock`)?.accessToken).toBe(`OLD`)
+    await reg.reauthorize(`mock`)
+    expect(authStore.getOAuthTokens(`mock`)).toBeUndefined()
+  })
+
+  it(`keeps onTokensChanged registered across reauthorize`, async () => {
+    const onTokensChanged = vi.fn()
+    const authStore = testAuthStore()
+    const reg = createRegistry({
+      publicUrl: `http://r:4448`,
+      authStore,
+      transportFactoryOverride: failingTransport,
+    })
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: {
+        mode: `authorizationCode`,
+        scopes: [`mcp:read`],
+        client: { clientId: `cid` },
+        onTokensChanged,
+      },
+    })
+    await reg.reauthorize(`mock`)
+    onTokensChanged.mockClear()
+    await authStore.saveOAuthTokens(`mock`, {
+      accessToken: `FRESH`,
+      refreshToken: `R2`,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    })
+    expect(onTokensChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ accessToken: `FRESH` })
+    )
+  })
+
+  it(`keeps the entry in every snapshot and emits a connecting flash`, async () => {
+    const reg = createRegistry({
+      publicUrl: `http://r:4448`,
+      transportFactoryOverride: redirectingTransport,
+    })
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: {
+        mode: `authorizationCode`,
+        scopes: [`mcp:read`],
+        client: { clientId: `cid` },
+      },
+    })
+    const seen: Array<{ status: string | undefined; size: number }> = []
+    const off = reg.subscribe((snap) =>
+      seen.push({
+        status: snap.servers.find((s) => s.name === `mock`)?.status,
+        size: snap.servers.length,
+      })
+    )
+    seen.length = 0 // drop the initial sentinel
+    await reg.reauthorize(`mock`)
+    off()
+    expect(seen.every((s) => s.size === 1)).toBe(true)
+    expect(seen.map((s) => s.status)).toContain(`connecting`)
+    expect(seen[seen.length - 1]?.status).toBe(`authenticating`)
+  })
+
+  it(`invokes openAuthorizeUrl with the freshly produced authorize URL`, async () => {
+    const openAuthorizeUrl = vi.fn()
+    const reg = createRegistry({
+      publicUrl: `http://r:4448`,
+      transportFactoryOverride: redirectingTransport,
+      openAuthorizeUrl,
+    })
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: {
+        mode: `authorizationCode`,
+        scopes: [`mcp:read`],
+        client: { clientId: `cid` },
+      },
+    })
+    const initialUrl = openAuthorizeUrl.mock.calls[0]?.[0] as string
+    openAuthorizeUrl.mockClear()
+    await reg.reauthorize(`mock`)
+    expect(openAuthorizeUrl).toHaveBeenCalledTimes(1)
+    const newUrl = openAuthorizeUrl.mock.calls[0]?.[0] as string
+    expect(newUrl).toContain(`authorize`)
+    expect(newUrl).not.toBe(initialUrl)
+  })
+})

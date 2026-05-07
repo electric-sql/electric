@@ -953,29 +953,30 @@ function registerIpcHandlers(): void {
   // No-op gracefully when no runtime is running; renderer should not
   // depend on these throwing.
   ipcMain.handle(`desktop:mcp-authorize`, async (_event, name: string) => {
-    const reg = runtime?.mcpRegistry
-    const entry = reg?.get(name)
-    if (!reg || !entry) return
-    // Same shape as the old HTTP /authorize: tear down + re-add to
-    // rotate PKCE state, registry's openAuthorizeUrl hook then opens
-    // the new authorize URL in a BrowserWindow.
-    await reg.removeServer(name)
-    await reg.addServer(entry.config)
+    // Forces a fresh OAuth flow. The registry mutates the entry in
+    // place rather than deleting + re-adding, so the renderer's
+    // snapshot keeps showing the row throughout — no flicker.
+    await runtime?.mcpRegistry?.reauthorize(name).catch((err) => {
+      console.warn(`[agents-desktop] mcp-authorize ${name}:`, err)
+    })
   })
   ipcMain.handle(`desktop:mcp-reconnect`, async (_event, name: string) => {
     const reg = runtime?.mcpRegistry
     const entry = reg?.get(name)
     if (!reg || !entry) return
-    await reg.addServer(entry.config)
+    await reg.addServer(entry.config).catch((err) => {
+      console.warn(`[agents-desktop] mcp-reconnect ${name}:`, err)
+    })
   })
   ipcMain.handle(`desktop:mcp-disable`, async (_event, name: string) => {
-    await runtime?.mcpRegistry?.disable(name).catch(() => {})
+    await runtime?.mcpRegistry?.disable(name).catch((err) => {
+      console.warn(`[agents-desktop] mcp-disable ${name}:`, err)
+    })
   })
   ipcMain.handle(`desktop:mcp-enable`, async (_event, name: string) => {
-    await runtime?.mcpRegistry?.enable(name).catch(() => {})
-  })
-  ipcMain.handle(`desktop:mcp-disconnect`, async (_event, name: string) => {
-    await runtime?.mcpRegistry?.removeServer(name).catch(() => {})
+    await runtime?.mcpRegistry?.enable(name).catch((err) => {
+      console.warn(`[agents-desktop] mcp-enable ${name}:`, err)
+    })
   })
 }
 
