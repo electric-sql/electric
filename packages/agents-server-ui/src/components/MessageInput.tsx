@@ -1,15 +1,24 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
-import { createSendMessageAction } from '../lib/sendMessage'
+import {
+  createDeleteInboxMessageAction,
+  createSendMessageAction,
+  createSteerInboxMessageAction,
+  createUpdateInboxMessageAction,
+  readTextPayload,
+} from '../lib/sendMessage'
 import { Icon, Stack, Text } from '../ui'
 import styles from './MessageInput.module.css'
+import type { EntityTimelineData } from '@electric-ax/agents-runtime/client'
 
 export function MessageInput({
   db,
   baseUrl,
   entityUrl,
   disabled,
+  pendingMessages = [],
+  generationActive,
   drawer,
   onSend,
 }: {
@@ -17,6 +26,8 @@ export function MessageInput({
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  pendingMessages?: EntityTimelineData[`inbox`]
+  generationActive: boolean
   onSend?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
@@ -25,10 +36,21 @@ export function MessageInput({
    * bottom edge underneath the composer for a "tray" effect (see
    * `EntityContextDrawer`).
    */
-  drawer?: React.ReactNode
+  drawer?: (props: {
+    pendingMessages: EntityTimelineData[`inbox`]
+    editingKey: string | null
+    onEdit: (message: EntityTimelineData[`inbox`][number]) => void
+    onDelete: (key: string) => void
+    onSteer: (key: string) => void
+    onReorder: (key: string, position: string) => void
+  }) => React.ReactNode
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [error, setError] = useState<string | null>(null)
+  const [editingMessage, setEditingMessage] = useState<{
+    key: string
+    originalText: string
+  } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-grow the composer as the user types. We reset to `auto`
@@ -52,62 +74,166 @@ export function MessageInput({
       entityUrl,
     })
   }, [db, baseUrl, entityUrl])
+  const updateAction = useMemo(() => {
+    if (!db) return null
+    return createUpdateInboxMessageAction({ db, baseUrl, entityUrl })
+  }, [db, baseUrl, entityUrl])
+  const deleteAction = useMemo(() => {
+    if (!db) return null
+    return createDeleteInboxMessageAction({ db, baseUrl, entityUrl })
+  }, [db, baseUrl, entityUrl])
+  const steerAction = useMemo(() => {
+    if (!db) return null
+    return createSteerInboxMessageAction({ db, baseUrl, entityUrl })
+  }, [db, baseUrl, entityUrl])
 
   const handleSubmit = useCallback(() => {
-    if (!value.trim() || !sendAction || disabled) return
+    if (!value.trim() || disabled) return
     setError(null)
-    const tx = sendAction({ text: value.trim() })
-    onSend?.()
+    const text = value.trim()
+    const shouldSendImmediately =
+      !generationActive && pendingMessages.length === 0
+    const tx = editingMessage
+      ? updateAction?.({ key: editingMessage.key, text })
+      : sendAction?.({
+          text,
+          mode: shouldSendImmediately ? `immediate` : `queued`,
+        })
+    if (!tx) return
+    if (!editingMessage) onSend?.()
     setValue(``)
+    setEditingMessage(null)
     tx.isPersisted.promise.catch((err: Error) => {
       setError(err.message)
     })
-  }, [value, sendAction, disabled, onSend])
+  }, [
+    value,
+    sendAction,
+    updateAction,
+    editingMessage,
+    disabled,
+    generationActive,
+    pendingMessages.length,
+    onSend,
+  ])
+
+  const startEditing = useCallback(
+    (message: EntityTimelineData[`inbox`][number]) => {
+      const text = readTextPayload(message.payload)
+      setEditingMessage({ key: message.key, originalText: text })
+      setValue(text)
+      textareaRef.current?.focus()
+    },
+    []
+  )
+
+  const cancelEditing = useCallback(() => {
+    setEditingMessage(null)
+    setValue(``)
+  }, [])
+
+  const deleteMessage = useCallback(
+    (key: string) => {
+      if (!deleteAction) return
+      setError(null)
+      deleteAction({ key }).isPersisted.promise.catch((err: Error) => {
+        setError(err.message)
+      })
+      if (editingMessage?.key === key) cancelEditing()
+    },
+    [deleteAction, editingMessage?.key, cancelEditing]
+  )
+
+  const steerMessage = useCallback(
+    (key: string) => {
+      if (!steerAction) return
+      setError(null)
+      steerAction({ key }).isPersisted.promise.catch((err: Error) => {
+        setError(err.message)
+      })
+      if (editingMessage?.key === key) cancelEditing()
+    },
+    [steerAction, editingMessage?.key, cancelEditing]
+  )
+  const reorderMessage = useCallback(
+    (key: string, position: string) => {
+      if (!updateAction) return
+      setError(null)
+      updateAction({ key, position }).isPersisted.promise.catch(
+        (err: Error) => {
+          setError(err.message)
+        }
+      )
+    },
+    [updateAction]
+  )
 
   const isActive = Boolean(value.trim() && !disabled)
 
   return (
     <Stack direction="column" gap={0} className={styles.root}>
-      {drawer}
+      {drawer?.({
+        pendingMessages,
+        editingKey: editingMessage?.key ?? null,
+        onEdit: startEditing,
+        onDelete: deleteMessage,
+        onSteer: steerMessage,
+        onReorder: reorderMessage,
+      })}
       {error && (
         <Text size={1} tone="danger" className={styles.errorText}>
           {error}
         </Text>
       )}
-      <Stack
-        align="end"
-        gap={2}
+      <div
         className={[styles.composer, disabled ? styles.disabled : null]
           .filter(Boolean)
           .join(` `)}
       >
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === `Enter` && !e.shiftKey) {
-              e.preventDefault()
-              handleSubmit()
-            }
-          }}
-          placeholder={disabled ? `Entity stopped` : `Send a message...`}
-          disabled={disabled}
-          rows={1}
-          className={styles.textarea}
-        />
-        <button
-          type="button"
-          aria-label="Send message"
-          onClick={handleSubmit}
-          disabled={!isActive}
-          className={[styles.composerSend, isActive ? styles.active : null]
-            .filter(Boolean)
-            .join(` `)}
-        >
-          <Icon icon={ArrowUp} size={3} />
-        </button>
-      </Stack>
+        {editingMessage && (
+          <div className={styles.editingBanner}>
+            <Text size={1} tone="muted">
+              Editing queued message
+            </Text>
+            <button
+              type="button"
+              aria-label="Cancel editing queued message"
+              onClick={cancelEditing}
+              className={styles.editingCancel}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        <div className={styles.composerBody}>
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === `Enter` && !e.shiftKey) {
+                e.preventDefault()
+                handleSubmit()
+              }
+            }}
+            placeholder={disabled ? `Entity stopped` : `Send a message...`}
+            disabled={disabled}
+            rows={1}
+            className={styles.textarea}
+          />
+          <button
+            type="button"
+            aria-label="Send message"
+            onClick={handleSubmit}
+            disabled={!isActive}
+            className={[styles.composerSend, isActive ? styles.active : null]
+              .filter(Boolean)
+              .join(` `)}
+          >
+            <Icon icon={ArrowUp} size={3} />
+          </button>
+        </div>
+      </div>
     </Stack>
   )
 }

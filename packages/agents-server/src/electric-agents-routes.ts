@@ -147,6 +147,67 @@ export class ElectricAgentsRoutes {
       return false
     }
 
+    const inboxItemMatch = path.match(
+      /^(\/(?!_)[^/*]+\/[^/*]+)\/inbox\/([^/*]+)$/
+    )
+    if (inboxItemMatch) {
+      const entityUrl = inboxItemMatch[1]!
+      const messageKey = decodeURIComponent(inboxItemMatch[2]!)
+
+      const entity = await this.manager.registry.getEntity(entityUrl)
+      if (!entity) {
+        const typeName = entityUrl.split(`/`)[1]!
+        const entityType = await this.manager.registry.getEntityType(typeName)
+        if (entityType) {
+          sendJsonError(
+            res,
+            404,
+            `NOT_FOUND`,
+            `Entity not found at ${entityUrl}`
+          )
+          return true
+        }
+        return false
+      }
+
+      if (method === `PATCH`) {
+        await this.handleUpdateInboxMessage(entityUrl, messageKey, req, res)
+        return true
+      }
+      if (method === `DELETE`) {
+        await this.handleDeleteInboxMessage(entityUrl, messageKey, res)
+        return true
+      }
+      return false
+    }
+
+    const inboxMatch = path.match(/^(\/(?!_)[^/*]+\/[^/*]+)\/inbox$/)
+    if (inboxMatch) {
+      const entityUrl = inboxMatch[1]!
+
+      const entity = await this.manager.registry.getEntity(entityUrl)
+      if (!entity) {
+        const typeName = entityUrl.split(`/`)[1]!
+        const entityType = await this.manager.registry.getEntityType(typeName)
+        if (entityType) {
+          sendJsonError(
+            res,
+            404,
+            `NOT_FOUND`,
+            `Entity not found at ${entityUrl}`
+          )
+          return true
+        }
+        return false
+      }
+
+      if (method === `POST`) {
+        await this.handleSend(entityUrl, req, res)
+        return true
+      }
+      return false
+    }
+
     const actionMatch = path.match(/^(\/(?!_)[^/*]+\/[^/*]+)\/send$/)
     if (actionMatch) {
       const entityUrl = actionMatch[1]!
@@ -311,6 +372,8 @@ export class ElectricAgentsRoutes {
       payload?: unknown
       key?: string
       type?: string
+      mode?: `immediate` | `queued` | `steer`
+      position?: string
       afterMs?: number
     }>(req, res)
     if (!parsed) return
@@ -324,6 +387,8 @@ export class ElectricAgentsRoutes {
             payload: parsed.payload,
             key: parsed.key,
             type: parsed.type,
+            mode: parsed.mode,
+            position: parsed.position,
           },
           new Date(Date.now() + parsed.afterMs)
         )
@@ -333,8 +398,47 @@ export class ElectricAgentsRoutes {
           payload: parsed.payload,
           key: parsed.key,
           type: parsed.type,
+          mode: parsed.mode,
+          position: parsed.position,
         })
       }
+      res.writeHead(204)
+      res.end()
+    } catch (err) {
+      handleElectricAgentsError(err, res)
+    }
+  }
+
+  private async handleUpdateInboxMessage(
+    entityUrl: string,
+    messageKey: string,
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
+    const parsed = await parseJsonBody<{
+      payload?: unknown
+      position?: string
+      mode?: `immediate` | `queued` | `steer`
+      status?: `pending` | `processed` | `cancelled`
+    }>(req, res)
+    if (!parsed) return
+
+    try {
+      await this.manager.updateInboxMessage(entityUrl, messageKey, parsed)
+      res.writeHead(204)
+      res.end()
+    } catch (err) {
+      handleElectricAgentsError(err, res)
+    }
+  }
+
+  private async handleDeleteInboxMessage(
+    entityUrl: string,
+    messageKey: string,
+    res: ServerResponse
+  ): Promise<void> {
+    try {
+      await this.manager.deleteInboxMessage(entityUrl, messageKey)
       res.writeHead(204)
       res.end()
     } catch (err) {

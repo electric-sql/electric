@@ -221,6 +221,10 @@ function fingerprintMessage(msg: IncludesInboxMessage): string {
   return `${msg.from}|${msg.timestamp}|${payloadToText(msg.payload)}`
 }
 
+function isProcessedInboxMessage(msg: IncludesInboxMessage): boolean {
+  return (msg.status ?? `processed`) === `processed`
+}
+
 function buildUserSection(
   msg: IncludesInboxMessage,
   isInitial: boolean
@@ -349,7 +353,9 @@ export function buildTimelineEntries(
     | { kind: `run`; data: IncludesRun }
 
   const items: Array<TimelineItem> = [
-    ...inbox.map((data): TimelineItem => ({ kind: `inbox`, data })),
+    ...inbox
+      .filter(isProcessedInboxMessage)
+      .map((data): TimelineItem => ({ kind: `inbox`, data })),
     ...wakes.map((data): TimelineItem => ({ kind: `wake`, data })),
     ...runs.map((data): TimelineItem => ({ kind: `run`, data })),
   ]

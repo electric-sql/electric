@@ -7,6 +7,8 @@ export interface DelayedSendPayload {
   payload: unknown
   key?: string
   type?: string
+  mode?: `immediate` | `queued` | `steer`
+  position?: string
   producerId?: string
   manifest?: {
     ownerEntityUrl: string

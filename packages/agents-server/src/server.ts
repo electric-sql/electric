@@ -335,6 +335,8 @@ export class ElectricAgentsServer {
                       payload: payload.payload,
                       key: payload.key ?? `scheduled-task-${taskId}`,
                       type: payload.type,
+                      mode: payload.mode,
+                      position: payload.position,
                     },
                     {
                       producerId,

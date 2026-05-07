@@ -26,6 +26,7 @@
 }
 
 .composer {
+  box-sizing: border-box;
   /* Solid raised-surface fill (also what `--ds-input-bg` resolves to,
      since both inherit from `--ds-surface-raised`). The composer
      docks at the bottom of a scrolling chat surface and chat content
@@ -73,8 +74,76 @@
   z-index: 1;
 }
 
+.inlineIconButton {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ds-radius-3);
+  color: var(--ds-text-3);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.inlineIconButton:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+
+.inlineIconButton:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: -2px;
+}
+
+.editingBanner {
+  box-sizing: border-box;
+  width: calc(100% + 24px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -12px -12px 8px;
+  padding: 5px 12px 5px 14px;
+  border-bottom: 1px solid var(--ds-gray-a4);
+  border-radius: var(--ds-radius-5) var(--ds-radius-5) 0 0;
+  background: var(--ds-gray-a2);
+}
+
+.editingCancel {
+  all: unset;
+  border-radius: var(--ds-radius-3);
+  color: var(--ds-text-2);
+  cursor: pointer;
+  font-family: var(--ds-font-body);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  padding: 0 2px;
+}
+
+.editingCancel:hover {
+  color: var(--ds-text-1);
+}
+
+.editingCancel:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 2px;
+}
+
+.composerBody {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ds-space-2);
+  min-width: 0;
+  width: 100%;
+}
+
 .textarea {
   flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;

@@ -1,5 +1,13 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, SplitSquareHorizontal } from 'lucide-react'
+import {
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+  Pencil,
+  SplitSquareHorizontal,
+  Trash2,
+} from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { inArray } from '@tanstack/db'
 import { useWorkspace } from '../hooks/useWorkspace'
@@ -8,9 +16,11 @@ import { Icon, IconButton, Text, Tooltip } from '../ui'
 import { StatusDot } from './StatusDot'
 import { JsonInspectDialog } from './JsonInspectDialog'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
+import { createQueuePositionBetween, readTextPayload } from '../lib/sendMessage'
 import styles from './EntityContextDrawer.module.css'
 import type {
   EntityStreamDBWithActions,
+  EntityTimelineData,
   Manifest,
 } from '@electric-ax/agents-runtime/client'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
@@ -80,10 +90,22 @@ export function EntityContextDrawer({
   entity,
   db,
   tileId,
+  pendingMessages = [],
+  pendingEditingKey = null,
+  onEditPending,
+  onDeletePending,
+  onSteerPending,
+  onReorderPending,
 }: {
   entity: ElectricEntity
   db: EntityStreamDBWithActions | null
   tileId: string
+  pendingMessages?: EntityTimelineData[`inbox`]
+  pendingEditingKey?: string | null
+  onEditPending?: (message: EntityTimelineData[`inbox`][number]) => void
+  onDeletePending?: (key: string) => void
+  onSteerPending?: (key: string) => void
+  onReorderPending?: (key: string, position: string) => void
 }): React.ReactElement | null {
   const { entitiesCollection } = useElectricAgents()
   const { helpers } = useWorkspace()
@@ -150,7 +172,14 @@ export function EntityContextDrawer({
     [parent, manifests, entitiesByUrl]
   )
 
-  if (groups.length === 0) return null
+  const hasPendingSection =
+    pendingMessages.length > 0 &&
+    onEditPending !== undefined &&
+    onDeletePending !== undefined &&
+    onSteerPending !== undefined &&
+    onReorderPending !== undefined
+
+  if (groups.length === 0 && !hasPendingSection) return null
 
   const openEntity = (url: string, side = false): void => {
     helpers.openEntity(url, {
@@ -187,6 +216,16 @@ export function EntityContextDrawer({
   return (
     <>
       <div className={styles.drawer}>
+        {hasPendingSection && (
+          <PendingInboxSection
+            messages={pendingMessages}
+            editingKey={pendingEditingKey}
+            onEdit={onEditPending}
+            onDelete={onDeletePending}
+            onSteer={onSteerPending}
+            onReorder={onReorderPending}
+          />
+        )}
         {groups.map((group) => (
           <ManifestSection
             key={group.key}
@@ -205,6 +244,213 @@ export function EntityContextDrawer({
         value={inspectTarget?.value ?? null}
       />
     </>
+  )
+}
+
+function PendingInboxSection({
+  messages,
+  editingKey,
+  onEdit,
+  onDelete,
+  onSteer,
+  onReorder,
+}: {
+  messages: EntityTimelineData[`inbox`]
+  editingKey: string | null
+  onEdit: (message: EntityTimelineData[`inbox`][number]) => void
+  onDelete: (key: string) => void
+  onSteer: (key: string) => void
+  onReorder: (key: string, position: string) => void
+}): React.ReactElement {
+  const [expanded, setExpanded] = useState(true)
+  const [draggingKey, setDraggingKey] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{
+    key: string
+    placement: `before` | `after`
+  } | null>(null)
+  const Chevron = expanded ? ChevronDown : ChevronRight
+
+  const clearDragState = (): void => {
+    setDraggingKey(null)
+    setDropTarget(null)
+  }
+
+  const getDropPlacement = (
+    event: React.DragEvent<HTMLElement>
+  ): `before` | `after` => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return event.clientY < rect.top + rect.height / 2 ? `before` : `after`
+  }
+
+  const reorderMessage = (
+    draggedKey: string,
+    targetKey: string,
+    placement: `before` | `after`
+  ): void => {
+    const fromIndex = messages.findIndex(
+      (message) => message.key === draggedKey
+    )
+    const targetIndex = messages.findIndex(
+      (message) => message.key === targetKey
+    )
+    if (fromIndex < 0 || targetIndex < 0 || draggedKey === targetKey) {
+      return
+    }
+
+    const nextOrder = [...messages]
+    const [moved] = nextOrder.splice(fromIndex, 1)
+    if (!moved) return
+    const targetIndexAfterRemoval = nextOrder.findIndex(
+      (message) => message.key === targetKey
+    )
+    if (targetIndexAfterRemoval < 0) return
+    const insertIndex =
+      placement === `before`
+        ? targetIndexAfterRemoval
+        : targetIndexAfterRemoval + 1
+    nextOrder.splice(insertIndex, 0, moved)
+
+    const movedIndex = nextOrder.findIndex(
+      (message) => message.key === draggedKey
+    )
+    const previous = movedIndex > 0 ? nextOrder[movedIndex - 1] : undefined
+    const next =
+      movedIndex >= 0 && movedIndex < nextOrder.length - 1
+        ? nextOrder[movedIndex + 1]
+        : undefined
+    const position = createQueuePositionBetween(
+      previous?.position,
+      next?.position
+    )
+    onReorder(draggedKey, position)
+  }
+
+  return (
+    <div className={styles.section}>
+      <button
+        type="button"
+        className={styles.row}
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <span className={styles.iconSlot}>
+          <Icon icon={Chevron} size={2} className={styles.chevron} />
+        </span>
+        <Text size={2} className={styles.headerLabel}>
+          {messages.length} Queued
+        </Text>
+      </button>
+      {expanded &&
+        messages.map((message) => (
+          <div
+            key={message.key}
+            className={[
+              styles.rowShell,
+              draggingKey === message.key ? styles.pendingDragging : null,
+              dropTarget?.key === message.key &&
+              dropTarget.placement === `before`
+                ? styles.pendingDropBefore
+                : null,
+              dropTarget?.key === message.key &&
+              dropTarget.placement === `after`
+                ? styles.pendingDropAfter
+                : null,
+            ]
+              .filter(Boolean)
+              .join(` `)}
+            draggable
+            onDragStart={(event) => {
+              setDraggingKey(message.key)
+              event.dataTransfer.effectAllowed = `move`
+              event.dataTransfer.setData(`text/plain`, message.key)
+            }}
+            onDragOver={(event) => {
+              if (!draggingKey || draggingKey === message.key) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = `move`
+              setDropTarget({
+                key: message.key,
+                placement: getDropPlacement(event),
+              })
+            }}
+            onDragLeave={() => {
+              setDropTarget((current) =>
+                current?.key === message.key ? null : current
+              )
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              const draggedKey =
+                event.dataTransfer.getData(`text/plain`) || draggingKey
+              const placement = getDropPlacement(event)
+              clearDragState()
+              if (draggedKey) {
+                reorderMessage(draggedKey, message.key, placement)
+              }
+            }}
+            onDragEnd={clearDragState}
+          >
+            <div
+              className={[
+                styles.row,
+                styles.pendingTextRow,
+                editingKey === message.key ? styles.pendingRowEditing : null,
+              ]
+                .filter(Boolean)
+                .join(` `)}
+              title={readTextPayload(message.payload)}
+            >
+              <span className={styles.iconSlot}>
+                <Icon
+                  icon={GripVertical}
+                  size={1}
+                  className={styles.dragHandle}
+                />
+              </span>
+              <span className={styles.rowMain}>
+                <Text size={2} className={styles.rowTitle}>
+                  {readTextPayload(message.payload) || `Untitled message`}
+                </Text>
+              </span>
+            </div>
+            <span className={styles.pendingActions}>
+              <IconButton
+                type="button"
+                size={1}
+                variant="ghost"
+                tone="neutral"
+                className={styles.pendingActionButton}
+                aria-label="Edit queued message"
+                onClick={() => onEdit(message)}
+              >
+                <Icon icon={Pencil} size={1} />
+              </IconButton>
+              <IconButton
+                type="button"
+                size={1}
+                variant="ghost"
+                tone="neutral"
+                className={styles.pendingActionButton}
+                aria-label="Steer now"
+                onClick={() => onSteer(message.key)}
+              >
+                <Icon icon={ArrowUp} size={1} />
+              </IconButton>
+              <IconButton
+                type="button"
+                size={1}
+                variant="ghost"
+                tone="neutral"
+                className={styles.pendingActionButton}
+                aria-label="Delete queued message"
+                onClick={() => onDelete(message.key)}
+              >
+                <Icon icon={Trash2} size={1} />
+              </IconButton>
+            </span>
+          </div>
+        ))}
+    </div>
   )
 }
 

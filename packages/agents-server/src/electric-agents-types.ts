@@ -121,6 +121,8 @@ export interface SendRequest {
   payload?: unknown
   key?: string
   type?: string
+  mode?: `immediate` | `queued` | `steer`
+  position?: string
 }
 
 export interface SetTagRequest {

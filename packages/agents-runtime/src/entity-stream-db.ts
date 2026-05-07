@@ -139,6 +139,11 @@ export function createEntityStreamDB(
     collectionNameByEventType.set(def.type, name)
     rowOffsetsByCollection.set(name, new Map())
   }
+  // Back-compat for streams written before the inbox collection's event type
+  // was renamed from the event-ish `message_received` to the collection name.
+  if (collectionNameByEventType.get(`inbox`) === `inbox`) {
+    collectionNameByEventType.set(`message_received`, `inbox`)
+  }
 
   // Build a reverse map from TanStack DB collection id to schema key
   const collIdToSchemaKey: Record<string, string> = {}
