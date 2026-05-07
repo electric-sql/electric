@@ -10,6 +10,7 @@ export type Value<Extensions = never> =
   | null
   | Extensions
   | Value<Extensions>[]
+  | readonly Value<Extensions>[]
   | { [key: string]: Value<Extensions> }
 
 export type Row<Extensions = never> = Record<string, Value<Extensions>>
