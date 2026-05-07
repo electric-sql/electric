@@ -4,6 +4,7 @@ import {
   Menu,
   Tray,
   app,
+  clipboard,
   dialog,
   ipcMain,
   nativeImage,
@@ -137,6 +138,11 @@ type DesktopCommand =
   | `split-right`
   | `split-down`
   | `cycle-tile`
+
+type DesktopContextMenuRequest = {
+  kind: `selection`
+  selectionText: string
+}
 
 const DEFAULT_SETTINGS: DesktopSettings = {
   servers: [],
@@ -439,6 +445,7 @@ function createWindow(): BrowserWindow {
   })
 
   windows.add(win)
+  installEditableContextMenu(win)
   win.on(`closed`, () => {
     windows.delete(win)
     buildApplicationMenu()
@@ -469,6 +476,72 @@ function createWindow(): BrowserWindow {
   buildApplicationMenu()
 
   return win
+}
+
+function installEditableContextMenu(win: BrowserWindow): void {
+  win.webContents.on(`context-menu`, (_event, params) => {
+    if (!params.isEditable) return
+
+    const template: Array<Electron.MenuItemConstructorOptions> = []
+    const suggestions = params.dictionarySuggestions.slice(0, 5)
+
+    if (params.misspelledWord) {
+      if (suggestions.length > 0) {
+        for (const suggestion of suggestions) {
+          template.push({
+            label: suggestion,
+            click: () => win.webContents.replaceMisspelling(suggestion),
+          })
+        }
+      } else {
+        template.push({ label: `No Guesses Found`, enabled: false })
+      }
+
+      template.push({
+        label: `Learn Spelling`,
+        click: () => {
+          win.webContents.session.addWordToSpellCheckerDictionary(
+            params.misspelledWord
+          )
+        },
+      })
+      template.push({ type: `separator` })
+    }
+
+    template.push(
+      { role: `undo`, enabled: params.editFlags.canUndo },
+      { role: `redo`, enabled: params.editFlags.canRedo },
+      { type: `separator` },
+      { role: `cut`, enabled: params.editFlags.canCut },
+      { role: `copy`, enabled: params.editFlags.canCopy },
+      { role: `paste`, enabled: params.editFlags.canPaste },
+      {
+        role: `pasteAndMatchStyle`,
+        enabled: params.editFlags.canPaste,
+      },
+      { role: `delete`, enabled: params.editFlags.canDelete },
+      { type: `separator` },
+      { role: `selectAll`, enabled: params.editFlags.canSelectAll }
+    )
+
+    Menu.buildFromTemplate(template).popup({ window: win })
+  })
+}
+
+function showSelectionContextMenu(
+  win: BrowserWindow,
+  request: DesktopContextMenuRequest
+): void {
+  const selectionText = request.selectionText.trim()
+  if (selectionText.length === 0) return
+
+  Menu.buildFromTemplate([
+    {
+      label: `Copy`,
+      accelerator: `CmdOrCtrl+C`,
+      click: () => clipboard.writeText(selectionText),
+    },
+  ]).popup({ window: win })
 }
 
 function showOrCreateWindow(): void {
@@ -752,6 +825,16 @@ function registerIpcHandlers(): void {
       })
       if (result.canceled) return null
       return result.filePaths[0] ?? null
+    }
+  )
+  ipcMain.on(
+    `desktop:show-context-menu`,
+    (event, request: DesktopContextMenuRequest) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win || win.isDestroyed()) return
+      if (request.kind === `selection`) {
+        showSelectionContextMenu(win, request)
+      }
     }
   )
 }

@@ -67,6 +67,71 @@ type DesktopCommand =
   | `split-down`
   | `cycle-tile`
 
+type DesktopContextMenuRequest = {
+  kind: `selection`
+  selectionText: string
+}
+
+function isEditableElement(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  const editable = target.closest(
+    `input, textarea, select, [contenteditable]:not([contenteditable="false"])`
+  )
+  return editable !== null
+}
+
+function selectionIntersectsContext(
+  selection: Selection,
+  contextRoot: Element
+): boolean {
+  for (let index = 0; index < selection.rangeCount; index++) {
+    const range = selection.getRangeAt(index)
+    if (range.collapsed) continue
+    if (range.intersectsNode(contextRoot)) return true
+  }
+  return false
+}
+
+function isSelectionContextControl(target: Element): boolean {
+  return (
+    target.closest(
+      `button, [role="button"], [data-md-code-block-actions], [data-md-table-toolbar]`
+    ) !== null
+  )
+}
+
+function installContextMenuBridge(): void {
+  window.addEventListener(
+    `contextmenu`,
+    (event) => {
+      if (isEditableElement(event.target)) return
+      if (!(event.target instanceof Element)) return
+      if (isSelectionContextControl(event.target)) return
+
+      const contextRoot = event.target.closest(
+        `[data-desktop-selection-context]`
+      )
+      if (!contextRoot) return
+
+      const selection = window.getSelection()
+      const selectionText = selection?.toString().trim() ?? ``
+      if (!selection || selectionText.length === 0) return
+      if (!selectionIntersectsContext(selection, contextRoot)) return
+
+      event.preventDefault()
+      ipcRenderer.send(`desktop:show-context-menu`, {
+        kind: `selection`,
+        selectionText,
+      } satisfies DesktopContextMenuRequest)
+    },
+    { capture: true }
+  )
+}
+
+if (typeof window !== `undefined`) {
+  installContextMenuBridge()
+}
+
 const api = {
   getServers: (): Promise<Array<ServerConfig>> =>
     ipcRenderer.invoke(`desktop:get-servers`),
