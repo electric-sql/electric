@@ -31,8 +31,10 @@ const SIDEBAR_MAX_WIDTH = 600
 
 function NewSessionSidebarRow({
   onNewSession,
+  selected,
 }: {
   onNewSession: () => void
+  selected: boolean
 }): React.ReactElement {
   const draggingRef = useRef(false)
 
@@ -73,7 +75,12 @@ function NewSessionSidebarRow({
           draggingRef.current = false
         }, 0)
       }}
-      className={styles.newSessionRow}
+      className={[
+        styles.newSessionRow,
+        selected ? styles.newSessionRowSelected : null,
+      ]
+        .filter(Boolean)
+        .join(` `)}
       title="New session"
     >
       <span className={styles.newSessionIconSlot}>
@@ -316,7 +323,10 @@ export function Sidebar({
 
         <ScrollArea className={styles.scrollFlex}>
           <Stack direction="column" className={styles.treeRow}>
-            <NewSessionSidebarRow onNewSession={handleNewSession} />
+            <NewSessionSidebarRow
+              onNewSession={handleNewSession}
+              selected={selectedEntityUrl === null}
+            />
 
             {pinnedEntities.length > 0 && (
               <>

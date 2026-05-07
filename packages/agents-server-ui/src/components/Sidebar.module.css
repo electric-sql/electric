@@ -133,6 +133,10 @@
 .newSessionRow:hover {
   background: var(--ds-bg-hover);
 }
+.newSessionRowSelected,
+.newSessionRowSelected:hover {
+  background: var(--ds-accent-a3);
+}
 /* Same 22px slot, same 16px glyph and the SAME `--ds-text-1` colour
    as the sidebar/search IconButtons in SidebarHeader so the three
    icons stacked in the column read as one family rather than three
