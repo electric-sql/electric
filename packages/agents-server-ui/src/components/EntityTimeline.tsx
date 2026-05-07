@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useLiveQuery } from '@tanstack/react-db'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -25,11 +26,21 @@ import {
 } from '../lib/timelineRowHeights'
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
 import { useWorkspace } from '../hooks/useWorkspace'
+import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
-import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
+import {
+  Badge,
+  Icon,
+  IconButton,
+  ScrollArea,
+  Stack,
+  Text,
+  Tooltip,
+} from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
 import { InlineEventCard } from './InlineEventCard'
+import { StatusDot } from './StatusDot'
 import {
   getCurrentMatchIndexInRoot,
   getTextMatchStarts,
@@ -39,7 +50,7 @@ import {
   formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
-import type { Manifest } from '@electric-ax/agents-runtime'
+import type { IncludesEntity, Manifest } from '@electric-ax/agents-runtime'
 import type { TimelineEntry } from '../lib/timelineEntries'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
@@ -220,10 +231,12 @@ function isTimelineFindMatch(
 function ManifestTimelineRow({
   manifest,
   entityUrl,
+  entityStatus,
 }: {
   manifest: Manifest
   entityUrl: string | null
   tileId: string | null
+  entityStatus?: IncludesEntity[`status`]
 }): React.ReactElement {
   const { helpers } = useWorkspace()
   const entityTarget = getManifestEntityUrl(manifest)
@@ -247,7 +260,19 @@ function ManifestTimelineRow({
     })
   }, [entityUrl, helpers, stateSourceId])
 
-  const actions = stateSourceId ? (
+  const statusBadge = entityStatus ? (
+    <Badge
+      size={1}
+      variant="soft"
+      tone={statusTone(entityStatus)}
+      className={styles.manifestStatusBadge}
+    >
+      <StatusDot status={entityStatus} size={5} />
+      {entityStatus}
+    </Badge>
+  ) : null
+
+  const openAction = stateSourceId ? (
     <Tooltip content="Open State Explorer">
       <IconButton
         type="button"
@@ -276,7 +301,14 @@ function ManifestTimelineRow({
         <Icon icon={ExternalLink} size={1} />
       </IconButton>
     </Tooltip>
-  ) : undefined
+  ) : null
+  const actions =
+    statusBadge || openAction ? (
+      <>
+        {statusBadge}
+        {openAction}
+      </>
+    ) : undefined
 
   const details = <ManifestDetailGrid manifest={manifest} />
 
@@ -457,6 +489,21 @@ function getManifestStateSourceId(manifest: Manifest): string | null {
   return null
 }
 
+function statusTone(status: NonNullable<IncludesEntity[`status`]>) {
+  switch (status) {
+    case `idle`:
+      return `success`
+    case `spawning`:
+      return `warning`
+    case `running`:
+      return `info`
+    case `stopped`:
+      return `neutral`
+    default:
+      return `neutral`
+  }
+}
+
 function describeSourceConfig(config: Record<string, unknown>): string {
   const cache = typeof config.cache === `string` ? config.cache : null
   const keys = Object.keys(config).filter((key) => key !== `cache`)
@@ -496,6 +543,7 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth,
   entityUrl,
   tileId,
+  entityStatusByUrl,
 }: {
   section: TimelineEntry[`section`]
   responseTimestamp: TimelineEntry[`responseTimestamp`]
@@ -504,6 +552,7 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth: number
   entityUrl: string | null
   tileId: string | null
+  entityStatusByUrl: Map<string, IncludesEntity[`status`]>
 }): React.ReactElement {
   if (section.kind === `user_message`) {
     return <UserMessage section={section} />
@@ -517,6 +566,11 @@ const TimelineRow = memo(function TimelineRow({
         manifest={section.manifest}
         entityUrl={entityUrl}
         tileId={tileId}
+        entityStatus={
+          getManifestEntityUrl(section.manifest)
+            ? entityStatusByUrl.get(getManifestEntityUrl(section.manifest)!)
+            : undefined
+        }
       />
     )
   }
@@ -539,6 +593,7 @@ export function EntityTimeline({
   cacheKey,
   tileId,
   entityUrl = null,
+  entities = [],
 }: {
   entries: Array<TimelineEntry>
   loading: boolean
@@ -547,8 +602,27 @@ export function EntityTimeline({
   cacheKey?: string | null
   tileId?: string | null
   entityUrl?: string | null
+  entities?: Array<IncludesEntity>
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
+  const { entitiesCollection } = useElectricAgents()
+  const { data: allEntities = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection) return undefined
+      return q.from({ e: entitiesCollection })
+    },
+    [entitiesCollection]
+  )
+  const entityStatusByUrl = useMemo(() => {
+    const statusByUrl = new Map<string, IncludesEntity[`status`]>()
+    for (const entity of entities) {
+      statusByUrl.set(entity.url, entity.status)
+    }
+    for (const entity of allEntities) {
+      statusByUrl.set(entity.url, entity.status)
+    }
+    return statusByUrl
+  }, [allEntities, entities])
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(
     null
@@ -1000,6 +1074,7 @@ export function EntityTimeline({
                       renderWidth={contentWidth}
                       entityUrl={entityUrl}
                       tileId={tileId ?? null}
+                      entityStatusByUrl={entityStatusByUrl}
                     />
                   </div>
                 )

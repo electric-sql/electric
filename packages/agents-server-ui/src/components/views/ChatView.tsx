@@ -54,7 +54,7 @@ function GenericChatBody({
   isSpawning: boolean
   tileId: string
 }): React.ReactElement {
-  const { entries, db, loading, error } = useEntityTimeline(
+  const { entries, entities, db, loading, error } = useEntityTimeline(
     baseUrl || null,
     entityUrl
   )
@@ -80,6 +80,7 @@ function GenericChatBody({
         cacheKey={`${baseUrl}${entityUrl ?? ``}`}
         tileId={tileId}
         entityUrl={entityUrl}
+        entities={entities}
       />
       <MessageInput
         db={db}
