@@ -1,10 +1,20 @@
 # MCP Support for Electric Agents — Design Spec
 
 **Status:** Draft — **Experimental feature**
-**Date:** 2026-05-05
+**Date:** 2026-05-05 (last revised 2026-05-07)
 **Author:** Valter Balegas (with Claude)
 
-> **Experimental.** This is the first cut of MCP integration. We expect to evolve the registration model (e.g. stream-based registration via the existing `entity_types` shape pattern, server-side delegated discovery, multi-tenant credential scopes) once the direct-call design has been used in anger. Public surfaces marked here may change without a deprecation cycle while the feature carries the experimental flag.
+> **Experimental.** This is the first cut of MCP integration. We expect to evolve the registration model (e.g. stream-based registration via the existing `entity_types` shape pattern, server-side delegated discovery, multi-tenant credential scopes) once the design has been used in anger. Public surfaces marked here may change without a deprecation cycle while the feature carries the experimental flag.
+
+> **2026-05-07 revision.** The spec was originally written around an
+> HTTP-exposed runtime with a public `CredentialStore` and polled UI
+> state. The implementation collapsed that into an Electron-embedded
+> runtime with push-based IPC and operator-owned persistence. This
+> revision rewrites the architecture, runtime-discovery, OAuth-callback,
+> Connected Services UI, and process-boundaries sections to match what
+> shipped on `balegas/mcp-impl-v2`. The "What's gone" subsection inside
+> "Credential handling" intentionally retains the prior contract for
+> readers tracking the change.
 
 ## Summary
 
@@ -14,12 +24,12 @@ Add Model Context Protocol (MCP) support to Electric Agents so agents can call t
 
 - Agents can call MCP tools from servers declared in runtime config.
 - Both stdio (local subprocess) and Streamable HTTP transports.
-- All three credential modes: API key, OAuth client credentials, OAuth authorization code (browser-redirect and device-code variants).
+- All three credential modes: API key, OAuth client credentials, OAuth authorization code (browser-redirect).
 - Silent token refresh on every call where possible. When silent refresh isn't possible, the tool call returns a structured error to the agent's model.
 - Per-call timeouts so a misbehaving or slow server can't hang a wake.
-- A web UI surface (agents-server-ui) showing server health and providing reauth actions.
+- A desktop UI surface (agents-server-ui inside the Electron app) showing server health and providing reauth actions.
 - Servers added/removed/reconfigured at runtime are visible to running agents within the same wake.
-- Pluggable key vault interface; default file-on-disk implementation for v1.
+- Persistence across process restarts is operator-owned via opt-in callbacks on the auth config — the runtime exposes no public credential-store interface.
 
 ## Non-goals (v1)
 
@@ -59,143 +69,115 @@ _MCP's hot-reload support means the factory's "what we research" surface evolves
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│             agents-server (no MCP state, no proxy)               │
+│   Electron desktop process (the v1 deployment target)            │
 │                                                                  │
-│  • Hosts the UI (static + dev server)                            │
-│  • Postgres + Electric + durable streams + entity bridge         │
-│  • /api/runtimes — discovery endpoint listing registered         │
-│    runtime processes and the public URLs the UI should call      │
-│    directly for MCP reads/writes                                 │
-│  • Holds NO vault, NO coordinator, NO MCP state                  │
-└──────────────────────────────────────────────────────────────────┘
-        ▲                                          ▲
-        │ entity-type registration                 │ /api/runtimes
-        │ (now includes the runtime's              │ (UI reads list
-        │  publicly-reachable URL)                 │  of runtime URLs)
-        │                                          │
-        │                                          │
-┌───────┴──────────────────────────────────────────┴───────────────┐
-│   runtime-hosting process (e.g. builtin-agents)                  │
-│   — sole owner of all MCP state, publicly addressable            │
-│                                                                  │
-│  ┌─────────────────────┐  ┌────────────────────────────────┐    │
-│  │  MCP Registry       │  │  CredentialStore (bootstrap)   │    │
-│  │  - mcp.json (no     │  │  - getApiKey / get/save tokens │    │
-│  │    secrets) +       │  │  - get/save OAuth client info  │    │
-│  │    addServer() API  │  │  - Default dev: composed(      │    │
-│  │  - Idempotent on    │  │      env, osKeychain, file)    │    │
-│  │    (name,url,auth)  │  │  - Production: operator wires  │    │
-│  │  - Manages stdio    │  │    against own vault           │    │
-│  │    subprocesses     │  └────────────────────────────────┘    │
-│  └──────────┬──────────┘  ┌────────────────────────────────┐    │
-│             │             │  SDK OAuthClientProvider       │    │
-│             │             │  - PKCE / DCR / discovery      │    │
-│             │             │  - Refresh / 401-retry         │    │
-│             │             │  - Backed by CredentialStore   │    │
-│             │             │  - Per-server escape-hatch     │    │
-│             │             └────────────────────────────────┘    │
-│             │                                                    │
-│  ┌──────────▼──────────────────────────────────────────────┐    │
-│  │  MCP Bridge (per-tool-call)                             │    │
-│  │  - SDK transport with OAuthClientProvider               │    │
-│  │  - Routes call (stdio JSON-RPC / Streamable HTTP)       │    │
-│  │  - Enforces per-call timeout                            │    │
-│  │  - On unrecoverable failure: returns structured error   │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-│  agents-runtime tool-provider hook auto-injects mcpHandle.tools()│
-│  into every entity-type's tool list at wake time — no per-agent  │
-│  wiring.                                                         │
-│                                                                  │
-│  Public HTTP surface (called directly by the UI):                │
-│  • GET  /api/mcp/servers     — list with live tool counts        │
-│  • POST /api/mcp/servers/:s/authorize  — start OAuth, returns    │
-│      { state: 'ready' | 'authenticating', authUrl? }             │
-│  • POST /api/mcp/servers/:s/disable | enable | disconnect        │
-│  • GET  /oauth/callback/:s   — OAuth provider redirects HERE,    │
-│      not to agents-server                                        │
-└──────────────────────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                    agents-server-ui                              │
-│  • At startup: GET ${agentsServerUrl}/api/runtimes               │
-│  • For Connected Services page: GET ${runtime.publicUrl}/api/mcp │
-│  • Authorize button: POST runtime → opens authUrl in new tab     │
+│  ┌─────────────────────────┐   ┌───────────────────────────┐    │
+│  │  Main process           │   │  Renderer (agents-       │    │
+│  │  - Spawns the embedded  │   │  server-ui)              │    │
+│  │    BuiltinAgentsServer  │   │  - Subscribes to MCP     │    │
+│  │  - Subscribes to        │◄──┤    snapshots over IPC    │    │
+│  │    Registry.subscribe() │   │  - Sends action verbs    │    │
+│  │  - Broadcasts snapshots │──►│    (authorize, reconnect,│    │
+│  │    on `desktop:mcp-     │   │    disable, enable) over │    │
+│  │    state` IPC           │   │    `desktop:mcp-*` IPC   │    │
+│  │  - Hosts OAuth          │   │                          │    │
+│  │    BrowserWindow        │   └───────────────────────────┘    │
+│  │    (intercepts          │                                     │
+│  │    redirect_uri)        │                                     │
+│  └────────────┬────────────┘                                     │
+│               │ in-process                                       │
+│  ┌────────────▼─────────────────────────────────────────────┐   │
+│  │  BuiltinAgentsServer (agents-runtime + Registry)         │   │
+│  │                                                          │   │
+│  │  ┌────────────────────┐   ┌─────────────────────────┐   │   │
+│  │  │  MCP Registry      │   │ Internal AuthStore      │   │   │
+│  │  │  - mcp.json +      │   │ (private; per-registry) │   │   │
+│  │  │    addServer()     │   │ - in-memory token cache │   │   │
+│  │  │  - Idempotent on   │   │ - per-server hooks fire │   │   │
+│  │  │    (name,url,auth) │   │   onTokensChanged /     │   │   │
+│  │  │  - subscribe(handler│   │   onClientRegistered   │   │   │
+│  │  │    ): RegistrySnap- │   │   if operator wired    │   │   │
+│  │  │    shot stream      │   │   them via auth config │   │   │
+│  │  │  - openAuthorizeUrl │   └─────────────────────────┘   │   │
+│  │  │    hook (called by  │   ┌─────────────────────────┐   │   │
+│  │  │    main to open     │   │ SDK OAuthClientProvider │   │   │
+│  │  │    BrowserWindow)   │   │ - PKCE / DCR / RFC 9728 │   │   │
+│  │  │  - Manages stdio    │   │ - Refresh / 401-retry   │   │   │
+│  │  │    subprocesses     │   │ - Backed by AuthStore   │   │   │
+│  │  └────────┬───────────┘   └─────────────────────────┘   │   │
+│  │           │                                             │   │
+│  │  ┌────────▼─────────────────────────────────────────┐  │   │
+│  │  │  MCP Bridge (per-tool-call)                       │  │   │
+│  │  │  - SDK transport with OAuthClientProvider         │  │   │
+│  │  │  - Routes call (stdio JSON-RPC / Streamable HTTP) │  │   │
+│  │  │  - Enforces per-call timeout                      │  │   │
+│  │  │  - On unrecoverable failure: structured error     │  │   │
+│  │  └───────────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### Runtime discovery (UI → runtime, direct)
+The agents-runtime tool-provider hook auto-injects MCP tools into every
+entity-type's tool list at wake time — no per-agent wiring.
 
-The runtime is the single source of truth for MCP state. The UI talks to it directly. agents-server's only role is to tell the UI **where** the runtime is.
+### Embedding model
 
-**Step 1 — runtime announces itself.** The existing entity-type registration handshake is extended with a `publicUrl`:
+`agents-mcp` is a Node library. The desktop app is the v1 embedder; it
+wraps the registry with Electron-specific glue (BrowserWindow OAuth
+interception + IPC broadcast). The library is embedder-agnostic — a
+deployed-runtime embedder could mount its own HTTP routes against the
+`Registry` interface — but `agents-mcp` no longer ships an
+`mountMcpHttp` helper or any built-in HTTP/OAuth-callback surface.
+That path was tried, then removed in favour of in-process embedding;
+operators wanting it back write the routes themselves.
 
-```ts
-// runtime → agents-server at startup
-POST /_electric/agents/types
-{
-  "types": ["horton", "worker"],
-  "publicUrl": "http://runtime.example.com:4448"
-}
-```
+### Push-based state (registry → renderer)
 
-agents-server holds `(name, publicUrl, types[])` per runtime in memory. State is rebuilt at boot when each runtime re-registers, so a server restart costs nothing.
+The registry is the single source of truth for MCP state. State sync
+to the UI is push-based and travels over Electron IPC:
 
-**Step 2 — UI discovers runtimes.** A single endpoint:
+1. **Subscribe.** On runtime startup, the Electron main process calls
+   `registry.subscribe((snapshot) => broadcast(snapshot))`. The
+   handler fires synchronously with the current state, then on every
+   mutation: `addServer`, `removeServer`, `applyConfig`, `finishAuth`,
+   `reauthorize`, `disable`, `enable`, and every connection-state
+   transition during `connectAndList`.
 
-```
-GET /api/runtimes
-→ [{ "name": "builtin-agents", "publicUrl": "http://runtime.example.com:4448", "types": ["horton", "worker"] }]
-```
+2. **Broadcast.** Main sends each snapshot over the
+   `desktop:mcp-state` IPC channel to every BrowserWindow.
 
-UI fetches once on mount, refetches on focus or every ~60s.
+3. **Render.** The `useMcpServersIpc` hook in the renderer holds the
+   latest snapshot and renders the Connected Services page from it.
+   `getSnapshot()` is provided as a one-shot fallback so the page can
+   render before the first push event arrives.
 
-**Step 3 — UI talks to the runtime directly.** Every MCP read and mutation is a direct cross-origin request to `${runtime.publicUrl}/api/mcp/...`. agents-server is not in the data path. CORS on the runtime allows the agents-server origin (configurable; `*` in dev).
-
-#### Runtime HTTP surface (mounted by `mountMcpHttp`)
-
-```
-GET    /api/mcp/servers
-  → [{ name, transport, url|command, authMode, status, authUrl?, error?, toolCount, tools? }]
-  status ∈ 'connecting' | 'authenticating' | 'ready' | 'error' | 'disabled'
-
-POST   /api/mcp/servers                       (programmatic add — same envelope as addServer)
-POST   /api/mcp/servers/:name/authorize       → { authUrl }
-POST   /api/mcp/servers/:name/disable
-POST   /api/mcp/servers/:name/enable
-POST   /api/mcp/servers/:name/reconnect
-DELETE /api/mcp/servers/:name
-
-GET    /oauth/callback/:server                 (OAuth provider redirects HERE)
-POST   /oauth/device/:server/start             (device flow)
-```
-
-Mutations return the same `AddServerResult` envelope (`ready` | `authenticating` | `error`) so a single response shape covers list/add/authorize/reconnect.
-
-#### Live updates: poll first, SSE later
-
-There is no shape, no DB row for MCP state — it lives in the runtime's memory. The UI keeps in sync via:
-
-- **Phase 1 — polling.** UI polls `GET /api/mcp/servers` every 10s when idle, ramped to ~2s during an active OAuth flow (any row in `authenticating`). Cheap, simple, ships with the rest of the feature.
-- **Phase 2 — SSE on the runtime.** `GET /api/mcp/events` (`text/event-stream`) emits `server.added` / `server.status` / `server.tools.changed` / `server.removed` events. UI keeps one EventSource per runtime, falls back to polling on disconnect. Added when polling becomes the bottleneck — not before.
+The snapshot envelope is `{ seq: number, servers: ListedEntry[] }`.
+`seq` is monotonic per-registry — useful for downstream dedup or
+"I have seq N already" checks.
 
 #### Why this closes the "tool count always 0" gap
 
-The UI reads from the same registry that owns the live tools. There is no second copy to keep in sync, no proxy state to invalidate. Disable/enable hit the actual registry, so they stop being cosmetic.
+The renderer reads from the same registry that owns the live tools.
+There is no second copy to keep in sync, no proxy state to invalidate,
+no polling cadence to tune. Disable / enable / reauthorize hit the
+actual registry, so they stop being cosmetic.
 
-#### Auth on the runtime API
+#### Auth on the IPC surface
 
-Dev: no auth — the runtime listens on localhost. Production: the runtime accepts a shared bearer (`RUNTIME_API_TOKEN`) which the agents-server hands to the UI via a session-scoped token endpoint. The hook is reserved in the API; the implementation is out of scope for the first cut.
+The desktop embedding has no cross-process auth concern — IPC is the
+process boundary. A future deployed-runtime embedding that exposes
+HTTP routes against the registry would own its own auth model;
+`agents-mcp` does not prescribe one.
 
 ### Package boundaries
 
-| Concern                                                                                        | Package                                            | Notes                                                                                                              |
-| ---------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Registry, transports, bridges, MCP HTTP routes, `CredentialStore`, OAuthClientProvider adapter | `agents-mcp`                                       | Self-contained, Node-specific, exports `mountMcpHttp(deps)` for any embedder. Owns no agents-server-specific code. |
-| Tool-provider injection at wake time                                                           | `agents-runtime`                                   | Tiny hook: `registerToolProvider({ name, tools })` — providers run at compose time. No per-agent wiring.           |
-| Runtime registration with public URL + UI hosting + `/api/runtimes` discovery                  | `agents-server`                                    | No MCP state. No proxy. Discovery only.                                                                            |
-| Bootstrap wiring (one-time)                                                                    | `packages/agents` (and any other runtime embedder) | Constructs registry + CredentialStore, calls `mountMcpHttp` and `registerToolProvider` once.                       |
+| Concern                                                                         | Package            | Notes                                                                                                                                                                   |
+| ------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Registry, transports, bridges, OAuthClientProvider adapter, persistence helpers | `agents-mcp`       | Self-contained Node lib. Public surface: `Registry` interface (incl. `subscribe`), `bridgeMcpTool`, `keychainPersistence` / `filePersistence`. No HTTP, no UI glue.     |
+| Tool-provider injection at wake time                                            | `agents-runtime`   | Tiny hook: `registerToolProvider({ name, tools })` — providers run at compose time. No per-agent wiring.                                                                |
+| Bootstrap wiring inside the embedded runtime                                    | `packages/agents`  | Constructs the `Registry`, exposes it via `BuiltinAgentsServer.mcpRegistry`, accepts an `openAuthorizeUrl` callback for embedders to launch the OAuth UI.               |
+| OAuth BrowserWindow + IPC broadcast + IPC action verbs                          | `agents-desktop`   | Subscribes to `mcpRegistry`, broadcasts snapshots on `desktop:mcp-state`, hosts the sandboxed OAuth window, exposes `desktop:mcp-{authorize,reconnect,disable,enable}`. |
+| Settings → MCP Servers page                                                     | `agents-server-ui` | Desktop-only; hooks onto `electronAPI.mcp.onState`. Hidden in non-Electron builds.                                                                                      |
 
 ### Transports and where they run
 
@@ -210,13 +192,13 @@ In local-dev, the runtime is the developer's machine, so stdio servers can read 
 
 Three auth modes per server:
 
-| Mode                                        | Initial setup                                 | Steady state                                             | Operator action when fails |
-| ------------------------------------------- | --------------------------------------------- | -------------------------------------------------------- | -------------------------- |
-| `apiKey`                                    | Operator pastes key into vault                | Never expires until rotated                              | Rotate key                 |
-| `clientCredentials`                         | Operator pastes `client_id` + `client_secret` | Runtime exchanges for short-lived access tokens silently | Rotate client secret       |
-| `authorizationCode` (`browser` or `device`) | Browser/device flow → user approves           | Silent refresh on each use; refresh tokens rotate        | Re-consent via catalog     |
+| Mode                | Initial setup                                                                                     | Steady state                                             | Operator action when fails |
+| ------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------- |
+| `apiKey`            | Operator passes the key inline in `auth.key`                                                      | Never expires until rotated                              | Rotate key                 |
+| `clientCredentials` | Operator passes `clientId` + `clientSecret` inline                                                | Runtime exchanges for short-lived access tokens silently | Rotate client secret       |
+| `authorizationCode` | Browser flow in a sandboxed Electron BrowserWindow → user approves → main intercepts the redirect | Silent refresh on each use; refresh tokens rotate        | Re-authorize via the page  |
 
-The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out).
+The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out). Device-code flow (RFC 8628) is not currently part of the public surface; an experimental device-flow path was prototyped but removed pending a concrete need in a non-desktop deployment.
 
 ### Token handling
 
@@ -238,7 +220,7 @@ The timeout is a hygiene feature, not a long-running-call solution. Calls in v1 
 
 ### Two creation modes
 
-Operators can register MCP servers either declaratively (in `mcp.json`) or programmatically. Both produce the same `Registry` entries and consume the same `CredentialStore` for keys/tokens.
+Operators can register MCP servers either declaratively (in `mcp.json`) or programmatically. Both produce the same `Registry` entries and use the same inline `auth` shape for credentials and persistence callbacks.
 
 **Declarative — `mcp.json`** (the 80% case)
 
@@ -252,7 +234,6 @@ Operators can register MCP servers either declaratively (in `mcp.json`) or progr
       "url": "https://mcp.honeycomb.io/mcp",
       "auth": {
         "mode": "authorizationCode",
-        "flow": "browser",
         "scopes": ["mcp:read", "mcp:write"],
       },
     },
@@ -261,7 +242,6 @@ Operators can register MCP servers either declaratively (in `mcp.json`) or progr
       "url": "https://mcp.linear.app/sse",
       "auth": {
         "mode": "authorizationCode",
-        "flow": "browser",
       },
     },
     "internal-api": {
@@ -295,7 +275,7 @@ Operators can register MCP servers either declaratively (in `mcp.json`) or progr
 }
 ```
 
-Note what's gone: no `clientIdRef`, `clientSecretRef`, `valueRef` — `mcp.json` has zero references to where secrets live. The runtime asks the `CredentialStore` (configured at bootstrap) for any keys it needs at the moment it needs them.
+`mcp.json` declares structural shape only. Static secrets and persistence callbacks are added at the call site — programmatic embedders read `mcp.json`, then layer in `auth.key` / `auth.tokens` / `auth.onTokensChanged` etc. before passing each entry to `addServer`. See "Credential handling" below for the inline shape.
 
 **Programmatic — runtime API** (advanced cases)
 
@@ -306,15 +286,17 @@ const result = await runtime.mcp.addServer({
   name: 'temp-stripe',
   transport: 'http',
   url: 'https://mcp.stripe.com/mcp',
-  auth: { mode: 'apiKey', headerName: 'Authorization' },
-  // Optional: pass credentials inline. The runtime stores them in the
-  // CredentialStore under the new server's name. If absent, the store
-  // is consulted in the usual way.
-  credentials: { apiKey: 'rk_live_…' },
+  auth: {
+    mode: 'apiKey',
+    headerName: 'Authorization',
+    key: process.env.STRIPE_MCP_KEY!, // inline; embedder owns the lookup
+  },
 })
 
 if (result.state === `authenticating`) {
-  // Hand result.authUrl back to the user / browser.
+  // Surface result.authUrl to the user (the desktop embedder opens it
+  // in a sandboxed BrowserWindow automatically via the registry's
+  // openAuthorizeUrl hook).
 } else if (result.state === `ready`) {
   // Server is connected and tools are listed.
 } else {
@@ -343,7 +325,7 @@ When config has drifted, the registry closes the old transport, builds a new one
 
 #### Escape-hatch `oauthProvider`
 
-For mTLS, pre-registered DCR clients, OIDC quirks, or any auth-server idiosyncrasy not covered by the `CredentialStore` shape, callers can supply a fully-formed MCP-SDK `OAuthClientProvider` per server. This bypasses the `CredentialStore` for that one server entirely:
+For mTLS, pre-registered DCR clients, OIDC quirks, or any auth-server idiosyncrasy not covered by the standard `auth` shape, callers can supply a fully-formed MCP-SDK `OAuthClientProvider` per server. This bypasses the registry's internal auth cache for that one server entirely:
 
 ```ts
 runtime.mcp.addServer({
@@ -359,7 +341,7 @@ runtime.mcp.addServer({
 
 The same field is allowed in `mcp.json` per server, but only by reference (e.g. `"oauthProviderRef": "myProviderName"` resolved against a map of providers passed at bootstrap), since `mcp.json` can't carry runtime objects.
 
-Programmatic registration is useful for agents that spin up servers in response to user actions (e.g. a coding-agent starting a project-scoped MCP server for the duration of a task). The same `CredentialStore` mediates access for both creation modes.
+Programmatic registration is useful for agents that spin up servers in response to user actions (e.g. a coding-agent starting a project-scoped MCP server for the duration of a task). The same inline `auth` shape and persistence callbacks apply to both creation modes.
 
 ### Credential handling
 
@@ -387,7 +369,6 @@ auth: {
 
 auth: {
   mode: `authorizationCode`,
-  flow: `browser`,                                          // or `device`
   scopes: [`mcp:read`],
   client?: { clientId, clientSecret? },                     // optional, skip DCR
   tokens?: { accessToken, refreshToken?, expiresAt? },      // optional, skip OAuth flow on boot
@@ -398,18 +379,18 @@ auth: {
 
 The SDK's `OAuthClientProvider` is wired internally to the registry's private cache; the developer never sees it. The provider does PKCE, RFC 9728 discovery, RFC 7591 DCR, token exchange, refresh, and 401-retry. Our code only:
 
-- Tells the SDK where to send the user for the authorize step (the runtime's public URL + `/oauth/callback/<server>`).
-- Receives the callback, hands the code to `provider.finishAuth(code)`.
+- Hands the SDK-issued authorize URL to the embedder via the registry's `openAuthorizeUrl` hook. The desktop embedder opens it in a sandboxed `BrowserWindow` and watches `webContents.on('will-redirect')` for the configured redirect URI; the redirect is cancelled before the renderer actually fetches it, so no HTTP listener is needed.
+- Calls `registry.finishAuth(server, code, state)` with the intercepted code+state, which runs the SDK token exchange under the hood.
 - Updates the private cache and fires `onTokensChanged` / `onClientRegistered` if the operator wired them.
 
 ### Persistence presets
 
 For operators who want OAuth tokens to survive process restarts, `agents-mcp` ships two small opt-in helpers that produce the auth-config slice. Each is a one-line spread at the call site.
 
-| Helper                              | Backing store                                                                                                       | When to use                                                          |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `keychainPersistence({ server })`   | OS keychain via `keytar` (macOS Keychain / libsecret / Windows Credential Manager); no-op when keytar isn't present | Local dev on a workstation; tokens encrypted by the OS               |
-| `filePersistence({ path, server })` | JSON file, mode `0600`                                                                                              | CI / minimal containers without an OS keychain; deterministic backup |
+| Helper                              | Backing store                                                                                                                                | When to use                                                          |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `keychainPersistence({ server })`   | OS keychain by shelling out (macOS `security` / Linux `secret-tool`); throws on Windows or when no backend is found. No native dependencies. | Local dev on a workstation; tokens encrypted by the OS               |
+| `filePersistence({ path, server })` | JSON file, mode `0600`                                                                                                                       | CI / minimal containers without an OS keychain; deterministic backup |
 
 Each helper returns `{ tokens?, client?, onTokensChanged, onClientRegistered }` — the exact shape the auth config expects. Usage:
 
@@ -422,7 +403,6 @@ await mcpRegistry.addServer({
   url: `https://mcp.honeycomb.io/mcp`,
   auth: {
     mode: `authorizationCode`,
-    flow: `browser`,
     scopes: [`mcp:read`],
     ...honeycomb,
   },
@@ -466,12 +446,19 @@ Resolved tool set is recorded in the agent's manifest at compose time. Tools are
 
 ### OAuth callback
 
-The runtime-hosting process exposes (mounted by `mountMcpHttp`):
+The runtime exposes no HTTP endpoint for the OAuth callback. Completion of the browser-redirect flow is handled by the embedder.
 
-- `GET /oauth/callback/:server` — completes browser-redirect flow. Hands the code to the SDK's `OAuthClientProvider.finishAuth(code)`, which performs PKCE-protected token exchange, persists the token set via the `CredentialStore.saveOAuthTokens` callback, and renders a success page.
-- `POST /oauth/device/:server/start` — initiates device flow; returns user code + verification URL for the catalog UI to display.
+**Desktop embedder.** The Electron main process subscribes to `registry.subscribe()` and accepts an `openAuthorizeUrl(url, server)` hook on the registry options. When the registry produces an authorize URL (initial sign-in or `reauthorize`), main opens it in a sandboxed `BrowserWindow` and listens on `webContents.on('will-redirect')` (and `'will-navigate'` as a backup). When a navigation begins to a URL starting with the configured redirect-URI prefix (e.g. `http://localhost:4448/oauth/callback/<server>`), main:
 
-The OAuth provider's redirect URI is `${RUNTIME_PUBLIC_URL}/oauth/callback/<server>` (or `auth.redirectUri` from `mcp.json` when set) — the browser redirects directly to the runtime, bypassing agents-server entirely.
+1. Calls `event.preventDefault()` — the redirect URL is never actually fetched, so no HTTP listener is needed.
+2. Extracts `code` and `state` from the query string.
+3. Calls `registry.finishAuth(server, code, state)`, which runs the SDK token exchange and fires the operator's persistence callbacks.
+
+The redirect-URI value is therefore a sentinel, not a network address. We reuse the conventional shape (`${publicUrl}/oauth/callback/<server>`) so the SDK's PKCE state stays well-formed.
+
+**Other embedders.** A deployed-runtime embedder that wants the classic browser-then-HTTP-callback shape mounts its own `GET /oauth/callback/:server` route against the registry: read `code` + `state` from the request, call `registry.finishAuth(...)`. `agents-mcp` does not ship this route by default.
+
+Device-code grant (RFC 8628) is not currently surfaced in the public API — see "Credential model" above.
 
 ### Hot-reload semantics
 
@@ -483,21 +470,25 @@ Changes to `mcp.json` (or `runtime.registerMcpServer` / `unregisterMcpServer`) t
 
 ## Connected Services UI
 
-A new page in agents-server-ui listing all registered servers. Each row shows:
+Settings → MCP Servers, in agents-server-ui. **Desktop-only:** in non-Electron builds, the sidebar entry is hidden and the page renders a hint to launch the desktop app. Each row shows:
 
 - **Name and transport** (stdio / http).
 - **Auth mode** (apiKey / clientCredentials / authorizationCode).
-- **Status** — one of:
-  - `healthy` — token valid, recent successful call.
-  - `expiring` — token within configurable window of expiry, refresh expected to succeed silently.
-  - `needs_auth` — no credential in vault, or refresh failed.
-  - `error` — server returned errors recently (other than auth).
+- **Status** — one of (mirrors `Registry.list()` / `ListedEntry.status`):
+  - `connecting` — transport is being established.
+  - `authenticating` — OAuth flow needed; `authUrl` is set, browser window has been opened.
+  - `ready` — connected; tools listed.
+  - `error` — connect or transport failure; `error.kind` + `error.message` are surfaced.
   - `disabled` — operator paused the server.
-- **Last successful call / refresh** timestamp.
-- **Per-row actions:** `Authorize` / `Re-authorize` / `Disconnect` / `Disable` / `Enable`.
-- **Device-flow detail** — when an in-progress device flow exists, the user code + verification URL.
+- **Tool count + expandable tool list** (name + description per tool).
+- **Per-row actions:**
+  - **Authorize / Re-authorize** — visible whenever the server's `authMode` is `authorizationCode`. Calls `Registry.reauthorize(name)`, which closes the transport, drops the in-memory tokens, and rebuilds the entry in place (no flicker), causing the SDK to surface a fresh authorize URL.
+  - **Reconnect** — drops the transport and re-runs `addServer(entry.config)`; tokens stay put.
+  - **Disable / Enable** — pause/resume the server. Tokens stay put either way.
 
-The catalog is the operator's primary mechanism for noticing and fixing broken credentials, and the developer's primary surface for kicking off initial OAuth flows.
+There is no "Disconnect" action: removal is the wrong inverse of "connect," because the only path back from a removed entry is a config edit. Pause via Disable is the recoverable equivalent. Removing entries entirely from the registry happens via the operator editing `mcp.json`.
+
+The page is the operator's primary mechanism for noticing and fixing broken credentials, and the developer's primary surface for kicking off initial OAuth flows.
 
 ## MCP spec conformance
 
@@ -509,7 +500,7 @@ We follow the MCP authorization spec for HTTP servers:
 - Resource Indicators (RFC 8707).
 - Streamable HTTP transport per the current spec.
 
-We add device-code grant (RFC 8628) as a first-class flow alongside browser-redirect — better fit for headless / webhook-spawned / remote-runtime contexts where there's no developer-at-a-browser.
+Device-code grant (RFC 8628) is not in the current public surface — see "Credential model" for the rationale. We may add it back if a non-desktop deployment needs it.
 
 ## Failure handling
 
@@ -525,67 +516,78 @@ Agents are expected to handle these like any other tool error: retry, fall back,
 
 ## Project risks and mitigations
 
-| Risk                                                             | Mitigation                                                                                                                   |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Refresh-token race across wakes                                  | Per-`(server, scope)` mutex around the refresh exchange; runtime owns the credential.                                        |
-| Vault file leaks if file permissions wrong                       | Default implementation enforces `chmod 600`; refuses to read wider modes; encryption-at-rest where OS keychain is available. |
-| Hot-reload causes user confusion when tool list changes mid-wake | Manifest snapshot at compose time records what the agent saw; catalog shows live truth.                                      |
-| Stdio + personal credentials confused for a deployment pattern   | Documentation prominently scopes it as local-dev only.                                                                       |
-| Untrusted MCP servers leak data or inject prompts                | Out of scope for runtime; operators register only trusted servers; catalog surfaces registered tool descriptions for audit.  |
+| Risk                                                             | Mitigation                                                                                                                                |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Refresh-token race across wakes                                  | Per-`(server, scope)` mutex around the refresh exchange; runtime owns the credential.                                                     |
+| Persisted token file leaks if file permissions wrong             | `filePersistence` writes mode `0600` and refuses to read wider modes; `keychainPersistence` defers encryption-at-rest to the OS keychain. |
+| Hot-reload causes user confusion when tool list changes mid-wake | Manifest snapshot at compose time records what the agent saw; catalog shows live truth.                                                   |
+| Stdio + personal credentials confused for a deployment pattern   | Documentation prominently scopes it as local-dev only.                                                                                    |
+| Untrusted MCP servers leak data or inject prompts                | Out of scope for runtime; operators register only trusted servers; catalog surfaces registered tool descriptions for audit.               |
 
 ## Rollout plan
 
-1. **Phase 1 — registry and bridge.** MCP Registry (with `mcp.json` loading and file-watch), key vault interface + file-on-disk default, stdio + HTTP bridge with per-call timeouts, per-agent allowlist, hot-reload of newly-added servers. `apiKey` mode only. Agents can call MCP tools given a pre-configured API key.
-2. **Phase 2 — OAuth.** OAuth Coordinator with PKCE/DCR, browser-redirect flow, silent refresh with per-`(server, scope)` mutex. `clientCredentials` and `authorizationCode (browser)`.
-3. **Phase 3 — UI.** Connected Services page with server status, per-row actions, and surfaces for kicking off OAuth flows.
-4. **Phase 4 — device-code flow.** Add `authorizationCode (device)`; surface user code + verification URL on the catalog.
+What shipped on `balegas/mcp-impl-v2`:
+
+1. **Registry and bridge.** MCP Registry with `mcp.json` loading + file-watch, stdio + HTTP transports with per-call timeout / cancellation / progress, per-agent allowlist, hot-reload, idempotent re-add. `apiKey` mode end-to-end.
+2. **OAuth (browser).** SDK-backed `OAuthClientProvider` adapter with PKCE / RFC 7591 DCR / RFC 9728 discovery / RFC 8707 resource indicators / silent refresh / 401-retry. `clientCredentials` and `authorizationCode` modes.
+3. **Push-based state.** `Registry.subscribe(handler)` emits monotonic snapshots on every mutation; `Registry.reauthorize(name)` rebuilds an entry in place to avoid UI flicker on re-auth.
+4. **Persistence presets.** `keychainPersistence` (macOS / Linux, no native deps) and `filePersistence` (mode-0600 JSON) — both produce auth-config slices via callbacks. The public `CredentialStore` surface was removed.
+5. **Desktop integration.** `agents-desktop` opens authorize URLs in a sandboxed `BrowserWindow` and intercepts the redirect URI client-side; broadcasts registry snapshots to all renderer windows; exposes IPC action verbs (`authorize`, `reconnect`, `disable`, `enable`).
+6. **Settings → MCP Servers.** Single flat list driven by `useMcpServersIpc`; gated on Electron; sidebar entry hidden on web.
+
+A device-code path (RFC 8628) and an HTTP `mountMcpHttp` surface were both prototyped earlier on this branch and removed when the desktop-IPC architecture made them unnecessary. Either can be reinstated for a non-desktop embedder when a use case arrives.
 
 ## Open questions
 
 - **Stdio process resource limits.** Default off in v1.
-- **Vault rotation.** Mechanics of rotating an `apiKey` while in-flight calls are using it — confirm a clean swap.
+- **API-key rotation.** Mechanics of rotating an `apiKey` while in-flight calls are using it — confirm a clean swap when `applyConfig` re-applies a changed `auth.key`.
 - **Schema validator severity.** Should `authorizationCode` mode for an unattended-flagged workflow be a warning or a hard error? Probably warning until we have user feedback.
 - **Catalog page for `mcp.tools('*')` agents.** Show the resolved set as of last compose, or always the live set? Probably last compose, with a note.
 - **Per-call timeout default.** 30s is a starting point; revisit based on what real MCP servers in the ecosystem do.
 
 ## Process boundaries and where credentials live
 
-Two processes are involved in any deployment that uses the
-durable-streams + Postgres backbone (which is the default):
+The v1 deployment target is the Electron desktop app. There is one OS
+process (the Electron main process) hosting:
 
-- **`agents-server`** — hosts the UI, owns Postgres, Electric, durable
-  streams, and the entity bridge. Holds an in-memory list of registered
-  runtimes (`name`, `publicUrl`, `types[]`) populated by the type-
-  registration handshake. Serves `/api/runtimes` for UI discovery.
-  **Holds no MCP state, no credentials, no OAuth coordinator.**
+- **The renderer (agents-server-ui)** in a sandboxed `BrowserWindow`,
+  with `contextBridge`-exposed IPC verbs and no Node access.
+- **The agents runtime** (`BuiltinAgentsServer`) running in-process in
+  main, owning the `Registry`, the private auth cache, all MCP
+  transports (stdio subprocesses + HTTP clients), and the SDK
+  `OAuthClientProvider`.
+- **The OAuth window** — a separate sandboxed `BrowserWindow` opened
+  on demand to host the auth provider's login page; main intercepts
+  the redirect URI before the renderer ever fetches it.
 
-- **The runtime-hosting process** — runs `agents-runtime` and the
-  user's agent definitions (e.g. `packages/agents`, or any custom
-  embedder). Sole owner of the live MCP registry, the
-  `CredentialStore`, and all connections to MCP servers. Mounted at
-  a publicly-reachable URL so OAuth providers and the UI can both
-  reach it.
-
-**Credentials live in the runtime-hosting process. They never leave it.**
-agents-server is not in the data path for MCP — the UI talks to the
-runtime directly (CORS-allowlisted), and OAuth providers redirect
-directly to `${RUNTIME_PUBLIC_URL}/oauth/callback/<server>`.
+**Credentials live in the runtime owned by main. They never leave it.**
+The renderer reads its view of MCP state via push-based IPC snapshots;
+it has no access to tokens, the auth cache, or transport handles.
+OAuth providers redirect to a sentinel URL inside the OAuth window —
+never to a real network endpoint — and main extracts the code from
+the navigation event.
 
 Why this matters:
 
 - Single source of truth for tokens and tool state. No cross-process
-  sync, no proxy invalidation, no second coordinator to race against.
-- A compromise of agents-server doesn't expose user credentials.
-- New runtime embedders get MCP for free — they mount `mountMcpHttp`,
-  announce their `publicUrl`, and the UI picks them up via discovery.
+  sync, no second coordinator to race against, no HTTP listener that
+  could be exploited.
+- The renderer's IPC surface is a small, explicit allowlist:
+  `desktop:mcp-{snapshot,state,authorize,reconnect,disable,enable}`.
+  Anything else stays in main.
+- Tests against the registry are pure Node — no Electron required —
+  because the registry knows nothing about IPC; it just emits
+  snapshots through `subscribe(handler)`.
 
-The trade-off: the runtime needs a public URL the browser can reach.
-For local dev that's just `http://localhost:4448`. For deployed setups
-the operator provides one (typically a sibling host or a path prefix
-on the same load balancer). This is a deployment requirement of the
-experimental cut; future iterations may relax it (e.g. tunnel the
-callback through agents-server, or use the durable-streams shape
-pattern so the UI never needs a runtime URL at all).
+Trade-offs and the deployed-runtime case:
+
+- This shape ties first-class MCP management to the desktop app. The
+  web build of agents-server-ui (no `electronAPI`) hides the page and
+  shows a hint to launch the desktop app.
+- A future deployed-runtime embedder (HTTP-only, multi-user) can wrap
+  the same `Registry` with its own HTTP routes for state and OAuth
+  callback handling, plus its own auth model on those routes.
+  `agents-mcp` keeps the registry embedder-agnostic for that path.
 
 ### Tool-provider injection (no per-agent wiring)
 

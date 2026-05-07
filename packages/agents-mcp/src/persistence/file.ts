@@ -28,7 +28,6 @@ async function writeSafe(file: string, data: FileShape): Promise<void> {
   const tmp = `${file}.tmp`
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
   await fs.rename(tmp, file)
-  await fs.chmod(file, 0o600)
 }
 
 export interface FilePersistenceOpts {

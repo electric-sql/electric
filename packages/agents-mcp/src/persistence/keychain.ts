@@ -60,6 +60,13 @@ interface KeychainBackend {
 // `security` is at /usr/bin/security on every Mac; talks to Keychain
 // Services. find-generic-password -w prints the password to stdout.
 // add-generic-password -U upserts. Exit code 44 = item not found.
+//
+// Known limitation: `add-generic-password -w <value>` puts the secret
+// in argv, briefly visible to other processes under the same user via
+// `ps`. This matches `git credential-osxkeychain` and other long-lived
+// CLI tools targeting Keychain — the binary doesn't accept the secret
+// on stdin. If this becomes a hardening target, swap to a temp-file +
+// `-x` flag flow or call SecKeychainAddGenericPassword via FFI.
 const macosBackend: KeychainBackend = {
   async get(service, account) {
     const r = await run(`security`, [
