@@ -461,8 +461,6 @@ function manifestDetails(
             { label: `Target`, value: manifest.targetUrl },
             { label: `Status`, value: manifest.status ?? `pending` },
           ]
-    case `child`:
-      return []
   }
 }
 
