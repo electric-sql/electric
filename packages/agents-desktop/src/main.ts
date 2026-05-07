@@ -72,12 +72,16 @@ type DesktopSettings = {
   /**
    * MCP servers shipped by the desktop app's settings — global to all
    * workspaces, edited via the Settings UI (or by hand in
-   * `settings.json` for now). Layered with the per-workspace
-   * `mcp.json` at runtime: non-conflicting servers from both files
-   * load together; on name collision, the workspace `mcp.json` wins.
-   * Static shape only — secrets and persistence callbacks are wired
-   * by the runtime (keychain auto-applied to `authorizationCode`
-   * servers).
+   * `settings.json` for now). On disk this mirrors `mcp.json`'s
+   * keyed-by-name shape (`{ servers: { foo: { ... } } }`); the array
+   * here is the in-memory rewrite that `BuiltinAgentsServer.
+   * extraMcpServers` consumes. `loadSettings` and `saveSettings`
+   * handle the conversion in both directions. Layered with the
+   * per-workspace `mcp.json` at runtime: non-conflicting servers from
+   * both files load together; on name collision, the workspace
+   * `mcp.json` wins. Static shape only — secrets and persistence
+   * callbacks are wired by the runtime (keychain auto-applied to
+   * `authorizationCode` servers).
    */
   mcp?: { servers: Array<McpServerConfig> }
 }
@@ -256,22 +260,52 @@ function normalizeApiKeys(value: unknown): ApiKeys {
   }
 }
 
-// settings.json round-trip is plain JSON, so the most we can validate
-// here is "shape looks roughly right and each entry has a name."
-// Schema-level validation (transport / auth.mode / forbidden refs)
-// happens inside the registry's `applyConfig` via `parseConfig`.
+// settings.json's `mcp.servers` mirrors the shape of `mcp.json`: an
+// object keyed by server name, with the entry itself omitting `name`.
+// We rewrite into the array form `BuiltinAgentsServer.extraMcpServers`
+// expects and surface friendly warnings on shape errors instead of
+// silently dropping the field. Schema-level validation (transport /
+// auth.mode / forbidden refs) still happens inside the registry's
+// `applyConfig`.
 function normalizeMcp(
   value: unknown
 ): { servers: Array<McpServerConfig> } | undefined {
-  if (!value || typeof value !== `object`) return undefined
-  const maybe = (value as { servers?: unknown }).servers
-  if (!Array.isArray(maybe)) return undefined
-  const servers = maybe.filter(
-    (s): s is McpServerConfig =>
-      Boolean(s) &&
-      typeof s === `object` &&
-      typeof (s as { name?: unknown }).name === `string`
-  )
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== `object`) {
+    console.warn(
+      `[agents-desktop] settings.json: 'mcp' must be an object, got ${typeof value}; ignoring`
+    )
+    return undefined
+  }
+  const maybeServers = (value as { servers?: unknown }).servers
+  if (maybeServers === undefined) return undefined
+  if (
+    typeof maybeServers !== `object` ||
+    maybeServers === null ||
+    Array.isArray(maybeServers)
+  ) {
+    console.warn(
+      `[agents-desktop] settings.json: 'mcp.servers' must be an object keyed by server name; ignoring`
+    )
+    return undefined
+  }
+  const servers: McpServerConfig[] = []
+  for (const [name, entry] of Object.entries(
+    maybeServers as Record<string, unknown>
+  )) {
+    if (!entry || typeof entry !== `object`) {
+      console.warn(
+        `[agents-desktop] settings.json: 'mcp.servers.${name}' is not an object; skipping`
+      )
+      continue
+    }
+    if (`name` in entry && (entry as { name: unknown }).name !== name) {
+      console.warn(
+        `[agents-desktop] settings.json: 'mcp.servers.${name}' has a conflicting 'name' field; the keyed name wins`
+      )
+    }
+    servers.push({ ...(entry as object), name } as McpServerConfig)
+  }
   return servers.length > 0 ? { servers } : undefined
 }
 
@@ -345,7 +379,21 @@ async function loadSettings(): Promise<void> {
 
 async function saveSettings(): Promise<void> {
   await mkdir(path.dirname(settingsPath()), { recursive: true })
-  await writeFile(settingsPath(), JSON.stringify(settings, null, 2))
+  await writeFile(settingsPath(), JSON.stringify(serializeSettings(), null, 2))
+}
+
+// Memory holds `mcp.servers` as the array `BuiltinAgentsServer.extraMcpServers`
+// expects. On disk we mirror `mcp.json`'s keyed-by-name shape so users can
+// copy entries between the two files. This re-keys the array before write.
+function serializeSettings(): Record<string, unknown> {
+  const { mcp, ...rest } = settings
+  if (!mcp || mcp.servers.length === 0) return rest
+  const servers: Record<string, Record<string, unknown>> = {}
+  for (const s of mcp.servers) {
+    const { name, ...entry } = s as McpServerConfig & Record<string, unknown>
+    servers[name] = entry
+  }
+  return { ...rest, mcp: { servers } }
 }
 
 function statusLabel(status: DesktopRuntimeStatus): string {

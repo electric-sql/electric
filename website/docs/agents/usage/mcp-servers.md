@@ -97,7 +97,7 @@ For [`authorizationCode`](#authorization-code-oauth) servers in `mcp.json`, the 
 
 ### Desktop settings layer
 
-The Electron desktop app exposes a second file-based layer: a global `mcp.servers` array in its `settings.json`, applied to every workspace. It composes with the workspace `mcp.json` instead of replacing it:
+The Electron desktop app exposes a second file-based layer: a global `mcp.servers` block in its `settings.json`, applied to every workspace. The shape mirrors `mcp.json` — keyed by server name — so entries can be copy-pasted between the two files. It composes with the workspace `mcp.json` instead of replacing it:
 
 - Servers from both files load together when their names don't collide.
 - On a name collision, the workspace `mcp.json` wins (project scope overrides global).
@@ -120,19 +120,18 @@ Example shape:
   "workingDirectory": "/Users/me/workspace/foo",
   "apiKeys": {...},
   "mcp": {
-    "servers": [
-      {
-        "name": "linear",
+    "servers": {
+      "linear": {
         "transport": "http",
         "url": "https://mcp.linear.app/sse",
         "auth": { "mode": "authorizationCode", "scopes": ["mcp:read"] }
       }
-    ]
+    }
   }
 }
 ```
 
-Embedders other than the desktop app pass the same array via `BuiltinAgentsServer({ extraMcpServers })`.
+Programmatic embedders (other than the desktop) pass the resolved set as an array via `BuiltinAgentsServer({ extraMcpServers })` — that's the in-memory shape `settings.json` is rewritten into when the desktop loads it.
 
 ## Per-agent allowlist
 
