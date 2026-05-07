@@ -14,7 +14,7 @@ import {
   type HighlightTokensResult,
 } from '../lib/codeHighlighter'
 import { useDarkModeContext } from '../hooks/useDarkMode'
-import { IconButton, Tooltip } from '../ui'
+import { Icon, IconButton, Tooltip } from '../ui'
 
 // Streamdown threads its rehype `Element` through every component
 // override as a `node` prop. We strip it from the rest spread so
@@ -506,7 +506,11 @@ function CodeBlockToolbar({
           aria-label="Copy code"
           onClick={() => void copy()}
         >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? (
+            <Icon icon={Check} size={1} />
+          ) : (
+            <Icon icon={Copy} size={1} />
+          )}
         </IconButton>
       </Tooltip>
       <Tooltip content="Download code" side="top">
@@ -517,7 +521,7 @@ function CodeBlockToolbar({
           aria-label="Download code"
           onClick={download}
         >
-          <Download size={12} />
+          <Icon icon={Download} size={1} />
         </IconButton>
       </Tooltip>
     </div>

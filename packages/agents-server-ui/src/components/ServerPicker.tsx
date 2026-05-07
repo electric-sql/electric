@@ -11,6 +11,7 @@ import {
   Button,
   Dialog,
   Field,
+  Icon,
   IconButton,
   Input,
   Menu,
@@ -132,12 +133,14 @@ export function ServerPicker(): React.ReactElement {
               aria-label="Switch server"
             >
               <span className={styles.tileLabel}>
-                <span className={styles.dot} data-state={status} />
+                <span className={styles.tileStatusSlot}>
+                  <span className={styles.dot} data-state={status} />
+                </span>
                 <span className={styles.tileName}>
                   {activeServer?.name ?? `No server`}
                 </span>
               </span>
-              <ChevronsUpDown size={12} />
+              <Icon icon={ChevronsUpDown} size={1} />
             </button>
           }
         />
@@ -167,7 +170,7 @@ export function ServerPicker(): React.ReactElement {
                       }}
                       aria-label={`Remove ${server.name}`}
                     >
-                      <Trash2 size={12} />
+                      <Icon icon={Trash2} size={1} />
                     </IconButton>
                   </Tooltip>
                 </span>
@@ -194,7 +197,7 @@ export function ServerPicker(): React.ReactElement {
           )}
           <Menu.Separator />
           <Menu.Item onSelect={() => setAdding(true)}>
-            <Plus size={14} />
+            <Icon icon={Plus} size={2} />
             <Text size={2}>Add server</Text>
           </Menu.Item>
         </Menu.Content>

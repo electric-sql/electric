@@ -20,7 +20,7 @@ import {
   streamdownControls,
   streamdownPlugins,
 } from '../lib/streamdownConfig'
-import { IconButton, Stack, Text, Tooltip } from '../ui'
+import { Icon, IconButton, Stack, Text, Tooltip } from '../ui'
 import { ToolCallView } from './ToolCallView'
 import { TimeText } from './TimeText'
 import { ThinkingIndicator } from './ThinkingIndicator'
@@ -330,7 +330,11 @@ export const AgentResponse = memo(function AgentResponse({
               onClick={() => void copyResponseText()}
               aria-label="Copy response text"
             >
-              {copied ? <Check size={12} /> : <Copy size={12} />}
+              {copied ? (
+                <Icon icon={Check} size={1} />
+              ) : (
+                <Icon icon={Copy} size={1} />
+              )}
             </IconButton>
           </Tooltip>
         )}

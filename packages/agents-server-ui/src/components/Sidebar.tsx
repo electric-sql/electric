@@ -12,7 +12,7 @@ import {
 import { useSidebarView } from '../hooks/useSidebarView'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../hooks/useNarrowViewport'
-import { HoverCard, ScrollArea, Stack, Text } from '../ui'
+import { HoverCard, Icon, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
 import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
 import { SidebarHeader } from './SidebarHeader'
@@ -77,7 +77,7 @@ function NewSessionSidebarRow({
       title="New session"
     >
       <span className={styles.newSessionIconSlot}>
-        <SquarePen size={16} />
+        <Icon icon={SquarePen} size={3} />
       </span>
       <span className={styles.newSessionLabel}>New session</span>
       <span className={styles.newSessionKbd} aria-hidden="true">

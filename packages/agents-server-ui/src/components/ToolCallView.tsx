@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime'
-import { Badge, Box, Stack, Text } from '../ui'
+import { Badge, Box, Icon, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
 import toolBlock from './toolBlock.module.css'
 import styles from './ToolCallView.module.css'
@@ -280,7 +280,11 @@ export function ToolCallView({
         className={`${toolBlock.header} ${toolBlock.headerToggle}`}
       >
         <span className={toolBlock.toggleArrow} aria-hidden="true">
-          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {expanded ? (
+            <Icon icon={ChevronDown} size={1} />
+          ) : (
+            <Icon icon={ChevronRight} size={1} />
+          )}
         </span>
         <span className={toolBlock.toolName}>{item.toolName}</span>
         {summary && <span className={toolBlock.summary}>{summary}</span>}

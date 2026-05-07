@@ -9,7 +9,7 @@ import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
 import { connectEntityStream } from '../../lib/entity-connection'
 import { createSendMessageAction } from '../../lib/sendMessage'
-import { Select, Stack, Text } from '../../ui'
+import { Icon, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
 import styles from '../NewSessionPage.module.css'
@@ -513,7 +513,7 @@ function DefaultAgentComposer({
               .filter(Boolean)
               .join(` `)}
           >
-            <ArrowUp size={16} />
+            <Icon icon={ArrowUp} size={3} />
           </button>
         </div>
       </div>

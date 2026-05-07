@@ -1,6 +1,7 @@
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { Check, ChevronDown } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
+import { Icon } from './Icon'
 import popoverStyles from './Popover.module.css'
 import styles from './Select.module.css'
 
@@ -89,7 +90,7 @@ function Trigger({
   const cls = [size === `pill` ? styles.triggerPill : styles.trigger, className]
     .filter(Boolean)
     .join(` `)
-  const iconSize = size === `pill` ? 12 : 14
+  const iconSize = size === `pill` ? 1 : 2
   return (
     <BaseSelect.Trigger
       className={cls}
@@ -100,7 +101,7 @@ function Trigger({
     >
       <BaseSelect.Value placeholder={placeholder} />
       <BaseSelect.Icon className={styles.icon}>
-        <ChevronDown size={iconSize} />
+        <Icon icon={ChevronDown} size={iconSize} />
       </BaseSelect.Icon>
     </BaseSelect.Trigger>
   )
@@ -136,7 +137,7 @@ function Item<V extends string>({
     <BaseSelect.Item value={value} className={cls} {...rest}>
       <BaseSelect.ItemText>{children}</BaseSelect.ItemText>
       <BaseSelect.ItemIndicator className={styles.indicator}>
-        <Check size={14} />
+        <Icon icon={Check} size={2} />
       </BaseSelect.ItemIndicator>
     </BaseSelect.Item>
   )

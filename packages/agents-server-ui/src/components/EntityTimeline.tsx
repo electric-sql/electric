@@ -18,7 +18,7 @@ import {
 } from '../lib/timelineRowHeights'
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
-import { ScrollArea, Stack, Text, Tooltip } from '../ui'
+import { Icon, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
 import {
@@ -633,7 +633,7 @@ export function EntityTimeline({
         aria-hidden={!showJumpToBottom}
         tabIndex={showJumpToBottom ? 0 : -1}
       >
-        <ArrowDown size={16} />
+        <Icon icon={ArrowDown} size={3} />
       </button>
     </div>
   )

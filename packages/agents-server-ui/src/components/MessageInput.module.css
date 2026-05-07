@@ -79,8 +79,8 @@
   border: none;
   outline: none;
   background: transparent;
-  font-size: var(--ds-text-sm);
-  line-height: 1.5;
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
   color: var(--ds-text-1);
   font-family: var(--ds-font-body);
   /* Auto-grow is driven by inline `height = scrollHeight` from

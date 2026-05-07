@@ -19,6 +19,8 @@
 }
 
 .body {
+  font-size: var(--ds-chat-text);
+  line-height: var(--ds-chat-text-lh);
   white-space: pre-wrap;
 }
 

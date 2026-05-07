@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
 import { StatusDot } from './StatusDot'
-import { HoverCard, Text } from '../ui'
+import { HoverCard, Icon, Text } from '../ui'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { formatAbsoluteDateTime, formatRelativeTime } from '../lib/formatTime'
 import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
@@ -186,8 +186,9 @@ export const SidebarRow = memo(function SidebarRow({
                 aria-label={pinned ? `Unpin session` : `Pin session`}
                 aria-pressed={pinned}
               >
-                <Pin
-                  size={12}
+                <Icon
+                  icon={Pin}
+                  size={1}
                   fill={pinned ? `currentColor` : `none`}
                   style={{
                     transform: pinned ? `rotate(45deg)` : undefined,
@@ -223,7 +224,7 @@ export const SidebarRow = memo(function SidebarRow({
                 aria-label="Collapse subtree"
                 aria-expanded
               >
-                <ChevronDown size={14} />
+                <Icon icon={ChevronDown} size={2} />
               </button>
             ) : (
               <button
@@ -236,7 +237,7 @@ export const SidebarRow = memo(function SidebarRow({
                 aria-label={`Expand subtree (${childCount} subagent${childCount === 1 ? `` : `s`})`}
                 aria-expanded={false}
               >
-                <ChevronRight size={14} />
+                <Icon icon={ChevronRight} size={2} />
               </button>
             )
           ) : null}

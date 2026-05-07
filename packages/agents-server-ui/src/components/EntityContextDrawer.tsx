@@ -4,7 +4,7 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { Text } from '../ui'
+import { Icon, Text } from '../ui'
 import { StatusDot } from './StatusDot'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import styles from './EntityContextDrawer.module.css'
@@ -107,7 +107,7 @@ function ParentRow({
       title={`Open parent: ${parent.url}`}
     >
       <span className={styles.iconSlot}>
-        <CornerUpLeft size={14} className={styles.parentIcon} />
+        <Icon icon={CornerUpLeft} size={2} className={styles.parentIcon} />
       </span>
       <EntityRowBody entity={parent} />
     </button>
@@ -141,7 +141,7 @@ function SubAgentsSection({
         aria-expanded={expanded}
       >
         <span className={styles.iconSlot}>
-          <Chevron size={14} className={styles.chevron} />
+          <Icon icon={Chevron} size={2} className={styles.chevron} />
         </span>
         <Text size={2} className={styles.headerLabel}>
           {agents.length} {label}
@@ -157,7 +157,7 @@ function SubAgentsSection({
             title={agent.url}
           >
             <span className={styles.iconSlot}>
-              <StatusDot status={agent.status} size={7} />
+              <StatusDot status={agent.status} />
             </span>
             <EntityRowBody entity={agent} />
           </button>

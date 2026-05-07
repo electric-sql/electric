@@ -1,6 +1,7 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox'
 import { Check } from 'lucide-react'
 import { forwardRef, type CSSProperties, type ReactNode } from 'react'
+import { Icon } from './Icon'
 import popoverStyles from './Popover.module.css'
 import styles from './Combobox.module.css'
 
@@ -185,7 +186,7 @@ function ItemIndicator({
   return (
     <BaseCombobox.ItemIndicator
       className={[styles.indicator, className].filter(Boolean).join(` `)}
-      render={render ?? <Check size={14} />}
+      render={render ?? <Icon icon={Check} size={2} />}
     />
   )
 }

@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { StatusDot } from './StatusDot'
+import { Icon } from '../ui'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { usePinnedEntities } from '../hooks/usePinnedEntities'
@@ -476,7 +477,7 @@ export function SearchPalette(): React.ReactElement | null {
         <BaseDialog.Backdrop className={styles.backdrop} />
         <BaseDialog.Popup className={styles.popup}>
           <div className={styles.searchRow}>
-            <Search size={16} className={styles.searchIcon} />
+            <Icon icon={Search} size={3} className={styles.searchIcon} />
             <input
               ref={inputRef}
               type="search"
@@ -515,7 +516,11 @@ export function SearchPalette(): React.ReactElement | null {
                         {item.kind === `session` ? (
                           <StatusDot status={item.entity.status} />
                         ) : (
-                          <item.icon size={14} className={styles.rowIcon} />
+                          <Icon
+                            icon={item.icon}
+                            size={2}
+                            className={styles.rowIcon}
+                          />
                         )}
                       </span>
                       <span className={styles.rowTitle} title={item.title}>

@@ -115,7 +115,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: var(--ds-row-height-md);
   padding-left: 3px;
   padding-right: 3px;

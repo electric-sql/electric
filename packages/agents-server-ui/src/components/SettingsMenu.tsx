@@ -13,7 +13,7 @@ import {
   Square,
   Sun,
 } from 'lucide-react'
-import { IconButton, Menu, Text } from '../ui'
+import { Icon, IconButton, Menu, Text } from '../ui'
 import { useDarkModeContext, type ThemePreference } from '../hooks/useDarkMode'
 import {
   loadDesktopState,
@@ -27,9 +27,9 @@ const THEME_OPTIONS: ReadonlyArray<{
   label: string
   icon: React.ReactElement
 }> = [
-  { value: `light`, label: `Light`, icon: <Sun size={14} /> },
-  { value: `dark`, label: `Dark`, icon: <Moon size={14} /> },
-  { value: `system`, label: `System`, icon: <Monitor size={14} /> },
+  { value: `light`, label: `Light`, icon: <Icon icon={Sun} size={2} /> },
+  { value: `dark`, label: `Dark`, icon: <Icon icon={Moon} size={2} /> },
+  { value: `system`, label: `System`, icon: <Icon icon={Monitor} size={2} /> },
 ]
 
 const RUNTIME_STATUS_LABELS: Record<DesktopState[`runtimeStatus`], string> = {
@@ -85,16 +85,20 @@ export function SettingsMenu(): React.ReactElement {
             aria-label="Settings"
             title="Settings"
           >
-            <SettingsIcon size={14} />
+            <Icon icon={SettingsIcon} size={2} />
           </IconButton>
         }
       />
       <Menu.Content side="top" align="end">
         <Menu.SubmenuRoot>
           <Menu.SubmenuTrigger className={styles.submenuTrigger}>
-            <Palette size={14} />
+            <Icon icon={Palette} size={2} />
             <Text size={2}>Theme</Text>
-            <ChevronRight size={14} className={styles.submenuChevron} />
+            <Icon
+              icon={ChevronRight}
+              size={2}
+              className={styles.submenuChevron}
+            />
           </Menu.SubmenuTrigger>
           <Menu.Content side="left" align="start">
             {THEME_OPTIONS.map((opt) => {
@@ -106,7 +110,9 @@ export function SettingsMenu(): React.ReactElement {
                 >
                   {opt.icon}
                   <Text size={2}>{opt.label}</Text>
-                  {active && <Check size={14} className={styles.activeMark} />}
+                  {active && (
+                    <Icon icon={Check} size={2} className={styles.activeMark} />
+                  )}
                 </Menu.Item>
               )
             })}
@@ -116,9 +122,13 @@ export function SettingsMenu(): React.ReactElement {
         {isDesktop && (
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className={styles.submenuTrigger}>
-              <Cpu size={14} />
+              <Icon icon={Cpu} size={2} />
               <Text size={2}>Local Runtime</Text>
-              <ChevronRight size={14} className={styles.submenuChevron} />
+              <Icon
+                icon={ChevronRight}
+                size={2}
+                className={styles.submenuChevron}
+              />
             </Menu.SubmenuTrigger>
             <Menu.Content side="left" align="start">
               <Menu.Group>
@@ -147,7 +157,7 @@ export function SettingsMenu(): React.ReactElement {
                   <Menu.Item
                     onSelect={() => void window.electronAPI?.restartRuntime?.()}
                   >
-                    <Play size={14} />
+                    <Icon icon={Play} size={2} />
                     <Text size={2}>Start runtime</Text>
                   </Menu.Item>
                 ) : (
@@ -155,7 +165,7 @@ export function SettingsMenu(): React.ReactElement {
                     disabled={runtimeIsStarting}
                     onSelect={() => void window.electronAPI?.restartRuntime?.()}
                   >
-                    <RefreshCw size={14} />
+                    <Icon icon={RefreshCw} size={2} />
                     <Text size={2}>Restart runtime</Text>
                   </Menu.Item>
                 )}
@@ -163,7 +173,7 @@ export function SettingsMenu(): React.ReactElement {
                   disabled={!runtimeIsRunning && !runtimeIsStarting}
                   onSelect={() => void window.electronAPI?.stopRuntime?.()}
                 >
-                  <Square size={14} />
+                  <Icon icon={Square} size={2} />
                   <Text size={2}>Stop runtime</Text>
                 </Menu.Item>
               </Menu.Group>
@@ -181,7 +191,7 @@ export function SettingsMenu(): React.ReactElement {
             })
           }
         >
-          <SettingsIcon size={14} />
+          <Icon icon={SettingsIcon} size={2} />
           <Text size={2}>Settings…</Text>
         </Menu.Item>
       </Menu.Content>

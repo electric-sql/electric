@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
-import { Badge, IconButton, Text, Tooltip } from '../ui'
+import { Badge, Icon as UiIcon, IconButton, Text, Tooltip } from '../ui'
 import type { BadgeTone } from '../ui'
 import { MainHeader } from './MainHeader'
 import { listViews, type ViewId } from '../lib/workspace/viewRegistry'
@@ -121,7 +121,11 @@ function EntityTitle({
           onClick={copy}
           data-no-drag
         >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? (
+            <UiIcon icon={Check} size={1} />
+          ) : (
+            <UiIcon icon={Copy} size={1} />
+          )}
         </span>
       </span>
     </span>
@@ -172,7 +176,7 @@ function EntityActions({
                 aria-pressed={active}
                 className={active ? styles.activeBg : undefined}
               >
-                <Icon size={14} />
+                <UiIcon icon={Icon} size={2} />
               </IconButton>
             </Tooltip>
           )

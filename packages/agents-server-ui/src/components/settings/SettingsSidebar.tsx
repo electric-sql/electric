@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Cpu, Palette, Settings as SettingsIcon } from 'lucide-react'
-import { ScrollArea, Stack, Text } from '../../ui'
+import { Icon, ScrollArea, Stack, Text } from '../../ui'
 import {
   loadDesktopState,
   onDesktopStateChanged,
@@ -67,19 +67,19 @@ export function SettingsSidebar({
     {
       id: `general`,
       label: `General`,
-      icon: <SettingsIcon size={14} />,
+      icon: <Icon icon={SettingsIcon} size={2} />,
       visible: true,
     },
     {
       id: `appearance`,
       label: `Appearance`,
-      icon: <Palette size={14} />,
+      icon: <Icon icon={Palette} size={2} />,
       visible: true,
     },
     {
       id: `local-runtime`,
       label: `Local Runtime`,
-      icon: <Cpu size={14} />,
+      icon: <Icon icon={Cpu} size={2} />,
       visible: isDesktop || Boolean(desktopState),
     },
   ]
@@ -110,7 +110,7 @@ export function SettingsSidebar({
             data-no-drag
             aria-label="Back to app"
           >
-            <ArrowLeft size={14} />
+            <Icon icon={ArrowLeft} size={2} />
             <Text size={2}>Back to app</Text>
           </button>
         </div>

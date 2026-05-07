@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
 import { createSendMessageAction } from '../lib/sendMessage'
-import { Stack, Text } from '../ui'
+import { Icon, Stack, Text } from '../ui'
 import styles from './MessageInput.module.css'
 
 export function MessageInput({
@@ -102,7 +102,7 @@ export function MessageInput({
             .filter(Boolean)
             .join(` `)}
         >
-          <ArrowUp size={16} />
+          <Icon icon={ArrowUp} size={3} />
         </button>
       </Stack>
     </Stack>
