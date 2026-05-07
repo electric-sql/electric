@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
-import { useWorkspace } from '../../hooks/useWorkspace'
+import { listTiles, useWorkspace } from '../../hooks/useWorkspace'
 import { getView } from '../../lib/workspace/viewRegistry'
 import { setDragPayload } from '../../lib/workspace/dragPayload'
 import { EntityHeader } from '../EntityHeader'
 import { MainHeader } from '../MainHeader'
-import { Stack, Text } from '../../ui'
+import { Icon, IconButton, Stack, Text, Tooltip } from '../../ui'
 import { SplitMenu } from './SplitMenu'
 import { DropOverlay } from './DropOverlay'
 import { PaneFindBar } from './PaneFindBar'
 import type { Tile } from '../../lib/workspace/types'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
 import type { ReactNode } from 'react'
+import type { ElectricEntity } from '../../lib/ElectricAgentsProvider'
 import styles from './TileContainer.module.css'
 
 /**
@@ -130,7 +132,7 @@ function EntityTileBody({
           entity={entity}
           currentViewId={tile.viewId}
           onSetView={setView}
-          menu={<SplitMenu tile={tile} entity={entity} />}
+          menu={<TileActions tile={tile} entity={entity} />}
         />
       </div>
       <PaneFindBar tileId={tile.id} rootRef={rootRef} />
@@ -194,7 +196,7 @@ function StandaloneTileBody({
       <div draggable onDragStart={onHeaderDragStart}>
         <MainHeader
           title={toolbarTitle}
-          actions={<SplitMenu tile={tile} entity={null} />}
+          actions={<TileActions tile={tile} entity={null} />}
         />
       </div>
       <PaneFindBar tileId={tile.id} rootRef={rootRef} />
@@ -204,5 +206,36 @@ function StandaloneTileBody({
         setToolbarTitle={setToolbarTitle}
       />
     </Stack>
+  )
+}
+
+function TileActions({
+  tile,
+  entity,
+}: {
+  tile: Tile
+  entity: ElectricEntity | null
+}): React.ReactElement {
+  const { workspace, helpers } = useWorkspace()
+  const canClose = listTiles(workspace.root).length > 1
+
+  return (
+    <>
+      <SplitMenu tile={tile} entity={entity} />
+      {canClose && (
+        <Tooltip content="Close tile">
+          <IconButton
+            variant="ghost"
+            tone="neutral"
+            size={1}
+            aria-label="Close tile"
+            title="Close tile"
+            onClick={() => helpers.closeTile(tile.id)}
+          >
+            <Icon icon={X} size={3} />
+          </IconButton>
+        </Tooltip>
+      )}
+    </>
   )
 }
