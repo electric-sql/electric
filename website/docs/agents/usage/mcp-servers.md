@@ -3,8 +3,9 @@ title: MCP servers
 titleTemplate: "... - Electric Agents"
 description: >-
   Connect agents to external tools, resources, and prompts via the
-  Model Context Protocol — declaratively in mcp.json, programmatically
-  via the Registry, or globally in the desktop app's settings.
+  Model Context Protocol. Register servers programmatically through the
+  Registry API, declaratively in mcp.json, or globally in the desktop
+  app's settings.
 outline: [2, 3]
 ---
 
@@ -12,13 +13,56 @@ outline: [2, 3]
 
 The runtime ships an embedded **MCP registry** that connects agents to external [Model Context Protocol](https://modelcontextprotocol.io) servers — both locally-spawned `stdio` servers and remote `Streamable HTTP` servers. Tools, resources, and prompts exposed by those servers become available to every entity at the next wake without per-agent wiring.
 
-## Two creation modes
+## Registering servers
 
-Servers can be registered declaratively in an `mcp.json` file or programmatically via the registry API. Both produce the same registry entries and use the same auth shape.
+`Registry` is the primary API. Agent authors call into it directly when they're defining or hosting agents in code. `mcp.json` and the desktop app's `settings.json` are file-based convenience layers that the runtime turns into the same `Registry.applyConfig()` calls under the hood.
 
-### Declarative — `mcp.json`
+### Programmatic — `Registry.addServer()` / `applyConfig()`
 
-The runtime loads `mcp.json` from the configured `workingDirectory` (or the process cwd for headless embedders) on boot, watches it for changes, and hot-reloads adds, removes, and reconfigurations. In-flight tool calls finish on the old config; new calls pick up the new one.
+`BuiltinAgentsServer` exposes the registry through `mcpRegistry`. Add servers from code anywhere it's the right shape — at boot from your own config source, in response to user actions, or per-session for tools an agent should only see during a specific task:
+
+```ts
+import { BuiltinAgentsServer } from "@electric-ax/agents"
+
+const server = new BuiltinAgentsServer({
+  agentServerUrl: "http://localhost:4437",
+  port: 4448,
+  workingDirectory: process.cwd(),
+})
+
+await server.start()
+
+const result = await server.mcpRegistry?.addServer({
+  name: "stripe",
+  transport: "http",
+  url: "https://mcp.stripe.com/mcp",
+  auth: {
+    mode: "apiKey",
+    headerName: "Authorization",
+    key: process.env.STRIPE_MCP_KEY!,
+  },
+})
+
+if (result?.state === "authenticating") {
+  // OAuth flow needed — `result.authUrl` is the URL to send the
+  // user to. The desktop app opens it in a sandboxed BrowserWindow
+  // automatically; headless embedders surface it themselves.
+} else if (result?.state === "ready") {
+  // Tools are listed and available to every entity at the next wake.
+}
+```
+
+`addServer` returns a discriminated [`AddServerResult`](#addserverresult), so callers don't have to introspect status to decide whether a redirect is needed. The bulk methods are:
+
+- `applyConfig(cfg)` — replace the full set of servers. Idempotent on unchanged entries; removes anything not in the supplied config. This is what file-based config layers compile down to.
+- `subscribe(handler)` — push-based view of the live state, including `ready` / `authenticating` / `error` transitions. Useful when an embedder renders its own UI on top of the registry.
+- `reauthorize(name)`, `disable(name)`, `enable(name)`, `removeServer(name)` — single-server lifecycle.
+
+Static secrets (`apiKey.key`, `clientCredentials.clientId` / `clientSecret`) are passed inline at the call site — typically read from `process.env`. The runtime never reads environment variables on the embedder's behalf. See [`McpServerConfig`](/docs/agents/reference/mcp-server-config) for the full schema.
+
+### File-based — `mcp.json`
+
+For static, project-scoped configuration the runtime auto-loads `mcp.json` from the configured `workingDirectory` (or the process cwd for headless embedders) on boot, watches it for changes, and hot-reloads adds, removes, and reconfigurations through `applyConfig` — exactly as if you'd called the API yourself. In-flight tool calls finish on the old config; new calls pick up the new one.
 
 `mcp.json` carries structural shape only — no secrets:
 
@@ -55,50 +99,11 @@ The runtime loads `mcp.json` from the configured `workingDirectory` (or the proc
 }
 ```
 
-Static secrets (`apiKey.key`, `clientCredentials.clientId`/`clientSecret`) are passed inline by the embedder at the call site — typically read from `process.env`. The runtime never reads environment variables on the embedder's behalf, and `mcp.json` itself never contains secrets. See [`McpServerConfig`](/docs/agents/reference/mcp-server-config) for the full schema.
-
 For [`authorizationCode`](#authorization-code-oauth) servers in `mcp.json`, the runtime auto-wires `keychainPersistence` so OAuth tokens survive process restarts via the OS keychain.
 
-### Programmatic — `Registry.addServer()`
+### Desktop settings layer
 
-For temporary or user-scoped servers (e.g. a coding agent that spins up a project-scoped MCP server for the duration of a task), call into the registry directly. `BuiltinAgentsServer` exposes the registry through `mcpRegistry`:
-
-```ts
-import { BuiltinAgentsServer } from "@electric-ax/agents"
-
-const server = new BuiltinAgentsServer({
-  agentServerUrl: "http://localhost:4437",
-  port: 4448,
-  workingDirectory: process.cwd(),
-})
-
-await server.start()
-
-const result = await server.mcpRegistry?.addServer({
-  name: "temp-stripe",
-  transport: "http",
-  url: "https://mcp.stripe.com/mcp",
-  auth: {
-    mode: "apiKey",
-    headerName: "Authorization",
-    key: process.env.STRIPE_MCP_KEY!,
-  },
-})
-
-if (result?.state === "authenticating") {
-  // OAuth flow needed — `result.authUrl` is the URL to send the
-  // user to. The desktop app opens it in a sandboxed BrowserWindow
-  // automatically; headless embedders surface it themselves.
-} else if (result?.state === "ready") {
-  // Tools are listed and available to every entity at the next wake.
-}
-```
-
-`addServer` returns a discriminated [`AddServerResult`](#addserverresult) — callers don't have to introspect status to decide whether a redirect is needed. `applyConfig(cfg)` is the bulk version: idempotent on unchanged servers, and removes anything not in the supplied config. `subscribe(handler)` exposes the live state stream — useful when an embedder renders its own UI.
-
-### Settings (Electron desktop)
-
-The Electron desktop app adds a third path: a global `mcp.servers` array in its `settings.json`, applied to every workspace. The runtime layers it with the per-workspace `mcp.json`:
+The Electron desktop app exposes a second file-based layer: a global `mcp.servers` array in its `settings.json`, applied to every workspace. It composes with the workspace `mcp.json` instead of replacing it:
 
 - Servers from both files load together when their names don't collide.
 - On a name collision, the workspace `mcp.json` wins (project scope overrides global).
