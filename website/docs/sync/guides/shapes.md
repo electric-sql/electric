@@ -184,7 +184,7 @@ const stream = new ShapeStream({
 const shape = new Shape(stream)
 ```
 
-When a shape uses a subquery, Electric tracks the dependency between tables. If the data in the subquery changes (for example, a project becomes archived or a membership row is added), rows will automatically move in or out of the shape without the root row itself being modified.
+When a shape uses a subquery, Electric tracks the dependency between tables. If the data in the subquery changes (e.g., a project becomes archived), rows will automatically move in or out of the shape without the row itself being modified.
 
 Electric 1.6 keeps these moves incremental even for compound expressions that use `AND`, `OR`, and `NOT` around subqueries. In older releases those cases could return `409` and force a full resync of the shape.
 
