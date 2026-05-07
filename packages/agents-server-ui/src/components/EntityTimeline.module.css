@@ -4,6 +4,26 @@
   overflow: hidden;
 }
 
+.topDivider {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  width: min(calc(var(--chat-surface-width) + 8px), calc(100% - 72px));
+  height: 1px;
+  background: var(--ds-divider);
+  box-shadow:
+    0 1px 3px rgba(15, 15, 30, 0.04),
+    0 1px 1px rgba(15, 15, 30, 0.02);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 120ms ease;
+}
+.topDivider[data-visible='true'] {
+  opacity: 0.9;
+}
+
 .scroll {
   height: 100%;
   overflow: hidden;
@@ -55,7 +75,7 @@
  * CSS variables so EntityTimeline + MessageInput can stay perfectly
  * aligned without duplicating constants. */
 .content {
-  padding: 36px 40px;
+  padding: 28px 40px 36px;
   max-width: calc(var(--chat-surface-width) + 80px);
   margin: 0 auto;
   overflow-anchor: none;

@@ -194,7 +194,9 @@ export function EntityTimeline({
   const [contentWidth, setContentWidth] = useState(0)
   const isNearBottom = useRef(true)
   const lastScrollTopRef = useRef(0)
+  const spawnMarkerRef = useRef<HTMLSpanElement | null>(null)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  const [showTopDivider, setShowTopDivider] = useState(false)
   const cachedSizeMapRef = useRef(new Map<string, number>())
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
@@ -482,6 +484,14 @@ export function EntityTimeline({
       }
 
       lastScrollTopRef.current = viewport.scrollTop
+      const spawnMarker = spawnMarkerRef.current
+      if (spawnMarker) {
+        const markerRect = spawnMarker.getBoundingClientRect()
+        const viewportRect = viewport.getBoundingClientRect()
+        setShowTopDivider(markerRect.top <= viewportRect.top)
+      } else {
+        setShowTopDivider(false)
+      }
       setShowJumpToBottom(!isNearBottom.current)
     }
 
@@ -544,6 +554,11 @@ export function EntityTimeline({
 
   return (
     <div className={styles.root} data-desktop-selection-context="">
+      <div
+        className={styles.topDivider}
+        data-visible={showTopDivider ? `true` : undefined}
+        aria-hidden="true"
+      />
       <ScrollArea
         viewportRef={scrollAreaRef}
         className={styles.scroll}
@@ -554,7 +569,7 @@ export function EntityTimeline({
           <Stack>
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
-                <span className={styles.statusPill}>
+                <span ref={spawnMarkerRef} className={styles.statusPill}>
                   <Text size={1} tone="muted" className={styles.statusText}>
                     spawned
                   </Text>
@@ -567,13 +582,11 @@ export function EntityTimeline({
                 </span>
               </Tooltip>
             ) : (
-              <Text
-                size={1}
-                tone="muted"
-                className={`${styles.statusPill} ${styles.statusText}`}
-              >
-                spawned
-              </Text>
+              <span ref={spawnMarkerRef} className={styles.statusPill}>
+                <Text size={1} tone="muted" className={styles.statusText}>
+                  spawned
+                </Text>
+              </span>
             )}
           </Stack>
 
