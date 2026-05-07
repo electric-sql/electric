@@ -138,6 +138,8 @@ export function Sidebar({
   const [width, setWidth] = useSidebarWidth()
   const [resizeHandleHover, setResizeHandleHover] = useState(false)
   const [resizing, setResizing] = useState(false)
+  const [showTopDivider, setShowTopDivider] = useState(false)
+  const scrollViewportRef = useRef<HTMLDivElement>(null)
   // Narrow viewports flip the sidebar from a push-displace flex
   // column into an absolute-positioned overlay that floats above
   // the main content with a backdrop. Selecting any sidebar row
@@ -263,6 +265,19 @@ export function Sidebar({
     closeIfOverlay()
   }, [navigate, closeIfOverlay])
 
+  useEffect(() => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
+
+    const updateTopDivider = () => {
+      setShowTopDivider(viewport.scrollTop > 0)
+    }
+
+    updateTopDivider()
+    viewport.addEventListener(`scroll`, updateTopDivider, { passive: true })
+    return () => viewport.removeEventListener(`scroll`, updateTopDivider)
+  }, [])
+
   const treeProps = {
     childrenByParent,
     selectedEntityUrl,
@@ -320,8 +335,15 @@ export function Sidebar({
           />
         )}
         <SidebarHeader />
+        <div
+          className={styles.topDivider}
+          data-visible={showTopDivider ? `true` : undefined}
+        />
 
-        <ScrollArea className={styles.scrollFlex}>
+        <ScrollArea
+          className={styles.scrollFlex}
+          viewportRef={scrollViewportRef}
+        >
           <Stack direction="column" className={styles.treeRow}>
             <NewSessionSidebarRow
               onNewSession={handleNewSession}
