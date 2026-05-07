@@ -20,6 +20,7 @@ import type {
   EntityTimelineData,
   IncludesInboxMessage,
   IncludesRun,
+  IncludesWakeMessage,
 } from '../src/entity-timeline'
 
 function order(index: number): string {
@@ -360,6 +361,73 @@ describe(`entity includes query`, () => {
         kind: `agent_response`,
         items: [{ kind: `text`, text: `hello world` }],
         done: true,
+      })
+    })
+
+    it(`interleaves wake events with inbox messages and runs by order`, () => {
+      const inbox: Array<IncludesInboxMessage> = [
+        {
+          key: `m-0`,
+          order: order(1),
+          from: `user`,
+          payload: `start`,
+          timestamp: `2026-03-17T20:00:00.000Z`,
+        },
+      ]
+      const wakes: Array<IncludesWakeMessage> = [
+        {
+          key: `wake-0`,
+          order: order(2),
+          payload: {
+            type: `wake`,
+            timestamp: `2026-03-17T20:00:10.000Z`,
+            source: `source:entity:/worker-1`,
+            timeout: false,
+            changes: [],
+            finished_child: {
+              url: `/worker-1`,
+              type: `worker`,
+              run_status: `completed`,
+            },
+          },
+        },
+      ]
+      const runs: Array<IncludesRun> = [
+        {
+          key: `run-0`,
+          order: order(3),
+          status: `completed`,
+          texts: [
+            {
+              key: `text-0`,
+              run_id: `run-0`,
+              order: order(3),
+              status: `completed`,
+              text: `done`,
+            },
+          ],
+          toolCalls: [],
+          steps: [],
+          errors: [],
+        },
+      ]
+
+      const entries = buildTimelineEntries(runs, inbox, wakes)
+
+      expect(entries.map((entry) => entry.key)).toEqual([
+        `inbox:m-0`,
+        `wake:wake-0`,
+        `run:run-0`,
+      ])
+      expect(entries[1]?.section).toMatchObject({
+        kind: `wake`,
+        timestamp: Date.parse(`2026-03-17T20:00:10.000Z`),
+        payload: {
+          source: `source:entity:/worker-1`,
+          finished_child: {
+            run_status: `completed`,
+          },
+        },
       })
     })
 

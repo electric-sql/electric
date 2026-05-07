@@ -4,6 +4,7 @@ import type {
   EntityTimelineSection,
   IncludesInboxMessage,
   IncludesRun,
+  IncludesWakeMessage,
 } from './entity-timeline'
 
 type UserMessageSection = Extract<
@@ -14,6 +15,7 @@ type AgentResponseSection = Extract<
   EntityTimelineSection,
   { kind: `agent_response` }
 >
+type WakeSection = Extract<EntityTimelineSection, { kind: `wake` }>
 export interface EntityTimelineEntry {
   key: string
   section: EntityTimelineSection
@@ -319,23 +321,36 @@ function buildAgentSection(run: IncludesRun): AgentResponseSection {
   return section
 }
 
+function buildWakeSection(wake: IncludesWakeMessage): WakeSection {
+  const timestamp = Date.parse(wake.payload.timestamp)
+  return {
+    kind: `wake`,
+    payload: wake.payload,
+    timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+  }
+}
+
 export function buildSections(
   runs: Array<IncludesRun>,
-  inbox: Array<IncludesInboxMessage>
+  inbox: Array<IncludesInboxMessage>,
+  wakes: Array<IncludesWakeMessage> = []
 ): Array<EntityTimelineSection> {
-  return buildTimelineEntries(runs, inbox).map((entry) => entry.section)
+  return buildTimelineEntries(runs, inbox, wakes).map((entry) => entry.section)
 }
 
 export function buildTimelineEntries(
   runs: Array<IncludesRun>,
-  inbox: Array<IncludesInboxMessage>
+  inbox: Array<IncludesInboxMessage>,
+  wakes: Array<IncludesWakeMessage> = []
 ): Array<EntityTimelineEntry> {
   type TimelineItem =
     | { kind: `inbox`; data: IncludesInboxMessage }
+    | { kind: `wake`; data: IncludesWakeMessage }
     | { kind: `run`; data: IncludesRun }
 
   const items: Array<TimelineItem> = [
     ...inbox.map((data): TimelineItem => ({ kind: `inbox`, data })),
+    ...wakes.map((data): TimelineItem => ({ kind: `wake`, data })),
     ...runs.map((data): TimelineItem => ({ kind: `run`, data })),
   ]
   items.sort((a, b) => compareTimelineOrders(a.data.order, b.data.order))
@@ -354,6 +369,12 @@ export function buildTimelineEntries(
         responseTimestamp: null,
       })
       userMessageCount++
+    } else if (item.kind === `wake`) {
+      entries.push({
+        key: `wake:${item.data.key}`,
+        section: buildWakeSection(item.data),
+        responseTimestamp: null,
+      })
     } else {
       entries.push({
         key: `run:${item.data.key}`,

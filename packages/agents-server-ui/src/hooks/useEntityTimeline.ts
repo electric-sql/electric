@@ -80,6 +80,8 @@ export function useEntityTimeline(
           runs: [],
           inbox: [],
           wakes: [],
+          contextInserted: [],
+          contextRemoved: [],
           entities: [],
         }
       ),
@@ -87,8 +89,13 @@ export function useEntityTimeline(
   )
 
   const entries = useMemo(
-    () => buildTimelineEntries(timelineData.runs, timelineData.inbox),
-    [timelineData.runs, timelineData.inbox]
+    () =>
+      buildTimelineEntries(
+        timelineData.runs,
+        timelineData.inbox,
+        timelineData.wakes
+      ),
+    [timelineData.runs, timelineData.inbox, timelineData.wakes]
   )
 
   return { entries, entities: timelineData.entities, db, loading, error }

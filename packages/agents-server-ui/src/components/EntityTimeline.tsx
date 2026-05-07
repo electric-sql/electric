@@ -64,6 +64,9 @@ function estimateRowHeight(
     // bubble padding (24) + meta row (~24) + content
     return Math.max(64, 48 + lines * lineHeight)
   }
+  if (row.section.kind === `wake`) {
+    return 28
+  }
 
   const textLength = row.section.items.reduce((total: number, item) => {
     if (item.kind === `text`) return total + item.text.length
@@ -88,6 +91,7 @@ type TimelinePaneFindMatch = PaneFindMatch & {
 function timelineRowSearchText(row: EntityTimelineEntry): string {
   const { section } = row
   if (section.kind === `user_message`) return section.text
+  if (section.kind === `wake`) return wakeSectionText(section)
 
   return section.items
     .map((item) => {
@@ -104,7 +108,66 @@ function timelineRowSearchText(row: EntityTimelineEntry): string {
 }
 
 function timelineRowLabel(row: EntityTimelineEntry): string {
-  return row.section.kind === `user_message` ? `User message` : `Agent response`
+  switch (row.section.kind) {
+    case `user_message`:
+      return `User message`
+    case `wake`:
+      return `Wake`
+    case `agent_response`:
+      return `Agent response`
+  }
+}
+
+function wakeReason(
+  section: Extract<EntityTimelineEntry[`section`], { kind: `wake` }>
+): string {
+  const { payload } = section
+  if (payload.timeout) return `timeout`
+  if (payload.finished_child) {
+    return `child ${payload.finished_child.run_status}`
+  }
+  if (payload.changes.length > 0) {
+    return `${payload.changes.length} ${payload.changes.length === 1 ? `change` : `changes`}`
+  }
+  if (payload.other_children && payload.other_children.length > 0) {
+    return `${payload.other_children.length} child ${payload.other_children.length === 1 ? `update` : `updates`}`
+  }
+  return payload.source
+}
+
+function wakeSectionText(
+  section: Extract<EntityTimelineEntry[`section`], { kind: `wake` }>
+): string {
+  return [`woke`, wakeReason(section), section.payload.source].join(` `)
+}
+
+function WakeTimelineRow({
+  section,
+}: {
+  section: Extract<EntityTimelineEntry[`section`], { kind: `wake` }>
+}): React.ReactElement {
+  const reason = wakeReason(section)
+  return (
+    <Tooltip content={formatAbsoluteDateTimeVerbose(section.timestamp)}>
+      <span className={styles.statusPill}>
+        <Text size={1} tone="muted" className={styles.statusText}>
+          woke
+        </Text>
+        <Text size={1} tone="muted" className={styles.statusText}>
+          ·
+        </Text>
+        <Text size={1} tone="muted" className={styles.statusText}>
+          {reason}
+        </Text>
+        <Text size={1} tone="muted" className={styles.statusText}>
+          ·
+        </Text>
+        <Text size={1} tone="muted" className={styles.statusText}>
+          {formatChatTimestamp(section.timestamp)}
+        </Text>
+      </span>
+    </Tooltip>
+  )
 }
 
 function excerptAround(
@@ -158,6 +221,9 @@ const TimelineRow = memo(function TimelineRow({
 }): React.ReactElement {
   if (section.kind === `user_message`) {
     return <UserMessage section={section} />
+  }
+  if (section.kind === `wake`) {
+    return <WakeTimelineRow section={section} />
   }
 
   return (
