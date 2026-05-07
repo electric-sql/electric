@@ -113,6 +113,9 @@ export class ElectricAgentsManager {
   private validator: SchemaValidator
   private scheduler: Scheduler | null = null
   private entityBridgeManager: EntityBridgeManager | null = null
+  private writeTokenValidator:
+    | ((entity: ElectricAgentsEntity, token: string) => boolean)
+    | null = null
   readonly wakeRegistry: WakeRegistry
   private forkWorkLockedEntities = new Map<string, number>()
   private forkWriteLockedEntities = new Map<string, number>()
@@ -169,6 +172,21 @@ export class ElectricAgentsManager {
 
   setEntityBridgeManager(entityBridgeManager: EntityBridgeManager): void {
     this.entityBridgeManager = entityBridgeManager
+  }
+
+  setWriteTokenValidator(
+    validator: (entity: ElectricAgentsEntity, token: string) => boolean
+  ): void {
+    this.writeTokenValidator = validator
+  }
+
+  private isValidWriteToken(
+    entity: ElectricAgentsEntity,
+    token: string
+  ): boolean {
+    return this.writeTokenValidator
+      ? this.writeTokenValidator(entity, token)
+      : token === entity.write_token
   }
 
   private encodeChangeEvent(event: Record<string, unknown>): Uint8Array {
@@ -1710,7 +1728,7 @@ export class ElectricAgentsManager {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
 
-    if (token !== entity.write_token) {
+    if (!this.isValidWriteToken(entity, token)) {
       throw new ElectricAgentsError(`UNAUTHORIZED`, `Invalid write token`, 401)
     }
     if (entity.status === `stopped`) {
@@ -1752,7 +1770,7 @@ export class ElectricAgentsManager {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
 
-    if (token !== entity.write_token) {
+    if (!this.isValidWriteToken(entity, token)) {
       throw new ElectricAgentsError(`UNAUTHORIZED`, `Invalid write token`, 401)
     }
     if (entity.status === `stopped`) {
@@ -2451,7 +2469,6 @@ export class ElectricAgentsManager {
         streams: entity.streams,
         tags: entity.tags,
         spawnArgs: entity.spawn_args,
-        writeToken: entity.write_token,
       },
       triggerEvent: `message_received`,
     }
