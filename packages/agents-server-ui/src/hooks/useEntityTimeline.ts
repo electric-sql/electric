@@ -2,22 +2,24 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
 import {
   buildTimelineEntries,
+  compareTimelineOrders,
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
 } from '@electric-ax/agents-runtime'
 import { connectEntityStream } from '../lib/entity-connection'
+import type { TimelineEntry } from '../lib/timelineEntries'
 import type {
   EntityStreamDBWithActions,
   EntityTimelineData,
-  EntityTimelineEntry,
   IncludesEntity,
+  Manifest,
 } from '@electric-ax/agents-runtime'
 
 export function useEntityTimeline(
   baseUrl: string | null,
   entityUrl: string | null
 ): {
-  entries: Array<EntityTimelineEntry>
+  entries: Array<TimelineEntry>
   entities: Array<IncludesEntity>
   db: EntityStreamDBWithActions | null
   loading: boolean
@@ -73,6 +75,15 @@ export function useEntityTimeline(
     (q) => (db ? createEntityIncludesQuery(db)(q) : undefined),
     [db]
   )
+  const { data: manifests = [] } = useLiveQuery(
+    (q) =>
+      db
+        ? q
+            .from({ manifest: db.collections.manifests })
+            .orderBy(({ manifest }) => manifest._seq, `asc`)
+        : undefined,
+    [db]
+  )
   const timelineData = useMemo(
     () =>
       normalizeEntityTimelineData(
@@ -88,15 +99,43 @@ export function useEntityTimeline(
     [timelineRows]
   )
 
-  const entries = useMemo(
-    () =>
-      buildTimelineEntries(
-        timelineData.runs,
-        timelineData.inbox,
-        timelineData.wakes
-      ),
-    [timelineData.runs, timelineData.inbox, timelineData.wakes]
-  )
+  const entries = useMemo(() => {
+    const baseEntries = buildTimelineEntries(
+      timelineData.runs,
+      timelineData.inbox,
+      timelineData.wakes
+    )
+    const orderByKey = new Map<string, string | number>()
+    for (const run of timelineData.runs) {
+      orderByKey.set(`run:${run.key}`, run.order)
+    }
+    for (const msg of timelineData.inbox) {
+      orderByKey.set(`inbox:${msg.key}`, msg.order)
+    }
+    for (const wake of timelineData.wakes) {
+      orderByKey.set(`wake:${wake.key}`, wake.order)
+    }
+
+    const merged: Array<{ order: string | number; entry: TimelineEntry }> = [
+      ...baseEntries.map((entry) => ({
+        order: orderByKey.get(entry.key) ?? Number.MAX_SAFE_INTEGER,
+        entry,
+      })),
+      ...(manifests as Array<Manifest>).map((manifest) => ({
+        order: manifest._seq ?? Number.MAX_SAFE_INTEGER,
+        entry: {
+          key: `manifest:${manifest.key}`,
+          order: manifest._seq ?? Number.MAX_SAFE_INTEGER,
+          responseTimestamp: null,
+          section: { kind: `manifest` as const, manifest },
+        },
+      })),
+    ]
+
+    return merged
+      .sort((left, right) => compareTimelineOrders(left.order, right.order))
+      .map(({ entry }) => entry)
+  }, [manifests, timelineData.runs, timelineData.inbox, timelineData.wakes])
 
   return { entries, entities: timelineData.entities, db, loading, error }
 }

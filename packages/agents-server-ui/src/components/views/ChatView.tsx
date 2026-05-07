@@ -79,6 +79,7 @@ function GenericChatBody({
         entityStopped={entityStopped}
         cacheKey={`${baseUrl}${entityUrl ?? ``}`}
         tileId={tileId}
+        entityUrl={entityUrl}
       />
       <MessageInput
         db={db}

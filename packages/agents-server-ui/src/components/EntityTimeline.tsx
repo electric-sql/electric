@@ -11,16 +11,25 @@ import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
 } from '@tanstack/react-virtual'
-import { ArrowDown } from 'lucide-react'
+import {
+  ArrowDown,
+  Database,
+  ExternalLink,
+  FileJson,
+  GitBranch,
+  Radio,
+} from 'lucide-react'
 import {
   loadTimelineRowHeights,
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
+import { useWorkspace } from '../hooks/useWorkspace'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
-import { Icon, ScrollArea, Stack, Text, Tooltip } from '../ui'
+import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
 import { AgentResponse } from './AgentResponse'
+import { InlineEventCard } from './InlineEventCard'
 import {
   getCurrentMatchIndexInRoot,
   getTextMatchStarts,
@@ -30,7 +39,8 @@ import {
   formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
-import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
+import type { Manifest } from '@electric-ax/agents-runtime'
+import type { TimelineEntry } from '../lib/timelineEntries'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 
 /**
@@ -48,7 +58,7 @@ import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
  * width and multiply by the body line height.
  */
 function estimateRowHeight(
-  row: EntityTimelineEntry | undefined,
+  row: TimelineEntry | undefined,
   contentWidth: number
 ): number {
   if (!row) return 120
@@ -62,10 +72,13 @@ function estimateRowHeight(
   if (row.section.kind === `user_message`) {
     const lines = Math.max(1, Math.ceil(row.section.text.length / charsPerLine))
     // bubble padding (24) + meta row (~24) + content
-    return Math.max(64, 48 + lines * lineHeight)
+    return Math.max(64, 48 + lines * lineHeight) + timelineRowGap(row)
   }
   if (row.section.kind === `wake`) {
-    return 28
+    return 28 + timelineRowGap(row)
+  }
+  if (row.section.kind === `manifest`) {
+    return 76 + timelineRowGap(row)
   }
 
   const textLength = row.section.items.reduce((total: number, item) => {
@@ -75,12 +88,17 @@ function estimateRowHeight(
   }, 0)
   const lines = Math.max(2, Math.ceil(textLength / charsPerLine))
   // status row (~24) + content + a little breathing room
-  return Math.max(120, 32 + lines * lineHeight)
+  return Math.max(120, 32 + lines * lineHeight) + timelineRowGap(row)
 }
 
 const BOTTOM_PIN_THRESHOLD = 8
 const ROW_GAP = 24
+const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
+
+function timelineRowGap(row: TimelineEntry): number {
+  return row.section.kind === `manifest` ? MANIFEST_ROW_GAP : ROW_GAP
+}
 
 type TimelinePaneFindMatch = PaneFindMatch & {
   rowKey: string
@@ -88,10 +106,11 @@ type TimelinePaneFindMatch = PaneFindMatch & {
   rowOccurrence: number
 }
 
-function timelineRowSearchText(row: EntityTimelineEntry): string {
+function timelineRowSearchText(row: TimelineEntry): string {
   const { section } = row
   if (section.kind === `user_message`) return section.text
   if (section.kind === `wake`) return wakeSectionText(section)
+  if (section.kind === `manifest`) return manifestSearchText(section.manifest)
 
   return section.items
     .map((item) => {
@@ -107,19 +126,21 @@ function timelineRowSearchText(row: EntityTimelineEntry): string {
     .join(`\n\n`)
 }
 
-function timelineRowLabel(row: EntityTimelineEntry): string {
+function timelineRowLabel(row: TimelineEntry): string {
   switch (row.section.kind) {
     case `user_message`:
       return `User message`
     case `wake`:
       return `Wake`
+    case `manifest`:
+      return `Manifest item`
     case `agent_response`:
       return `Agent response`
   }
 }
 
 function wakeReason(
-  section: Extract<EntityTimelineEntry[`section`], { kind: `wake` }>
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
 ): string {
   const { payload } = section
   if (payload.timeout) return `timeout`
@@ -136,7 +157,7 @@ function wakeReason(
 }
 
 function wakeSectionText(
-  section: Extract<EntityTimelineEntry[`section`], { kind: `wake` }>
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
 ): string {
   return [`woke`, wakeReason(section), section.payload.source].join(` `)
 }
@@ -144,7 +165,7 @@ function wakeSectionText(
 function WakeTimelineRow({
   section,
 }: {
-  section: Extract<EntityTimelineEntry[`section`], { kind: `wake` }>
+  section: Extract<TimelineEntry[`section`], { kind: `wake` }>
 }): React.ReactElement {
   const reason = wakeReason(section)
   return (
@@ -196,6 +217,267 @@ function isTimelineFindMatch(
   )
 }
 
+function ManifestTimelineRow({
+  manifest,
+  entityUrl,
+}: {
+  manifest: Manifest
+  entityUrl: string | null
+  tileId: string | null
+}): React.ReactElement {
+  const { helpers } = useWorkspace()
+  const entityTarget = getManifestEntityUrl(manifest)
+  const stateSourceId = getManifestStateSourceId(manifest)
+  const isEntity = entityTarget !== null
+  const title = manifestTitle(manifest)
+  const meta = manifestMeta(manifest)
+  const summary =
+    isEntity || stateSourceId ? null : [title, meta].filter(Boolean).join(` · `)
+
+  const openEntity = useCallback(() => {
+    if (!entityTarget) return
+    helpers.openEntity(entityTarget)
+  }, [entityTarget, helpers])
+
+  const openStateInspector = useCallback(() => {
+    if (!entityUrl || !stateSourceId) return
+    helpers.openEntity(entityUrl, {
+      viewId: `state-explorer`,
+      viewParams: { source: stateSourceId },
+    })
+  }, [entityUrl, helpers, stateSourceId])
+
+  const actions = stateSourceId ? (
+    <Tooltip content="Open State Explorer">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.manifestActionButton}
+        aria-label="Open State Explorer"
+        onClick={openStateInspector}
+        disabled={!entityUrl}
+      >
+        <Icon icon={ExternalLink} size={1} />
+      </IconButton>
+    </Tooltip>
+  ) : entityTarget ? (
+    <Tooltip content="Open entity">
+      <IconButton
+        type="button"
+        size={1}
+        variant="ghost"
+        tone="neutral"
+        className={styles.manifestActionButton}
+        aria-label="Open entity"
+        onClick={openEntity}
+      >
+        <Icon icon={ExternalLink} size={1} />
+      </IconButton>
+    </Tooltip>
+  ) : undefined
+
+  const details = <ManifestDetailGrid manifest={manifest} />
+
+  return (
+    <div className={styles.manifestRow}>
+      <InlineEventCard
+        icon={manifestIcon(manifest)}
+        title={manifestKindLabel(manifest)}
+        summary={summary}
+        actions={actions}
+        collapsible={!isEntity && !stateSourceId}
+        headerSurface
+      >
+        {isEntity || stateSourceId ? (
+          details
+        ) : (
+          <>
+            {details}
+            <pre className={styles.manifestJson}>
+              {JSON.stringify(manifest, null, 2)}
+            </pre>
+          </>
+        )}
+      </InlineEventCard>
+    </div>
+  )
+}
+
+function ManifestDetailGrid({
+  manifest,
+}: {
+  manifest: Manifest
+}): React.ReactElement | null {
+  const details = manifestDetails(manifest)
+  if (details.length === 0) return null
+  return (
+    <div className={styles.manifestDetails}>
+      {details.map((detail) => (
+        <div key={detail.label} className={styles.manifestDetail}>
+          <span>{detail.label}</span>
+          <strong>{detail.value}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function manifestSearchText(manifest: Manifest): string {
+  return [
+    manifestKindLabel(manifest),
+    manifestTitle(manifest),
+    manifestMeta(manifest),
+  ]
+    .filter(Boolean)
+    .join(` `)
+}
+
+function manifestKindLabel(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return `Child entity`
+    case `source`:
+      return manifest.sourceType === `db`
+        ? `Database source`
+        : `${titleCase(manifest.sourceType)} source`
+    case `shared-state`:
+      return `Shared state`
+    case `effect`:
+      return `Effect`
+    case `context`:
+      return `Context`
+    case `schedule`:
+      return `Schedule`
+  }
+}
+
+function manifestTitle(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return manifest.id
+    case `source`:
+      return manifest.sourceRef
+    case `shared-state`:
+    case `effect`:
+    case `context`:
+    case `schedule`:
+      return manifest.id
+  }
+}
+
+function manifestMeta(manifest: Manifest): string {
+  switch (manifest.kind) {
+    case `child`:
+      return `${manifest.entity_type}${manifest.observed ? `` : ` · unobserved`}`
+    case `source`:
+      return describeSourceConfig(manifest.config)
+    case `shared-state`:
+      return `${manifest.mode} · ${Object.keys(manifest.collections).join(`, `)}`
+    case `effect`:
+      return manifest.function_ref
+    case `context`:
+      return `${Object.keys(manifest.attrs).length} attrs`
+    case `schedule`:
+      return manifest.scheduleType === `cron`
+        ? `${manifest.expression}${manifest.timezone ? ` · ${manifest.timezone}` : ``}`
+        : `${manifest.fireAt} · ${manifest.status}`
+  }
+}
+
+function manifestDetails(
+  manifest: Manifest
+): Array<{ label: string; value: string }> {
+  switch (manifest.kind) {
+    case `child`:
+      return [
+        { label: `Id`, value: manifest.id },
+        { label: `Type`, value: manifest.entity_type },
+      ]
+    case `shared-state`:
+      return [
+        { label: `Mode`, value: manifest.mode },
+        {
+          label: `Collections`,
+          value: Object.keys(manifest.collections).join(`, `) || `none`,
+        },
+      ]
+    case `source`:
+      return [
+        { label: `Type`, value: manifest.sourceType },
+        { label: `Ref`, value: manifest.sourceRef },
+      ]
+    case `effect`:
+      return [
+        { label: `Function`, value: manifest.function_ref },
+        { label: `Config`, value: shortJson(manifest.config) },
+      ]
+    case `context`:
+      return [
+        { label: `Name`, value: manifest.name },
+        { label: `Content`, value: `${manifest.content.length} chars` },
+      ]
+    case `schedule`:
+      return manifest.scheduleType === `cron`
+        ? [
+            { label: `Cron`, value: manifest.expression },
+            { label: `Timezone`, value: manifest.timezone ?? `local` },
+          ]
+        : [
+            { label: `Fire at`, value: manifest.fireAt },
+            { label: `Target`, value: manifest.targetUrl },
+            { label: `Status`, value: manifest.status ?? `pending` },
+          ]
+    case `child`:
+      return []
+  }
+}
+
+function manifestIcon(manifest: Manifest) {
+  if (getManifestStateSourceId(manifest)) return Database
+  if (getManifestEntityUrl(manifest)) return GitBranch
+  if (manifest.kind === `schedule`) return Radio
+  return FileJson
+}
+
+function getManifestEntityUrl(manifest: Manifest): string | null {
+  if (manifest.kind === `child`) return manifest.entity_url
+  if (manifest.kind === `source` && manifest.sourceType === `entity`) {
+    return manifest.sourceRef
+  }
+  return null
+}
+
+function getManifestStateSourceId(manifest: Manifest): string | null {
+  if (manifest.kind === `shared-state`) return manifest.id
+  if (manifest.kind === `source` && manifest.sourceType === `db`) {
+    return manifest.sourceRef
+  }
+  return null
+}
+
+function describeSourceConfig(config: Record<string, unknown>): string {
+  const cache = typeof config.cache === `string` ? config.cache : null
+  const keys = Object.keys(config).filter((key) => key !== `cache`)
+  return [cache, keys.length > 0 ? `${keys.length} config keys` : null]
+    .filter(Boolean)
+    .join(` · `)
+}
+
+function shortJson(value: unknown): string {
+  const json = JSON.stringify(value)
+  return json.length > 80 ? `${json.slice(0, 77)}...` : json
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(` `)
+}
+
 // `section` and `responseTimestamp` are pulled out of the parent
 // `EntityTimelineEntry` so React.memo's shallow compare can hit on
 // the *section* identity. `buildTimelineEntries` returns a fresh
@@ -212,18 +494,31 @@ const TimelineRow = memo(function TimelineRow({
   entityStopped,
   isStreaming,
   renderWidth,
+  entityUrl,
+  tileId,
 }: {
-  section: EntityTimelineEntry[`section`]
-  responseTimestamp: EntityTimelineEntry[`responseTimestamp`]
+  section: TimelineEntry[`section`]
+  responseTimestamp: TimelineEntry[`responseTimestamp`]
   entityStopped: boolean
   isStreaming: boolean
   renderWidth: number
+  entityUrl: string | null
+  tileId: string | null
 }): React.ReactElement {
   if (section.kind === `user_message`) {
     return <UserMessage section={section} />
   }
   if (section.kind === `wake`) {
     return <WakeTimelineRow section={section} />
+  }
+  if (section.kind === `manifest`) {
+    return (
+      <ManifestTimelineRow
+        manifest={section.manifest}
+        entityUrl={entityUrl}
+        tileId={tileId}
+      />
+    )
   }
 
   return (
@@ -243,13 +538,15 @@ export function EntityTimeline({
   entityStopped,
   cacheKey,
   tileId,
+  entityUrl = null,
 }: {
-  entries: Array<EntityTimelineEntry>
+  entries: Array<TimelineEntry>
   loading: boolean
   error: string | null
   entityStopped: boolean
   cacheKey?: string | null
   tileId?: string | null
+  entityUrl?: string | null
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
@@ -271,8 +568,8 @@ export function EntityTimeline({
   const firstMessage = rows.find(
     (
       row
-    ): row is EntityTimelineEntry & {
-      section: Extract<EntityTimelineEntry[`section`], { kind: `user_message` }>
+    ): row is TimelineEntry & {
+      section: Extract<TimelineEntry[`section`], { kind: `user_message` }>
     } => row.section.kind === `user_message`
   )
   const spawnTime = firstMessage?.section.timestamp ?? null
@@ -359,7 +656,7 @@ export function EntityTimeline({
       cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
       estimateRowHeight(rows[index], contentWidth),
     getItemKey: (index) => rows[index]?.key ?? index,
-    gap: ROW_GAP,
+    gap: 0,
     overscan: 6,
     measureElement: measureRowElement,
     enabled: rows.length > 0,
@@ -690,7 +987,10 @@ export function EntityTimeline({
                     data-item-key={row.key}
                     data-pane-find-row-key={row.key}
                     className={styles.virtualRow}
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                      paddingBottom: timelineRowGap(row),
+                    }}
                   >
                     <TimelineRow
                       section={row.section}
@@ -698,6 +998,8 @@ export function EntityTimeline({
                       entityStopped={entityStopped}
                       isStreaming={row.key === lastStreamingAgentKey}
                       renderWidth={contentWidth}
+                      entityUrl={entityUrl}
+                      tileId={tileId ?? null}
                     />
                   </div>
                 )
