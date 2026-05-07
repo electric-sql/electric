@@ -11,6 +11,7 @@ import {
 import { Icon, Stack, Text } from '../ui'
 import styles from './MessageInput.module.css'
 import type { EntityTimelineData } from '@electric-ax/agents-runtime/client'
+import type { OptimisticInboxMessage } from '../lib/sendMessage'
 
 export function MessageInput({
   db,
@@ -18,7 +19,8 @@ export function MessageInput({
   entityUrl,
   disabled,
   pendingMessages = [],
-  generationActive,
+  inlineQueuedSubmits = false,
+  onOptimisticQueuedMessage,
   drawer,
   onSend,
 }: {
@@ -27,8 +29,9 @@ export function MessageInput({
   entityUrl: string
   disabled: boolean
   pendingMessages?: EntityTimelineData[`inbox`]
-  generationActive: boolean
   onSend?: () => void
+  inlineQueuedSubmits?: boolean
+  onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed
@@ -72,8 +75,13 @@ export function MessageInput({
       db,
       baseUrl,
       entityUrl,
+      onOptimisticMessage: (message) => {
+        if (inlineQueuedSubmits && message.mode === `queued`) {
+          onOptimisticQueuedMessage?.(message)
+        }
+      },
     })
-  }, [db, baseUrl, entityUrl])
+  }, [db, baseUrl, entityUrl, inlineQueuedSubmits, onOptimisticQueuedMessage])
   const updateAction = useMemo(() => {
     if (!db) return null
     return createUpdateInboxMessageAction({ db, baseUrl, entityUrl })
@@ -91,8 +99,6 @@ export function MessageInput({
     if (!value.trim() || disabled) return
     setError(null)
     const text = value.trim()
-    const shouldSendImmediately =
-      !generationActive && pendingMessages.length === 0
     const tx = editingMessage
       ? updateAction?.({
           key: editingMessage.key,
@@ -102,7 +108,7 @@ export function MessageInput({
         })
       : sendAction?.({
           text,
-          mode: shouldSendImmediately ? `immediate` : `queued`,
+          mode: `queued`,
         })
     if (!tx) return
     if (!editingMessage) onSend?.()
@@ -111,16 +117,7 @@ export function MessageInput({
     tx.isPersisted.promise.catch((err: Error) => {
       setError(err.message)
     })
-  }, [
-    value,
-    sendAction,
-    updateAction,
-    editingMessage,
-    disabled,
-    generationActive,
-    pendingMessages.length,
-    onSend,
-  ])
+  }, [value, sendAction, updateAction, editingMessage, disabled, onSend])
 
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {

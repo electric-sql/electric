@@ -9,7 +9,7 @@ const OPTIMISTIC_INBOX_SEQ_START = Number.MAX_SAFE_INTEGER - 1_000_000
 
 let optimisticInboxSeq = OPTIMISTIC_INBOX_SEQ_START
 
-type OptimisticInboxMessage = {
+export type OptimisticInboxMessage = {
   key: string
   _seq: number
   from: string
@@ -147,11 +147,13 @@ export function createSendMessageAction({
   baseUrl,
   entityUrl,
   from = `user`,
+  onOptimisticMessage,
 }: {
   db: EntityStreamDBWithActions
   baseUrl: string
   entityUrl: string
   from?: string
+  onOptimisticMessage?: (message: OptimisticInboxMessage) => void
 }) {
   const action = createOptimisticAction<SendMessageInput>({
     onMutate: ({ text, mode, key, seq, position }) => {
@@ -171,6 +173,7 @@ export function createSendMessageAction({
           : { processed_at: now }),
       }
       db.collections.inbox.insert(message)
+      onOptimisticMessage?.(message)
     },
     mutationFn: async ({ text, key, mode, position }) => {
       const res = await fetch(`${baseUrl}${entityUrl}/inbox`, {
