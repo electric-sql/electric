@@ -12,7 +12,7 @@ import styles from './EntityContextDrawer.module.css'
 import type {
   EntityStreamDBWithActions,
   Manifest,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
 type DrawerEntity = Pick<

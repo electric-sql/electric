@@ -1,5 +1,5 @@
 import { createOptimisticAction } from '@tanstack/db'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
 // Timeline queries sort inbox messages by `_seq`. Pending local rows do not
 // have a server sequence yet, so put them after streamed rows until the real

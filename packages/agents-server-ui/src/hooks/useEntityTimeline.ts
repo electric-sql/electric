@@ -5,7 +5,7 @@ import {
   compareTimelineOrders,
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 import { connectEntityStream } from '../lib/entity-connection'
 import type { TimelineEntry } from '../lib/timelineEntries'
 import type {
@@ -13,7 +13,7 @@ import type {
   EntityTimelineData,
   IncludesEntity,
   Manifest,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 
 export function useEntityTimeline(
   baseUrl: string | null,

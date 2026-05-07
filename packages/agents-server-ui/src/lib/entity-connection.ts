@@ -1,5 +1,7 @@
-import { createEntityStreamDB } from '@electric-ax/agents-runtime'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+import {
+  createEntityStreamDB,
+  type EntityStreamDBWithActions,
+} from '@electric-ax/agents-runtime/client'
 
 function getMainStreamPath(entityUrl: string): string {
   return `${entityUrl}/main`

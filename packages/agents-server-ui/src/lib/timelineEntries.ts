@@ -1,4 +1,7 @@
-import type { EntityTimelineEntry, Manifest } from '@electric-ax/agents-runtime'
+import type {
+  EntityTimelineEntry,
+  Manifest,
+} from '@electric-ax/agents-runtime/client'
 
 export type ManifestTimelineEntry = {
   key: string

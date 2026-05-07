@@ -43,7 +43,10 @@ import {
   formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
-import type { IncludesEntity, Manifest } from '@electric-ax/agents-runtime'
+import type {
+  IncludesEntity,
+  Manifest,
+} from '@electric-ax/agents-runtime/client'
 import type { TimelineEntry } from '../lib/timelineEntries'
 import type { PaneFindAdapter, PaneFindMatch } from '../hooks/usePaneFind'
 

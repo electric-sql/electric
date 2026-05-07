@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp } from 'lucide-react'
-import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 import { createSendMessageAction } from '../lib/sendMessage'
 import { Icon, Stack, Text } from '../ui'
 import styles from './MessageInput.module.css'

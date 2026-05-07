@@ -28,7 +28,7 @@ import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
   EntityTimelineSection,
-} from '@electric-ax/agents-runtime'
+} from '@electric-ax/agents-runtime/client'
 
 type AgentResponseSection = Extract<
   EntityTimelineSection,

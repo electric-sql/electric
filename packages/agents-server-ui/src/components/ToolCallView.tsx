@@ -1,5 +1,5 @@
 import { Wrench } from 'lucide-react'
-import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime'
+import type { EntityTimelineContentItem } from '@electric-ax/agents-runtime/client'
 import { Badge, Stack, Text } from '../ui'
 import type { BadgeTone } from '../ui'
 import { InlineEventCard } from './InlineEventCard'

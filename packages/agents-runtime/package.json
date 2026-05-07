@@ -44,6 +44,16 @@
         "default": "./dist/react.cjs"
       }
     },
+    "./client": {
+      "import": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
+      "require": {
+        "types": "./dist/client.d.cts",
+        "default": "./dist/client.cjs"
+      }
+    },
     "./tools": {
       "import": {
         "types": "./dist/tools.d.ts",
