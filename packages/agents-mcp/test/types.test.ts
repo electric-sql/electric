@@ -31,7 +31,7 @@ describe(`types`, () => {
       name: `x`,
       transport: `http`,
       url: `https://x/mcp`,
-      auth: { mode: `apiKey`, headerName: `X-Api-Key` },
+      auth: { mode: `apiKey`, key: `KEY`, headerName: `X-Api-Key` },
     }
     expect(c.transport).toBe(`http`)
   })
@@ -47,11 +47,11 @@ describe(`types`, () => {
     expect(s.length).toBe(5)
   })
 
-  // Type-only sanity: mode 'authorizationCode' requires a flow.
-  it(`authorizationCode requires flow`, () => {
+  // Type-only sanity: authorizationCode is the only OAuth flow we support
+  // now (browser-only, hosted by the desktop app).
+  it(`authorizationCode mode accepts inline scopes / client / tokens`, () => {
     const a: McpAuthConfig = {
       mode: `authorizationCode`,
-      flow: `browser`,
       scopes: [`x`],
     }
     expect(a.mode).toBe(`authorizationCode`)

@@ -42,6 +42,86 @@ describe(`bridgeMcpTool`, () => {
     })
     expect(result).toEqual({ content: [{ type: `text`, text: `hi` }] })
   })
+  it(`normalizes inputSchema with no properties to { properties: {}, required: [] }`, () => {
+    const tool = bridgeMcpTool({
+      server: `mock`,
+      tool: {
+        name: `noargs`,
+        description: `d`,
+        inputSchema: { type: `object` },
+      },
+      client: { callTool: vi.fn() } as any,
+    })
+    expect(tool.inputSchema).toEqual({
+      type: `object`,
+      properties: {},
+      required: [],
+    })
+  })
+  it(`leaves a well-formed object schema untouched`, () => {
+    const schema = {
+      type: `object`,
+      properties: { msg: { type: `string` } },
+      required: [`msg`],
+    }
+    const tool = bridgeMcpTool({
+      server: `mock`,
+      tool: { name: `echo`, description: `d`, inputSchema: schema },
+      client: { callTool: vi.fn() } as any,
+    })
+    expect(tool.inputSchema).toEqual(schema)
+  })
+  it(`passes signal as the THIRD arg (options) — not the second (resultSchema)`, async () => {
+    // Regression: before the fix, invoke() passed { signal } as the second argument
+    // to client.callTool(), landing in the resultSchema position. The real MCP SDK
+    // then tried safeParse({ signal }, response), which threw
+    // "v3Schema.safeParse is not a function".
+    const callTool = vi.fn(async () => ({
+      content: [{ type: `text`, text: `ok` }],
+    }))
+    const tool = bridgeMcpTool({
+      server: `mock`,
+      tool: { name: `echo`, description: `d`, inputSchema: { type: `object` } },
+      client: { callTool } as any,
+      timeoutMs: 1000,
+    })
+    const ac = new AbortController()
+    await tool.execute(`call-1`, { message: `hi` }, ac.signal)
+
+    // callTool must be called with THREE args:
+    //   [0] params  { name, arguments }
+    //   [1] undefined  (resultSchema — let the SDK default to CallToolResultSchema)
+    //   [2] options { signal, ... }
+    expect(callTool).toHaveBeenCalledTimes(1)
+    const call = callTool.mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      { signal?: AbortSignal },
+    ]
+    const [params, resultSchema, options] = call
+    expect(params).toEqual({ name: `echo`, arguments: { message: `hi` } })
+    expect(resultSchema).toBeUndefined()
+    expect(options).toMatchObject({ signal: ac.signal })
+  })
+
+  it(`omits resultSchema/options args entirely when no signal or onProgress`, async () => {
+    const callTool = vi.fn(async () => ({
+      content: [{ type: `text`, text: `ok` }],
+    }))
+    const tool = bridgeMcpTool({
+      server: `mock`,
+      tool: { name: `echo`, description: `d`, inputSchema: { type: `object` } },
+      client: { callTool } as any,
+      timeoutMs: 1000,
+    })
+    await tool.call({ message: `hi` })
+    // Only one argument — no resultSchema / options pollution
+    expect(callTool).toHaveBeenCalledTimes(1)
+    const call = callTool.mock.calls[0] as unknown as unknown[]
+    expect(call.length).toBe(1)
+    expect(call[0]).toEqual({ name: `echo`, arguments: { message: `hi` } })
+  })
+
   it(`returns a structured timeout error when slower than budget`, async () => {
     const callTool = () =>
       new Promise((r) => setTimeout(() => r({ content: [] }), 50))

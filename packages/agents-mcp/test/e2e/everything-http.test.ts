@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createRegistry } from '../../src/registry'
-import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
 import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
 
 const PORT = 38421
@@ -45,7 +44,7 @@ describe(`E2E — everything server (HTTP)`, () => {
   })
 
   it(`connects via HTTP and lists tools`, async () => {
-    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const reg = createRegistry({})
     const r = await reg.addServer({
       name: `everything-http`,
       transport: `http`,
@@ -58,7 +57,7 @@ describe(`E2E — everything server (HTTP)`, () => {
   }, 60_000)
 
   it(`calls echo via HTTP`, async () => {
-    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const reg = createRegistry({})
     await reg.addServer({
       name: `everything-http`,
       transport: `http`,

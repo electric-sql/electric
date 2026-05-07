@@ -4,7 +4,11 @@ import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
 describe(`progress passthrough`, () => {
   it(`forwards progress notifications to the optional callback`, async () => {
     const callTool = vi.fn(
-      async (_args, opts: { onProgress?: (p: unknown) => void }) => {
+      async (
+        _args: unknown,
+        _resultSchema: unknown,
+        opts: { onProgress?: (p: unknown) => void }
+      ) => {
         opts.onProgress?.({ progress: 0.5 })
         return { content: [{ type: `text`, text: `done` }] }
       }

@@ -363,81 +363,86 @@ Programmatic registration is useful for agents that spin up servers in response 
 
 ### Credential handling
 
-The runtime owns no secret persistence. Keys flow through a single seam: a `CredentialStore` provided at bootstrap. Anything that needs a key (an apiKey transport adapter, the SDK's `OAuthClientProvider`, a clientCredentials grant) asks the store; anything that produces a key worth persisting (a fresh OAuth token after refresh, a DCR-registered client) writes through the store.
+The runtime owns no secret persistence and exposes no credential-store contract on its public surface. Two principles:
+
+1. **Static secrets (API keys, M2M client_id/secret, pre-registered OAuth client, pre-existing tokens) are passed inline in the `auth` config.** The developer's call site is the only place that knows where their secret came from (env var, vault, ...); `agents-mcp` never reads `process.env` on their behalf.
+2. **Dynamic secrets (OAuth `access_token` / `refresh_token`, DCR-registered client) live in a private in-process token cache owned by the registry.** The cache is never exposed; persistence across process restarts is the operator's choice via opt-in callbacks on the auth config.
 
 ```ts
-interface CredentialStore {
-  // Static credentials. Synchronous or async.
-  getApiKey?(server: string): string | undefined | Promise<string | undefined>
-  getClientCredentials?(server: string):
-    | { clientId: string; clientSecret: string }
-    | undefined
-    | Promise<{ clientId: string; clientSecret: string } | undefined>
+// Per-mode auth shape; `tokens`, `client`, and the callbacks only apply
+// to the OAuth modes that produce or refresh that material.
+auth: {
+  mode: `apiKey`,
+  key: process.env.X_API_KEY,
+  headerName: `X-...`,
+}
 
-  // OAuth tokens. The SDK's OAuthClientProvider wraps these and handles
-  // refresh / 401-retry; the store only persists.
-  getOAuthTokens?(server: string): OAuthTokens | undefined | Promise<...>
-  saveOAuthTokens?(server: string, tokens: OAuthTokens): void | Promise<void>
+auth: {
+  mode: `clientCredentials`,
+  tokenUrl: `https://auth.example.com/oauth/token`,
+  clientId: process.env.X_CLIENT_ID,
+  clientSecret: process.env.X_CLIENT_SECRET,
+  scopes: [`mcp:read`],
+}
 
-  // OAuth client info (for DCR-registered clients). Persisted across
-  // restarts so we don't re-register on every boot.
-  getOAuthClientInfo?(server: string): OAuthClientInfo | undefined | Promise<...>
-  saveOAuthClientInfo?(server: string, info: OAuthClientInfo): void | Promise<void>
+auth: {
+  mode: `authorizationCode`,
+  flow: `browser`,                                          // or `device`
+  scopes: [`mcp:read`],
+  client?: { clientId, clientSecret? },                     // optional, skip DCR
+  tokens?: { accessToken, refreshToken?, expiresAt? },      // optional, skip OAuth flow on boot
+  onTokensChanged?: (tokens) => void | Promise<void>,       // fires on initial auth + every refresh
+  onClientRegistered?: (client) => void | Promise<void>,    // fires once after DCR
 }
 ```
 
-Every method is optional. A store that returns `undefined` from everything is valid and means "MCP servers needing credentials will be `needs_auth` forever" — useful for tests and for runtimes that only host stdio servers.
+The SDK's `OAuthClientProvider` is wired internally to the registry's private cache; the developer never sees it. The provider does PKCE, RFC 9728 discovery, RFC 7591 DCR, token exchange, refresh, and 401-retry. Our code only:
 
-### Built-in store implementations (in `@electric-ax/agents-mcp`)
+- Tells the SDK where to send the user for the authorize step (the runtime's public URL + `/oauth/callback/<server>`).
+- Receives the callback, hands the code to `provider.finishAuth(code)`.
+- Updates the private cache and fires `onTokensChanged` / `onClientRegistered` if the operator wired them.
 
-| Implementation                 | When to use                | Notes                                                                                                                                               |
-| ------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inMemoryCredentialStore()`    | Tests, ephemeral dev       | Tokens lost on restart; full re-OAuth required.                                                                                                     |
-| `envCredentialStore()`         | 12-factor production, CI   | Reads `MCP_<SERVER>_API_KEY` / `MCP_<SERVER>_CLIENT_ID` / `MCP_<SERVER>_CLIENT_SECRET`. Cannot persist OAuth tokens (env is read-only).             |
-| `osKeychainCredentialStore()`  | Local dev on a workstation | Uses `keytar` (macOS Keychain / libsecret / Windows Credential Manager). Tokens encrypted by the OS. Skipped silently if the native dep is missing. |
-| `fileCredentialStore(path)`    | Local dev fallback         | JSON at `.electric-agents/credentials.json`, mode `0600`. AES-256-GCM if a key is available from the OS keychain; otherwise plain (with a warning). |
-| `composedCredentialStore(...)` | Combine the above          | Reads check stores in order; first non-`undefined` wins. Writes go to the first store that implements the relevant `save*` method.                  |
+### Persistence presets
 
-### Default dev experience
+For operators who want OAuth tokens to survive process restarts, `agents-mcp` ships two small opt-in helpers that produce the auth-config slice. Each is a one-line spread at the call site.
 
-The runtime picks a sensible default if no `credentials` option is passed at bootstrap. The default is `composedCredentialStore(envCredentialStore(), osKeychainCredentialStore(), fileCredentialStore('.electric-agents/credentials.json'))`. Concretely:
+| Helper                              | Backing store                                                                                                       | When to use                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `keychainPersistence({ server })`   | OS keychain via `keytar` (macOS Keychain / libsecret / Windows Credential Manager); no-op when keytar isn't present | Local dev on a workstation; tokens encrypted by the OS               |
+| `filePersistence({ path, server })` | JSON file, mode `0600`                                                                                              | CI / minimal containers without an OS keychain; deterministic backup |
 
-- API keys / client credentials read from env vars first (operator's preferred override).
-- OAuth tokens persist to the OS keychain when available; that means a developer authorizes once and tokens survive process restarts and reboots, encrypted by the OS.
-- If keytar isn't available (e.g. minimal Linux container), tokens fall back to a `chmod 0600` JSON file in the workspace.
-
-The runtime logs which stores are wired at startup so the developer can see what's in play:
-
-```
-[mcp] credentials store: env + os-keychain (macOS) + file:./.electric-agents/credentials.json
-```
-
-Production deployments override explicitly:
+Each helper returns `{ tokens?, client?, onTokensChanged, onClientRegistered }` — the exact shape the auth config expects. Usage:
 
 ```ts
-mountMcpHttp({
-  registry,
-  publicUrl: process.env.RUNTIME_PUBLIC_URL,
-  credentials: {
-    getApiKey: (s) => process.env[`MCP_${s.toUpperCase()}_API_KEY`],
-    getClientCredentials: (s) => readFromAwsSecretsManager(`mcp/${s}`),
-    getOAuthTokens: (s) => readFromVault(`mcp/${s}/tokens`),
-    saveOAuthTokens: (s, t) => writeToVault(`mcp/${s}/tokens`, t),
-    getOAuthClientInfo: (s) => readFromVault(`mcp/${s}/client`),
-    saveOAuthClientInfo: (s, c) => writeToVault(`mcp/${s}/client`, c),
+const honeycomb = await keychainPersistence({ server: `honeycomb` })
+
+await mcpRegistry.addServer({
+  name: `honeycomb`,
+  transport: `http`,
+  url: `https://mcp.honeycomb.io/mcp`,
+  auth: {
+    mode: `authorizationCode`,
+    flow: `browser`,
+    scopes: [`mcp:read`],
+    ...honeycomb,
   },
 })
 ```
 
-### OAuth via the SDK's `OAuthClientProvider`
+If neither helper is wired, OAuth tokens live only for the lifetime of the process — `dev.sh restart` sends the developer back through the Authorize button. That's an acceptable default for the "developer owns persistence" model: the SDK doesn't decide where their secrets sleep.
 
-For OAuth-mode servers, the runtime constructs an `OAuthClientProvider` (the MCP SDK's interface) backed by the `CredentialStore`. The SDK does PKCE, RFC 9728 discovery, RFC 7591 DCR (when no static client info is in the store), token exchange, refresh, and 401-retry. Our code only:
+For Vault / SSM / a custom secret system, the operator writes their own `onTokensChanged` and `onClientRegistered` directly. There is no `CredentialStore` interface to extend; the contract is two callbacks and two optional values.
 
-- Tells the SDK where to send the user for the authorize step (the runtime's public URL + `/oauth/callback/<server>`).
-- Receives the callback, hands the code to `provider.finishAuth(code)`, gets the success or error result.
-- Persists tokens / client info via the store's `save*` callbacks (which the SDK invokes).
+### What's gone
 
-We do not implement PKCE, DCR, discovery, or refresh ourselves. We do not maintain a vault.
+The earlier design exposed a `CredentialStore` interface plus five public store implementations (`inMemoryCredentialStore`, `envCredentialStore`, `fileCredentialStore`, `osKeychainCredentialStore`, `composedCredentialStore`) and required the embedder to compose them at bootstrap. All of that is removed:
+
+- `CredentialStore` is no longer a public type.
+- All five built-in stores are removed from the public surface; the keychain and file behaviours live on as the persistence presets above.
+- `createRegistry` no longer accepts a `credentials` option.
+- Static secrets that previously came from `envCredentialStore`'s opinionated naming convention (`MCP_<SERVER>_API_KEY`, etc.) now come from inline auth-config fields. The developer reads `process.env` themselves at the call site.
+
+The internal token cache used by the registry is the same data structure as the old `inMemoryCredentialStore`, just no longer crossing the public boundary. Tests use a small `testCredentials` helper kept under `test/helpers/`.
 
 ### Per-agent allowlist
 

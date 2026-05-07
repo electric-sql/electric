@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { createSdkOAuthProvider } from '../../src/auth/sdk-provider'
-import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
+import { createAuthStore } from '../../src/credentials/auth-store'
 
 describe(`createSdkOAuthProvider`, () => {
-  it(`round-trips tokens via CredentialStore`, async () => {
-    const credentials = inMemoryCredentialStore()
+  it(`round-trips tokens via the internal auth store`, async () => {
+    const authStore = createAuthStore()
     const p = createSdkOAuthProvider({
       server: `mock`,
       publicUrl: `http://r:4448`,
-      credentials,
+      authStore,
       scopes: [`mcp:read`],
     })
     expect(p.redirectUrl).toBe(`http://r:4448/oauth/callback/mock`)
@@ -17,11 +17,11 @@ describe(`createSdkOAuthProvider`, () => {
   })
 
   it(`captures the authorize URL via redirectToAuthorization for the addServer envelope`, async () => {
-    const credentials = inMemoryCredentialStore()
+    const authStore = createAuthStore()
     const p = createSdkOAuthProvider({
       server: `mock`,
       publicUrl: `http://r:4448`,
-      credentials,
+      authStore,
       scopes: [`mcp:read`],
     })
     p.redirectToAuthorization(new URL(`https://provider/authorize?x=1`))
@@ -29,11 +29,11 @@ describe(`createSdkOAuthProvider`, () => {
   })
 
   it(`round-trips DCR client info`, async () => {
-    const credentials = inMemoryCredentialStore()
+    const authStore = createAuthStore()
     const p = createSdkOAuthProvider({
       server: `mock`,
       publicUrl: `http://r:4448`,
-      credentials,
+      authStore,
       scopes: [`mcp:read`],
     })
     await p.saveClientInformation({ client_id: `cid` } as any)
@@ -41,14 +41,28 @@ describe(`createSdkOAuthProvider`, () => {
   })
 
   it(`honors a redirectUri override from auth config`, () => {
-    const credentials = inMemoryCredentialStore()
+    const authStore = createAuthStore()
     const p = createSdkOAuthProvider({
       server: `mock`,
       publicUrl: `http://r:4448`,
-      credentials,
+      authStore,
       scopes: [`mcp:read`],
       redirectUri: `http://custom/cb`,
     })
     expect(p.redirectUrl).toBe(`http://custom/cb`)
+  })
+
+  it(`clearAuthUrl resets the captured auth URL to undefined`, () => {
+    const authStore = createAuthStore()
+    const p = createSdkOAuthProvider({
+      server: `mock`,
+      publicUrl: `http://r:4448`,
+      authStore,
+      scopes: [`mcp:read`],
+    })
+    p.redirectToAuthorization(new URL(`https://provider/authorize?x=1`))
+    expect(p.peekAuthUrl()).toBeDefined()
+    p.clearAuthUrl()
+    expect(p.peekAuthUrl()).toBeUndefined()
   })
 })

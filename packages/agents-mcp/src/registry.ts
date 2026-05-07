@@ -4,7 +4,8 @@ import type {
   McpServerStatus,
   McpToolError,
 } from './types'
-import type { CredentialStore } from './credentials/types'
+import { createAuthStore } from './credentials/auth-store'
+import type { InternalAuthStore } from './credentials/auth-store'
 import type { McpTransport } from './transports/types'
 import { createHttpTransport } from './transports/http'
 import { createStdioTransport } from './transports/stdio'
@@ -12,8 +13,6 @@ import { buildApiKeyHeader } from './auth/api-key'
 import { createSdkOAuthProvider } from './auth/sdk-provider'
 import type { SdkOAuthProvider } from './auth/sdk-provider'
 import { createClientCredentialsProvider } from './auth/client-credentials'
-import { startDeviceFlow } from './auth/device-code'
-import type { DeviceFlowHandle } from './auth/device-code'
 import type { McpConfig } from './config/loader'
 
 interface Entry {
@@ -26,11 +25,9 @@ interface Entry {
   tools: Array<{ name: string; description?: string; inputSchema: unknown }>
   capabilities?: unknown
   provider?: SdkOAuthProvider
-  deviceHandle?: DeviceFlowHandle
 }
 
 export interface RegistryOpts {
-  credentials: CredentialStore
   /** Base URL of this registry process, used to construct OAuth redirect URIs. */
   publicUrl?: string
   transportFactoryOverride?: (
@@ -38,8 +35,27 @@ export interface RegistryOpts {
     hp?: HeaderProvider,
     provider?: SdkOAuthProvider
   ) => McpTransport
-  /** fetch implementation to use for RFC 8628 device-code polling requests. */
-  deviceFlowFetch?: typeof fetch
+  /**
+   * Called when an authorizationCode-flow server first needs the user
+   * to consent — receives the SDK-generated authorize URL plus the
+   * server name. The default implementation logs the URL; the desktop
+   * app overrides this to open the URL in a sandboxed BrowserWindow
+   * (and intercept the redirect_uri navigation to call `finishAuth`).
+   *
+   * Headless / non-Electron embedders that want to drive the flow
+   * themselves can read the URL from the `authenticating` envelope of
+   * `addServer` instead — this hook is purely a convenience for
+   * "open this URL right now" callers.
+   */
+  openAuthorizeUrl?: (url: string, server: string) => void
+  /**
+   * Internal hook used by tests to seed / inspect the registry's private
+   * auth store. Not part of the public contract — production callers should
+   * use the per-server `auth.tokens` / `auth.client` fields and the
+   * `onTokensChanged` / `onClientRegistered` hooks instead.
+   * @internal
+   */
+  authStore?: InternalAuthStore
 }
 
 export type HeaderProvider = () => Promise<
@@ -50,16 +66,24 @@ export interface ListedEntry {
   name: string
   status: McpServerStatus
   toolCount: number
+  /** `http` or `stdio`. Surfaces in UI for badges + per-status affordances. */
+  transport?: string
+  /** `none` | `apiKey` | `clientCredentials` | `authorizationCode`. */
+  authMode?: string
   authUrl?: string
   error?: McpToolError
   tools: Entry[`tools`]
   capabilities?: unknown
-  deviceCode?: {
-    userCode: string
-    expiresAt: number
-    verificationUriComplete?: string
-  }
 }
+
+/** State snapshot delivered to subscribers on every registry mutation. */
+export interface RegistrySnapshot {
+  /** Monotonic per-registry counter; useful for detecting dropped events. */
+  seq: number
+  servers: ReadonlyArray<ListedEntry>
+}
+
+export type RegistrySubscriber = (snapshot: RegistrySnapshot) => void
 
 export interface Registry {
   addServer(cfg: McpServerConfig): Promise<AddServerResult>
@@ -74,6 +98,16 @@ export interface Registry {
   ): Promise<AddServerResult>
   disable(name: string): Promise<void>
   enable(name: string): Promise<AddServerResult>
+  /**
+   * Subscribe to registry state changes. The handler is invoked
+   * synchronously with the current snapshot on subscribe (so callers
+   * can render an initial UI without a round-trip), and again on every
+   * mutation: addServer / removeServer / applyConfig / finishAuth /
+   * disable / enable / connection-state transitions.
+   *
+   * Returns an unsubscribe function.
+   */
+  subscribe(handler: RegistrySubscriber): () => void
 }
 
 function hashConfig(c: McpServerConfig): string {
@@ -104,11 +138,16 @@ interface BuildTransportResult {
   error?: McpToolError
   authUrl?: string
   provider?: SdkOAuthProvider
-  deviceHandle?: DeviceFlowHandle
 }
 
 export function createRegistry(opts: RegistryOpts): Registry {
   const entries = new Map<string, Entry>()
+
+  // Per-registry private auth state. Holds OAuth tokens + DCR client info
+  // for the lifetime of this registry. Cross-process persistence (if any)
+  // is the operator's choice via the per-server hooks declared on the
+  // auth config.
+  const authStore = opts.authStore ?? createAuthStore()
 
   const buildTransport = async (
     cfg: McpServerConfig
@@ -141,12 +180,15 @@ export function createRegistry(opts: RegistryOpts): Registry {
       if (opts.transportFactoryOverride) {
         return { transport: opts.transportFactoryOverride(cfg) }
       }
-      const key = await opts.credentials.getApiKey?.(cfg.name)
-      if (!key)
+      if (!cfg.auth.key) {
         return {
-          error: makeError(`auth_unavailable`, `no apiKey for ${cfg.name}`),
+          error: makeError(
+            `auth_unavailable`,
+            `no auth.key for ${cfg.name} (apiKey mode requires the secret inline)`
+          ),
         }
-      const header = buildApiKeyHeader(key, {
+      }
+      const header = buildApiKeyHeader(cfg.auth.key, {
         headerName: cfg.auth.headerName,
         valuePrefix: cfg.auth.valuePrefix,
       })
@@ -160,65 +202,12 @@ export function createRegistry(opts: RegistryOpts): Registry {
       }
     }
 
-    if (cfg.auth.mode === `authorizationCode` && cfg.auth.flow === `device`) {
-      const eps = (cfg.auth as any).deviceEndpoints as
-        | { deviceAuthorizationEndpoint: string; tokenEndpoint: string }
-        | undefined
-      if (!eps) {
-        return {
-          error: makeError(
-            `auth_unavailable`,
-            `device flow requires auth.deviceEndpoints in mcp.json`
-          ),
-        }
-      }
-      const cc = await opts.credentials.getClientCredentials?.(cfg.name)
-      if (!cc) {
-        return {
-          error: makeError(
-            `auth_unavailable`,
-            `no clientCredentials for ${cfg.name} (device flow needs at minimum a clientId)`
-          ),
-        }
-      }
-      const handle = await startDeviceFlow({
-        deviceAuthorizationEndpoint: eps.deviceAuthorizationEndpoint,
-        tokenEndpoint: eps.tokenEndpoint,
-        clientId: cc.clientId,
-        clientSecret: cc.clientSecret,
-        scopes: cfg.auth.scopes,
-        resource: cfg.auth.resource,
-        fetchImpl: opts.deviceFlowFetch,
-      })
-      void handle
-        .poll()
-        .then(async (tokens) => {
-          await opts.credentials.saveOAuthTokens?.(cfg.name, {
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token,
-            expiresAt: tokens.expires_in
-              ? Math.floor(Date.now() / 1000) + tokens.expires_in
-              : undefined,
-            tokenType: tokens.token_type,
-          })
-          void registry.addServer(cfg).catch(() => {})
-        })
-        .catch((err) => {
-          const e = entries.get(cfg.name)
-          if (e) {
-            e.status = `error`
-            e.error = makeError(`auth_unavailable`, String(err))
-          }
-        })
-      return { authUrl: handle.verificationUri, deviceHandle: handle }
-    }
-
     if (cfg.auth.mode === `authorizationCode`) {
       const publicUrl = opts.publicUrl ?? `http://localhost`
       const provider = createSdkOAuthProvider({
         server: cfg.name,
         publicUrl,
-        credentials: opts.credentials,
+        authStore,
         scopes: cfg.auth.scopes,
         redirectUri: cfg.auth.redirectUri,
         resource: cfg.auth.resource,
@@ -240,19 +229,18 @@ export function createRegistry(opts: RegistryOpts): Registry {
     }
 
     if (cfg.auth.mode === `clientCredentials`) {
-      const cc = await opts.credentials.getClientCredentials?.(cfg.name)
-      if (!cc) {
+      if (!cfg.auth.clientId || !cfg.auth.clientSecret) {
         return {
           error: makeError(
             `auth_unavailable`,
-            `no clientCredentials for ${cfg.name}`
+            `clientCredentials mode requires auth.clientId and auth.clientSecret inline for ${cfg.name}`
           ),
         }
       }
       const ccProvider = createClientCredentialsProvider({
         tokenUrl: cfg.auth.tokenUrl,
-        clientId: cc.clientId,
-        clientSecret: cc.clientSecret,
+        clientId: cfg.auth.clientId,
+        clientSecret: cfg.auth.clientSecret,
         scopes: cfg.auth.scopes,
         audience: cfg.auth.audience,
         resource: cfg.auth.resource,
@@ -302,6 +290,7 @@ export function createRegistry(opts: RegistryOpts): Registry {
         entry.transport.client as { getServerCapabilities?: () => unknown }
       ).getServerCapabilities?.()
       entry.status = `ready`
+      notify()
       return {
         state: `ready`,
         id: entry.config.name,
@@ -314,16 +303,62 @@ export function createRegistry(opts: RegistryOpts): Registry {
         entry.status = `authenticating`
         entry.authUrl = authUrl
         entry.provider = provider
+        notify()
+        try {
+          opts.openAuthorizeUrl?.(authUrl, entry.config.name)
+        } catch {
+          // Operator-provided callback must not break the flow.
+        }
         return { state: `authenticating`, id: entry.config.name, authUrl }
       }
       entry.status = `error`
       const e = makeError(`transport_error`, (err as Error).message)
       entry.error = e
+      notify()
       return { state: `error`, id: entry.config.name, error: e }
     }
   }
 
+  // ── State-change emitter ─────────────────────────────────────────
+  // Per-registry monotonic seq + handler set. notify() pulls the latest
+  // list() and fans it out to every subscriber. Each mutation site
+  // (addServer / removeServer / applyConfig / finishAuth / disable /
+  // enable / status transitions during connectAndList) calls notify()
+  // after committing its change.
+  let seq = 0
+  const subscribers = new Set<RegistrySubscriber>()
+  const snapshot = (): RegistrySnapshot => ({
+    seq: ++seq,
+    servers: registry.list(),
+  })
+  const notify = (): void => {
+    if (subscribers.size === 0) return
+    const snap = snapshot()
+    for (const h of subscribers) {
+      try {
+        h(snap)
+      } catch {
+        // A buggy subscriber must not break the registry.
+      }
+    }
+  }
+
   const registry: Registry = {
+    subscribe(handler) {
+      subscribers.add(handler)
+      // Synchronous initial snapshot so callers can render without a
+      // round-trip; seq is reused (not bumped) for the initial deliver
+      // so that downstream "I have seq N already" logic stays simple.
+      try {
+        handler({ seq, servers: registry.list() })
+      } catch {
+        // ignored — see notify()
+      }
+      return () => {
+        subscribers.delete(handler)
+      }
+    },
+
     async addServer(cfg) {
       const existing = entries.get(cfg.name)
       const hash = hashConfig(cfg)
@@ -342,6 +377,19 @@ export function createRegistry(opts: RegistryOpts): Registry {
         await Promise.resolve(existing.transport?.close()).catch(() => {})
         entries.delete(cfg.name)
       }
+
+      // Seed the in-process auth cache from inline auth-config fields,
+      // and wire up the per-server hooks so refresh-token rotation /
+      // DCR completion fire the operator's persistence callbacks.
+      if (cfg.auth?.mode === `authorizationCode`) {
+        if (cfg.auth.tokens) authStore.seedTokens(cfg.name, cfg.auth.tokens)
+        if (cfg.auth.client) authStore.seedClient(cfg.name, cfg.auth.client)
+        authStore.registerHooks(cfg.name, {
+          onTokensChanged: cfg.auth.onTokensChanged,
+          onClientRegistered: cfg.auth.onClientRegistered,
+        })
+      }
+
       const built = await buildTransport(cfg)
       const entry: Entry = {
         config: cfg,
@@ -352,30 +400,23 @@ export function createRegistry(opts: RegistryOpts): Registry {
         authUrl: built.authUrl,
         tools: [],
         provider: built.provider,
-        deviceHandle: built.deviceHandle,
       }
       entries.set(cfg.name, entry)
-      if (built.error)
+      if (built.error) {
+        notify()
         return { state: `error`, id: cfg.name, error: built.error }
-      if (built.authUrl && built.deviceHandle) {
-        entry.status = `authenticating`
-        entry.authUrl = built.authUrl
-        entry.deviceHandle = built.deviceHandle
-        return {
-          state: `authenticating`,
-          id: cfg.name,
-          authUrl: built.authUrl,
-          deviceCode: {
-            userCode: built.deviceHandle.userCode,
-            expiresAt: built.deviceHandle.expiresAt,
-            verificationUriComplete: built.deviceHandle.verificationUriComplete,
-          },
-        }
       }
       if (built.authUrl) {
         entry.status = `authenticating`
+        notify()
+        try {
+          opts.openAuthorizeUrl?.(built.authUrl, cfg.name)
+        } catch {
+          // see above
+        }
         return { state: `authenticating`, id: cfg.name, authUrl: built.authUrl }
       }
+      // connectAndList notifies internally on each status transition.
       return await connectAndList(entry, built.provider)
     },
 
@@ -392,9 +433,10 @@ export function createRegistry(opts: RegistryOpts): Registry {
     async removeServer(name) {
       const e = entries.get(name)
       if (!e) return
-      e.deviceHandle?.cancel()
       await Promise.resolve(e.transport?.close()).catch(() => {})
       entries.delete(name)
+      authStore.forget(name)
+      notify()
     },
 
     list() {
@@ -402,17 +444,12 @@ export function createRegistry(opts: RegistryOpts): Registry {
         name: e.config.name,
         status: e.status,
         toolCount: e.tools.length,
+        transport: e.config.transport,
+        authMode: (e.config as { auth?: { mode?: string } }).auth?.mode,
         authUrl: e.authUrl,
         error: e.error,
         tools: e.tools,
         capabilities: e.capabilities,
-        deviceCode: e.deviceHandle
-          ? {
-              userCode: e.deviceHandle.userCode,
-              expiresAt: e.deviceHandle.expiresAt,
-              verificationUriComplete: e.deviceHandle.verificationUriComplete,
-            }
-          : undefined,
       }))
     },
 
@@ -443,14 +480,13 @@ export function createRegistry(opts: RegistryOpts): Registry {
     async disable(name) {
       const e = entries.get(name)
       if (!e) throw new Error(`unknown server "${name}"`)
-      e.deviceHandle?.cancel()
-      e.deviceHandle = undefined
       await Promise.resolve(e.transport?.close()).catch(() => {})
       e.transport = undefined
       e.tools = []
       e.authUrl = undefined
       e.status = `disabled`
       e.error = undefined
+      notify()
     },
 
     async enable(name) {

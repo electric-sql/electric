@@ -6,16 +6,13 @@ import type {
   OAuthTokens as SdkOAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
-import type {
-  CredentialStore,
-  OAuthClientInfo,
-  OAuthTokens,
-} from '../credentials/types'
+import type { AuthStore } from '../credentials/types'
+import type { OAuthClientInfo, OAuthTokens } from '../types'
 
 export interface CreateSdkOAuthProviderOpts {
   server: string
   publicUrl: string
-  credentials: CredentialStore
+  authStore: AuthStore
   scopes?: string[]
   redirectUri?: string
   /** RFC 8707 resource indicator. */
@@ -23,9 +20,12 @@ export interface CreateSdkOAuthProviderOpts {
 }
 
 /**
- * Adapter that implements MCP SDK's OAuthClientProvider, persisting via CredentialStore.
- * The SDK handles PKCE, DCR (RFC 7591), discovery (RFC 9728), token exchange, refresh,
- * and 401-retry. We only persist.
+ * Adapter that implements the MCP SDK's `OAuthClientProvider` and reads/writes
+ * the registry's internal `AuthStore`. The SDK handles PKCE, DCR (RFC 7591),
+ * discovery (RFC 9728), token exchange, refresh, and 401-retry; this adapter
+ * just plumbs reads and writes. Cross-process persistence (if any) happens
+ * via the `onTokensChanged` / `onClientRegistered` hooks the registry wires
+ * into the store from the per-server auth config.
  */
 export interface SdkOAuthProvider extends OAuthClientProvider {
   /** Always implemented — persists DCR response via CredentialStore. */
@@ -100,34 +100,24 @@ export function createSdkOAuthProvider(
     },
 
     async clientInformation(): Promise<OAuthClientInformation | undefined> {
-      const saved = await opts.credentials.getOAuthClientInfo?.(opts.server)
+      const saved = opts.authStore.getOAuthClientInfo(opts.server)
       return saved ? toSdkClientInfo(saved) : undefined
     },
 
     async saveClientInformation(info: OAuthClientInformationMixed) {
-      if (!opts.credentials.saveOAuthClientInfo) {
-        throw new Error(
-          `No CredentialStore.saveOAuthClientInfo available — cannot persist DCR result for "${opts.server}"`
-        )
-      }
-      await opts.credentials.saveOAuthClientInfo(
+      await opts.authStore.saveOAuthClientInfo(
         opts.server,
         fromSdkClientInfo(info)
       )
     },
 
     async tokens(): Promise<SdkOAuthTokens | undefined> {
-      const saved = await opts.credentials.getOAuthTokens?.(opts.server)
+      const saved = opts.authStore.getOAuthTokens(opts.server)
       return saved ? toSdkTokens(saved) : undefined
     },
 
     async saveTokens(tokens: SdkOAuthTokens) {
-      if (!opts.credentials.saveOAuthTokens) {
-        throw new Error(
-          `No CredentialStore.saveOAuthTokens available — cannot persist tokens for "${opts.server}"`
-        )
-      }
-      await opts.credentials.saveOAuthTokens(opts.server, fromSdkTokens(tokens))
+      await opts.authStore.saveOAuthTokens(opts.server, fromSdkTokens(tokens))
     },
 
     redirectToAuthorization(url: URL) {

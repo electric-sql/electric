@@ -1,4 +1,4 @@
-import { prefixToolName } from './tool-bridge'
+import { prefixToolName, makeSyntheticBridgedTool } from './tool-bridge'
 import { withTimeout, DEFAULT_TIMEOUT_MS } from '../transports/timeout'
 import type { BridgedTool } from './tool-bridge'
 
@@ -16,24 +16,26 @@ export function buildResourceTools(
 ): BridgedTool[] {
   const ms = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   return [
-    {
+    makeSyntheticBridgedTool({
       name: prefixToolName(opts.server, `list_resources`),
       server: opts.server,
+      label: `list_resources`,
       description: `List resources on ${opts.server}`,
-      inputSchema: { type: `object`, properties: {} },
-      call: () => withTimeout(opts.client.listResources(), ms),
-    },
-    {
+      schema: { type: `object`, properties: {}, required: [] },
+      run: () => withTimeout(opts.client.listResources(), ms),
+    }),
+    makeSyntheticBridgedTool({
       name: prefixToolName(opts.server, `read_resource`),
       server: opts.server,
+      label: `read_resource`,
       description: `Read a resource from ${opts.server}`,
-      inputSchema: {
+      schema: {
         type: `object`,
         properties: { uri: { type: `string` } },
         required: [`uri`],
       },
-      call: (args) =>
+      run: (args) =>
         withTimeout(opts.client.readResource(args as { uri: string }), ms),
-    },
+    }),
   ]
 }

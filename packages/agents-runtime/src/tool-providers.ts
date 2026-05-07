@@ -1,7 +1,40 @@
 // Process-global registry of tool providers. Wake-time tool composition appends
 // each registered provider's tools to whatever the entity type declared.
 
-import { isMcpToolsSentinel, filterByAllowlist } from '@electric-ax/agents-mcp'
+// NOTE: These two helpers are intentionally inlined here (duplicated from
+// @electric-ax/agents-mcp/tools) so that agents-runtime does NOT import the
+// full agents-mcp package at the top level.  The agents-server-ui Vite build
+// bundles agents-runtime for the browser; pulling in agents-mcp would
+// transitively drag in @modelcontextprotocol/sdk stdio (node:stream etc.) and
+// break the browser bundle.  The sentinel uses Symbol.for so it stays
+// structurally identical to the version in agents-mcp — any value created by
+// mcp.tools() over there will still pass isMcpToolsSentinel() here.
+
+const MCP_TOOLS_SENTINEL_KEY = Symbol.for(
+  `@electric-ax/agents-mcp/tools-sentinel`
+)
+
+interface McpToolsSentinelLike {
+  [key: symbol]: true
+  allowlist: string[] | `*`
+}
+
+function isMcpToolsSentinel(x: unknown): x is McpToolsSentinelLike {
+  return (
+    !!x &&
+    typeof x === `object` &&
+    (x as Record<symbol, unknown>)[MCP_TOOLS_SENTINEL_KEY] === true
+  )
+}
+
+function filterByAllowlist(
+  serverNames: string[],
+  allowlist: string[] | `*`
+): string[] {
+  if (allowlist === `*`) return [...serverNames]
+  const set = new Set(allowlist)
+  return serverNames.filter((n) => set.has(n))
+}
 
 export interface ToolProviderEntry {
   name: string

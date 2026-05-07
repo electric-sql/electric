@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createRegistry } from '../../src/registry'
-import { inMemoryCredentialStore } from '../../src/credentials/in-memory'
 import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
 import { buildResourceTools } from '../../src/bridge/resource-bridge'
 import { buildPromptTools } from '../../src/bridge/prompt-bridge'
 
 describe(`E2E — everything server (stdio)`, () => {
   it(`connects, lists tools, calls echo`, async () => {
-    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const reg = createRegistry({})
     const result = await reg.addServer({
       name: `everything`,
       transport: `stdio`,
@@ -37,7 +36,7 @@ describe(`E2E — everything server (stdio)`, () => {
   }, 60_000)
 
   it(`lists resources and reads one`, async () => {
-    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const reg = createRegistry({})
     await reg.addServer({
       name: `everything`,
       transport: `stdio`,
@@ -63,7 +62,7 @@ describe(`E2E — everything server (stdio)`, () => {
   }, 60_000)
 
   it(`lists prompts and gets one`, async () => {
-    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const reg = createRegistry({})
     await reg.addServer({
       name: `everything`,
       transport: `stdio`,
@@ -89,7 +88,7 @@ describe(`E2E — everything server (stdio)`, () => {
   }, 60_000)
 
   it(`connection idempotency: re-adding the same config does not respawn the subprocess`, async () => {
-    const reg = createRegistry({ credentials: inMemoryCredentialStore() })
+    const reg = createRegistry({})
     const cfg = {
       name: `everything`,
       transport: `stdio` as const,

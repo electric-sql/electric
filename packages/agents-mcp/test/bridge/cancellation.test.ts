@@ -4,14 +4,20 @@ import { bridgeMcpTool } from '../../src/bridge/tool-bridge'
 describe(`cancellation`, () => {
   it(`aborts the SDK call when the caller-supplied signal aborts`, async () => {
     let abortedFromSdk = false
-    const callTool = vi.fn(async (_args, o: { signal?: AbortSignal }) => {
-      return new Promise((_resolve, reject) => {
-        o.signal?.addEventListener(`abort`, () => {
-          abortedFromSdk = true
-          reject(new Error(`aborted`))
+    const callTool = vi.fn(
+      async (
+        _args: unknown,
+        _resultSchema: unknown,
+        o: { signal?: AbortSignal }
+      ) => {
+        return new Promise((_resolve, reject) => {
+          o.signal?.addEventListener(`abort`, () => {
+            abortedFromSdk = true
+            reject(new Error(`aborted`))
+          })
         })
-      })
-    })
+      }
+    )
     const ctrl = new AbortController()
     const tool = bridgeMcpTool({
       server: `mock`,
