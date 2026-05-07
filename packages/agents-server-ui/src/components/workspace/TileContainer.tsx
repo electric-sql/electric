@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { GripVertical, X } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
 import { listTiles, useWorkspace } from '../../hooks/useWorkspace'
 import { getView } from '../../lib/workspace/viewRegistry'
-import { setDragPayload } from '../../lib/workspace/dragPayload'
+import { setWorkspaceDrag } from '../../lib/workspace/dragPayload'
+import { getEntityDisplayTitle } from '../../lib/entityDisplay'
 import { EntityHeader } from '../EntityHeader'
 import { MainHeader } from '../MainHeader'
 import { Icon, IconButton, Stack, Text, Tooltip } from '../../ui'
@@ -68,7 +69,8 @@ function EntityTileBody({
 }): React.ReactElement {
   const { activeServer } = useServerConnection()
   const { entitiesCollection } = useElectricAgents()
-  const { helpers } = useWorkspace()
+  const { workspace, helpers } = useWorkspace()
+  const canRearrange = listTiles(workspace.root).length > 1
 
   const { data: matches = [] } = useLiveQuery(
     (q) => {
@@ -118,20 +120,21 @@ function EntityTileBody({
   // expect one.
   const View = viewDef?.kind === `entity` ? viewDef.Component : undefined
 
-  // The header is the drag handle for this tile. The browser only
-  // dispatches `dragstart` after the cursor moves, so the title's
-  // copy-on-click button still works for clicks-without-movement.
-  const onHeaderDragStart = (e: React.DragEvent) => {
-    setDragPayload(e, { kind: `tile`, tileId: tile.id })
-  }
-
   return (
     <Stack direction="column" className={styles.body} data-tile-id={tile.id}>
-      <div draggable onDragStart={onHeaderDragStart}>
+      <div>
         <EntityHeader
           entity={entity}
           currentViewId={tile.viewId}
           onSetView={setView}
+          leading={
+            canRearrange ? (
+              <TileDragHandle
+                tile={tile}
+                label={getEntityDisplayTitle(entity).title}
+              />
+            ) : undefined
+          }
           menu={<TileActions tile={tile} entity={entity} />}
         />
       </div>
@@ -169,17 +172,11 @@ function StandaloneTileBody({
   rootRef: React.RefObject<HTMLDivElement | null>
 }): React.ReactElement {
   const { activeServer } = useServerConnection()
+  const { workspace } = useWorkspace()
   const viewDef = getView(tile.viewId)
   const baseUrl = activeServer?.url ?? ``
   const [toolbarTitle, setToolbarTitle] = useState<ReactNode | null>(null)
-
-  // Same drag-by-header trick as the entity tile body — the whole
-  // surface is draggable, but the actual `dragstart` doesn't fire
-  // until the cursor moves, so clicks on inner controls (the agent
-  // picker buttons, the composer) still work.
-  const onHeaderDragStart = (e: React.DragEvent) => {
-    setDragPayload(e, { kind: `tile`, tileId: tile.id })
-  }
+  const canRearrange = listTiles(workspace.root).length > 1
 
   if (!viewDef || viewDef.kind !== `standalone`) {
     return (
@@ -193,8 +190,13 @@ function StandaloneTileBody({
 
   return (
     <Stack direction="column" className={styles.body} data-tile-id={tile.id}>
-      <div draggable onDragStart={onHeaderDragStart}>
+      <div>
         <MainHeader
+          leading={
+            canRearrange ? (
+              <TileDragHandle tile={tile} label={viewDef.label} />
+            ) : undefined
+          }
           title={toolbarTitle}
           actions={<TileActions tile={tile} entity={null} />}
         />
@@ -206,6 +208,33 @@ function StandaloneTileBody({
         setToolbarTitle={setToolbarTitle}
       />
     </Stack>
+  )
+}
+
+function TileDragHandle({
+  tile,
+  label,
+}: {
+  tile: Tile
+  label: string
+}): React.ReactElement {
+  return (
+    <span
+      className={styles.dragHandle}
+      title="Drag to rearrange tile"
+      aria-hidden="true"
+      data-no-drag
+      draggable={true}
+      onDragStart={(e) => {
+        setWorkspaceDrag(
+          e,
+          { kind: `tile`, tileId: tile.id },
+          { dragImage: `label-row`, dragImageLabel: label }
+        )
+      }}
+    >
+      <Icon icon={GripVertical} size={2} />
+    </span>
   )
 }
 

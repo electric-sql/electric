@@ -28,6 +28,8 @@ type EntityHeaderProps = {
    * header doesn't need to know about tiles / groups / splits.
    */
   menu?: ReactNode
+  /** Optional leading affordance before the title, e.g. a tile drag handle. */
+  leading?: ReactNode
   /** Optional banner of error messages displayed below the strip. */
   errors?: Array<string>
 }
@@ -46,11 +48,13 @@ export function EntityHeader({
   currentViewId,
   onSetView,
   menu,
+  leading,
   errors,
 }: EntityHeaderProps): React.ReactElement | null {
   return (
     <>
       <MainHeader
+        leading={leading}
         title={<EntityTitle entity={entity} />}
         actions={
           <EntityActions

@@ -7,6 +7,7 @@ import { modKeyLabel } from '../lib/keyLabels'
 import styles from './MainHeader.module.css'
 
 type MainHeaderProps = {
+  leading?: ReactNode
   title?: ReactNode
   actions?: ReactNode
 }
@@ -24,6 +25,7 @@ type MainHeaderProps = {
  * body so the header reads as part of the same surface.
  */
 export function MainHeader({
+  leading,
   title,
   actions,
 }: MainHeaderProps): React.ReactElement {
@@ -58,6 +60,7 @@ export function MainHeader({
           </Tooltip>
         </span>
       )}
+      {leading}
       <div className={styles.title}>{title}</div>
       {actions !== undefined && <div className={styles.actions}>{actions}</div>}
     </header>

@@ -35,7 +35,8 @@ export type WorkspaceDragPayload =
     }
 
 type WorkspaceDragOptions = {
-  dragImage?: `sidebar-row`
+  dragImage?: `sidebar-row` | `label-row`
+  dragImageLabel?: string
 }
 
 /**
@@ -46,6 +47,12 @@ type WorkspaceDragOptions = {
  * format.
  */
 export const DRAG_MIME = `application/vnd.electric-tile+json`
+export const WORKSPACE_DRAG_START_EVENT = `electric-workspace-dragstart`
+
+export type WorkspaceDragStartDetail = {
+  kind: WorkspaceDragPayload[`kind`]
+  tileId?: string
+}
 
 export function setDragPayload(
   e: DragEvent | React.DragEvent,
@@ -69,7 +76,17 @@ export function setWorkspaceDrag(
   setDragPayload(e, payload)
   if (options.dragImage === `sidebar-row`) {
     setSidebarRowDragImage(e)
+  } else if (options.dragImage === `label-row` && options.dragImageLabel) {
+    setLabelRowDragImage(e, options.dragImageLabel)
   }
+  window.dispatchEvent(
+    new CustomEvent<WorkspaceDragStartDetail>(WORKSPACE_DRAG_START_EVENT, {
+      detail: {
+        kind: payload.kind,
+        tileId: payload.kind === `tile` ? payload.tileId : undefined,
+      },
+    })
+  )
 }
 
 function setSidebarRowDragImage(e: React.DragEvent<HTMLElement>): void {
@@ -93,6 +110,36 @@ function setSidebarRowDragImage(e: React.DragEvent<HTMLElement>): void {
     e.clientX - rect.left,
     e.clientY - rect.top
   )
+  window.setTimeout(() => ghost.remove(), 0)
+}
+
+function setLabelRowDragImage(
+  e: React.DragEvent<HTMLElement>,
+  label: string
+): void {
+  const ghost = document.createElement(`div`)
+  ghost.textContent = label
+  ghost.style.position = `fixed`
+  ghost.style.top = `-1000px`
+  ghost.style.left = `-1000px`
+  ghost.style.display = `flex`
+  ghost.style.alignItems = `center`
+  ghost.style.height = `var(--ds-row-height-md)`
+  ghost.style.maxWidth = `240px`
+  ghost.style.padding = `0 8px`
+  ghost.style.boxSizing = `border-box`
+  ghost.style.background = `var(--ds-bg-hover)`
+  ghost.style.borderRadius = `var(--ds-radius-item)`
+  ghost.style.color = `var(--ds-text-1)`
+  ghost.style.fontFamily = `var(--ds-font-body)`
+  ghost.style.fontSize = `var(--ds-text-sm)`
+  ghost.style.whiteSpace = `nowrap`
+  ghost.style.overflow = `hidden`
+  ghost.style.textOverflow = `ellipsis`
+  ghost.style.pointerEvents = `none`
+
+  document.body.appendChild(ghost)
+  e.dataTransfer.setDragImage(ghost, 12, 14)
   window.setTimeout(() => ghost.remove(), 0)
 }
 
