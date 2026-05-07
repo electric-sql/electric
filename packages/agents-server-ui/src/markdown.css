@@ -412,6 +412,15 @@
   flex-shrink: 0;
 }
 
+.agent-ui-markdown [data-md-code-block-actions] button {
+  color: var(--ds-text-4);
+  opacity: 0.7;
+}
+
+.agent-ui-markdown [data-md-code-block-actions] button:hover {
+  opacity: 1;
+}
+
 /* The code area itself — the only part that carries chrome.
    `--ds-surface-raised` matches the marketing site's
    `--vp-code-bg = --vp-c-bg-elv` so code wells sit at the same

@@ -67,10 +67,18 @@
    that sits flush with the message column rather than as a centered
    chip floating above it. Reads as a quiet log entry, not a label. */
 .statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
   padding: 2px 0 2px 10px;
   border-left: 2px solid var(--ds-gray-a3);
   color: var(--ds-text-4);
   letter-spacing: 0.02em;
+}
+
+.statusText {
+  color: var(--ds-text-4);
+  opacity: 0.7;
 }
 
 .emptyState {

@@ -27,7 +27,7 @@ import {
 } from './workspace/PaneFindBar'
 import {
   formatAbsoluteDateTimeVerbose,
-  formatShortTime,
+  formatChatTimestamp,
 } from '../lib/formatTime'
 import styles from './EntityTimeline.module.css'
 import type { EntityTimelineEntry } from '@electric-ax/agents-runtime'
@@ -554,12 +554,24 @@ export function EntityTimeline({
           <Stack>
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>
-                <Text size={1} tone="muted" className={styles.statusPill}>
-                  {`spawned · ${formatShortTime(spawnTime)}`}
-                </Text>
+                <span className={styles.statusPill}>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    spawned
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    ·
+                  </Text>
+                  <Text size={1} tone="muted" className={styles.statusText}>
+                    {formatChatTimestamp(spawnTime)}
+                  </Text>
+                </span>
               </Tooltip>
             ) : (
-              <Text size={1} tone="muted" className={styles.statusPill}>
+              <Text
+                size={1}
+                tone="muted"
+                className={`${styles.statusPill} ${styles.statusText}`}
+              >
                 spawned
               </Text>
             )}
