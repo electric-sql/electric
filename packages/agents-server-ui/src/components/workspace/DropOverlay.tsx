@@ -16,8 +16,9 @@ import styles from './DropOverlay.module.css'
  * compute which of the 4 edges the cursor is closest to and highlight
  * that zone. On `drop` we either:
  *
- * - move an existing tile (`tile` payload) to that side of this tile, or
- * - open a sidebar entity (`sidebar-entity` payload) as a new split.
+ * - move an existing tile (`tile` payload) to that side of this tile,
+ * - open a sidebar entity (`sidebar-entity` payload) as a new split, or
+ * - create a fresh standalone new-session tile (`sidebar-new-session`).
  *
  * There is intentionally no centre zone: drops always create a new
  * split. To swap the contents of an existing tile in place, switch the

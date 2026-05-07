@@ -4,7 +4,7 @@ import { StatusDot } from './StatusDot'
 import { HoverCard, Text } from '../ui'
 import { getEntityDisplayTitle } from '../lib/entityDisplay'
 import { formatAbsoluteDateTime, formatRelativeTime } from '../lib/formatTime'
-import { setDragPayload } from '../lib/workspace/dragPayload'
+import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
 import styles from './SidebarRow.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
@@ -132,10 +132,14 @@ export const SidebarRow = memo(function SidebarRow({
           className={className}
           draggable
           onDragStart={(e) => {
-            setDragPayload(e, {
-              kind: `sidebar-entity`,
-              entityUrl: entity.url,
-            })
+            setWorkspaceDrag(
+              e,
+              {
+                kind: `sidebar-entity`,
+                entityUrl: entity.url,
+              },
+              { dragImage: `sidebar-row` }
+            )
           }}
           onClick={(e) => {
             // ⌘/Ctrl-click or middle-click → open in new split (when

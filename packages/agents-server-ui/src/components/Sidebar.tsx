@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useNavigate } from '@tanstack/react-router'
@@ -14,7 +14,7 @@ import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useNarrowViewport } from '../hooks/useNarrowViewport'
 import { HoverCard, ScrollArea, Stack, Text } from '../ui'
 import { NewSessionKey } from '../lib/keyLabels'
-import { setDragPayload } from '../lib/workspace/dragPayload'
+import { setWorkspaceDrag } from '../lib/workspace/dragPayload'
 import { SidebarHeader } from './SidebarHeader'
 import { SidebarRowInfo } from './SidebarRow'
 import type { SidebarRowInfoPayload } from './SidebarRow'
@@ -28,6 +28,64 @@ const SIDEBAR_WIDTH_KEY = `electric-agents-ui.sidebar.width`
 const SIDEBAR_DEFAULT_WIDTH = 240
 const SIDEBAR_MIN_WIDTH = 200
 const SIDEBAR_MAX_WIDTH = 600
+
+function NewSessionSidebarRow({
+  onNewSession,
+}: {
+  onNewSession: () => void
+}): React.ReactElement {
+  const draggingRef = useRef(false)
+
+  const handleClick = useCallback(() => {
+    if (draggingRef.current) {
+      draggingRef.current = false
+      return
+    }
+    onNewSession()
+  }, [onNewSession])
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== `Enter` && e.key !== ` `) return
+      e.preventDefault()
+      handleClick()
+    },
+    [handleClick]
+  )
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      draggable={true}
+      onDragStart={(e) => {
+        draggingRef.current = true
+        setWorkspaceDrag(
+          e,
+          { kind: `sidebar-new-session` },
+          { dragImage: `sidebar-row` }
+        )
+      }}
+      onDragEnd={() => {
+        window.setTimeout(() => {
+          draggingRef.current = false
+        }, 0)
+      }}
+      className={styles.newSessionRow}
+      title="New session"
+    >
+      <span className={styles.newSessionIconSlot}>
+        <SquarePen size={16} />
+      </span>
+      <span className={styles.newSessionLabel}>New session</span>
+      <span className={styles.newSessionKbd} aria-hidden="true">
+        <NewSessionKey />
+      </span>
+    </div>
+  )
+}
 
 function useSidebarWidth(): readonly [number, (w: number) => void] {
   const [width, setWidth] = useState<number>(() => {
@@ -258,28 +316,7 @@ export function Sidebar({
 
         <ScrollArea className={styles.scrollFlex}>
           <Stack direction="column" className={styles.treeRow}>
-            <button
-              type="button"
-              onClick={handleNewSession}
-              // Draggable so the user can drop a fresh new-session tile
-              // into any quadrant of an existing tile (creating a split)
-              // — gives them multiple new-session tiles at once. The
-              // browser only fires `dragstart` after the cursor moves,
-              // so a click that doesn't drag still triggers `onClick`.
-              draggable
-              onDragStart={(e) =>
-                setDragPayload(e, { kind: `sidebar-new-session` })
-              }
-              className={styles.newSessionRow}
-            >
-              <span className={styles.newSessionIconSlot}>
-                <SquarePen size={16} />
-              </span>
-              <span className={styles.newSessionLabel}>New session</span>
-              <span className={styles.newSessionKbd} aria-hidden="true">
-                <NewSessionKey />
-              </span>
-            </button>
+            <NewSessionSidebarRow onNewSession={handleNewSession} />
 
             {pinnedEntities.length > 0 && (
               <>

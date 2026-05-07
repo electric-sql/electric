@@ -15,12 +15,10 @@
 .zone {
   position: absolute;
   background: var(--ds-accent-a4);
-  border: 1px solid var(--ds-accent-a8);
   opacity: 0;
   transition:
     opacity 0.08s ease-out,
     background 0.08s ease-out;
-  border-radius: 4px;
   pointer-events: none;
 }
 

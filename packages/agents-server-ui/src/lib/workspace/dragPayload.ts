@@ -34,6 +34,10 @@ export type WorkspaceDragPayload =
       tileId: string
     }
 
+type WorkspaceDragOptions = {
+  dragImage?: `sidebar-row`
+}
+
 /**
  * Custom MIME type for our payload. Browsers expose drag types in
  * lowercase, so we never check this string with case-sensitivity. The
@@ -55,6 +59,41 @@ export function setDragPayload(
   // form first.
   dt.setData(`text/plain`, describePayload(payload))
   dt.effectAllowed = `move`
+}
+
+export function setWorkspaceDrag(
+  e: React.DragEvent<HTMLElement>,
+  payload: WorkspaceDragPayload,
+  options: WorkspaceDragOptions = {}
+): void {
+  setDragPayload(e, payload)
+  if (options.dragImage === `sidebar-row`) {
+    setSidebarRowDragImage(e)
+  }
+}
+
+function setSidebarRowDragImage(e: React.DragEvent<HTMLElement>): void {
+  const source = e.currentTarget
+  const rect = source.getBoundingClientRect()
+  const ghost = source.cloneNode(true) as HTMLElement
+
+  ghost.style.position = `fixed`
+  ghost.style.top = `-1000px`
+  ghost.style.left = `-1000px`
+  ghost.style.width = `${rect.width}px`
+  ghost.style.height = `${rect.height}px`
+  ghost.style.boxSizing = `border-box`
+  ghost.style.background = `var(--ds-bg-hover)`
+  ghost.style.borderRadius = `var(--ds-radius-item)`
+  ghost.style.pointerEvents = `none`
+
+  document.body.appendChild(ghost)
+  e.dataTransfer.setDragImage(
+    ghost,
+    e.clientX - rect.left,
+    e.clientY - rect.top
+  )
+  window.setTimeout(() => ghost.remove(), 0)
 }
 
 export function readDragPayload(

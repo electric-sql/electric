@@ -112,7 +112,7 @@
    concentric-halo rule as `.row` in SidebarRow.module.css, so the
    New session row rounds identically to the entity rows below it. */
 .newSessionRow {
-  all: unset;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -122,7 +122,13 @@
   border-radius: var(--ds-radius-item);
   cursor: pointer;
   color: var(--ds-text-1);
+  background: transparent;
   transition: background 0.08s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.newSessionRow > * {
+  pointer-events: none;
 }
 .newSessionRow:hover {
   background: var(--ds-bg-hover);
