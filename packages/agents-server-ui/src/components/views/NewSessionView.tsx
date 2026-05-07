@@ -260,11 +260,11 @@ function Picker({
         <Text size={7} as="h1" className={styles.headingTitle}>
           {heroTitle}
         </Text>
-        <span className={styles.headingSubtitle}>
-          {defaultAgent
-            ? `Type a message to start a new ${defaultAgent.name} chat, or pick another agent below.`
-            : `Pick the kind of agent you want to spawn.`}
-        </span>
+        {!defaultAgent && (
+          <span className={styles.headingSubtitle}>
+            Pick the kind of agent you want to spawn.
+          </span>
+        )}
       </div>
 
       {error && <div className={styles.error}>{error}</div>}
