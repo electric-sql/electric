@@ -16,7 +16,7 @@ export function createStdioTransport(opts: StdioTransportOpts): McpTransport {
     env: opts.env,
   })
   const client = new Client(
-    { name: `@electric-ax/agents-mcp`, version: `0.1.0-experimental.0` },
+    { name: `@electric-ax/agents-mcp`, version: `0.1.0` },
     { capabilities: {} }
   )
   return {

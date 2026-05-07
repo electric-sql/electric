@@ -12,10 +12,6 @@ outline: [2, 3]
 
 The runtime ships an embedded **MCP registry** that connects agents to external [Model Context Protocol](https://modelcontextprotocol.io) servers — both locally-spawned `stdio` servers and remote `Streamable HTTP` servers. Tools, resources, and prompts exposed by those servers become available to every entity at the next wake without per-agent wiring.
 
-::: warning Experimental
-The `@electric-ax/agents-mcp` package is experimental. Public APIs may change without a deprecation cycle while the feature carries the experimental flag.
-:::
-
 ## Two creation modes
 
 Servers can be registered declaratively in an `mcp.json` file or programmatically via the registry API. Both produce the same registry entries and use the same auth shape.

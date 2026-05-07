@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-mcp",
-  "version": "0.1.0-experimental.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

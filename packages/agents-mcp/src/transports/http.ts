@@ -28,7 +28,7 @@ export function createHttpTransport(opts: HttpTransportOpts): McpTransport {
       : fetchImpl,
   })
   const client = new Client(
-    { name: `@electric-ax/agents-mcp`, version: `0.1.0-experimental.0` },
+    { name: `@electric-ax/agents-mcp`, version: `0.1.0` },
     { capabilities: {} }
   )
   return {

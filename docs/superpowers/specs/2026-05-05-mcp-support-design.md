@@ -1,10 +1,8 @@
 # MCP Support for Electric Agents — Design Spec
 
-**Status:** Draft — **Experimental feature**
+**Status:** Draft
 **Date:** 2026-05-07
 **Author:** Valter Balegas (with Claude)
-
-> **Experimental.** This is the first cut of MCP integration. We expect to evolve the registration model (e.g. stream-based registration via the existing `entity_types` shape pattern, server-side delegated discovery, multi-tenant credential scopes) once the design has been used in anger. Public surfaces marked here may change without a deprecation cycle while the feature carries the experimental flag.
 
 ## Summary
 
@@ -162,7 +160,7 @@ Three auth modes per server:
 | `clientCredentials` | Operator passes `clientId` + `clientSecret` inline                                                | Runtime exchanges for short-lived access tokens silently | Rotate client secret       |
 | `authorizationCode` | Browser flow in a sandboxed Electron BrowserWindow → user approves → main intercepts the redirect | Silent refresh on each use; refresh tokens rotate        | Re-authorize via the page  |
 
-The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out). Device-code flow (RFC 8628) is not currently part of the public surface; an experimental device-flow path was prototyped but removed pending a concrete need in a non-desktop deployment.
+The mode is declared per server in `mcp.json`. Picking `authorizationCode` for a server an unattended workflow needs is a configuration smell — the schema validator should warn (and the docs should call it out). Device-code flow (RFC 8628) is not currently part of the public surface; a device-flow path was prototyped but removed pending a concrete need in a non-desktop deployment.
 
 ### Token handling
 
