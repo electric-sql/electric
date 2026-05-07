@@ -1,5 +1,5 @@
 import { BuiltinAgentsServer } from '@electric-ax/agents'
-import type { RegistrySnapshot } from '@electric-ax/agents'
+import type { McpServerConfig, RegistrySnapshot } from '@electric-ax/agents'
 import { openAuthorizeWindow } from './oauth-window'
 import {
   BrowserWindow,
@@ -69,6 +69,17 @@ type DesktopSettings = {
    * via `desktop:get-api-keys-status` for the first-launch prompt.
    */
   apiKeys: ApiKeys
+  /**
+   * MCP servers shipped by the desktop app's settings — global to all
+   * workspaces, edited via the Settings UI (or by hand in
+   * `settings.json` for now). Layered with the per-workspace
+   * `mcp.json` at runtime: non-conflicting servers from both files
+   * load together; on name collision, the workspace `mcp.json` wins.
+   * Static shape only — secrets and persistence callbacks are wired
+   * by the runtime (keychain auto-applied to `authorizationCode`
+   * servers).
+   */
+  mcp?: { servers: Array<McpServerConfig> }
 }
 
 /**
@@ -245,6 +256,25 @@ function normalizeApiKeys(value: unknown): ApiKeys {
   }
 }
 
+// settings.json round-trip is plain JSON, so the most we can validate
+// here is "shape looks roughly right and each entry has a name."
+// Schema-level validation (transport / auth.mode / forbidden refs)
+// happens inside the registry's `applyConfig` via `parseConfig`.
+function normalizeMcp(
+  value: unknown
+): { servers: Array<McpServerConfig> } | undefined {
+  if (!value || typeof value !== `object`) return undefined
+  const maybe = (value as { servers?: unknown }).servers
+  if (!Array.isArray(maybe)) return undefined
+  const servers = maybe.filter(
+    (s): s is McpServerConfig =>
+      Boolean(s) &&
+      typeof s === `object` &&
+      typeof (s as { name?: unknown }).name === `string`
+  )
+  return servers.length > 0 ? { servers } : undefined
+}
+
 /**
  * Mirror persisted API keys into `process.env` so the bundled
  * `BuiltinAgentsServer` (Horton) — which reads them via
@@ -298,6 +328,7 @@ async function loadSettings(): Promise<void> {
           ? parsed.workingDirectory
           : null,
       apiKeys: normalizeApiKeys(parsed.apiKeys),
+      mcp: normalizeMcp(parsed.mcp),
     }
   } catch {
     settings = { ...DEFAULT_SETTINGS }
@@ -671,6 +702,7 @@ async function restartRuntime(): Promise<void> {
     host: `127.0.0.1`,
     port: 0,
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
+    extraMcpServers: settings.mcp?.servers,
     openAuthorizeUrl: (url, server) => {
       void handleAuthorizeUrl(url, server)
     },

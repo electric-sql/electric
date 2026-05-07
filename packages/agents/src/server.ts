@@ -44,6 +44,14 @@ export interface BuiltinAgentsServerOptions {
    * BrowserWindow"; headless embedders can leave it undefined.
    */
   openAuthorizeUrl?: (url: string, server: string) => void
+  /**
+   * MCP servers contributed by the embedder (e.g. desktop's
+   * `settings.json` `mcp.servers`). Always applied; merged with the
+   * project-scoped `mcp.json` if present, with `mcp.json` winning by
+   * name on conflict. Auto-wired with `keychainPersistence` for
+   * `authorizationCode` servers, same as `mcp.json` entries.
+   */
+  extraMcpServers?: ReadonlyArray<McpServerConfig>
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -161,14 +169,22 @@ export class BuiltinAgentsServer {
             openAuthorizeUrl: this.options.openAuthorizeUrl,
           })
           this._mcpRegistry = mcpRegistry
-          const mcpConfigPath = path.resolve(`mcp.json`)
+          // mcp.json is project-scoped — resolve it relative to the
+          // configured workspace (the Electron desktop's chosen
+          // working directory) so each project can ship its own.
+          // Falls back to process.cwd() for headless embedders that
+          // don't pass a workingDirectory.
+          const mcpConfigPath = path.resolve(
+            this.options.workingDirectory ?? process.cwd(),
+            `mcp.json`
+          )
+          const extras = this.options.extraMcpServers ?? []
 
-          // Walks an mcp.json-loaded config and, for every authorizationCode
-          // server, awaits keychainPersistence(server) and merges the
-          // returned auth-config slice (tokens / client / hooks) into the
-          // server's auth config. Tokens then survive process restarts via
-          // the OS keychain — operator opts in to that simply by having
-          // OAuth servers in mcp.json.
+          // Walks a config and, for every authorizationCode server,
+          // awaits keychainPersistence(server) and merges the returned
+          // auth-config slice (tokens / client / hooks) into the
+          // server's auth config. Tokens then survive process restarts
+          // via the OS keychain.
           const wirePersistence = async (
             cfg: McpConfig
           ): Promise<McpConfig> => {
@@ -190,24 +206,52 @@ export class BuiltinAgentsServer {
             return { ...cfg, servers }
           }
 
+          // Merge: embedder-provided extras + workspace mcp.json. On
+          // name conflict, mcp.json wins (project scope overrides
+          // global). Servers from both sides that don't conflict are
+          // applied together. `raw` is preserved when the workspace
+          // file contributed one — otherwise undefined; the registry
+          // does not look at `raw` during applyConfig.
+          const merge = (jsonCfg: McpConfig | null): McpConfig => {
+            const jsonServers = jsonCfg?.servers ?? []
+            const jsonNames = new Set(jsonServers.map((s) => s.name))
+            const filteredExtras = extras.filter((s) => !jsonNames.has(s.name))
+            return {
+              servers: [...filteredExtras, ...jsonServers],
+              raw: jsonCfg?.raw,
+            }
+          }
+
+          const applyMerged = (jsonCfg: McpConfig | null): Promise<void> =>
+            wirePersistence(merge(jsonCfg))
+              .then((wired) => {
+                void mcpRegistry.applyConfig(wired)
+              })
+              .catch((e) => {
+                serverLog.error(`[mcp] applyConfig:`, e)
+              })
+
           try {
             const cfg = await loadMcpConfig(mcpConfigPath, process.env)
             // Fire-and-forget: HTTPS discovery + DCR can take seconds.
-            void wirePersistence(cfg)
-              .then((wired) => mcpRegistry.applyConfig(wired))
-              .catch((e) => serverLog.error(`[mcp] applyConfig:`, e))
+            void applyMerged(cfg)
           } catch (err) {
             if ((err as NodeJS.ErrnoException).code !== `ENOENT`) throw err
-            serverLog.info(
-              `[mcp] no ${mcpConfigPath} — starting with no servers`
-            )
+            // No mcp.json — apply just the embedder-provided extras.
+            if (extras.length === 0) {
+              serverLog.info(
+                `[mcp] no ${mcpConfigPath} — starting with no servers`
+              )
+            } else {
+              serverLog.info(
+                `[mcp] no ${mcpConfigPath} — starting with ${extras.length} server(s) from extras`
+              )
+            }
+            void applyMerged(null)
           }
 
           watchMcpConfig(mcpConfigPath, {
-            onChange: (cfg) =>
-              wirePersistence(cfg)
-                .then((wired) => mcpRegistry.applyConfig(wired))
-                .catch((e) => serverLog.error(`[mcp] applyConfig:`, e)),
+            onChange: (cfg) => void applyMerged(cfg),
             onError: (e) => serverLog.error(`[mcp] config error:`, e),
           }).catch((e) =>
             serverLog.error(`[mcp] config watcher failed to start:`, e)

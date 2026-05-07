@@ -21,6 +21,8 @@ export type {
   RegistrySnapshot,
   RegistrySubscriber,
   ListedEntry as McpListedEntry,
+  McpServerConfig,
+  McpConfig,
 } from '@electric-ax/agents-mcp'
 
 export {
