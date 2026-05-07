@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import { useLiveQuery } from '@tanstack/react-db'
+import { inArray } from '@tanstack/db'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,
@@ -663,23 +664,35 @@ export function EntityTimeline({
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
   const { entitiesCollection } = useElectricAgents()
-  const { data: allEntities = [] } = useLiveQuery(
+  const referencedEntityUrls = useMemo(
+    () => Array.from(new Set(entities.map((entity) => entity.url))),
+    [entities]
+  )
+  const { data: entityStatuses = [] } = useLiveQuery(
     (q) => {
-      if (!entitiesCollection) return undefined
-      return q.from({ e: entitiesCollection })
+      if (!entitiesCollection || referencedEntityUrls.length === 0) {
+        return undefined
+      }
+      return q
+        .from({ e: entitiesCollection })
+        .where(({ e }) => inArray(e.url, referencedEntityUrls))
+        .select(({ e }) => ({
+          url: e.url,
+          status: e.status,
+        }))
     },
-    [entitiesCollection]
+    [entitiesCollection, referencedEntityUrls]
   )
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, IncludesEntity[`status`]>()
     for (const entity of entities) {
       statusByUrl.set(entity.url, entity.status)
     }
-    for (const entity of allEntities) {
+    for (const entity of entityStatuses) {
       statusByUrl.set(entity.url, entity.status)
     }
     return statusByUrl
-  }, [allEntities, entities])
+  }, [entities, entityStatuses])
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(
     null

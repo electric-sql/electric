@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
+import { eq, not } from '@tanstack/db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import {
@@ -210,34 +211,29 @@ export function Sidebar({
     [width, setWidth]
   )
 
-  const { data: entities = [] } = useLiveQuery(
-    (query) => {
-      if (!entitiesCollection) return undefined
-      return query
-        .from({ e: entitiesCollection })
-        .orderBy(({ e }) => e.updated_at, `desc`)
-    },
-    [entitiesCollection]
-  )
-
   const view = useSidebarView()
 
-  // Apply Show > Type / Show > Status filters before building the
-  // tree so a hidden parent doesn't accidentally hide its (visible)
-  // children — instead, the children are reparented to the root level
-  // in the filtered view, which is the conventional behaviour for
-  // tree filtering.
-  const visibleEntities = useMemo(() => {
-    if (view.hiddenTypes.size === 0 && view.hiddenStatuses.size === 0) {
-      return entities
-    }
-    return entities.filter(
-      (e) => !view.hiddenTypes.has(e.type) && !view.hiddenStatuses.has(e.status)
-    )
-  }, [entities, view.hiddenTypes, view.hiddenStatuses])
+  const { data: visibleEntities = [] } = useLiveQuery(
+    (query) => {
+      if (!entitiesCollection) return undefined
+      let builder = query.from({ e: entitiesCollection })
+
+      for (const type of view.hiddenTypes) {
+        builder = builder.where(({ e }) => not(eq(e.type, type)))
+      }
+      for (const status of view.hiddenStatuses) {
+        builder = builder.where(({ e }) => not(eq(e.status, status)))
+      }
+
+      return builder.orderBy(({ e }) => e.updated_at, `desc`)
+    },
+    [entitiesCollection, view.hiddenTypes, view.hiddenStatuses]
+  )
 
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
   const pinnedEntities = visibleEntities.filter((e) => pinnedSet.has(e.url))
+  const filtersActive =
+    view.hiddenTypes.size > 0 || view.hiddenStatuses.size > 0
 
   const { roots, childrenByParent } = useMemo(
     () => buildEntityTree(visibleEntities),
@@ -402,24 +398,16 @@ export function Sidebar({
               </div>
             ))}
 
-            {entities.length === 0 && (
+            {visibleEntities.length === 0 && (
               <Text
                 size={1}
                 tone="muted"
                 align="center"
                 className={styles.emptyTreeText}
               >
-                No sessions
-              </Text>
-            )}
-            {entities.length > 0 && visibleEntities.length === 0 && (
-              <Text
-                size={1}
-                tone="muted"
-                align="center"
-                className={styles.emptyTreeText}
-              >
-                No sessions match the current filters
+                {filtersActive
+                  ? `No sessions match the current filters`
+                  : `No sessions`}
               </Text>
             )}
           </Stack>

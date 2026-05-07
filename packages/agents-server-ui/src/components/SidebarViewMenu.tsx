@@ -66,6 +66,11 @@ export function SidebarViewMenu(): React.ReactElement {
       return q
         .from({ e: entitiesCollection })
         .orderBy(({ e }) => e.updated_at, `desc`)
+        .select(({ e }) => ({
+          url: e.url,
+          type: e.type,
+          parent: e.parent,
+        }))
     },
     [entitiesCollection]
   )

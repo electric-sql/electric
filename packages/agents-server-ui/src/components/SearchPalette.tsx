@@ -9,6 +9,7 @@ import {
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
+import { eq } from '@tanstack/db'
 import {
   Copy,
   ExternalLink,
@@ -38,6 +39,11 @@ import { listViews } from '../lib/workspace/viewRegistry'
 import styles from './SearchPalette.module.css'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
+type PaletteEntity = Pick<
+  ElectricEntity,
+  `url` | `type` | `status` | `tags` | `spawn_args` | `parent`
+>
+
 type PaletteItem =
   | {
       kind: `action`
@@ -54,7 +60,7 @@ type PaletteItem =
       id: string
       title: string
       subtitle: string
-      entity: ElectricEntity
+      entity: PaletteEntity
       run: () => void
     }
 
@@ -128,15 +134,30 @@ export function SearchPalette(): React.ReactElement | null {
       return q
         .from({ e: entitiesCollection })
         .orderBy(({ e }) => e.updated_at, `desc`)
+        .select(({ e }) => ({
+          url: e.url,
+          type: e.type,
+          status: e.status,
+          tags: e.tags,
+          spawn_args: e.spawn_args,
+          parent: e.parent,
+        }))
     },
     [entitiesCollection]
   )
 
   const tiles = useMemo(() => listTiles(workspace.root), [workspace.root])
   const activeTile = helpers.activeTile
-  const activeEntity = activeTile?.entityUrl
-    ? entities.find((entity) => entity.url === activeTile.entityUrl)
-    : undefined
+  const { data: activeEntityMatches = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !activeTile?.entityUrl) return undefined
+      return q
+        .from({ e: entitiesCollection })
+        .where(({ e }) => eq(e.url, activeTile.entityUrl))
+    },
+    [entitiesCollection, activeTile?.entityUrl]
+  )
+  const activeEntity = activeEntityMatches.at(0) ?? undefined
   const activeEntityTitle = activeEntity
     ? getEntityDisplayTitle(activeEntity).title
     : undefined

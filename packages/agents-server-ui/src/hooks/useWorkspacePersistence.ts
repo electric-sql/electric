@@ -3,7 +3,6 @@ import { useSearch } from '@tanstack/react-router'
 import { useWorkspace, listTiles } from './useWorkspace'
 import { useServerConnection } from './useServerConnection'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { useLiveQuery } from '@tanstack/react-db'
 import type { Workspace, WorkspaceNode } from '../lib/workspace/types'
 
 /**
@@ -63,61 +62,80 @@ export function useWorkspacePersistence(): void {
   // restore once per (server, mount) — subsequent workspace changes
   // are user-driven and shouldn't get blown away by a re-hydration.
   const hydratedFor = useRef<string | null>(null)
-  // Materialise the live entities once so prune-on-load can drop dead
-  // tiles. Re-running `useLiveQuery` on every render is fine — TanStack
-  // memoises by query identity.
-  const { data: liveEntities = [] } = useLiveQuery(
-    (q) => {
-      if (!entitiesCollection) return undefined
-      return q.from({ e: entitiesCollection })
-    },
-    [entitiesCollection]
-  )
-  const liveUrls = useRef<Set<string>>(new Set())
-  liveUrls.current = new Set(liveEntities.map((e) => e.url))
+  const hydratingFor = useRef<string | null>(null)
 
   useEffect(() => {
     const key = storageKey(serverId)
     if (!key) return
     if (hydratedFor.current === serverId) return
-    hydratedFor.current = serverId
+    if (hydratingFor.current === serverId) return
 
     // Explicit layout links are higher priority than local restore.
     // `<Workspace>` imports the URL payload and then strips `?layout=`.
-    if (search.layout) return
-
-    let raw: string | null = null
-    try {
-      raw = window.localStorage.getItem(key)
-    } catch {
-      // Some embedded contexts (file://, sandboxed iframes) deny
-      // localStorage. Fail silently — we still work, just without
-      // persistence.
+    if (search.layout) {
+      hydratedFor.current = serverId
       return
     }
-    if (!raw) return
 
-    try {
-      const env = JSON.parse(raw) as Envelope
-      if (!env || env.v !== SCHEMA_VERSION || !env.workspace) return
-      // Prune entities that are no longer alive on the server. We do
-      // this against `liveUrls` *as of first hydration*; subsequent
-      // entity disappearances are handled by `<TileContainer>`'s
-      // close-on-disappear effect. If the entities collection hasn't
-      // populated yet we skip the prune (the close-on-disappear
-      // effect will handle it on next render).
-      const pruned =
-        liveUrls.current.size === 0
-          ? env.workspace
-          : pruneWorkspace(env.workspace, liveUrls.current)
-      // Restore even if the URL → workspace effect already bootstrapped
-      // a single route tile. On app refresh the URL only represents the
-      // active tile, while localStorage holds the full split tree.
-      if (pruned.root !== null) {
-        helpers.replaceWorkspace(pruned)
+    if (!entitiesCollection) return
+
+    let cancelled = false
+    hydratingFor.current = serverId
+
+    const hydrate = async (): Promise<void> => {
+      let liveUrls = new Set<string>()
+      try {
+        await entitiesCollection.preload()
+        if (cancelled) return
+        liveUrls = new Set(
+          Array.from(entitiesCollection.values()).map((entity) => entity.url)
+        )
+      } catch {
+        if (cancelled) return
+        // If the snapshot read fails, restore without pruning; entity
+        // tiles still self-close when their scoped live query finds no row.
       }
-    } catch {
-      // Malformed envelope — ignore and start fresh.
+
+      let raw: string | null = null
+      try {
+        raw = window.localStorage.getItem(key)
+      } catch {
+        // Some embedded contexts (file://, sandboxed iframes) deny
+        // localStorage. Fail silently — we still work, just without
+        // persistence.
+        return
+      } finally {
+        hydratedFor.current = serverId
+        hydratingFor.current = null
+      }
+      if (!raw) return
+
+      try {
+        const env = JSON.parse(raw) as Envelope
+        if (!env || env.v !== SCHEMA_VERSION || !env.workspace) return
+        // Prune entities that are no longer alive on the server. We do
+        // this against a one-time snapshot during hydration; subsequent
+        // entity disappearances are handled by `<TileContainer>`'s
+        // close-on-disappear effect.
+        const pruned =
+          liveUrls.size === 0
+            ? env.workspace
+            : pruneWorkspace(env.workspace, liveUrls)
+        // Restore even if the URL → workspace effect already bootstrapped
+        // a single route tile. On app refresh the URL only represents the
+        // active tile, while localStorage holds the full split tree.
+        if (pruned.root !== null) {
+          helpers.replaceWorkspace(pruned)
+        }
+      } catch {
+        // Malformed envelope — ignore and start fresh.
+      }
+    }
+
+    void hydrate()
+    return () => {
+      cancelled = true
+      if (hydratingFor.current === serverId) hydratingFor.current = null
     }
     // Note: we intentionally *don't* depend on `workspace` here;
     // hydration is a one-shot per (server, mount) tied to the
@@ -125,7 +143,7 @@ export function useWorkspacePersistence(): void {
     // try to fire after every state change. Reading the latest
     // `workspace.root` via the live closure rather than declaring it
     // a dep is what we want for this read-once-on-mount semantics.
-  }, [serverId, helpers, search.layout])
+  }, [serverId, helpers, search.layout, entitiesCollection])
 
   // Debounced write on workspace change. We always write; even
   // workspace.root === null is a meaningful state to remember (so

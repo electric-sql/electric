@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, SplitSquareHorizontal } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
+import { inArray } from '@tanstack/db'
 import { useWorkspace } from '../hooks/useWorkspace'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { Icon, IconButton, Text, Tooltip } from '../ui'
@@ -14,6 +15,11 @@ import type {
 } from '@electric-ax/agents-runtime'
 import type { ElectricEntity } from '../lib/ElectricAgentsProvider'
 
+type DrawerEntity = Pick<
+  ElectricEntity,
+  `url` | `type` | `status` | `tags` | `spawn_args`
+>
+
 type DrawerEntry =
   | {
       key: string
@@ -26,7 +32,7 @@ type DrawerEntry =
         | { kind: `entity`; url: string }
         | { kind: `state`; sourceId: string }
         | { kind: `inspect` }
-      entity: ElectricEntity | null
+      entity: DrawerEntity | null
     }
   | {
       key: string
@@ -36,7 +42,7 @@ type DrawerEntry =
       meta: string
       manifest: null
       action: { kind: `entity`; url: string }
-      entity: ElectricEntity
+      entity: DrawerEntity
     }
 
 type ManifestDrawerEntry = Extract<DrawerEntry, { manifest: Manifest }>
@@ -85,18 +91,6 @@ export function EntityContextDrawer({
 
   const parentUrl = entity.parent
 
-  const { data: allEntities = [] } = useLiveQuery(
-    (q) => {
-      if (!entitiesCollection) return undefined
-      return q.from({ e: entitiesCollection })
-    },
-    [entitiesCollection]
-  )
-
-  const entitiesByUrl = useMemo(() => {
-    return new Map(allEntities.map((e) => [e.url, e]))
-  }, [allEntities])
-
   const { data: manifests = [] } = useLiveQuery(
     (q) => {
       if (!db) return undefined
@@ -106,6 +100,45 @@ export function EntityContextDrawer({
     },
     [db]
   )
+
+  const referencedEntityUrls = useMemo(() => {
+    const urls = new Set<string>()
+    if (parentUrl) urls.add(parentUrl)
+    for (const manifest of manifests as Array<Manifest>) {
+      if (manifest.kind === `child`) {
+        urls.add(manifest.entity_url)
+      } else if (
+        manifest.kind === `source` &&
+        manifest.sourceType === `entity`
+      ) {
+        urls.add(manifest.sourceRef)
+      }
+    }
+    return Array.from(urls)
+  }, [manifests, parentUrl])
+
+  const { data: referencedEntities = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || referencedEntityUrls.length === 0) {
+        return undefined
+      }
+      return q
+        .from({ e: entitiesCollection })
+        .where(({ e }) => inArray(e.url, referencedEntityUrls))
+        .select(({ e }) => ({
+          url: e.url,
+          type: e.type,
+          status: e.status,
+          tags: e.tags,
+          spawn_args: e.spawn_args,
+        }))
+    },
+    [entitiesCollection, referencedEntityUrls]
+  )
+
+  const entitiesByUrl = useMemo(() => {
+    return new Map(referencedEntities.map((e) => [e.url, e]))
+  }, [referencedEntities])
 
   const parent = parentUrl ? (entitiesByUrl.get(parentUrl) ?? null) : null
   const groups = useMemo(
@@ -172,9 +205,9 @@ export function EntityContextDrawer({
 }
 
 function buildDrawerGroups(
-  parent: ElectricEntity | null,
+  parent: DrawerEntity | null,
   manifests: ReadonlyArray<Manifest>,
-  entitiesByUrl: Map<string, ElectricEntity>
+  entitiesByUrl: Map<string, DrawerEntity>
 ): Array<DrawerGroup> {
   const grouped = new Map<string, DrawerGroup>()
 
@@ -242,7 +275,7 @@ function manifestKindLabel(manifest: Manifest): string {
   }
 }
 
-function createParentEntry(parent: ElectricEntity): DrawerEntry {
+function createParentEntry(parent: DrawerEntity): DrawerEntry {
   const { title, isFromSlug } = getEntityDisplayTitle(parent)
   const id = parent.url.split(`/`).pop() ?? parent.url
   return {
@@ -259,7 +292,7 @@ function createParentEntry(parent: ElectricEntity): DrawerEntry {
 
 function createManifestEntry(
   manifest: Manifest,
-  entitiesByUrl: Map<string, ElectricEntity>
+  entitiesByUrl: Map<string, DrawerEntity>
 ): ManifestDrawerEntry | null {
   switch (manifest.kind) {
     case `child`: {
