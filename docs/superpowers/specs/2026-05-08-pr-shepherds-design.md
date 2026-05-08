@@ -1,4 +1,4 @@
-# PR Watcher Agent — Design
+# PR Shepherds — Design
 
 **Status:** Draft for review
 **Date:** 2026-05-08
@@ -7,17 +7,26 @@
 
 ## 1. Goal
 
-Build a software-factory feature that watches a GitHub repository for new pull requests and shepherds each one through a fixed set of gates until it is "ready to merge." Work is divided across independent reactive agents that read and write a shared blackboard; agents wake on signals rather than calling each other directly.
+The primary goal is to **exercise the Electric Agents framework end-to-end on a real workload, find bugs in the platform, and surface improvements** before we tackle harder agentic systems. PR Shepherds is the first non-trivial multi-agent system built on the framework's reactive blackboard pattern.
 
-The system must be safe to enable on a real repo: it only operates on PRs explicitly opted-in via the `agents` label, asks for human go-ahead after a per-agent iteration cap, and tags every commit it authors.
+PR Shepherds shepherd a GitHub PR through a fixed set of gates (template, CI, conflicts, review threads, docs) until it is "ready to merge." Work is divided across independent reactive agents (reviewer, build-doctor, doc-editor, manager) that read and write a shared blackboard and wake on signals.
+
+This design is **deliberately limited**:
+
+- **No coding agent.** PR Shepherds operate on PRs that already exist — they do not originate the substantive feature work. They review the diff, push small fixes for must-fix review threads (often via a `suggested_patch` they generated themselves), repair CI failures with targeted diffs, and keep documentation in sync. A human (or a separate coding agent) authors the feature.
+- **One repo per watcher.** No fan-out across repos in this phase.
+- **No webhooks.** Phase 1 polls GitHub on a cadence; phase 2 swaps in webhook ingestion.
+- **No automerge.** When all gates pass, the system applies an `agents:ready` label and updates the status comment. The human still drives the merge.
+
+The system must be safe to enable on a real repo: it only operates on PRs explicitly opted-in via the `agents` label, asks for human go-ahead after a per-agent iteration cap, and tags every commit it authors with `[agent:<role>]`.
 
 ## 2. Non-goals
 
-- Webhook ingestion (deferred to phase 2).
-- Watching multiple repositories from a single watcher (one watcher per repo for now).
-- Merging the PR for the human (we only mark `ready_to_merge`; the human or GitHub automerge does the actual merge).
+(See also the deliberate limits called out in §1.)
+
 - A bespoke web UI; the existing `agents-server-ui` is the surface.
 - Replacing human review for sensitive areas — this is a co-pilot, not a substitute.
+- A general-purpose framework for arbitrary multi-agent orchestration; the design is shaped to the PR-shepherding workload specifically.
 
 ## 3. Architecture
 
