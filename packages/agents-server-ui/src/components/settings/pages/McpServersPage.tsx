@@ -118,16 +118,32 @@ function ServerEntry({
         control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
       />
 
-      {server.error && (
-        <div style={{ padding: `0 16px 12px` }}>
+      {/*
+        Always-rendered info line. The content swaps with status, but
+        the slot itself is permanent so the row's height doesn't change
+        as the entry transitions through connecting → ready / error /
+        authenticating / disabled. Without this, the chevron toggle
+        below mounted/unmounted on every reload and the row visibly
+        reflowed.
+      */}
+      <div style={{ padding: `0 16px 12px` }}>
+        {server.status === `error` && server.error ? (
           <Text size={1} tone="danger">
             {server.error.kind}: {server.error.message}
           </Text>
-        </div>
-      )}
-
-      {server.tools && server.tools.length > 0 && (
-        <div style={{ padding: `0 16px 12px` }}>
+        ) : server.status === `connecting` ? (
+          <Text size={1} tone="muted">
+            Loading tools…
+          </Text>
+        ) : server.status === `authenticating` ? (
+          <Text size={1} tone="muted">
+            Sign in to load tools
+          </Text>
+        ) : server.status === `disabled` ? (
+          <Text size={1} tone="muted">
+            Disabled — click Enable to resume
+          </Text>
+        ) : server.tools && server.tools.length > 0 ? (
           <button
             type="button"
             onClick={() => setShowTools((v) => !v)}
@@ -149,7 +165,15 @@ function ServerEntry({
               {server.tools.length === 1 ? `` : `s`}
             </Text>
           </button>
-          {showTools && (
+        ) : (
+          <Text size={1} tone="muted">
+            No tools advertised
+          </Text>
+        )}
+        {showTools &&
+          server.status === `ready` &&
+          server.tools &&
+          server.tools.length > 0 && (
             <ul
               style={{
                 listStyle: `none`,
@@ -176,9 +200,16 @@ function ServerEntry({
               ))}
             </ul>
           )}
-        </div>
-      )}
+      </div>
 
+      {/*
+        Action buttons. To keep the row stable across state transitions
+        we render the same set of buttons every time and only toggle
+        their `disabled` state. Authorize is rendered exclusively for
+        authorizationCode servers (rendering it for apiKey servers
+        would be misleading); the Enable/Disable swap follows the
+        disabled flag.
+      */}
       <div
         style={{
           display: `flex`,
@@ -187,26 +218,29 @@ function ServerEntry({
           padding: `0 16px 16px`,
         }}
       >
-        {server.status === `authenticating` && (
+        {server.authMode === `authorizationCode` && (
           <Button
-            variant="solid"
-            tone="accent"
+            variant={server.status === `authenticating` ? `solid` : `soft`}
+            tone={server.status === `authenticating` ? `accent` : `neutral`}
             onClick={wrap(() => ipc.authorize(server.name))}
-            disabled={busy}
+            disabled={busy || server.status !== `authenticating`}
           >
             Authorize
           </Button>
         )}
-        {server.status !== `disabled` && server.status !== `authenticating` && (
-          <Button
-            variant="soft"
-            tone="neutral"
-            onClick={wrap(() => ipc.reconnect(server.name))}
-            disabled={busy}
-          >
-            Reconnect
-          </Button>
-        )}
+        <Button
+          variant="soft"
+          tone="neutral"
+          onClick={wrap(() => ipc.reconnect(server.name))}
+          disabled={
+            busy ||
+            server.status === `connecting` ||
+            server.status === `authenticating` ||
+            server.status === `disabled`
+          }
+        >
+          Reconnect
+        </Button>
         {server.status === `disabled` ? (
           <Button
             variant="soft"
@@ -221,7 +255,7 @@ function ServerEntry({
             variant="soft"
             tone="neutral"
             onClick={wrap(() => ipc.disable(server.name))}
-            disabled={busy}
+            disabled={busy || server.status === `connecting`}
           >
             Disable
           </Button>
