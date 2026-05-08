@@ -393,7 +393,7 @@ function createAssistantHandler(options: {
       ...(skillsRegistry && skillsRegistry.catalog.size > 0
         ? createSkillTools(skillsRegistry, ctx)
         : []),
-      ...mcp.tools(`*`),
+      ...mcp.tools(),
     ]
 
     const titlePromise =

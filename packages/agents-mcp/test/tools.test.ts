@@ -15,6 +15,11 @@ describe(`mcp.tools`, () => {
     expect((s as any).allowlist).toBe(`*`)
   })
 
+  it(`no-arg call defaults to wildcard (every registered server)`, () => {
+    const [s] = mcp.tools()
+    expect((s as any).allowlist).toBe(`*`)
+  })
+
   it(`filterByAllowlist returns matching servers (or all when "*")`, () => {
     expect(filterByAllowlist([`a`, `b`, `c`], [`a`, `c`])).toEqual([`a`, `c`])
     expect(filterByAllowlist([`a`, `b`], `*`)).toEqual([`a`, `b`])

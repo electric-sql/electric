@@ -69,6 +69,31 @@ describe(`Registry`, () => {
     expect(closeSpy).toHaveBeenCalledTimes(1)
   })
 
+  it(`timeoutMs change forces reconfigure — entry.config.timeoutMs is fresh`, async () => {
+    // hashConfig must include timeoutMs; otherwise the
+    // idempotent-fast-path in addServer keeps the stale value and
+    // bridge tools call with the wrong per-call timeout.
+    const reg = createRegistry({
+      transportFactoryOverride: () => makeFakeTransport([`t1`]),
+    })
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: { mode: `apiKey`, key: `KEY` },
+      timeoutMs: 5_000,
+    })
+    expect(reg.get(`mock`)?.config.timeoutMs).toBe(5_000)
+    await reg.addServer({
+      name: `mock`,
+      transport: `http`,
+      url: `https://mock/mcp`,
+      auth: { mode: `apiKey`, key: `KEY` },
+      timeoutMs: 30_000,
+    })
+    expect(reg.get(`mock`)?.config.timeoutMs).toBe(30_000)
+  })
+
   it(`removeServer fully tears down`, async () => {
     const closeSpy = vi.fn()
     const reg = createRegistry({
@@ -111,6 +136,66 @@ it(`disable closes the transport and zeroes the tool count; enable restores`, as
   const r = await reg.enable(`mock`)
   expect(r.state).toBe(`ready`)
   expect(reg.list()[0]!.status).toBe(`ready`)
+})
+
+it(`close() closes every transport, clears the list, and notifies once`, async () => {
+  const closes: string[] = []
+  const mkTransport = (name: string) => () => ({
+    ...makeFakeTransport([`t1`]),
+    close: async () => {
+      closes.push(name)
+    },
+  })
+  const reg = createRegistry({
+    transportFactoryOverride: (cfg) => mkTransport(cfg.name)(),
+  })
+  await reg.addServer({
+    name: `alpha`,
+    transport: `http`,
+    url: `https://a/mcp`,
+    auth: { mode: `apiKey`, key: `KEY` },
+  })
+  await reg.addServer({
+    name: `beta`,
+    transport: `http`,
+    url: `https://b/mcp`,
+    auth: { mode: `apiKey`, key: `KEY` },
+  })
+  expect(reg.list()).toHaveLength(2)
+
+  const snapshots: Array<ReturnType<typeof reg.list>> = []
+  reg.subscribe(() => {
+    snapshots.push(reg.list())
+  })
+  // The synchronous-on-subscribe delivery counts as one notify.
+  const before = snapshots.length
+
+  await reg.close()
+
+  expect(closes.sort()).toEqual([`alpha`, `beta`])
+  expect(reg.list()).toEqual([])
+  // close() emits a single empty snapshot.
+  expect(snapshots.length).toBe(before + 1)
+  expect(snapshots[snapshots.length - 1]).toEqual([])
+})
+
+it(`close() swallows transport.close() failures`, async () => {
+  const reg = createRegistry({
+    transportFactoryOverride: () => ({
+      ...makeFakeTransport([`t1`]),
+      close: async () => {
+        throw new Error(`boom`)
+      },
+    }),
+  })
+  await reg.addServer({
+    name: `oops`,
+    transport: `http`,
+    url: `https://o/mcp`,
+    auth: { mode: `apiKey`, key: `KEY` },
+  })
+  await expect(reg.close()).resolves.toBeUndefined()
+  expect(reg.list()).toEqual([])
 })
 
 function mkCfg(url: string) {

@@ -122,6 +122,15 @@ export interface Registry {
    * Returns an unsubscribe function.
    */
   subscribe(handler: RegistrySubscriber): () => void
+  /**
+   * Tear down every server transport and clear the registry. Stdio
+   * children get killed, HTTP transports get closed. Subscribers
+   * receive one final empty snapshot before the registry is left
+   * dormant. Subsequent calls to addServer / applyConfig will start
+   * fresh entries — close() is reusable in that sense, but in practice
+   * callers throw the registry away.
+   */
+  close(): Promise<void>
 }
 
 function hashConfig(c: McpServerConfig): string {
@@ -130,6 +139,11 @@ function hashConfig(c: McpServerConfig): string {
     c.transport,
     (c as any).url ?? ``,
     c.auth?.mode ?? `none`,
+    // timeoutMs is consumed per-call by the bridges; if it changes
+    // and the hash doesn't, addServer's idempotent-fast-path returns
+    // early and the entry's `.config.timeoutMs` stays stale. Include
+    // it so timeout-only edits force a reconfigure.
+    String(c.timeoutMs ?? ``),
   ]
   if (
     c.auth &&
@@ -597,6 +611,27 @@ export function createRegistry(opts: RegistryOpts): Registry {
       // connectAndList notifies on its own status transitions, including
       // the peekAuthUrl → authenticating path that opens the browser.
       await connectAndList(e, built.provider)
+    },
+
+    async close() {
+      // Close all transports in parallel — they're independent and
+      // each may take a beat (an HTTP transport flushes, a stdio
+      // child receives SIGTERM and we await its exit). Errors are
+      // swallowed because cleanup is best-effort.
+      const transports = [...entries.values()]
+        .map((e) => e.transport)
+        .filter((t): t is NonNullable<typeof t> => Boolean(t))
+      await Promise.all(
+        transports.map((t) => Promise.resolve(t.close()).catch(() => {}))
+      )
+      // Drop auth state for every server we knew about so a later
+      // addServer (in a fresh registry life cycle) doesn't pick up
+      // stale token/client material from this one.
+      for (const name of [...entries.keys()]) {
+        authStore.forget(name)
+      }
+      entries.clear()
+      notify()
     },
   }
 

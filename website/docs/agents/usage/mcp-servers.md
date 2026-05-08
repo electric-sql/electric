@@ -56,7 +56,9 @@ Static secrets (`apiKey.key`, `clientCredentials.clientId` / `clientSecret`) are
 
 ### File-based — `mcp.json`
 
-For static, project-scoped configuration the runtime auto-loads `mcp.json` from the configured `workingDirectory` (or the process cwd for headless embedders) on boot, watches it for changes, and hot-reloads adds, removes, and reconfigurations through `applyConfig` — exactly as if you'd called the API yourself. In-flight tool calls finish on the old config; new calls pick up the new one.
+For static, project-scoped configuration the runtime can load `mcp.json` from the configured `workingDirectory`, watch it for changes, and hot-reload adds, removes, and reconfigurations through `applyConfig` — exactly as if you'd called the API yourself. In-flight tool calls finish on the old config; new calls pick up the new one.
+
+`mcp.json` loading is opt-in: stdio MCP servers spawn local commands, so picking a working directory must not auto-execute config from it. The Electron desktop and the `electric-ax` CLI opt in by default. Library embedders that construct `BuiltinAgentsServer` directly enable it via `loadProjectMcpConfig: true` (use the `<workingDirectory>/mcp.json` path) or `loadProjectMcpConfig: '/abs/path/to/mcp.json'` (use a specific file).
 
 `mcp.json` carries structural shape only — no secrets:
 
@@ -147,7 +149,7 @@ registry.define("research-agent", {
       tools: [
         ...ctx.electricTools,
         ...mcp.tools(["sentry", "github"]), // explicit list
-        // or: ...mcp.tools("*")              // every registered server
+        // or: ...mcp.tools()                 // every registered server
       ],
     })
     await ctx.agent.run()
@@ -161,7 +163,7 @@ The resolved tool set is recorded in the agent's manifest at compose time. Tools
 - Resources: `mcp__<server>__list_resources`, `mcp__<server>__read_resource`
 - Prompts: `mcp__<server>__list_prompts`, `mcp__<server>__get_prompt`
 
-Built-in entities `horton` and `worker` opt in to all registered servers via `mcp.tools("*")`.
+Built-in entities `horton` and `worker` opt in to all registered servers via `mcp.tools()`.
 
 ## Auth modes
 
@@ -299,11 +301,11 @@ For the full per-method API (including `subscribe`, `RegistrySnapshot`, and `Reg
 
 Editing `mcp.json` (or calling `applyConfig` programmatically) takes effect immediately:
 
-- **New server.** Tools available at the next tool-selection step in any active wake; manifests of agents using `mcp.tools("*")` update at the next compose.
+- **New server.** Tools available at the next tool-selection step in any active wake; manifests of agents using `mcp.tools()` update at the next compose.
 - **Removed server.** In-flight tool calls complete or fail cleanly; no new calls dispatch; stdio subprocesses terminate after in-flight calls drain.
 - **Reconfigured server.** Takes effect on the next tool call to that server. In-flight calls finish on the old config.
 
-`addServer` and `applyConfig` are idempotent on unchanged config — they compare by `(name, url, transport, authMode, scopes, command, args)` and short-circuit when nothing changed. Spurious file-system events from macOS reload watchers won't tear down healthy connections.
+`addServer` and `applyConfig` are idempotent on unchanged config — they compare by `(name, url, transport, authMode, scopes, timeoutMs, command, args)` and short-circuit when nothing changed. Spurious file-system events from macOS reload watchers won't tear down healthy connections.
 
 ### Re-authorize
 

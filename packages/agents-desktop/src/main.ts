@@ -751,6 +751,9 @@ async function restartRuntime(): Promise<void> {
     port: 0,
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
     extraMcpServers: settings.mcp?.servers,
+    // Desktop runs against a user-chosen workspace; loading
+    // `mcp.json` from it is the whole point of project scope.
+    loadProjectMcpConfig: true,
     openAuthorizeUrl: (url, server) => {
       void handleAuthorizeUrl(url, server)
     },

@@ -1,6 +1,8 @@
 // Process-global registry of tool providers. Wake-time tool composition appends
 // each registered provider's tools to whatever the entity type declared.
 
+import { runtimeLog } from './log'
+
 // NOTE: These two helpers are intentionally inlined here (duplicated from
 // @electric-ax/agents-mcp/tools) so that agents-runtime does NOT import the
 // full agents-mcp package at the top level.  The agents-server-ui Vite build
@@ -75,6 +77,31 @@ export async function composeToolsWithProviders(
         .filter((s): s is string => typeof s === `string`)
     ),
   ]
+  // Surface named MCP servers that resolve to nothing — either
+  // unknown (typo / not configured) or registered-but-not-ready
+  // (still connecting, errored, awaiting auth, disabled). Without
+  // a warning the sentinel silently expands to an empty set and
+  // the agent runs under-equipped. Wildcard sentinels
+  // (`mcp.tools()` / `mcp.tools('*')`) are intentionally not
+  // reported — the agent didn't name anything specific.
+  const missing = new Set<string>()
+  for (const t of declaredTools) {
+    if (isMcpToolsSentinel(t) && t.allowlist !== `*`) {
+      for (const name of t.allowlist) {
+        if (!allServers.includes(name)) missing.add(name)
+      }
+    }
+  }
+  if (missing.size > 0) {
+    runtimeLog.warn(
+      `[mcp]`,
+      `requested MCP server(s) unavailable: ${[...missing]
+        .map((n) => `"${n}"`)
+        .join(`, `)}. ` +
+        `These may be misconfigured or still connecting/authenticating; ` +
+        `their tools will be missing from this agent's toolset.`
+    )
+  }
   return declaredTools.flatMap((t) => {
     if (isMcpToolsSentinel(t)) {
       const matching = filterByAllowlist(allServers, t.allowlist)

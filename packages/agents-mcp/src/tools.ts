@@ -17,12 +17,17 @@ export function isMcpToolsSentinel(x: unknown): x is McpToolsSentinel {
 
 export const mcp = {
   /**
-   * Returns a sentinel array suitable for `tools: [...mcp.tools(['sentry'])]` in
-   * an entity-type definition. Resolution happens at wake time via the runtime's
-   * tool-provider hook.
+   * Returns a sentinel array suitable for `tools: [...mcp.tools(['sentry'])]`
+   * in an entity-type definition. Resolution happens at wake time via the
+   * runtime's tool-provider hook.
+   *
+   * - `mcp.tools()` — every registered server (default).
+   * - `mcp.tools(['sentry', 'github'])` — only the named servers.
+   * - `mcp.tools('*')` — explicit form of the default; kept for
+   *   back-compat with earlier callers.
    */
-  tools(allowlist: string[] | `*`): McpToolsSentinel[] {
-    return [{ [MCP_TOOLS_SENTINEL]: true, allowlist }]
+  tools(allowlist?: string[] | `*`): McpToolsSentinel[] {
+    return [{ [MCP_TOOLS_SENTINEL]: true, allowlist: allowlist ?? `*` }]
   },
 }
 

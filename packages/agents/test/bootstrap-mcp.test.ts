@@ -106,6 +106,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
+      loadProjectMcpConfig: true,
       extraMcpServers: [
         {
           name: `extras-only`,
@@ -134,6 +135,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
+      loadProjectMcpConfig: true,
     })
     await server.start()
     await waitForServers(server, [`workspace-only`])
@@ -154,6 +156,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
+      loadProjectMcpConfig: true,
       extraMcpServers: [
         {
           name: `from-settings`,
@@ -182,6 +185,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
+      loadProjectMcpConfig: true,
       extraMcpServers: [
         {
           name: `shared-name`,
@@ -197,6 +201,106 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     expect(entry?.config.transport).toBe(`http`)
     if (entry?.config.transport === `http`) {
       expect(entry.config.url).toBe(`https://workspace.invalid/mcp`)
+    }
+  })
+
+  it(`ignores workspace mcp.json by default (no opt-in)`, async () => {
+    // Stdio MCP servers can spawn local commands, so picking a working
+    // directory must not auto-execute config from it. Without
+    // loadProjectMcpConfig, mcp.json is not read or watched.
+    await writeMcpJson(workspace, {
+      servers: {
+        'workspace-only': {
+          transport: `http`,
+          url: `https://example.invalid/mcp`,
+          auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+        },
+      },
+    })
+    server = new BuiltinAgentsServer({
+      agentServerUrl: mockServer.url,
+      port: 0,
+      mockStreamFn,
+      workingDirectory: workspace,
+      extraMcpServers: [
+        {
+          name: `from-settings`,
+          transport: `http`,
+          url: `https://example.invalid/mcp`,
+          auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+        },
+      ],
+    })
+    await server.start()
+    await waitForServers(server, [`from-settings`])
+    expect(server.mcpRegistry!.get(`workspace-only`)).toBeUndefined()
+  })
+
+  it(`stop() tears down MCP registry, watcher, and tool provider`, async () => {
+    await writeMcpJson(workspace, {
+      servers: {
+        teardown: {
+          transport: `http`,
+          url: `https://example.invalid/mcp`,
+          auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+        },
+      },
+    })
+    server = new BuiltinAgentsServer({
+      agentServerUrl: mockServer.url,
+      port: 0,
+      mockStreamFn,
+      workingDirectory: workspace,
+      loadProjectMcpConfig: true,
+    })
+    await server.start()
+    await waitForServers(server, [`teardown`])
+    expect(server.mcpRegistry).not.toBeNull()
+
+    await server.stop()
+    // mcpRegistry getter is cleared after teardown so embedders can
+    // detect a stopped runtime without holding a stale reference.
+    expect(server.mcpRegistry).toBeNull()
+
+    // A second stop() must be a no-op (idempotent), even though the
+    // registry / watcher / tool provider were already disposed.
+    await expect(server.stop()).resolves.toBeUndefined()
+
+    // Calling start() again should succeed — proving no global state
+    // (tool provider, registry slot) was left behind that would clash.
+    await server.start()
+    expect(server.mcpRegistry).not.toBeNull()
+    await waitForServers(server, [`teardown`])
+  })
+
+  it(`accepts an explicit mcp.json path via loadProjectMcpConfig`, async () => {
+    // String form: load from a specific path, not <workingDirectory>/mcp.json.
+    const altDir = await fs.mkdtemp(path.join(os.tmpdir(), `agents-mcp-alt-`))
+    try {
+      const altPath = path.join(altDir, `custom.json`)
+      await fs.writeFile(
+        altPath,
+        JSON.stringify({
+          servers: {
+            'from-explicit-path': {
+              transport: `http`,
+              url: `https://example.invalid/mcp`,
+              auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
+            },
+          },
+        })
+      )
+      server = new BuiltinAgentsServer({
+        agentServerUrl: mockServer.url,
+        port: 0,
+        mockStreamFn,
+        workingDirectory: workspace,
+        loadProjectMcpConfig: altPath,
+      })
+      await server.start()
+      await waitForServers(server, [`from-explicit-path`])
+    } finally {
+      await fs.rm(altDir, { recursive: true, force: true }).catch(() => {})
     }
   })
 })

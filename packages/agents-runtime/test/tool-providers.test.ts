@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest'
 import {
   registerToolProvider,
   unregisterToolProvider,
@@ -6,6 +6,7 @@ import {
   composeToolsWithProviders,
   __resetToolProvidersForTest,
 } from '../src/tool-providers'
+import { runtimeLog } from '../src/log'
 import { mcp } from '@electric-ax/agents-mcp'
 
 describe(`tool-providers`, () => {
@@ -107,5 +108,76 @@ describe(`composeToolsWithProviders (wake-time sentinel composition)`, () => {
     const declared = [staticTool]
     const composed = await composeToolsWithProviders(declared)
     expect(composed).toEqual([staticTool])
+  })
+
+  describe(`missing-server warnings`, () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>
+    beforeEach(() => {
+      warnSpy = vi.spyOn(runtimeLog, `warn`).mockImplementation(() => {})
+    })
+    afterEach(() => {
+      warnSpy.mockRestore()
+    })
+
+    it(`warns once per call, listing every missing named server`, async () => {
+      registerToolProvider({
+        name: `mcp`,
+        tools: () => [{ name: `mcp__a__t1`, server: `a` }],
+      })
+      const declared = [...mcp.tools([`a`, `github`, `linear`])]
+      await composeToolsWithProviders(declared)
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      const [, message] = warnSpy.mock.calls[0]!
+      expect(message).toContain(`"github"`)
+      expect(message).toContain(`"linear"`)
+      // The available server is not flagged.
+      expect(message).not.toContain(`"a"`)
+    })
+
+    it(`dedupes missing names across multiple sentinels`, async () => {
+      registerToolProvider({
+        name: `mcp`,
+        tools: () => [],
+      })
+      // Two sentinels both naming "github" — should produce a single
+      // line with "github" listed once, not twice.
+      const declared = [
+        ...mcp.tools([`github`]),
+        ...mcp.tools([`github`, `sentry`]),
+      ]
+      await composeToolsWithProviders(declared)
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      const [, message] = warnSpy.mock.calls[0]!
+      const githubMatches = (message as string).match(/"github"/g) ?? []
+      expect(githubMatches.length).toBe(1)
+      expect(message).toContain(`"sentry"`)
+    })
+
+    it(`silent for wildcard sentinel even with no servers ready`, async () => {
+      registerToolProvider({ name: `mcp`, tools: () => [] })
+      const declared = [...mcp.tools(`*`)]
+      await composeToolsWithProviders(declared)
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it(`silent when every named server is available`, async () => {
+      registerToolProvider({
+        name: `mcp`,
+        tools: () => [
+          { name: `mcp__a__t1`, server: `a` },
+          { name: `mcp__b__t1`, server: `b` },
+        ],
+      })
+      const declared = [...mcp.tools([`a`, `b`])]
+      await composeToolsWithProviders(declared)
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it(`silent when there are no sentinels at all`, async () => {
+      registerToolProvider({ name: `mcp`, tools: () => [] })
+      const declared = [{ name: `static-thing` }]
+      await composeToolsWithProviders(declared)
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
   })
 })
