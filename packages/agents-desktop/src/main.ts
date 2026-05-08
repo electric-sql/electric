@@ -122,10 +122,14 @@ const MAX_CONNECTIONS_PER_HOST = `256`
 // server's auth provider via DCR (RFC 7591) and persisted in the
 // keychain. If it drifted, the cached DCR client info would be
 // invalidated on every restart and users would have to re-authorize.
-// The path-only host means OAuth 2.1 loopback rules apply (any port
-// accepted), and our BrowserWindow intercepts navigation by prefix
-// before anything reaches the network — nothing actually listens here.
-const MCP_OAUTH_REDIRECT_BASE = `http://localhost`
+//
+// The form (`http://127.0.0.1:<fixed-port>`) is the loopback-literal
+// shape RFC 8252 §7.3 recommends — universally accepted by OAuth 2.1
+// servers, no DNS involved. The port is arbitrary and intentionally
+// outside the IANA registered range; nothing actually listens there.
+// Our BrowserWindow intercepts navigation by prefix before anything
+// reaches the network.
+const MCP_OAUTH_REDIRECT_BASE = `http://127.0.0.1:53117`
 
 // Electric streams can hold many long-polling HTTP requests open to the same
 // agents server. Raise Chromium's default per-host connection cap before
