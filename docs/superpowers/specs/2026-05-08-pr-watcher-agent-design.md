@@ -78,6 +78,8 @@ For each PR, the manager initializes a shared DB instance keyed `pr-<repo>-<numb
     description: string,
     state: 'open' | 'closed' | 'merged',
     labels: string[],
+    mergeable: boolean | null,       // GitHub's mergeable flag (null = not yet computed)
+    status_comment_id: string | null, // id of the agent-managed status comment
     agents_disabled: boolean,        // /stop or `agents` label removed
     last_synced_at: string,
   }]
@@ -268,10 +270,17 @@ The PR's steward. Mostly mechanical; agent-driven for the parts that benefit fro
 
 **Agent-driven responsibilities (skill `pr/manager.md`):**
 
-- Gate evaluation. On any signal, recompute:
-  - `template_ok`, `ci_green`, `no_conflicts`, `threads_resolved`, `docs_ok`, `ready_to_merge`.
-  - If any gate flipped, write `gates`, insert `gate_state_changed`. If `ready_to_merge` newly true, insert `ready_to_merge`.
-- Status comment composition. On `gate_state_changed`, `human_input_required`, `commits_pushed`: rewrite the single status comment on the PR with current gate states + paused agents + recent agent commits. (Comment id stored in `pr_meta`.)
+- Gate evaluation. After signal-driven wake, recompute the gates (definitions in §15.1). If any gate flipped, write `gates`, insert `gate_state_changed`. If `ready_to_merge` newly true, insert `ready_to_merge` and apply the `agents:ready` label to the PR.
+- Status comment composition. On `gate_state_changed`, `human_input_required`, `commits_pushed`: rewrite the single status comment on the PR using the template in §15.4. The comment id is stored in `pr_meta.status_comment_id` (singleton).
+
+**Ready-to-merge behavior.** When `ready_to_merge` first becomes true, the manager:
+
+- Applies the `agents:ready` label to the PR.
+- Updates the status comment to show the green `Ready to merge` row.
+
+It does NOT enable auto-merge, post a fake LGTM, remove draft status, or merge the PR. The human still drives the merge — the system only signals readiness. If the gate later flips back to false (e.g., new push introduces a must-fix), the manager removes the `agents:ready` label.
+
+**Wake debounce.** The manager subscribes to all signals and a chatty PR can produce many in a short interval. To avoid running the gate-eval/status-rewrite agent dozens of times per minute, the manager's TS handler debounces: when a signal lands, schedule a 2s timer; if more signals land before it fires, reset the timer. Only when the 2s of quiet elapses does the agent run, processing all accumulated signals at once.
 
 The manager has its own persistent timeline so the gate-evaluation reasoning can reference past evaluations ("ci_green has flipped 3 times this PR — looks flaky"), and the status-comment author can pick up tonal continuity.
 
@@ -342,7 +351,7 @@ Defaults (per PR, configurable per-watcher):
 
 **Pause:** when an agent's `iterations >= cap`, its skill sets `paused = true` on its `agent_state` row, writes `pause_reason`, inserts `human_input_required`, and exits. `pr-manager` wakes on `human_input_required` and updates the PR status comment with a "paused agents" section.
 
-**Resume:** human posts `/continue <role>`, `/continue all`, or `/stop` in the PR. `<role>` is the short role name: `reviewer`, `build-doctor`, or `doc-editor`. The manager parses these on its sync poll. `/continue` resets the named agent's `iterations = 0`, `paused = false`, sets `last_continue_grant_at`, inserts `continue_granted` with `payload: { role }` (each worker filters subscriptions on its own role name). `/stop` sets `pr_meta.agents_disabled = true`.
+**Resume:** human posts a slash-command in the PR (full grammar in §15.7). `/continue <role>` or `/continue all` resets the named agent's `iterations = 0`, `paused = false`, sets `last_continue_grant_at`, inserts `continue_granted` with `payload: { role }`. `/stop` sets `pr_meta.agents_disabled = true`. `/resume` clears it.
 
 **Counter resets** on outside-world events that change the situation:
 
@@ -488,6 +497,12 @@ packages/agents/skills/pr/
   reviewer.md                  # review + thread-addressing decision tree
   build-doctor.md              # CI-fix decision tree
   doc-editor.md                # doc-impact decision tree
+  templates/
+    pr-description.md          # §15.2 (override at .github/agent-pr/)
+    review-thread.md           # §15.3
+    status-comment.md          # §15.4
+    commit-message.md          # §15.5
+    thread-reply.md            # §15.6
 ```
 
 All five entity files follow the registration shape used by `horton.ts` (creation schema + handler). The handler:
@@ -502,7 +517,150 @@ A small extension to the framework is required to pass `use_skill` / `remove_ski
 ## 14. Items deferred to the implementation plan
 
 - The full body of each skill in `packages/agents/skills/pr/`.
-- Exact format of the status comment (markdown layout).
-- Whether the manager's description renderer reads a template from `.github/agent-pr-template.md` or uses a built-in default. Design assumes built-in default with optional override file.
-- Confirming the framework's `ctx.observe(...).where(type ∈ [...])` API shape on the shared DB's `signals` collection (Reactive Observers pattern).
+- Confirming the framework's `ctx.observe(...).where(...)` API shape on the shared DB's `signals` collection (Reactive Observers pattern).
 - Whether the manager does its sync polling in the TS handler before the agent runs each wake, or whether sync is one of the agent's tools the skill calls. Design leans "TS handler before agent" for determinism; plan confirms.
+
+## 15. Templates
+
+All templates ship as files under `packages/agents/skills/pr/templates/` so they're versioned, easy to override per-repo (by placing a same-named file under `.github/agent-pr/`), and reusable from skills.
+
+### 15.1 Gate definitions
+
+Each gate's truth is computed deterministically from the blackboard, except `template_ok` which compares the PR description against the active PR-description template (§15.2).
+
+```ts
+template_ok       = renderTemplateChecksum(pr_meta.description) matches all
+                    required headings in the active PR template (§15.2)
+ci_green          = checks.every(c => c.conclusion === 'success' || 'skipped')
+no_conflicts      = sync poll fetched mergeable === true (stored on pr_meta)
+threads_resolved  = review_threads.every(t => t.severity !== 'must-fix' || t.status !== 'open')
+docs_ok           = doc_plan.every(p => p.status === 'done') OR doc_plan is empty
+ready_to_merge    = template_ok && ci_green && no_conflicts &&
+                    threads_resolved && docs_ok
+```
+
+### 15.2 PR description template
+
+Default at `packages/agents/skills/pr/templates/pr-description.md`. Repo override at `.github/agent-pr/pr-description.md`.
+
+```md
+## Summary
+
+<one paragraph: what this PR does and why>
+
+## Linked issues
+
+<closes #1234>
+
+## Test plan
+
+- [ ] <how to verify this works>
+
+<!-- agent-managed:summary -->
+
+<!-- This block is rewritten by pr-doc-editor when the implementation
+     changes. Edit OUTSIDE the markers; agents preserve human content there. -->
+
+<!-- /agent-managed:summary -->
+```
+
+`template_ok` requires all three top-level `##` headings to be present and have non-empty content beneath them. The `<!-- agent-managed:summary -->` block is optional but, if present, fully owned by agents.
+
+### 15.3 Review-thread comment template (posted to GitHub)
+
+Used by `pr-reviewer` when posting each `review_threads` row as a GitHub review comment.
+
+````md
+**🤖 Reviewer · {severity} · {category}**
+
+{body}
+
+<details><summary>Suggested fix</summary>
+
+```diff
+{suggested_patch}
+```
+
+</details>
+
+<!-- agent-thread-id: {key} -->
+<!-- agent-thread-source: agent -->
+````
+
+The hidden HTML comment trailers are how the address pass correlates threads across pushes (humans can also tag a thread for the agent by adding `<!-- agent-thread-id: <new-key> -->` to a review comment they author; the reviewer then treats it as actionable).
+
+The `<details>` block is omitted entirely if `suggested_patch` is null.
+
+### 15.4 Status comment template (single comment, rewritten by manager)
+
+The PR carries one agent-authored comment, identified by the `<!-- agent-managed-status -->` trailer. Manager rewrites its body each time gates change.
+
+```md
+## 🤖 Agent status — PR #{number}
+
+| Gate               | State                                                 |
+| ------------------ | ----------------------------------------------------- |
+| Template           | {✅ \| ⏳ \| 🔴 (reason)}                             |
+| CI                 | {✅ \| ⏳ pending (n checks running) \| 🔴 n failing} |
+| Conflicts          | {✅ \| 🔴 (rebase needed)}                            |
+| Review threads     | {✅ \| 🔴 n open must-fix}                            |
+| Docs               | {✅ \| ⏳ in-progress \| 🔴 needed}                   |
+| **Ready to merge** | {✅ \| ⏳}                                            |
+
+### Active agents
+
+- {✅ \| 🔴 paused} reviewer ({iterations}/{cap} cycles)
+- {✅ \| 🔴 paused} build-doctor ({iterations}/{cap} cycles)
+- {✅ \| 🔴 paused} doc-editor ({iterations}/{cap} cycles)
+
+### Paused agents
+
+{- **{role}** — {pause*reason}. Reply `/continue {role}` to resume.}
+{\_None* if no paused agents}
+
+### Recent agent commits
+
+{- `{sha}` `[agent:{role}] {subject}` — {ago}}
+
+---
+
+_Disable agents on this PR with `/stop` or by removing the `agents` label._
+
+<!-- agent-managed-status -->
+```
+
+### 15.5 Agent commit message template
+
+Subject line: `[agent:{role}] {short subject}`.
+
+Body must include the correlation id of what's being addressed:
+
+```
+[agent:reviewer] address must-fix in src/parse.ts:42
+
+Resolves agent-thread-id: t_abc123
+```
+
+For build-doctor: `Resolves check: <check name>`.
+For doc-editor: `Resolves doc_plan: <doc_path>`.
+
+### 15.6 Thread-reply template
+
+What the reviewer posts on a GitHub review thread once it has addressed that thread.
+
+```md
+✅ Addressed in {sha}.
+
+<!-- agent-thread-id: {key} -->
+```
+
+### 15.7 Slash-command grammar
+
+The manager parses comments authored by humans (not the agent itself) for these patterns. Match is line-anchored; first match wins; case-insensitive.
+
+| Pattern            | Effect                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `/continue {role}` | Reset `agent_state` for `role` ∈ {`reviewer`, `build-doctor`, `doc-editor`}; insert `continue_granted`. |
+| `/continue all`    | Reset all three workers' `agent_state`; insert `continue_granted` with `role: 'all'`.                   |
+| `/stop`            | Set `pr_meta.agents_disabled = true`. Workers' next wakes no-op.                                        |
+| `/resume`          | Clear `pr_meta.agents_disabled`. (Inverse of `/stop`.)                                                  |
