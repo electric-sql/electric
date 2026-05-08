@@ -39,6 +39,8 @@ export interface BuiltinAgentHandlerOptions {
   serveEndpoint?: string
   workingDirectory?: string
   streamFn?: StreamFn
+  publicUrl?: string
+  runtimeName?: string
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -74,6 +76,8 @@ export async function createBuiltinAgentHandler(
     workingDirectory,
     streamFn,
     createElectricTools,
+    publicUrl,
+    runtimeName,
   } = options
 
   const modelCatalog = await createBuiltinModelCatalog({
@@ -128,6 +132,8 @@ export async function createBuiltinAgentHandler(
     subscriptionPathForType: (name) => `/${name}/*/main`,
     idleTimeout: 5_000,
     createElectricTools,
+    publicUrl,
+    name: runtimeName ?? `builtin-agents`,
   })
 
   return {

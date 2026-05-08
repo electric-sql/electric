@@ -13,6 +13,18 @@ export type {
 export { BuiltinAgentsServer } from './server.js'
 export type { BuiltinAgentsServerOptions } from './server.js'
 
+// Re-export the MCP types embedders need to talk to the registry
+// (e.g. the Electron desktop app subscribes to state changes from
+// `BuiltinAgentsServer.mcpRegistry` and forwards over IPC).
+export type {
+  Registry as McpRegistry,
+  RegistrySnapshot,
+  RegistrySubscriber,
+  ListedEntry as McpListedEntry,
+  McpServerConfig,
+  McpConfig,
+} from '@electric-ax/agents-mcp'
+
 export {
   resolveBuiltinAgentsEntrypointOptions,
   runBuiltinAgentsEntrypoint,

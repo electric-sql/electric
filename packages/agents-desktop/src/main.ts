@@ -1,4 +1,6 @@
 import { BuiltinAgentsServer } from '@electric-ax/agents'
+import type { McpServerConfig, RegistrySnapshot } from '@electric-ax/agents'
+import { openAuthorizeWindow } from './oauth-window'
 import {
   BrowserWindow,
   Menu,
@@ -67,6 +69,21 @@ type DesktopSettings = {
    * via `desktop:get-api-keys-status` for the first-launch prompt.
    */
   apiKeys: ApiKeys
+  /**
+   * MCP servers shipped by the desktop app's settings — global to all
+   * workspaces, edited via the Settings UI (or by hand in
+   * `settings.json` for now). On disk this mirrors `mcp.json`'s
+   * keyed-by-name shape (`{ servers: { foo: { ... } } }`); the array
+   * here is the in-memory rewrite that `BuiltinAgentsServer.
+   * extraMcpServers` consumes. `loadSettings` and `saveSettings`
+   * handle the conversion in both directions. Layered with the
+   * per-workspace `mcp.json` at runtime: non-conflicting servers from
+   * both files load together; on name collision, the workspace
+   * `mcp.json` wins. Static shape only — secrets and persistence
+   * callbacks are wired by the runtime (keychain auto-applied to
+   * `authorizationCode` servers).
+   */
+  mcp?: { servers: Array<McpServerConfig> }
 }
 
 /**
@@ -98,6 +115,14 @@ const TRAY_ICON_2X_PATH = path.resolve(
 const APP_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/icon.png`)
 const APP_DISPLAY_NAME = `Electric Agents`
 const MAX_CONNECTIONS_PER_HOST = `256`
+
+// Stable OAuth redirect base for MCP DCR (RFC 7591). The runtime
+// listens on an ephemeral port but the redirect URI must be constant
+// across restarts so the cached DCR client info stays valid. Loopback
+// literal form per RFC 8252 §7.3; nothing listens at this port — our
+// BrowserWindow intercepts the redirect by prefix before anything
+// reaches the network.
+const MCP_OAUTH_REDIRECT_BASE = `http://127.0.0.1:53117`
 
 // Electric streams can hold many long-polling HTTP requests open to the same
 // agents server. Raise Chromium's default per-host connection cap before
@@ -181,6 +206,8 @@ let state: DesktopState = {
 }
 let runtime: BuiltinAgentsServer | null = null
 let runtimeGeneration = 0
+let mcpUnsubscribe: (() => void) | null = null
+let lastMcpSnapshot: RegistrySnapshot | null = null
 let tray: Tray | null = null
 let aboutWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -241,6 +268,55 @@ function normalizeApiKeys(value: unknown): ApiKeys {
   }
 }
 
+// settings.json's `mcp.servers` mirrors the shape of `mcp.json`: an
+// object keyed by server name, with the entry itself omitting `name`.
+// We rewrite into the array form `BuiltinAgentsServer.extraMcpServers`
+// expects and surface friendly warnings on shape errors instead of
+// silently dropping the field. Schema-level validation (transport /
+// auth.mode / forbidden refs) still happens inside the registry's
+// `applyConfig`.
+function normalizeMcp(
+  value: unknown
+): { servers: Array<McpServerConfig> } | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== `object`) {
+    console.warn(
+      `[agents-desktop] settings.json: 'mcp' must be an object, got ${typeof value}; ignoring`
+    )
+    return undefined
+  }
+  const maybeServers = (value as { servers?: unknown }).servers
+  if (maybeServers === undefined) return undefined
+  if (
+    typeof maybeServers !== `object` ||
+    maybeServers === null ||
+    Array.isArray(maybeServers)
+  ) {
+    console.warn(
+      `[agents-desktop] settings.json: 'mcp.servers' must be an object keyed by server name; ignoring`
+    )
+    return undefined
+  }
+  const servers: McpServerConfig[] = []
+  for (const [name, entry] of Object.entries(
+    maybeServers as Record<string, unknown>
+  )) {
+    if (!entry || typeof entry !== `object`) {
+      console.warn(
+        `[agents-desktop] settings.json: 'mcp.servers.${name}' is not an object; skipping`
+      )
+      continue
+    }
+    if (`name` in entry && (entry as { name: unknown }).name !== name) {
+      console.warn(
+        `[agents-desktop] settings.json: 'mcp.servers.${name}' has a conflicting 'name' field; the keyed name wins`
+      )
+    }
+    servers.push({ ...(entry as object), name } as McpServerConfig)
+  }
+  return servers.length > 0 ? { servers } : undefined
+}
+
 /**
  * Mirror persisted API keys into `process.env` so the bundled
  * `BuiltinAgentsServer` (Horton) — which reads them via
@@ -294,6 +370,7 @@ async function loadSettings(): Promise<void> {
           ? parsed.workingDirectory
           : null,
       apiKeys: normalizeApiKeys(parsed.apiKeys),
+      mcp: normalizeMcp(parsed.mcp),
     }
   } catch {
     settings = { ...DEFAULT_SETTINGS }
@@ -310,7 +387,21 @@ async function loadSettings(): Promise<void> {
 
 async function saveSettings(): Promise<void> {
   await mkdir(path.dirname(settingsPath()), { recursive: true })
-  await writeFile(settingsPath(), JSON.stringify(settings, null, 2))
+  await writeFile(settingsPath(), JSON.stringify(serializeSettings(), null, 2))
+}
+
+// Memory holds `mcp.servers` as the array `BuiltinAgentsServer.extraMcpServers`
+// expects. On disk we mirror `mcp.json`'s keyed-by-name shape so users can
+// copy entries between the two files. This re-keys the array before write.
+function serializeSettings(): Record<string, unknown> {
+  const { mcp, ...rest } = settings
+  if (!mcp || mcp.servers.length === 0) return rest
+  const servers: Record<string, Record<string, unknown>> = {}
+  for (const s of mcp.servers) {
+    const { name, ...entry } = s as McpServerConfig & Record<string, unknown>
+    servers[name] = entry
+  }
+  return { ...rest, mcp: { servers } }
 }
 
 function statusLabel(status: DesktopRuntimeStatus): string {
@@ -602,8 +693,45 @@ function showOrCreateWindow(): void {
 async function stopExistingRuntime(): Promise<void> {
   const current = runtime
   runtime = null
+  if (mcpUnsubscribe) {
+    mcpUnsubscribe()
+    mcpUnsubscribe = null
+  }
+  lastMcpSnapshot = null
+  // Renderers should know the MCP list is empty while the runtime is
+  // down; otherwise they keep showing the last-known servers.
+  broadcastMcpSnapshot({ seq: 0, servers: [] })
   if (current) {
     await current.stop()
+  }
+}
+
+function broadcastMcpSnapshot(snapshot: RegistrySnapshot): void {
+  lastMcpSnapshot = snapshot
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(`desktop:mcp-state`, snapshot)
+    }
+  }
+}
+
+async function handleAuthorizeUrl(url: string, server: string): Promise<void> {
+  const reg = runtime?.mcpRegistry
+  if (!reg) return
+  const redirectUriPrefix = `${MCP_OAUTH_REDIRECT_BASE}/oauth/callback/${server}`
+  try {
+    const focused = BrowserWindow.getFocusedWindow() ?? undefined
+    const result = await openAuthorizeWindow({
+      server,
+      authorizeUrl: url,
+      redirectUriPrefix,
+      parent: focused ?? undefined,
+    })
+    await reg.finishAuth(result.server, result.code, result.state)
+  } catch (err) {
+    // Cancelled / closed without completing. The registry stays in
+    // `authenticating`; the user can click Authorize again to retry.
+    console.warn(`[agents-desktop] OAuth flow for ${server}:`, err)
   }
 }
 
@@ -624,6 +752,12 @@ async function restartRuntime(): Promise<void> {
     host: `127.0.0.1`,
     port: 0,
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
+    extraMcpServers: settings.mcp?.servers,
+    loadProjectMcpConfig: true,
+    mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
+    openAuthorizeUrl: (url, server) => {
+      void handleAuthorizeUrl(url, server)
+    },
   })
   runtime = nextRuntime
 
@@ -634,6 +768,15 @@ async function restartRuntime(): Promise<void> {
       return
     }
     setState({ runtimeStatus: `running`, runtimeUrl, error: null })
+    // Subscribe to MCP registry state changes and forward to renderers.
+    // The handler is invoked synchronously with the initial empty
+    // snapshot on subscribe, so renderers always see *something*.
+    const reg = nextRuntime.mcpRegistry
+    if (reg) {
+      mcpUnsubscribe = reg.subscribe((snapshot) => {
+        broadcastMcpSnapshot(snapshot)
+      })
+    }
   } catch (error) {
     if (runtime === nextRuntime) {
       runtime = null
@@ -882,6 +1025,43 @@ function registerIpcHandlers(): void {
       }
     }
   )
+
+  // ── MCP registry IPC ─────────────────────────────────────────────
+  // Renderers subscribe to `desktop:mcp-state` push events; this handler
+  // returns the most recent snapshot so the renderer can render before
+  // the next push lands. Empty list when no runtime is running.
+  ipcMain.handle(`desktop:mcp-snapshot`, () => {
+    return lastMcpSnapshot ?? { seq: 0, servers: [] }
+  })
+  // Mutation handlers — translate IPC calls into registry methods.
+  // No-op gracefully when no runtime is running; renderer should not
+  // depend on these throwing.
+  ipcMain.handle(`desktop:mcp-authorize`, async (_event, name: string) => {
+    // Forces a fresh OAuth flow. The registry mutates the entry in
+    // place rather than deleting + re-adding, so the renderer's
+    // snapshot keeps showing the row throughout — no flicker.
+    await runtime?.mcpRegistry?.reauthorize(name).catch((err) => {
+      console.warn(`[agents-desktop] mcp-authorize ${name}:`, err)
+    })
+  })
+  ipcMain.handle(`desktop:mcp-reconnect`, async (_event, name: string) => {
+    const reg = runtime?.mcpRegistry
+    const entry = reg?.get(name)
+    if (!reg || !entry) return
+    await reg.addServer(entry.config).catch((err) => {
+      console.warn(`[agents-desktop] mcp-reconnect ${name}:`, err)
+    })
+  })
+  ipcMain.handle(`desktop:mcp-disable`, async (_event, name: string) => {
+    await runtime?.mcpRegistry?.disable(name).catch((err) => {
+      console.warn(`[agents-desktop] mcp-disable ${name}:`, err)
+    })
+  })
+  ipcMain.handle(`desktop:mcp-enable`, async (_event, name: string) => {
+    await runtime?.mcpRegistry?.enable(name).catch((err) => {
+      console.warn(`[agents-desktop] mcp-enable ${name}:`, err)
+    })
+  })
 }
 
 function windowDisplayLabel(win: BrowserWindow): string {

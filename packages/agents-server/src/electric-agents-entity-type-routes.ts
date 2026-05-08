@@ -23,12 +23,15 @@ import type {
   ElectricAgentsEntityType,
   RegisterEntityTypeRequest,
 } from './electric-agents-types.js'
+import type { RuntimeRegistry } from './runtime-registry.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 type PublicEntityTypeRequest = Partial<
   RegisterEntityTypeRequest & {
     input_schemas?: Record<string, Record<string, unknown>>
     output_schemas?: Record<string, Record<string, unknown>>
+    public_url?: string
+    runtime_name?: string
   }
 >
 
@@ -40,9 +43,14 @@ type PublicEntityTypeResponse = ElectricAgentsEntityType & {
 
 export class ElectricAgentsEntityTypeRoutes {
   private manager: ElectricAgentsManager
+  private runtimeRegistry?: RuntimeRegistry
 
-  constructor(manager: ElectricAgentsManager) {
+  constructor(
+    manager: ElectricAgentsManager,
+    runtimeRegistry?: RuntimeRegistry
+  ) {
     this.manager = manager
+    this.runtimeRegistry = runtimeRegistry
   }
 
   async handleRequest(
@@ -104,11 +112,16 @@ export class ElectricAgentsEntityTypeRoutes {
         !normalized.description &&
         !normalized.creation_schema
       ) {
-        await this.handleServeEndpointDiscovery(normalized, res)
+        await this.handleServeEndpointDiscovery(normalized, parsed, res)
         return
       }
 
       const entityType = await this.manager.registerEntityType(normalized)
+      this.runtimeRegistry?.register({
+        name: parsed.runtime_name ?? `default`,
+        publicUrl: parsed.public_url,
+        types: [normalized.name],
+      })
       sendJson(res, 201, this.toPublicEntityType(entityType))
     } catch (err) {
       handleElectricAgentsError(err, res)
@@ -130,6 +143,7 @@ export class ElectricAgentsEntityTypeRoutes {
 
   private async handleServeEndpointDiscovery(
     parsed: RegisterEntityTypeRequest,
+    original: PublicEntityTypeRequest,
     res: ServerResponse
   ): Promise<void> {
     try {
@@ -161,9 +175,13 @@ export class ElectricAgentsEntityTypeRoutes {
       // Use serve_endpoint from the original request
       manifest.serve_endpoint = parsed.serve_endpoint
 
-      const entityType = await this.manager.registerEntityType(
-        this.normalizeEntityTypeRequest(manifest)
-      )
+      const normalized = this.normalizeEntityTypeRequest(manifest)
+      const entityType = await this.manager.registerEntityType(normalized)
+      this.runtimeRegistry?.register({
+        name: original.runtime_name ?? `default`,
+        publicUrl: original.public_url,
+        types: [normalized.name],
+      })
       sendJson(res, 201, this.toPublicEntityType(entityType))
     } catch (err) {
       if (err instanceof ElectricAgentsError) {
