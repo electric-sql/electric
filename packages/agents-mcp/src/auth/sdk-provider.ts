@@ -6,7 +6,7 @@ import type {
   OAuthTokens as SdkOAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
-import type { AuthStore } from '../credentials/types'
+import type { AuthStore } from '../credentials/auth-store'
 import type { OAuthClientInfo, OAuthTokens } from '../types'
 
 export interface CreateSdkOAuthProviderOpts {
