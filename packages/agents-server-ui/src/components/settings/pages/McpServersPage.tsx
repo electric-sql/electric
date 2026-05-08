@@ -203,12 +203,12 @@ function ServerEntry({
       </div>
 
       {/*
-        Action buttons. To keep the row stable across state transitions
-        we render the same set of buttons every time and only toggle
-        their `disabled` state. Authorize is rendered exclusively for
-        authorizationCode servers (rendering it for apiKey servers
-        would be misleading); the Enable/Disable swap follows the
-        disabled flag.
+        Action buttons. For non-disabled states we render the same set
+        of buttons every time and only toggle their `disabled` flag, so
+        the row's height stays stable across connecting → ready / error
+        / authenticating transitions. When the server is disabled the
+        Authorize/Reconnect buttons would be permanently dead — hide
+        them and surface Enable as the sole action.
       */}
       <div
         style={{
@@ -218,32 +218,6 @@ function ServerEntry({
           padding: `0 16px 16px`,
         }}
       >
-        {server.authMode === `authorizationCode` && (
-          <Button
-            variant={server.status === `authenticating` ? `solid` : `soft`}
-            tone={server.status === `authenticating` ? `accent` : `neutral`}
-            onClick={wrap(() => ipc.authorize(server.name))}
-            disabled={
-              busy ||
-              !(server.status === `authenticating` || server.status === `error`)
-            }
-          >
-            Authorize
-          </Button>
-        )}
-        <Button
-          variant="soft"
-          tone="neutral"
-          onClick={wrap(() => ipc.reconnect(server.name))}
-          disabled={
-            busy ||
-            server.status === `connecting` ||
-            server.status === `authenticating` ||
-            server.status === `disabled`
-          }
-        >
-          Reconnect
-        </Button>
         {server.status === `disabled` ? (
           <Button
             variant="soft"
@@ -254,14 +228,38 @@ function ServerEntry({
             Enable
           </Button>
         ) : (
-          <Button
-            variant="soft"
-            tone="neutral"
-            onClick={wrap(() => ipc.disable(server.name))}
-            disabled={busy || server.status === `connecting`}
-          >
-            Disable
-          </Button>
+          <>
+            {server.authMode === `authorizationCode` && (
+              <Button
+                variant={server.status === `authenticating` ? `solid` : `soft`}
+                tone={server.status === `authenticating` ? `accent` : `neutral`}
+                onClick={wrap(() => ipc.authorize(server.name))}
+                disabled={busy || server.status === `connecting`}
+              >
+                {server.status === `ready` ? `Re-authorize` : `Authorize`}
+              </Button>
+            )}
+            <Button
+              variant="soft"
+              tone="neutral"
+              onClick={wrap(() => ipc.reconnect(server.name))}
+              disabled={
+                busy ||
+                server.status === `connecting` ||
+                server.status === `authenticating`
+              }
+            >
+              Reconnect
+            </Button>
+            <Button
+              variant="soft"
+              tone="neutral"
+              onClick={wrap(() => ipc.disable(server.name))}
+              disabled={busy || server.status === `connecting`}
+            >
+              Disable
+            </Button>
+          </>
         )}
       </div>
     </>
