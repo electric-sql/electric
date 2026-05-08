@@ -35,9 +35,32 @@ Five new entity types live in `packages/agents/src/agents/` alongside `horton.ts
 
 All five are long-lived. Each has its own persistent timeline that accumulates across wakes — the agent sees what it has previously concluded and done on this PR. Skills are re-loaded fresh on each wake (they're stateless instructions); the entity's _memory of past work_ lives in the entity timeline, not in the skill.
 
-The four mechanical roles from the previous draft (`sync`, `description-updater`, `gate-evaluator`, plus lifecycle) have been folded into `pr-manager` because they are deterministic / mechanical and don't benefit from a separate persistent persona. The reasoning bits (gate-evaluation summary, status-comment composition, slash-command parsing) live in `pr/manager.md`; the mechanical bits (worktree create/teardown, scheduled wake, GitHub polling, deterministic re-render of the description) live in the manager's TS handler.
+`pr-manager` is split internally between deterministic mechanical work (worktree create/teardown, scheduled GitHub polling, description re-render from a template, slash-command parsing, signal insertion based on diffs) and reasoning work (gate evaluation summary, status-comment composition). The mechanical work lives in the TS handler and runs before the agent each wake; the reasoning work lives in `pr/manager.md` and runs inside the agent.
 
-### 3.2 Shared blackboard
+### 3.2 Shared state
+
+There are two shared-DB scopes:
+
+- **Per-watcher state**, keyed `pr-watcher-<repo>`, holds the watcher's PR-tracking ledger. Schema below as `watcher_state`.
+- **Per-PR blackboard**, keyed `pr-<repo>-<number>`, holds everything for one PR. Schema below as the collections starting with `pr_meta`.
+
+The per-watcher ledger is small:
+
+```ts
+{
+  managed_prs: [
+    {
+      key: string, // PR number as string
+      number: number,
+      manager_entity_url: string, // url of the spawned pr-manager
+      state: 'active' | 'completed',
+      spawned_at: string,
+    },
+  ]
+}
+```
+
+`pr-watcher` reads `managed_prs` on each scan and only spawns a `pr-manager` for PRs labeled `agents` whose number is not in the ledger or whose ledger entry is `completed`. When a manager tears down on `pr_closed`, it flips its own ledger row to `completed`.
 
 For each PR, the manager initializes a shared DB instance keyed `pr-<repo>-<number>` with this schema:
 
@@ -109,9 +132,9 @@ For each PR, the manager initializes a shared DB instance keyed `pr-<repo>-<numb
     last_evaluated_at: string,
   }]
 
-  agent_state: [{                    // one row per observer
-    key: string,                     // role name
-    role: string,
+  agent_state: [{                    // one row per worker entity
+    key: string,                     // role name (e.g. 'reviewer')
+    role: 'reviewer' | 'build-doctor' | 'doc-editor',
     iterations: number,
     cap: number,
     paused: boolean,
@@ -119,7 +142,7 @@ For each PR, the manager initializes a shared DB instance keyed `pr-<repo>-<numb
     last_continue_grant_at: string | null,
     // role-specific fields (sparse):
     last_reviewed_sha: string | null,        // reviewer
-    last_substantive_signature: string | null,
+    last_substantive_signature: string | null, // reviewer
     iterations_skipped_since_review: number, // reviewer
     worktree_lock_holder: string | null,     // shared lock; only one writer at a time
   }]
@@ -134,11 +157,22 @@ For each PR, the manager initializes a shared DB instance keyed `pr-<repo>-<numb
 }
 ```
 
-The `signals` collection is append-only and the central reactive substrate. Workers subscribe to types; a worker is "done" with a signal when it adds its role to `consumed_by`.
+The `signals` collection is append-only and the central reactive substrate. Each entity subscribes to the types it cares about; an entity marks a signal "consumed" by adding its role name to the signal's `consumed_by` array after handling it.
 
 ### 3.3 Signal vocabulary
 
 "Producer" below means the entity (or its skill body) that inserts the signal into the `signals` collection. "Consumers" subscribe via `ctx.observe` and wake on it.
+
+Signal payloads are typed per signal type. Notable shapes:
+
+- `head_sha_changed`: `{ from_sha: string, to_sha: string, author_login: string }`.
+- `ci_failed`: `{ head_sha: string, failed_checks: string[] }`.
+- `new_human_comment`: `{ comment_id: string, author_login: string, body: string, file?: string, line?: number }`.
+- `commits_pushed`: `{ shas: string[], by_role: 'reviewer' | 'build-doctor' | 'doc-editor' }`.
+- `human_input_required`: `{ role: string, reason: string, summary: string }`.
+- `continue_granted`: `{ role: 'reviewer' | 'build-doctor' | 'doc-editor' | 'all' }`.
+
+Other signals carry an empty payload; the relevant state lives in the blackboard collections.
 
 | Signal                  | Producer                                      | Consumers                                                             |
 | ----------------------- | --------------------------------------------- | --------------------------------------------------------------------- |
@@ -163,12 +197,12 @@ The `signals` collection is append-only and the central reactive substrate. Work
 
 ### 3.4 Subscription mechanism
 
-There is no central dispatcher. Each entity owns its own subscription:
+There is no central dispatcher. Each entity owns its own subscription. **Naming convention**: entity names are `pr-<role>`; role names used in `agent_state.role`, slash-commands, and signal payloads are the short form (`reviewer`, `build-doctor`, `doc-editor`).
 
-- `pr-manager` subscribes to: every signal type (it's the gate evaluator + description updater + status-comment poster + slash-command parser); also runs a `ctx.scheduleWake` timer for sync polling (§4.1).
-- `pr-reviewer` subscribes to: `head_sha_changed`, `new_human_comment`, `continue_granted` (when the granted role is `reviewer`).
-- `pr-build-doctor` subscribes to: `ci_failed`, `continue_granted` (when role is `build-doctor`).
-- `pr-doc-editor` subscribes to: `head_sha_changed`, `continue_granted` (when role is `doc-editor`).
+- `pr-manager` subscribes to every signal type (it's the gate evaluator + description updater + status-comment poster + slash-command parser); also runs a `ctx.scheduleWake` timer for sync polling (§4.1).
+- `pr-reviewer` subscribes to: `head_sha_changed`, `new_human_comment`, `continue_granted` filtered to `payload.role == 'reviewer'`.
+- `pr-build-doctor` subscribes to: `ci_failed`, `continue_granted` filtered to `payload.role == 'build-doctor'`.
+- `pr-doc-editor` subscribes to: `head_sha_changed`, `continue_granted` filtered to `payload.role == 'doc-editor'`.
 
 Subscriptions are set up by each entity's handler via `ctx.observe` on the shared DB's `signals` collection, filtered to its types (the framework's "Reactive Observers" pattern). When a matching signal is appended, the entity wakes, runs its agent (which loads its skill), takes action, and goes back to sleep.
 
@@ -210,7 +244,7 @@ Three worker entities + the manager. Each is a **hybrid**: a TS entity shell han
 All worker skills share these protocol invariants, enforced by an opening checklist at the top of every skill body:
 
 - Read `pr_meta.agents_disabled` first; if true, exit without acting.
-- Increment `agent_state.iterations` for this role. If `iterations >= cap`, write a `human_input_required` signal with `{ agent, reason, summary }`, set `paused = true`, exit.
+- Increment `agent_state.iterations` for this role. If `iterations >= cap`, insert a `human_input_required` signal with `{ agent, reason, summary }`, set `paused = true`, exit.
 - For agents that push: acquire the worktree lock (`agent_state.worktree_lock_holder`) before any push; release on exit (always, even on error).
 - Mark signals consumed (add the role to `consumed_by`) for any signals processed this wake.
 - The act of writing to the blackboard (e.g. inserting a `commits` row, flipping a thread's `status`) is what emits downstream signals. The skill body lists which writes matter and what signal type to insert.
@@ -227,7 +261,7 @@ The PR's steward. Mostly mechanical; agent-driven for the parts that benefit fro
 **Mechanical responsibilities (TS handler):**
 
 - Lifecycle: on first wake, create `.worktrees/pr-<n>` and check out the head branch; on `pr_closed`, remove the worktree.
-- Sync polling (replaces the previous `sync` role). On scheduled wake, queries GitHub for: PR meta diff, check-runs, comments since `last_synced_at`, labels, base sha. Diffs against blackboard, writes updates, inserts the right signals (`head_sha_changed`, `ci_failed`/`ci_passed`, `new_human_comment`, `base_advanced`, `label_changed`, `agents_label_removed`/`agents_label_restored`, `pr_closed`).
+- Sync polling. On scheduled wake, queries GitHub for: PR meta diff, check-runs, comments since `last_synced_at`, labels, base sha. Diffs against blackboard, writes updates, inserts the right signals (`head_sha_changed`, `ci_failed`/`ci_passed`, `new_human_comment`, `base_advanced`, `label_changed`, `agents_label_removed`/`agents_label_restored`, `pr_closed`).
 - Cadence: 30s when active (signal in last 5 min), 5 min when idle, cancel on `pr_closed`.
 - Slash-command parsing: when sync sees a comment matching `/continue <role>` / `/continue all` / `/stop`, emit `continue_granted` (resets the named role's `agent_state` counter) or set `pr_meta.agents_disabled = true`.
 - Description re-render: deterministic template renderer; preserves `<!-- agent-managed:summary --> ... <!-- /agent-managed:summary -->` boundaries.
@@ -250,13 +284,19 @@ Reviews the diff and addresses must-fix threads (its own + actionable human comm
 
 **On wake (skill decision tree):**
 
-1. **Idempotency check.** If `last_reviewed_sha == head_sha` AND the current wake's signal is `head_sha_changed` AND no open must-fix threads: exit.
-2. **Substantive-change check.** Compute diff `last_reviewed_sha..head_sha` minus whitespace, comment-only, lockfiles, generated files, and lines matching `suggested_patch` of already-addressed threads. If empty AND `iterations_skipped_since_review < 5`: increment `iterations_skipped_since_review`, insert `review_skipped`, exit.
-3. **Review pass.** Read worktree diff. Emit structured `review_threads` rows with `severity` ∈ {must-fix, suggestion, nit}, `category`, `body`, optional `suggested_patch`, `source: 'agent'`. Post each as a GitHub review comment (file/line). Reset `iterations_skipped_since_review = 0`. Update `last_reviewed_sha`. Insert `review_complete`.
-4. **Address pass.** Read open `review_threads` with `severity == 'must-fix'` (own + actionable human-tagged threads). For each: apply `suggested_patch` if clean, otherwise generate a fix in the worktree. Stage per-thread.
-5. **Push.** If anything staged: acquire lock, commit `[agent:reviewer] <thread summary>`, push, release. Insert `commits` row + `commits_pushed`. Mark threads `addressed`, set `addressed_by_sha`. Reply to each GitHub thread: "Addressed in <sha>."
+The skill decides whether to run a review pass, an address pass, or both, based on the triggering signal and current state. Address always runs after review when both apply.
 
-The two passes (review + address) live in the same agent so it has full memory: when re-reviewing after its own fix push, it knows which threads were "responses to me" and skips re-flagging them.
+1. **Decide review pass.**
+   - If signal is `head_sha_changed` AND `last_reviewed_sha != head_sha`: candidate.
+   - Compute substantive diff `last_reviewed_sha..head_sha` minus whitespace, comment-only, lockfiles, generated files, and lines matching `suggested_patch` of already-addressed threads.
+   - If candidate AND substantive diff is empty AND `iterations_skipped_since_review < 5`: increment `iterations_skipped_since_review`, insert `review_skipped`, do NOT run the review pass (but proceed to step 3).
+   - If candidate AND (substantive diff non-empty OR `iterations_skipped_since_review >= 5`): run review pass.
+   - If signal is `new_human_comment` or `continue_granted`: do NOT run review pass; proceed to step 3.
+2. **Review pass.** Read worktree diff. Emit structured `review_threads` rows with `severity` ∈ {must-fix, suggestion, nit}, `category`, `body`, optional `suggested_patch`, `source: 'agent'`. Post each as a GitHub review comment (file/line). Reset `iterations_skipped_since_review = 0`. Update `last_reviewed_sha`. Insert `review_complete`.
+3. **Address pass.** Read open `review_threads` with `severity == 'must-fix'` (own + actionable human-tagged threads). If none: skip to exit. For each: apply `suggested_patch` if clean, otherwise generate a fix in the worktree. Stage per-thread.
+4. **Push.** If anything staged: acquire lock, commit `[agent:reviewer] <thread summary>`, push, release. Insert `commits` row + `commits_pushed`. Mark threads `addressed`, set `addressed_by_sha`. Reply to each GitHub thread: "Addressed in <sha>."
+
+The two passes live in the same agent so it has full memory: when re-reviewing after its own fix push, it knows which threads were "responses to me" and skips re-flagging them.
 
 ### 4.3 `pr-build-doctor` — skill `pr/build-doctor.md`
 
@@ -302,12 +342,12 @@ Defaults (per PR, configurable per-watcher):
 
 **Pause:** when an agent's `iterations >= cap`, its skill sets `paused = true` on its `agent_state` row, writes `pause_reason`, inserts `human_input_required`, and exits. `pr-manager` wakes on `human_input_required` and updates the PR status comment with a "paused agents" section.
 
-**Resume:** human posts `/continue <role>`, `/continue all`, or `/stop` in the PR. The manager parses these on its sync poll. `/continue` resets the named agent's `iterations = 0`, `paused = false`, sets `last_continue_grant_at`, inserts `continue_granted` (which the named agent subscribes to → wakes → resumes). `/stop` sets `pr_meta.agents_disabled = true`.
+**Resume:** human posts `/continue <role>`, `/continue all`, or `/stop` in the PR. `<role>` is the short role name: `reviewer`, `build-doctor`, or `doc-editor`. The manager parses these on its sync poll. `/continue` resets the named agent's `iterations = 0`, `paused = false`, sets `last_continue_grant_at`, inserts `continue_granted` with `payload: { role }` (each worker filters subscriptions on its own role name). `/stop` sets `pr_meta.agents_disabled = true`.
 
 **Counter resets** on outside-world events that change the situation:
 
-- `new_human_comment` resets `pr-reviewer` (a human comment may add a new actionable thread).
-- `head_sha_changed` from a non-agent author resets all three workers.
+- `new_human_comment` resets `reviewer` (a human comment may add a new actionable thread).
+- `head_sha_changed` where the new head_sha is not in the `commits` table (i.e., not authored by an agent in this PR) resets all three workers.
 - `base_advanced` resets all three.
 
 Independent pausing: each worker pauses/resumes on its own. A paused reviewer does not block the doc-editor.
@@ -315,7 +355,7 @@ Independent pausing: each worker pauses/resumes on its own. A paused reviewer do
 ## 6. Safety gates
 
 1. **Entry label.** `pr-watcher` only spawns a `pr-manager` for PRs with the `agents` label. PRs without the label are invisible to the system.
-2. **Live label gate.** If the `agents` label is removed, the manager flips `agents_disabled = true` and posts a comment. Observers all no-op until restored. No commits are pushed while disabled.
+2. **Live label gate.** If the `agents` label is removed, the manager flips `agents_disabled = true` and posts a comment. Workers all no-op until restored. No commits are pushed while disabled.
 3. **`/stop` slash-command.** Same effect as label removal but via comment (doesn't require label perms).
 4. **Iteration caps.** No worker takes unbounded action without human go-ahead.
 5. **Worktree lock.** Single-writer invariant on the local worktree prevents concurrent pushes from two workers stomping each other.
@@ -338,7 +378,7 @@ No probe, no state flag — the agent decides per call.
 
 - `pr-manager` creates `.worktrees/pr-<n>` on first wake, checked out to the PR's head branch with the PR remote configured.
 - All three worker entities operate inside this worktree.
-- A serialized lock on `agent_state.worktree_lock_holder` ensures one writer at a time. Observers acquire on entry to a push step, release on exit.
+- A serialized lock on `agent_state.worktree_lock_holder` ensures one writer at a time. Workers acquire on entry to a push step, release on exit.
 - On `pr_closed`, manager removes the worktree.
 - `pr-watcher` chooses the worktree root: defaults to `<repo_root>/.worktrees/`, configurable per watcher.
 
@@ -384,10 +424,10 @@ The reviewer's persistent timeline is what lets it confidently say "I just pushe
 ## 10. Failure modes & error handling
 
 - **Push rejected (force-push by author):** the worker rebases its prepared commit once; on second failure inserts `human_input_required` with reason `force_push_conflict`.
-- **GitHub API rate-limited:** `sync` backs off (exponential up to 10 min) and emits a status update; other workers continue acting on cached blackboard state.
-- **Worker exception:** caught by handler, logged, and a `human_input_required` signal is emitted with reason `worker_error: <message>` so it surfaces in the status comment. Iteration counter increments to prevent infinite retries.
-- **Worktree corrupted:** manager detects on lock acquire (e.g., dirty state, missing); blows it away and re-creates; emits `worktree_reset` (informational; no consumers).
-- **Conflicting concurrent observers:** prevented by worktree lock. Lock contention is rare because observers' acting paths are short.
+- **GitHub API rate-limited:** the manager's sync poll backs off (exponential up to 10 min) and updates the status comment; workers continue acting on cached blackboard state.
+- **Worker exception:** caught by handler, logged, and a `human_input_required` signal is inserted with reason `worker_error: <message>` so it surfaces in the status comment. Iteration counter increments to prevent infinite retries.
+- **Worktree corrupted:** manager detects on lock acquire (e.g., dirty state, missing); blows it away and re-creates; updates the status comment with a "worktree reset" note.
+- **Conflicting concurrent workers:** prevented by the worktree lock. Lock contention is rare because workers' acting paths are short.
 - **Signal storm:** if the same signal type fires more than 20 times in 60 seconds, manager flips `agents_disabled = true` and posts an alert in the status comment. Catastrophic loop detector.
 
 ## 11. Phase 1 / Phase 2 boundary
