@@ -27,9 +27,6 @@ on:
         type: string
         default: ''
 
-permissions:
-  contents: write
-
 jobs:
   prepare-release:
     name: Prepare release
