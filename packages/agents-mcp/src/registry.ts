@@ -392,7 +392,11 @@ export function createRegistry(opts: RegistryOpts): Registry {
       }
       if (existing) {
         await Promise.resolve(existing.transport?.close()).catch(() => {})
-        entries.delete(cfg.name)
+        // Don't delete — `entries.set(cfg.name, ...)` below replaces
+        // the value in place and preserves the Map's insertion order,
+        // so the entry keeps its position in subsequent `list()`
+        // snapshots. Deleting first would move it to the end on every
+        // reconfigure, hot-reload, or enable.
       }
 
       // Seed the in-process auth cache from inline auth-config fields,
@@ -511,7 +515,10 @@ export function createRegistry(opts: RegistryOpts): Registry {
       if (!e) throw new Error(`unknown server "${name}"`)
       if (e.status !== `disabled`)
         return { state: `ready`, id: name, toolCount: e.tools.length }
-      entries.delete(name)
+      // No `entries.delete(name)` — addServer replaces the value in
+      // place via `entries.set` and the Map preserves the original
+      // position. Deleting first would move the row to the end of the
+      // snapshot, which the renderer reflects as a visible reorder.
       return await registry.addServer(e.config)
     },
 

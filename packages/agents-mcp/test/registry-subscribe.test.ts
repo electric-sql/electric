@@ -114,6 +114,45 @@ describe(`Registry — subscribe`, () => {
     expect(handler.mock.calls[0]![0]!.seq).toBe(0)
   })
 
+  it(`preserves insertion order across reconfigure / disable+enable`, async () => {
+    const reg = createRegistry({
+      transportFactoryOverride: () => fakeTransport([`a`]),
+    })
+    await reg.addServer({
+      name: `alpha`,
+      transport: `http`,
+      url: `https://a.invalid/mcp`,
+      auth: { mode: `apiKey`, key: `K1` },
+    })
+    await reg.addServer({
+      name: `beta`,
+      transport: `http`,
+      url: `https://b.invalid/mcp`,
+      auth: { mode: `apiKey`, key: `K2` },
+    })
+    await reg.addServer({
+      name: `gamma`,
+      transport: `http`,
+      url: `https://c.invalid/mcp`,
+      auth: { mode: `apiKey`, key: `K3` },
+    })
+    expect(reg.list().map((e) => e.name)).toEqual([`alpha`, `beta`, `gamma`])
+
+    // Reconfiguring the middle entry (different url) must not move it.
+    await reg.addServer({
+      name: `beta`,
+      transport: `http`,
+      url: `https://b2.invalid/mcp`,
+      auth: { mode: `apiKey`, key: `K2` },
+    })
+    expect(reg.list().map((e) => e.name)).toEqual([`alpha`, `beta`, `gamma`])
+
+    // Disable + re-enable the middle entry must not move it either.
+    await reg.disable(`beta`)
+    await reg.enable(`beta`)
+    expect(reg.list().map((e) => e.name)).toEqual([`alpha`, `beta`, `gamma`])
+  })
+
   it(`a buggy subscriber does not break the registry`, async () => {
     const reg = createRegistry({
       transportFactoryOverride: () => fakeTransport([`a`]),
