@@ -223,7 +223,10 @@ function ServerEntry({
             variant={server.status === `authenticating` ? `solid` : `soft`}
             tone={server.status === `authenticating` ? `accent` : `neutral`}
             onClick={wrap(() => ipc.authorize(server.name))}
-            disabled={busy || server.status !== `authenticating`}
+            disabled={
+              busy ||
+              !(server.status === `authenticating` || server.status === `error`)
+            }
           >
             Authorize
           </Button>
