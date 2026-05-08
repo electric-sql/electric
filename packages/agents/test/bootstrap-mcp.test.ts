@@ -6,6 +6,7 @@
  * `mcp.json` wins.
  */
 
+import { createServer, type Server } from 'node:http'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -17,6 +18,34 @@ const mockStreamFn = vi.fn(async function* () {}) as any
 
 async function makeWorkspace(): Promise<string> {
   return await fs.mkdtemp(path.join(os.tmpdir(), `agents-mcp-test-`))
+}
+
+// Minimal stand-in for an agents-server. BuiltinAgentsServer.start()
+// POSTs entity-type registration during bootstrap; CI has nothing
+// listening on a fixed port, so we spin up a no-op HTTP server that
+// 200s every request and feed its URL through `agentServerUrl`.
+async function startMockAgentsServer(): Promise<{
+  url: string
+  stop: () => Promise<void>
+}> {
+  const httpServer: Server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': `application/json` })
+    res.end(`{}`)
+  })
+  await new Promise<void>((resolve) =>
+    httpServer.listen(0, `127.0.0.1`, resolve)
+  )
+  const addr = httpServer.address()
+  if (!addr || typeof addr === `string`) {
+    throw new Error(`mock agents-server failed to bind`)
+  }
+  return {
+    url: `http://127.0.0.1:${addr.port}`,
+    stop: () =>
+      new Promise<void>((resolve, reject) =>
+        httpServer.close((err) => (err ? reject(err) : resolve()))
+      ),
+  }
 }
 
 async function writeMcpJson(
@@ -57,20 +86,23 @@ async function waitForServers(
 describe(`BuiltinAgentsServer — MCP merge`, () => {
   let workspace: string
   let server: BuiltinAgentsServer | null = null
+  let mockServer: { url: string; stop: () => Promise<void> }
 
   beforeEach(async () => {
     workspace = await makeWorkspace()
+    mockServer = await startMockAgentsServer()
   })
 
   afterEach(async () => {
     await server?.stop()
     server = null
+    await mockServer.stop().catch(() => {})
     await fs.rm(workspace, { recursive: true, force: true }).catch(() => {})
   })
 
   it(`registers extras when no mcp.json is present in the workspace`, async () => {
     server = new BuiltinAgentsServer({
-      agentServerUrl: `http://localhost:4437`,
+      agentServerUrl: mockServer.url,
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
@@ -98,7 +130,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
       },
     })
     server = new BuiltinAgentsServer({
-      agentServerUrl: `http://localhost:4437`,
+      agentServerUrl: mockServer.url,
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
@@ -118,7 +150,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
       },
     })
     server = new BuiltinAgentsServer({
-      agentServerUrl: `http://localhost:4437`,
+      agentServerUrl: mockServer.url,
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
@@ -146,7 +178,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
       },
     })
     server = new BuiltinAgentsServer({
-      agentServerUrl: `http://localhost:4437`,
+      agentServerUrl: mockServer.url,
       port: 0,
       mockStreamFn,
       workingDirectory: workspace,
