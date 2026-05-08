@@ -20,7 +20,9 @@ describe(`completeWithLowCostModel`, () => {
   test(`passes required system prompt`, async () => {
     await completeWithLowCostModel({
       catalog: {
-        choices: [{ provider: `openai-codex`, id: `gpt-5.4-mini`, reasoning: false }],
+        choices: [
+          { provider: `openai-codex`, id: `gpt-5.4-mini`, reasoning: false },
+        ],
       },
       purpose: `URL extraction`,
       systemPrompt: `Custom instructions`,
