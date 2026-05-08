@@ -8,6 +8,14 @@ export interface WatchOpts {
   env?: NodeJS.ProcessEnv
 }
 
+/**
+ * Start watching `path` for changes. Each modification triggers
+ * `loadConfig(path)` (debounced) and forwards the parsed config to
+ * `onChange`, or any error to `onError`. The caller is responsible
+ * for performing the initial load — `watchConfig` only sets up the
+ * subscription so the caller can fully await its first apply before
+ * subsequent change events start firing.
+ */
 export async function watchConfig(
   path: string,
   opts: WatchOpts
@@ -22,7 +30,6 @@ export async function watchConfig(
       opts.onError?.(err)
     }
   }
-  await reload()
   const watcher = fs.watch(path, () => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(reload, debounce)

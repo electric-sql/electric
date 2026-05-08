@@ -125,14 +125,15 @@ export class BuiltinAgentsServer {
   private _url: string | null = null
   private publicBaseUrl: string | null = null
   private _mcpRegistry: McpRegistry | null = null
-  // Closer returned by watchMcpConfig (or null when project mcp.json
-  // loading is off). Held so stop() can dispose the underlying
-  // chokidar watcher; otherwise it leaks past the runtime lifecycle.
   private mcpWatcherCloser: (() => void) | null = null
-  // Tool-provider name we registered in the process-global map at
-  // start(); cleared on stop(). Tracked explicitly so we never
-  // unregister someone else's provider.
   private mcpToolProviderName: string | null = null
+  // In-flight `applyMerged` promises. `stop()` awaits these so the
+  // registry isn't torn down while a config apply is mid-flight.
+  private mcpApplyInFlight: Set<Promise<void>> = new Set()
+  // Latched once `stop()` starts so any debounced watcher reload
+  // that fires during teardown short-circuits instead of resurrecting
+  // transports against a registry that's about to clear.
+  private mcpStopping = false
   readonly options: BuiltinAgentsServerOptions
 
   constructor(options: BuiltinAgentsServerOptions) {
@@ -278,20 +279,12 @@ export class BuiltinAgentsServer {
             }
           }
 
-          // Async/await so failures from `applyConfig` (or the prior
-          // `wirePersistence` step) actually reach the catch. The
-          // earlier `.then(() => void applyConfig(…))` form discarded
-          // the inner promise, which let `applyConfig` rejections
-          // escape as unhandled-rejection warnings while looking
-          // handled. Errors here are also forwarded to the embedder's
-          // `onConfigError` callback if one was provided, so the UI
-          // can surface them instead of relying solely on log output.
           const onConfigError = this.options.onConfigError
-          const applyMerged = async (
-            jsonCfg: McpConfig | null
-          ): Promise<void> => {
+          const runApply = async (jsonCfg: McpConfig | null): Promise<void> => {
+            if (this.mcpStopping) return
             try {
               const wired = await wirePersistence(merge(jsonCfg))
+              if (this.mcpStopping) return
               await mcpRegistry.applyConfig(wired)
             } catch (e) {
               serverLog.error(`[mcp] applyConfig:`, e)
@@ -302,6 +295,12 @@ export class BuiltinAgentsServer {
               }
             }
           }
+          const applyMerged = (jsonCfg: McpConfig | null): Promise<void> => {
+            const p = runApply(jsonCfg)
+            this.mcpApplyInFlight.add(p)
+            void p.finally(() => this.mcpApplyInFlight.delete(p))
+            return p
+          }
 
           if (mcpConfigPath) {
             try {
@@ -310,7 +309,6 @@ export class BuiltinAgentsServer {
               void applyMerged(cfg)
             } catch (err) {
               if ((err as NodeJS.ErrnoException).code !== `ENOENT`) throw err
-              // No mcp.json — apply just the embedder-provided extras.
               if (extras.length === 0) {
                 serverLog.info(
                   `[mcp] no ${mcpConfigPath} — starting with no servers`
@@ -323,24 +321,18 @@ export class BuiltinAgentsServer {
               void applyMerged(null)
             }
 
-            watchMcpConfig(mcpConfigPath, {
-              onChange: (cfg) => void applyMerged(cfg),
-              onError: (e) => serverLog.error(`[mcp] config error:`, e),
-            }).then(
-              (closer) => {
-                // Stash the closer so stop() can dispose the chokidar
-                // watcher. Without this it survives the runtime and
-                // leaks a file handle on the old workspace's mcp.json.
-                this.mcpWatcherCloser = closer
-              },
-              (e) => serverLog.error(`[mcp] config watcher failed to start:`, e)
-            )
+            try {
+              this.mcpWatcherCloser = await watchMcpConfig(mcpConfigPath, {
+                onChange: (cfg) => void applyMerged(cfg),
+                onError: (e) => serverLog.error(`[mcp] config error:`, e),
+              })
+            } catch (e) {
+              serverLog.error(`[mcp] config watcher failed to start:`, e)
+            }
           } else {
-            // Project-scoped mcp.json loading is off. Apply just the
-            // embedder-provided extras and skip the watcher.
             if (extras.length > 0) {
               serverLog.info(
-                `[mcp] starting with ${extras.length} server(s) from extras (project mcp.json disabled)`
+                `[mcp] starting with ${extras.length} server(s) from extras`
               )
             }
             void applyMerged(null)
@@ -446,10 +438,18 @@ export class BuiltinAgentsServer {
       this.bootstrap = null
     }
 
-    // MCP teardown order: stop the watcher first (so no further
-    // applyConfig calls schedule), unregister the tool provider next
-    // (so wake-time tool composition stops resolving against this
-    // registry), and close the registry transports last.
+    // MCP teardown:
+    //   1. Latch `mcpStopping` so any debounced watcher reload that
+    //      runs during shutdown short-circuits before touching the
+    //      registry.
+    //   2. Stop the file watcher.
+    //   3. Drain in-flight `applyMerged` promises so the registry
+    //      isn't cleared underneath an active applyConfig.
+    //   4. Unregister the tool provider so wake-time composition
+    //      stops resolving against this registry.
+    //   5. Close registry transports last.
+    this.mcpStopping = true
+
     if (this.mcpWatcherCloser) {
       try {
         this.mcpWatcherCloser()
@@ -457,6 +457,10 @@ export class BuiltinAgentsServer {
         serverLog.error(`[mcp] watcher close failed:`, e)
       }
       this.mcpWatcherCloser = null
+    }
+
+    if (this.mcpApplyInFlight.size > 0) {
+      await Promise.allSettled([...this.mcpApplyInFlight])
     }
 
     if (this.mcpToolProviderName) {
@@ -479,6 +483,7 @@ export class BuiltinAgentsServer {
       this.server = null
     }
 
+    this.mcpStopping = false
     this._url = null
     this.publicBaseUrl = null
   }
