@@ -1,4 +1,4 @@
-import { BuiltinAgentsServer } from '@electric-ax/agents'
+import type { BuiltinAgentsServer } from '@electric-ax/agents'
 import {
   BrowserWindow,
   Menu,
@@ -85,17 +85,18 @@ type ApiKeysStatus = {
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const PACKAGE_DIR = path.resolve(MODULE_DIR, `..`)
-const RENDERER_INDEX = path.resolve(
-  PACKAGE_DIR,
-  `../agents-server-ui/dist-desktop/index.html`
-)
+const RESOURCE_DIR = app.isPackaged ? process.resourcesPath : PACKAGE_DIR
+const RENDERER_INDEX = app.isPackaged
+  ? path.join(RESOURCE_DIR, `renderer`, `index.html`)
+  : path.resolve(PACKAGE_DIR, `../agents-server-ui/dist-desktop/index.html`)
 const PRELOAD_PATH = path.resolve(MODULE_DIR, `preload.cjs`)
-const TRAY_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/trayTemplate.png`)
-const TRAY_ICON_2X_PATH = path.resolve(
-  PACKAGE_DIR,
-  `assets/trayTemplate@2x.png`
+const TRAY_ICON_PATH = path.join(RESOURCE_DIR, `assets`, `trayTemplate.png`)
+const TRAY_ICON_2X_PATH = path.join(
+  RESOURCE_DIR,
+  `assets`,
+  `trayTemplate@2x.png`
 )
-const APP_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/icon.png`)
+const APP_ICON_PATH = path.join(RESOURCE_DIR, `assets`, `icon.png`)
 const APP_DISPLAY_NAME = `Electric Agents`
 const MAX_CONNECTIONS_PER_HOST = `256`
 
@@ -185,6 +186,16 @@ let tray: Tray | null = null
 let aboutWindow: BrowserWindow | null = null
 let isQuitting = false
 const windows = new Set<BrowserWindow>()
+
+function configureRuntimeEnvironment(): void {
+  // Packaged macOS apps can launch with cwd `/`, which makes the agents
+  // logger's default `./logs` path resolve to unwritable `/logs`.
+  process.env.ELECTRIC_AGENTS_LOG_DIR ??= path.join(
+    app.getPath(`userData`),
+    `logs`
+  )
+}
+configureRuntimeEnvironment()
 
 function settingsPath(): string {
   return path.join(app.getPath(`userData`), `settings.json`)
@@ -607,6 +618,74 @@ async function stopExistingRuntime(): Promise<void> {
   }
 }
 
+type AgentsServerHealthResult = { ok: true } | { ok: false; reason: string }
+
+function buildAgentsServerHealthUrl(baseUrl: string): string {
+  try {
+    return new URL(`/_electric/health`, baseUrl).toString()
+  } catch {
+    const trimmed = baseUrl.replace(/\/+$/, ``)
+    return `${trimmed}/_electric/health`
+  }
+}
+
+function formatStartupNetworkError(
+  error: unknown,
+  activeServerUrl: string
+): string | null {
+  if (!(error instanceof Error)) return null
+  if (!/fetch failed/i.test(error.message)) return null
+  const cause = (error as Error & { cause?: unknown }).cause
+  const details =
+    cause && typeof cause === `object` && `code` in cause
+      ? String((cause as { code?: unknown }).code ?? ``).trim()
+      : ``
+  const suffix = details ? ` (${details})` : ``
+  return [
+    `Could not connect to agents-server at ${activeServerUrl}.`,
+    `Make sure it is running, then retry.${suffix}`,
+  ].join(` `)
+}
+
+async function checkAgentsServerHealth(
+  baseUrl: string,
+  timeoutMs: number
+): Promise<AgentsServerHealthResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const healthUrl = buildAgentsServerHealthUrl(baseUrl)
+  try {
+    const res = await fetch(healthUrl, {
+      signal: controller.signal,
+      headers: { accept: `application/json` },
+    })
+    if (!res.ok) {
+      return {
+        ok: false,
+        reason: `health check returned ${res.status}`,
+      }
+    }
+    const json = (await res.json()) as { status?: unknown }
+    if (json?.status !== `ok`) {
+      return {
+        ok: false,
+        reason: `health check returned an unexpected response`,
+      }
+    }
+    return { ok: true }
+  } catch (error) {
+    const reason =
+      error instanceof Error && error.name === `AbortError`
+        ? `health check timed out after ${timeoutMs}ms`
+        : error instanceof Error
+          ? error.message
+          : String(error)
+    return { ok: false, reason }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function restartRuntime(): Promise<void> {
   const generation = ++runtimeGeneration
   await stopExistingRuntime()
@@ -619,6 +698,18 @@ async function restartRuntime(): Promise<void> {
 
   setState({ runtimeStatus: `starting`, runtimeUrl: null, error: null })
 
+  const serverHealth = await checkAgentsServerHealth(activeServer.url, 4_000)
+  if (!serverHealth.ok) {
+    setState({
+      runtimeStatus: `error`,
+      runtimeUrl: null,
+      error: `Could not reach agents-server at ${activeServer.url}: ${serverHealth.reason}.`,
+    })
+    return
+  }
+
+  configureRuntimeEnvironment()
+  const { BuiltinAgentsServer } = await import(`@electric-ax/agents`)
   const nextRuntime = new BuiltinAgentsServer({
     agentServerUrl: activeServer.url,
     host: `127.0.0.1`,
@@ -638,10 +729,16 @@ async function restartRuntime(): Promise<void> {
     if (runtime === nextRuntime) {
       runtime = null
     }
+    const startupNetworkError = formatStartupNetworkError(
+      error,
+      activeServer.url
+    )
     setState({
       runtimeStatus: `error`,
       runtimeUrl: null,
-      error: error instanceof Error ? error.message : String(error),
+      error:
+        startupNetworkError ??
+        (error instanceof Error ? error.message : String(error)),
     })
   }
 }
@@ -731,21 +828,8 @@ let discoveryTimer: NodeJS.Timeout | null = null
 let discoveryInFlight: Promise<void> | null = null
 
 async function probeAgentsServer(url: string): Promise<boolean> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT_MS)
-  try {
-    const res = await fetch(`${url}/_electric/health`, {
-      signal: controller.signal,
-      headers: { accept: `application/json` },
-    })
-    if (!res.ok) return false
-    const json = (await res.json()) as { status?: unknown }
-    return json?.status === `ok`
-  } catch {
-    return false
-  } finally {
-    clearTimeout(timer)
-  }
+  const result = await checkAgentsServerHealth(url, DISCOVERY_TIMEOUT_MS)
+  return result.ok
 }
 
 async function runDiscovery(): Promise<void> {
@@ -1266,6 +1350,7 @@ async function main(): Promise<void> {
   })
 
   await app.whenReady()
+  configureRuntimeEnvironment()
   await loadSettings()
   registerIpcHandlers()
 

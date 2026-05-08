@@ -1,0 +1,62 @@
+appId: com.electric-sql.agents
+productName: Electric Agents
+artifactName: Electric-Agents-${version}-${os}-${arch}.${ext}
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - assets/**/*
+  - package.json
+
+extraResources:
+  - from: ../agents-server-ui/dist-desktop
+    to: renderer
+    filter:
+      - '**/*'
+  - from: assets
+    to: assets
+    filter:
+      - '**/*'
+
+asar: true
+asarUnpack:
+  - '**/*.node'
+  - '**/node_modules/better-sqlite3/**/*'
+  - '**/node_modules/sqlite-vec/**/*'
+
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+linux:
+  category: Development
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+
+publish:
+  provider: github
+  owner: electric-sql
+  repo: electric
