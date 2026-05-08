@@ -147,6 +147,19 @@ function makeError(kind: McpToolError[`kind`], message: string): McpToolError {
   return { kind, message }
 }
 
+// Mirror of the redirect URI `createSdkOAuthProvider` builds. Used at
+// seed time to detect a cached DCR client that points at a different
+// URI than the one the SDK would use right now (e.g. across runtime
+// restarts where the port changed). Keep in sync with sdk-provider.ts.
+function redirectUriFor(
+  cfg: McpServerConfig,
+  publicUrl: string | undefined
+): string {
+  if (cfg.auth?.mode !== `authorizationCode`) return ``
+  if (cfg.auth.redirectUri) return cfg.auth.redirectUri
+  return `${(publicUrl ?? `http://localhost`).replace(/\/$/, ``)}/oauth/callback/${cfg.name}`
+}
+
 interface BuildTransportResult {
   transport?: McpTransport
   error?: McpToolError
@@ -403,8 +416,25 @@ export function createRegistry(opts: RegistryOpts): Registry {
       // and wire up the per-server hooks so refresh-token rotation /
       // DCR completion fire the operator's persistence callbacks.
       if (cfg.auth?.mode === `authorizationCode`) {
-        if (cfg.auth.tokens) authStore.seedTokens(cfg.name, cfg.auth.tokens)
-        if (cfg.auth.client) authStore.seedClient(cfg.name, cfg.auth.client)
+        // Detect redirect-URI drift between sessions. The runtime's
+        // `publicUrl` (and therefore the redirect_uri the SDK will
+        // send during DCR / authorize / token exchange) typically
+        // depends on the OS-assigned port — so a client cached in
+        // keychain on a previous run may have been registered against
+        // a different URI. The auth server will refuse the token
+        // exchange in that case (`invalid_grant`). Skip seeding the
+        // stale client + tokens; the next connect runs fresh DCR and
+        // the persistence hooks overwrite the keychain.
+        const wouldRedirectTo = redirectUriFor(cfg, opts.publicUrl)
+        const cachedClient = cfg.auth.client
+        const clientStale =
+          cachedClient !== undefined &&
+          (cachedClient.redirectUris === undefined ||
+            !cachedClient.redirectUris.includes(wouldRedirectTo))
+        if (!clientStale) {
+          if (cfg.auth.tokens) authStore.seedTokens(cfg.name, cfg.auth.tokens)
+          if (cfg.auth.client) authStore.seedClient(cfg.name, cfg.auth.client)
+        }
         authStore.registerHooks(cfg.name, {
           onTokensChanged: cfg.auth.onTokensChanged,
           onClientRegistered: cfg.auth.onClientRegistered,
