@@ -1,6 +1,20 @@
 {
   "name": "@electric-ax/agents-mcp",
   "version": "0.1.0",
+  "description": "Model Context Protocol registry, transports, and OAuth bridges for Electric Agents",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "electric-agents",
+    "oauth",
+    "tools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/agents-mcp"
+  },
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -23,14 +37,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
-  },
-  "peerDependencies": {
-    "keytar": "^7.9.0"
-  },
-  "peerDependenciesMeta": {
-    "keytar": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "tsdown": "^0.9.0",
