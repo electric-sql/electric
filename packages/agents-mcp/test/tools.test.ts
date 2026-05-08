@@ -10,19 +10,14 @@ describe(`mcp.tools`, () => {
     expect((s as any).allowlist).toEqual([`sentry`, `github`])
   })
 
-  it(`'*' produces a wildcard sentinel`, () => {
-    const [s] = mcp.tools(`*`)
-    expect((s as any).allowlist).toBe(`*`)
-  })
-
-  it(`no-arg call defaults to wildcard (every registered server)`, () => {
+  it(`no-arg call produces a wildcard sentinel (every registered server)`, () => {
     const [s] = mcp.tools()
-    expect((s as any).allowlist).toBe(`*`)
+    expect((s as any).allowlist).toBeUndefined()
   })
 
-  it(`filterByAllowlist returns matching servers (or all when "*")`, () => {
+  it(`filterByAllowlist returns matching servers (or all when undefined)`, () => {
     expect(filterByAllowlist([`a`, `b`, `c`], [`a`, `c`])).toEqual([`a`, `c`])
-    expect(filterByAllowlist([`a`, `b`], `*`)).toEqual([`a`, `b`])
+    expect(filterByAllowlist([`a`, `b`], undefined)).toEqual([`a`, `b`])
     expect(filterByAllowlist([`a`, `b`], [`nope`])).toEqual([])
   })
 })

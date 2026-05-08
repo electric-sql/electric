@@ -18,7 +18,7 @@ const MCP_TOOLS_SENTINEL_KEY = Symbol.for(
 
 interface McpToolsSentinelLike {
   [key: symbol]: true
-  allowlist: string[] | `*`
+  allowlist?: string[]
 }
 
 function isMcpToolsSentinel(x: unknown): x is McpToolsSentinelLike {
@@ -31,9 +31,9 @@ function isMcpToolsSentinel(x: unknown): x is McpToolsSentinelLike {
 
 function filterByAllowlist(
   serverNames: string[],
-  allowlist: string[] | `*`
+  allowlist: string[] | undefined
 ): string[] {
-  if (allowlist === `*`) return [...serverNames]
+  if (allowlist === undefined) return [...serverNames]
   const set = new Set(allowlist)
   return serverNames.filter((n) => set.has(n))
 }
@@ -77,16 +77,14 @@ export async function composeToolsWithProviders(
         .filter((s): s is string => typeof s === `string`)
     ),
   ]
-  // Surface named MCP servers that resolve to nothing — either
-  // unknown (typo / not configured) or registered-but-not-ready
-  // (still connecting, errored, awaiting auth, disabled). Without
-  // a warning the sentinel silently expands to an empty set and
-  // the agent runs under-equipped. Wildcard sentinels
-  // (`mcp.tools()` / `mcp.tools('*')`) are intentionally not
-  // reported — the agent didn't name anything specific.
+  // Named MCP servers that resolve to nothing — typo'd, not
+  // configured, or registered-but-not-ready — would otherwise
+  // expand silently to an empty set and the agent would run
+  // under-equipped. Wildcard sentinels (no allowlist) are not
+  // reported.
   const missing = new Set<string>()
   for (const t of declaredTools) {
-    if (isMcpToolsSentinel(t) && t.allowlist !== `*`) {
+    if (isMcpToolsSentinel(t) && t.allowlist) {
       for (const name of t.allowlist) {
         if (!allServers.includes(name)) missing.add(name)
       }

@@ -48,10 +48,10 @@ describe(`tool-providers`, () => {
       expect(result).toEqual([`sentry`, `linear`])
     })
 
-    it(`filterByAllowlist with wildcard keeps all servers`, async () => {
+    it(`filterByAllowlist with no allowlist keeps all servers`, async () => {
       const { filterByAllowlist } = await import(`@electric-ax/agents-mcp`)
       const servers = [`sentry`, `github`]
-      const result = filterByAllowlist(servers, `*`)
+      const result = filterByAllowlist(servers, undefined)
       expect(result).toEqual([`sentry`, `github`])
     })
 
@@ -86,7 +86,7 @@ describe(`composeToolsWithProviders (wake-time sentinel composition)`, () => {
     expect(names).toEqual([`mcp__a__t1`, `mcp__c__t1`])
   })
 
-  it(`'*' allowlist gets every provider tool`, async () => {
+  it(`no-arg sentinel gets every provider tool`, async () => {
     registerToolProvider({
       name: `mcp`,
       tools: () => [
@@ -94,7 +94,7 @@ describe(`composeToolsWithProviders (wake-time sentinel composition)`, () => {
         { name: `mcp__b__t1`, server: `b` },
       ],
     })
-    const declared = [...mcp.tools(`*`)]
+    const declared = [...mcp.tools()]
     const composed = await composeToolsWithProviders(declared)
     expect(composed).toHaveLength(2)
   })
@@ -155,7 +155,7 @@ describe(`composeToolsWithProviders (wake-time sentinel composition)`, () => {
 
     it(`silent for wildcard sentinel even with no servers ready`, async () => {
       registerToolProvider({ name: `mcp`, tools: () => [] })
-      const declared = [...mcp.tools(`*`)]
+      const declared = [...mcp.tools()]
       await composeToolsWithProviders(declared)
       expect(warnSpy).not.toHaveBeenCalled()
     })

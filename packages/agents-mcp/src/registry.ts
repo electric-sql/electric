@@ -123,12 +123,8 @@ export interface Registry {
    */
   subscribe(handler: RegistrySubscriber): () => void
   /**
-   * Tear down every server transport and clear the registry. Stdio
-   * children get killed, HTTP transports get closed. Subscribers
-   * receive one final empty snapshot before the registry is left
-   * dormant. Subsequent calls to addServer / applyConfig will start
-   * fresh entries — close() is reusable in that sense, but in practice
-   * callers throw the registry away.
+   * Close every transport, clear all entries, and emit a final empty
+   * snapshot to subscribers.
    */
   close(): Promise<void>
 }
@@ -139,10 +135,6 @@ function hashConfig(c: McpServerConfig): string {
     c.transport,
     (c as any).url ?? ``,
     c.auth?.mode ?? `none`,
-    // timeoutMs is consumed per-call by the bridges; if it changes
-    // and the hash doesn't, addServer's idempotent-fast-path returns
-    // early and the entry's `.config.timeoutMs` stays stale. Include
-    // it so timeout-only edits force a reconfigure.
     String(c.timeoutMs ?? ``),
   ]
   if (
@@ -159,19 +151,6 @@ function hashConfig(c: McpServerConfig): string {
 
 function makeError(kind: McpToolError[`kind`], message: string): McpToolError {
   return { kind, message }
-}
-
-// Mirror of the redirect URI `createSdkOAuthProvider` builds. Used at
-// seed time to detect a cached DCR client that points at a different
-// URI than the one the SDK would use right now (e.g. across runtime
-// restarts where the port changed). Keep in sync with sdk-provider.ts.
-function redirectUriFor(
-  cfg: McpServerConfig,
-  publicUrl: string | undefined
-): string {
-  if (cfg.auth?.mode !== `authorizationCode`) return ``
-  if (cfg.auth.redirectUri) return cfg.auth.redirectUri
-  return `${(publicUrl ?? `http://localhost`).replace(/\/$/, ``)}/oauth/callback/${cfg.name}`
 }
 
 interface BuildTransportResult {
@@ -417,38 +396,16 @@ export function createRegistry(opts: RegistryOpts): Registry {
           toolCount: existing.tools.length,
         }
       }
+      // Replace the existing entry's value in place via `entries.set`
+      // below — Map preserves insertion order so the row keeps its
+      // position in `list()` snapshots.
       if (existing) {
         await Promise.resolve(existing.transport?.close()).catch(() => {})
-        // Don't delete — `entries.set(cfg.name, ...)` below replaces
-        // the value in place and preserves the Map's insertion order,
-        // so the entry keeps its position in subsequent `list()`
-        // snapshots. Deleting first would move it to the end on every
-        // reconfigure, hot-reload, or enable.
       }
 
-      // Seed the in-process auth cache from inline auth-config fields,
-      // and wire up the per-server hooks so refresh-token rotation /
-      // DCR completion fire the operator's persistence callbacks.
       if (cfg.auth?.mode === `authorizationCode`) {
-        // Detect redirect-URI drift between sessions. The runtime's
-        // `publicUrl` (and therefore the redirect_uri the SDK will
-        // send during DCR / authorize / token exchange) typically
-        // depends on the OS-assigned port — so a client cached in
-        // keychain on a previous run may have been registered against
-        // a different URI. The auth server will refuse the token
-        // exchange in that case (`invalid_grant`). Skip seeding the
-        // stale client + tokens; the next connect runs fresh DCR and
-        // the persistence hooks overwrite the keychain.
-        const wouldRedirectTo = redirectUriFor(cfg, opts.publicUrl)
-        const cachedClient = cfg.auth.client
-        const clientStale =
-          cachedClient !== undefined &&
-          (cachedClient.redirectUris === undefined ||
-            !cachedClient.redirectUris.includes(wouldRedirectTo))
-        if (!clientStale) {
-          if (cfg.auth.tokens) authStore.seedTokens(cfg.name, cfg.auth.tokens)
-          if (cfg.auth.client) authStore.seedClient(cfg.name, cfg.auth.client)
-        }
+        if (cfg.auth.tokens) authStore.seedTokens(cfg.name, cfg.auth.tokens)
+        if (cfg.auth.client) authStore.seedClient(cfg.name, cfg.auth.client)
         authStore.registerHooks(cfg.name, {
           onTokensChanged: cfg.auth.onTokensChanged,
           onClientRegistered: cfg.auth.onClientRegistered,
@@ -559,10 +516,6 @@ export function createRegistry(opts: RegistryOpts): Registry {
       if (!e) throw new Error(`unknown server "${name}"`)
       if (e.status !== `disabled`)
         return { state: `ready`, id: name, toolCount: e.tools.length }
-      // No `entries.delete(name)` — addServer replaces the value in
-      // place via `entries.set` and the Map preserves the original
-      // position. Deleting first would move the row to the end of the
-      // snapshot, which the renderer reflects as a visible reorder.
       return await registry.addServer(e.config)
     },
 
@@ -572,15 +525,8 @@ export function createRegistry(opts: RegistryOpts): Registry {
       if (e.config.auth?.mode !== `authorizationCode`) return
       if (e.status === `disabled`) return
       await Promise.resolve(e.transport?.close()).catch(() => {})
-      // Drop only the tokens + DCR client cache. Hooks stay registered
-      // so future refresh / re-DCR still hit the operator's persistence
-      // callbacks. Skipping the token re-seed is the whole point — we
-      // want the SDK to discover it has no credentials and produce a
-      // fresh authorize URL on the next connect.
+      // Drop only tokens + DCR client cache; hooks stay registered.
       authStore.clearCredentials(name)
-      // Make the in-progress flash visible: buildTransport may take a
-      // beat (RFC 9728 discovery / RFC 7591 DCR), and during that beat
-      // the entry is no longer connected.
       e.status = `connecting`
       e.tools = []
       e.capabilities = undefined
@@ -588,7 +534,6 @@ export function createRegistry(opts: RegistryOpts): Registry {
       e.error = undefined
       notify()
       const built = await buildTransport(e.config)
-      // Mutate in place so the snapshot never loses the entry.
       e.transport = built.transport
       e.error = built.error
       e.authUrl = built.authUrl
@@ -614,19 +559,12 @@ export function createRegistry(opts: RegistryOpts): Registry {
     },
 
     async close() {
-      // Close all transports in parallel — they're independent and
-      // each may take a beat (an HTTP transport flushes, a stdio
-      // child receives SIGTERM and we await its exit). Errors are
-      // swallowed because cleanup is best-effort.
       const transports = [...entries.values()]
         .map((e) => e.transport)
         .filter((t): t is NonNullable<typeof t> => Boolean(t))
       await Promise.all(
         transports.map((t) => Promise.resolve(t.close()).catch(() => {}))
       )
-      // Drop auth state for every server we knew about so a later
-      // addServer (in a fresh registry life cycle) doesn't pick up
-      // stale token/client material from this one.
       for (const name of [...entries.keys()]) {
         authStore.forget(name)
       }

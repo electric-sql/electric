@@ -116,18 +116,11 @@ const APP_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/icon.png`)
 const APP_DISPLAY_NAME = `Electric Agents`
 const MAX_CONNECTIONS_PER_HOST = `256`
 
-// Stable base for OAuth redirect URIs. Must NOT depend on the runtime's
-// listening port — the runtime uses `port: 0` so its real URL changes
-// every launch, but the redirect URI is registered with each MCP
-// server's auth provider via DCR (RFC 7591) and persisted in the
-// keychain. If it drifted, the cached DCR client info would be
-// invalidated on every restart and users would have to re-authorize.
-//
-// The form (`http://127.0.0.1:<fixed-port>`) is the loopback-literal
-// shape RFC 8252 §7.3 recommends — universally accepted by OAuth 2.1
-// servers, no DNS involved. The port is arbitrary and intentionally
-// outside the IANA registered range; nothing actually listens there.
-// Our BrowserWindow intercepts navigation by prefix before anything
+// Stable OAuth redirect base for MCP DCR (RFC 7591). The runtime
+// listens on an ephemeral port but the redirect URI must be constant
+// across restarts so the cached DCR client info stays valid. Loopback
+// literal form per RFC 8252 §7.3; nothing listens at this port — our
+// BrowserWindow intercepts the redirect by prefix before anything
 // reaches the network.
 const MCP_OAUTH_REDIRECT_BASE = `http://127.0.0.1:53117`
 
@@ -725,12 +718,6 @@ function broadcastMcpSnapshot(snapshot: RegistrySnapshot): void {
 async function handleAuthorizeUrl(url: string, server: string): Promise<void> {
   const reg = runtime?.mcpRegistry
   if (!reg) return
-  // Redirect URI the SDK registered with the auth server is built
-  // from `mcpOAuthRedirectBase` (passed to BuiltinAgentsServer) —
-  // we use the same base here so the BrowserWindow interceptor
-  // matches the URL the auth server redirects to. Stays stable
-  // across runtime restarts even though the runtime's listening
-  // port changes.
   const redirectUriPrefix = `${MCP_OAUTH_REDIRECT_BASE}/oauth/callback/${server}`
   try {
     const focused = BrowserWindow.getFocusedWindow() ?? undefined
@@ -766,16 +753,7 @@ async function restartRuntime(): Promise<void> {
     port: 0,
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
     extraMcpServers: settings.mcp?.servers,
-    // Desktop runs against a user-chosen workspace; loading
-    // `mcp.json` from it is the whole point of project scope.
     loadProjectMcpConfig: true,
-    // Stable, port-independent OAuth redirect base. The runtime
-    // listens on `port: 0` (so its actual URL changes per launch),
-    // but the OAuth callback URL must NOT — DCR registers it with
-    // the auth server and the cached client info would otherwise go
-    // stale every restart, forcing re-authorization. The desktop's
-    // BrowserWindow intercepts navigation to URIs starting with this
-    // base; nothing actually listens at the URL.
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
     openAuthorizeUrl: (url, server) => {
       void handleAuthorizeUrl(url, server)

@@ -315,8 +315,6 @@ export async function startBuiltinAgentsServer(
     host,
     port,
     workingDirectory: cwd,
-    // CLI invocation in a project directory: loading that project's
-    // `mcp.json` is the expected behaviour.
     loadProjectMcpConfig: true,
   })
 

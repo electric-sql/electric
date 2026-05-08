@@ -40,57 +40,30 @@ export interface BuiltinAgentsServerOptions {
   workingDirectory?: string
   mockStreamFn?: StreamFn
   webhookPath?: string
-  /**
-   * Forwarded to the embedded MCP registry. Invoked when an
-   * authorizationCode-flow server first needs the user to consent.
-   * The Electron desktop app sets this to "open a sandboxed
-   * BrowserWindow"; headless embedders can leave it undefined.
-   */
+  /** Invoked when an `authorizationCode` server needs user consent. */
   openAuthorizeUrl?: (url: string, server: string) => void
   /**
-   * MCP servers contributed by the embedder (e.g. desktop's
-   * `settings.json` `mcp.servers`). Always applied; merged with the
-   * project-scoped `mcp.json` if present, with `mcp.json` winning by
-   * name on conflict. Auto-wired with `keychainPersistence` for
-   * `authorizationCode` servers, same as `mcp.json` entries.
+   * MCP servers contributed by the embedder. Merged with `mcp.json`
+   * when `loadProjectMcpConfig` is set; on name conflict `mcp.json`
+   * wins. `authorizationCode` servers are wired to `keychainPersistence`.
    */
   extraMcpServers?: ReadonlyArray<McpServerConfig>
-  /**
-   * Optional callback invoked when applying an MCP config (initial
-   * boot or watcher reload) fails. Errors are always logged via
-   * `serverLog.error`; this callback is the embedder's hook for
-   * surfacing them programmatically — e.g. forwarding to a renderer
-   * over IPC so the desktop UI can show a banner. The callback runs
-   * after the catch, so per-server entry errors (which still appear
-   * in the registry snapshot) are unaffected.
-   */
+  /** Invoked when applying MCP config fails. Errors are always logged. */
   onConfigError?: (error: unknown) => void
   /**
-   * Base used to derive OAuth redirect URIs for `authorizationCode`
-   * MCP servers — full URI is `<base>/oauth/callback/<server-name>`.
-   * Defaults to `process.env.MCP_RUNTIME_PUBLIC_URL` or the runtime's
-   * own URL. Embedders that listen on an ephemeral port (the Electron
-   * desktop runs on `port: 0`) MUST set this to a stable value;
-   * otherwise the cached DCR client info goes stale every restart
-   * and users have to re-authorize on every launch. The runtime
-   * never hosts an HTTP listener at this URI — the embedder's
-   * BrowserWindow (or whatever drives the OAuth flow) intercepts
-   * the redirect before it hits the network.
+   * Base for OAuth redirect URIs — full URI is
+   * `<base>/oauth/callback/<server-name>`. Must be stable across
+   * restarts so DCR client info stays valid. The runtime never
+   * listens at this URI; the embedder intercepts the redirect.
+   * Defaults to the runtime's own listen URL.
    */
   mcpOAuthRedirectBase?: string
   /**
-   * Enable loading project-scoped `mcp.json` from `workingDirectory`.
-   * Defaults to `false`: stdio MCP servers spawn local commands, so
-   * picking a working directory should not auto-execute config from
-   * that directory. Embedders that want project config (the Electron
-   * desktop, the `electric-ax` CLI) opt in explicitly.
-   *
-   * - `true` — load `<workingDirectory>/mcp.json` (and watch it).
-   * - `string` — load that exact path instead.
-   * - `false` / `undefined` — do not read or watch any `mcp.json`;
-   *    only `extraMcpServers` is applied.
+   * Load `<workingDirectory>/mcp.json` (and watch it for changes).
+   * Off by default — stdio MCP servers can spawn local commands,
+   * so the embedder must opt in.
    */
-  loadProjectMcpConfig?: boolean | string
+  loadProjectMcpConfig?: boolean
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -127,12 +100,7 @@ export class BuiltinAgentsServer {
   private _mcpRegistry: McpRegistry | null = null
   private mcpWatcherCloser: (() => void) | null = null
   private mcpToolProviderName: string | null = null
-  // In-flight `applyMerged` promises. `stop()` awaits these so the
-  // registry isn't torn down while a config apply is mid-flight.
   private mcpApplyInFlight: Set<Promise<void>> = new Set()
-  // Latched once `stop()` starts so any debounced watcher reload
-  // that fires during teardown short-circuits instead of resurrecting
-  // transports against a registry that's about to clear.
   private mcpStopping = false
   readonly options: BuiltinAgentsServerOptions
 
@@ -140,11 +108,7 @@ export class BuiltinAgentsServer {
     this.options = options
   }
 
-  /**
-   * Read-only access to the embedded MCP registry. `null` until `start()`
-   * has run. The Electron desktop uses this to subscribe to state changes
-   * and forward them to renderer windows over IPC.
-   */
+  /** Embedded MCP registry. `null` until `start()` has run. */
   get mcpRegistry(): McpRegistry | null {
     return this._mcpRegistry
   }
@@ -205,43 +169,21 @@ export class BuiltinAgentsServer {
           ).toString()
 
           const publicUrl =
-            this.options.mcpOAuthRedirectBase ??
-            process.env.MCP_RUNTIME_PUBLIC_URL ??
-            this.publicBaseUrl
+            this.options.mcpOAuthRedirectBase ?? this.publicBaseUrl
 
-          // --- MCP wiring ---
-          // No credential store. The registry's private auth cache holds
-          // OAuth tokens for the lifetime of this process; cross-restart
-          // persistence is opted into per-server via keychainPersistence
-          // (or whatever the operator wires onto onTokensChanged) below.
           const mcpRegistry = createMcpRegistry({
             publicUrl,
             openAuthorizeUrl: this.options.openAuthorizeUrl,
           })
           this._mcpRegistry = mcpRegistry
-          // mcp.json is project-scoped and must be opted into. Stdio
-          // MCP servers spawn arbitrary local commands, so we don't
-          // auto-execute config from a working directory unless the
-          // embedder explicitly asked for it. The Electron desktop
-          // and the `electric-ax` CLI opt in; library embedders get
-          // the safer default of "extras only".
-          const loadProject = this.options.loadProjectMcpConfig
-          const mcpConfigPath: string | null =
-            typeof loadProject === `string`
-              ? loadProject
-              : loadProject === true
-                ? path.resolve(
-                    this.options.workingDirectory ?? process.cwd(),
-                    `mcp.json`
-                  )
-                : null
+          const mcpConfigPath = this.options.loadProjectMcpConfig
+            ? path.resolve(
+                this.options.workingDirectory ?? process.cwd(),
+                `mcp.json`
+              )
+            : null
           const extras = this.options.extraMcpServers ?? []
 
-          // Walks a config and, for every authorizationCode server,
-          // awaits keychainPersistence(server) and merges the returned
-          // auth-config slice (tokens / client / hooks) into the
-          // server's auth config. Tokens then survive process restarts
-          // via the OS keychain.
           const wirePersistence = async (
             cfg: McpConfig
           ): Promise<McpConfig> => {
@@ -263,12 +205,7 @@ export class BuiltinAgentsServer {
             return { ...cfg, servers }
           }
 
-          // Merge: embedder-provided extras + workspace mcp.json. On
-          // name conflict, mcp.json wins (project scope overrides
-          // global). Servers from both sides that don't conflict are
-          // applied together. `raw` is preserved when the workspace
-          // file contributed one — otherwise undefined; the registry
-          // does not look at `raw` during applyConfig.
+          // On name conflict between extras and mcp.json, mcp.json wins.
           const merge = (jsonCfg: McpConfig | null): McpConfig => {
             const jsonServers = jsonCfg?.servers ?? []
             const jsonNames = new Set(jsonServers.map((s) => s.name))
@@ -305,7 +242,6 @@ export class BuiltinAgentsServer {
           if (mcpConfigPath) {
             try {
               const cfg = await loadMcpConfig(mcpConfigPath, process.env)
-              // Fire-and-forget: HTTPS discovery + DCR can take seconds.
               void applyMerged(cfg)
             } catch (err) {
               if ((err as NodeJS.ErrnoException).code !== `ENOENT`) throw err
@@ -337,13 +273,6 @@ export class BuiltinAgentsServer {
             }
             void applyMerged(null)
           }
-
-          // No HTTP admin / OAuth-callback surface anymore. The browser
-          // OAuth flow is hosted by the Electron desktop (which intercepts
-          // the redirect_uri navigation in a sandboxed BrowserWindow);
-          // headless embedders that hosted this BuiltinAgentsServer
-          // directly only see api-key / clientCredentials / pre-fed-token
-          // flows, none of which need an HTTP listener.
 
           this.mcpToolProviderName = `mcp`
           registerToolProvider({
@@ -438,16 +367,9 @@ export class BuiltinAgentsServer {
       this.bootstrap = null
     }
 
-    // MCP teardown:
-    //   1. Latch `mcpStopping` so any debounced watcher reload that
-    //      runs during shutdown short-circuits before touching the
-    //      registry.
-    //   2. Stop the file watcher.
-    //   3. Drain in-flight `applyMerged` promises so the registry
-    //      isn't cleared underneath an active applyConfig.
-    //   4. Unregister the tool provider so wake-time composition
-    //      stops resolving against this registry.
-    //   5. Close registry transports last.
+    // Order: latch stopping flag, close watcher, drain in-flight
+    // applies, unregister provider, close registry. Each step
+    // protects the next from acting on torn-down state.
     this.mcpStopping = true
 
     if (this.mcpWatcherCloser) {

@@ -118,14 +118,7 @@ function ServerEntry({
         control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
       />
 
-      {/*
-        Always-rendered info line. The content swaps with status, but
-        the slot itself is permanent so the row's height doesn't change
-        as the entry transitions through connecting → ready / error /
-        authenticating / disabled. Without this, the chevron toggle
-        below mounted/unmounted on every reload and the row visibly
-        reflowed.
-      */}
+      {/* Status-line slot — always rendered so row height stays stable. */}
       <div style={{ padding: `0 16px 12px` }}>
         {server.status === `error` && server.error ? (
           <Text size={1} tone="danger">
@@ -202,14 +195,6 @@ function ServerEntry({
           )}
       </div>
 
-      {/*
-        Action buttons. For non-disabled states we render the same set
-        of buttons every time and only toggle their `disabled` flag, so
-        the row's height stays stable across connecting → ready / error
-        / authenticating transitions. When the server is disabled the
-        Authorize/Reconnect buttons would be permanently dead — hide
-        them and surface Enable as the sole action.
-      */}
       <div
         style={{
           display: `flex`,

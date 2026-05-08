@@ -272,35 +272,4 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     expect(server.mcpRegistry).not.toBeNull()
     await waitForServers(server, [`teardown`])
   })
-
-  it(`accepts an explicit mcp.json path via loadProjectMcpConfig`, async () => {
-    // String form: load from a specific path, not <workingDirectory>/mcp.json.
-    const altDir = await fs.mkdtemp(path.join(os.tmpdir(), `agents-mcp-alt-`))
-    try {
-      const altPath = path.join(altDir, `custom.json`)
-      await fs.writeFile(
-        altPath,
-        JSON.stringify({
-          servers: {
-            'from-explicit-path': {
-              transport: `http`,
-              url: `https://example.invalid/mcp`,
-              auth: { mode: `apiKey`, key: `k`, headerName: `X-Api-Key` },
-            },
-          },
-        })
-      )
-      server = new BuiltinAgentsServer({
-        agentServerUrl: mockServer.url,
-        port: 0,
-        mockStreamFn,
-        workingDirectory: workspace,
-        loadProjectMcpConfig: altPath,
-      })
-      await server.start()
-      await waitForServers(server, [`from-explicit-path`])
-    } finally {
-      await fs.rm(altDir, { recursive: true, force: true }).catch(() => {})
-    }
-  })
 })

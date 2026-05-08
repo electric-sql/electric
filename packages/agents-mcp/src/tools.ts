@@ -4,7 +4,8 @@ export const MCP_TOOLS_SENTINEL = Symbol.for(
 
 export interface McpToolsSentinel {
   [MCP_TOOLS_SENTINEL]: true
-  allowlist: string[] | `*`
+  /** `undefined` means every registered server. */
+  allowlist?: string[]
 }
 
 export function isMcpToolsSentinel(x: unknown): x is McpToolsSentinel {
@@ -17,25 +18,21 @@ export function isMcpToolsSentinel(x: unknown): x is McpToolsSentinel {
 
 export const mcp = {
   /**
-   * Returns a sentinel array suitable for `tools: [...mcp.tools(['sentry'])]`
-   * in an entity-type definition. Resolution happens at wake time via the
-   * runtime's tool-provider hook.
-   *
-   * - `mcp.tools()` — every registered server (default).
-   * - `mcp.tools(['sentry', 'github'])` — only the named servers.
-   * - `mcp.tools('*')` — explicit form of the default; kept for
-   *   back-compat with earlier callers.
+   * Returns a sentinel array for `tools: [...mcp.tools()]`.
+   * Resolution happens at wake time via the runtime's tool-provider
+   * hook. Pass an array to restrict to specific servers; omit for
+   * every registered server.
    */
-  tools(allowlist?: string[] | `*`): McpToolsSentinel[] {
-    return [{ [MCP_TOOLS_SENTINEL]: true, allowlist: allowlist ?? `*` }]
+  tools(allowlist?: string[]): McpToolsSentinel[] {
+    return [{ [MCP_TOOLS_SENTINEL]: true, allowlist }]
   },
 }
 
 export function filterByAllowlist(
   serverNames: string[],
-  allowlist: string[] | `*`
+  allowlist: string[] | undefined
 ): string[] {
-  if (allowlist === `*`) return [...serverNames]
+  if (allowlist === undefined) return [...serverNames]
   const set = new Set(allowlist)
   return serverNames.filter((n) => set.has(n))
 }
