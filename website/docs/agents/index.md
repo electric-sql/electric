@@ -135,6 +135,8 @@ await ctx.agent.run()
 
 Functions the LLM can call during the agent loop. Each tool has a name, description, parameters (defined with [TypeBox](https://github.com/sinclairzx81/typebox) or any [Standard Schema](https://standardschema.dev) validator), and an execute function. Tools run in the handler's context and have access to the entity's state and coordination primitives. See [Defining tools](/docs/agents/usage/defining-tools) and the [`AgentTool` reference](/docs/agents/reference/agent-tool).
 
+External tools, resources, and prompts can also be loaded from [Model Context Protocol](https://modelcontextprotocol.io) servers — declared in `mcp.json`, the desktop app's `settings.json`, or programmatically. See [MCP servers](/docs/agents/usage/mcp-servers).
+
 ```ts
 const searchKbTool: AgentTool = {
   name: "search_kb",

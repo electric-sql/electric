@@ -315,6 +315,7 @@ export async function startBuiltinAgentsServer(
     host,
     port,
     workingDirectory: cwd,
+    loadProjectMcpConfig: true,
   })
 
   await server.start()

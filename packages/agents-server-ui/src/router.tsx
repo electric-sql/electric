@@ -43,12 +43,14 @@ import {
 import { GeneralPage } from './components/settings/pages/GeneralPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
 import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
+import { McpServersPage } from './components/settings/pages/McpServersPage'
 import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `general`,
   `appearance`,
   `local-runtime`,
+  `mcp-servers`,
 ]
 
 function RootLayout(): React.ReactElement {
@@ -381,6 +383,8 @@ function SettingsCategoryPage(): React.ReactElement {
       return <AppearancePage />
     case `local-runtime`:
       return <LocalRuntimePage />
+    case `mcp-servers`:
+      return <McpServersPage />
     case `general`:
     default:
       return <GeneralPage />

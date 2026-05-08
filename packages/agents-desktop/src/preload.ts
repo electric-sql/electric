@@ -174,6 +174,33 @@ const api = {
     ipcRenderer.on(`desktop:command`, listener)
     return () => ipcRenderer.removeListener(`desktop:command`, listener)
   },
+  // ── MCP registry surface ────────────────────────────────────────
+  // Push-based view of the embedded BuiltinAgentsServer's MCP registry.
+  // `getSnapshot()` returns the most recent snapshot (or an empty list
+  // if the runtime isn't up yet) so the renderer can render before the
+  // first push event arrives.
+  mcp: {
+    getSnapshot: (): Promise<{ seq: number; servers: Array<unknown> }> =>
+      ipcRenderer.invoke(`desktop:mcp-snapshot`),
+    onState: (
+      callback: (snapshot: { seq: number; servers: Array<unknown> }) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        snapshot: { seq: number; servers: Array<unknown> }
+      ) => callback(snapshot)
+      ipcRenderer.on(`desktop:mcp-state`, listener)
+      return () => ipcRenderer.removeListener(`desktop:mcp-state`, listener)
+    },
+    authorize: (name: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-authorize`, name),
+    reconnect: (name: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-reconnect`, name),
+    disable: (name: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-disable`, name),
+    enable: (name: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-enable`, name),
+  },
 }
 
 contextBridge.exposeInMainWorld(`electronAPI`, api)

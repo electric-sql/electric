@@ -228,3 +228,6 @@ export type {
   RuntimeHandlerConfig,
   RuntimeHandlerResult,
 } from './create-handler'
+
+export { registerToolProvider, unregisterToolProvider } from './tool-providers'
+export type { ToolProviderEntry } from './tool-providers'

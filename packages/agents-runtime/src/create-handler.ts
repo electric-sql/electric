@@ -77,6 +77,17 @@ export interface RuntimeRouterConfig {
   onWakeError?: (error: Error) => boolean | void
   /** Max number of concurrent entity-type registrations (default: 8). */
   registrationConcurrency?: number
+  /**
+   * Public URL of this runtime, forwarded to the agents-server so it can be
+   * included in GET /api/runtimes. If omitted the runtime is registered but
+   * excluded from the public runtimes list.
+   */
+  publicUrl?: string
+  /**
+   * Human-readable name for this runtime instance. Defaults to "default".
+   * Used as the key for /api/runtimes de-duplication (last-write-wins).
+   */
+  name?: string
 }
 
 export interface RuntimeRouter {
@@ -152,6 +163,8 @@ export function createRuntimeRouter(
     heartbeatInterval,
     createElectricTools,
     registrationConcurrency,
+    publicUrl,
+    name: runtimeName,
   } = normalized
 
   const wakeConfig: ProcessWakeConfig = {
@@ -401,6 +414,11 @@ export function createRuntimeRouter(
         body.serve_endpoint = serveEndpoint
       }
 
+      if (publicUrl !== undefined) {
+        body.public_url = publicUrl
+      }
+      body.runtime_name = runtimeName ?? `default`
+
       const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
         method: `POST`,
         headers: { 'content-type': `application/json` },
@@ -542,6 +560,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
   heartbeatInterval?: number
   createElectricTools?: RuntimeRouterConfig[`createElectricTools`]
   registrationConcurrency?: number
+  publicUrl?: string
+  name?: string
 } {
   const serveEndpoint = config.serveEndpoint ?? config.handlerUrl
   const webhookPath =
@@ -557,6 +577,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     heartbeatInterval: config.heartbeatInterval,
     createElectricTools: config.createElectricTools,
     registrationConcurrency: config.registrationConcurrency,
+    publicUrl: config.publicUrl,
+    name: config.name,
   }
 }
 

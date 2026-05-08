@@ -20,7 +20,7 @@ import {
   context as otelContext,
   trace,
 } from '@opentelemetry/api'
-import { sendJsonError } from './electric-agents-http.js'
+import { sendJson, sendJsonError } from './electric-agents-http.js'
 import { PostgresRegistry } from './electric-agents-registry.js'
 import { WakeRegistry } from './wake-registry.js'
 import { createDb, runMigrations } from './db/index.js'
@@ -33,6 +33,7 @@ import { SchemaValidator } from './electric-agents-schema-validator.js'
 import { ElectricAgentsManager } from './electric-agents-manager.js'
 import { ElectricAgentsRoutes } from './electric-agents-routes.js'
 import { ElectricAgentsEntityTypeRoutes } from './electric-agents-entity-type-routes.js'
+import { createRuntimeRegistry } from './runtime-registry.js'
 import { Scheduler, isPermanentElectricAgentsError } from './scheduler.js'
 import { StreamClient } from './stream-client.js'
 import { serverLog } from './log.js'
@@ -44,6 +45,7 @@ import {
   applyElectricUrlQueryParams,
   electricUrlWithPath,
 } from './electric-url.js'
+import type { RuntimeRegistry } from './runtime-registry.js'
 import type { WakeRegistration } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
@@ -184,6 +186,7 @@ export class ElectricAgentsServer {
   private electricAgentsRoutes: ElectricAgentsRoutes | null = null
   private electricAgentsEntityTypeRoutes: ElectricAgentsEntityTypeRoutes | null =
     null
+  private runtimeRegistry: RuntimeRegistry = createRuntimeRegistry()
   private registry: PostgresRegistry | null = null
   private pgDb: DrizzleDB | null = null
   private pgClient: PgClient | null = null
@@ -440,7 +443,10 @@ export class ElectricAgentsServer {
             }
           )
           this.electricAgentsEntityTypeRoutes =
-            new ElectricAgentsEntityTypeRoutes(this.electricAgentsManager)
+            new ElectricAgentsEntityTypeRoutes(
+              this.electricAgentsManager,
+              this.runtimeRegistry
+            )
 
           if (this.options.mockStreamFn) {
             this.mockAgentBootstrap = createMockAgentBootstrap({
@@ -690,6 +696,14 @@ export class ElectricAgentsServer {
     if (path === `/_electric/health` && method === `GET`) {
       res.writeHead(200, { 'content-type': `application/json` })
       res.end(JSON.stringify({ status: `ok` }))
+      return
+    }
+
+    if (path === `/api/runtimes` && method === `GET`) {
+      sendJson(res, 200, {
+        runtimes: this.runtimeRegistry.list(),
+        experimental: true,
+      })
       return
     }
 
