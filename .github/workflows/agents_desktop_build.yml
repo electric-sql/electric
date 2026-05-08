@@ -67,17 +67,17 @@ jobs:
             git tag -f "$RELEASE_TAG" "$COMMIT_SHA"
             git push origin "refs/tags/${RELEASE_TAG}" --force
 
-            cat > release-notes.md <<EOF
-          Canary build for Electric Agents Desktop.
-
-          - Source commit: ${COMMIT_SHA}
-          - Workflow run: ${RUN_URL}
-          - Build timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          - Desktop package version: ${VERSION}
-          - Signed/notarized: ${SIGN}
-
-          Canary builds are pre-release quality and may be unsigned.
-          EOF
+            {
+              echo "Canary build for Electric Agents Desktop."
+              echo
+              echo "- Source commit: ${COMMIT_SHA}"
+              echo "- Workflow run: ${RUN_URL}"
+              echo "- Build timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "- Desktop package version: ${VERSION}"
+              echo "- Signed/notarized: ${SIGN}"
+              echo
+              echo "Canary builds are pre-release quality and may be unsigned."
+            } > release-notes.md
 
             if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
               gh release edit "$RELEASE_TAG" \
