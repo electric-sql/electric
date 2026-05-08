@@ -1,0 +1,31 @@
+name: Agents Desktop PR
+
+on:
+  pull_request:
+    paths:
+      - 'packages/agents-desktop/**'
+      - 'packages/agents-server-ui/**'
+      - 'packages/agents/**'
+      - 'packages/agents-runtime/**'
+      - '.github/workflows/agents_desktop_*.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/agents_desktop_build.yml
+    with:
+      channel: pr
+      version: pr-${{ github.event.pull_request.number || github.run_number }}-${{ github.sha }}
+      git_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      publish: false
+      sign: false

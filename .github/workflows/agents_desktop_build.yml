@@ -1,0 +1,245 @@
+name: Agents Desktop Build
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      git_ref:
+        required: true
+        type: string
+      publish:
+        required: true
+        type: boolean
+      sign:
+        required: true
+        type: boolean
+      release_tag:
+        required: false
+        type: string
+        default: ''
+      release_name:
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: ${{ inputs.publish }}
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref }}
+
+      - name: Create or update GitHub release
+        if: ${{ inputs.publish }}
+        shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SIGN: ${{ inputs.sign }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$RELEASE_TAG" ]]; then
+            echo "release_tag is required when publish is true" >&2
+            exit 1
+          fi
+
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          if [[ "$CHANNEL" == "canary" ]]; then
+            git tag -f "$RELEASE_TAG" "$COMMIT_SHA"
+            git push origin "refs/tags/${RELEASE_TAG}" --force
+
+            cat > release-notes.md <<EOF
+          Canary build for Electric Agents Desktop.
+
+          - Source commit: ${COMMIT_SHA}
+          - Workflow run: ${RUN_URL}
+          - Build timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          - Desktop package version: ${VERSION}
+          - Signed/notarized: ${SIGN}
+
+          Canary builds are pre-release quality and may be unsigned.
+          EOF
+
+            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+              gh release edit "$RELEASE_TAG" \
+                --title "$RELEASE_NAME" \
+                --notes-file release-notes.md \
+                --prerelease
+            else
+              gh release create "$RELEASE_TAG" \
+                --target "$COMMIT_SHA" \
+                --title "$RELEASE_NAME" \
+                --notes-file release-notes.md \
+                --prerelease
+            fi
+          else
+            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+              gh release edit "$RELEASE_TAG" --title "$RELEASE_NAME"
+            else
+              gh release create "$RELEASE_TAG" \
+                --target "$COMMIT_SHA" \
+                --title "$RELEASE_NAME" \
+                --notes "Desktop artifacts for Electric Agents ${VERSION}."
+            fi
+          fi
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: prepare-release
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            id: macos-arm64
+            runs_on: macos-14
+            builder_args: --mac --arm64
+          - name: macOS Intel
+            id: macos-x64
+            runs_on: macos-13
+            builder_args: --mac --x64
+          - name: Windows x64
+            id: windows-x64
+            runs_on: windows-latest
+            builder_args: --win --x64
+          - name: Linux x64
+            id: linux-x64
+            runs_on: ubuntu-latest
+            builder_args: --linux --x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck desktop app
+        run: pnpm --filter @electric-ax/agents-desktop typecheck
+
+      - name: Build desktop app
+        run: pnpm --filter @electric-ax/agents-desktop build
+
+      - name: Build desktop icons
+        run: pnpm --filter @electric-ax/agents-desktop build:icons
+
+      - name: Rebuild native modules
+        run: pnpm --filter @electric-ax/agents-desktop rebuild:native
+
+      - name: Package desktop app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.sign && 'true' || 'false' }}
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @electric-ax/agents-desktop exec electron-builder ${{ matrix.builder_args }} --publish never
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electric-agents-desktop-${{ inputs.channel }}-${{ matrix.id }}
+          retention-days: ${{ inputs.channel == 'pr' && 7 || 30 }}
+          if-no-files-found: error
+          path: |
+            packages/agents-desktop/release/*.dmg
+            packages/agents-desktop/release/*.zip
+            packages/agents-desktop/release/*.exe
+            packages/agents-desktop/release/*.AppImage
+            packages/agents-desktop/release/*.deb
+            packages/agents-desktop/release/*.blockmap
+            packages/agents-desktop/release/latest*.yml
+            packages/agents-desktop/release/latest*.yaml
+
+      - name: Prepare release assets
+        if: ${{ inputs.publish }}
+        shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          MATRIX_ID: ${{ matrix.id }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          mkdir -p packages/agents-desktop/publish-assets
+
+          copy_first() {
+            local destination="$1"
+            shift
+
+            for file in "$@"; do
+              if [[ -f "$file" ]]; then
+                cp "$file" "packages/agents-desktop/publish-assets/${destination}"
+                return
+              fi
+            done
+
+            echo "No asset found for ${destination}" >&2
+            exit 1
+          }
+
+          if [[ "$CHANNEL" == "canary" ]]; then
+            case "$MATRIX_ID" in
+              macos-arm64)
+                copy_first "Electric-Agents-canary-mac-arm64.dmg" packages/agents-desktop/release/*.dmg
+                copy_first "Electric-Agents-canary-mac-arm64.zip" packages/agents-desktop/release/*.zip
+                ;;
+              macos-x64)
+                copy_first "Electric-Agents-canary-mac-x64.dmg" packages/agents-desktop/release/*.dmg
+                copy_first "Electric-Agents-canary-mac-x64.zip" packages/agents-desktop/release/*.zip
+                ;;
+              windows-x64)
+                copy_first "Electric-Agents-canary-windows-x64.exe" packages/agents-desktop/release/*.exe
+                ;;
+              linux-x64)
+                copy_first "Electric-Agents-canary-linux-x64.AppImage" packages/agents-desktop/release/*.AppImage
+                copy_first "Electric-Agents-canary-linux-x64.deb" packages/agents-desktop/release/*.deb
+                ;;
+            esac
+          else
+            cp packages/agents-desktop/release/*.{dmg,zip,exe,AppImage,deb,blockmap,yml,yaml} \
+              packages/agents-desktop/publish-assets/ 2>/dev/null || true
+          fi
+
+          assets=(packages/agents-desktop/publish-assets/*)
+          if (( ${#assets[@]} == 0 )); then
+            echo "No publish assets were prepared" >&2
+            exit 1
+          fi
+
+      - name: Upload assets to GitHub release
+        if: ${{ inputs.publish }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" packages/agents-desktop/publish-assets/* --clobber

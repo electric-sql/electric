@@ -21,6 +21,8 @@ jobs:
       published: ${{ steps.changesets.outputs.published }}
       sync_service_release_tag: ${{ steps.sync_service_release_tag.outputs.tag }}
       agent_server_release_tag: ${{ steps.agent_server_release_tag.outputs.tag }}
+      desktop_release_version: ${{ steps.desktop_release.outputs.version }}
+      desktop_release_tag: ${{ steps.desktop_release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,6 +65,16 @@ jobs:
           PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
           TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agents-server") | .name + "@" + .version')
           echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
+      - name: Capture the new agents-desktop release as an output (if any)
+        id: desktop_release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
+          VERSION=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agents-desktop") | .version' | head -n 1)
+          if [ -n "$VERSION" ]; then
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=@electric-ax/agents-desktop@$VERSION" >> "$GITHUB_OUTPUT"
+          fi
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
@@ -88,6 +100,22 @@ jobs:
     secrets: inherit
     with:
       git_ref: ${{ needs.changesets.outputs.agent_server_release_tag }}
+
+  publish-agents-desktop:
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.desktop_release_tag != '' }}
+    uses: ./.github/workflows/agents_desktop_build.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      channel: stable
+      version: ${{ needs.changesets.outputs.desktop_release_version }}
+      git_ref: ${{ needs.changesets.outputs.desktop_release_tag }}
+      publish: true
+      sign: false
+      release_tag: ${{ needs.changesets.outputs.desktop_release_tag }}
+      release_name: Electric Agents Desktop v${{ needs.changesets.outputs.desktop_release_version }}
 
   update-cloud:
     name: Update Electric version used by Cloud
