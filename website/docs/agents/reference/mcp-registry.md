@@ -179,7 +179,7 @@ function createRegistry(opts: RegistryOpts): Registry
 
 | Field              | Description                                                                                                                          |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `publicUrl`        | Base URL used to construct the OAuth `redirect_uri` sentinel. The desktop sets this to the runtime's local URL; it never receives an actual HTTP request — see the OAuth callback section of the usage guide. |
+| `publicUrl`        | Base URL used to construct the OAuth `redirect_uri` (full URI is `<publicUrl>/oauth/callback/<server-name>`). MUST be stable across restarts — DCR registers it with the auth server and persists it in the keychain, so a value that drifts forces re-authorization on every launch. Embedders that listen on an ephemeral port should pass a fixed loopback literal (the desktop uses `http://127.0.0.1:53117`); nothing actually listens at the URL — the embedder's BrowserWindow intercepts the redirect by prefix. |
 | `openAuthorizeUrl` | Hook invoked when an `authorizationCode` server first needs consent. Receives the SDK-generated authorize URL. The desktop opens it in a sandboxed `BrowserWindow`; headless embedders can read the URL from the `authenticating` envelope of `addServer` and surface it themselves. |
 
 ## See also

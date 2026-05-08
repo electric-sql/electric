@@ -113,8 +113,21 @@ function ServerEntry({
   return (
     <>
       <SettingsRow
-        label={server.name}
-        description={metaPieces.join(` · `)}
+        label={
+          <span
+            style={{
+              display: `inline-flex`,
+              alignItems: `baseline`,
+              gap: 8,
+              flexWrap: `wrap`,
+            }}
+          >
+            <span>{server.name}</span>
+            <Text size={1} tone="muted">
+              {metaPieces.join(` · `)}
+            </Text>
+          </span>
+        }
         control={<Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>}
       />
 

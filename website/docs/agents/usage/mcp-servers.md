@@ -58,7 +58,7 @@ Static secrets (`apiKey.key`, `clientCredentials.clientId` / `clientSecret`) are
 
 For static, project-scoped configuration the runtime can load `mcp.json` from the configured `workingDirectory`, watch it for changes, and hot-reload adds, removes, and reconfigurations through `applyConfig` — exactly as if you'd called the API yourself. In-flight tool calls finish on the old config; new calls pick up the new one.
 
-`mcp.json` loading is opt-in: stdio MCP servers spawn local commands, so picking a working directory must not auto-execute config from it. The Electron desktop and the `electric-ax` CLI opt in by default. Library embedders that construct `BuiltinAgentsServer` directly enable it via `loadProjectMcpConfig: true` (use the `<workingDirectory>/mcp.json` path) or `loadProjectMcpConfig: '/abs/path/to/mcp.json'` (use a specific file).
+`mcp.json` loading is opt-in: stdio MCP servers spawn local commands, so picking a working directory must not auto-execute config from it. The Electron desktop and the `electric-ax` CLI opt in by default. Library embedders that construct `BuiltinAgentsServer` directly enable it with `loadProjectMcpConfig: true` (which loads `<workingDirectory>/mcp.json` and watches it).
 
 `mcp.json` carries structural shape only — no secrets:
 
@@ -221,6 +221,8 @@ The MCP SDK handles PKCE, RFC 7591 Dynamic Client Registration, RFC 9728 Protect
 
 Subsequent restarts re-seed from persisted tokens; refresh-token rotation happens silently on every call.
 
+The redirect URI registered with the auth server during DCR is `<mcpOAuthRedirectBase>/oauth/callback/<server-name>`. Embedders that listen on an ephemeral port (the desktop runs on `port: 0`) MUST pass a stable `mcpOAuthRedirectBase` to `BuiltinAgentsServer` — otherwise the cached DCR client info goes stale on every restart and users have to re-authorize every launch. The desktop sets it to a fixed loopback literal (`http://127.0.0.1:53117`) per RFC 8252 §7.3; nothing actually listens at the port. Headless embedders that use port 0 with persisted credentials need to do the same.
+
 #### Persistence helpers
 
 `@electric-ax/agents-mcp` ships two opt-in helpers that produce the auth-config slice:
@@ -311,7 +313,7 @@ Editing `mcp.json` (or calling `applyConfig` programmatically) takes effect imme
 
 Calling `Registry.reauthorize(name)` forces a fresh OAuth flow without removing the entry from the registry. The transport is closed, tokens are dropped from the in-memory cache (hooks remain registered), and the SDK produces a new authorize URL that fires through the `openAuthorizeUrl` hook. The entry stays in every snapshot throughout, so subscribers don't see it disappear and reappear.
 
-The desktop's **Authorize** button (visible whenever a server is in `authenticating`) routes through this method. There's no manual "force a fresh token" affordance for healthy servers — the registry reauthorizes automatically when the SDK can't refresh the existing one.
+The desktop's **Authorize** button routes through this method. It's enabled when the server is in `authenticating` (initial sign-in) or `error` (recover from a stale-token state). Once the server is `ready` the same button label switches to **Re-authorize** and forces a fresh OAuth flow — useful when refresh-token rotation has stopped working and you want to re-bootstrap without removing the server.
 
 ### Per-call timeouts
 
