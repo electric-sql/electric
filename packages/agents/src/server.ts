@@ -66,6 +66,19 @@ export interface BuiltinAgentsServerOptions {
    */
   onConfigError?: (error: unknown) => void
   /**
+   * Base used to derive OAuth redirect URIs for `authorizationCode`
+   * MCP servers — full URI is `<base>/oauth/callback/<server-name>`.
+   * Defaults to `process.env.MCP_RUNTIME_PUBLIC_URL` or the runtime's
+   * own URL. Embedders that listen on an ephemeral port (the Electron
+   * desktop runs on `port: 0`) MUST set this to a stable value;
+   * otherwise the cached DCR client info goes stale every restart
+   * and users have to re-authorize on every launch. The runtime
+   * never hosts an HTTP listener at this URI — the embedder's
+   * BrowserWindow (or whatever drives the OAuth flow) intercepts
+   * the redirect before it hits the network.
+   */
+  mcpOAuthRedirectBase?: string
+  /**
    * Enable loading project-scoped `mcp.json` from `workingDirectory`.
    * Defaults to `false`: stdio MCP servers spawn local commands, so
    * picking a working directory should not auto-execute config from
@@ -191,7 +204,9 @@ export class BuiltinAgentsServer {
           ).toString()
 
           const publicUrl =
-            process.env.MCP_RUNTIME_PUBLIC_URL ?? this.publicBaseUrl
+            this.options.mcpOAuthRedirectBase ??
+            process.env.MCP_RUNTIME_PUBLIC_URL ??
+            this.publicBaseUrl
 
           // --- MCP wiring ---
           // No credential store. The registry's private auth cache holds
