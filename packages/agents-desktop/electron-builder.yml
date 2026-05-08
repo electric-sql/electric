@@ -3,6 +3,7 @@ productName: Electric Agents
 artifactName: Electric-Agents-${version}-${os}-${arch}.${ext}
 
 directories:
+  buildResources: build
   output: release
 
 files:
@@ -30,6 +31,7 @@ mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false
+  icon: build/icons/mac/icon.icns
   target:
     - target: dmg
       arch:
@@ -41,6 +43,7 @@ mac:
         - arm64
 
 win:
+  icon: build/icons/win/icon.ico
   target:
     - target: nsis
       arch:
@@ -48,6 +51,7 @@ win:
 
 linux:
   category: Development
+  icon: build/icons/png
   target:
     - target: AppImage
       arch:

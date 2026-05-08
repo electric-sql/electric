@@ -96,7 +96,9 @@ const TRAY_ICON_2X_PATH = path.join(
   `assets`,
   `trayTemplate@2x.png`
 )
-const APP_ICON_PATH = path.join(RESOURCE_DIR, `assets`, `icon.png`)
+const APP_ICON_FILE =
+  process.platform === `darwin` ? `icon-mac.png` : `icon.png`
+const APP_ICON_PATH = path.join(RESOURCE_DIR, `assets`, APP_ICON_FILE)
 const APP_DISPLAY_NAME = `Electric Agents`
 const MAX_CONNECTIONS_PER_HOST = `256`
 
