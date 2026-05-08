@@ -76,6 +76,7 @@ Return raw JSON, no markdown fences.`
 
   const text = await completeWithLowCostModel({
     purpose: `skill metadata extraction`,
+    systemPrompt: `Extract metadata from skill documents. Return only valid JSON that matches the requested schema.`,
     prompt,
     maxTokens: 256,
     log: (message) => serverLog.info(message),

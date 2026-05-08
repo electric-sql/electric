@@ -40,6 +40,7 @@ function createPiRunnerExtractor(opts: {
       log: opts.log,
       logPrefix: opts.logPrefix,
       purpose: `URL extraction`,
+      systemPrompt: `Extract the requested information from the page content. Return only the extracted content, without commentary about the extraction process.`,
       prompt: `${prompt}\n\n<page_content>\n${text}\n</page_content>`,
       maxTokens: 2048,
     })
