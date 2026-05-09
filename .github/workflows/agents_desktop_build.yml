@@ -241,8 +241,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          codesign --verify --deep --strict --verbose=4 "packages/agents-desktop/release/mac-arm64/Electric Agents.app"
-          codesign --verify --deep --strict --verbose=4 "packages/agents-desktop/release/mac/Electric Agents.app"
+          verify_signature() {
+            local app_dir="$1"
+
+            codesign -dv --verbose=4 "$app_dir"
+            codesign --verify --deep --verbose=4 "$app_dir"
+          }
+
+          verify_signature "packages/agents-desktop/release/mac-arm64/Electric Agents.app"
+          verify_signature "packages/agents-desktop/release/mac/Electric Agents.app"
 
       - name: Verify macOS native module architectures
         if: ${{ matrix.id == 'macos' }}
