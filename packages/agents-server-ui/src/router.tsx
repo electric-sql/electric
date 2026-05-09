@@ -36,6 +36,7 @@ import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
 import { ApiKeysModal } from './components/ApiKeysModal'
 import { DesktopTitleBar } from './components/DesktopTitleBar'
+import { TitlebarControls } from './components/TitlebarControls'
 import {
   SettingsSidebar,
   type SettingsCategoryId,
@@ -70,24 +71,34 @@ function RootLayout(): React.ReactElement {
 function RootShell(): React.ReactElement {
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
-  const { collapsed, toggle } = useSidebarCollapsed()
+  const {
+    collapsed,
+    animating: sidebarAnimating,
+    toggle,
+  } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
   const { openFindForTile, findNextInTile, findPreviousInTile } =
     usePaneFindCommands()
+  const nativeMenuHandlesAppHotkeys =
+    typeof window !== `undefined` && Boolean(window.electronAPI)
 
-  useHotkey(`mod+b`, toggle)
-  useHotkey(`mod+k`, (e) => {
-    e.preventDefault()
-    search.toggle()
-  })
+  useHotkey(`mod+b`, toggle, { disabled: nativeMenuHandlesAppHotkeys })
+  useHotkey(
+    `mod+k`,
+    (e) => {
+      e.preventDefault()
+      search.toggle()
+    },
+    { disabled: nativeMenuHandlesAppHotkeys }
+  )
   useHotkey(
     `mod+f`,
     (e) => {
       e.preventDefault()
       openFindForTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   useHotkey(
     `mod+g`,
@@ -95,7 +106,7 @@ function RootShell(): React.ReactElement {
       e.preventDefault()
       findNextInTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   useHotkey(
     `mod+shift+g`,
@@ -103,7 +114,7 @@ function RootShell(): React.ReactElement {
       e.preventDefault()
       findPreviousInTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   // New session: bind both ⌘N / Ctrl+N (works in Electron) and
   // ⌘⇧O / Ctrl+Shift+O (works in browsers — `⌘N` is reserved by
@@ -119,16 +130,20 @@ function RootShell(): React.ReactElement {
   const openNewSession = useCallback(() => {
     navigate({ to: `/` })
   }, [navigate])
-  useHotkey(`mod+n`, (e) => {
-    e.preventDefault()
-    openNewSession()
-  })
+  useHotkey(
+    `mod+n`,
+    (e) => {
+      e.preventDefault()
+      openNewSession()
+    },
+    { disabled: nativeMenuHandlesAppHotkeys }
+  )
   useHotkey(`mod+shift+o`, (e) => {
     e.preventDefault()
     openNewSession()
   })
 
-  useWorkspaceHotkeys()
+  useWorkspaceHotkeys({ disabled: nativeMenuHandlesAppHotkeys })
   useWorkspacePersistence()
   useDocumentTitle()
 
@@ -249,7 +264,11 @@ function RootShell(): React.ReactElement {
   return (
     <div className={styles.rootShell}>
       <DesktopTitleBar />
-      <div className={styles.appShell} data-sidebar-state={sidebarState}>
+      <div
+        className={styles.appShell}
+        data-sidebar-state={sidebarState}
+        data-sidebar-animation={sidebarAnimating ? `true` : undefined}
+      >
         {inSettings ? (
           <SettingsSidebar activeCategory={settingsCategory} />
         ) : (
@@ -265,6 +284,7 @@ function RootShell(): React.ReactElement {
         <SearchPalette />
         <ApiKeysModal />
       </div>
+      {!inSettings && <TitlebarControls />}
     </div>
   )
 }

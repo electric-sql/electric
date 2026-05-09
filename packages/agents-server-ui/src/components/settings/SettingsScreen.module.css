@@ -25,7 +25,6 @@
 :global(
     html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
   )
-  :global([data-sidebar-state='open'])
   .root {
   border-top-left-radius: var(--ds-radius-5);
 }

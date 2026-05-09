@@ -16,8 +16,10 @@ import styles from './SplitContainer.module.css'
  */
 export function SplitContainer({
   split,
+  chromeInsetTarget = false,
 }: {
   split: Split
+  chromeInsetTarget?: boolean
 }): React.ReactElement {
   const { helpers } = useWorkspace()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -74,7 +76,10 @@ export function SplitContainer({
               flexShrink: 0,
             }}
           >
-            <NodeRenderer node={child.node} />
+            <NodeRenderer
+              node={child.node}
+              chromeInsetTarget={chromeInsetTarget && i === 0}
+            />
           </div>
         </Fragment>
       ))}

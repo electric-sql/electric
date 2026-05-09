@@ -235,7 +235,7 @@ export function Workspace(): React.ReactElement {
 
   return (
     <div className={styles.workspace}>
-      <NodeRenderer node={workspace.root} />
+      <NodeRenderer node={workspace.root} chromeInsetTarget />
     </div>
   )
 }

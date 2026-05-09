@@ -12,6 +12,16 @@
   transition: border-top-left-radius 180ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+:global([data-sidebar-state='closed']) .workspace {
+  margin-left: -1px;
+}
+
+:global([data-sidebar-animation='true']) .workspace {
+  transition:
+    border-top-left-radius 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    margin-left 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :global(
     html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
   )
@@ -22,7 +32,6 @@
 :global(
     html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
   )
-  :global([data-sidebar-state='open'])
   .workspace {
   border-top-left-radius: var(--ds-radius-5);
 }

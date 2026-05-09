@@ -1,0 +1,31 @@
+.controls {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  z-index: 100;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .controls {
+  left: 84px;
+  -webkit-app-region: no-drag;
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .controls {
+  display: none;
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .controls
+  * {
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
