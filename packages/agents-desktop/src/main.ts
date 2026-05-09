@@ -170,6 +170,22 @@ type DesktopCommand =
   | `split-down`
   | `cycle-tile`
 
+type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
+
+type DesktopMenuPopupBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+type DesktopMenuState = {
+  hasActiveTile: boolean
+  canCloseTile: boolean
+  canSplitTile: boolean
+  canCycleTile: boolean
+}
+
 type DesktopContextMenuRequest = {
   kind: `selection`
   selectionText: string
@@ -536,11 +552,21 @@ function createWindow(): BrowserWindow {
     // overlaid on the window content. The renderer paints the toolbar
     // with extra left-padding so its icons sit to the right of the
     // traffic lights and the row reads as a single chrome strip.
-    // Windows and Linux use the native frame and menu bar instead of
-    // in-app drag regions.
-    titleBarStyle: isMac ? `hiddenInset` : `default`,
+    // macOS keeps the native traffic lights in a hiddenInset titlebar.
+    // Windows/Linux use a hidden titlebar plus Electron's native
+    // window-controls overlay so the renderer can paint a Cursor-style
+    // icon/menu strip on the same row as the minimize/maximize/close
+    // controls.
+    titleBarStyle: isMac ? `hiddenInset` : `hidden`,
     frame: true,
-    autoHideMenuBar: false,
+    autoHideMenuBar: !isMac,
+    titleBarOverlay: isMac
+      ? undefined
+      : {
+          color: `#f7f7f7`,
+          symbolColor: `#1f2328`,
+          height: 34,
+        },
     // Standard macOS hiddenInset traffic-light origin (top-left of the
     // leftmost light). The renderer matches the 44px desktop header
     // height so the 24px IconButton glyphs flex-center to the same y as
@@ -555,6 +581,9 @@ function createWindow(): BrowserWindow {
   })
 
   windows.add(win)
+  if (!isMac) {
+    win.setMenuBarVisibility(false)
+  }
   installEditableContextMenu(win)
   installExternalLinkHandler(win)
   win.on(`closed`, () => {
@@ -1115,6 +1144,27 @@ function registerIpcHandlers(): void {
       }
     }
   )
+  ipcMain.handle(
+    `desktop:show-menu-section`,
+    (
+      event,
+      section: DesktopMenuSection,
+      bounds: DesktopMenuPopupBounds,
+      menuState: DesktopMenuState
+    ) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win || win.isDestroyed()) return
+      popupApplicationMenuSection(win, section, bounds, menuState)
+    }
+  )
+  ipcMain.handle(
+    `desktop:show-app-menu`,
+    (event, bounds: DesktopMenuPopupBounds) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win || win.isDestroyed()) return
+      popupAppIconMenu(win, bounds)
+    }
+  )
 
   // ── MCP registry IPC ─────────────────────────────────────────────
   // Renderers subscribe to `desktop:mcp-state` push events; this handler
@@ -1304,7 +1354,7 @@ function showAboutDialog(): void {
   void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 }
 
-function buildApplicationMenu(): void {
+function buildApplicationMenuTemplate(): Array<Electron.MenuItemConstructorOptions> {
   const isMac = process.platform === `darwin`
   const focused = BrowserWindow.getFocusedWindow()
   const liveWindows = [...windows].filter((win) => !win.isDestroyed())
@@ -1337,7 +1387,7 @@ function buildApplicationMenu(): void {
     },
   ]
 
-  const template: Array<Electron.MenuItemConstructorOptions> = [
+  return [
     ...(isMac
       ? [
           {
@@ -1498,8 +1548,76 @@ function buildApplicationMenu(): void {
       ],
     },
   ]
+}
+
+function buildApplicationMenu(): void {
+  const template = buildApplicationMenuTemplate()
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+function popupApplicationMenuSection(
+  win: BrowserWindow,
+  section: DesktopMenuSection,
+  bounds: DesktopMenuPopupBounds,
+  state: DesktopMenuState
+): void {
+  const item = buildApplicationMenuTemplate().find(
+    (candidate) => candidate.label === section
+  )
+  if (!item || !Array.isArray(item.submenu)) return
+
+  Menu.buildFromTemplate(applyDesktopMenuState(item.submenu, state)).popup({
+    window: win,
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y + bounds.height),
+  })
+}
+
+function popupAppIconMenu(
+  win: BrowserWindow,
+  bounds: DesktopMenuPopupBounds
+): void {
+  Menu.buildFromTemplate([
+    {
+      label: `About ${APP_DISPLAY_NAME}`,
+      click: () => showAboutDialog(),
+    },
+    {
+      label: `Check for Updates…`,
+      enabled: false,
+    },
+  ]).popup({
+    window: win,
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y + bounds.height),
+  })
+}
+
+function applyDesktopMenuState(
+  items: Array<Electron.MenuItemConstructorOptions>,
+  state: DesktopMenuState
+): Array<Electron.MenuItemConstructorOptions> {
+  const enabledByLabel = new Map<string, boolean>([
+    [`Close Tile`, state.canCloseTile],
+    [`Find in Pane…`, state.hasActiveTile],
+    [`Find Next`, state.hasActiveTile],
+    [`Find Previous`, state.hasActiveTile],
+    [`Split Right`, state.canSplitTile],
+    [`Split Down`, state.canSplitTile],
+    [`Cycle Tile`, state.canCycleTile],
+  ])
+
+  return items.map((item) => {
+    const next = { ...item }
+    if (typeof item.label === `string` && enabledByLabel.has(item.label)) {
+      next.enabled = enabledByLabel.get(item.label)
+    }
+    if (Array.isArray(item.submenu)) {
+      next.submenu = applyDesktopMenuState(item.submenu, state)
+    }
+    return next
+  })
 }
 
 async function main(): Promise<void> {

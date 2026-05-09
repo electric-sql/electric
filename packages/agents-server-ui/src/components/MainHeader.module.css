@@ -30,10 +30,19 @@
   flex-shrink: 0;
 }
 
+/* On Windows/Linux desktop these controls live in the custom menu bar.
+   Web and macOS keep them in the in-app header. */
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .chrome {
+  display: none;
+}
+
 /* macOS desktop: every tile's MainHeader strip becomes a window-drag
-   region for the hiddenInset titlebar. Windows and Linux use native
-   window chrome instead. */
-:global(html[data-electric-platform='darwin']) .header {
+   region for the hiddenInset titlebar. */
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header {
   -webkit-app-region: drag;
 }
 
@@ -41,15 +50,26 @@
    the leftmost tile because the sidebar is collapsed, push it past
    the macOS traffic lights. Other tiles in the row keep the standard
    gutter — they sit to the right of the lights anyway. */
-:global(html[data-electric-platform='darwin']) .header:has(.chrome) {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header:has(.chrome) {
   padding-left: 84px;
 }
 
-:global(html[data-electric-platform='darwin']) .header button,
-:global(html[data-electric-platform='darwin']) .header a,
-:global(html[data-electric-platform='darwin']) .header input,
-:global(html[data-electric-platform='darwin']) .header [role='button'],
-:global(html[data-electric-platform='darwin']) .header [data-no-drag] {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  button,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  a,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  input,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [role='button'],
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [data-no-drag] {
   -webkit-app-region: no-drag;
 }
 

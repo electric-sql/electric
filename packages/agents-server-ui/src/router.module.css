@@ -1,6 +1,15 @@
+.rootShell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ds-bg);
+}
+
 .appShell {
   display: flex;
-  height: 100vh;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
   background: var(--ds-bg);
@@ -9,6 +18,13 @@
      the absolutely-positioned overlay would resolve against the
      viewport and end up floating over modals/toasts higher up. */
   position: relative;
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .appShell {
+  background: var(--ds-bg-subtle);
 }
 
 .entityShell {

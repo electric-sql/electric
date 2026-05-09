@@ -17,7 +17,6 @@ import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
 } from './hooks/useSidebarCollapsed'
-import { useNarrowViewport } from './hooks/useNarrowViewport'
 import { useHotkey } from './hooks/useHotkey'
 import {
   SearchPaletteProvider,
@@ -36,6 +35,7 @@ import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
 import { ApiKeysModal } from './components/ApiKeysModal'
+import { DesktopTitleBar } from './components/DesktopTitleBar'
 import {
   SettingsSidebar,
   type SettingsCategoryId,
@@ -241,21 +241,18 @@ function RootShell(): React.ReactElement {
   const inSettings = settingsCategory !== null
 
   // On narrow viewports the sidebar floats over content as an
-  // overlay (see Sidebar.tsx + useNarrowViewport). We keep the
-  // component mounted regardless of `collapsed` while in overlay
-  // mode so the exit transition (slide-out + backdrop fade) can
-  // run before unmount. In wide mode we keep the existing
-  // mount-on-demand behaviour — there's no animation, so unmounting
-  // immediately on collapse is the cheapest correct option.
-  const narrow = useNarrowViewport()
-  const showWorkspaceSidebar = narrow || !collapsed
+  // overlay (see Sidebar.tsx + useNarrowViewport). In wide mode we
+  // keep it mounted too so collapse/expand can animate the width
+  // instead of snapping the sidebar out of the flex row.
+  const sidebarState = inSettings || !collapsed ? `open` : `closed`
 
   return (
-    <div className={styles.appShell}>
-      {inSettings ? (
-        <SettingsSidebar activeCategory={settingsCategory} />
-      ) : (
-        showWorkspaceSidebar && (
+    <div className={styles.rootShell}>
+      <DesktopTitleBar />
+      <div className={styles.appShell} data-sidebar-state={sidebarState}>
+        {inSettings ? (
+          <SettingsSidebar activeCategory={settingsCategory} />
+        ) : (
           <Sidebar
             selectedEntityUrl={selectedEntityUrl}
             onSelectEntity={navigateToEntity}
@@ -263,11 +260,11 @@ function RootShell(): React.ReactElement {
             pinnedUrls={pinnedUrls}
             onTogglePin={togglePin}
           />
-        )
-      )}
-      <Outlet />
-      <SearchPalette />
-      <ApiKeysModal />
+        )}
+        <Outlet />
+        <SearchPalette />
+        <ApiKeysModal />
+      </div>
     </div>
   )
 }

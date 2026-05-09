@@ -76,6 +76,22 @@ export type DesktopCommand =
   | `split-down`
   | `cycle-tile`
 
+export type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
+
+export type DesktopMenuPopupBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type DesktopMenuState = {
+  hasActiveTile: boolean
+  canCloseTile: boolean
+  canSplitTile: boolean
+  canCycleTile: boolean
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -100,6 +116,12 @@ declare global {
       pickDirectory?: (options?: {
         defaultPath?: string
       }) => Promise<string | null>
+      showMenuSection?: (
+        section: DesktopMenuSection,
+        bounds: DesktopMenuPopupBounds,
+        state: DesktopMenuState
+      ) => Promise<void>
+      showAppMenu?: (bounds: DesktopMenuPopupBounds) => Promise<void>
       onDesktopStateChanged?: (
         callback: (state: DesktopState) => void
       ) => () => void

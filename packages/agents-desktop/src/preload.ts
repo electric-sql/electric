@@ -69,6 +69,22 @@ type DesktopCommand =
   | `split-down`
   | `cycle-tile`
 
+type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
+
+type DesktopMenuPopupBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+type DesktopMenuState = {
+  hasActiveTile: boolean
+  canCloseTile: boolean
+  canSplitTile: boolean
+  canCycleTile: boolean
+}
+
 type DesktopContextMenuRequest = {
   kind: `selection`
   selectionText: string
@@ -158,6 +174,14 @@ const api = {
     ipcRenderer.invoke(`desktop:choose-working-directory`),
   pickDirectory: (options?: { defaultPath?: string }): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:pick-directory`, options),
+  showMenuSection: (
+    section: DesktopMenuSection,
+    bounds: DesktopMenuPopupBounds,
+    state: DesktopMenuState
+  ): Promise<void> =>
+    ipcRenderer.invoke(`desktop:show-menu-section`, section, bounds, state),
+  showAppMenu: (bounds: DesktopMenuPopupBounds): Promise<void> =>
+    ipcRenderer.invoke(`desktop:show-app-menu`, bounds),
   onDesktopStateChanged: (
     callback: (state: DesktopState) => void
   ): (() => void) => {

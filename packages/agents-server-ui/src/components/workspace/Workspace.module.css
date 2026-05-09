@@ -3,8 +3,28 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  position: relative;
+  z-index: 1;
+  border-left: 1px solid var(--ds-border-1);
   background: var(--ds-bg);
+  box-shadow: -1px 0 2px color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
   overflow: hidden;
+  transition: border-top-left-radius 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .workspace {
+  border-top: 1px solid var(--ds-border-1);
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  :global([data-sidebar-state='open'])
+  .workspace {
+  border-top-left-radius: var(--ds-radius-5);
 }
 
 .empty {

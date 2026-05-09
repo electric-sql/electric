@@ -6,7 +6,28 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 1;
+  border-left: 1px solid var(--ds-border-1);
   background: var(--ds-bg);
+  box-shadow: -1px 0 2px color-mix(in oklab, var(--ds-gray-12) 5%, transparent);
+  overflow: hidden;
+  transition: border-top-left-radius 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .root {
+  border-top: 1px solid var(--ds-border-1);
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  :global([data-sidebar-state='open'])
+  .root {
+  border-top-left-radius: var(--ds-radius-5);
 }
 
 /* Top strip mirrors `MainHeader` (44px tall). On macOS desktop, it
@@ -34,7 +55,8 @@
   flex-shrink: 0;
 }
 
-:global(html[data-electric-platform='darwin']) .header {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header {
   -webkit-app-region: drag;
 }
 
@@ -45,15 +67,26 @@
    under the lights. We *also* shift the toggle past the lights
    when it's the leftmost element. Mirrors MainHeader's `:has`
    rule. */
-:global(html[data-electric-platform='darwin']) .header:has(.chrome) {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header:has(.chrome) {
   padding-left: 84px;
 }
 
-:global(html[data-electric-platform='darwin']) .header button,
-:global(html[data-electric-platform='darwin']) .header a,
-:global(html[data-electric-platform='darwin']) .header input,
-:global(html[data-electric-platform='darwin']) .header [role='button'],
-:global(html[data-electric-platform='darwin']) .header [data-no-drag] {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  button,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  a,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  input,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [role='button'],
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [data-no-drag] {
   -webkit-app-region: no-drag;
 }
 
