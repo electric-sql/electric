@@ -239,6 +239,92 @@ jobs:
             packages/agents-desktop/release/latest*.yml
             packages/agents-desktop/release/latest*.yaml
 
+      - name: Update PR artifact comment for ${{ matrix.name }}
+        if: ${{ always() && inputs.channel == 'pr' && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        continue-on-error: true
+        env:
+          ARTIFACT_URL: ${{ steps.upload-artifact.outputs.artifact-url }}
+          PLATFORM_ID: ${{ matrix.id }}
+          PLATFORM_LABEL: ${{ matrix.name }}
+          UPLOAD_OUTCOME: ${{ steps.upload-artifact.outcome }}
+        with:
+          script: |
+            const marker = '<!-- electric-agents-desktop-pr-artifacts -->'
+            const platforms = [
+              ['macos-arm64', 'macOS Apple Silicon'],
+              ['macos-x64', 'macOS Intel'],
+              ['windows-x64', 'Windows x64'],
+              ['linux-x64', 'Linux x64'],
+            ]
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.pull_request.number
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const sha = context.payload.pull_request.head.sha
+            const shortSha = sha.slice(0, 7)
+            const label = process.env.PLATFORM_LABEL
+            const uploadOutcome = process.env.UPLOAD_OUTCOME
+            const artifactUrl = process.env.ARTIFACT_URL
+            const status = uploadOutcome === 'success' ? 'Passed' : 'Failed'
+            const artifact = artifactUrl ? `[Download](${artifactUrl})` : 'Unavailable'
+            const nextRow = `| ${label} | ${status} | ${artifact} |`
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            })
+            const existing = comments.find((comment) => comment.body?.includes(marker))
+            const body = existing?.body ?? renderInitialBody()
+            const nextBody = replacePlatformRow(body, label, nextRow)
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: nextBody,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: nextBody,
+              })
+            }
+
+            function renderInitialBody() {
+              return [
+                marker,
+                '## Electric Agents Desktop Builds',
+                '',
+                `Build artifacts for commit \`${shortSha}\` are in progress.`,
+                '',
+                '| Platform | Status | Artifact |',
+                '| --- | --- | --- |',
+                platforms
+                  .map(([, platformLabel]) => `| ${platformLabel} | Building | Pending |`)
+                  .join('\n'),
+                '',
+                `[Workflow run](${runUrl})`,
+              ].join('\n')
+            }
+
+            function replacePlatformRow(body, platformLabel, row) {
+              const lines = body.split('\n')
+              const rowIndex = lines.findIndex((line) =>
+                line.startsWith(`| ${platformLabel} |`)
+              )
+              if (rowIndex === -1) {
+                return body
+              }
+
+              lines[rowIndex] = row
+              return lines.join('\n')
+            }
+
       - name: Prepare release assets
         if: ${{ inputs.publish }}
         shell: bash
