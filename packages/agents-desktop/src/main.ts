@@ -585,8 +585,11 @@ function createWindow(): BrowserWindow {
     titleBarStyle: isMac ? `hiddenInset` : `hidden`,
     frame: true,
     autoHideMenuBar: !isMac,
-    transparent: isMac || isWindows,
-    backgroundColor: isMac || isWindows ? `#00000000` : undefined,
+    // Keep true transparent windows macOS-only. On Windows, `transparent: true`
+    // creates a layered window, which drops the native DWM border, rounded
+    // corners, and shadow. Mica is applied via `backgroundMaterial` instead.
+    transparent: isMac,
+    backgroundColor: isMac ? `#00000000` : undefined,
     vibrancy: isMac ? `sidebar` : undefined,
     visualEffectState: isMac ? `active` : undefined,
     backgroundMaterial: isWindows ? `mica` : undefined,
