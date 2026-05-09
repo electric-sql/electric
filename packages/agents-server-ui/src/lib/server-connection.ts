@@ -92,6 +92,11 @@ export type DesktopMenuState = {
   canCycleTile: boolean
 }
 
+export type DesktopNavigationState = {
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -122,6 +127,11 @@ declare global {
         state: DesktopMenuState
       ) => Promise<void>
       showAppMenu?: (bounds: DesktopMenuPopupBounds) => Promise<void>
+      getNavigationState?: () => Promise<DesktopNavigationState>
+      navigateHistory?: (direction: `back` | `forward`) => Promise<void>
+      onNavigationStateChanged?: (
+        callback: (state: DesktopNavigationState) => void
+      ) => () => void
       onDesktopStateChanged?: (
         callback: (state: DesktopState) => void
       ) => () => void

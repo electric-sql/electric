@@ -85,6 +85,11 @@ type DesktopMenuState = {
   canCycleTile: boolean
 }
 
+type DesktopNavigationState = {
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
 type DesktopContextMenuRequest = {
   kind: `selection`
   selectionText: string
@@ -182,6 +187,21 @@ const api = {
     ipcRenderer.invoke(`desktop:show-menu-section`, section, bounds, state),
   showAppMenu: (bounds: DesktopMenuPopupBounds): Promise<void> =>
     ipcRenderer.invoke(`desktop:show-app-menu`, bounds),
+  getNavigationState: (): Promise<DesktopNavigationState> =>
+    ipcRenderer.invoke(`desktop:get-navigation-state`),
+  navigateHistory: (direction: `back` | `forward`): Promise<void> =>
+    ipcRenderer.invoke(`desktop:navigate-history`, direction),
+  onNavigationStateChanged: (
+    callback: (state: DesktopNavigationState) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: DesktopNavigationState
+    ) => callback(state)
+    ipcRenderer.on(`desktop:navigation-state-changed`, listener)
+    return () =>
+      ipcRenderer.removeListener(`desktop:navigation-state-changed`, listener)
+  },
   onDesktopStateChanged: (
     callback: (state: DesktopState) => void
   ): (() => void) => {

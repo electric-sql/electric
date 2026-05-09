@@ -4,6 +4,7 @@ import { Icon, IconButton, Tooltip } from '../ui'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { modKeyLabel } from '../lib/keyLabels'
+import { DesktopHistoryButtons } from './DesktopHistoryButtons'
 import styles from './MainHeader.module.css'
 
 type MainHeaderProps = {
@@ -58,6 +59,7 @@ export function MainHeader({
               <Icon icon={Search} size={3} />
             </IconButton>
           </Tooltip>
+          <DesktopHistoryButtons />
         </span>
       )}
       {leading}

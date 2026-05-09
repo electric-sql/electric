@@ -186,6 +186,11 @@ type DesktopMenuState = {
   canCycleTile: boolean
 }
 
+type DesktopNavigationState = {
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
 type DesktopContextMenuRequest = {
   kind: `selection`
   selectionText: string
@@ -534,6 +539,21 @@ function broadcastState(): void {
   }
 }
 
+function getNavigationState(win: BrowserWindow): DesktopNavigationState {
+  return {
+    canGoBack: win.webContents.canGoBack(),
+    canGoForward: win.webContents.canGoForward(),
+  }
+}
+
+function sendNavigationState(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  win.webContents.send(
+    `desktop:navigation-state-changed`,
+    getNavigationState(win)
+  )
+}
+
 function setState(patch: Partial<DesktopState>): void {
   state = { ...state, ...patch }
   updateTray()
@@ -586,6 +606,7 @@ function createWindow(): BrowserWindow {
   }
   installEditableContextMenu(win)
   installExternalLinkHandler(win)
+  installNavigationStateBridge(win)
   win.on(`closed`, () => {
     windows.delete(win)
     buildApplicationMenu()
@@ -615,6 +636,13 @@ function createWindow(): BrowserWindow {
   buildApplicationMenu()
 
   return win
+}
+
+function installNavigationStateBridge(win: BrowserWindow): void {
+  const notify = () => sendNavigationState(win)
+  win.webContents.on(`did-finish-load`, notify)
+  win.webContents.on(`did-navigate`, notify)
+  win.webContents.on(`did-navigate-in-page`, notify)
 }
 
 function isExternalLink(url: string): boolean {
@@ -1163,6 +1191,29 @@ function registerIpcHandlers(): void {
       const win = BrowserWindow.fromWebContents(event.sender)
       if (!win || win.isDestroyed()) return
       popupAppIconMenu(win, bounds)
+    }
+  )
+  ipcMain.handle(`desktop:get-navigation-state`, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) {
+      return {
+        canGoBack: false,
+        canGoForward: false,
+      } satisfies DesktopNavigationState
+    }
+    return getNavigationState(win)
+  })
+  ipcMain.handle(
+    `desktop:navigate-history`,
+    (event, direction: `back` | `forward`) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win || win.isDestroyed()) return
+      if (direction === `back` && win.webContents.canGoBack()) {
+        win.webContents.goBack()
+      } else if (direction === `forward` && win.webContents.canGoForward()) {
+        win.webContents.goForward()
+      }
+      sendNavigationState(win)
     }
   )
 

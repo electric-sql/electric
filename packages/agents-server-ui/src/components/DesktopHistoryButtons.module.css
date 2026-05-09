@@ -1,0 +1,13 @@
+.historyButtons {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+:global(html[data-electric-desktop='true']) .historyButtons {
+  display: inline-flex;
+}
+
+.historyButton:disabled {
+  cursor: default;
+}

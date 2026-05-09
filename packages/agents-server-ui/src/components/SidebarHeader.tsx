@@ -3,6 +3,7 @@ import { Icon, IconButton, Tooltip } from '../ui'
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { useSearchPalette } from '../hooks/useSearchPalette'
 import { modKeyLabel } from '../lib/keyLabels'
+import { DesktopHistoryButtons } from './DesktopHistoryButtons'
 import styles from './SidebarHeader.module.css'
 
 /**
@@ -38,6 +39,7 @@ export function SidebarHeader(): React.ReactElement {
           <Icon icon={Search} size={3} />
         </IconButton>
       </Tooltip>
+      <DesktopHistoryButtons />
     </div>
   )
 }

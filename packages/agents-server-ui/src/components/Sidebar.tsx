@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { ChevronRight, SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
@@ -320,11 +321,11 @@ export function Sidebar({
                 minWidth: 0,
                 maxWidth: `min(85vw, 320px)`,
               }
-            : {
+            : ({
                 width,
                 minWidth: SIDEBAR_MIN_WIDTH,
                 [`--sidebar-expanded-width`]: `${width}px`,
-              }
+              } as CSSProperties)
         }
       >
         {/* Resize handle is push-mode-only — dragging an overlaid

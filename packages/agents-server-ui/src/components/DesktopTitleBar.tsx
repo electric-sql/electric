@@ -4,6 +4,7 @@ import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 import { listTiles, useWorkspace } from '../hooks/useWorkspace'
 import { modKeyLabel } from '../lib/keyLabels'
 import { Icon, IconButton, Tooltip } from '../ui'
+import { DesktopHistoryButtons } from './DesktopHistoryButtons'
 import styles from './DesktopTitleBar.module.css'
 import type {
   DesktopMenuState,
@@ -104,6 +105,7 @@ export function DesktopTitleBar(): React.ReactElement {
             <Icon icon={Search} size={3} />
           </IconButton>
         </Tooltip>
+        <DesktopHistoryButtons />
       </div>
       <nav className={styles.menu} aria-label="Application">
         {MENU_SECTIONS.map((section) => (

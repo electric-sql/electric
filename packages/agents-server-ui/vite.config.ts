@@ -8,9 +8,6 @@ import react from '@vitejs/plugin-react'
  * the Electron preload sets from the actual runtime platform; the static
  * `darwin` default avoids flashing Windows/Linux titlebar chrome on macOS
  * before preload runs.
- *
- * Local dev can opt into a desktop platform preview by setting
- * `ELECTRIC_DESKTOP_PREVIEW_PLATFORM` to `darwin` or `win32`.
  */
 function desktopHtmlMarker(platform: `darwin` | `win32` = `darwin`): Plugin {
   return {
@@ -29,10 +26,6 @@ function desktopHtmlMarker(platform: `darwin` | `win32` = `darwin`): Plugin {
 
 export default defineConfig(({ command, mode }) => {
   const desktop = mode === `desktop`
-  const previewPlatform = process.env.ELECTRIC_DESKTOP_PREVIEW_PLATFORM
-  const previewDesktop =
-    command === `serve` &&
-    (previewPlatform === `darwin` || previewPlatform === `win32`)
   // Desktop *build* serves the bundle via file:// from the Electron
   // app, so assets must be referenced with relative URLs (`./`). The
   // dev server, on the other hand, serves over http and needs an
@@ -41,14 +34,7 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base: desktop ? (desktopServe ? `/` : `./`) : `/__agent_ui/`,
-    plugins: [
-      react(),
-      ...(desktop
-        ? [desktopHtmlMarker()]
-        : previewDesktop
-          ? [desktopHtmlMarker(previewPlatform)]
-          : []),
-    ],
+    plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
     build: {
       outDir: desktop ? `dist-desktop` : `dist`,
       emptyOutDir: true,
