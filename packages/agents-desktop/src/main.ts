@@ -151,17 +151,21 @@ const INITIAL_SERVER_URL =
   process.env.ELECTRIC_AGENTS_SERVER_URL?.trim() ||
   null
 
-const PULL_WAKE_RUNNER_ID =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
-const PULL_WAKE_REGISTER_RUNNER =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER === `1` ||
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER === `true`
-const PULL_WAKE_OWNER_USER_ID =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() || undefined
 const ASSERTED_AUTH_EMAIL =
   process.env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || undefined
 const ASSERTED_AUTH_NAME =
   process.env.ELECTRIC_ASSERTED_AUTH_NAME?.trim() || undefined
+const PULL_WAKE_RUNNER_ID =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
+const PULL_WAKE_REGISTER_RUNNER = [`1`, `true`].includes(
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER?.trim().toLowerCase() ??
+    ``
+)
+const PULL_WAKE_OWNER_USER_ID =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
+  ASSERTED_AUTH_EMAIL ||
+  ASSERTED_AUTH_NAME ||
+  `local-desktop`
 
 function buildAssertedAuthHeaders(): Record<string, string> | undefined {
   const headers: Record<string, string> = {}
@@ -854,6 +858,19 @@ async function restartRuntime(): Promise<void> {
   setState({ pullWakeRunnerId: runnerId })
 
   const assertedAuthHeaders = buildAssertedAuthHeaders()
+  console.info(
+    `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
+  )
+  console.info(`[agents-desktop] Pull-wake runner id: ${runnerId}`)
+  if (PULL_WAKE_REGISTER_RUNNER) {
+    console.info(
+      `[agents-desktop] Pull-wake runner registration enabled; owner user id: ${PULL_WAKE_OWNER_USER_ID}`
+    )
+  } else {
+    console.info(
+      `[agents-desktop] Pull-wake runner registration skipped; runner must already be registered with the agents server.`
+    )
+  }
 
   const nextRuntime = new BuiltinAgentsServer({
     agentServerUrl: activeServer.url,
@@ -867,7 +884,9 @@ async function restartRuntime(): Promise<void> {
     pullWake: {
       runnerId,
       registerRunner: PULL_WAKE_REGISTER_RUNNER,
-      ownerUserId: PULL_WAKE_OWNER_USER_ID,
+      ownerUserId: PULL_WAKE_REGISTER_RUNNER
+        ? PULL_WAKE_OWNER_USER_ID
+        : undefined,
       label: `Electric Agents Desktop`,
       headers: assertedAuthHeaders,
       claimHeaders: assertedAuthHeaders,
