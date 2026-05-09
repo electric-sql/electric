@@ -248,32 +248,68 @@ jobs:
           check_arch "packages/agents-desktop/release/mac-arm64" "arm64"
           check_arch "packages/agents-desktop/release/mac" "x86_64"
 
-      - name: Upload workflow artifacts
-        id: upload-artifact
+      - name: Upload macOS Apple Silicon DMG
+        id: upload-macos-arm64-dmg
+        if: ${{ matrix.id == 'macos' }}
         uses: actions/upload-artifact@v4
         with:
-          name: electric-agents-desktop-${{ inputs.channel }}-${{ matrix.id }}
+          name: electric-agents-desktop-${{ inputs.channel }}-macos-arm64-dmg
           retention-days: ${{ inputs.channel == 'pr' && 7 || 30 }}
           if-no-files-found: error
-          path: |
-            packages/agents-desktop/release/*.dmg
-            packages/agents-desktop/release/*.zip
-            packages/agents-desktop/release/*.exe
-            packages/agents-desktop/release/*.AppImage
-            packages/agents-desktop/release/*.deb
-            packages/agents-desktop/release/*.blockmap
-            packages/agents-desktop/release/latest*.yml
-            packages/agents-desktop/release/latest*.yaml
+          path: packages/agents-desktop/release/*mac-arm64.dmg
+
+      - name: Upload macOS Intel DMG
+        id: upload-macos-x64-dmg
+        if: ${{ matrix.id == 'macos' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: electric-agents-desktop-${{ inputs.channel }}-macos-x64-dmg
+          retention-days: ${{ inputs.channel == 'pr' && 7 || 30 }}
+          if-no-files-found: error
+          path: packages/agents-desktop/release/*mac-x64.dmg
+
+      - name: Upload Windows installer
+        id: upload-windows-x64-exe
+        if: ${{ matrix.id == 'windows-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: electric-agents-desktop-${{ inputs.channel }}-windows-x64-exe
+          retention-days: ${{ inputs.channel == 'pr' && 7 || 30 }}
+          if-no-files-found: error
+          path: packages/agents-desktop/release/*.exe
+
+      - name: Upload Linux AppImage
+        id: upload-linux-x64-appimage
+        if: ${{ matrix.id == 'linux-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: electric-agents-desktop-${{ inputs.channel }}-linux-x64-appimage
+          retention-days: ${{ inputs.channel == 'pr' && 7 || 30 }}
+          if-no-files-found: error
+          path: packages/agents-desktop/release/*.AppImage
+
+      - name: Upload Linux deb
+        id: upload-linux-x64-deb
+        if: ${{ matrix.id == 'linux-x64' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: electric-agents-desktop-${{ inputs.channel }}-linux-x64-deb
+          retention-days: ${{ inputs.channel == 'pr' && 7 || 30 }}
+          if-no-files-found: error
+          path: packages/agents-desktop/release/*.deb
 
       - name: Update PR artifact comment for ${{ matrix.name }}
         if: ${{ always() && inputs.channel == 'pr' && github.event_name == 'pull_request' }}
         uses: actions/github-script@v7
         continue-on-error: true
         env:
-          ARTIFACT_URL: ${{ steps.upload-artifact.outputs.artifact-url }}
+          LINUX_APPIMAGE_URL: ${{ steps.upload-linux-x64-appimage.outputs.artifact-url }}
+          LINUX_DEB_URL: ${{ steps.upload-linux-x64-deb.outputs.artifact-url }}
+          MACOS_ARM64_DMG_URL: ${{ steps.upload-macos-arm64-dmg.outputs.artifact-url }}
+          MACOS_X64_DMG_URL: ${{ steps.upload-macos-x64-dmg.outputs.artifact-url }}
           PLATFORM_ID: ${{ matrix.id }}
           PLATFORM_LABEL: ${{ matrix.name }}
-          UPLOAD_OUTCOME: ${{ steps.upload-artifact.outcome }}
+          WINDOWS_EXE_URL: ${{ steps.upload-windows-x64-exe.outputs.artifact-url }}
         with:
           script: |
             const marker = '<!-- electric-agents-desktop-pr-artifacts -->'
@@ -290,14 +326,7 @@ jobs:
             const shortSha = sha.slice(0, 7)
             const label = process.env.PLATFORM_LABEL
             const platformId = process.env.PLATFORM_ID
-            const uploadOutcome = process.env.UPLOAD_OUTCOME
-            const artifactUrl = process.env.ARTIFACT_URL
-            const status = uploadOutcome === 'success' ? 'Passed' : 'Failed'
-            const artifact = artifactUrl ? `[Download](${artifactUrl})` : 'Unavailable'
-            const labels =
-              platformId === 'macos'
-                ? ['macOS Apple Silicon', 'macOS Intel']
-                : [label]
+            const rowsByLabel = buildRows()
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
@@ -307,12 +336,8 @@ jobs:
             })
             const existing = comments.find((comment) => comment.body?.includes(marker))
             let nextBody = existing?.body ?? renderInitialBody()
-            for (const platformLabel of labels) {
-              nextBody = replacePlatformRow(
-                nextBody,
-                platformLabel,
-                `| ${platformLabel} | ${status} | ${artifact} |`
-              )
+            for (const [platformLabel, row] of rowsByLabel) {
+              nextBody = replacePlatformRow(nextBody, platformLabel, row)
             }
 
             if (existing) {
@@ -359,6 +384,70 @@ jobs:
 
               lines[rowIndex] = row
               return lines.join('\n')
+            }
+
+            function buildRows() {
+              switch (platformId) {
+                case 'macos':
+                  return [
+                    [
+                      'macOS Apple Silicon',
+                      buildRow(
+                        'macOS Apple Silicon',
+                        process.env.MACOS_ARM64_DMG_URL
+                          ? `[DMG](${process.env.MACOS_ARM64_DMG_URL})`
+                          : null
+                      ),
+                    ],
+                    [
+                      'macOS Intel',
+                      buildRow(
+                        'macOS Intel',
+                        process.env.MACOS_X64_DMG_URL
+                          ? `[DMG](${process.env.MACOS_X64_DMG_URL})`
+                          : null
+                      ),
+                    ],
+                  ]
+                case 'linux-x64':
+                  return [
+                    [
+                      'Linux x64',
+                      buildRow(
+                        'Linux x64',
+                        [
+                          process.env.LINUX_APPIMAGE_URL
+                            ? `[AppImage](${process.env.LINUX_APPIMAGE_URL})`
+                            : null,
+                          process.env.LINUX_DEB_URL
+                            ? `[deb](${process.env.LINUX_DEB_URL})`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' / ') || null
+                      ),
+                    ],
+                  ]
+                case 'windows-x64':
+                  return [
+                    [
+                      'Windows x64',
+                      buildRow(
+                        'Windows x64',
+                        process.env.WINDOWS_EXE_URL
+                          ? `[Installer](${process.env.WINDOWS_EXE_URL})`
+                          : null
+                      ),
+                    ],
+                  ]
+                default:
+                  return [[label, buildRow(label, null)]]
+              }
+            }
+
+            function buildRow(platformLabel, artifact) {
+              const status = artifact ? 'Passed' : 'Failed'
+              return `| ${platformLabel} | ${status} | ${artifact ?? 'Unavailable'} |`
             }
 
       - name: Prepare release assets
@@ -440,21 +529,32 @@ jobs:
                 id: 'macos',
                 label: 'macOS Apple Silicon',
                 jobName: 'build / Build macOS',
+                artifacts: [
+                  ['DMG', 'electric-agents-desktop-pr-macos-arm64-dmg'],
+                ],
               },
               {
                 id: 'macos',
                 label: 'macOS Intel',
                 jobName: 'build / Build macOS',
+                artifacts: [['DMG', 'electric-agents-desktop-pr-macos-x64-dmg']],
               },
               {
                 id: 'windows-x64',
                 label: 'Windows x64',
                 jobName: 'build / Build Windows x64',
+                artifacts: [
+                  ['Installer', 'electric-agents-desktop-pr-windows-x64-exe'],
+                ],
               },
               {
                 id: 'linux-x64',
                 label: 'Linux x64',
                 jobName: 'build / Build Linux x64',
+                artifacts: [
+                  ['AppImage', 'electric-agents-desktop-pr-linux-x64-appimage'],
+                  ['deb', 'electric-agents-desktop-pr-linux-x64-deb'],
+                ],
               },
             ]
 
@@ -489,10 +589,14 @@ jobs:
             const rows = platforms
               .map((platform) => {
                 const job = jobs.find((candidate) => candidate.name === platform.jobName)
-                const artifactName = `electric-agents-desktop-pr-${platform.id}`
-                const artifactUrl = artifactByName.get(artifactName)
                 const status = formatStatus(job)
-                const artifact = artifactUrl ? `[Download](${artifactUrl})` : 'Unavailable'
+                const artifact = platform.artifacts
+                  .map(([label, artifactName]) => {
+                    const artifactUrl = artifactByName.get(artifactName)
+                    return artifactUrl ? `[${label}](${artifactUrl})` : null
+                  })
+                  .filter(Boolean)
+                  .join(' / ') || 'Unavailable'
                 return `| ${platform.label} | ${status} | ${artifact} |`
               })
               .join('\n')
