@@ -573,7 +573,7 @@ export interface EntityTypeEntry<
 // Re-export upstream types used in signatures above so consumers can import from one place
 export type { ChangeEvent, StateEvent }
 
-export interface WebhookNotification {
+export interface WakeNotification {
   consumerId: string
   epoch: number
   wakeId: string
@@ -594,11 +594,28 @@ export interface WebhookNotification {
   }
 }
 
+export type WebhookNotification = WakeNotification
+
+export type ClaimTokenHeader = `authorization` | `electric-claim-token` | `both`
+
 export interface ProcessWakeConfig {
   /** Base URL of the durable streams server */
   baseUrl: string
   /** Entity registry used by this runtime instance */
   registry?: EntityRegistry
+  /**
+   * Additional headers sent to claim callback requests (claim, heartbeat, done).
+   * Use with claimTokenHeader: `electric-claim-token` to keep Authorization
+   * available for user/session auth in local-runner flows.
+   */
+  claimHeaders?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>)
+  /**
+   * Header transport for the Durable Streams claim token. Defaults to the
+   * historical webhook-compatible Authorization: Bearer <claimToken> behavior.
+   * `both` also sends Electric-Claim-Token and only fills Authorization when
+   * claimHeaders did not already provide one.
+   */
+  claimTokenHeader?: ClaimTokenHeader
   /** Optional tool factory invoked per wake context. */
   createElectricTools?: (context: {
     entityUrl: string

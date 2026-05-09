@@ -20,6 +20,7 @@ import {
 import { rewriteLoopbackWebhookUrl } from './webhook-url.js'
 import type { ElectricAgentsManager } from './electric-agents-manager.js'
 import type {
+  DispatchPolicy,
   ElectricAgentsEntityType,
   RegisterEntityTypeRequest,
 } from './electric-agents-types.js'
@@ -223,6 +224,7 @@ export class ElectricAgentsEntityTypeRoutes {
       output_schemas?: Record<string, Record<string, unknown>>
       inbox_schemas?: Record<string, Record<string, unknown>>
       state_schemas?: Record<string, Record<string, unknown>>
+      default_dispatch_policy?: DispatchPolicy
     }>(req, res)
     if (!parsed) return
 
@@ -230,6 +232,7 @@ export class ElectricAgentsEntityTypeRoutes {
       const updated = await this.manager.amendSchemas(name, {
         inbox_schemas: parsed.inbox_schemas ?? parsed.input_schemas,
         state_schemas: parsed.state_schemas ?? parsed.output_schemas,
+        default_dispatch_policy: parsed.default_dispatch_policy,
       })
       sendJson(res, 200, this.toPublicEntityType(updated))
     } catch (err) {
@@ -260,6 +263,7 @@ export class ElectricAgentsEntityTypeRoutes {
       inbox_schemas: parsed.inbox_schemas ?? parsed.input_schemas,
       state_schemas: parsed.state_schemas ?? parsed.output_schemas,
       serve_endpoint: rewriteLoopbackWebhookUrl(parsed.serve_endpoint),
+      default_dispatch_policy: parsed.default_dispatch_policy,
     }
   }
 

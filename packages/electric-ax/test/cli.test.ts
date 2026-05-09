@@ -29,9 +29,8 @@ const STARTED_ENV: StartedDevEnvironment = {
 }
 
 const STARTED_BUILTIN_ENV: StartedBuiltinAgentsEnvironment = {
-  port: 4448,
-  url: `http://localhost:4448`,
-  registeredBaseUrl: `http://localhost:4448`,
+  runnerId: `test-runner`,
+  url: `pull-wake:test-runner`,
   agentServerUrl: `http://localhost:4437`,
 }
 

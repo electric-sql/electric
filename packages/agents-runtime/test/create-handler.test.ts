@@ -407,20 +407,20 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
-  it(`registerTypes throws on partial registration failure`, async () => {
+  it(`registerTypes throws on entity type registration failure`, async () => {
     defineEntity(`good-agent`, { handler: async () => {} })
     defineEntity(`bad-agent`, { handler: async () => {} })
 
-    vi.spyOn(globalThis, `fetch`).mockImplementation((url) => {
-      if (String(url).includes(`/good-agent/**?subscription=`)) {
+    vi.spyOn(globalThis, `fetch`).mockImplementation((url, init) => {
+      const body = JSON.parse(String(init?.body ?? `{}`)) as { name?: string }
+      if (
+        String(url).includes(`/_electric/entity-types`) &&
+        body.name === `good-agent`
+      ) {
         return Promise.resolve(new Response(`server error`, { status: 500 }))
       }
-
-      const body = JSON.stringify(
-        String(url).includes(`entity-types`) ? { ok: true } : {}
-      )
       return Promise.resolve(
-        new Response(body, {
+        new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: { 'content-type': `application/json` },
         })
@@ -437,7 +437,7 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
-  it(`registers entity types and creates a serve-endpoint subscription`, async () => {
+  it(`registers entity types without creating webhook subscriptions`, async () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,
       outputSchemas: { custom: makeStandardSchema({ type: `object` }) },
@@ -458,25 +458,17 @@ describe(`createRuntimeHandler`, () => {
 
     await handler.registerTypes()
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith(
       `http://localhost:3000/_electric/entity-types`,
       expect.objectContaining({
         method: `POST`,
       })
     )
-    expect(fetchMock).toHaveBeenCalledWith(
-      `http://localhost:3000/schema-agent/**?subscription=schema-agent-handler`,
-      expect.objectContaining({
-        method: `PUT`,
-      })
-    )
-
     const [, options] = fetchMock.mock.calls[0]!
     expect(JSON.parse(options?.body as string)).toMatchObject({
       name: `schema-agent`,
       description: `Schema agent`,
-      serve_endpoint: `http://localhost:4000/electric-agents`,
       output_schemas: expect.objectContaining({
         custom: { type: `object` },
         run: expect.any(Object),
@@ -603,6 +595,7 @@ describe(`createRuntimeHandler`, () => {
     const [, options] = fetchMock.mock.calls[0]!
     const body = JSON.parse(options?.body as string) as Record<string, unknown>
     expect(body).not.toHaveProperty(`serve_endpoint`)
+    expect(body).not.toHaveProperty(`handlerUrl`)
   })
 
   it(`sends creation_schema when creationSchema is defined`, async () => {

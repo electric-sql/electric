@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
-  resolveBuiltinAgentsHost,
-  resolveBuiltinAgentsPort,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
   waitForElectricAgentsServer,
@@ -62,48 +60,6 @@ describe(`resolveElectricAgentsPort`, () => {
 
   it(`defaults to 4437`, () => {
     expect(resolveElectricAgentsPort({}, {})).toBe(4437)
-  })
-})
-
-describe(`resolveBuiltinAgentsPort`, () => {
-  it(`uses process env when present`, () => {
-    expect(
-      resolveBuiltinAgentsPort({ ELECTRIC_AGENTS_BUILTIN_PORT: `5548` }, {})
-    ).toBe(5548)
-  })
-
-  it(`falls back to .env`, () => {
-    expect(
-      resolveBuiltinAgentsPort({}, { ELECTRIC_AGENTS_BUILTIN_PORT: `6658` })
-    ).toBe(6658)
-  })
-
-  it(`defaults to 4448`, () => {
-    expect(resolveBuiltinAgentsPort({}, {})).toBe(4448)
-  })
-})
-
-describe(`resolveBuiltinAgentsHost`, () => {
-  it(`uses process env when present`, () => {
-    expect(
-      resolveBuiltinAgentsHost(
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `127.0.0.1` },
-        {}
-      )
-    ).toBe(`127.0.0.1`)
-  })
-
-  it(`falls back to .env`, () => {
-    expect(
-      resolveBuiltinAgentsHost(
-        {},
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `localhost` }
-      )
-    ).toBe(`localhost`)
-  })
-
-  it(`defaults to all interfaces so Docker can reach the host runtime`, () => {
-    expect(resolveBuiltinAgentsHost({}, {})).toBe(`0.0.0.0`)
   })
 })
 

@@ -37,6 +37,12 @@ pnpm -C packages/typescript-client build
 docker compose -f packages/agents-server/docker-compose.dev.yml up -d
 ```
 
+The compose file keeps the historical defaults, but host ports can be
+overridden with `PG_HOST_PORT`, `ELECTRIC_HOST_PORT`, `JAEGER_UI_PORT`,
+`JAEGER_OTLP_HTTP_PORT`, and `JAEGER_OTLP_GRPC_PORT`. Use
+`COMPOSE_PROJECT_NAME` (or `docker compose -p ...`) to isolate container names
+and volumes across checkouts.
+
 Services will be available at:
 
 - PostgreSQL: `localhost:5432` (electric_agents/electric_agents)
@@ -83,10 +89,19 @@ The agents-server will start on `http://localhost:4437` with an embedded durable
 ```sh
 # Terminal 5: built-in agents (Horton + Worker)
 ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+  ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID=local-builtins \
+  ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER=1 \
+  ELECTRIC_ASSERTED_AUTH_EMAIL=local-builtins@example.test \
+  ELECTRIC_ASSERTED_AUTH_NAME="Local Built-ins" \
   node packages/agents/dist/entrypoint.js
 ```
 
-The built-in agents server starts on `http://localhost:4448` and auto-registers Horton and Worker entity types.
+`ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID` (or `PULL_WAKE_RUNNER_ID`) is required.
+`ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER=1` is useful for local development
+when the runner has not already been registered. The asserted-auth variables are
+optional and only needed when the agents-server is running with dev asserted auth.
+
+The built-in agents entrypoint starts a pull-wake runner and auto-registers Horton and Worker entity types.
 
 ### Step 6 — Start the agents UI dashboard
 
@@ -110,14 +125,25 @@ Vite dev server with HMR — changes appear instantly.
 | `ELECTRIC_AGENTS_STREAMS_DATA_DIR`    | —         | Local streams data directory                        |
 | `ELECTRIC_AGENTS_DURABLE_STREAMS_URL` | —         | External durable streams URL (omit to use embedded) |
 
+### agents-desktop
+
+| Variable                               | Default                        | Description                                                                                                                                                        |
+| -------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ELECTRIC_DESKTOP_USER_DATA_DIR`       | Electron default userData path | Overrides the profile/settings directory. Set this before launch to run multiple desktop instances/checkouts without sharing settings or the single-instance lock. |
+| `ELECTRIC_DESKTOP_SERVER_URL`          | —                              | Adds/selects this agents-server URL at startup. Takes precedence over `ELECTRIC_AGENTS_SERVER_URL`.                                                                |
+| `ELECTRIC_AGENTS_SERVER_URL`           | —                              | Fallback startup server URL for desktop, and the required server URL for the standalone built-in agents package.                                                   |
+| `ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID` | persisted UUID                 | Runner id used by the desktop pull-wake registration.                                                                                                              |
+
 ### agents (built-in)
 
-| Variable                       | Default     | Description                  |
-| ------------------------------ | ----------- | ---------------------------- |
-| `ELECTRIC_AGENTS_SERVER_URL`   | —           | agents-server URL (required) |
-| `ANTHROPIC_API_KEY`            | —           | Claude API key (required)    |
-| `ELECTRIC_AGENTS_BUILTIN_HOST` | `127.0.0.1` | Bind address                 |
-| `ELECTRIC_AGENTS_BUILTIN_PORT` | `4448`      | Server port                  |
+| Variable                                                      | Default | Description                                                                   |
+| ------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------- |
+| `ELECTRIC_AGENTS_SERVER_URL`                                  | —       | agents-server URL (required)                                                  |
+| `ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID` / `PULL_WAKE_RUNNER_ID` | —       | Pull-wake runner id (required)                                                |
+| `ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER`                   | —       | Set to `1`/`true` to register the local runner on startup                     |
+| `ELECTRIC_ASSERTED_AUTH_EMAIL`                                | —       | Optional dev asserted-auth email; sent on runner registration and wake claims |
+| `ELECTRIC_ASSERTED_AUTH_NAME`                                 | —       | Optional dev asserted-auth name; sent on runner registration and wake claims  |
+| `ANTHROPIC_API_KEY`                                           | —       | Claude API key (required)                                                     |
 
 ## Running tests
 
@@ -171,4 +197,67 @@ To clear all state: stop the servers and run `docker compose down -v` to remove 
 ```sh
 docker compose -f packages/agents-server/docker-compose.dev.yml down    # stop services
 docker compose -f packages/agents-server/docker-compose.dev.yml down -v  # stop + remove volumes
+```
+
+## Isolated manual pull-wake stack alongside another checkout
+
+Use a unique compose project, host ports, server port, desktop profile, and
+runner id. This example keeps a normal checkout on the defaults and starts an
+isolated pull-wake stack on PostgreSQL `55432`, Electric `33060`, Jaeger UI
+`16687`, and agents-server `4447`. Run from the isolated checkout root.
+
+```sh
+# Terminal A: backing services
+COMPOSE_PROJECT_NAME=electric-agents-pull-wake \
+PG_HOST_PORT=55432 \
+ELECTRIC_HOST_PORT=33060 \
+JAEGER_UI_PORT=16687 \
+JAEGER_OTLP_HTTP_PORT=14318 \
+JAEGER_OTLP_GRPC_PORT=14317 \
+docker compose -f packages/agents-server/docker-compose.dev.yml up -d
+
+# Terminal B/C/D: watch builds, as in the normal setup
+pnpm -C packages/agents-runtime dev
+pnpm -C packages/agents-server dev
+pnpm -C packages/agents-desktop dev:ui
+
+# Terminal E: isolated agents-server
+DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:55432/electric_agents \
+ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:33060 \
+ELECTRIC_AGENTS_PORT=4447 \
+ELECTRIC_AGENTS_BASE_URL=http://127.0.0.1:4447 \
+ELECTRIC_AGENTS_DEV_ASSERTED_AUTH=1 \
+ELECTRIC_INSECURE=true \
+node packages/agents-server/dist/entrypoint.js
+
+# Terminal F: desktop A against the default stack
+ELECTRIC_DESKTOP_USER_DATA_DIR="$PWD/.tmp/desktop-default" \
+ELECTRIC_DESKTOP_SERVER_URL=http://127.0.0.1:4437 \
+ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID=manual-default-a \
+ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER=1 \
+ELECTRIC_ASSERTED_AUTH_EMAIL=desktop-a@example.test \
+ELECTRIC_ASSERTED_AUTH_NAME="Desktop A" \
+pnpm -C packages/agents-desktop start
+
+# Terminal G: desktop B against the isolated stack
+ELECTRIC_DESKTOP_USER_DATA_DIR="$PWD/.tmp/desktop-pull-wake" \
+ELECTRIC_DESKTOP_SERVER_URL=http://127.0.0.1:4447 \
+ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID=manual-pull-wake-b \
+ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER=1 \
+ELECTRIC_ASSERTED_AUTH_EMAIL=desktop-b@example.test \
+ELECTRIC_ASSERTED_AUTH_NAME="Desktop B" \
+pnpm -C packages/agents-desktop start
+```
+
+If you also run `packages/agents` standalone for the isolated server, set
+`ELECTRIC_AGENTS_SERVER_URL=http://127.0.0.1:4447` and use a unique
+`ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID` (or `PULL_WAKE_RUNNER_ID`). Set
+`ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER=1` if the runner has not already
+been registered.
+
+Teardown for the isolated services:
+
+```sh
+COMPOSE_PROJECT_NAME=electric-agents-pull-wake \
+docker compose -f packages/agents-server/docker-compose.dev.yml down -v
 ```

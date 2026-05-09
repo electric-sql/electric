@@ -44,13 +44,36 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
     ).toEqual({
       baseUrl: `https://electric-agents.example.com`,
       durableStreamsUrl: `http://streams:8787`,
+      dispatchRecoveryIntervalMs: undefined,
       electricSecret: `electric-secret`,
       electricUrl: `http://electric:3000`,
+      staleOutstandingWakeAfterMs: undefined,
       host: `0.0.0.0`,
       port: 8080,
       postgresUrl: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
       workingDirectory: `/workspace/app`,
     })
+  })
+
+  it(`enables dev asserted auth only when explicitly requested`, async () => {
+    const disabled = resolveElectricAgentsEntrypointOptions({
+      DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
+      ELECTRIC_ASSERTED_AUTH_EMAIL: `alice@example.com`,
+    })
+    expect(disabled.authenticateRequest).toBeUndefined()
+
+    const enabled = resolveElectricAgentsEntrypointOptions({
+      DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
+      ELECTRIC_AGENTS_DEV_ASSERTED_AUTH: `1`,
+      ELECTRIC_ASSERTED_AUTH_EMAIL: `alice@example.com`,
+    })
+    expect(await enabled.authenticateRequest?.({ headers: {} } as any)).toEqual(
+      {
+        userId: `alice@example.com`,
+        email: `alice@example.com`,
+        name: undefined,
+      }
+    )
   })
 
   it(`uses sane defaults for container startup`, () => {
@@ -65,13 +88,41 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
     ).toEqual({
       baseUrl: undefined,
       durableStreamsUrl: `http://streams:8787`,
+      dispatchRecoveryIntervalMs: undefined,
       electricSecret: undefined,
       electricUrl: undefined,
+      staleOutstandingWakeAfterMs: undefined,
       host: `0.0.0.0`,
       port: 4437,
       postgresUrl: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
       workingDirectory: `/workspace/default`,
     })
+  })
+
+  it(`reads optional dispatch recovery scheduling config`, () => {
+    expect(
+      resolveElectricAgentsEntrypointOptions({
+        DURABLE_STREAMS_URL: `http://streams:8787`,
+        DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
+        ELECTRIC_AGENTS_DISPATCH_RECOVERY_INTERVAL_MS: `30000`,
+        ELECTRIC_AGENTS_STALE_OUTSTANDING_WAKE_AFTER_MS: `120000`,
+      })
+    ).toEqual(
+      expect.objectContaining({
+        dispatchRecoveryIntervalMs: 30_000,
+        staleOutstandingWakeAfterMs: 120_000,
+      })
+    )
+  })
+
+  it(`rejects invalid dispatch recovery scheduling config`, () => {
+    expect(() =>
+      resolveElectricAgentsEntrypointOptions({
+        DURABLE_STREAMS_URL: `http://streams:8787`,
+        DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
+        ELECTRIC_AGENTS_DISPATCH_RECOVERY_INTERVAL_MS: `0`,
+      })
+    ).toThrow(/Invalid dispatch recovery interval/)
   })
 
   it(`fails fast when required dependencies are missing`, () => {
@@ -129,8 +180,10 @@ describe(`runElectricAgentsEntrypoint`, () => {
     expect(createServer).toHaveBeenCalledWith({
       baseUrl: undefined,
       durableStreamsUrl: `http://streams:8787`,
+      dispatchRecoveryIntervalMs: undefined,
       electricSecret: `electric-secret`,
       electricUrl: `http://electric:3000`,
+      staleOutstandingWakeAfterMs: undefined,
       host: `0.0.0.0`,
       port: 7777,
       postgresUrl: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,

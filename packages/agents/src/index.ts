@@ -1,5 +1,4 @@
 export {
-  DEFAULT_BUILTIN_AGENT_HANDLER_PATH,
   createBuiltinAgentHandler,
   createAgentHandler,
   registerBuiltinAgentTypes,

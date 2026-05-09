@@ -38,6 +38,7 @@ type DesktopState = {
   workingDirectory: string | null
   error: string | null
   discoveredServers: Array<DiscoveredServer>
+  pullWakeRunnerId: string | null
 }
 
 type ApiKeys = {

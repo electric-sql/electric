@@ -33,7 +33,11 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       baseUrl = await electricAgentsServer.start()
       builtinAgentsServer = new BuiltinAgentsServer({
         agentServerUrl: baseUrl,
-        port: 0,
+        pullWake: {
+          runnerId: `horton-spawn-worker-test`,
+          registerRunner: true,
+          ownerUserId: `test-user`,
+        },
       })
       await builtinAgentsServer.start()
     }, 60_000)

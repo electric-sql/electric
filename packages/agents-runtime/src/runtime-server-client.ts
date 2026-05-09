@@ -12,6 +12,10 @@ export interface RuntimeEntityInfo {
   streamPath: string
 }
 
+export interface RunnerDispatchPolicy {
+  targets: Array<{ type: `runner`; runnerId: string }>
+}
+
 export interface SpawnEntityOptions {
   type: string
   id: string
@@ -19,6 +23,7 @@ export interface SpawnEntityOptions {
   parentUrl?: string
   initialMessage?: unknown
   tags?: Record<string, string>
+  dispatch_policy?: RunnerDispatchPolicy
   wake?: {
     subscriberUrl: string
     condition:
@@ -214,6 +219,7 @@ export function createRuntimeServerClient(
     initialMessage,
     tags,
     wake,
+    dispatch_policy,
   }: SpawnEntityOptions): Promise<RuntimeEntityInfo> => {
     const body: Record<string, unknown> = {}
     if (args && Object.keys(args).length > 0) body.args = args
@@ -221,6 +227,7 @@ export function createRuntimeServerClient(
     if (initialMessage !== undefined) body.initialMessage = initialMessage
     if (tags && Object.keys(tags).length > 0) body.tags = tags
     if (wake !== undefined) body.wake = wake
+    if (dispatch_policy !== undefined) body.dispatch_policy = dispatch_policy
 
     const response = await request(`/${type}/${id}`, {
       method: `PUT`,

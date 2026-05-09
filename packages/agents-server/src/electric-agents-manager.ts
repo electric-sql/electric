@@ -20,6 +20,7 @@ import {
   resolveCronScheduleSpec,
 } from '@electric-ax/agents-runtime'
 import {
+  assertDispatchPolicy,
   ErrCodeDuplicateURL,
   ErrCodeForkInProgress,
   ErrCodeForkWaitTimeout,
@@ -47,6 +48,7 @@ import type { PostgresRegistry } from './electric-agents-registry.js'
 import type { SchemaValidator } from './electric-agents-schema-validator.js'
 import type { StreamClient } from './stream-client.js'
 import type {
+  DispatchPolicy,
   ElectricAgentsEntity,
   ElectricAgentsEntityType,
   RegisterEntityTypeRequest,
@@ -226,6 +228,13 @@ export class ElectricAgentsManager {
     this.validateSchema(req.creation_schema)
     this.validateSchemaMap(req.inbox_schemas)
     this.validateSchemaMap(req.state_schemas)
+    const defaultDispatchPolicy =
+      req.default_dispatch_policy !== undefined
+        ? this.validateDispatchPolicy(
+            req.default_dispatch_policy,
+            `default_dispatch_policy`
+          )
+        : undefined
 
     const existing = await this.registry.getEntityType(req.name)
     const now = new Date().toISOString()
@@ -236,6 +245,7 @@ export class ElectricAgentsManager {
       inbox_schemas: req.inbox_schemas,
       state_schemas: req.state_schemas,
       serve_endpoint: req.serve_endpoint,
+      default_dispatch_policy: defaultDispatchPolicy,
       revision: existing ? existing.revision + 1 : 1,
       created_at: existing?.created_at ?? now,
       updated_at: now,
@@ -284,6 +294,51 @@ export class ElectricAgentsManager {
       span.setAttribute(ATTR.ENTITY_URL, entity.url)
       return entity
     })
+  }
+
+  /**
+   * Resolve the dispatch policy a spawn would use before any streams/entities
+   * are created. This intentionally mirrors spawnInner's precedence:
+   * explicit dispatch_policy, parent inheritance, then entity type default.
+   */
+  async resolveEffectiveDispatchPolicy(
+    typeName: string,
+    req: Pick<TypedSpawnRequest, `dispatch_policy` | `parent`>
+  ): Promise<DispatchPolicy | undefined> {
+    const entityType = await this.registry.getEntityType(typeName)
+    if (!entityType) {
+      throw new ElectricAgentsError(
+        ErrCodeUnknownEntityType,
+        `Entity type "${typeName}" not found`,
+        404
+      )
+    }
+
+    let parentEntity: ElectricAgentsEntity | null = null
+    if (req.parent) {
+      parentEntity = await this.registry.getEntity(req.parent)
+      if (!parentEntity) {
+        throw new ElectricAgentsError(
+          ErrCodeNotFound,
+          `Parent entity "${req.parent}" not found`,
+          404
+        )
+      }
+    }
+
+    return req.dispatch_policy !== undefined
+      ? this.validateDispatchPolicy(req.dispatch_policy, `dispatch_policy`)
+      : parentEntity?.dispatch_policy !== undefined
+        ? this.validateDispatchPolicy(
+            parentEntity.dispatch_policy,
+            `parent.dispatch_policy`
+          )
+        : entityType.default_dispatch_policy !== undefined
+          ? this.validateDispatchPolicy(
+              entityType.default_dispatch_policy,
+              `default_dispatch_policy`
+            )
+          : undefined
   }
 
   private async spawnInner(
@@ -354,9 +409,10 @@ export class ElectricAgentsManager {
       )
     }
 
+    let parentEntity: ElectricAgentsEntity | null = null
     if (req.parent) {
-      const parent = await this.registry.getEntity(req.parent)
-      if (!parent) {
+      parentEntity = await this.registry.getEntity(req.parent)
+      if (!parentEntity) {
         throw new ElectricAgentsError(
           ErrCodeNotFound,
           `Parent entity "${req.parent}" not found`,
@@ -364,6 +420,21 @@ export class ElectricAgentsManager {
         )
       }
     }
+
+    const dispatchPolicy =
+      req.dispatch_policy !== undefined
+        ? this.validateDispatchPolicy(req.dispatch_policy, `dispatch_policy`)
+        : parentEntity?.dispatch_policy !== undefined
+          ? this.validateDispatchPolicy(
+              parentEntity.dispatch_policy,
+              `parent.dispatch_policy`
+            )
+          : entityType.default_dispatch_policy !== undefined
+            ? this.validateDispatchPolicy(
+                entityType.default_dispatch_policy,
+                `default_dispatch_policy`
+              )
+            : undefined
 
     const now = Date.now()
     const entityData: ElectricAgentsEntity = {
@@ -375,6 +446,7 @@ export class ElectricAgentsManager {
         error: errorPath,
       },
       subscription_id: subscriptionId,
+      dispatch_policy: dispatchPolicy,
       write_token: writeToken,
       tags: initialTags,
       spawn_args: req.args,
@@ -2276,6 +2348,7 @@ export class ElectricAgentsManager {
     await this.wakeRegistry.unregisterBySource(entityUrl)
 
     const txid = await this.registry.updateStatusWithTxid(entityUrl, `stopped`)
+    await this.registry.supersedeDispatchForStoppedEntity({ entityUrl })
     if (this.entityBridgeManager) {
       await this.entityBridgeManager.onEntityChanged(entityUrl)
     }
@@ -2375,11 +2448,19 @@ export class ElectricAgentsManager {
     schemas: {
       inbox_schemas?: Record<string, Record<string, unknown>>
       state_schemas?: Record<string, Record<string, unknown>>
+      default_dispatch_policy?: DispatchPolicy
     }
   ): Promise<ElectricAgentsEntityType> {
     // Validate each provided schema via validateSchemaSubset.
     this.validateSchemaMap(schemas.inbox_schemas)
     this.validateSchemaMap(schemas.state_schemas)
+    const amendedDefaultDispatchPolicy =
+      schemas.default_dispatch_policy !== undefined
+        ? this.validateDispatchPolicy(
+            schemas.default_dispatch_policy,
+            `default_dispatch_policy`
+          )
+        : undefined
 
     // Look up current entity type.
     const existing = await this.registry.getEntityType(typeName)
@@ -2433,6 +2514,8 @@ export class ElectricAgentsManager {
       inbox_schemas: mergedInbox,
       state_schemas: mergedState,
       serve_endpoint: existing.serve_endpoint,
+      default_dispatch_policy:
+        amendedDefaultDispatchPolicy ?? existing.default_dispatch_policy,
       revision: nextRevision,
       created_at: existing.created_at,
       updated_at: now,
@@ -2471,6 +2554,21 @@ export class ElectricAgentsManager {
         spawnArgs: entity.spawn_args,
       },
       triggerEvent: `message_received`,
+    }
+  }
+
+  private validateDispatchPolicy(
+    policy: unknown,
+    label: string
+  ): DispatchPolicy {
+    try {
+      return assertDispatchPolicy(policy, label)
+    } catch (err) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        err instanceof Error ? err.message : `Invalid ${label}`,
+        400
+      )
     }
   }
 

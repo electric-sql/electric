@@ -1,6 +1,10 @@
 import { DurableStreamTestServer } from '@durable-streams/server'
 import { ElectricAgentsServer } from './server.js'
 import type { ElectricAgentsServerOptions } from './server.js'
+import {
+  createDevAssertedAuthenticateRequest,
+  devAssertedAuthOptionsFromEnv,
+} from './dev-asserted-auth.js'
 
 const DEFAULT_HOST = `0.0.0.0`
 const DEFAULT_PORT = 4437
@@ -74,6 +78,24 @@ function validateUrl(name: string, value: string): string {
   }
 }
 
+function readOptionalPositiveInteger(
+  env: EnvSource,
+  names: Array<string>,
+  description: string
+): number | undefined {
+  const raw = readEnv(env, names)
+  if (!raw) return undefined
+
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `Invalid ${description} "${raw}". Expected a positive integer.`
+    )
+  }
+
+  return value
+}
+
 function readOptionalPort(
   env: EnvSource,
   names: Array<string>,
@@ -119,7 +141,12 @@ export function resolveElectricAgentsEntrypointOptions(
   const electricSecret = readEnv(env, [`ELECTRIC_AGENTS_ELECTRIC_SECRET`])
   const baseUrl = readEnv(env, [`ELECTRIC_AGENTS_BASE_URL`, `BASE_URL`])
 
+  const authenticateRequest = createDevAssertedAuthenticateRequest(
+    devAssertedAuthOptionsFromEnv(env)
+  )
+
   return {
+    ...(authenticateRequest ? { authenticateRequest } : {}),
     baseUrl: baseUrl ? validateUrl(`base URL`, baseUrl) : undefined,
     durableStreamsUrl: durableStreamsUrl
       ? validateUrl(`durable streams URL`, durableStreamsUrl)
@@ -136,6 +163,16 @@ export function resolveElectricAgentsEntrypointOptions(
         `ELECTRIC_AGENTS_WORKING_DIRECTORY`,
         `WORKING_DIRECTORY`,
       ]) ?? cwd,
+    dispatchRecoveryIntervalMs: readOptionalPositiveInteger(
+      env,
+      [`ELECTRIC_AGENTS_DISPATCH_RECOVERY_INTERVAL_MS`],
+      `dispatch recovery interval`
+    ),
+    staleOutstandingWakeAfterMs: readOptionalPositiveInteger(
+      env,
+      [`ELECTRIC_AGENTS_STALE_OUTSTANDING_WAKE_AFTER_MS`],
+      `stale outstanding wake age`
+    ),
   }
 }
 

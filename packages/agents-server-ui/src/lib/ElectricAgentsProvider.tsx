@@ -97,6 +97,10 @@ type EntityTypesCollection = ReturnType<typeof createEntityTypesCollection>
 
 // --- Actions ---
 
+type RunnerDispatchPolicy = {
+  targets: Array<{ type: `runner`; runnerId: string }>
+}
+
 interface SpawnInput {
   type: string
   name: string
@@ -104,6 +108,7 @@ interface SpawnInput {
   tags?: Record<string, string>
   parent?: string
   initialMessage?: unknown
+  dispatch_policy?: RunnerDispatchPolicy
 }
 
 function createSpawnAction(
@@ -123,12 +128,21 @@ function createSpawnAction(
         updated_at: Date.now(),
       })
     },
-    mutationFn: async ({ type, name, args, tags, parent, initialMessage }) => {
+    mutationFn: async ({
+      type,
+      name,
+      args,
+      tags,
+      parent,
+      initialMessage,
+      dispatch_policy,
+    }) => {
       const body: Record<string, unknown> = {}
       if (args) body.args = args
       if (tags) body.tags = tags
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
+      if (dispatch_policy) body.dispatch_policy = dispatch_policy
 
       const res = await fetch(`${baseUrl}/${type}/${name}`, {
         method: `PUT`,

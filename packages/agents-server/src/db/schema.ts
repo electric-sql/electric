@@ -8,11 +8,74 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
   unique,
 } from 'drizzle-orm/pg-core'
+
+export const users = pgTable(
+  `users`,
+  {
+    id: text(`id`).primaryKey(),
+    displayName: text(`display_name`),
+    email: text(`email`),
+    avatarUrl: text(`avatar_url`),
+    authProvider: text(`auth_provider`),
+    authSubject: text(`auth_subject`),
+    profile: jsonb(`profile`).notNull().default({}),
+    metadata: jsonb(`metadata`).notNull().default({}),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index(`idx_users_email`).on(table.email),
+    index(`idx_users_auth_identity`).on(table.authProvider, table.authSubject),
+  ]
+)
+
+export const runners = pgTable(
+  `runners`,
+  {
+    id: text(`id`).primaryKey(),
+    ownerUserId: text(`owner_user_id`).notNull(),
+    label: text(`label`).notNull(),
+    kind: text(`kind`).notNull().default(`local`),
+    adminStatus: text(`admin_status`).notNull().default(`enabled`),
+    wakeStream: text(`wake_stream`).notNull(),
+    lastSeenAt: timestamp(`last_seen_at`, { withTimezone: true }),
+    livenessLeaseExpiresAt: timestamp(`liveness_lease_expires_at`, {
+      withTimezone: true,
+    }),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index(`idx_runners_owner_user_id`).on(table.ownerUserId),
+    index(`idx_runners_admin_status`).on(table.adminStatus),
+    index(`idx_runners_liveness_lease_expires_at`).on(
+      table.livenessLeaseExpiresAt
+    ),
+    unique(`uq_runners_wake_stream`).on(table.wakeStream),
+    check(
+      `chk_runners_kind`,
+      sql`${table.kind} IN ('local', 'cloud-worker', 'sandbox', 'ci', 'server')`
+    ),
+    check(
+      `chk_runners_admin_status`,
+      sql`${table.adminStatus} IN ('enabled', 'disabled')`
+    ),
+  ]
+)
 
 export const entityTypes = pgTable(`entity_types`, {
   name: text(`name`).primaryKey(),
@@ -21,6 +84,7 @@ export const entityTypes = pgTable(`entity_types`, {
   inboxSchemas: jsonb(`inbox_schemas`),
   stateSchemas: jsonb(`state_schemas`),
   serveEndpoint: text(`serve_endpoint`),
+  defaultDispatchPolicy: jsonb(`default_dispatch_policy`),
   revision: integer(`revision`).notNull().default(1),
   createdAt: text(`created_at`).notNull(),
   updatedAt: text(`updated_at`).notNull(),
@@ -33,6 +97,7 @@ export const entities = pgTable(
     type: text(`type`).notNull(),
     status: text(`status`).notNull().default(`idle`),
     subscriptionId: text(`subscription_id`).notNull(),
+    dispatchPolicy: jsonb(`dispatch_policy`),
     writeToken: text(`write_token`).notNull(),
     tags: jsonb(`tags`).notNull().default({}),
     tagsIndex: text(`tags_index`)
@@ -55,6 +120,126 @@ export const entities = pgTable(
     check(
       `chk_entities_status`,
       sql`${table.status} IN ('spawning', 'running', 'idle', 'stopped')`
+    ),
+  ]
+)
+
+export const entityDispatchState = pgTable(
+  `entity_dispatch_state`,
+  {
+    entityUrl: text(`entity_url`).primaryKey(),
+    pendingSourceStreams: jsonb(`pending_source_streams`)
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    pendingReason: text(`pending_reason`),
+    pendingSince: timestamp(`pending_since`, { withTimezone: true }),
+    outstandingWakeId: text(`outstanding_wake_id`),
+    outstandingWakeTarget: jsonb(`outstanding_wake_target`),
+    outstandingWakeCreatedAt: timestamp(`outstanding_wake_created_at`, {
+      withTimezone: true,
+    }),
+    activeConsumerId: text(`active_consumer_id`),
+    activeRunnerId: text(`active_runner_id`),
+    activeEpoch: integer(`active_epoch`),
+    activeClaimedAt: timestamp(`active_claimed_at`, { withTimezone: true }),
+    activeLeaseExpiresAt: timestamp(`active_lease_expires_at`, {
+      withTimezone: true,
+    }),
+    lastWakeId: text(`last_wake_id`),
+    lastClaimedAt: timestamp(`last_claimed_at`, { withTimezone: true }),
+    lastReleasedAt: timestamp(`last_released_at`, { withTimezone: true }),
+    lastCompletedAt: timestamp(`last_completed_at`, { withTimezone: true }),
+    lastError: text(`last_error`),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index(`idx_entity_dispatch_state_active_runner`).on(table.activeRunnerId),
+    index(`idx_entity_dispatch_state_outstanding_wake`).on(
+      table.outstandingWakeId
+    ),
+    index(`idx_entity_dispatch_state_active_lease`).on(
+      table.activeLeaseExpiresAt
+    ),
+  ]
+)
+
+export const wakeNotifications = pgTable(
+  `wake_notifications`,
+  {
+    wakeId: text(`wake_id`).primaryKey(),
+    entityUrl: text(`entity_url`).notNull(),
+    targetType: text(`target_type`).notNull(),
+    targetRunnerId: text(`target_runner_id`),
+    targetWebhookUrl: text(`target_webhook_url`),
+    targetWorkerPoolId: text(`target_worker_pool_id`),
+    runnerWakeStream: text(`runner_wake_stream`),
+    runnerWakeStreamOffset: text(`runner_wake_stream_offset`),
+    notificationPublic: jsonb(`notification_public`).notNull(),
+    deliveryStatus: text(`delivery_status`).notNull().default(`queued`),
+    claimStatus: text(`claim_status`).notNull().default(`unclaimed`),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deliveredAt: timestamp(`delivered_at`, { withTimezone: true }),
+    claimedAt: timestamp(`claimed_at`, { withTimezone: true }),
+    resolvedAt: timestamp(`resolved_at`, { withTimezone: true }),
+  },
+  (table) => [
+    index(`idx_wake_notifications_entity_url`).on(table.entityUrl),
+    index(`idx_wake_notifications_target_runner`).on(table.targetRunnerId),
+    index(`idx_wake_notifications_delivery_status`).on(table.deliveryStatus),
+    index(`idx_wake_notifications_claim_status`).on(table.claimStatus),
+    index(`idx_wake_notifications_created_at`).on(table.createdAt),
+    check(
+      `chk_wake_notifications_target_type`,
+      sql`${table.targetType} IN ('webhook', 'runner', 'worker-pool')`
+    ),
+    check(
+      `chk_wake_notifications_delivery_status`,
+      sql`${table.deliveryStatus} IN ('queued', 'delivered', 'failed', 'superseded')`
+    ),
+    check(
+      `chk_wake_notifications_claim_status`,
+      sql`${table.claimStatus} IN ('unclaimed', 'claimed', 'completed', 'expired')`
+    ),
+  ]
+)
+
+export const consumerClaims = pgTable(
+  `consumer_claims`,
+  {
+    consumerId: text(`consumer_id`).notNull(),
+    epoch: integer(`epoch`).notNull(),
+    wakeId: text(`wake_id`),
+    entityUrl: text(`entity_url`).notNull(),
+    streamPath: text(`stream_path`).notNull(),
+    runnerId: text(`runner_id`),
+    status: text(`status`).notNull().default(`active`),
+    claimedAt: timestamp(`claimed_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastHeartbeatAt: timestamp(`last_heartbeat_at`, { withTimezone: true }),
+    leaseExpiresAt: timestamp(`lease_expires_at`, { withTimezone: true }),
+    releasedAt: timestamp(`released_at`, { withTimezone: true }),
+    ackedStreams: jsonb(`acked_streams`),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.consumerId, table.epoch] }),
+    index(`idx_consumer_claims_entity_status`).on(
+      table.entityUrl,
+      table.status
+    ),
+    index(`idx_consumer_claims_runner`).on(table.runnerId),
+    index(`idx_consumer_claims_wake_id`).on(table.wakeId),
+    index(`idx_consumer_claims_lease_expires_at`).on(table.leaseExpiresAt),
+    check(
+      `chk_consumer_claims_status`,
+      sql`${table.status} IN ('active', 'released', 'expired', 'failed')`
     ),
   ]
 )

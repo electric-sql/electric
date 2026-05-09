@@ -22,6 +22,10 @@ import {
 } from '@opentelemetry/api'
 import { sendJson, sendJsonError } from './electric-agents-http.js'
 import { PostgresRegistry } from './electric-agents-registry.js'
+import type {
+  ExpiredActiveClaimRecoveryItem,
+  StaleOutstandingWakeRecoveryItem,
+} from './electric-agents-registry.js'
 import { WakeRegistry } from './wake-registry.js'
 import { createDb, runMigrations } from './db/index.js'
 import {
@@ -36,6 +40,10 @@ import { ElectricAgentsEntityTypeRoutes } from './electric-agents-entity-type-ro
 import { createRuntimeRegistry } from './runtime-registry.js'
 import { Scheduler, isPermanentElectricAgentsError } from './scheduler.js'
 import { StreamClient } from './stream-client.js'
+import {
+  DispatchWakeRouter,
+  callbackForwardPathForConsumer,
+} from './dispatch-wake-router.js'
 import { serverLog } from './log.js'
 import { ATTR, extractTraceContext, tracer } from './tracing.js'
 import { EntityBridgeManager } from './entity-bridge-manager.js'
@@ -47,6 +55,12 @@ import {
 } from './electric-url.js'
 import type { RuntimeRegistry } from './runtime-registry.js'
 import type { WakeRegistration } from './wake-registry.js'
+import type {
+  AuthenticatedRequestUser,
+  AuthenticateRequest,
+  ElectricAgentsEntity,
+  SourceStreamOffset,
+} from './electric-agents-types.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
@@ -119,6 +133,22 @@ export interface ElectricAgentsServerOptions {
   postgresUrl: string
   electricUrl?: string
   electricSecret?: string
+  /**
+   * Optional host-provided user identity hook for local-runner safety checks.
+   * Broad auth/policy remains host-owned; Agents Server only uses this to
+   * ensure runner-target spawn/acquire requests act as the runner owner.
+   */
+  authenticateRequest?: AuthenticateRequest
+  /**
+   * Disabled by default. When set to a positive interval, periodically
+   * recovers expired dispatch claims and stale outstanding wakes.
+   */
+  dispatchRecoveryIntervalMs?: number
+  /**
+   * Age threshold for outstanding wakes recovered by the periodic loop.
+   * Defaults to dispatchRecoveryIntervalMs when periodic recovery is enabled.
+   */
+  staleOutstandingWakeAfterMs?: number
 }
 
 interface MockAgentBootstrap {
@@ -188,6 +218,7 @@ export class ElectricAgentsServer {
     null
   private runtimeRegistry: RuntimeRegistry = createRuntimeRegistry()
   private registry: PostgresRegistry | null = null
+  private dispatchWakeRouter: DispatchWakeRouter | null = null
   private pgDb: DrizzleDB | null = null
   private pgClient: PgClient | null = null
   private scheduler: Scheduler | null = null
@@ -199,6 +230,9 @@ export class ElectricAgentsServer {
   private streamsAgent: Agent | null = null
   private activeClaimWriteTokens = new Map<string, ActiveClaimWriteToken>()
   private activeClaimWriteTokensByConsumer = new Map<string, string>()
+  private dispatchRecoveryTimer: ReturnType<typeof setInterval> | null = null
+  private dispatchRecoveryRunning = false
+  private dispatchRecoveryActivePromise: Promise<void> | null = null
 
   streamClient: StreamClient
   readonly options: ElectricAgentsServerOptions
@@ -288,6 +322,55 @@ export class ElectricAgentsServer {
           this.pgClient = client
 
           this.registry = new PostgresRegistry(db)
+          const registry = this.registry
+          this.dispatchWakeRouter = new DispatchWakeRouter({
+            streamClient: this.streamClient,
+            registry,
+            materializeWake: async ({
+              entity,
+              target,
+              notification,
+              runnerWakeStream,
+            }) => {
+              if (!entity) {
+                throw new Error(
+                  `Dispatch wake materialization requires an entity`
+                )
+              }
+              return await registry.beginDispatchWake({
+                entityUrl: entity.url,
+                target,
+                notification,
+                sourceStreams: notification.streams,
+                reason: notification.triggerEvent,
+                runnerWakeStream,
+              })
+            },
+            markWakeDelivered: async ({
+              wakeId,
+              runnerWakeStream,
+              runnerWakeStreamOffset,
+            }) => {
+              await registry.markWakeDelivered({
+                wakeId,
+                runnerWakeStream,
+                runnerWakeStreamOffset,
+              })
+            },
+            markWakeFailed: async ({ wakeId }) => {
+              await registry.markWakeFailed({ wakeId })
+            },
+            callbackUrlForNotification: async (notification) => {
+              await registry.upsertConsumerCallback({
+                consumerId: notification.consumerId,
+                callbackUrl: notification.callback,
+                primaryStream: notification.streamPath,
+              })
+              return `${this.publicUrl}${callbackForwardPathForConsumer(
+                notification.consumerId
+              )}`
+            },
+          })
 
           const validator = new SchemaValidator()
           const wakeRegistry = new WakeRegistry(db)
@@ -433,10 +516,13 @@ export class ElectricAgentsServer {
           serverLog.info(`[agent-server] starting scheduler...`)
           await this.scheduler.start()
           serverLog.info(`[agent-server] scheduler started`)
+          this.startDispatchRecoveryLoop()
 
           this.electricAgentsRoutes = new ElectricAgentsRoutes(
             this.electricAgentsManager,
             {
+              streamClient: this.streamClient,
+              authenticateRequest: this.options.authenticateRequest,
               onEntityKilled: (entityUrl) => {
                 this.clearActiveClaimForStream(`${entityUrl}/main`)
               },
@@ -469,8 +555,137 @@ export class ElectricAgentsServer {
     })
   }
 
+  async recoverExpiredDispatchClaimsOnce(input?: {
+    now?: Date
+    limit?: number
+  }): Promise<Array<ExpiredActiveClaimRecoveryItem>> {
+    const registry = this.registry
+    if (!registry) return []
+
+    const recovered = await registry.expireStaleActiveClaims(input)
+    await Promise.all(
+      recovered.map(async (item) => {
+        if (item.pendingSourceStreams.length === 0) return
+
+        try {
+          const entity = await registry.getEntity(item.entityUrl)
+          if (!entity?.dispatch_policy) return
+
+          await this.dispatchWakeForPending(entity, item.pendingSourceStreams, {
+            triggerEvent: item.pendingReason ?? `expired_claim_recovery`,
+          })
+        } catch (err) {
+          serverLog.warn(
+            `[agent-server] expired claim recovery dispatch failed for ${item.entityUrl}:`,
+            err
+          )
+        }
+      })
+    )
+
+    return recovered
+  }
+
+  async recoverStaleOutstandingWakesOnce(input: {
+    staleBefore: Date
+    now?: Date
+    limit?: number
+  }): Promise<Array<StaleOutstandingWakeRecoveryItem>> {
+    const registry = this.registry
+    if (!registry) return []
+
+    const recovered = await registry.expireStaleOutstandingWakes(input)
+    await Promise.all(
+      recovered.map(async (item) => {
+        try {
+          const entity = await registry.getEntity(item.entityUrl)
+          if (!entity?.dispatch_policy) return
+
+          await this.dispatchWakeForPending(entity, item.pendingSourceStreams, {
+            triggerEvent: item.pendingReason ?? `stale_outstanding_wake`,
+          })
+        } catch (err) {
+          serverLog.warn(
+            `[agent-server] stale outstanding wake recovery dispatch failed for ${item.entityUrl} wake=${item.wakeId}:`,
+            err
+          )
+        }
+      })
+    )
+
+    return recovered
+  }
+
+  private startDispatchRecoveryLoop(): void {
+    this.stopDispatchRecoveryLoop()
+
+    const intervalMs = this.options.dispatchRecoveryIntervalMs
+    if (!intervalMs || intervalMs <= 0) return
+
+    const staleAfterMs =
+      this.options.staleOutstandingWakeAfterMs &&
+      this.options.staleOutstandingWakeAfterMs > 0
+        ? this.options.staleOutstandingWakeAfterMs
+        : intervalMs
+
+    const run = async (): Promise<void> => {
+      if (this.shuttingDown || this.dispatchRecoveryRunning) return
+
+      this.dispatchRecoveryRunning = true
+      const now = new Date()
+      try {
+        await this.recoverExpiredDispatchClaimsOnce({ now })
+        await this.recoverStaleOutstandingWakesOnce({
+          now,
+          staleBefore: new Date(now.getTime() - staleAfterMs),
+        })
+      } catch (err) {
+        serverLog.warn(`[agent-server] dispatch recovery loop failed:`, err)
+      } finally {
+        this.dispatchRecoveryRunning = false
+      }
+    }
+
+    this.dispatchRecoveryTimer = setInterval(() => {
+      if (this.shuttingDown || this.dispatchRecoveryRunning) return
+
+      const activePromise = run().finally(() => {
+        if (this.dispatchRecoveryActivePromise === activePromise) {
+          this.dispatchRecoveryActivePromise = null
+        }
+      })
+      this.dispatchRecoveryActivePromise = activePromise
+      void activePromise
+    }, intervalMs)
+    this.dispatchRecoveryTimer.unref?.()
+  }
+
+  private stopDispatchRecoveryLoop(): void {
+    if (!this.dispatchRecoveryTimer) return
+    clearInterval(this.dispatchRecoveryTimer)
+    this.dispatchRecoveryTimer = null
+  }
+
+  private async drainDispatchRecoveryLoop(): Promise<void> {
+    const activePromise = this.dispatchRecoveryActivePromise
+    if (!activePromise) return
+
+    try {
+      await activePromise
+    } catch (err) {
+      // The recovery runner catches/logs its own errors, but keep shutdown
+      // defensive so recovery cleanup cannot prevent normal server stop.
+      serverLog.warn(
+        `[agent-server] dispatch recovery loop failed during shutdown:`,
+        err
+      )
+    }
+  }
+
   async stop(): Promise<void> {
     this.shuttingDown = true
+    this.stopDispatchRecoveryLoop()
+    await this.drainDispatchRecoveryLoop()
 
     if (this.server) {
       const server = this.server
@@ -509,6 +724,7 @@ export class ElectricAgentsServer {
       this.electricAgentsManager = null
       this.electricAgentsRoutes = null
       this.electricAgentsEntityTypeRoutes = null
+      this.dispatchWakeRouter = null
       this.registry = null
     }
 
@@ -665,7 +881,7 @@ export class ElectricAgentsServer {
     )
     res.setHeader(
       `access-control-allow-headers`,
-      `content-type, authorization, ngrok-skip-browser-warning`
+      `content-type, authorization, electric-claim-token, electric-runner-id, x-runner-id, ngrok-skip-browser-warning`
     )
     if (method === `OPTIONS`) {
       res.writeHead(204)
@@ -943,9 +1159,58 @@ export class ElectricAgentsServer {
       void this.syncManifestSchedules(entity.url, event).catch((err) =>
         serverLog.warn(`[agent-server] manifest schedule sync failed:`, err)
       )
+      void this.dispatchWakeForEntityAppend(entity, event)
     }
 
     return true
+  }
+
+  private async dispatchWakeForEntityAppend(
+    entity: ElectricAgentsEntity,
+    event: Record<string, unknown> | Array<Record<string, unknown>>
+  ): Promise<void> {
+    await this.dispatchWakeForPending(entity, undefined, {
+      triggerEvent: inferDispatchTriggerEvent(event),
+    })
+  }
+
+  private async dispatchWakeForPending(
+    entity: ElectricAgentsEntity,
+    pendingSourceStreams?: Array<SourceStreamOffset>,
+    options?: { triggerEvent?: string }
+  ): Promise<void> {
+    const router = this.dispatchWakeRouter
+    if (!router || !entity.dispatch_policy) return
+
+    try {
+      const target = router.resolveSingleTarget(entity.dispatch_policy)
+      if (!target) return
+
+      if (target.type === `worker-pool`) {
+        serverLog.info(
+          `[agent-server] worker-pool dispatch target skipped for ${entity.url}; worker pools are not wired yet`
+        )
+        return
+      }
+
+      const triggerEvent =
+        options?.triggerEvent ??
+        (pendingSourceStreams ? `pending_coalesced_wake` : undefined)
+      const minted = await router.mintNotificationForEntity(entity, {
+        ...(pendingSourceStreams ? { streams: pendingSourceStreams } : {}),
+        ...(triggerEvent ? { triggerEvent } : {}),
+      })
+      const notification = await router.enrichNotificationForEntity(
+        minted.notification,
+        entity
+      )
+      await router.dispatchToTarget(target, notification, entity)
+    } catch (err) {
+      serverLog.warn(
+        `[agent-server] dispatch wake failed for ${entity.url}:`,
+        err
+      )
+    }
   }
 
   private extractManifestSourceUrl(
@@ -1593,7 +1858,6 @@ export class ElectricAgentsServer {
     }
 
     let forwardBody = body
-    let runningEntityUrl: string | null = null
 
     let payload: Record<string, unknown> | null = null
     try {
@@ -1653,16 +1917,15 @@ export class ElectricAgentsServer {
         )
 
         const upsertPromise =
-          this.pgDb && consumerId && callbackUrl
+          this.registry && consumerId && callbackUrl
             ? tracer
                 .startActiveSpan(`db.upsertConsumerCallback`, async (span) => {
                   try {
-                    await this.pgDb!.insert(consumerCallbacks)
-                      .values({ consumerId, callbackUrl, primaryStream })
-                      .onConflictDoUpdate({
-                        target: consumerCallbacks.consumerId,
-                        set: { callbackUrl, primaryStream },
-                      })
+                    await this.registry!.upsertConsumerCallback({
+                      consumerId,
+                      callbackUrl,
+                      primaryStream,
+                    })
                   } finally {
                     span.end()
                   }
@@ -1696,20 +1959,6 @@ export class ElectricAgentsServer {
 
         if (entity && entity.status !== `stopped`) {
           rootSpan?.setAttribute(ATTR.ENTITY_URL, entity.url)
-          await tracer.startActiveSpan(
-            `db.updateStatus.running`,
-            async (span) => {
-              try {
-                await this.electricAgentsManager!.registry.updateStatus(
-                  entity.url,
-                  `running`
-                )
-              } finally {
-                span.end()
-              }
-            }
-          )
-          runningEntityUrl = entity.url
         }
 
         if (consumerId && callbackUrl) {
@@ -1741,12 +1990,6 @@ export class ElectricAgentsServer {
         }
       )
     } catch (err) {
-      if (runningEntityUrl && this.electricAgentsManager) {
-        await this.electricAgentsManager.registry.updateStatus(
-          runningEntityUrl,
-          `idle`
-        )
-      }
       sendJsonError(
         res,
         502,
@@ -1759,6 +2002,100 @@ export class ElectricAgentsServer {
       ? new Uint8Array(await upstream.arrayBuffer())
       : new Uint8Array()
     this.writeResponse(res, upstream, responseBytes)
+  }
+
+  private async authenticateIncomingRequest(
+    req: IncomingMessage
+  ): Promise<AuthenticatedRequestUser | null> {
+    const authenticateRequest = this.options.authenticateRequest
+    if (!authenticateRequest) return null
+
+    try {
+      const user = await authenticateRequest(req)
+      if (
+        !user ||
+        typeof user.userId !== `string` ||
+        user.userId.length === 0
+      ) {
+        return null
+      }
+      return user
+    } catch (err) {
+      serverLog.warn(
+        `[agent-server] authenticateRequest failed: ${err instanceof Error ? err.message : String(err)}`
+      )
+      return null
+    }
+  }
+
+  private async authorizeCallbackForwardClaim(
+    req: IncomingMessage,
+    res: ServerResponse,
+    primaryStream: string
+  ): Promise<boolean> {
+    const entity =
+      await this.electricAgentsManager!.registry.getEntityByStream(
+        primaryStream
+      )
+    const target = entity?.dispatch_policy?.targets[0]
+    if (!entity || target?.type !== `runner`) {
+      return true
+    }
+
+    if (!this.options.authenticateRequest) {
+      sendJsonError(
+        res,
+        401,
+        `AUTHENTICATION_REQUIRED`,
+        `Authentication is required to acquire runner-targeted work`
+      )
+      return false
+    }
+
+    const user = await this.authenticateIncomingRequest(req)
+    if (!user) {
+      sendJsonError(
+        res,
+        401,
+        `AUTHENTICATION_REQUIRED`,
+        `Authentication is required to acquire runner-targeted work`
+      )
+      return false
+    }
+
+    const requestRunnerId = readRunnerIdHeader(req)
+    if (requestRunnerId !== target.runnerId) {
+      sendJsonError(
+        res,
+        403,
+        `RUNNER_MISMATCH`,
+        `Runner id header must match the entity dispatch target`
+      )
+      return false
+    }
+
+    const runner = await this.electricAgentsManager!.registry.getRunner(
+      target.runnerId
+    )
+    if (!runner) {
+      sendJsonError(res, 404, `NOT_FOUND`, `Runner not found`)
+      return false
+    }
+    if (runner.admin_status !== `enabled`) {
+      sendJsonError(res, 403, `RUNNER_DISABLED`, `Runner is disabled`)
+      return false
+    }
+    if (runner.owner_user_id !== user.userId) {
+      sendJsonError(
+        res,
+        403,
+        `FORBIDDEN`,
+        `Authenticated user does not own the target runner`
+      )
+      return false
+    }
+
+    return true
   }
 
   private async handleCallbackForward(
@@ -1802,7 +2139,24 @@ export class ElectricAgentsServer {
       typeof requestBody?.wakeId === `string` ||
       typeof requestBody?.wake_id === `string`
 
+    if (isClaimRequest && target.primaryStream) {
+      const authorized = await this.authorizeCallbackForwardClaim(
+        req,
+        res,
+        target.primaryStream
+      )
+      if (!authorized) return
+    }
+
     const headers = this.buildForwardHeaders(req)
+    const claimToken = headers.get(`electric-claim-token`)?.trim()
+    if (claimToken) {
+      headers.set(
+        `authorization`,
+        `Bearer ${claimToken.replace(/^Bearer\s+/i, ``)}`
+      )
+      headers.delete(`electric-claim-token`)
+    }
     headers.delete(`content-length`)
 
     let upstream: Response
@@ -1825,9 +2179,13 @@ export class ElectricAgentsServer {
     let responseBytes: Uint8Array<ArrayBufferLike> = upstream.body
       ? new Uint8Array(await upstream.arrayBuffer())
       : new Uint8Array()
+    const responseBody = decodeJsonObject(responseBytes)
+    const requestEpoch = readIntegerField(requestBody, `epoch`)
+    const isDoneRequest = requestBody?.done === true
+    const isHeartbeatRequest =
+      requestEpoch !== undefined && !isClaimRequest && !isDoneRequest
 
     if (isClaimRequest && upstream.ok && target.primaryStream) {
-      const responseBody = decodeJsonObject(responseBytes)
       if (responseBody?.ok === true) {
         const entity =
           await this.electricAgentsManager!.registry.getEntityByStream(
@@ -1858,12 +2216,102 @@ export class ElectricAgentsServer {
           )
           responseBody.writeToken = writeToken
           responseBytes = new TextEncoder().encode(JSON.stringify(responseBody))
+          if (entity.status !== `stopped`) {
+            try {
+              await this.electricAgentsManager!.registry.updateStatus(
+                entity.url,
+                `running`
+              )
+            } catch (err) {
+              serverLog.error(
+                `[callback-forward] error updating status to running for ${entity.url}: ${err instanceof Error ? err.message : String(err)}`
+              )
+            }
+
+            const epoch = readIntegerField(requestBody, responseBody, `epoch`)
+            if (epoch !== undefined) {
+              try {
+                await this.electricAgentsManager!.registry.materializeActiveClaim(
+                  {
+                    consumerId,
+                    epoch,
+                    entityUrl: entity.url,
+                    streamPath: target.primaryStream,
+                    wakeId: readStringField(
+                      requestBody,
+                      responseBody,
+                      `wakeId`,
+                      `wake_id`
+                    ),
+                    runnerId: readRunnerId(req, requestBody, responseBody),
+                    leaseExpiresAt: readDateField(
+                      responseBody,
+                      requestBody,
+                      `leaseExpiresAt`,
+                      `lease_expires_at`,
+                      `leaseExpires`,
+                      `lease_expires`,
+                      `activeLeaseExpiresAt`,
+                      `active_lease_expires_at`
+                    ),
+                  }
+                )
+              } catch (err) {
+                serverLog.error(
+                  `[callback-forward] error materializing active claim for ${entity.url} consumer=${consumerId} epoch=${epoch}: ${err instanceof Error ? err.message : String(err)}`
+                )
+              }
+            }
+          }
         }
       }
     }
 
+    if (isHeartbeatRequest && upstream.ok && target.primaryStream) {
+      try {
+        const entity =
+          await this.electricAgentsManager!.registry.getEntityByStream(
+            target.primaryStream
+          )
+        if (entity) {
+          const matched =
+            await this.electricAgentsManager!.registry.materializeHeartbeatClaim(
+              {
+                consumerId,
+                epoch: requestEpoch,
+                entityUrl: entity.url,
+                streamPath: target.primaryStream,
+                leaseExpiresAt: readDateField(
+                  responseBody,
+                  requestBody,
+                  `leaseExpiresAt`,
+                  `lease_expires_at`,
+                  `leaseExpires`,
+                  `lease_expires`,
+                  `activeLeaseExpiresAt`,
+                  `active_lease_expires_at`
+                ),
+              }
+            )
+          if (!matched) {
+            serverLog.warn(
+              `[callback-forward] heartbeat did not match active claim for ${entity.url} consumer=${consumerId} epoch=${requestEpoch}`
+            )
+          }
+        } else {
+          serverLog.warn(
+            `[callback-forward] heartbeat received but no entity found for stream=${target.primaryStream}`
+          )
+        }
+      } catch (err) {
+        serverLog.error(
+          `[callback-forward] error materializing heartbeat for consumer=${consumerId} epoch=${requestEpoch}: ${err instanceof Error ? err.message : String(err)}`
+        )
+      }
+    }
+
     try {
-      if (upstream.ok && requestBody?.done === true && target.primaryStream) {
+      if (upstream.ok && isDoneRequest && target.primaryStream) {
         serverLog.info(
           `[callback-forward] done received for stream=${target.primaryStream} consumer=${consumerId}`
         )
@@ -1875,28 +2323,85 @@ export class ElectricAgentsServer {
           await this.electricAgentsManager!.registry.getEntityByStream(
             target.primaryStream
           )
-        if (entity && stillOwnsClaim) {
-          await this.electricAgentsManager!.registry.updateStatus(
-            entity.url,
-            `idle`
-          )
-          this.clearActiveClaimForStream(target.primaryStream)
-          serverLog.info(
-            `[callback-forward] status updated to idle for ${entity.url}`
-          )
-          await this.entityBridgeManager?.onEntityChanged(entity.url)
-        } else if (stillOwnsClaim) {
-          this.clearActiveClaimForStream(target.primaryStream)
-        } else if (entity) {
-          serverLog.info(
-            `[callback-forward] done ignored for stale claim stream=${target.primaryStream} consumer=${consumerId}`
-          )
+        if (entity) {
+          if (requestEpoch === undefined) {
+            serverLog.warn(
+              `[callback-forward] done missing epoch; skipping release materialization and idle status for ${entity.url} consumer=${consumerId}`
+            )
+          } else {
+            let releaseMatched = false
+            let pendingSourceStreams: Array<SourceStreamOffset> = []
+            let pendingReason: string | undefined
+            try {
+              const releaseResult =
+                await this.electricAgentsManager!.registry.materializeReleasedClaim(
+                  {
+                    consumerId,
+                    epoch: requestEpoch,
+                    entityUrl: entity.url,
+                    streamPath: target.primaryStream,
+                    ackedStreams: readSourceStreamsField(
+                      requestBody,
+                      `acks`,
+                      `ackedStreams`,
+                      `acked_streams`
+                    ),
+                  }
+                )
+              releaseMatched = releaseResult.matched
+              pendingSourceStreams = releaseResult.pendingSourceStreams
+              pendingReason = releaseResult.pendingReason
+            } catch (err) {
+              serverLog.error(
+                `[callback-forward] error materializing released claim for ${entity.url} consumer=${consumerId} epoch=${requestEpoch}: ${err instanceof Error ? err.message : String(err)}`
+              )
+            }
+
+            if (releaseMatched && (stillOwnsClaim || !activeClaim)) {
+              if (entity.status !== `stopped`) {
+                try {
+                  await this.electricAgentsManager!.registry.updateStatus(
+                    entity.url,
+                    `idle`
+                  )
+                  serverLog.info(
+                    `[callback-forward] status updated to idle for ${entity.url}`
+                  )
+                } catch (err) {
+                  serverLog.error(
+                    `[callback-forward] error updating status to idle for ${entity.url}: ${err instanceof Error ? err.message : String(err)}`
+                  )
+                }
+              }
+              this.clearActiveClaimForStream(target.primaryStream)
+              await this.entityBridgeManager?.onEntityChanged(entity.url)
+
+              if (pendingSourceStreams.length > 0 && entity.dispatch_policy) {
+                void this.dispatchWakeForPending(entity, pendingSourceStreams, {
+                  triggerEvent: pendingReason,
+                }).catch((err) =>
+                  serverLog.warn(
+                    `[callback-forward] pending dispatch wake failed for ${entity.url}:`,
+                    err
+                  )
+                )
+              }
+            } else if (releaseMatched) {
+              serverLog.info(
+                `[callback-forward] done ignored for stale claim stream=${target.primaryStream} consumer=${consumerId}`
+              )
+            } else {
+              serverLog.warn(
+                `[callback-forward] stale done skipped idle/status clear for ${entity.url} consumer=${consumerId} epoch=${requestEpoch}`
+              )
+            }
+          }
         } else {
           serverLog.warn(
             `[callback-forward] done received but no entity found for stream=${target.primaryStream}`
           )
         }
-      } else if (requestBody?.done === true) {
+      } else if (isDoneRequest) {
         serverLog.warn(
           `[callback-forward] done received but skipped: upstream.ok=${upstream.ok} primaryStream=${target.primaryStream ?? `null`} consumer=${consumerId}`
         )
@@ -1981,12 +2486,37 @@ export class ElectricAgentsServer {
     if (table === `entities`) {
       target.searchParams.set(
         `columns`,
-        `"url","type","status","tags","spawn_args","parent","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
+        `"url","type","status","dispatch_policy","tags","spawn_args","parent","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
       )
     } else if (table === `entity_types`) {
       target.searchParams.set(
         `columns`,
-        `"name","description","creation_schema","inbox_schemas","state_schemas","serve_endpoint","revision","created_at","updated_at"`
+        `"name","description","creation_schema","inbox_schemas","state_schemas","serve_endpoint","default_dispatch_policy","revision","created_at","updated_at"`
+      )
+    } else if (table === `users`) {
+      target.searchParams.set(
+        `columns`,
+        `"id","display_name","email","avatar_url","created_at","updated_at"`
+      )
+    } else if (table === `runners`) {
+      target.searchParams.set(
+        `columns`,
+        `"id","owner_user_id","label","kind","admin_status","wake_stream","last_seen_at","liveness_lease_expires_at","created_at","updated_at"`
+      )
+    } else if (table === `entity_dispatch_state`) {
+      target.searchParams.set(
+        `columns`,
+        `"entity_url","pending_source_streams","pending_reason","pending_since","outstanding_wake_id","outstanding_wake_target","outstanding_wake_created_at","active_consumer_id","active_runner_id","active_epoch","active_claimed_at","active_lease_expires_at","last_wake_id","last_claimed_at","last_released_at","last_completed_at","last_error","updated_at"`
+      )
+    } else if (table === `wake_notifications`) {
+      target.searchParams.set(
+        `columns`,
+        `"wake_id","entity_url","target_type","target_runner_id","target_worker_pool_id","runner_wake_stream","runner_wake_stream_offset","notification_public","delivery_status","claim_status","created_at","delivered_at","claimed_at","resolved_at"`
+      )
+    } else if (table === `consumer_claims`) {
+      target.searchParams.set(
+        `columns`,
+        `"consumer_id","epoch","wake_id","entity_url","stream_path","runner_id","status","claimed_at","last_heartbeat_at","lease_expires_at","released_at","acked_streams","updated_at"`
       )
     }
 
@@ -2099,6 +2629,19 @@ function readBody(req: IncomingMessage): Promise<Uint8Array> {
   })
 }
 
+function inferDispatchTriggerEvent(
+  event: Record<string, unknown> | Array<Record<string, unknown>>
+): string | undefined {
+  const events = Array.isArray(event) ? event : [event]
+  for (const item of events) {
+    const eventType = item.type
+    if (typeof eventType === `string` && eventType.length > 0) {
+      return eventType
+    }
+  }
+  return undefined
+}
+
 function decodeJsonObject(body: Uint8Array): Record<string, unknown> | null {
   if (body.length === 0) return null
 
@@ -2112,4 +2655,136 @@ function decodeJsonObject(body: Uint8Array): Record<string, unknown> | null {
   }
 
   return null
+}
+
+function splitFieldLookupArgs(
+  args: Array<Record<string, unknown> | null | undefined | string>
+): {
+  sources: Array<Record<string, unknown>>
+  fields: Array<string>
+} {
+  const sources: Array<Record<string, unknown>> = []
+  const fields: Array<string> = []
+  for (const arg of args) {
+    if (!arg) continue
+    if (typeof arg === `string`) {
+      fields.push(arg)
+    } else {
+      sources.push(arg)
+    }
+  }
+  return { sources, fields }
+}
+
+function readStringField(
+  ...args: Array<Record<string, unknown> | null | undefined | string>
+): string | undefined {
+  const { sources, fields } = splitFieldLookupArgs(args)
+  for (const source of sources) {
+    for (const field of fields) {
+      const value = source[field]
+      if (typeof value === `string` && value.length > 0) {
+        return value
+      }
+    }
+  }
+  return undefined
+}
+
+function readIntegerField(
+  ...args: Array<Record<string, unknown> | null | undefined | string>
+): number | undefined {
+  const { sources, fields } = splitFieldLookupArgs(args)
+  for (const source of sources) {
+    for (const field of fields) {
+      const value = source[field]
+      const parsed =
+        typeof value === `number`
+          ? value
+          : typeof value === `string`
+            ? Number(value)
+            : Number.NaN
+      if (Number.isInteger(parsed)) {
+        return parsed
+      }
+    }
+  }
+  return undefined
+}
+
+function readDateField(
+  ...args: Array<Record<string, unknown> | null | undefined | string>
+): Date | undefined {
+  const { sources, fields } = splitFieldLookupArgs(args)
+  for (const source of sources) {
+    for (const field of fields) {
+      const value = source[field]
+      const date =
+        typeof value === `string` || typeof value === `number`
+          ? new Date(value)
+          : undefined
+      if (date && !Number.isNaN(date.getTime())) {
+        return date
+      }
+    }
+  }
+  return undefined
+}
+
+function readSourceStreamsField(
+  source: Record<string, unknown> | null | undefined,
+  ...fields: Array<string>
+): Array<SourceStreamOffset> | undefined {
+  if (!source) return undefined
+  for (const field of fields) {
+    const value = source[field]
+    if (!Array.isArray(value)) continue
+    const streams: Array<SourceStreamOffset> = []
+    for (const item of value) {
+      if (!item || typeof item !== `object` || Array.isArray(item)) continue
+      const record = item as Record<string, unknown>
+      const path = record.path
+      const offset = record.offset
+      if (typeof path !== `string`) continue
+      if (
+        typeof offset !== `string` &&
+        typeof offset !== `number` &&
+        typeof offset !== `bigint`
+      ) {
+        continue
+      }
+      streams.push({ path, offset: String(offset) })
+    }
+    return streams
+  }
+  return undefined
+}
+
+function readRunnerIdHeader(req: IncomingMessage): string | undefined {
+  for (const header of [`electric-runner-id`, `x-runner-id`]) {
+    const value = req.headers[header]
+    if (typeof value === `string` && value.length > 0) {
+      return value
+    }
+    if (Array.isArray(value) && typeof value[0] === `string`) {
+      return value[0]
+    }
+  }
+  return undefined
+}
+
+function readRunnerId(
+  req: IncomingMessage,
+  ...bodies: Array<Record<string, unknown> | null | undefined>
+): string | undefined {
+  const headerRunnerId = readRunnerIdHeader(req)
+  if (headerRunnerId) return headerRunnerId
+
+  return readStringField(
+    ...bodies,
+    `runnerId`,
+    `runner_id`,
+    `activeRunnerId`,
+    `active_runner_id`
+  )
 }

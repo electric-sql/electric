@@ -200,7 +200,18 @@ export type {
 } from './observation-sources'
 
 export { processWake, processWebhookWake } from './process-wake'
-export type { WebhookNotification, ProcessWakeConfig } from './types'
+export { createPullWakeRunner } from './pull-wake-runner'
+export type {
+  PullWakeRunner,
+  PullWakeRunnerConfig,
+  PullWakeStreamResponse,
+} from './pull-wake-runner'
+export type {
+  ClaimTokenHeader,
+  WakeNotification,
+  WebhookNotification,
+  ProcessWakeConfig,
+} from './types'
 
 export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 export { createContextEntriesApi } from './context-entries'

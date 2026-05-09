@@ -153,7 +153,20 @@ export function NewSessionView({
       if (!spawnEntity) return
       setError(null)
       const name = nanoid(10)
-      const tx = spawnEntity({ type: typeName, name, args })
+      const desktopState = await window.electronAPI?.getDesktopState?.()
+      const runnerId = desktopState?.pullWakeRunnerId?.trim() || null
+      const tx = spawnEntity({
+        type: typeName,
+        name,
+        args,
+        ...(runnerId
+          ? {
+              dispatch_policy: {
+                targets: [{ type: `runner` as const, runnerId }],
+              },
+            }
+          : {}),
+      })
       const entityUrl = `/${typeName}/${name}`
       helpers.openEntity(entityUrl, {
         target: { tileId, position: `replace` },

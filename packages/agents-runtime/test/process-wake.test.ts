@@ -450,6 +450,113 @@ describe(`processWake`, () => {
     expect(body.epoch).toBe(1)
   })
 
+  it(`defaults claim callbacks to Authorization bearer claim token`, async () => {
+    defineEntity(`test-agent`, {
+      handler: () => {},
+    })
+
+    await processWake(makeNotification(), BASE_CONFIG)
+
+    const callbackCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/_electric/wakes/wake-abc`)
+    )
+    const claimHeaders = new Headers(callbackCalls[0]![1]!.headers)
+    const doneHeaders = new Headers(
+      callbackCalls[callbackCalls.length - 1]![1]!.headers
+    )
+
+    expect(claimHeaders.get(`authorization`)).toBe(`Bearer tok-123`)
+    expect(claimHeaders.get(`electric-claim-token`)).toBeNull()
+    expect(doneHeaders.get(`authorization`)).toBe(`Bearer tok-123`)
+    expect(doneHeaders.get(`electric-claim-token`)).toBeNull()
+  })
+
+  it(`can keep user Authorization while sending active claim token in Electric-Claim-Token`, async () => {
+    const heartbeatSeen = new Promise<void>((resolve) => {
+      fetchMock.mockImplementation((url, opts) => {
+        const urlStr = String(url)
+        if (urlStr.includes(`/_electric/wakes/wake-abc`)) {
+          const body = JSON.parse(
+            (opts?.body as string | undefined) ?? `{}`
+          ) as { wakeId?: string; done?: boolean } | undefined
+
+          if (body?.wakeId) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({ ok: true, claimToken: `tok-456` }),
+                {
+                  status: 200,
+                  headers: { 'content-type': `application/json` },
+                }
+              )
+            )
+          }
+
+          if (!body?.done) {
+            const response = new Response(
+              JSON.stringify({ ok: true, claimToken: `tok-789` }),
+              {
+                status: 200,
+                headers: { 'content-type': `application/json` },
+              }
+            )
+            return Promise.resolve(response).then((r) => {
+              setTimeout(resolve, 0)
+              return r
+            })
+          }
+        }
+
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'content-type': `application/json` },
+          })
+        )
+      })
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async () => {
+        await heartbeatSeen
+      },
+    })
+
+    await processWake(makeNotification(), {
+      ...BASE_CONFIG,
+      heartbeatInterval: 1,
+      claimHeaders: () => ({
+        authorization: `Bearer user-session`,
+        'x-runner-id': `runner-local`,
+      }),
+      claimTokenHeader: `electric-claim-token`,
+    })
+
+    const callbackCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/_electric/wakes/wake-abc`)
+    )
+    const claimHeaders = new Headers(callbackCalls[0]![1]!.headers)
+    const heartbeatCall = callbackCalls.find(([, opts]) => {
+      const body = JSON.parse((opts?.body as string | undefined) ?? `{}`) as {
+        wakeId?: string
+        done?: boolean
+      }
+      return !body.wakeId && !body.done
+    })!
+    const heartbeatHeaders = new Headers(heartbeatCall[1]!.headers)
+    const doneHeaders = new Headers(
+      callbackCalls[callbackCalls.length - 1]![1]!.headers
+    )
+
+    expect(claimHeaders.get(`authorization`)).toBe(`Bearer user-session`)
+    expect(claimHeaders.get(`electric-claim-token`)).toBe(`tok-123`)
+    expect(claimHeaders.get(`x-runner-id`)).toBe(`runner-local`)
+    expect(heartbeatHeaders.get(`authorization`)).toBe(`Bearer user-session`)
+    expect(heartbeatHeaders.get(`electric-claim-token`)).toBe(`tok-456`)
+    expect(doneHeaders.get(`authorization`)).toBe(`Bearer user-session`)
+    expect(doneHeaders.get(`electric-claim-token`)).toBe(`tok-789`)
+  })
+
   it(`acks the local consumed offset on done even when the stream tail is ahead`, async () => {
     defineEntity(`test-agent`, {
       handler: () => {},

@@ -24,8 +24,6 @@ import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SkillsRegistry } from './skills/types'
 
-export const DEFAULT_BUILTIN_AGENT_HANDLER_PATH = `/_electric/builtin-agent-handler`
-
 export interface AgentHandlerResult {
   handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>
   runtime: RuntimeHandler
@@ -36,7 +34,6 @@ export interface AgentHandlerResult {
 
 export interface BuiltinAgentHandlerOptions {
   agentServerUrl: string
-  serveEndpoint?: string
   workingDirectory?: string
   streamFn?: StreamFn
   publicUrl?: string
@@ -72,14 +69,12 @@ export async function createBuiltinAgentHandler(
 ): Promise<AgentHandlerResult | null> {
   const {
     agentServerUrl,
-    serveEndpoint = `${agentServerUrl}${DEFAULT_BUILTIN_AGENT_HANDLER_PATH}`,
     workingDirectory,
     streamFn,
     createElectricTools,
     publicUrl,
     runtimeName,
   } = options
-
   const modelCatalog = await createBuiltinModelCatalog({
     allowMockFallback: Boolean(streamFn),
   })
@@ -127,7 +122,6 @@ export async function createBuiltinAgentHandler(
 
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,
-    serveEndpoint,
     registry,
     subscriptionPathForType: (name) => `/${name}/*/main`,
     idleTimeout: 5_000,
@@ -149,12 +143,10 @@ export async function createAgentHandler(
   agentServerUrl: string,
   workingDirectory?: string,
   streamFn?: StreamFn,
-  createElectricTools?: BuiltinAgentHandlerOptions[`createElectricTools`],
-  serveEndpoint?: string
+  createElectricTools?: BuiltinAgentHandlerOptions[`createElectricTools`]
 ): Promise<AgentHandlerResult | null> {
   return createBuiltinAgentHandler({
     agentServerUrl,
-    serveEndpoint,
     workingDirectory,
     streamFn,
     createElectricTools,

@@ -5,6 +5,7 @@ import {
   IdempotentProducer,
 } from '@durable-streams/client'
 import { ATTR, injectTraceHeaders, withSpan } from './tracing.js'
+import type { WakeNotification } from '@electric-ax/agents-runtime'
 
 export interface StreamAppendResult {
   offset: string
@@ -31,6 +32,18 @@ export interface ConsumerStateResponse {
     wake_id?: string | null
     subscription_id?: string
   }
+}
+
+export interface MintWakeNotificationRequest {
+  streamPath: string
+  streams?: WakeNotification[`streams`]
+  triggeredBy?: WakeNotification[`triggeredBy`]
+  triggerEvent?: WakeNotification[`triggerEvent`]
+  wakeEvent?: WakeNotification[`wakeEvent`]
+}
+
+export interface MintWakeNotificationResponse {
+  notification: WakeNotification
 }
 
 function isNotFoundError(err: unknown): boolean {
@@ -372,5 +385,44 @@ export class StreamClient {
       )
     }
     return res.json() as Promise<ConsumerStateResponse>
+  }
+
+  async mintWakeNotification(
+    consumerId: string,
+    request: MintWakeNotificationRequest
+  ): Promise<MintWakeNotificationResponse> {
+    return await withSpan(`stream.mintWakeNotification`, async (span) => {
+      span.setAttributes({
+        [ATTR.STREAM_PATH]: request.streamPath,
+        [ATTR.STREAM_OP]: `mintWakeNotification`,
+        [`electric_agents.consumer.id`]: consumerId,
+      })
+
+      const headers: Record<string, string> = {
+        'content-type': `application/json`,
+      }
+      injectTraceHeaders(headers)
+
+      const url = [
+        `${this.baseUrl}/consumers`,
+        encodeURIComponent(consumerId),
+        `wake-notifications`,
+      ].join(`/`)
+      const res = await fetch(url, {
+        method: `POST`,
+        headers,
+        body: JSON.stringify(request),
+      })
+
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(
+          `Wake notification mint failed for consumer "${consumerId}" ` +
+            `stream "${request.streamPath}": ${res.status} ${body}`
+        )
+      }
+
+      return res.json() as Promise<MintWakeNotificationResponse>
+    })
   }
 }

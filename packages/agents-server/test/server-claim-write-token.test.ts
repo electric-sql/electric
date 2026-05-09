@@ -265,6 +265,13 @@ describe(`Claim-scoped write tokens`, () => {
       },
     ])
 
+    const initialEntityTokenRes = await appendEntityEvent({
+      streamPath: entity.streams.main,
+      writeToken: entityWriteToken,
+      key: `manifest-initial-entity-token`,
+    })
+    expect(initialEntityTokenRes.status).toBe(401)
+
     const firstClaim = await claimConsumer({
       consumerId: `consumer-one`,
       epoch: 4,

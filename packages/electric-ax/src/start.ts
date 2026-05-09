@@ -15,8 +15,6 @@ import type {
 export { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
-const DEFAULT_BUILTIN_AGENTS_PORT = 4448
-const DEFAULT_BUILTIN_AGENTS_HOST = `0.0.0.0`
 const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
@@ -34,9 +32,8 @@ export interface StoppedDevEnvironment {
 }
 
 export interface StartedBuiltinAgentsEnvironment {
-  port: number
+  runnerId: string
   url: string
-  registeredBaseUrl: string
   agentServerUrl: string
 }
 
@@ -44,31 +41,6 @@ interface WaitForServerOptions {
   fetchImpl?: typeof globalThis.fetch
   timeoutMs?: number
   intervalMs?: number
-}
-
-export function resolveBuiltinAgentsPort(
-  env: NodeJS.ProcessEnv = process.env,
-  fileEnv: Record<string, string> = readDotEnvFile()
-): number {
-  const raw =
-    env.ELECTRIC_AGENTS_BUILTIN_PORT?.trim() ||
-    fileEnv.ELECTRIC_AGENTS_BUILTIN_PORT?.trim()
-  const parsed = raw ? Number(raw) : DEFAULT_BUILTIN_AGENTS_PORT
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`ELECTRIC_AGENTS_BUILTIN_PORT must be a positive integer`)
-  }
-  return parsed
-}
-
-export function resolveBuiltinAgentsHost(
-  env: NodeJS.ProcessEnv = process.env,
-  fileEnv: Record<string, string> = readDotEnvFile()
-): string {
-  return (
-    env.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
-    fileEnv.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
-    DEFAULT_BUILTIN_AGENTS_HOST
-  )
 }
 
 export function resolveElectricAgentsPort(
@@ -108,8 +80,8 @@ export function getStartedBuiltinAgentsMessage(
   started: StartedBuiltinAgentsEnvironment
 ): string {
   return [
-    `Builtin Horton server is up.`,
-    `Webhook server: ${started.url}`,
+    `Builtin Horton pull-wake runner is up.`,
+    `Runner id: ${started.runnerId}`,
     `Registers with: ${started.agentServerUrl}`,
     `Press Ctrl-C to stop.`,
   ].join(`\n`)
@@ -300,8 +272,6 @@ export async function startBuiltinAgentsServer(
   const cwd = params.cwd ?? process.cwd()
   const fileEnv = readDotEnvFile(cwd)
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
-  const host = resolveBuiltinAgentsHost(env, fileEnv)
-  const port = resolveBuiltinAgentsPort(env, fileEnv)
   const agentServerUrl =
     params.agentServerUrl ??
     env.ELECTRIC_AGENTS_URL?.trim() ??
@@ -310,20 +280,32 @@ export async function startBuiltinAgentsServer(
   process.env.ANTHROPIC_API_KEY = anthropicApiKey
   await waitForElectricAgentsServer(agentServerUrl)
 
+  const runnerId =
+    env.ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID?.trim() ||
+    env.PULL_WAKE_RUNNER_ID?.trim()
+  if (!runnerId) {
+    throw new Error(
+      `Builtin agents now use pull-wake; set ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID`
+    )
+  }
+
   const server = new BuiltinAgentsServer({
     agentServerUrl,
-    host,
-    port,
     workingDirectory: cwd,
     loadProjectMcpConfig: true,
+    pullWake: {
+      runnerId,
+      registerRunner:
+        env.ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER === `1` ||
+        env.ELECTRIC_AGENTS_REGISTER_PULL_WAKE_RUNNER === `true`,
+    },
   })
 
-  await server.start()
+  const url = await server.start()
 
   const started = {
-    port,
-    url: server.url,
-    registeredBaseUrl: server.registeredBaseUrl,
+    runnerId,
+    url,
     agentServerUrl,
   }
 

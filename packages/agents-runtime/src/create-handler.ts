@@ -1,10 +1,11 @@
 /**
  * Runtime router factory — creates a fetch-native request router for webhook
- * wake delivery plus a compatibility Node HTTP adapter.
+ * wake delivery plus a transport-generic wake dispatcher and compatibility Node
+ * HTTP adapter.
  */
 
 import { zodToJsonSchema } from 'zod-to-json-schema'
-import { processWebhookWake } from './process-wake'
+import { processWake } from './process-wake'
 import { getEntityType, listEntityTypes } from './define-entity'
 import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 import { passthrough } from './entity-schema'
@@ -15,6 +16,7 @@ import type {
   AgentTool,
   EntityStreamDBWithActions,
   ProcessWakeConfig,
+  WakeNotification,
   WebhookNotification,
 } from './types'
 import type { ChangeEvent } from '@durable-streams/state'
@@ -24,7 +26,8 @@ export interface RuntimeRouterConfig {
   baseUrl: string
   /**
    * Full webhook callback URL exposed by your app.
-   * Used for Electric Agents `serve_endpoint` registration.
+   * Used only for matching inbound webhook requests; entity type registration
+   * is metadata-only and does not create webhook subscriptions.
    */
   serveEndpoint?: string
   /**
@@ -39,8 +42,12 @@ export interface RuntimeRouterConfig {
   handlerUrl?: string
   /** Runtime-local entity registry for this handler */
   registry?: EntityRegistry
-  /** Override the webhook subscription path used per entity type registration. */
+  /** @deprecated registerTypes no longer creates webhook subscriptions. */
   subscriptionPathForType?: (typeName: string) => string
+  /** Additional headers sent to wake claim callback requests. */
+  claimHeaders?: ProcessWakeConfig[`claimHeaders`]
+  /** Header transport for the Durable Streams claim token. */
+  claimTokenHeader?: ProcessWakeConfig[`claimTokenHeader`]
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
   /** Heartbeat interval in ms (default: 30_000) */
@@ -102,12 +109,20 @@ export interface RuntimeRouter {
   handleWebhookRequest: (request: Request) => Promise<Response>
 
   /**
+   * Dispatch an already-parsed wake notification from any transport.
+   */
+  dispatchWake: (
+    notification: WakeNotification,
+    options?: Pick<ProcessWakeConfig, `claimHeaders` | `claimTokenHeader`>
+  ) => void
+
+  /**
    * Dispatch an already-parsed webhook wake notification.
    */
   dispatchWebhookWake: (notification: WebhookNotification) => void
 
   /**
-   * Wait for all in-flight webhook wake handlers to settle.
+   * Wait for all in-flight wake handlers to settle.
    * Throws any wake errors instead of hiding them behind logs.
    */
   drainWakes: () => Promise<void>
@@ -155,10 +170,10 @@ export function createRuntimeRouter(
   const normalized = normalizeConfig(config)
   const {
     baseUrl,
-    serveEndpoint,
     webhookPath,
     registry,
-    subscriptionPathForType,
+    claimHeaders,
+    claimTokenHeader,
     idleTimeout,
     heartbeatInterval,
     createElectricTools,
@@ -170,6 +185,8 @@ export function createRuntimeRouter(
   const wakeConfig: ProcessWakeConfig = {
     baseUrl,
     registry,
+    claimHeaders,
+    claimTokenHeader,
     createElectricTools,
     idleTimeout,
     heartbeatInterval,
@@ -205,12 +222,16 @@ export function createRuntimeRouter(
     await Promise.all(Array.from({ length: workerCount }, () => worker()))
   }
 
-  const dispatchWebhookWake = (notification: WebhookNotification): void => {
+  const dispatchWake: RuntimeRouter[`dispatchWake`] = (
+    notification,
+    options
+  ): void => {
     const wakeLabel = notification.entity?.url ?? notification.streamPath
     const controller = new AbortController()
     const wake: Promise<void> = Promise.resolve(
-      processWebhookWake(notification, {
+      processWake(notification, {
         ...wakeConfig,
+        ...options,
         shutdownSignal: controller.signal,
       })
     )
@@ -236,6 +257,8 @@ export function createRuntimeRouter(
     pendingWakeLabels.set(wake, wakeLabel)
     pendingWakeControllers.set(wake, controller)
   }
+
+  const dispatchWebhookWake: RuntimeRouter[`dispatchWebhookWake`] = dispatchWake
 
   const abortWakes = (): void => {
     for (const controller of pendingWakeControllers.values()) {
@@ -279,9 +302,9 @@ export function createRuntimeRouter(
       return json({ error: `Method not allowed` }, 405)
     }
 
-    let notification: WebhookNotification
+    let notification: WakeNotification
     try {
-      notification = (await request.json()) as WebhookNotification
+      notification = (await request.json()) as WakeNotification
     } catch (err) {
       return json(
         {
@@ -301,7 +324,7 @@ export function createRuntimeRouter(
       )
     }
 
-    dispatchWebhookWake(notification)
+    dispatchWake(notification)
     return json({ ok: true }, 200)
   }
 
@@ -410,10 +433,6 @@ export function createRuntimeRouter(
         },
       }
 
-      if (serveEndpoint) {
-        body.serve_endpoint = serveEndpoint
-      }
-
       if (publicUrl !== undefined) {
         body.public_url = publicUrl
       }
@@ -433,32 +452,6 @@ export function createRuntimeRouter(
         )
         failed.push(name)
         return
-      }
-
-      if (serveEndpoint) {
-        const subPath = subscriptionPathForType
-          ? subscriptionPathForType(name)
-          : `/${name}/**`
-        const subRes = await fetch(
-          `${baseUrl}${subPath}?subscription=${name}-handler`,
-          {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              webhook: serveEndpoint,
-            }),
-          }
-        )
-
-        if (!subRes.ok) {
-          const err = await subRes.text()
-          runtimeLog.error(
-            `[agent-runtime]`,
-            `Failed to create subscription for "${name}": ${err}`
-          )
-          failed.push(name)
-          return
-        }
       }
 
       registered.push(name)
@@ -492,6 +485,7 @@ export function createRuntimeRouter(
   return {
     handleRequest,
     handleWebhookRequest,
+    dispatchWake,
     dispatchWebhookWake,
     drainWakes,
     waitForSettled,
@@ -538,6 +532,7 @@ export function createRuntimeHandler(
     onEnter,
     handleRequest: router.handleRequest,
     handleWebhookRequest: router.handleWebhookRequest,
+    dispatchWake: router.dispatchWake,
     dispatchWebhookWake: router.dispatchWebhookWake,
     drainWakes: router.drainWakes,
     waitForSettled: router.waitForSettled,
@@ -556,6 +551,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
   webhookPath: string
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
+  claimHeaders?: ProcessWakeConfig[`claimHeaders`]
+  claimTokenHeader?: ProcessWakeConfig[`claimTokenHeader`]
   idleTimeout?: number
   heartbeatInterval?: number
   createElectricTools?: RuntimeRouterConfig[`createElectricTools`]
@@ -573,6 +570,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     webhookPath,
     registry: config.registry,
     subscriptionPathForType: config.subscriptionPathForType,
+    claimHeaders: config.claimHeaders,
+    claimTokenHeader: config.claimTokenHeader,
     idleTimeout: config.idleTimeout,
     heartbeatInterval: config.heartbeatInterval,
     createElectricTools: config.createElectricTools,

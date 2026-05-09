@@ -3,11 +3,17 @@ import { describe, expect, it, vi } from 'vitest'
 import { ElectricAgentsError } from '../src/electric-agents-manager'
 import { ElectricAgentsRoutes } from '../src/electric-agents-routes'
 
-function createRequest(body?: unknown) {
+function createRequest(
+  body?: unknown,
+  headers: Record<string, string> = {},
+  url?: string
+) {
   const req = new EventEmitter() as EventEmitter & {
     headers: Record<string, string>
+    url?: string
   }
-  req.headers = {}
+  req.headers = headers
+  req.url = url
 
   process.nextTick(() => {
     if (body !== undefined) {
@@ -21,10 +27,689 @@ function createRequest(body?: unknown) {
 
 function createResponse() {
   return {
+    setHeader: vi.fn(),
     writeHead: vi.fn(),
     end: vi.fn(),
   } as any
 }
+
+function jsonResponse(res: ReturnType<typeof createResponse>) {
+  const body = res.end.mock.calls[0]?.[0]
+  return typeof body === `string` ? JSON.parse(body) : body
+}
+
+function makeEntity(url: string, dispatchPolicy?: unknown) {
+  const type = url.split(`/`)[1]!
+  return {
+    url,
+    type,
+    status: `idle`,
+    streams: {
+      main: `${url}/main`,
+      error: `${url}/error`,
+    },
+    subscription_id: `${type}-handler`,
+    dispatch_policy: dispatchPolicy,
+    write_token: `write-${url}`,
+    tags: {},
+    spawn_args: {},
+    created_at: 1,
+    updated_at: 1,
+  }
+}
+
+function makeRunner(id: string, ownerUserId: string) {
+  return {
+    id,
+    owner_user_id: ownerUserId,
+    label: `${id} label`,
+    kind: `local`,
+    admin_status: `enabled`,
+    liveness: `offline`,
+    wake_stream: `/runners/${id}/wake`,
+    created_at: `2026-01-01T00:00:00.000Z`,
+    updated_at: `2026-01-01T00:00:00.000Z`,
+  }
+}
+
+describe(`ElectricAgentsRoutes runner registration`, () => {
+  it(`uses the authenticated user as runner owner`, async () => {
+    const manager = {
+      registry: {
+        getRunner: vi.fn().mockResolvedValue(null),
+        createRunner: vi.fn().mockResolvedValue({
+          id: `kyle-mac`,
+          owner_user_id: `user-kyle`,
+          label: `Kyle's Mac`,
+          kind: `local`,
+          admin_status: `enabled`,
+          wake_stream: `/runners/kyle-mac/wake`,
+          created_at: `2026-01-01T00:00:00.000Z`,
+          updated_at: `2026-01-01T00:00:00.000Z`,
+        }),
+      },
+    } as any
+    const authenticateRequest = vi.fn().mockReturnValue({ userId: `user-kyle` })
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      authenticateRequest
+    )
+    const req = createRequest({ id: `kyle-mac`, label: `Kyle's Mac` })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/_electric/runners`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(authenticateRequest).toHaveBeenCalledWith(req)
+    expect(manager.registry.createRunner).toHaveBeenCalledWith({
+      id: `kyle-mac`,
+      ownerUserId: `user-kyle`,
+      label: `Kyle's Mac`,
+      kind: `local`,
+      adminStatus: `enabled`,
+      wakeStream: `/runners/kyle-mac/wake`,
+    })
+    expect(res.writeHead).toHaveBeenCalledWith(201, {
+      'content-type': `application/json`,
+    })
+  })
+
+  it(`rejects supplied owner_user_id that differs from the authenticated user`, async () => {
+    const manager = {
+      registry: {
+        getRunner: vi.fn(),
+        createRunner: vi.fn(),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest({
+      id: `kyle-mac`,
+      label: `Kyle's Mac`,
+      owner_user_id: `user-other`,
+    })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/_electric/runners`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.createRunner).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `OWNER_MISMATCH`,
+        message: `owner_user_id must match the authenticated user`,
+      },
+    })
+  })
+
+  it(`rejects re-registering an existing runner owned by another authenticated user`, async () => {
+    const manager = {
+      registry: {
+        getRunner: vi.fn().mockResolvedValue({
+          id: `shared-mac`,
+          owner_user_id: `user-other`,
+          admin_status: `enabled`,
+        }),
+        createRunner: vi.fn(),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest({ id: `shared-mac`, label: `Shared Mac` })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/_electric/runners`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.createRunner).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `OWNER_MISMATCH`,
+        message: `Authenticated user does not own the existing runner`,
+      },
+    })
+  })
+})
+
+describe(`ElectricAgentsRoutes runner management ownership`, () => {
+  it(`requires authentication before listing runners when configured`, async () => {
+    const manager = {
+      registry: {
+        listRunners: vi.fn(),
+      },
+    } as any
+    const authenticateRequest = vi.fn().mockReturnValue(null)
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      authenticateRequest
+    )
+    const req = createRequest(undefined, {}, `/_electric/runners`)
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `GET`,
+      `/_electric/runners`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(authenticateRequest).toHaveBeenCalledWith(req)
+    expect(manager.registry.listRunners).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(401, {
+      'content-type': `application/json`,
+    })
+  })
+
+  it(`lists only the authenticated user's runners`, async () => {
+    const runners = [makeRunner(`kyle-mac`, `user-kyle`)]
+    const manager = {
+      registry: {
+        listRunners: vi.fn().mockResolvedValue(runners),
+      },
+    } as any
+    const authenticateRequest = vi.fn().mockReturnValue({ userId: `user-kyle` })
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      authenticateRequest
+    )
+    const req = createRequest(undefined, {}, `/_electric/runners`)
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `GET`,
+      `/_electric/runners`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.listRunners).toHaveBeenCalledWith({
+      ownerUserId: `user-kyle`,
+    })
+    expect(jsonResponse(res)).toEqual(runners)
+  })
+
+  it(`rejects listing runners for a different supplied owner`, async () => {
+    const manager = {
+      registry: {
+        listRunners: vi.fn(),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest(
+      undefined,
+      {},
+      `/_electric/runners?owner_user_id=user-other`
+    )
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `GET`,
+      `/_electric/runners`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.listRunners).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `OWNER_MISMATCH`,
+        message: `owner_user_id must match the authenticated user`,
+      },
+    })
+  })
+
+  it(`returns 403 when getting another user's runner`, async () => {
+    const manager = {
+      registry: {
+        getRunner: vi
+          .fn()
+          .mockResolvedValue(makeRunner(`shared-mac`, `user-other`)),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest()
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `GET`,
+      `/_electric/runners/shared-mac`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.getRunner).toHaveBeenCalledWith(`shared-mac`)
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `FORBIDDEN`,
+        message: `Authenticated user does not own the runner`,
+      },
+    })
+  })
+
+  it(`returns 404 when an authenticated runner lookup is missing`, async () => {
+    const manager = {
+      registry: {
+        getRunner: vi.fn().mockResolvedValue(null),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest()
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `GET`,
+      `/_electric/runners/missing-mac`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(res.writeHead).toHaveBeenCalledWith(404, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `NOT_FOUND`,
+        message: `Runner not found`,
+      },
+    })
+  })
+
+  it(`rejects runner heartbeat from a non-owner before updating liveness`, async () => {
+    const manager = {
+      registry: {
+        getRunner: vi
+          .fn()
+          .mockResolvedValue(makeRunner(`kyle-mac`, `user-kyle`)),
+        heartbeatRunner: vi.fn(),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-other` })
+    )
+    const req = createRequest({ lease_ms: 1000 })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/_electric/runners/kyle-mac/heartbeat`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.heartbeatRunner).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+  })
+
+  it(`rejects runner disable from a non-owner before changing status`, async () => {
+    const manager = {
+      registry: {
+        getRunner: vi
+          .fn()
+          .mockResolvedValue(makeRunner(`kyle-mac`, `user-kyle`)),
+        setRunnerAdminStatus: vi.fn(),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-other` })
+    )
+    const req = createRequest()
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/_electric/runners/kyle-mac/disable`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.setRunnerAdminStatus).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+  })
+
+  it(`allows the runner owner to disable their runner`, async () => {
+    const disabledRunner = {
+      ...makeRunner(`kyle-mac`, `user-kyle`),
+      admin_status: `disabled`,
+    }
+    const manager = {
+      registry: {
+        getRunner: vi
+          .fn()
+          .mockResolvedValue(makeRunner(`kyle-mac`, `user-kyle`)),
+        setRunnerAdminStatus: vi.fn().mockResolvedValue(disabledRunner),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest()
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/_electric/runners/kyle-mac/disable`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.setRunnerAdminStatus).toHaveBeenCalledWith(
+      `kyle-mac`,
+      `disabled`
+    )
+    expect(jsonResponse(res)).toEqual(disabledRunner)
+  })
+
+  it(`keeps no-hook scaffold behavior for management routes`, async () => {
+    const runners = [makeRunner(`other-mac`, `user-other`)]
+    const manager = {
+      registry: {
+        listRunners: vi.fn().mockResolvedValue(runners),
+        getRunner: vi.fn().mockResolvedValue(runners[0]),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(manager)
+    const listReq = createRequest(
+      undefined,
+      {},
+      `/_electric/runners?owner_user_id=user-other`
+    )
+    const listRes = createResponse()
+
+    const listHandled = await routes.handleRequest(
+      `GET`,
+      `/_electric/runners`,
+      listReq,
+      listRes
+    )
+
+    expect(listHandled).toBe(true)
+    expect(manager.registry.listRunners).toHaveBeenCalledWith({
+      ownerUserId: `user-other`,
+    })
+    expect(jsonResponse(listRes)).toEqual(runners)
+
+    const getReq = createRequest()
+    const getRes = createResponse()
+    const getHandled = await routes.handleRequest(
+      `GET`,
+      `/_electric/runners/other-mac`,
+      getReq,
+      getRes
+    )
+
+    expect(getHandled).toBe(true)
+    expect(manager.registry.getRunner).toHaveBeenCalledWith(`other-mac`)
+    expect(jsonResponse(getRes)).toEqual(runners[0])
+  })
+})
+
+describe(`ElectricAgentsRoutes spawn runner safety gate`, () => {
+  const runnerPolicy = {
+    targets: [{ type: `runner`, runnerId: `kyle-mac` }],
+  } as const
+
+  it(`requires authentication for explicit runner-target dispatch`, async () => {
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+        getEntity: vi.fn(),
+        getRunner: vi.fn(),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(runnerPolicy),
+      spawn: vi.fn(),
+    } as any
+    const authenticateRequest = vi.fn().mockReturnValue(null)
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      authenticateRequest
+    )
+    const req = createRequest({ dispatch_policy: runnerPolicy })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(`PUT`, `/chat/test`, req, res)
+
+    expect(handled).toBe(true)
+    expect(authenticateRequest).toHaveBeenCalledWith(req)
+    expect(manager.registry.getRunner).not.toHaveBeenCalled()
+    expect(manager.spawn).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(401, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `AUTHENTICATION_REQUIRED`,
+        message: `Authentication is required to spawn runner-targeted work`,
+      },
+    })
+  })
+
+  it(`rejects explicit runner-target dispatch by a non-owner`, async () => {
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+        getEntity: vi.fn(),
+        getRunner: vi.fn().mockResolvedValue({
+          id: `kyle-mac`,
+          owner_user_id: `user-kyle`,
+          admin_status: `enabled`,
+        }),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(runnerPolicy),
+      spawn: vi.fn(),
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-other` })
+    )
+    const req = createRequest({ dispatch_policy: runnerPolicy })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(`PUT`, `/chat/test`, req, res)
+
+    expect(handled).toBe(true)
+    expect(manager.registry.getRunner).toHaveBeenCalledWith(`kyle-mac`)
+    expect(manager.spawn).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `FORBIDDEN`,
+        message: `Authenticated user does not own the target runner`,
+      },
+    })
+  })
+
+  it(`rejects explicit runner-target dispatch to a disabled runner`, async () => {
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+        getEntity: vi.fn(),
+        getRunner: vi.fn().mockResolvedValue({
+          id: `kyle-mac`,
+          owner_user_id: `user-kyle`,
+          admin_status: `disabled`,
+        }),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(runnerPolicy),
+      spawn: vi.fn(),
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest({ dispatch_policy: runnerPolicy })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(`PUT`, `/chat/test`, req, res)
+
+    expect(handled).toBe(true)
+    expect(manager.spawn).not.toHaveBeenCalled()
+    expect(res.writeHead).toHaveBeenCalledWith(403, {
+      'content-type': `application/json`,
+    })
+    expect(jsonResponse(res)).toEqual({
+      error: {
+        code: `RUNNER_DISABLED`,
+        message: `Runner is disabled`,
+      },
+    })
+  })
+
+  it(`allows explicit runner-target dispatch for the runner owner`, async () => {
+    const entity = makeEntity(`/chat/test`, runnerPolicy)
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+        getEntity: vi.fn(),
+        getRunner: vi.fn().mockResolvedValue({
+          id: `kyle-mac`,
+          owner_user_id: `user-kyle`,
+          admin_status: `enabled`,
+        }),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(runnerPolicy),
+      spawn: vi.fn().mockResolvedValue({ ...entity, txid: 42 }),
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest({
+      dispatch_policy: runnerPolicy,
+      args: { prompt: `ship it` },
+    })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(`PUT`, `/chat/test`, req, res)
+
+    expect(handled).toBe(true)
+    expect(manager.spawn).toHaveBeenCalledWith(`chat`, {
+      instance_id: `test`,
+      args: { prompt: `ship it` },
+      tags: undefined,
+      parent: undefined,
+      dispatch_policy: runnerPolicy,
+      initialMessage: undefined,
+      wake: undefined,
+    })
+    expect(res.setHeader).not.toHaveBeenCalledWith(
+      `x-write-token`,
+      entity.write_token
+    )
+    expect(res.writeHead).toHaveBeenCalledWith(201, {
+      'content-type': `application/json`,
+    })
+  })
+
+  it(`does not authenticate webhook/default-policy spawns`, async () => {
+    const webhookPolicy = {
+      targets: [{ type: `webhook`, url: `https://example.test/wake` }],
+    } as const
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+        getEntity: vi.fn(),
+        getRunner: vi.fn(),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(webhookPolicy),
+      spawn: vi.fn().mockResolvedValue({
+        ...makeEntity(`/chat/webhook`, webhookPolicy),
+        txid: 7,
+      }),
+    } as any
+    const authenticateRequest = vi.fn(() => {
+      throw new Error(`should not authenticate webhook spawn`)
+    })
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      authenticateRequest
+    )
+    const req = createRequest({})
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(`PUT`, `/chat/webhook`, req, res)
+
+    expect(handled).toBe(true)
+    expect(authenticateRequest).not.toHaveBeenCalled()
+    expect(manager.registry.getRunner).not.toHaveBeenCalled()
+    expect(manager.spawn).toHaveBeenCalledOnce()
+    expect(res.writeHead).toHaveBeenCalledWith(201, {
+      'content-type': `application/json`,
+    })
+  })
+})
 
 describe(`ElectricAgentsRoutes schedule endpoints`, () => {
   it(`routes future-send schedule upserts to the manager and returns txid`, async () => {
