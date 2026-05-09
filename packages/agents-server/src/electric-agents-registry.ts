@@ -1095,6 +1095,7 @@ export class PostgresRegistry {
     input: ExpireStaleActiveClaimsInput = {}
   ): Promise<Array<ExpiredActiveClaimRecoveryItem>> {
     const now = input.now ?? new Date()
+    const nowIso = now.toISOString()
     const limit = Math.floor(input.limit ?? 100)
     if (limit <= 0) return []
 
@@ -1111,7 +1112,7 @@ export class PostgresRegistry {
           WHERE ${entityDispatchState.activeConsumerId} IS NOT NULL
             AND ${entityDispatchState.activeEpoch} IS NOT NULL
             AND ${entityDispatchState.activeLeaseExpiresAt} IS NOT NULL
-            AND ${entityDispatchState.activeLeaseExpiresAt} < ${now}
+            AND ${entityDispatchState.activeLeaseExpiresAt} < ${nowIso}::timestamptz
           ORDER BY ${entityDispatchState.activeLeaseExpiresAt} ASC
           LIMIT ${limit}
           FOR UPDATE SKIP LOCKED
@@ -1122,8 +1123,8 @@ export class PostgresRegistry {
                active_epoch = NULL,
                active_claimed_at = NULL,
                active_lease_expires_at = NULL,
-               last_released_at = ${now},
-               updated_at = ${now}
+               last_released_at = ${nowIso}::timestamptz,
+               updated_at = ${nowIso}::timestamptz
           FROM candidates
          WHERE ${entityDispatchState.entityUrl} = candidates.entity_url
         RETURNING
@@ -1171,6 +1172,8 @@ export class PostgresRegistry {
     input: ExpireStaleOutstandingWakesInput
   ): Promise<Array<StaleOutstandingWakeRecoveryItem>> {
     const now = input.now ?? new Date()
+    const nowIso = now.toISOString()
+    const staleBeforeIso = input.staleBefore.toISOString()
     const limit = Math.floor(input.limit ?? 100)
     if (limit <= 0) return []
 
@@ -1184,7 +1187,7 @@ export class PostgresRegistry {
           WHERE ${entityDispatchState.outstandingWakeId} IS NOT NULL
             AND ${entityDispatchState.activeConsumerId} IS NULL
             AND ${entityDispatchState.outstandingWakeCreatedAt} IS NOT NULL
-            AND ${entityDispatchState.outstandingWakeCreatedAt} < ${input.staleBefore}
+            AND ${entityDispatchState.outstandingWakeCreatedAt} < ${staleBeforeIso}::timestamptz
           ORDER BY ${entityDispatchState.outstandingWakeCreatedAt} ASC
           LIMIT ${limit}
           FOR UPDATE SKIP LOCKED
@@ -1194,7 +1197,7 @@ export class PostgresRegistry {
                outstanding_wake_target = NULL,
                outstanding_wake_created_at = NULL,
                pending_reason = COALESCE(${entityDispatchState.pendingReason}, 'stale_outstanding_wake'),
-               updated_at = ${now}
+               updated_at = ${nowIso}::timestamptz
           FROM candidates
          WHERE ${entityDispatchState.entityUrl} = candidates.entity_url
         RETURNING
