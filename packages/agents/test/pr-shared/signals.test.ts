@@ -35,7 +35,11 @@ describe(`insertSignal`, () => {
   it(`inserts a row with auto key, iso ts, empty consumed_by`, () => {
     const insert = vi.fn()
     const collection = { insert } as unknown as { insert: (r: unknown) => void }
-    insertSignal(collection as any, `pr_synced`, { foo: 1 })
+    insertSignal(collection as any, `head_sha_changed`, {
+      from_sha: `a`,
+      to_sha: `b`,
+      author_login: `me`,
+    })
     expect(insert).toHaveBeenCalledTimes(1)
     const row = insert.mock.calls[0]![0] as {
       key: string
@@ -44,8 +48,12 @@ describe(`insertSignal`, () => {
       ts: string
       consumed_by: string[]
     }
-    expect(row.type).toBe(`pr_synced`)
-    expect(row.payload).toEqual({ foo: 1 })
+    expect(row.type).toBe(`head_sha_changed`)
+    expect(row.payload).toEqual({
+      from_sha: `a`,
+      to_sha: `b`,
+      author_login: `me`,
+    })
     expect(row.consumed_by).toEqual([])
     expect(row.key).toMatch(/^[A-Za-z0-9_-]{12,}$/)
     expect(new Date(row.ts).toString()).not.toBe(`Invalid Date`)
