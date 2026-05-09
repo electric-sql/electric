@@ -222,7 +222,7 @@ pnpm -C packages/agents-server dev
 pnpm -C packages/agents-desktop dev:ui
 
 # Terminal E: isolated agents-server
-DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:55432/electric_agents \
+ELECTRIC_AGENTS_DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:55432/electric_agents \
 ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:33060 \
 ELECTRIC_AGENTS_PORT=4447 \
 ELECTRIC_AGENTS_BASE_URL=http://127.0.0.1:4447 \
