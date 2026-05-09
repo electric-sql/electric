@@ -18,7 +18,9 @@ const defaultRunner: GhRunner = async (cmd, args, opts) => {
     args,
     opts as Parameters<typeof execFileP>[2]
   )
-  return { stdout }
+  return {
+    stdout: typeof stdout === `string` ? stdout : stdout.toString(`utf8`),
+  }
 }
 
 export interface GithubPr {
