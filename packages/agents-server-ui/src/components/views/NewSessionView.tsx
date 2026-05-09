@@ -288,7 +288,7 @@ function Picker({
   )
 
   return (
-    <Stack direction="column" gap={5}>
+    <Stack direction="column" gap={5} className={styles.pickerFlow}>
       <div className={styles.heading}>
         <Text size={7} as="h1" className={styles.headingTitle}>
           {heroTitle}
