@@ -1,3 +1,4 @@
+import { serverFetch } from './auth-fetch'
 import { createOptimisticAction } from '@tanstack/db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
@@ -70,7 +71,7 @@ export function createSendMessageAction({
       db.collections.inbox.insert(message)
     },
     mutationFn: async ({ text, key }) => {
-      const res = await fetch(`${baseUrl}${entityUrl}/send`, {
+      const res = await serverFetch(`${baseUrl}${entityUrl}/send`, {
         method: `POST`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify({ from, key, payload: { text } }),

@@ -4,6 +4,7 @@ import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { createOptimisticAction } from '@tanstack/db'
 import { z } from 'zod'
 import type { ReactNode } from 'react'
+import { serverFetch } from './auth-fetch'
 
 type EntityStatus = `spawning` | `running` | `idle` | `stopped`
 
@@ -69,6 +70,7 @@ function createEntitiesCollection(baseUrl: string) {
             `updated_at`,
           ],
         },
+        fetchClient: serverFetch,
         parser: {
           int8: (v: string) => Number(v),
         },
@@ -86,6 +88,7 @@ function createEntityTypesCollection(baseUrl: string) {
       shapeOptions: {
         url: `${baseUrl}/_electric/electric/v1/shape`,
         params: { table: `entity_types` },
+        fetchClient: serverFetch,
       },
       getKey: (item) => item.name,
     })
@@ -144,7 +147,7 @@ function createSpawnAction(
       if (initialMessage) body.initialMessage = initialMessage
       if (dispatch_policy) body.dispatch_policy = dispatch_policy
 
-      const res = await fetch(`${baseUrl}/${type}/${name}`, {
+      const res = await serverFetch(`${baseUrl}/${type}/${name}`, {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify(body),
@@ -177,7 +180,7 @@ function createKillAction(
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await fetch(`${baseUrl}${entityUrl}`, {
+      const res = await serverFetch(`${baseUrl}${entityUrl}`, {
         method: `DELETE`,
       })
       if (!res.ok) {
@@ -192,7 +195,7 @@ function createKillAction(
 
 function createForkEntity(baseUrl: string) {
   return async (entityUrl: string): Promise<{ url: string }> => {
-    const res = await fetch(`${baseUrl}${entityUrl}/fork`, {
+    const res = await serverFetch(`${baseUrl}${entityUrl}/fork`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({}),

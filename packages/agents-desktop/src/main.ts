@@ -1076,6 +1076,10 @@ function registerIpcHandlers(): void {
   )
   ipcMain.handle(`desktop:get-state`, () => state)
   ipcMain.handle(
+    `desktop:get-asserted-auth-headers`,
+    () => buildAssertedAuthHeaders() ?? {}
+  )
+  ipcMain.handle(
     `desktop:set-active-server`,
     async (_event, server: ServerConfig | null) => {
       await setActiveServer(server)

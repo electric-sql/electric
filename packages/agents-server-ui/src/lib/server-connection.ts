@@ -88,6 +88,7 @@ declare global {
       stopRuntime?: () => Promise<void>
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
+      getAssertedAuthHeaders?: () => Promise<Record<string, string>>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>

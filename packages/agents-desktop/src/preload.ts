@@ -149,6 +149,8 @@ const api = {
     ipcRenderer.invoke(`desktop:rescan-servers`),
   getApiKeysStatus: (): Promise<ApiKeysStatus> =>
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
+  getAssertedAuthHeaders: (): Promise<Record<string, string>> =>
+    ipcRenderer.invoke(`desktop:get-asserted-auth-headers`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
   getWorkingDirectory: (): Promise<string | null> =>
