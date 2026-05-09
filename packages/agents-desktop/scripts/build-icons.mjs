@@ -2,8 +2,11 @@ import { copyFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)))
+const require = createRequire(import.meta.url)
+const iconBuilderBin = require.resolve(`electron-icon-builder/index.js`)
 const outputDir = join(packageDir, `build`)
 const baseIcon = join(packageDir, `assets`, `icon.png`)
 const macIcon = join(packageDir, `assets`, `icon-mac.png`)
@@ -11,8 +14,8 @@ const macOnlyOutputDir = join(packageDir, `build-mac-icon`)
 
 function runIconBuilder(input, output) {
   execFileSync(
-    `electron-icon-builder`,
-    [`--input`, input, `--output`, output],
+    process.execPath,
+    [iconBuilderBin, `--input`, input, `--output`, output],
     {
       cwd: packageDir,
       stdio: `inherit`,

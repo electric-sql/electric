@@ -52,6 +52,7 @@ win:
 linux:
   category: Development
   icon: build/icons/png
+  maintainer: ElectricSQL <info@electric-sql.com>
   target:
     - target: AppImage
       arch:

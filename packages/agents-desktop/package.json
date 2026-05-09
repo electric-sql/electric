@@ -3,6 +3,9 @@
   "productName": "Electric Agents",
   "private": true,
   "version": "0.0.0",
+  "description": "Desktop app for Electric Agents",
+  "author": "ElectricSQL <info@electric-sql.com>",
+  "homepage": "https://electric-sql.com",
   "type": "module",
   "main": "./dist/main.cjs",
   "scripts": {
