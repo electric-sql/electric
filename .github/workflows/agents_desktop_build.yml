@@ -143,6 +143,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build desktop type dependencies
+        run: pnpm --filter @electric-ax/agents... build
+
       - name: Typecheck desktop app
         run: pnpm --filter @electric-ax/agents-desktop typecheck
 
