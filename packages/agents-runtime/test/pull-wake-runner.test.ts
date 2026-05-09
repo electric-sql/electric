@@ -49,6 +49,7 @@ describe(`createPullWakeRunner`, () => {
       runnerId: `runner a/b`,
       runtime,
       offset: `initial`,
+      heartbeatIntervalMs: 0,
       streamFactory,
     })
 
@@ -78,6 +79,7 @@ describe(`createPullWakeRunner`, () => {
       baseUrl: `http://localhost:3000`,
       runnerId: `runner-1`,
       runtime,
+      heartbeatIntervalMs: 0,
       claimHeaders: () => ({ authorization: `Bearer user-session` }),
       claimTokenHeader: `electric-claim-token`,
       streamFactory: async () => ({
@@ -119,6 +121,7 @@ describe(`createPullWakeRunner`, () => {
       baseUrl: `http://localhost:3000`,
       runnerId: `runner-1`,
       runtime,
+      heartbeatIntervalMs: 0,
       streamFactory,
     })
 
@@ -142,6 +145,7 @@ describe(`createPullWakeRunner`, () => {
       baseUrl: `http://localhost:3000`,
       runnerId: `runner-1`,
       runtime,
+      heartbeatIntervalMs: 0,
       streamFactory: async (opts) => {
         signal = opts.signal
         return {
@@ -164,5 +168,98 @@ describe(`createPullWakeRunner`, () => {
     expect(runtime.abortWakes).toHaveBeenCalledTimes(1)
     expect(runtime.drainWakes).toHaveBeenCalledTimes(1)
     expect(runner.running).toBe(false)
+  })
+
+  it(`heartbeats immediately and periodically with control-plane headers`, async () => {
+    vi.useFakeTimers()
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { status: 204 })
+    )
+    vi.stubGlobal(`fetch`, fetch)
+    const runtime = {
+      dispatchWake: vi.fn(),
+      drainWakes: vi.fn(async () => {}),
+      abortWakes: vi.fn(),
+    }
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://localhost:3000`,
+      runnerId: `runner a/b`,
+      runtime,
+      headers: () => ({ authorization: `Bearer control`, 'x-electric': `yes` }),
+      heartbeatIntervalMs: 1_000,
+      leaseMs: 5_000,
+      streamFactory: async () => {
+        let cancel!: () => void
+        return {
+          jsonStream: async function* () {
+            await new Promise<void>((resolve) => {
+              cancel = resolve
+            })
+          },
+          cancel: () => cancel(),
+        }
+      },
+    })
+
+    runner.start()
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(fetch).toHaveBeenCalledTimes(3)
+
+    const [url, init] = fetch.mock.calls[0] as [RequestInfo | URL, RequestInit]
+    expect(url).toBe(
+      `http://localhost:3000/_electric/runners/runner%20a%2Fb/heartbeat`
+    )
+    expect(init.method).toBe(`POST`)
+    const headers = new Headers(init.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer control`)
+    expect(headers.get(`x-electric`)).toBe(`yes`)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
+    expect(JSON.parse(init.body as string)).toEqual({ lease_ms: 5_000 })
+
+    await runner.stop()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it(`stop cancels periodic heartbeats`, async () => {
+    vi.useFakeTimers()
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { status: 204 })
+    )
+    vi.stubGlobal(`fetch`, fetch)
+    const runtime = {
+      dispatchWake: vi.fn(),
+      drainWakes: vi.fn(async () => {}),
+      abortWakes: vi.fn(),
+    }
+    let cancel!: () => void
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://localhost:3000`,
+      runnerId: `runner-1`,
+      runtime,
+      heartbeatIntervalMs: 1_000,
+      streamFactory: async () => ({
+        jsonStream: async function* () {
+          await new Promise<void>((resolve) => {
+            cancel = resolve
+          })
+        },
+        cancel: () => cancel(),
+      }),
+    })
+
+    runner.start()
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    await runner.stop()
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 })

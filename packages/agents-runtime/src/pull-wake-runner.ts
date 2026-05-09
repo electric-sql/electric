@@ -22,6 +22,12 @@ export interface PullWakeRunnerConfig {
   claimTokenHeader?: ProcessWakeConfig[`claimTokenHeader`]
   /** Wake stream path. Defaults to /runners/{runnerId}/wake. */
   wakeStreamPath?: string
+  /** Heartbeat interval for runner liveness. Set <= 0 to disable. Defaults to 30s. */
+  heartbeatIntervalMs?: number
+  /** Lease duration requested with each heartbeat. Defaults to 3x heartbeatIntervalMs. */
+  leaseMs?: number
+  /** Runner heartbeat path. Defaults to /_electric/runners/{runnerId}/heartbeat. */
+  heartbeatPath?: string
   /** Optional lifecycle error hook. Return true to mark handled. */
   onError?: (error: Error) => boolean | void
   /** Test seam for custom stream implementations. */
@@ -54,12 +60,19 @@ export function createPullWakeRunner(
   let controller: AbortController | null = null
   let loop: Promise<void> | null = null
   let response: PullWakeStreamResponse | null = null
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let currentOffset = config.offset
 
   const wakePath =
     config.wakeStreamPath ??
     `/runners/${encodeURIComponent(config.runnerId)}/wake`
   const wakeUrl = new URL(wakePath, config.baseUrl).toString()
+  const heartbeatIntervalMs = config.heartbeatIntervalMs ?? 30_000
+  const leaseMs = config.leaseMs ?? heartbeatIntervalMs * 3
+  const heartbeatPath =
+    config.heartbeatPath ??
+    `/_electric/runners/${encodeURIComponent(config.runnerId)}/heartbeat`
+  const heartbeatUrl = new URL(heartbeatPath, config.baseUrl).toString()
 
   const resolveHeaders = async (): Promise<Record<string, string>> => {
     const init =
@@ -79,6 +92,53 @@ export function createPullWakeRunner(
       headers.set(`electric-runner-id`, config.runnerId)
     }
     return headers
+  }
+
+  const reportError = (err: unknown): void => {
+    const error = err instanceof Error ? err : new Error(String(err))
+    if (config.onError?.(error) !== true) throw error
+  }
+
+  const heartbeat = async (signal: AbortSignal): Promise<void> => {
+    try {
+      const headers = new Headers(await resolveHeaders())
+      headers.set(`content-type`, `application/json`)
+      const res = await fetch(heartbeatUrl, {
+        method: `POST`,
+        headers,
+        body: JSON.stringify({ lease_ms: leaseMs }),
+        signal,
+      })
+      if (!res.ok) {
+        throw new Error(
+          `Pull-wake runner heartbeat failed for ${config.runnerId}: ${res.status} ${await res.text()}`
+        )
+      }
+    } catch (err) {
+      if (!signal.aborted) {
+        const error = err instanceof Error ? err : new Error(String(err))
+        try {
+          config.onError?.(error)
+        } catch {
+          // Heartbeat errors should not kill the wake tail.
+        }
+      }
+    }
+  }
+
+  const startHeartbeat = (signal: AbortSignal): void => {
+    if (heartbeatIntervalMs <= 0) return
+    void heartbeat(signal)
+    heartbeatTimer = setInterval(() => {
+      void heartbeat(signal)
+    }, heartbeatIntervalMs)
+  }
+
+  const stopHeartbeat = (): void => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = null
+    }
   }
 
   const streamFactory =
@@ -121,10 +181,10 @@ export function createPullWakeRunner(
       })
     } catch (err) {
       if (!signal.aborted) {
-        const error = err instanceof Error ? err : new Error(String(err))
-        if (config.onError?.(error) !== true) throw error
+        reportError(err)
       }
     } finally {
+      stopHeartbeat()
       response = null
       controller = null
     }
@@ -134,12 +194,14 @@ export function createPullWakeRunner(
     start() {
       if (loop) return
       controller = new AbortController()
+      startHeartbeat(controller.signal)
       loop = run().finally(() => {
         loop = null
       })
     },
     async stop() {
       controller?.abort()
+      stopHeartbeat()
       response?.cancel?.(new Error(`pull wake runner stopped`))
       config.runtime.abortWakes()
       await loop?.catch((err) => {
