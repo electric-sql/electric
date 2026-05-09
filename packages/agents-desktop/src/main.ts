@@ -163,6 +163,7 @@ type DesktopCommand =
   | `new-chat`
   | `close-tile`
   | `toggle-sidebar`
+  | `open-settings`
   | `open-search`
   | `open-find`
   | `find-next`
@@ -1459,6 +1460,16 @@ function buildApplicationMenuTemplate(): Array<Electron.MenuItemConstructorOptio
       accelerator: `Shift+CommandOrControl+N`,
       click: () => createWindow(),
     },
+    ...(!isMac
+      ? ([
+          { type: `separator` },
+          {
+            label: `Settings…`,
+            accelerator: `CommandOrControl+,`,
+            click: () => sendCommand(`open-settings`),
+          },
+        ] as Array<Electron.MenuItemConstructorOptions>)
+      : []),
     { type: `separator` },
     {
       label: `Close Tile`,
@@ -1479,6 +1490,12 @@ function buildApplicationMenuTemplate(): Array<Electron.MenuItemConstructorOptio
             label: APP_DISPLAY_NAME,
             submenu: [
               { role: `about` as const },
+              { type: `separator` as const },
+              {
+                label: `Settings…`,
+                accelerator: `CommandOrControl+,`,
+                click: () => sendCommand(`open-settings`),
+              },
               { type: `separator` as const },
               { role: `services` as const },
               { type: `separator` as const },

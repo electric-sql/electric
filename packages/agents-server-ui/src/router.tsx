@@ -160,6 +160,12 @@ function RootShell(): React.ReactElement {
         case `toggle-sidebar`:
           toggle()
           break
+        case `open-settings`:
+          navigate({
+            to: `/settings/$category`,
+            params: { category: `general` },
+          })
+          break
         case `open-search`:
           search.toggle()
           break
@@ -204,6 +210,7 @@ function RootShell(): React.ReactElement {
     openNewSession,
     toggle,
     search,
+    navigate,
     helpers,
     workspace,
     openFindForTile,

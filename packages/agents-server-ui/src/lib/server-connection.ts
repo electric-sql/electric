@@ -68,6 +68,7 @@ export type DesktopCommand =
   | `new-chat`
   | `close-tile`
   | `toggle-sidebar`
+  | `open-settings`
   | `open-search`
   | `open-find`
   | `find-next`
