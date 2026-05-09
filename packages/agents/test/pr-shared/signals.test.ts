@@ -7,7 +7,7 @@ import {
 } from '../../src/agents/pr-shared/signals'
 
 describe(`signals vocabulary`, () => {
-  it(`declares all 17 signal types from §3.3`, () => {
+  it(`declares all 18 signal types from §3.3`, () => {
     expect(SIGNAL_TYPES).toEqual([
       `pr_synced`,
       `head_sha_changed`,
@@ -67,9 +67,24 @@ describe(`isConsumed / markConsumed`, () => {
     )
     expect(isConsumed({ consumed_by: [] } as any, `reviewer`)).toBe(false)
   })
+
   it(`markConsumed appends role idempotently via collection.update`, () => {
-    const update = vi.fn((_key, fn) => fn({ consumed_by: [] }))
+    const draft = { consumed_by: [`reviewer`] }
+    const update = vi.fn((_key, fn) => fn(draft))
     markConsumed({ update } as any, `sig-1`, `reviewer`)
-    expect(update).toHaveBeenCalledWith(`sig-1`, expect.any(Function))
+    expect(draft.consumed_by).toEqual([`reviewer`])
+    markConsumed({ update } as any, `sig-1`, `build-doctor`)
+    expect(draft.consumed_by).toEqual([`reviewer`, `build-doctor`])
+  })
+})
+
+describe(`insertSignal key uniqueness`, () => {
+  it(`generates a distinct key for each insertion`, () => {
+    const insert = vi.fn()
+    insertSignal({ insert } as any, `pr_synced`, {})
+    insertSignal({ insert } as any, `pr_synced`, {})
+    const k1 = (insert.mock.calls[0]![0] as { key: string }).key
+    const k2 = (insert.mock.calls[1]![0] as { key: string }).key
+    expect(k1).not.toBe(k2)
   })
 })
