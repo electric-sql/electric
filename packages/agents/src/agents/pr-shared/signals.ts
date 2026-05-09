@@ -27,7 +27,7 @@ export interface SignalPayloads {
   pr_synced: Record<string, never>
   head_sha_changed: { from_sha: string; to_sha: string; author_login: string }
   ci_failed: { head_sha: string; failed_checks: string[] }
-  ci_passed: { head_sha: string }
+  ci_passed: Record<string, never>
   new_human_comment: {
     comment_id: string
     author_login: string
@@ -41,11 +41,11 @@ export interface SignalPayloads {
     shas: string[]
     by_role: `reviewer` | `build-doctor` | `doc-editor`
   }
-  base_advanced: { from_sha: string; to_sha: string }
-  label_changed: { added: string[]; removed: string[] }
+  base_advanced: Record<string, never>
+  label_changed: Record<string, never>
   agents_label_removed: Record<string, never>
   agents_label_restored: Record<string, never>
-  pr_closed: { merged: boolean }
+  pr_closed: Record<string, never>
   human_input_required: { role: string; reason: string; summary: string }
   continue_granted: { role: `reviewer` | `build-doctor` | `doc-editor` | `all` }
   agents_disabled: Record<string, never>
