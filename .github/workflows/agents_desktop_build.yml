@@ -165,14 +165,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS Apple Silicon
-            id: macos-arm64
+          - name: macOS
+            id: macos
             runs_on: macos-14
-            builder_args: --mac --arm64
-          - name: macOS Intel
-            id: macos-x64
-            runs_on: macos-13
-            builder_args: --mac --x64
+            builder_args: --mac --arm64 --x64
           - name: Windows x64
             id: windows-x64
             runs_on: windows-latest
@@ -222,6 +218,36 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pnpm --filter @electric-ax/agents-desktop exec electron-builder ${{ matrix.builder_args }} --publish never
 
+      - name: Verify macOS native module architectures
+        if: ${{ matrix.id == 'macos' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_arch() {
+            local app_dir="$1"
+            local expected="$2"
+            local found=0
+
+            while IFS= read -r -d '' node_file; do
+              found=1
+              info="$(file "$node_file")"
+              echo "$info"
+              if [[ "$info" != *"$expected"* ]]; then
+                echo "Expected $node_file to contain $expected" >&2
+                exit 1
+              fi
+            done < <(find "$app_dir" -name '*.node' -print0)
+
+            if [[ "$found" -eq 0 ]]; then
+              echo "No native .node files found under $app_dir" >&2
+              exit 1
+            fi
+          }
+
+          check_arch "packages/agents-desktop/release/mac-arm64" "arm64"
+          check_arch "packages/agents-desktop/release/mac" "x86_64"
+
       - name: Upload workflow artifacts
         id: upload-artifact
         uses: actions/upload-artifact@v4
@@ -263,11 +289,15 @@ jobs:
             const sha = context.payload.pull_request.head.sha
             const shortSha = sha.slice(0, 7)
             const label = process.env.PLATFORM_LABEL
+            const platformId = process.env.PLATFORM_ID
             const uploadOutcome = process.env.UPLOAD_OUTCOME
             const artifactUrl = process.env.ARTIFACT_URL
             const status = uploadOutcome === 'success' ? 'Passed' : 'Failed'
             const artifact = artifactUrl ? `[Download](${artifactUrl})` : 'Unavailable'
-            const nextRow = `| ${label} | ${status} | ${artifact} |`
+            const labels =
+              platformId === 'macos'
+                ? ['macOS Apple Silicon', 'macOS Intel']
+                : [label]
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
@@ -276,8 +306,14 @@ jobs:
               per_page: 100,
             })
             const existing = comments.find((comment) => comment.body?.includes(marker))
-            const body = existing?.body ?? renderInitialBody()
-            const nextBody = replacePlatformRow(body, label, nextRow)
+            let nextBody = existing?.body ?? renderInitialBody()
+            for (const platformLabel of labels) {
+              nextBody = replacePlatformRow(
+                nextBody,
+                platformLabel,
+                `| ${platformLabel} | ${status} | ${artifact} |`
+              )
+            }
 
             if (existing) {
               await github.rest.issues.updateComment({
@@ -354,13 +390,11 @@ jobs:
 
           if [[ "$CHANNEL" == "canary" ]]; then
             case "$MATRIX_ID" in
-              macos-arm64)
-                copy_first "Electric-Agents-canary-mac-arm64.dmg" packages/agents-desktop/release/*.dmg
-                copy_first "Electric-Agents-canary-mac-arm64.zip" packages/agents-desktop/release/*.zip
-                ;;
-              macos-x64)
-                copy_first "Electric-Agents-canary-mac-x64.dmg" packages/agents-desktop/release/*.dmg
-                copy_first "Electric-Agents-canary-mac-x64.zip" packages/agents-desktop/release/*.zip
+              macos)
+                copy_first "Electric-Agents-canary-mac-arm64.dmg" packages/agents-desktop/release/*mac-arm64.dmg packages/agents-desktop/release/*arm64.dmg
+                copy_first "Electric-Agents-canary-mac-arm64.zip" packages/agents-desktop/release/*mac-arm64.zip packages/agents-desktop/release/*arm64.zip
+                copy_first "Electric-Agents-canary-mac-x64.dmg" packages/agents-desktop/release/*mac-x64.dmg packages/agents-desktop/release/*x64.dmg
+                copy_first "Electric-Agents-canary-mac-x64.zip" packages/agents-desktop/release/*mac-x64.zip packages/agents-desktop/release/*x64.zip
                 ;;
               windows-x64)
                 copy_first "Electric-Agents-canary-windows-x64.exe" packages/agents-desktop/release/*.exe
@@ -403,14 +437,14 @@ jobs:
             const marker = '<!-- electric-agents-desktop-pr-artifacts -->'
             const platforms = [
               {
-                id: 'macos-arm64',
+                id: 'macos',
                 label: 'macOS Apple Silicon',
-                jobName: 'build / Build macOS Apple Silicon',
+                jobName: 'build / Build macOS',
               },
               {
-                id: 'macos-x64',
+                id: 'macos',
                 label: 'macOS Intel',
-                jobName: 'build / Build macOS Intel',
+                jobName: 'build / Build macOS',
               },
               {
                 id: 'windows-x64',
