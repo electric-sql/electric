@@ -141,7 +141,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --filter @electric-ax/agents-desktop... install --frozen-lockfile
 
       - name: Build desktop type dependencies
         run: pnpm --filter @electric-ax/agents... build
