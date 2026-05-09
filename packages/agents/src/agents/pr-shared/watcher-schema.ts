@@ -10,5 +10,9 @@ export const ManagedPrRow = Type.Object({
 export type ManagedPrRow = Static<typeof ManagedPrRow>
 
 export const WatcherSchema = {
-  managed_prs: { schema: ManagedPrRow, primaryKey: `key` as const },
+  managed_prs: {
+    schema: ManagedPrRow,
+    type: `pr-watcher:managed_pr`,
+    primaryKey: `key` as const,
+  },
 }

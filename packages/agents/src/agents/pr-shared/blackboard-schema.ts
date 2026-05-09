@@ -129,12 +129,44 @@ export const SignalRow = Type.Object({
 export type SignalRow = Static<typeof SignalRow>
 
 export const PrBlackboardSchema = {
-  pr_meta: { schema: PrMetaRow, primaryKey: `key` as const },
-  checks: { schema: CheckRow, primaryKey: `key` as const },
-  review_threads: { schema: ReviewThreadRow, primaryKey: `key` as const },
-  doc_plan: { schema: DocPlanRow, primaryKey: `key` as const },
-  commits: { schema: CommitRow, primaryKey: `key` as const },
-  gates: { schema: GatesRow, primaryKey: `key` as const },
-  agent_state: { schema: AgentStateRow, primaryKey: `key` as const },
-  signals: { schema: SignalRow, primaryKey: `key` as const },
+  pr_meta: {
+    schema: PrMetaRow,
+    type: `pr:meta`,
+    primaryKey: `key` as const,
+  },
+  checks: {
+    schema: CheckRow,
+    type: `pr:check`,
+    primaryKey: `key` as const,
+  },
+  review_threads: {
+    schema: ReviewThreadRow,
+    type: `pr:review_thread`,
+    primaryKey: `key` as const,
+  },
+  doc_plan: {
+    schema: DocPlanRow,
+    type: `pr:doc_plan`,
+    primaryKey: `key` as const,
+  },
+  commits: {
+    schema: CommitRow,
+    type: `pr:commit`,
+    primaryKey: `key` as const,
+  },
+  gates: {
+    schema: GatesRow,
+    type: `pr:gates`,
+    primaryKey: `key` as const,
+  },
+  agent_state: {
+    schema: AgentStateRow,
+    type: `pr:agent_state`,
+    primaryKey: `key` as const,
+  },
+  signals: {
+    schema: SignalRow,
+    type: `pr:signal`,
+    primaryKey: `key` as const,
+  },
 }
