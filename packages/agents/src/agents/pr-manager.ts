@@ -1,10 +1,36 @@
+import path from 'node:path'
+import { db } from '@electric-ax/agents-runtime'
+import type {
+  EntityRegistry,
+  HandlerContext,
+  SharedStateSchemaMap,
+  WakeEvent,
+} from '@electric-ax/agents-runtime'
+import type { StreamFn } from '@mariozechner/pi-agent-core'
 import { insertSignal } from './pr-shared/signals'
 import { parseSlashCommand } from './pr-shared/slash-commands'
-import type {
-  CheckRow,
-  PrMetaRow,
-  SignalRow,
+import {
+  PrBlackboardSchema,
+  type AgentStateRow,
+  type CheckRow,
+  type CommitRow,
+  type DocPlanRow,
+  type GatesRow,
+  type PrMetaRow,
+  type ReviewThreadRow,
+  type SignalRow,
 } from './pr-shared/blackboard-schema'
+import { createWorktree as defaultCreateWorktree } from './pr-shared/worktree'
+import { createGithubClient } from './pr-shared/github'
+import { renderStatusComment } from './pr-shared/status-comment'
+import { evalGates } from './pr-shared/gates'
+import { buildWorkerPrelude } from './pr-shared/prelude'
+import {
+  resolveBuiltinModelConfig,
+  type BuiltinModelCatalog,
+} from '../model-catalog'
+import { createSkillTools } from '../skills/tools'
+import type { SkillsRegistry } from '../skills/types'
 import type { GithubComment, GithubPr } from './pr-shared/github'
 
 interface BoardCollections {
@@ -157,4 +183,314 @@ export async function runSyncPoll(deps: SyncPollDeps): Promise<void> {
   }
 
   insertSignal(board.signals, `pr_synced`, {})
+}
+
+export interface PrManagerArgs {
+  repo: string
+  number: number
+  head_branch: string
+  worktreeRoot: string
+  caps?: { reviewer?: number; buildDoctor?: number; docEditor?: number }
+}
+
+export interface PrManagerDeps {
+  workingDirectory: string
+  modelCatalog: BuiltinModelCatalog
+  skillsRegistry?: SkillsRegistry | null
+  streamFn?: StreamFn
+  createWorktree?: typeof defaultCreateWorktree
+  githubFactory?: () => ReturnType<typeof createGithubClient>
+}
+
+const DEFAULT_CAPS = { reviewer: 5, buildDoctor: 3, docEditor: 3 } as const
+
+interface PrBoardHandle {
+  pr_meta: {
+    toArray: PrMetaRow[]
+    insert: (row: PrMetaRow) => void
+    update: (key: string, fn: (draft: PrMetaRow) => void) => void
+  }
+  signals: {
+    toArray: SignalRow[]
+    insert: (row: SignalRow) => void
+    update: (key: string, fn: (draft: SignalRow) => void) => void
+  }
+  checks: {
+    toArray: CheckRow[]
+    insert: (row: CheckRow) => void
+    update: (key: string, fn: (draft: CheckRow) => void) => void
+    delete: (key: string) => void
+  }
+  review_threads: {
+    toArray: ReviewThreadRow[]
+    insert: (row: ReviewThreadRow) => void
+  }
+  doc_plan: {
+    toArray: DocPlanRow[]
+    insert: (row: DocPlanRow) => void
+  }
+  commits: {
+    toArray: CommitRow[]
+    insert: (row: CommitRow) => void
+  }
+  gates: {
+    toArray: GatesRow[]
+    insert: (row: GatesRow) => void
+    update: (key: string, fn: (draft: GatesRow) => void) => void
+  }
+  agent_state: {
+    toArray: AgentStateRow[]
+    insert: (row: AgentStateRow) => void
+    update: (key: string, fn: (draft: AgentStateRow) => void) => void
+  }
+}
+
+function blackboardId(repo: string, number: number): string {
+  return `pr-${repo}-${number}`
+}
+
+function decodeWakeKind(
+  events: ReadonlyArray<{ type: string; value?: unknown }>
+): string | null {
+  for (const e of events) {
+    if (e.type !== `inbox.user_message`) continue
+    const v = e.value as { content?: string } | undefined
+    try {
+      const parsed = JSON.parse(v?.content ?? ``) as { kind?: string }
+      if (typeof parsed.kind === `string`) return parsed.kind
+    } catch {
+      /* not JSON; ignore */
+    }
+  }
+  return null
+}
+
+export function registerPrManager(
+  registry: EntityRegistry,
+  deps: PrManagerDeps
+): void {
+  const {
+    workingDirectory,
+    modelCatalog,
+    skillsRegistry,
+    streamFn,
+    createWorktree = defaultCreateWorktree,
+    githubFactory = () => createGithubClient(),
+  } = deps
+
+  registry.define(`pr-manager`, {
+    description: `PR shepherd manager — owns the per-PR blackboard, sync poll, worktree, gates, status comment`,
+    async handler(ctx: HandlerContext, _wake: WakeEvent) {
+      const args = ctx.args as unknown as PrManagerArgs
+      const board = (await ctx.observe(
+        db(
+          blackboardId(args.repo, args.number),
+          PrBlackboardSchema as unknown as SharedStateSchemaMap
+        )
+      )) as unknown as PrBoardHandle
+      const gh = githubFactory()
+      const caps = { ...DEFAULT_CAPS, ...args.caps }
+
+      // ── firstWake: initialize
+      if (ctx.firstWake) {
+        const remote = await gh.fetchPr(args.repo, args.number)
+        board.pr_meta.insert({
+          key: `meta`,
+          number: args.number,
+          repo: args.repo,
+          title: remote.title,
+          base_branch: remote.base.ref,
+          base_sha: remote.base.sha,
+          head_branch: remote.head.ref,
+          head_sha: remote.head.sha,
+          description: remote.body,
+          state: remote.state,
+          labels: remote.labels,
+          mergeable: remote.mergeable,
+          status_comment_id: null,
+          agents_disabled: false,
+          last_synced_at: new Date(0).toISOString(),
+        })
+
+        const roles = [
+          { role: `reviewer` as const, cap: caps.reviewer },
+          { role: `build-doctor` as const, cap: caps.buildDoctor },
+          { role: `doc-editor` as const, cap: caps.docEditor },
+        ]
+        for (const r of roles) {
+          board.agent_state.insert({
+            key: r.role,
+            role: r.role,
+            iterations: 0,
+            cap: r.cap,
+            paused: false,
+            pause_reason: null,
+            last_continue_grant_at: null,
+            last_reviewed_sha: null,
+            last_substantive_signature: null,
+            iterations_skipped_since_review: 0,
+            worktree_lock_holder: null,
+          })
+        }
+
+        await createWorktree({
+          repoRoot: workingDirectory,
+          prNumber: args.number,
+          headBranch: remote.head.ref,
+        })
+
+        const blackboardArg = {
+          id: blackboardId(args.repo, args.number),
+          schema: PrBlackboardSchema as unknown as Record<string, unknown>,
+        }
+        const workerArgs = {
+          repo: args.repo,
+          number: args.number,
+          head_branch: remote.head.ref,
+          base_branch: remote.base.ref,
+          worktree_path: path.join(
+            workingDirectory,
+            `.worktrees`,
+            `pr-${args.number}`
+          ),
+          blackboard: blackboardArg,
+        }
+        await ctx.spawn(
+          `pr-reviewer`,
+          `pr-reviewer-${args.number}`,
+          workerArgs,
+          {}
+        )
+        await ctx.spawn(
+          `pr-build-doctor`,
+          `pr-build-doctor-${args.number}`,
+          workerArgs,
+          {}
+        )
+        await ctx.spawn(
+          `pr-doc-editor`,
+          `pr-doc-editor-${args.number}`,
+          workerArgs,
+          {}
+        )
+
+        ctx.send(ctx.entityUrl, { kind: `sync_tick` }, { afterMs: 30_000 })
+        return
+      }
+
+      const kind = decodeWakeKind(ctx.events)
+
+      if (kind === `sync_tick`) {
+        await runSyncPoll({
+          board,
+          gh,
+          repo: args.repo,
+          number: args.number,
+        })
+        const recentSignals = board.signals.toArray.filter(
+          (s) => Date.now() - new Date(s.ts).getTime() < 5 * 60_000
+        )
+        const meta = board.pr_meta.toArray[0]!
+        if (meta.state !== `open`) return
+        const nextDelay = recentSignals.length > 0 ? 30_000 : 5 * 60_000
+        ctx.send(ctx.entityUrl, { kind: `sync_tick` }, { afterMs: nextDelay })
+        return
+      }
+
+      // ── Otherwise: gate eval + status comment via the manager agent
+      const meta = board.pr_meta.toArray[0]
+      if (!meta) return
+      const evaluated = evalGates({
+        pr_meta: meta,
+        checks: board.checks.toArray,
+        review_threads: board.review_threads.toArray,
+        doc_plan: board.doc_plan.toArray,
+      })
+      const previous = board.gates.toArray[0]
+      const gateRow = {
+        key: `gates` as const,
+        ...evaluated,
+        last_evaluated_at: new Date().toISOString(),
+      }
+      if (!previous) board.gates.insert(gateRow)
+      else board.gates.update(`gates`, (d) => Object.assign(d, gateRow))
+
+      const flipped =
+        !previous || previous.ready_to_merge !== gateRow.ready_to_merge
+      if (flipped && gateRow.ready_to_merge) {
+        await gh.addLabel(args.repo, args.number, `agents:ready`)
+      } else if (
+        flipped &&
+        previous?.ready_to_merge &&
+        !gateRow.ready_to_merge
+      ) {
+        await gh
+          .removeLabel(args.repo, args.number, `agents:ready`)
+          .catch(() => {})
+      }
+
+      if (flipped || ctx.events.length > 0) {
+        const failingChecks = board.checks.toArray.filter(
+          (c) => c.conclusion === `failure`
+        ).length
+        const pendingChecks = board.checks.toArray.filter(
+          (c) => c.status !== `completed`
+        ).length
+        const openMustFix = board.review_threads.toArray.filter(
+          (t) => t.severity === `must-fix` && t.status === `open`
+        ).length
+        const body = renderStatusComment({
+          pr_meta: meta,
+          gates: gateRow,
+          agent_state: board.agent_state.toArray,
+          commits: board.commits.toArray,
+          pendingChecks,
+          failingChecks,
+          openMustFix,
+        })
+        const cid = await gh.upsertComment(
+          args.repo,
+          args.number,
+          body,
+          meta.status_comment_id
+        )
+        if (cid !== meta.status_comment_id) {
+          board.pr_meta.update(`meta`, (d) => {
+            d.status_comment_id = cid
+          })
+        }
+      }
+
+      // Optionally also run the manager skill for narrative parts.
+      if (skillsRegistry) {
+        const [useSkill, removeSkill] = createSkillTools(skillsRegistry, ctx)
+        const modelConfig = resolveBuiltinModelConfig(
+          modelCatalog,
+          args as unknown as Readonly<Record<string, unknown>>
+        )
+        ctx.useAgent({
+          systemPrompt: buildWorkerPrelude({
+            role: `manager`,
+            repo: args.repo,
+            number: args.number,
+            base_branch: meta.base_branch,
+            head_sha: meta.head_sha,
+            signal_type: kind ?? `manager_tick`,
+            signal_key: `n/a`,
+            signal_ts: new Date().toISOString(),
+            blackboard_id: blackboardId(args.repo, args.number),
+            worktree_path: path.join(
+              workingDirectory,
+              `.worktrees`,
+              `pr-${args.number}`
+            ),
+          }),
+          ...modelConfig,
+          tools: [useSkill, removeSkill],
+          ...(streamFn && { streamFn }),
+        })
+        await ctx.agent.run()
+      }
+    },
+  })
 }
