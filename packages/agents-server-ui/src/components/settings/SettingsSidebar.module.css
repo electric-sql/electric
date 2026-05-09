@@ -65,8 +65,8 @@
 
 /* Top header row mirrors the geometry of `SidebarHeader` (44px tall,
    10px gutter) so the in-app titlebar height stays consistent across
-   the two sidebars. The button itself opts out of the drag region via
-   `data-no-drag` so it remains clickable on Electron. */
+   the two sidebars. On macOS, the button opts out of the drag region
+   via `data-no-drag` so it remains clickable. */
 .header {
   flex-shrink: 0;
   display: flex;
@@ -76,12 +76,12 @@
   padding: 0 10px;
 }
 
-:global(html[data-electric-desktop='true']) .header {
+:global(html[data-electric-platform='darwin']) .header {
   padding-left: 84px;
   -webkit-app-region: drag;
 }
 
-:global(html[data-electric-desktop='true']) .header [data-no-drag] {
+:global(html[data-electric-platform='darwin']) .header [data-no-drag] {
   -webkit-app-region: no-drag;
 }
 

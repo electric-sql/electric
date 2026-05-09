@@ -39,7 +39,7 @@ interface CategoryDef {
  * rather than a modal overlay.
  *
  * The header row sits in the macOS draggable region (see
- * `:global(html[data-electric-desktop='true'])` rules in the
+ * `:global(html[data-electric-platform='darwin'])` rules in the
  * stylesheet); the "Back to app" affordance opts back out via
  * `data-no-drag` so it stays clickable.
  */

@@ -20,7 +20,7 @@
   padding: 0 10px;
 }
 
-/* Electron desktop: extend the sidebar header up into the macOS
+/* macOS desktop: extend the sidebar header up into the
    "hiddenInset" titlebar area so the toolbar buttons sit on the same
    row as the OS traffic lights. Padding-left clears the three lights
    (positioned at x:16, y:16 in main.ts → ~74px wide region) with a
@@ -30,15 +30,15 @@
    The whole bar is a window-drag region; interactive descendants
    (buttons, tooltips, links, inputs) opt back out so they stay
    clickable. */
-:global(html[data-electric-desktop='true']) .header {
+:global(html[data-electric-platform='darwin']) .header {
   padding-left: 84px;
   -webkit-app-region: drag;
 }
 
-:global(html[data-electric-desktop='true']) .header button,
-:global(html[data-electric-desktop='true']) .header a,
-:global(html[data-electric-desktop='true']) .header input,
-:global(html[data-electric-desktop='true']) .header [role='button'],
-:global(html[data-electric-desktop='true']) .header [data-no-drag] {
+:global(html[data-electric-platform='darwin']) .header button,
+:global(html[data-electric-platform='darwin']) .header a,
+:global(html[data-electric-platform='darwin']) .header input,
+:global(html[data-electric-platform='darwin']) .header [role='button'],
+:global(html[data-electric-platform='darwin']) .header [data-no-drag] {
   -webkit-app-region: no-drag;
 }

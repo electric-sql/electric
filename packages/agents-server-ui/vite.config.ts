@@ -3,11 +3,10 @@ import react from '@vitejs/plugin-react'
 
 /**
  * Tags the built `<html>` element with `data-electric-desktop="true"`
- * for the Electron desktop build so module-CSS rules like
- * `:global(html[data-electric-desktop='true']) .header` match from the
- * first paint — earlier than either preload (isolated world) or the
- * renderer entry (runs after CSS is loaded) can reliably set the
- * attribute.
+ * for the Electron desktop build so desktop-wide CSS matches from the
+ * first paint. Platform-specific chrome rules use
+ * `data-electric-platform`, which the Electron preload sets from the
+ * actual runtime platform.
  */
 function desktopHtmlMarker(): Plugin {
   return {

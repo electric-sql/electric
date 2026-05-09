@@ -1,17 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 // The Vite desktop build already stamps `<html data-electric-desktop="true">`
-// into the index, so CSS that targets `html[data-electric-desktop='true']`
-// matches from the first paint. We re-apply it here as a safety net in
-// case anything (HMR, navigation, etc.) drops the attribute. Wrapped in
-// try/catch so a DOM hiccup can never block `contextBridge.exposeInMainWorld`
-// further down — losing `window.electronAPI` would break the whole UI.
+// into the index, so CSS that targets desktop broadly matches from the first
+// paint. The preload adds the runtime platform for macOS-only titlebar chrome.
+// Wrapped in try/catch so a DOM hiccup can never block
+// `contextBridge.exposeInMainWorld` further down — losing
+// `window.electronAPI` would break the whole UI.
 try {
   if (typeof document !== `undefined` && document.documentElement) {
     document.documentElement.dataset.electricDesktop = `true`
+    document.documentElement.dataset.electricPlatform = process.platform
   } else if (typeof window !== `undefined`) {
     window.addEventListener(`DOMContentLoaded`, () => {
       document.documentElement.dataset.electricDesktop = `true`
+      document.documentElement.dataset.electricPlatform = process.platform
     })
   }
 } catch {

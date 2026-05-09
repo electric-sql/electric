@@ -9,10 +9,9 @@
   background: var(--ds-bg);
 }
 
-/* Top strip mirrors `MainHeader` (44px tall, draggable on desktop)
-   so the settings shell carries the same titlebar height as the
-   workspace and the macOS hiddenInset traffic lights stay aligned
-   with the sidebar's "Back to app" row. */
+/* Top strip mirrors `MainHeader` (44px tall). On macOS desktop, it
+   participates in the hiddenInset titlebar so the traffic lights stay
+   aligned with the sidebar's "Back to app" row. */
 .header {
   flex-shrink: 0;
   display: flex;
@@ -35,26 +34,26 @@
   flex-shrink: 0;
 }
 
-:global(html[data-electric-desktop='true']) .header {
+:global(html[data-electric-platform='darwin']) .header {
   -webkit-app-region: drag;
 }
 
-/* On Electron the SettingsScreen header is the only window-drag
+/* On macOS desktop the SettingsScreen header is the only window-drag
    region in the right column, so we need to push past the macOS
    traffic lights when the SettingsSidebar is collapsed (overlay
    on narrow viewports) — otherwise our header content would sit
    under the lights. We *also* shift the toggle past the lights
    when it's the leftmost element. Mirrors MainHeader's `:has`
    rule. */
-:global(html[data-electric-desktop='true']) .header:has(.chrome) {
+:global(html[data-electric-platform='darwin']) .header:has(.chrome) {
   padding-left: 84px;
 }
 
-:global(html[data-electric-desktop='true']) .header button,
-:global(html[data-electric-desktop='true']) .header a,
-:global(html[data-electric-desktop='true']) .header input,
-:global(html[data-electric-desktop='true']) .header [role='button'],
-:global(html[data-electric-desktop='true']) .header [data-no-drag] {
+:global(html[data-electric-platform='darwin']) .header button,
+:global(html[data-electric-platform='darwin']) .header a,
+:global(html[data-electric-platform='darwin']) .header input,
+:global(html[data-electric-platform='darwin']) .header [role='button'],
+:global(html[data-electric-platform='darwin']) .header [data-no-drag] {
   -webkit-app-region: no-drag;
 }
 

@@ -525,6 +525,7 @@ function setState(patch: Partial<DesktopState>): void {
 }
 
 function createWindow(): BrowserWindow {
+  const isMac = process.platform === `darwin`
   const win = new BrowserWindow({
     width: 1280,
     height: 900,
@@ -535,16 +536,16 @@ function createWindow(): BrowserWindow {
     // overlaid on the window content. The renderer paints the toolbar
     // with extra left-padding so its icons sit to the right of the
     // traffic lights and the row reads as a single chrome strip.
-    // Other platforms get a frameless window with custom in-app
-    // title bars.
-    titleBarStyle: process.platform === `darwin` ? `hiddenInset` : `hidden`,
-    frame: process.platform === `darwin`,
+    // Windows and Linux use the native frame and menu bar instead of
+    // in-app drag regions.
+    titleBarStyle: isMac ? `hiddenInset` : `default`,
+    frame: true,
+    autoHideMenuBar: false,
     // Standard macOS hiddenInset traffic-light origin (top-left of the
     // leftmost light). The renderer matches the 44px desktop header
     // height so the 24px IconButton glyphs flex-center to the same y as
     // the light centers — the row reads as a single chrome strip.
-    trafficLightPosition:
-      process.platform === `darwin` ? { x: 16, y: 14 } : undefined,
+    trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
     webPreferences: {
       preload: PRELOAD_PATH,
       contextIsolation: true,
@@ -869,7 +870,7 @@ async function restartRuntime(): Promise<void> {
     // snapshot on subscribe, so renderers always see *something*.
     const reg = nextRuntime.mcpRegistry
     if (reg) {
-      mcpUnsubscribe = reg.subscribe((snapshot) => {
+      mcpUnsubscribe = reg.subscribe((snapshot: RegistrySnapshot) => {
         broadcastMcpSnapshot(snapshot)
       })
     }
@@ -1129,7 +1130,7 @@ function registerIpcHandlers(): void {
     // Forces a fresh OAuth flow. The registry mutates the entry in
     // place rather than deleting + re-adding, so the renderer's
     // snapshot keeps showing the row throughout — no flicker.
-    await runtime?.mcpRegistry?.reauthorize(name).catch((err) => {
+    await runtime?.mcpRegistry?.reauthorize(name).catch((err: unknown) => {
       console.warn(`[agents-desktop] mcp-authorize ${name}:`, err)
     })
   })
@@ -1137,17 +1138,17 @@ function registerIpcHandlers(): void {
     const reg = runtime?.mcpRegistry
     const entry = reg?.get(name)
     if (!reg || !entry) return
-    await reg.addServer(entry.config).catch((err) => {
+    await reg.addServer(entry.config).catch((err: unknown) => {
       console.warn(`[agents-desktop] mcp-reconnect ${name}:`, err)
     })
   })
   ipcMain.handle(`desktop:mcp-disable`, async (_event, name: string) => {
-    await runtime?.mcpRegistry?.disable(name).catch((err) => {
+    await runtime?.mcpRegistry?.disable(name).catch((err: unknown) => {
       console.warn(`[agents-desktop] mcp-disable ${name}:`, err)
     })
   })
   ipcMain.handle(`desktop:mcp-enable`, async (_event, name: string) => {
-    await runtime?.mcpRegistry?.enable(name).catch((err) => {
+    await runtime?.mcpRegistry?.enable(name).catch((err: unknown) => {
       console.warn(`[agents-desktop] mcp-enable ${name}:`, err)
     })
   })
