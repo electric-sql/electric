@@ -29,15 +29,73 @@ on:
 
 jobs:
   prepare-release:
-    name: Prepare release
+    name: Prepare
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        if: ${{ inputs.publish }}
+        if: ${{ inputs.publish || (inputs.channel == 'pr' && github.event_name == 'pull_request') }}
         uses: actions/checkout@v5.0.0
         with:
           fetch-depth: 0
           ref: ${{ inputs.git_ref }}
+
+      - name: Create or update PR artifact comment
+        if: ${{ inputs.channel == 'pr' && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            const marker = '<!-- electric-agents-desktop-pr-artifacts -->'
+            const platforms = [
+              ['macos-arm64', 'macOS Apple Silicon'],
+              ['macos-x64', 'macOS Intel'],
+              ['windows-x64', 'Windows x64'],
+              ['linux-x64', 'Linux x64'],
+            ]
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const sha = context.payload.pull_request.head.sha
+            const shortSha = sha.slice(0, 7)
+            const rows = platforms
+              .map(([, label]) => `| ${label} | Building | Pending |`)
+              .join('\n')
+            const body = [
+              marker,
+              '## Electric Agents Desktop Builds',
+              '',
+              `Build artifacts for commit \`${shortSha}\` are in progress.`,
+              '',
+              '| Platform | Status | Artifact |',
+              '| --- | --- | --- |',
+              rows,
+              '',
+              `[Workflow run](${runUrl})`,
+            ].join('\n')
+
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.pull_request.number
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            })
+            const existing = comments.find((comment) => comment.body?.includes(marker))
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              })
+            }
 
       - name: Create or update GitHub release
         if: ${{ inputs.publish }}
@@ -165,6 +223,7 @@ jobs:
         run: pnpm --filter @electric-ax/agents-desktop exec electron-builder ${{ matrix.builder_args }} --publish never
 
       - name: Upload workflow artifacts
+        id: upload-artifact
         uses: actions/upload-artifact@v4
         with:
           name: electric-agents-desktop-${{ inputs.channel }}-${{ matrix.id }}
@@ -243,3 +302,132 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: gh release upload "$RELEASE_TAG" packages/agents-desktop/publish-assets/* --clobber
+
+  update-pr-comment:
+    name: Update PR artifact comment
+    needs: build
+    if: ${{ always() && inputs.channel == 'pr' && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update PR artifact comment
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            const marker = '<!-- electric-agents-desktop-pr-artifacts -->'
+            const platforms = [
+              {
+                id: 'macos-arm64',
+                label: 'macOS Apple Silicon',
+                jobName: 'build / Build macOS Apple Silicon',
+              },
+              {
+                id: 'macos-x64',
+                label: 'macOS Intel',
+                jobName: 'build / Build macOS Intel',
+              },
+              {
+                id: 'windows-x64',
+                label: 'Windows x64',
+                jobName: 'build / Build Windows x64',
+              },
+              {
+                id: 'linux-x64',
+                label: 'Linux x64',
+                jobName: 'build / Build Linux x64',
+              },
+            ]
+
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.pull_request.number
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const sha = context.payload.pull_request.head.sha
+            const shortSha = sha.slice(0, 7)
+
+            const [jobs, artifacts] = await Promise.all([
+              github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                owner,
+                repo,
+                run_id: context.runId,
+                per_page: 100,
+              }),
+              github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+                owner,
+                repo,
+                run_id: context.runId,
+                per_page: 100,
+              }),
+            ])
+
+            const artifactByName = new Map(
+              artifacts.map((artifact) => [
+                artifact.name,
+                `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}/artifacts/${artifact.id}`,
+              ])
+            )
+
+            const rows = platforms
+              .map((platform) => {
+                const job = jobs.find((candidate) => candidate.name === platform.jobName)
+                const artifactName = `electric-agents-desktop-pr-${platform.id}`
+                const artifactUrl = artifactByName.get(artifactName)
+                const status = formatStatus(job)
+                const artifact = artifactUrl ? `[Download](${artifactUrl})` : 'Unavailable'
+                return `| ${platform.label} | ${status} | ${artifact} |`
+              })
+              .join('\n')
+
+            const body = [
+              marker,
+              '## Electric Agents Desktop Builds',
+              '',
+              `Build artifacts for commit \`${shortSha}\`.`,
+              '',
+              '| Platform | Status | Artifact |',
+              '| --- | --- | --- |',
+              rows,
+              '',
+              `[Workflow run](${runUrl})`,
+            ].join('\n')
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            })
+            const existing = comments.find((comment) => comment.body?.includes(marker))
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              })
+            }
+
+            function formatStatus(job) {
+              if (!job) return 'Unknown'
+              if (job.status !== 'completed') return 'Building'
+
+              switch (job.conclusion) {
+                case 'success':
+                  return 'Passed'
+                case 'failure':
+                  return 'Failed'
+                case 'cancelled':
+                  return 'Cancelled'
+                case 'skipped':
+                  return 'Skipped'
+                default:
+                  return job.conclusion || 'Completed'
+              }
+            }
