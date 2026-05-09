@@ -212,11 +212,37 @@ jobs:
       - name: Rebuild native modules
         run: pnpm --filter @electric-ax/agents-desktop rebuild:native
 
+      - name: Package macOS desktop app
+        if: ${{ matrix.id == 'macos' }}
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: true
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          builder_args=(${{ matrix.builder_args }})
+          if [[ "${{ inputs.sign }}" != "true" ]]; then
+            builder_args+=("-c.mac.identity=-")
+          fi
+
+          pnpm --filter @electric-ax/agents-desktop exec electron-builder "${builder_args[@]}" --publish never
+
       - name: Package desktop app
+        if: ${{ matrix.id != 'macos' }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.sign && 'true' || 'false' }}
           GH_TOKEN: ${{ github.token }}
         run: pnpm --filter @electric-ax/agents-desktop exec electron-builder ${{ matrix.builder_args }} --publish never
+
+      - name: Verify macOS app signatures
+        if: ${{ matrix.id == 'macos' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          codesign --verify --deep --strict --verbose=4 "packages/agents-desktop/release/mac-arm64/Electric Agents.app"
+          codesign --verify --deep --strict --verbose=4 "packages/agents-desktop/release/mac/Electric Agents.app"
 
       - name: Verify macOS native module architectures
         if: ${{ matrix.id == 'macos' }}
