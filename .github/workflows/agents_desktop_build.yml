@@ -216,7 +216,8 @@ jobs:
         if: ${{ matrix.id == 'macos' }}
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: true
+          CSC_FOR_PULL_REQUEST: ${{ inputs.sign && 'false' || 'true' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.sign && 'true' || 'false' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
