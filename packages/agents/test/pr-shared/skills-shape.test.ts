@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const S = (name: string) =>
-  readFileSync(path.resolve(HERE, `../../skills/pr`, name), `utf8`)
+  readFileSync(path.resolve(HERE, `../../skills`, `pr-${name}`), `utf8`)
 
 const COMMON = [
   `agents_disabled`,
