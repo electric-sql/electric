@@ -11,6 +11,11 @@ import {
 import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
+import { registerPrWatcher } from './agents/pr-watcher'
+import { registerPrManager } from './agents/pr-manager'
+import { registerPrReviewer } from './agents/pr-reviewer'
+import { registerPrBuildDoctor } from './agents/pr-build-doctor'
+import { registerPrDocEditor } from './agents/pr-doc-editor'
 import { createBuiltinModelCatalog } from './model-catalog'
 import { createSkillsRegistry } from './skills/registry'
 import type {
@@ -120,6 +125,39 @@ export async function createBuiltinAgentHandler(
 
   registerWorker(registry, { workingDirectory: cwd, streamFn, modelCatalog })
   typeNames.push(`worker`)
+
+  registerPrWatcher(registry, { workingDirectory: cwd, modelCatalog })
+  registerPrManager(registry, {
+    workingDirectory: cwd,
+    modelCatalog,
+    skillsRegistry,
+    streamFn,
+  })
+  registerPrReviewer(registry, {
+    workingDirectory: cwd,
+    modelCatalog,
+    skillsRegistry,
+    streamFn,
+  })
+  registerPrBuildDoctor(registry, {
+    workingDirectory: cwd,
+    modelCatalog,
+    skillsRegistry,
+    streamFn,
+  })
+  registerPrDocEditor(registry, {
+    workingDirectory: cwd,
+    modelCatalog,
+    skillsRegistry,
+    streamFn,
+  })
+  typeNames.push(
+    `pr-watcher`,
+    `pr-manager`,
+    `pr-reviewer`,
+    `pr-build-doctor`,
+    `pr-doc-editor`
+  )
 
   const runtime = createRuntimeHandler({
     baseUrl: agentServerUrl,
