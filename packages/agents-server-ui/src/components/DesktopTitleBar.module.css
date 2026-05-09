@@ -3,7 +3,7 @@
   align-items: center;
   height: 34px;
   flex-shrink: 0;
-  background: var(--ds-bg-subtle);
+  background: var(--ds-chrome-bg);
   color: var(--ds-text-1);
   font-size: 12px;
   line-height: 1;

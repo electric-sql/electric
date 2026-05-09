@@ -97,12 +97,15 @@ export type DesktopNavigationState = {
   canGoForward: boolean
 }
 
+export type DesktopAppearance = `light` | `dark`
+
 declare global {
   interface Window {
     electronAPI?: {
       getServers: () => Promise<Array<ServerConfig>>
       saveServers: (servers: Array<ServerConfig>) => Promise<void>
       getDesktopState?: () => Promise<DesktopState>
+      setNativeAppearance?: (appearance: DesktopAppearance) => Promise<void>
       setActiveServer?: (server: ServerConfig | null) => Promise<void>
       restartRuntime?: () => Promise<void>
       stopRuntime?: () => Promise<void>

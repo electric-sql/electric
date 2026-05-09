@@ -99,6 +99,7 @@
    * in dark mode it's the website's `--vp-c-bg-elv` `#22252f`.          */
   --ds-bg: #f7f7f5;
   --ds-bg-subtle: #f0efed;
+  --ds-chrome-bg: var(--ds-bg-subtle);
   --ds-surface: #ffffff;
   --ds-surface-raised: #ffffff;
   --ds-input-bg: var(--ds-surface-raised);
@@ -316,6 +317,7 @@
 :root[data-theme='dark'] {
   --ds-bg: #111318;
   --ds-bg-subtle: #16181f;
+  --ds-chrome-bg: var(--ds-bg-subtle);
   --ds-surface: #1a1d27;
   --ds-surface-raised: #22252f;
   /* Solid raised fill — same value the marketing site uses for its

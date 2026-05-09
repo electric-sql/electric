@@ -1,4 +1,5 @@
 import { RouterProvider } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import {
   ServerConnectionProvider,
   useServerConnection,
@@ -24,6 +25,10 @@ function AppInner(): React.ReactElement {
 function ThemedApp(): React.ReactElement {
   const { darkMode } = useDarkModeContext()
   const appearance = darkMode ? `dark` : `light`
+
+  useEffect(() => {
+    void window.electronAPI?.setNativeAppearance?.(appearance)
+  }, [appearance])
 
   return (
     <ThemeProvider appearance={appearance}>

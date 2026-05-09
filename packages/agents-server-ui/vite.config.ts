@@ -35,6 +35,17 @@ export default defineConfig(({ command, mode }) => {
   return {
     base: desktop ? (desktopServe ? `/` : `./`) : `/__agent_ui/`,
     plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
+    resolve: {
+      dedupe: [`react`, `react-dom`],
+    },
+    optimizeDeps: {
+      include: [
+        `react`,
+        `react-dom`,
+        `react/jsx-runtime`,
+        `react/jsx-dev-runtime`,
+      ],
+    },
     build: {
       outDir: desktop ? `dist-desktop` : `dist`,
       emptyOutDir: true,

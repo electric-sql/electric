@@ -21,11 +21,9 @@
   position: relative;
 }
 
-:global(
-    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
-  )
-  .appShell {
-  background: var(--ds-bg-subtle);
+:global(html[data-electric-desktop='true']) .rootShell,
+:global(html[data-electric-desktop='true']) .appShell {
+  background: transparent;
 }
 
 .entityShell {

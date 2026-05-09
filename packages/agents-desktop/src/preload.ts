@@ -90,6 +90,8 @@ type DesktopNavigationState = {
   canGoForward: boolean
 }
 
+type DesktopAppearance = `light` | `dark`
+
 type DesktopContextMenuRequest = {
   kind: `selection`
   selectionText: string
@@ -162,6 +164,8 @@ const api = {
     ipcRenderer.invoke(`desktop:save-servers`, servers),
   getDesktopState: (): Promise<DesktopState> =>
     ipcRenderer.invoke(`desktop:get-state`),
+  setNativeAppearance: (appearance: DesktopAppearance): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-native-appearance`, appearance),
   setActiveServer: (server: ServerConfig | null): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-active-server`, server),
   restartRuntime: (): Promise<void> =>

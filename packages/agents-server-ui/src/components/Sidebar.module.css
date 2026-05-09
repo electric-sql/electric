@@ -1,8 +1,8 @@
 .root {
   flex-shrink: 0;
-  background: var(--ds-bg-subtle);
+  background: var(--ds-chrome-bg);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   transition:
     margin-right 180ms cubic-bezier(0.32, 0.72, 0, 1),
     visibility 0s linear 0s;

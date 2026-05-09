@@ -13,6 +13,7 @@ import {
   dialog,
   ipcMain,
   nativeImage,
+  nativeTheme,
   shell,
 } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -190,6 +191,8 @@ type DesktopNavigationState = {
   canGoBack: boolean
   canGoForward: boolean
 }
+
+type DesktopAppearance = `light` | `dark`
 
 type DesktopContextMenuRequest = {
   kind: `selection`
@@ -562,6 +565,7 @@ function setState(patch: Partial<DesktopState>): void {
 
 function createWindow(): BrowserWindow {
   const isMac = process.platform === `darwin`
+  const isWindows = process.platform === `win32`
   const win = new BrowserWindow({
     width: 1280,
     height: 900,
@@ -580,10 +584,15 @@ function createWindow(): BrowserWindow {
     titleBarStyle: isMac ? `hiddenInset` : `hidden`,
     frame: true,
     autoHideMenuBar: !isMac,
+    transparent: isMac || isWindows,
+    backgroundColor: isMac || isWindows ? `#00000000` : undefined,
+    vibrancy: isMac ? `sidebar` : undefined,
+    visualEffectState: isMac ? `active` : undefined,
+    backgroundMaterial: isWindows ? `mica` : undefined,
     titleBarOverlay: isMac
       ? undefined
       : {
-          color: `#f7f7f7`,
+          color: isWindows ? `#00000000` : `#f7f7f7`,
           symbolColor: `#1f2328`,
           height: 34,
         },
@@ -599,6 +608,12 @@ function createWindow(): BrowserWindow {
       sandbox: false,
     },
   })
+
+  if (isMac) {
+    win.setVibrancy(`sidebar`)
+  } else if (isWindows) {
+    win.setBackgroundMaterial(`mica`)
+  }
 
   windows.add(win)
   if (!isMac) {
@@ -1093,8 +1108,27 @@ function stopDiscoveryLoop(): void {
   }
 }
 
+function applyNativeAppearance(appearance: DesktopAppearance): void {
+  nativeTheme.themeSource = appearance
+
+  const symbolColor = appearance === `dark` ? `#ededee` : `#1f2328`
+  for (const win of windows) {
+    win.setTitleBarOverlay?.({
+      color: `#00000000`,
+      symbolColor,
+      height: 34,
+    })
+  }
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle(`desktop:get-servers`, () => settings.servers)
+  ipcMain.handle(
+    `desktop:set-native-appearance`,
+    (_event, appearance: DesktopAppearance) => {
+      applyNativeAppearance(appearance)
+    }
+  )
   ipcMain.handle(
     `desktop:save-servers`,
     async (_event, servers: Array<ServerConfig>) => {

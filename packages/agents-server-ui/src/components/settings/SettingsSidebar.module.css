@@ -5,7 +5,7 @@
   flex-shrink: 0;
   width: 240px;
   min-width: 240px;
-  background: var(--ds-bg-subtle);
+  background: var(--ds-chrome-bg);
   position: relative;
 }
 
