@@ -7,15 +7,30 @@ import { contextBridge, ipcRenderer } from 'electron'
 // `contextBridge.exposeInMainWorld` further down — losing
 // `window.electronAPI` would break the whole UI.
 try {
+  const applyFullscreenState = (fullscreen: boolean): void => {
+    document.documentElement.dataset.electricFullscreen = fullscreen
+      ? `true`
+      : `false`
+  }
+
   if (typeof document !== `undefined` && document.documentElement) {
     document.documentElement.dataset.electricDesktop = `true`
     document.documentElement.dataset.electricPlatform = process.platform
+    applyFullscreenState(false)
   } else if (typeof window !== `undefined`) {
     window.addEventListener(`DOMContentLoaded`, () => {
       document.documentElement.dataset.electricDesktop = `true`
       document.documentElement.dataset.electricPlatform = process.platform
+      applyFullscreenState(false)
     })
   }
+
+  ipcRenderer.on(
+    `desktop:fullscreen-state-changed`,
+    (_event, fullscreen: boolean) => {
+      applyFullscreenState(fullscreen)
+    }
+  )
 } catch {
   // Non-fatal — the static attribute in index.html is the source of truth.
 }

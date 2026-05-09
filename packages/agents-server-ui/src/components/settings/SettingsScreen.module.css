@@ -75,6 +75,13 @@
   padding-left: 84px;
 }
 
+:global(
+    html[data-electric-desktop='true'][data-electric-platform='darwin'][data-electric-fullscreen='true']
+  )
+  .header:has(.chrome) {
+  padding-left: 10px;
+}
+
 :global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
   .header
   button,

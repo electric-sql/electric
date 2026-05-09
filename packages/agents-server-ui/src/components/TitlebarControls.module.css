@@ -17,6 +17,13 @@
 }
 
 :global(
+    html[data-electric-desktop='true'][data-electric-platform='darwin'][data-electric-fullscreen='true']
+  )
+  .controls {
+  left: 10px;
+}
+
+:global(
     html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
   )
   .controls {

@@ -44,6 +44,14 @@
   padding-left: 196px;
 }
 
+:global(
+    html[data-electric-desktop='true'][data-electric-platform='darwin'][data-electric-fullscreen='true']
+  )
+  :global([data-sidebar-state='closed'])
+  .header[data-chrome-inset-target='true'] {
+  padding-left: 122px;
+}
+
 :global(html:not([data-electric-desktop]))
   :global([data-sidebar-animation='true'])
   .header[data-chrome-inset-target='true'],

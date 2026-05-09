@@ -558,6 +558,11 @@ function sendNavigationState(win: BrowserWindow): void {
   )
 }
 
+function sendFullscreenState(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  win.webContents.send(`desktop:fullscreen-state-changed`, win.isFullScreen())
+}
+
 function setState(patch: Partial<DesktopState>): void {
   state = { ...state, ...patch }
   updateTray()
@@ -626,6 +631,9 @@ function createWindow(): BrowserWindow {
   installEditableContextMenu(win)
   installExternalLinkHandler(win)
   installNavigationStateBridge(win)
+  win.on(`enter-full-screen`, () => sendFullscreenState(win))
+  win.on(`leave-full-screen`, () => sendFullscreenState(win))
+  win.webContents.on(`did-finish-load`, () => sendFullscreenState(win))
   win.on(`closed`, () => {
     windows.delete(win)
     buildApplicationMenu()

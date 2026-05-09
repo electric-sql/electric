@@ -81,6 +81,13 @@
   -webkit-app-region: drag;
 }
 
+:global(
+    html[data-electric-desktop='true'][data-electric-platform='darwin'][data-electric-fullscreen='true']
+  )
+  .header {
+  padding-left: 10px;
+}
+
 :global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
   .header
   [data-no-drag] {
