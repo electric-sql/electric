@@ -145,6 +145,104 @@ describe(`pr-manager`, () => {
     )
   })
 
+  it(`subscribes to the blackboard with wake on signals collection changes`, async () => {
+    const registry = createEntityRegistry()
+    const modelCatalog = await createBuiltinModelCatalog({
+      allowMockFallback: true,
+    })
+    const fetchPr = vi.fn().mockResolvedValue({
+      number: 42,
+      title: `t`,
+      state: `open`,
+      mergeable: true,
+      head: { sha: `A`, ref: `feat` },
+      base: { sha: `B`, ref: `main` },
+      body: ``,
+      labels: [`agents`],
+    })
+    registerPrManager(registry, {
+      workingDirectory: `/tmp`,
+      modelCatalog: modelCatalog!,
+      createWorktree: vi.fn(),
+      githubFactory: () =>
+        ({
+          fetchPr,
+          fetchChecks: vi.fn().mockResolvedValue([]),
+          fetchCommentsSince: vi.fn().mockResolvedValue([]),
+          upsertComment: vi.fn(),
+          addLabel: vi.fn(),
+          removeLabel: vi.fn(),
+        }) as any,
+    })
+    const board = makeBoardMocks()
+    const observe = vi.fn().mockResolvedValue(board)
+    const ctx = makeCtx({
+      args: {
+        repo: `foo/bar`,
+        number: 42,
+        head_branch: `feat`,
+        worktreeRoot: `/tmp/.worktrees`,
+      },
+      firstWake: false,
+      events: [],
+      observe,
+      spawn: vi.fn(),
+      send: vi.fn(),
+    })
+    await registry.get(`pr-manager`)!.definition.handler(ctx as any, {} as any)
+    expect(observe).toHaveBeenCalledTimes(1)
+    const observeOpts = observe.mock.calls[0][1]
+    expect(observeOpts).toEqual({
+      wake: { on: `change`, collections: [`signals`] },
+    })
+  })
+
+  it(`emits gate_state_changed and ready_to_merge when gates flip from no-state to all-true`, async () => {
+    const registry = createEntityRegistry()
+    const modelCatalog = await createBuiltinModelCatalog({
+      allowMockFallback: true,
+    })
+    registerPrManager(registry, {
+      workingDirectory: `/tmp`,
+      modelCatalog: modelCatalog!,
+      createWorktree: vi.fn(),
+      githubFactory: () =>
+        ({
+          fetchPr: vi.fn(),
+          fetchChecks: vi.fn().mockResolvedValue([]),
+          fetchCommentsSince: vi.fn().mockResolvedValue([]),
+          upsertComment: vi.fn().mockResolvedValue(`cmt-1`),
+          addLabel: vi.fn(),
+          removeLabel: vi.fn(),
+        }) as any,
+    })
+    const board = makeBoardMocks()
+    // gates table is empty (no previous), so flipped=true.
+    // checks empty, review_threads empty, doc_plan empty, mergeable=true,
+    // description has required headings -> ready_to_merge true.
+    board.pr_meta.toArray[0].description = `## Summary\nx\n\n## Linked issues\nx\n\n## Test plan\nx\n`
+    const observe = vi.fn().mockResolvedValue(board)
+    const ctx = makeCtx({
+      args: {
+        repo: `foo/bar`,
+        number: 42,
+        head_branch: `feat`,
+        worktreeRoot: `/tmp/.worktrees`,
+      },
+      firstWake: false,
+      events: [],
+      observe,
+      spawn: vi.fn(),
+      send: vi.fn(),
+    })
+    await registry.get(`pr-manager`)!.definition.handler(ctx as any, {} as any)
+    const inserted = board.signals.insert.mock.calls.map(
+      (c: any[]) => c[0].type
+    )
+    expect(inserted).toContain(`gate_state_changed`)
+    expect(inserted).toContain(`ready_to_merge`)
+  })
+
   it(`on wake with payload.kind === "sync_tick", runs runSyncPoll then schedules next tick`, async () => {
     const registry = createEntityRegistry()
     const modelCatalog = await createBuiltinModelCatalog({

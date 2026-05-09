@@ -1,4 +1,5 @@
 import path from 'node:path'
+import fs from 'node:fs'
 import { db } from '@electric-ax/agents-runtime'
 import type {
   EntityRegistry,
@@ -20,7 +21,10 @@ import {
   type ReviewThreadRow,
   type SignalRow,
 } from './pr-shared/blackboard-schema'
-import { createWorktree as defaultCreateWorktree } from './pr-shared/worktree'
+import {
+  createWorktree as defaultCreateWorktree,
+  worktreePathFor,
+} from './pr-shared/worktree'
 import { createGithubClient } from './pr-shared/github'
 import { renderStatusComment } from './pr-shared/status-comment'
 import { evalGates } from './pr-shared/gates'
@@ -286,7 +290,8 @@ export function registerPrManager(
         db(
           blackboardId(args.repo, args.number),
           PrBlackboardSchema as unknown as SharedStateSchemaMap
-        )
+        ),
+        { wake: { on: `change`, collections: [`signals`] } }
       )) as unknown as PrBoardHandle
       const gh = githubFactory()
       const caps = { ...DEFAULT_CAPS, ...args.caps }
@@ -294,30 +299,36 @@ export function registerPrManager(
       // ── firstWake: initialize
       if (ctx.firstWake) {
         const remote = await gh.fetchPr(args.repo, args.number)
-        board.pr_meta.insert({
-          key: `meta`,
-          number: args.number,
-          repo: args.repo,
-          title: remote.title,
-          base_branch: remote.base.ref,
-          base_sha: remote.base.sha,
-          head_branch: remote.head.ref,
-          head_sha: remote.head.sha,
-          description: remote.body,
-          state: remote.state,
-          labels: remote.labels,
-          mergeable: remote.mergeable,
-          status_comment_id: null,
-          agents_disabled: false,
-          last_synced_at: new Date(0).toISOString(),
-        })
+        if (board.pr_meta.toArray.length === 0) {
+          board.pr_meta.insert({
+            key: `meta`,
+            number: args.number,
+            repo: args.repo,
+            title: remote.title,
+            base_branch: remote.base.ref,
+            base_sha: remote.base.sha,
+            head_branch: remote.head.ref,
+            head_sha: remote.head.sha,
+            description: remote.body,
+            state: remote.state,
+            labels: remote.labels,
+            mergeable: remote.mergeable,
+            status_comment_id: null,
+            agents_disabled: false,
+            last_synced_at: new Date(0).toISOString(),
+          })
+        }
 
         const roles = [
           { role: `reviewer` as const, cap: caps.reviewer },
           { role: `build-doctor` as const, cap: caps.buildDoctor },
           { role: `doc-editor` as const, cap: caps.docEditor },
         ]
+        const existingRoles = new Set(
+          board.agent_state.toArray.map((r) => r.key)
+        )
         for (const r of roles) {
+          if (existingRoles.has(r.role)) continue
           board.agent_state.insert({
             key: r.role,
             role: r.role,
@@ -333,11 +344,15 @@ export function registerPrManager(
           })
         }
 
-        await createWorktree({
-          repoRoot: workingDirectory,
-          prNumber: args.number,
-          headBranch: remote.head.ref,
-        })
+        if (!fs.existsSync(worktreePathFor(workingDirectory, args.number))) {
+          await createWorktree({
+            repoRoot: workingDirectory,
+            prNumber: args.number,
+            headBranch: remote.head.ref,
+          }).catch(() => {
+            /* race: another firstWake delivery may have created it */
+          })
+        }
 
         const blackboardArg = {
           id: blackboardId(args.repo, args.number),
@@ -417,6 +432,12 @@ export function registerPrManager(
 
       const flipped =
         !previous || previous.ready_to_merge !== gateRow.ready_to_merge
+      if (flipped) {
+        insertSignal(board.signals, `gate_state_changed`, {})
+      }
+      if (gateRow.ready_to_merge && !previous?.ready_to_merge) {
+        insertSignal(board.signals, `ready_to_merge`, {})
+      }
       if (flipped && gateRow.ready_to_merge) {
         await gh.addLabel(args.repo, args.number, `agents:ready`)
       } else if (
