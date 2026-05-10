@@ -433,14 +433,14 @@ Cloud access tokens should live in `SecretStore`, not `settings.json`.
 13. Move MCP IPC to be server-scoped.
 14. Add Cloud account/server discovery on top of the same profile and secret-store model when ready.
 
-## Open Questions
+## Product Decisions
 
-- Should per-server API key overrides inherit from global keys by default, or be all-or-nothing?
-- Should MCP server config be global, per-server, per-workspace, or layered in that order?
-- Should a disconnected selected server show its last workspace layout, or a connection prompt first?
-- Should closing the last window keep connected runtimes alive in the tray, as today?
-- Should removing a server delete its secrets immediately, or require confirmation?
-- Should local discovered servers be auto-named by port only, or by a health endpoint that returns server metadata?
+- Per-server API keys inherit from global provider keys by default. Users can configure per-server overrides when needed.
+- MCP configuration is global by default, with optional per-server overrides. Workspace `mcp.json` still has the highest precedence when present.
+- A disconnected selected server should show its last workspace layout, with connection/disconnected state surfaced in the workspace.
+- Closing the last window should keep connected servers and their local runtimes alive in the tray. This is important for long-running remote control workflows.
+- Any destructive action, including removing a server or deleting associated secrets, requires confirmation.
+- Local discovered servers can be auto-named by port only.
 
 ## Testing Notes
 
