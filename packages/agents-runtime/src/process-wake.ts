@@ -1,5 +1,5 @@
 import { DurableStream, IdempotentProducer } from '@durable-streams/client'
-import { createStreamDB, queryOnce } from '@durable-streams/state'
+import { createStreamDB } from '@durable-streams/state'
 import { getEntityType } from './define-entity'
 import { createEntityStreamDB } from './entity-stream-db'
 import { entityStateSchema, isManagementEvent } from './entity-schema'
@@ -44,6 +44,18 @@ interface WakeDeltaWindow {
   wakeOffset: string
   ackOffset: string
   events: Array<ChangeEvent>
+}
+
+interface ClaimCallbackResponse {
+  ok: boolean
+  claimToken?: string
+  token?: string
+  writeToken?: string
+  error?: { code: string }
+}
+
+interface RawClaimCallbackResponse extends Omit<ClaimCallbackResponse, `ok`> {
+  ok?: boolean
 }
 
 const DEFAULT_IDLE_TIMEOUT = 20_000
@@ -349,12 +361,7 @@ export async function processWake(
   )
 
   let activeClaimToken = claimToken
-  let claimData: {
-    ok: boolean
-    claimToken?: string
-    writeToken?: string
-    error?: { code: string }
-  } | null = null
+  let claimData: ClaimCallbackResponse | null = null
   let heartbeat: ReturnType<typeof setInterval> | null = null
   let claimedWake = false
   let result: WakeResult | null = null
@@ -704,13 +711,16 @@ export async function processWake(
         })
       )
       .then(async (response) => {
-        claimData = (await response.json()) as {
-          ok: boolean
-          claimToken?: string
-          writeToken?: string
-          error?: { code: string }
+        const rawClaimData = (await response.json()) as RawClaimCallbackResponse
+        claimData = {
+          ...rawClaimData,
+          ok:
+            rawClaimData.ok === undefined
+              ? response.ok && rawClaimData.error === undefined
+              : rawClaimData.ok,
         }
-        if (claimData.claimToken) activeClaimToken = claimData.claimToken
+        const nextClaimToken = claimData.claimToken ?? claimData.token
+        if (nextClaimToken) activeClaimToken = nextClaimToken
         claimMs = +(performance.now() - claimT0).toFixed(2)
         return claimData
       })
@@ -1045,9 +1055,7 @@ export async function processWake(
         `wake input type=${currentWakeEvent.type} offset=${currentWakeOffset}`
       )
     }
-    const initialFirstWake =
-      (await queryOnce((q) => q.from({ manifests: db.collections.manifests })))
-        .length === 0
+    const initialFirstWake = db.collections.manifests.toArray.length === 0
     const wiredSharedStateIds = new Set<string>()
 
     const setupCtx = createSetupContext({
@@ -1402,9 +1410,9 @@ export async function processWake(
         await wakeSession.commitManifestEntries()
         await flushProducedWrites()
         if (result) {
-          result.manifest = await queryOnce((q) =>
-            q.from({ manifests: db.collections.manifests })
-          )
+          result.manifest = [
+            ...(db.collections.manifests.toArray as Array<ManifestEntry>),
+          ]
         }
 
         sleepRequested = getSleepRequested()

@@ -345,6 +345,18 @@ export class StreamClient {
     }
   }
 
+  async headOffset(path: string): Promise<string | null> {
+    try {
+      const result = await DurableStream.head({ url: this.streamUrl(path) })
+      return result.exists ? String(result.offset) : null
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        return null
+      }
+      throw err
+    }
+  }
+
   async createSubscription(
     pattern: string,
     subscriptionId: string,
@@ -403,26 +415,53 @@ export class StreamClient {
       }
       injectTraceHeaders(headers)
 
-      const url = [
-        `${this.baseUrl}/consumers`,
-        encodeURIComponent(consumerId),
-        `wake-notifications`,
-      ].join(`/`)
-      const res = await fetch(url, {
-        method: `POST`,
-        headers,
-        body: JSON.stringify(request),
+      const stream = new DurableStream({
+        url: this.streamUrl(request.streamPath),
       })
-
-      if (!res.ok) {
-        const body = await res.text()
+      const head = await stream.head()
+      if (!head.exists) {
         throw new Error(
           `Wake notification mint failed for consumer "${consumerId}" ` +
-            `stream "${request.streamPath}": ${res.status} ${body}`
+            `stream "${request.streamPath}": 404 Stream not found`
         )
       }
 
-      return res.json() as Promise<MintWakeNotificationResponse>
+      const registerRes = await fetch(`${this.baseUrl}/consumers`, {
+        method: `POST`,
+        headers,
+        body: JSON.stringify({
+          consumer_id: consumerId,
+          streams: [request.streamPath],
+        }),
+      })
+      if (registerRes.status !== 200 && registerRes.status !== 201) {
+        const body = await registerRes.text()
+        throw new Error(
+          `Wake notification mint failed for consumer "${consumerId}" ` +
+            `stream "${request.streamPath}": consumer registration failed ` +
+            `${registerRes.status} ${body}`
+        )
+      }
+
+      const wakeId = `wake-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      return {
+        notification: {
+          consumerId,
+          epoch: 0,
+          wakeId,
+          streamPath: request.streamPath,
+          streams: request.streams ?? [
+            { path: request.streamPath, offset: `-1` },
+          ],
+          ...(request.triggeredBy ? { triggeredBy: request.triggeredBy } : {}),
+          callback: `${this.baseUrl}/consumers/${encodeURIComponent(consumerId)}/acquire`,
+          claimToken: wakeId,
+          ...(request.triggerEvent
+            ? { triggerEvent: request.triggerEvent }
+            : {}),
+          ...(request.wakeEvent ? { wakeEvent: request.wakeEvent } : {}),
+        },
+      }
     })
   }
 }

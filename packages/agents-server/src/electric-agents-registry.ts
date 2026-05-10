@@ -759,13 +759,29 @@ export class PostgresRegistry {
 
   async markWakeFailed(input: MarkWakeFailedInput): Promise<void> {
     const failedAt = input.failedAt ?? new Date()
-    await this.db
-      .update(wakeNotifications)
-      .set({
-        deliveryStatus: `failed`,
-        resolvedAt: failedAt,
-      })
-      .where(eq(wakeNotifications.wakeId, input.wakeId))
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(wakeNotifications)
+        .set({
+          deliveryStatus: `failed`,
+          resolvedAt: failedAt,
+        })
+        .where(eq(wakeNotifications.wakeId, input.wakeId))
+
+      // A delivery failure means the wake is no longer outstanding in the
+      // runner/webhook queue. Clear only the matching outstanding wake so a
+      // later append can mint and deliver a fresh wake instead of coalescing
+      // forever behind a failed notification.
+      await tx
+        .update(entityDispatchState)
+        .set({
+          outstandingWakeId: null,
+          outstandingWakeTarget: null,
+          outstandingWakeCreatedAt: null,
+          updatedAt: failedAt,
+        })
+        .where(eq(entityDispatchState.outstandingWakeId, input.wakeId))
+    })
   }
 
   async getWakeNotification(

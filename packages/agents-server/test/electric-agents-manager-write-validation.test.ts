@@ -79,3 +79,73 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
     expect((manager as any).isValidWriteToken(entity, `claim-token`)).toBe(true)
   })
 })
+
+describe(`ElectricAgentsManager.send append callback`, () => {
+  it(`notifies after successful send append`, async () => {
+    const entity = {
+      url: `/horton/h1`,
+      streams: { main: `/horton/h1/main` },
+      inbox_schemas: undefined,
+    }
+    const registry = {
+      getEntity: vi.fn().mockResolvedValue(entity),
+      close: vi.fn(),
+    }
+    const streamClient = {
+      append: vi.fn().mockResolvedValue(undefined),
+    }
+    const manager = new ElectricAgentsManager({
+      registry: registry as any,
+      streamClient: streamClient as any,
+      validator: new SchemaValidator(),
+      wakeRegistry: {
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+    const callback = vi.fn()
+    manager.setEntityAppendCallback(callback)
+
+    await manager.send(`/horton/h1`, {
+      from: `test`,
+      payload: { hello: `world` },
+    })
+
+    expect(streamClient.append).toHaveBeenCalledOnce()
+    expect(callback).toHaveBeenCalledOnce()
+    expect(callback.mock.calls[0]![0]).toBe(entity)
+    expect(callback.mock.calls[0]![1]).toMatchObject({
+      type: `message_received`,
+      value: { payload: { hello: `world` } },
+    })
+  })
+
+  it(`does not notify when send append fails`, async () => {
+    const entity = {
+      url: `/horton/h1`,
+      streams: { main: `/horton/h1/main` },
+    }
+    const manager = new ElectricAgentsManager({
+      registry: {
+        getEntity: vi.fn().mockResolvedValue(entity),
+        close: vi.fn(),
+      } as any,
+      streamClient: {
+        append: vi.fn().mockRejectedValue(new Error(`boom`)),
+      } as any,
+      validator: new SchemaValidator(),
+      wakeRegistry: {
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+    const callback = vi.fn()
+    manager.setEntityAppendCallback(callback)
+
+    await expect(
+      manager.send(`/horton/h1`, { from: `test`, payload: { hello: `world` } })
+    ).rejects.toThrow(`boom`)
+
+    expect(callback).not.toHaveBeenCalled()
+  })
+})

@@ -118,6 +118,12 @@ export class ElectricAgentsManager {
   private writeTokenValidator:
     | ((entity: ElectricAgentsEntity, token: string) => boolean)
     | null = null
+  private entityAppendCallback:
+    | ((
+        entity: ElectricAgentsEntity,
+        event: Record<string, unknown> | Array<Record<string, unknown>>
+      ) => void | Promise<void>)
+    | null = null
   readonly wakeRegistry: WakeRegistry
   private forkWorkLockedEntities = new Map<string, number>()
   private forkWriteLockedEntities = new Map<string, number>()
@@ -180,6 +186,27 @@ export class ElectricAgentsManager {
     validator: (entity: ElectricAgentsEntity, token: string) => boolean
   ): void {
     this.writeTokenValidator = validator
+  }
+
+  setEntityAppendCallback(
+    callback: (
+      entity: ElectricAgentsEntity,
+      event: Record<string, unknown> | Array<Record<string, unknown>>
+    ) => void | Promise<void>
+  ): void {
+    this.entityAppendCallback = callback
+  }
+
+  private notifyEntityAppend(
+    entity: ElectricAgentsEntity,
+    event: Record<string, unknown> | Array<Record<string, unknown>>
+  ): void {
+    if (!this.entityAppendCallback) return
+
+    void Promise.resolve(this.entityAppendCallback(entity, event)).catch(
+      (err) =>
+        serverLog.warn(`[agent-server] entity append callback failed:`, err)
+    )
   }
 
   private isValidWriteToken(
@@ -1769,10 +1796,12 @@ export class ElectricAgentsManager {
         await this.streamClient.appendIdempotent(entity.streams.main, encoded, {
           producerId: opts.producerId,
         })
+        this.notifyEntityAppend(entity, envelope as Record<string, unknown>)
         return
       }
 
       await this.streamClient.append(entity.streams.main, encoded)
+      this.notifyEntityAppend(entity, envelope as Record<string, unknown>)
     } catch (err) {
       if (this.isClosedStreamError(err)) {
         throw new ElectricAgentsError(

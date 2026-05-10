@@ -396,6 +396,9 @@ export class ElectricAgentsServer {
               token
             )
           )
+          this.electricAgentsManager.setEntityAppendCallback((entity, event) =>
+            this.dispatchWakeForEntityAppend(entity, event)
+          )
           this.tagStreamOutboxDrainer = new TagStreamOutboxDrainer(
             this.registry,
             this.streamClient
@@ -1169,7 +1172,22 @@ export class ElectricAgentsServer {
     entity: ElectricAgentsEntity,
     event: Record<string, unknown> | Array<Record<string, unknown>>
   ): Promise<void> {
-    await this.dispatchWakeForPending(entity, undefined, {
+    if (isOnlyEntityCreatedEvent(event)) return
+
+    let streams: Array<SourceStreamOffset> | undefined
+    try {
+      const offset = await this.streamClient.headOffset(entity.streams.main)
+      if (offset !== null) {
+        streams = [{ path: entity.streams.main, offset }]
+      }
+    } catch (err) {
+      serverLog.warn(
+        `[agent-server] failed to read append offset for dispatch wake ${entity.url}:`,
+        err
+      )
+    }
+
+    await this.dispatchWakeForPending(entity, streams, {
       triggerEvent: inferDispatchTriggerEvent(event),
     })
   }
@@ -1196,7 +1214,7 @@ export class ElectricAgentsServer {
       const triggerEvent =
         options?.triggerEvent ??
         (pendingSourceStreams ? `pending_coalesced_wake` : undefined)
-      const minted = await router.mintNotificationForEntity(entity, {
+      const minted = await this.mintDispatchWakeNotificationWithRetry(entity, {
         ...(pendingSourceStreams ? { streams: pendingSourceStreams } : {}),
         ...(triggerEvent ? { triggerEvent } : {}),
       })
@@ -1211,6 +1229,37 @@ export class ElectricAgentsServer {
         err
       )
     }
+  }
+
+  private async mintDispatchWakeNotificationWithRetry(
+    entity: ElectricAgentsEntity,
+    options: { streams?: Array<SourceStreamOffset>; triggerEvent?: string }
+  ): Promise<
+    Awaited<ReturnType<DispatchWakeRouter[`mintNotificationForEntity`]>>
+  > {
+    const router = this.dispatchWakeRouter
+    if (!router) {
+      throw new Error(`Dispatch wake router not configured`)
+    }
+
+    let lastErr: unknown
+    const delays = [25, 50, 100, 200, 400, 800, 1600, 3200]
+    for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+      try {
+        return await router.mintNotificationForEntity(entity, options)
+      } catch (err) {
+        lastErr = err
+        if (
+          !isWakeNotificationStreamNotFoundError(err) ||
+          attempt === delays.length
+        ) {
+          throw err
+        }
+        await delay(delays[attempt]!)
+      }
+    }
+
+    throw lastErr
   }
 
   private extractManifestSourceUrl(
@@ -2186,7 +2235,11 @@ export class ElectricAgentsServer {
       requestEpoch !== undefined && !isClaimRequest && !isDoneRequest
 
     if (isClaimRequest && upstream.ok && target.primaryStream) {
-      if (responseBody?.ok === true) {
+      if (
+        responseBody &&
+        responseBody.error === undefined &&
+        responseBody.ok !== false
+      ) {
         const entity =
           await this.electricAgentsManager!.registry.getEntityByStream(
             target.primaryStream
@@ -2627,6 +2680,27 @@ function readBody(req: IncomingMessage): Promise<Uint8Array> {
     req.on(`end`, () => resolve(new Uint8Array(Buffer.concat(chunks))))
     req.on(`error`, reject)
   })
+}
+
+function isWakeNotificationStreamNotFoundError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /Wake notification mint failed/.test(err.message) &&
+    /:\s*404\s+Stream not found/i.test(err.message)
+  )
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isOnlyEntityCreatedEvent(
+  event: Record<string, unknown> | Array<Record<string, unknown>>
+): boolean {
+  const events = Array.isArray(event) ? event : [event]
+  return (
+    events.length > 0 && events.every((item) => item.type === `entity_created`)
+  )
 }
 
 function inferDispatchTriggerEvent(
