@@ -25,12 +25,12 @@ function AppInner(): React.ReactElement {
 }
 
 function ThemedApp(): React.ReactElement {
-  const { darkMode } = useDarkModeContext()
+  const { darkMode, preference } = useDarkModeContext()
   const appearance = darkMode ? `dark` : `light`
 
   useEffect(() => {
-    void window.electronAPI?.setNativeAppearance?.(appearance)
-  }, [appearance])
+    void window.electronAPI?.setNativeAppearance?.(preference)
+  }, [preference])
 
   return (
     <ThemeProvider appearance={appearance}>

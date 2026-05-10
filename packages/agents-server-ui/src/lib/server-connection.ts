@@ -126,7 +126,7 @@ export type DesktopNavigationState = {
   canGoForward: boolean
 }
 
-export type DesktopAppearance = `light` | `dark`
+export type DesktopAppearance = `light` | `dark` | `system`
 
 declare global {
   interface Window {

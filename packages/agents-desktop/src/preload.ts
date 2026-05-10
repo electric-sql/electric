@@ -138,7 +138,7 @@ type DesktopNavigationState = {
   canGoForward: boolean
 }
 
-type DesktopAppearance = `light` | `dark`
+type DesktopAppearance = `light` | `dark` | `system`
 
 type DesktopContextMenuRequest = {
   kind: `selection`

@@ -245,7 +245,7 @@ type DesktopNavigationState = {
   canGoForward: boolean
 }
 
-type DesktopAppearance = `light` | `dark`
+type DesktopAppearance = `light` | `dark` | `system`
 
 type DesktopContextMenuRequest = {
   kind: `selection`
@@ -1613,10 +1613,8 @@ function stopDiscoveryLoop(): void {
   }
 }
 
-function applyNativeAppearance(appearance: DesktopAppearance): void {
-  nativeTheme.themeSource = appearance
-
-  const symbolColor = appearance === `dark` ? `#ededee` : `#1f2328`
+function refreshNativeTitleBars(): void {
+  const symbolColor = nativeTheme.shouldUseDarkColors ? `#ededee` : `#1f2328`
   for (const win of windows) {
     win.setTitleBarOverlay?.({
       color: `#00000000`,
@@ -1624,6 +1622,11 @@ function applyNativeAppearance(appearance: DesktopAppearance): void {
       height: 34,
     })
   }
+}
+
+function applyNativeAppearance(appearance: DesktopAppearance): void {
+  nativeTheme.themeSource = appearance
+  refreshNativeTitleBars()
 }
 
 function registerIpcHandlers(): void {
@@ -2350,6 +2353,7 @@ async function main(): Promise<void> {
   configureRuntimeEnvironment()
   await loadSettings()
   registerIpcHandlers()
+  nativeTheme.on(`updated`, refreshNativeTitleBars)
 
   app.setAboutPanelOptions({
     applicationName: APP_DISPLAY_NAME,
