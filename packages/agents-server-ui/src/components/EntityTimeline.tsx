@@ -314,7 +314,9 @@ function ManifestTimelineRow({
   const title = manifestTitle(manifest)
   const meta = manifestMeta(manifest)
   const summary =
-    isEntity || stateSourceId ? null : [title, meta].filter(Boolean).join(` · `)
+    isEntity || stateSourceId
+      ? title
+      : [title, meta].filter(Boolean).join(` · `)
 
   const openEntity = useCallback(() => {
     if (!entityTarget) return
@@ -451,7 +453,7 @@ function manifestKindLabel(manifest: Manifest): string {
 function manifestTitle(manifest: Manifest): string {
   switch (manifest.kind) {
     case `child`:
-      return manifest.id
+      return manifest.entity_url
     case `source`:
       return manifest.sourceRef
     case `shared-state`:
@@ -465,7 +467,7 @@ function manifestTitle(manifest: Manifest): string {
 function manifestMeta(manifest: Manifest): string {
   switch (manifest.kind) {
     case `child`:
-      return `${manifest.entity_type}${manifest.observed ? `` : ` · unobserved`}`
+      return manifest.observed ? `child entity` : `child entity · unobserved`
     case `source`:
       return describeSourceConfig(manifest.config)
     case `shared-state`:
@@ -487,8 +489,11 @@ function manifestDetails(
   switch (manifest.kind) {
     case `child`:
       return [
-        { label: `Id`, value: manifest.id },
-        { label: `Type`, value: manifest.entity_type },
+        { label: `Path`, value: manifest.entity_url },
+        {
+          label: `Status`,
+          value: manifest.observed ? `observed` : `unobserved`,
+        },
       ]
     case `shared-state`:
       return [

@@ -280,14 +280,13 @@ function manifestKindLabel(manifest: Manifest): string {
 }
 
 function createParentEntry(parent: DrawerEntity): DrawerEntry {
-  const { title, isFromSlug } = getEntityDisplayTitle(parent)
-  const id = parent.url.split(`/`).pop() ?? parent.url
+  const { title } = getEntityDisplayTitle(parent)
   return {
     key: `parent:${parent.url}`,
     groupKey: `parent`,
     groupLabel: `Parent`,
-    title,
-    meta: isFromSlug ? parent.type : `${parent.type} · ${id}`,
+    title: parent.url,
+    meta: title === parent.url ? parent.type : title,
     manifest: null,
     action: { kind: `entity`, url: parent.url },
     entity: parent,
@@ -306,8 +305,8 @@ function createManifestEntry(
         key: manifest.key,
         groupKey: `child`,
         groupLabel: `Children`,
-        title: manifest.id,
-        meta: `${manifest.entity_type}${manifest.observed ? `` : ` · unobserved`}`,
+        title: url,
+        meta: manifest.observed ? `child entity` : `child entity · unobserved`,
         manifest,
         action: { kind: `entity`, url },
         entity,
@@ -321,8 +320,8 @@ function createManifestEntry(
           key: manifest.key,
           groupKey: `source:entity`,
           groupLabel: `Entity Sources`,
-          title: manifest.sourceRef.split(`/`).pop() ?? manifest.sourceRef,
-          meta: manifest.sourceRef,
+          title: manifest.sourceRef,
+          meta: `entity source`,
           manifest,
           action: { kind: `entity`, url: manifest.sourceRef },
           entity,
