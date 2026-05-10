@@ -57,7 +57,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.IndexChanges do
   alias Electric.Shapes.Consumer.Effects
   alias Electric.Shapes.DnfPlan
 
-  @type move :: {:move_in | :move_out, non_neg_integer(), list()}
+  @type move :: {:move_in | :move_out, non_neg_integer(), list(), [non_neg_integer()]}
 
   @doc """
   Returns index effects to apply when a dependency move event starts buffering.
@@ -68,7 +68,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.IndexChanges do
   """
   @spec effects_for_buffering(DnfPlan.t(), move(), [String.t()]) ::
           [Effects.AddToSubqueryIndex.t() | Effects.RemoveFromSubqueryIndex.t()]
-  def effects_for_buffering(dnf_plan, {dep_move_kind, dep_index, values}, subquery_ref) do
+  def effects_for_buffering(dnf_plan, {dep_move_kind, dep_index, values, _txids}, subquery_ref) do
     polarity = Map.get(dnf_plan.dependency_polarities, dep_index, :positive)
 
     case {polarity, dep_move_kind} do
@@ -104,7 +104,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.IndexChanges do
   """
   @spec effects_for_complete(DnfPlan.t(), move(), [String.t()]) ::
           [Effects.AddToSubqueryIndex.t() | Effects.RemoveFromSubqueryIndex.t()]
-  def effects_for_complete(dnf_plan, {dep_move_kind, dep_index, values}, subquery_ref) do
+  def effects_for_complete(dnf_plan, {dep_move_kind, dep_index, values, _txids}, subquery_ref) do
     polarity = Map.get(dnf_plan.dependency_polarities, dep_index, :positive)
 
     case {polarity, dep_move_kind} do

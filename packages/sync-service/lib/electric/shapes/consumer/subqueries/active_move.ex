@@ -22,6 +22,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
     :values,
     :views_before_move,
     :views_after_move,
+    txids: [],
     snapshot: nil,
     move_in_snapshot_name: nil,
     move_in_row_count: nil,
@@ -40,6 +41,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
           values: [move_value()],
           views_before_move: Views.t(),
           views_after_move: Views.t(),
+          txids: [non_neg_integer()],
           snapshot: {term(), term(), [term()]} | nil,
           move_in_snapshot_name: String.t() | nil,
           move_in_row_count: non_neg_integer() | nil,
@@ -51,14 +53,22 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
           buffered_txns: [Transaction.t()]
         }
 
-  @spec start(Views.t(), non_neg_integer(), :move_in | :move_out, [String.t()], [move_value()]) ::
-          t()
-  def start(views, dep_index, dep_move_kind, subquery_ref, values) when is_map(views) do
+  @spec start(
+          Views.t(),
+          non_neg_integer(),
+          :move_in | :move_out,
+          [String.t()],
+          [move_value()],
+          [non_neg_integer()]
+        ) :: t()
+  def start(views, dep_index, dep_move_kind, subquery_ref, values, txids \\ [])
+      when is_map(views) do
     %__MODULE__{
       dep_index: dep_index,
       dep_move_kind: dep_move_kind,
       subquery_ref: subquery_ref,
       values: values,
+      txids: txids,
       views_before_move: views,
       views_after_move: Views.apply_move(views, subquery_ref, values, dep_move_kind)
     }

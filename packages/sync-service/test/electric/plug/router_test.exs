@@ -2419,14 +2419,20 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      Postgrex.query!(db_conn, "UPDATE inner_table SET value = 3 WHERE id = 1", [])
+      %Postgrex.Result{rows: [[xid]]} =
+        Postgrex.query!(
+          db_conn,
+          "UPDATE inner_table SET value = 3 WHERE id = 1 RETURNING xmin::text::bigint",
+          []
+        )
 
       assert {_req, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
 
       assert %{
                "headers" => %{
                  "event" => "move-out",
-                 "patterns" => [%{"pos" => 0, "value" => ^tag}]
+                 "patterns" => [%{"pos" => 0, "value" => ^tag}],
+                 "txids" => [^xid]
                }
              } = data
     end
@@ -2460,7 +2466,12 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, opts)
 
       # Move in reflects in the new shape without invalidating it
-      Postgrex.query!(db_conn, "UPDATE inner_table SET value = 1 WHERE id = 2", [])
+      %Postgrex.Result{rows: [[xid]]} =
+        Postgrex.query!(
+          db_conn,
+          "UPDATE inner_table SET value = 1 WHERE id = 2 RETURNING xmin::text::bigint",
+          []
+        )
 
       tag2 =
         :crypto.hash(:md5, stack_id <> req.handle <> "v:2")
@@ -2468,7 +2479,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {_, 200,
               [
-                %{"headers" => %{"event" => "move-in"}},
+                %{"headers" => %{"event" => "move-in", "txids" => [^xid]}},
                 data,
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
