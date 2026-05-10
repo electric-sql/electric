@@ -101,7 +101,7 @@ export function EntityContextDrawer({
     [db]
   )
 
-  const referencedEntityUrls = useMemo(() => {
+  const referencedEntityUrlKey = useMemo(() => {
     const urls = new Set<string>()
     if (parentUrl) urls.add(parentUrl)
     for (const manifest of manifests as Array<Manifest>) {
@@ -114,8 +114,12 @@ export function EntityContextDrawer({
         urls.add(manifest.sourceRef)
       }
     }
-    return Array.from(urls)
+    return entityUrlKey(Array.from(urls))
   }, [manifests, parentUrl])
+  const referencedEntityUrls = useMemo(
+    () => entityUrlsFromKey(referencedEntityUrlKey),
+    [referencedEntityUrlKey]
+  )
 
   const { data: referencedEntities = [] } = useLiveQuery(
     (q) => {
@@ -133,7 +137,7 @@ export function EntityContextDrawer({
           spawn_args: e.spawn_args,
         }))
     },
-    [entitiesCollection, referencedEntityUrls]
+    [entitiesCollection, referencedEntityUrlKey, referencedEntityUrls]
   )
 
   const entitiesByUrl = useMemo(() => {
@@ -435,6 +439,14 @@ function titleCase(value: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(` `)
+}
+
+function entityUrlKey(urls: Array<string>): string {
+  return Array.from(new Set(urls)).sort().join(`\n`)
+}
+
+function entityUrlsFromKey(key: string): Array<string> {
+  return key ? key.split(`\n`) : []
 }
 
 function ManifestSection({
