@@ -19,7 +19,7 @@ export function ev(
   )
 
   switch (type) {
-    case `message_received`:
+    case `inbox`:
       return entityStateSchema.inbox.insert({
         key,
         value: {

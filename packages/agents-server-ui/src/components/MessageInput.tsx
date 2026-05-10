@@ -29,9 +29,9 @@ export function MessageInput({
   entityUrl: string
   disabled: boolean
   pendingMessages?: EntityTimelineData[`inbox`]
-  onSend?: () => void
   inlineQueuedSubmits?: boolean
   onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
+  onSend?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed

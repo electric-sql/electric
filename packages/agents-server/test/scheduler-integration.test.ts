@@ -108,16 +108,14 @@ describe(`Scheduler Integration`, () => {
     await waitFor(
       async () => {
         const events = await readStreamEvents(dsServer.url, entity.streams.main)
-        return events.some((event) => event.type === `message_received`)
+        return events.some((event) => event.type === `inbox`)
       },
       6_000,
       150
     )
 
     const events = await readStreamEvents(dsServer.url, entity.streams.main)
-    const inboxEvents = events.filter(
-      (event) => event.type === `message_received`
-    )
+    const inboxEvents = events.filter((event) => event.type === `inbox`)
 
     expect(inboxEvents, JSON.stringify(events, null, 2)).toHaveLength(1)
     expect(inboxEvents[0]!.key).toMatch(/^scheduled-task-\d+$/)
@@ -211,7 +209,7 @@ describe(`Scheduler Integration`, () => {
         const events = await readStreamEvents(dsServer.url, entity.streams.main)
         const hasDeliveredMessage = events.some(
           (event) =>
-            event.type === `message_received` &&
+            event.type === `inbox` &&
             (event.value as Record<string, unknown> | undefined)?.payload &&
             (
               (event.value as Record<string, unknown>).payload as Record<
@@ -232,9 +230,7 @@ describe(`Scheduler Integration`, () => {
     )
 
     const events = await readStreamEvents(dsServer.url, entity.streams.main)
-    const inboxEvents = events.filter(
-      (event) => event.type === `message_received`
-    )
+    const inboxEvents = events.filter((event) => event.type === `inbox`)
     expect(inboxEvents, JSON.stringify(events, null, 2)).toHaveLength(1)
     expect(
       (

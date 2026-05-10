@@ -2552,7 +2552,7 @@ export class ElectricAgentsManager {
         tags: entity.tags,
         spawnArgs: entity.spawn_args,
       },
-      triggerEvent: `message_received`,
+      triggerEvent: `inbox`,
     }
   }
 

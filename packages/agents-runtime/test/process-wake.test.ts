@@ -972,7 +972,7 @@ describe(`processWake`, () => {
     })
 
     const wakePromise = processWake(
-      makeNotification({ triggerEvent: `message_received` }),
+      makeNotification({ triggerEvent: `inbox` }),
       {
         ...BASE_CONFIG,
         idleTimeout: 50,
@@ -983,15 +983,13 @@ describe(`processWake`, () => {
     await new Promise((resolve) => setTimeout(resolve, 5))
 
     mockEntityOnBatch.current?.({
-      items: [
-        ev(`message_received`, `m-1`, `insert`, { payload: `follow-up` }),
-      ],
+      items: [ev(`inbox`, `m-1`, `insert`, { payload: `follow-up` })],
       offset: `11_000`,
     })
 
     await wakePromise
 
-    expect(wakeTypes).toEqual([`message_received`, `message_received`])
+    expect(wakeTypes).toEqual([`inbox`, `inbox`])
 
     const doneCalls = fetchMock.mock.calls.filter(([url]) =>
       String(url).includes(`/_electric/wakes/wake-abc`)
@@ -1026,22 +1024,13 @@ describe(`processWake`, () => {
     setTimeout(() => {
       mockEntityOnBatch.current?.({
         items: [
-          ev(
-            `message_received`,
-            `m-1`,
-            `insert`,
-            { payload: `hello` },
-            { offset: `1_0` }
-          ),
+          ev(`inbox`, `m-1`, `insert`, { payload: `hello` }, { offset: `1_0` }),
         ],
         offset: `1_0`,
       })
     }, 0)
 
-    await processWake(
-      makeNotification({ triggerEvent: `message_received` }),
-      BASE_CONFIG
-    )
+    await processWake(makeNotification({ triggerEvent: `inbox` }), BASE_CONFIG)
 
     expect(wakePayloads).toEqual([`hello`])
 
@@ -1081,7 +1070,7 @@ describe(`processWake`, () => {
       })
     }, 50)
 
-    await processWake(makeNotification({ triggerEvent: `message_received` }), {
+    await processWake(makeNotification({ triggerEvent: `inbox` }), {
       ...BASE_CONFIG,
       idleTimeout: 300,
     })
@@ -1113,22 +1102,13 @@ describe(`processWake`, () => {
       mockEntityOnBatch.current?.({
         items: [
           ev(`entity_created`, `created-1`, `insert`, {}, { offset: `0_0` }),
-          ev(
-            `message_received`,
-            `m-1`,
-            `insert`,
-            { payload: `hello` },
-            { offset: `1_0` }
-          ),
+          ev(`inbox`, `m-1`, `insert`, { payload: `hello` }, { offset: `1_0` }),
         ],
         offset: `1_0`,
       })
     })
 
-    await processWake(
-      makeNotification({ triggerEvent: `message_received` }),
-      BASE_CONFIG
-    )
+    await processWake(makeNotification({ triggerEvent: `inbox` }), BASE_CONFIG)
 
     expect(wakePayloads).toEqual([`hello`])
 
@@ -1166,7 +1146,7 @@ describe(`processWake`, () => {
         items: [
           ev(`entity_created`, `created-1`, `insert`, {}, { offset: `10_100` }),
           ev(
-            `message_received`,
+            `inbox`,
             `m-1`,
             `insert`,
             { payload: `hello` },
@@ -1179,7 +1159,7 @@ describe(`processWake`, () => {
 
     await processWake(
       makeNotification({
-        triggerEvent: `message_received`,
+        triggerEvent: `inbox`,
         streams: [{ path: `/streams/entity:agent-1`, offset: `10_100` }],
       }),
       BASE_CONFIG
@@ -1232,7 +1212,7 @@ describe(`processWake`, () => {
       mockEntityOnBatch.current?.({
         items: [
           ev(
-            `message_received`,
+            `inbox`,
             `m-1`,
             `insert`,
             { payload: `hello` },
@@ -1245,7 +1225,7 @@ describe(`processWake`, () => {
 
     await processWake(
       makeNotification({
-        triggerEvent: `message_received`,
+        triggerEvent: `inbox`,
         streams: [{ path: `/streams/entity:agent-1`, offset: `10_100` }],
       }),
       BASE_CONFIG
@@ -1286,10 +1266,7 @@ describe(`processWake`, () => {
       })
     })
 
-    await processWake(
-      makeNotification({ triggerEvent: `message_received` }),
-      BASE_CONFIG
-    )
+    await processWake(makeNotification({ triggerEvent: `inbox` }), BASE_CONFIG)
 
     expect(handler).not.toHaveBeenCalled()
 
@@ -1318,7 +1295,7 @@ describe(`processWake`, () => {
       mockEntityOnBatch.current?.({
         items: [
           ev(
-            `message_received`,
+            `inbox`,
             `m-old`,
             `insert`,
             { payload: `historical prompt` },
@@ -1341,7 +1318,7 @@ describe(`processWake`, () => {
 
     await processWake(
       makeNotification({
-        triggerEvent: `message_received`,
+        triggerEvent: `inbox`,
         streams: [{ path: `/streams/entity:agent-1`, offset: `0_0` }],
       }),
       { ...BASE_CONFIG, idleTimeout: 1 }
@@ -1390,7 +1367,7 @@ describe(`processWake`, () => {
     })
 
     const wakePromise = processWake(
-      makeNotification({ triggerEvent: `message_received` }),
+      makeNotification({ triggerEvent: `inbox` }),
       BASE_CONFIG
     )
 
@@ -1445,7 +1422,7 @@ describe(`processWake`, () => {
 
     defineEntity(`test-agent`, {
       handler: async (ctx, wake) => {
-        if (wake.type === `message_received`) {
+        if (wake.type === `inbox`) {
           firstPassSeenResolve?.()
           await blockFirstPass
           return
@@ -1456,7 +1433,7 @@ describe(`processWake`, () => {
             if (event.type === `wake`) {
               return `wake:${String((event.value as { source?: string }).source ?? ``)}`
             }
-            if (event.type === `message_received`) {
+            if (event.type === `inbox`) {
               return `message:${String((event.value as { payload?: unknown }).payload ?? ``)}`
             }
             return event.type
@@ -1466,7 +1443,7 @@ describe(`processWake`, () => {
     })
 
     const wakePromise = processWake(
-      makeNotification({ triggerEvent: `message_received` }),
+      makeNotification({ triggerEvent: `inbox` }),
       BASE_CONFIG
     )
 
@@ -1536,7 +1513,7 @@ describe(`processWake`, () => {
     })
 
     const wakePromise = processWake(
-      makeNotification({ triggerEvent: `message_received` }),
+      makeNotification({ triggerEvent: `inbox` }),
       BASE_CONFIG
     )
 
@@ -1568,7 +1545,7 @@ describe(`processWake`, () => {
     })
     mockEntityOnBatch.current?.({
       items: [
-        ev(`message_received`, `m-1`, `insert`, {
+        ev(`inbox`, `m-1`, `insert`, {
           payload: `follow-up`,
         }),
       ],
@@ -1625,7 +1602,7 @@ describe(`processWake`, () => {
     })
 
     const wakePromise = processWake(
-      makeNotification({ triggerEvent: `message_received` }),
+      makeNotification({ triggerEvent: `inbox` }),
       BASE_CONFIG
     )
 
@@ -1633,7 +1610,7 @@ describe(`processWake`, () => {
 
     mockEntityOnBatch.current?.({
       items: [
-        ev(`message_received`, `m-1`, `insert`, {
+        ev(`inbox`, `m-1`, `insert`, {
           payload: `follow-up`,
         }),
         ev(`wake`, `wake-1`, `insert`, {
@@ -1689,7 +1666,7 @@ describe(`processWake`, () => {
     })
 
     const wakePromise = processWake(
-      makeNotification({ triggerEvent: `message_received` }),
+      makeNotification({ triggerEvent: `inbox` }),
       BASE_CONFIG
     )
 
@@ -1700,7 +1677,7 @@ describe(`processWake`, () => {
         ev(`wake`, `wake-1`, `insert`, {
           source: `/child/first`,
         }),
-        ev(`message_received`, `m-1`, `insert`, {
+        ev(`inbox`, `m-1`, `insert`, {
           payload: `follow-up`,
         }),
         ev(`wake`, `wake-2`, `insert`, {
@@ -1744,7 +1721,7 @@ describe(`processWake`, () => {
             timeout: false,
             changes: [],
           }),
-          ev(`message_received`, `m-1`, `insert`, { payload: `newest` }),
+          ev(`inbox`, `m-1`, `insert`, { payload: `newest` }),
         ],
         offset: `10_100`,
       })
@@ -1755,7 +1732,7 @@ describe(`processWake`, () => {
       idleTimeout: 0,
     })
 
-    expect(wakeTypes).toEqual([`message_received`])
+    expect(wakeTypes).toEqual([`inbox`])
   })
 
   it(`does not send offset -1 in done ack when notification offset is -1 and stream is empty`, async () => {

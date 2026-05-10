@@ -25,7 +25,7 @@ type FixtureKind =
   | `text`
   | `text_delta`
   | `tool_call`
-  | `message_received`
+  | `inbox`
   | `wake`
   | `context_inserted`
   | `context_removed`
@@ -79,7 +79,7 @@ function rowForFixture(item: FixtureEvent): {
           ...item.value,
         },
       }
-    case `message_received`:
+    case `inbox`:
       return {
         collection: `inbox`,
         key,
@@ -281,7 +281,7 @@ export function createTestHandlerContext(
     writeEvent,
     wakeSession: createFakeWakeSession(db),
     wakeEvent: {
-      type: `message_received`,
+      type: `inbox`,
       source: `/test`,
       fromOffset: 0,
       toOffset: 0,

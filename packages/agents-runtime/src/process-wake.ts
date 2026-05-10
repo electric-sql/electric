@@ -55,7 +55,7 @@ type EntityStreamOptions = NonNullable<
 type EntityStreamHandle = NonNullable<EntityStreamOptions[`stream`]>
 
 function isInboxEvent(event: ChangeEvent): boolean {
-  return event.type === `inbox` || event.type === `message_received`
+  return event.type === `inbox`
 }
 
 function isInboxCancellationEvent(event: ChangeEvent): boolean {
@@ -516,11 +516,7 @@ export async function processWebhookWake(
   }
 
   const isFreshEvent = (event: ChangeEvent): boolean => {
-    return (
-      event.type === `inbox` ||
-      event.type === `message_received` ||
-      event.type === `wake`
-    )
+    return event.type === `inbox` || event.type === `wake`
   }
 
   const filterAcceptedLiveEvents = (
@@ -564,10 +560,7 @@ export async function processWebhookWake(
   }
 
   const waitForCurrentWakeInput = async (): Promise<void> => {
-    if (
-      currentWakeEvent.type !== `inbox` &&
-      currentWakeEvent.type !== `message_received`
-    ) {
+    if (currentWakeEvent.type !== `inbox`) {
       return
     }
 
@@ -575,7 +568,7 @@ export async function processWebhookWake(
       currentWakeEvent.payload !== undefined ||
       catchUpEvents.some(
         (event) =>
-          (event.type === `inbox` || event.type === `message_received`) &&
+          event.type === `inbox` &&
           (currentWakeOffset === `-1` ||
             event.headers.offset === currentWakeOffset)
       )

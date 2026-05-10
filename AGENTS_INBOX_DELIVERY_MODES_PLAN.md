@@ -247,7 +247,7 @@ Steer may still deserve a dedicated helper route/action because it has side effe
 
 ### Inbox Schema
 
-Rename the built-in event/collection type from `message_received` to `inbox` so the runtime names the thing being inserted/updated/deleted rather than the event that happened.
+Rename the built-in event/collection type from `inbox` to `inbox` so the runtime names the thing being inserted/updated/deleted rather than the event that happened.
 
 Update the built-in `inbox` schema to include:
 

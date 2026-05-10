@@ -24,6 +24,7 @@ export function useEntityTimeline(
   entries: Array<TimelineEntry>
   pendingInbox: EntityTimelineData[`inbox`]
   entities: Array<IncludesEntity>
+  generationActive: boolean
   db: EntityStreamDBWithActions | null
   loading: boolean
   error: string | null
@@ -189,11 +190,16 @@ export function useEntityTimeline(
         }),
     [pendingInboxRows]
   )
+  const generationActive = useMemo(
+    () => timelineData.runs.some((run) => run.status === `started`),
+    [timelineData.runs]
+  )
 
   return {
     entries,
     pendingInbox,
     entities: timelineData.entities,
+    generationActive,
     db,
     loading,
     error,

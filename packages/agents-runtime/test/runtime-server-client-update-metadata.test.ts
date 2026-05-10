@@ -68,7 +68,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       events: [],
       writeEvent: () => {},
       wakeSession: {} as any,
-      wakeEvent: { type: `message_received`, payload: `hi` } as any,
+      wakeEvent: { type: `inbox`, payload: `hi` } as any,
       doObserve: () => Promise.resolve({} as any),
       doSpawn: () => Promise.resolve({} as any),
       doMkdb: () => ({}) as any,

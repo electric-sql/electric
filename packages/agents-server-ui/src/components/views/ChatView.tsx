@@ -59,8 +59,15 @@ function GenericChatBody({
   isSpawning: boolean
   tileId: string
 }): React.ReactElement {
-  const { entries, pendingInbox, entities, db, loading, error } =
-    useEntityTimeline(baseUrl || null, entityUrl)
+  const {
+    entries,
+    pendingInbox,
+    entities,
+    generationActive,
+    db,
+    loading,
+    error,
+  } = useEntityTimeline(baseUrl || null, entityUrl)
   const navigate = useNavigate()
   const [sentMessageSignal, setSentMessageSignal] = useState(0)
   const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
@@ -200,7 +207,7 @@ function GenericChatBody({
         pendingMessages={visiblePendingInbox}
         inlineQueuedSubmits={
           !entityStopped &&
-          entity.status !== `running` &&
+          !generationActive &&
           pendingInbox.length === 0 &&
           inlineQueuedMessages.size === 0
         }

@@ -683,8 +683,6 @@ export const BUILT_IN_EVENT_SCHEMAS = {
   error: createErrorEventSchema() as unknown as BuiltInEntitySchema<ErrorEvent>,
   inbox:
     createMessageReceivedSchema() as unknown as BuiltInEntitySchema<MessageReceived>,
-  message_received:
-    createMessageReceivedSchema() as unknown as BuiltInEntitySchema<MessageReceived>,
   wake: createWakeSchema() as unknown as BuiltInEntitySchema<WakeEntry>,
   entity_created:
     createEntityCreatedSchema() as unknown as BuiltInEntitySchema<EntityCreated>,
@@ -770,8 +768,7 @@ export const builtInCollections: EntityCollectionsDefinition = {
     primaryKey: `key`,
   },
   inbox: {
-    schema:
-      BUILT_IN_EVENT_SCHEMAS.message_received as StandardSchemaV1<MessageReceived>,
+    schema: BUILT_IN_EVENT_SCHEMAS.inbox as StandardSchemaV1<MessageReceived>,
     type: `inbox`,
     primaryKey: `key`,
   },

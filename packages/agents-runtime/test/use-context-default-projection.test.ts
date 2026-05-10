@@ -5,7 +5,7 @@ import { buildStreamFixture } from './helpers/context-test-helpers'
 describe(`timelineMessages default projection`, () => {
   it(`is byte-identical to timelineToMessages for a no-context stream`, () => {
     const db = buildStreamFixture([
-      { kind: `message_received`, at: 1, value: { payload: `hello` } },
+      { kind: `inbox`, at: 1, value: { payload: `hello` } },
       { kind: `wake`, at: 2, value: { payload: `tick` } },
     ])
 

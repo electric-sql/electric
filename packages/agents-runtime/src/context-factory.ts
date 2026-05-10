@@ -151,11 +151,11 @@ function getTriggerMessageText(
   events: Array<ChangeEvent>,
   wakeOffset: string
 ): string {
-  if (wakeEvent.type === `inbox` || wakeEvent.type === `message_received`) {
+  if (wakeEvent.type === `inbox`) {
     let latestPayload: unknown = wakeEvent.payload
     for (let index = events.length - 1; index >= 0; index--) {
       const event = events[index]!
-      if (event.type !== `inbox` && event.type !== `message_received`) {
+      if (event.type !== `inbox`) {
         continue
       }
 

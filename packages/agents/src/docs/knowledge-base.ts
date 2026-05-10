@@ -884,10 +884,10 @@ export function createHortonDocsSupport(
     events: Array<Pick<ChangeEvent, `type` | `value`>>,
     inbox: Array<{ payload?: unknown }>
   ): string {
-    if (wake.type === `message_received`) {
+    if (wake.type === `inbox`) {
       const eventQuestion = findLatestQuestion(
         events
-          .filter((event) => event.type === `message_received`)
+          .filter((event) => event.type === `inbox`)
           .map((event) => event.value as { payload?: unknown } | undefined)
       )
       if (eventQuestion) {

@@ -2170,7 +2170,7 @@ t.define(TYPES.l1Watcher, {
       return true
     }
 
-    if (wake.type === `message_received`) {
+    if (wake.type === `inbox`) {
       await runTestAgent(
         ctx,
         createObservationRelayAssistant({
@@ -2312,7 +2312,7 @@ t.define(TYPES.f2Manager, {
     if (!status.get(`current`)) {
       status.insert({ key: `current`, value: `idle` })
     }
-    if (wake.type === `message_received`) {
+    if (wake.type === `inbox`) {
       await runTestAgent(ctx, createManagerWorkerAssistant(ctx))
     }
 
@@ -2818,7 +2818,7 @@ describe(`A: basic entity lifecycle`, () => {
       args: { plan: `pro`, userId: `user-1` },
       entity_type: TYPES.a1,
     })
-    expect(history.count(`message_received`)).toBe(0)
+    expect(history.count(`inbox`)).toBe(0)
     expect(history.count(`run`)).toBe(0)
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
   }, 60_000)
@@ -2833,12 +2833,12 @@ describe(`A: basic entity lifecycle`, () => {
     const history = await entity.history()
 
     expect(history.count(`entity_created`)).toBe(1)
-    expect(history.count(`message_received`)).toBe(1)
+    expect(history.count(`inbox`)).toBe(1)
     expect(history.count(`run`)).toBe(0)
     expect(history.indexOf(`entity_created`)).toBeLessThan(
-      history.indexOf(`message_received`)
+      history.indexOf(`inbox`)
     )
-    expect(history.find(`message_received`)?.value).toMatchObject({
+    expect(history.find(`inbox`)?.value).toMatchObject({
       payload: `hello on create`,
     })
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -2896,7 +2896,7 @@ describe(`A: basic entity lifecycle`, () => {
   it(`A6: agent-less entity records only inbound messages`, async () => {
     const entity = await t.spawn(TYPES.a6, `na-1`)
     await entity.send(`hello`, { from: `user` })
-    await entity.waitForTypeCount(`message_received`, 1)
+    await entity.waitForTypeCount(`inbox`, 1)
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
   }, 30_000)
@@ -3050,7 +3050,7 @@ describe(`B: spawn mechanics`, () => {
 
     const child = t.entity(`/${TYPES.b1Child}/c-1`)
     await child.send({ text: `hello child` }, { from: `parent` })
-    await child.waitForTypeCount(`message_received`, 1)
+    await child.waitForTypeCount(`inbox`, 1)
 
     expect(await parent.snapshot()).toMatchSnapshot(`parent history`)
     expect(await child.snapshot()).toMatchSnapshot(`child history`)
@@ -3062,7 +3062,7 @@ describe(`B: spawn mechanics`, () => {
     await parent.waitForRun()
 
     const child = t.entity(`/${TYPES.b2Child}/c-2`)
-    await child.waitForTypeCount(`message_received`, 1)
+    await child.waitForTypeCount(`inbox`, 1)
 
     expect(await parent.snapshot()).toMatchSnapshot(`parent history`)
     expect(await child.snapshot()).toMatchSnapshot(`child history`)
@@ -3180,7 +3180,7 @@ describe(`D: shared state`, () => {
     const writerHistory = await writer.history()
     expect(
       writerHistory.events
-        .filter((event) => event.type === `message_received`)
+        .filter((event) => event.type === `inbox`)
         .map((event) => eventValueRecord(event)?.payload)
     ).toEqual([`insert art-1 Alpha|First body`])
     expect(
@@ -3247,7 +3247,7 @@ describe(`D: shared state`, () => {
     const writerHistory = await writer.history()
     expect(
       writerHistory.events
-        .filter((event) => event.type === `message_received`)
+        .filter((event) => event.type === `inbox`)
         .map((event) => eventValueRecord(event)?.payload)
     ).toEqual([
       `insert art-1 Alpha|First body`,
@@ -3662,7 +3662,7 @@ describe(`E: observation replay`, () => {
     await parent.send(`poke-2`, { from: `user` })
     await parent.waitFor((history) =>
       history.some(
-        `message_received`,
+        `inbox`,
         (event) => eventValueRecord(event)?.payload === `poke-2`
       )
     )
@@ -3683,7 +3683,7 @@ describe(`E: observation replay`, () => {
     expect(await child.snapshot()).toMatchSnapshot(`child history`)
     expect({
       userPayloads: parentHistory.events
-        .filter((event) => event.type === `message_received`)
+        .filter((event) => event.type === `inbox`)
         .map((event) => eventValueRecord(event)?.payload),
       observedCounts: parentHistory.events
         .filter((event) => event.type === `observed_count`)
@@ -3899,7 +3899,7 @@ describe(`F: coordination orchestration`, () => {
         .filteredSnapshot((entry) => {
           if (
             entry.type === `entity_created` ||
-            entry.type === `message_received` ||
+            entry.type === `inbox` ||
             entry.type === `tool_call` ||
             entry.type === `state:children`
           ) {
@@ -4122,15 +4122,15 @@ describe(`F: coordination orchestration`, () => {
     await parent.send(`spawn_perspectives second question`, { from: `user` })
 
     const secondOptimist = await optimist.waitFor(
-      (history) => history.count(`message_received`) >= 2,
+      (history) => history.count(`inbox`) >= 2,
       60_000
     )
     const secondPessimist = await pessimist.waitFor(
-      (history) => history.count(`message_received`) >= 2,
+      (history) => history.count(`inbox`) >= 2,
       60_000
     )
     const secondPragmatist = await pragmatist.waitFor(
-      (history) => history.count(`message_received`) >= 2,
+      (history) => history.count(`inbox`) >= 2,
       60_000
     )
     const parentHistory = await parent.waitFor((history) => {
@@ -4152,9 +4152,9 @@ describe(`F: coordination orchestration`, () => {
     expect(secondOptimist.count(`entity_created`)).toBe(1)
     expect(secondPessimist.count(`entity_created`)).toBe(1)
     expect(secondPragmatist.count(`entity_created`)).toBe(1)
-    expect(secondOptimist.count(`message_received`)).toBe(2)
-    expect(secondPessimist.count(`message_received`)).toBe(2)
-    expect(secondPragmatist.count(`message_received`)).toBe(2)
+    expect(secondOptimist.count(`inbox`)).toBe(2)
+    expect(secondPessimist.count(`inbox`)).toBe(2)
+    expect(secondPragmatist.count(`inbox`)).toBe(2)
     expect(
       new Set(
         parentHistory.events
@@ -4565,7 +4565,7 @@ describe(`G: map-reduce ordering`, () => {
       (await parent.history()).filteredSnapshot((entry) => {
         if (
           entry.type === `entity_created` ||
-          entry.type === `message_received` ||
+          entry.type === `inbox` ||
           entry.type === `manifest` ||
           entry.type === `tool_call` ||
           entry.type === `state:children`
@@ -4626,7 +4626,7 @@ describe(`G: map-reduce ordering`, () => {
     ).toBe(1)
     expect(
       chunkHistory.find(
-        `message_received`,
+        `inbox`,
         (event) => eventValueRecord(event)?.payload === `summarize:only-one`
       )?.value
     ).toMatchObject({
@@ -4989,12 +4989,12 @@ describe(`M: deep researcher coordination`, () => {
     const historyHistory = await historyWorker.waitForRun()
     const applicationsHistory = await applicationsWorker.waitForRun()
 
-    expect(historyHistory.count(`message_received`)).toBe(1)
-    expect(applicationsHistory.count(`message_received`)).toBe(1)
-    expect(historyHistory.find(`message_received`)?.value).toMatchObject({
+    expect(historyHistory.count(`inbox`)).toBe(1)
+    expect(applicationsHistory.count(`inbox`)).toBe(1)
+    expect(historyHistory.find(`inbox`)?.value).toMatchObject({
       payload: `Durable Streams`,
     })
-    expect(applicationsHistory.find(`message_received`)?.value).toMatchObject({
+    expect(applicationsHistory.find(`inbox`)?.value).toMatchObject({
       payload: `Durable Streams`,
     })
   }, 30_000)
@@ -5343,7 +5343,7 @@ describe(`J: debate coordination`, () => {
     })
     expect(
       parentHistory.count(
-        `message_received`,
+        `inbox`,
         (event) => eventValueRecord(event)?.payload === `end_debate`
       )
     ).toBe(1)
@@ -6225,14 +6225,14 @@ describe(`L: reactive observation flows`, () => {
 
 describe(`N: wake primitives verification`, () => {
   it(`N1: WakeEvent type is "wake" when parent is re-woken by child completion`, async () => {
-    // Finding 1: enrichPayload always sets triggerEvent: "message_received".
+    // Finding 1: enrichPayload always sets triggerEvent: "inbox".
     // The fix: the runtime reads wake events from its own stream catch-up
     // events instead of relying on the webhook notification field.
     //
     // The parent records wake.type to a state collection on EVERY wake.
     // After the child completes, the parent should eventually see a
     // wake_log_entry with wakeType === "wake". Intermediate re-wakes
-    // from the parent's own writes may happen first with "message_received".
+    // from the parent's own writes may happen first with "inbox".
 
     const parent = await t.spawn(TYPES.n1WakeTypeParent, `wake-type-1`)
 
@@ -6263,7 +6263,7 @@ describe(`N: wake primitives verification`, () => {
       .filter((event): event is Record<string, unknown> => event !== undefined)
 
     // First entry should be from the initial send
-    expect(wakeLogEntries[0]!.wakeType).toBe(`message_received`)
+    expect(wakeLogEntries[0]!.wakeType).toBe(`inbox`)
 
     // At least one entry should have wakeType === "wake"
     const wakeEntry = wakeLogEntries.find((e) => e.wakeType === `wake`)

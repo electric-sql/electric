@@ -60,7 +60,7 @@ The function that runs when an entity wakes. Receives a [`HandlerContext`](/docs
 ```ts
 registry.define("support", {
   async handler(ctx, wake) {
-    if (wake.type === "message_received") {
+    if (wake.type === "inbox") {
       ctx.useAgent({
         systemPrompt: "You are a support agent.",
         model: "claude-sonnet-4-5-20250929",
@@ -78,11 +78,11 @@ Events that trigger a handler invocation. Wake sources include incoming messages
 
 ```ts
 async handler(ctx, wake) {
-  // wake.type — "message_received", "wake", etc.
+  // wake.type — "inbox", "wake", etc.
   // wake.source — who triggered the wake
   // wake.payload — message content or wake data
 
-  if (wake.type === "message_received") {
+  if (wake.type === "inbox") {
     const userMessage = wake.payload
     // handle incoming message
   }
