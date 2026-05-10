@@ -324,7 +324,10 @@ export async function processWake(
   })
 
   // Create producer BEFORE the StreamDB so state actions can write through it.
-  const producer = new IdempotentProducer(stream, `entity-${entityUrl}`, {
+  const producerSessionId = crypto.randomUUID()
+  const producerId = `entity-${encodeURIComponent(entityUrl)}-${wakeId ?? epoch}-${producerSessionId}`
+
+  const producer = new IdempotentProducer(stream, producerId, {
     epoch,
     autoClaim: true,
     fetch: (input, init) => {
@@ -916,7 +919,7 @@ export async function processWake(
         })
         const sharedProducer = new IdempotentProducer(
           sharedStream,
-          `shared-state-${entityUrl}-${ssId}`,
+          `shared-state-${entityUrl}-${ssId}-${producerSessionId}`,
           {
             epoch,
             autoClaim: true,

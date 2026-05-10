@@ -59,6 +59,35 @@ function createMockStreamFn(responseText: string): StreamFn {
   }) as StreamFn)
 }
 
+function assertCompleteResponses(
+  events: Array<any>,
+  responseText: string,
+  minCount: number
+): void {
+  const eventType = (event: any): unknown =>
+    event.type ?? event.value?.type ?? event.value?.value?.type
+  expect(
+    events.filter((event) => eventType(event) === `run`).length
+  ).toBeGreaterThanOrEqual(minCount)
+  expect(
+    events.filter((event) => eventType(event) === `step`).length
+  ).toBeGreaterThanOrEqual(minCount)
+  expect(
+    events.filter((event) => eventType(event) === `text`).length
+  ).toBeGreaterThanOrEqual(minCount)
+
+  const responseDeltas = events
+    .filter((event) => eventType(event) === `text_delta`)
+    .map((event) => {
+      const value = event.value?.value ?? event.value ?? event
+      return typeof value.delta === `string` ? value.delta : ``
+    })
+    .join(``)
+  expect(responseDeltas.split(responseText).length - 1).toBeGreaterThanOrEqual(
+    minCount
+  )
+}
+
 describe(`pull-wake Horton e2e with mocked LLM`, () => {
   let dsServer: DurableStreamTestServer
   let builtinAgentsServer: BuiltinAgentsServer
@@ -160,11 +189,12 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
 
     await waitFor(async () => {
       const events = await readStreamEvents(dsServer.url, spawned.streams.main)
-      return events.some(
-        (event) =>
-          event.type === `text_delta` &&
-          JSON.stringify(event).includes(mockResponse)
-      )
+      try {
+        assertCompleteResponses(events, mockResponse, 1)
+        return true
+      } catch {
+        return false
+      }
     }, 20_000)
 
     let state: any
@@ -232,6 +262,16 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
         wake?.claim_status === `completed`
       )
     }, 10_000)
+
+    await waitFor(async () => {
+      const events = await readStreamEvents(dsServer.url, spawned.streams.main)
+      try {
+        assertCompleteResponses(events, mockResponse, 2)
+        return true
+      } catch {
+        return false
+      }
+    }, 20_000)
 
     const wakeEvents = await readStreamEvents(dsServer.url, runner.wake_stream!)
     expect(

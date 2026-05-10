@@ -999,7 +999,9 @@ describe(`processWake`, () => {
     await processWake(makeNotification(), BASE_CONFIG)
 
     expect(mockConstructedProducers).toContainEqual({
-      producerId: `entity-http://localhost:3000/test-agent/agent-1`,
+      producerId: expect.stringMatching(
+        /^entity-http%3A%2F%2Flocalhost%3A3000%2Ftest-agent%2Fagent-1-wake-abc-[0-9a-f-]{36}$/
+      ),
       opts: expect.objectContaining({
         epoch: 1,
         autoClaim: true,
@@ -1018,7 +1020,9 @@ describe(`processWake`, () => {
     await processWake(makeNotification(), BASE_CONFIG)
 
     expect(mockConstructedProducers).toContainEqual({
-      producerId: `shared-state-http://localhost:3000/test-agent/agent-1-board-1`,
+      producerId: expect.stringMatching(
+        /^shared-state-http:\/\/localhost:3000\/test-agent\/agent-1-board-1-[0-9a-f-]{36}$/
+      ),
       opts: expect.objectContaining({
         epoch: 1,
         autoClaim: true,
