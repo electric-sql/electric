@@ -60,6 +60,12 @@
   flex-direction: column;
 }
 
+.section + .section {
+  border-top: 1px solid var(--ds-gray-a4);
+  margin-top: 3px;
+  padding-top: 3px;
+}
+
 /* Universal row treatment used by every interactive row in the
    drawer: parent row, sub-agents toggle, and each sub-agent entry.
    Every row is full-width and clickable end to end so the hover
