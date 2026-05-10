@@ -99,6 +99,7 @@ function estimateRowHeight(
 }
 
 const BOTTOM_PIN_THRESHOLD = 8
+const CHAT_SURFACE_GUTTER = 24
 const ROW_GAP = 24
 const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
@@ -731,6 +732,7 @@ export function EntityTimeline({
   const settledKeysRef = useRef(new Set<string>())
   const settleCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handledScrollSignalRef = useRef(scrollToBottomSignal)
+  const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
 
   const firstMessage = rows.find(
     (
@@ -821,7 +823,7 @@ export function EntityTimeline({
     getScrollElement: () => viewport,
     estimateSize: (index) =>
       cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
-      estimateRowHeight(rows[index], contentWidth),
+      estimateRowHeight(rows[index], textColumnWidth),
     getItemKey: (index) => rows[index]?.key ?? index,
     gap: 0,
     overscan: 6,
@@ -1178,7 +1180,7 @@ export function EntityTimeline({
                       responseTimestamp={row.responseTimestamp}
                       entityStopped={entityStopped}
                       isStreaming={row.key === lastStreamingAgentKey}
-                      renderWidth={contentWidth}
+                      renderWidth={textColumnWidth}
                       entityUrl={entityUrl}
                       tileId={tileId ?? null}
                       entityStatusByUrl={entityStatusByUrl}

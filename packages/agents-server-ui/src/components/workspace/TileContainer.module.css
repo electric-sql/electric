@@ -30,14 +30,8 @@
   /* Shared chat-column geometry — kept in sync with router.module.css's
    * .entityMain so chat tiles render the same regardless of where they
    * sit in the workspace. */
-  --chat-col-width: 68ch;
+  --chat-col-width: 80ch;
   --chat-surface-width: calc(var(--chat-col-width) + 24px);
-}
-
-@media (min-width: 1100px) {
-  .body {
-    --chat-col-width: 80ch;
-  }
 }
 
 .dragHandle {

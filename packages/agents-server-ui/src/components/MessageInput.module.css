@@ -13,14 +13,13 @@
  * stacking-context fighting elsewhere. (Sibling document order would
  * already place us on top, but explicit > implicit.)
  *
- * Outer max-width / horizontal padding match `EntityTimeline .content`
- * so the composer sits directly under the user-bubble column above it.
+ * Width matches the user-message surface: fixed 16px outer gutters,
+ * capped at the normal chat surface width.
  */
 .root {
-  padding: 0 40px 16px;
-  max-width: calc(var(--chat-surface-width) + 80px);
+  padding: 0 0 16px;
   margin: -20px auto 0;
-  width: 100%;
+  width: min(var(--chat-surface-width), max(0px, calc(100% - 32px)));
   box-sizing: border-box;
   position: relative;
   z-index: 1;

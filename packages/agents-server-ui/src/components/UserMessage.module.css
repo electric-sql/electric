@@ -3,7 +3,6 @@
  * padding so the actual *text* lines up with the agent text column —
  * only the white background extends past it. */
 .root {
-  max-width: var(--chat-surface-width);
   margin-inline: auto;
   width: 100%;
 }
