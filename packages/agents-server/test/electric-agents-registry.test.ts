@@ -200,6 +200,102 @@ describe(`PostgresRegistry supersedeDispatchForStoppedEntity`, () => {
     expect(claim!.releasedAt?.toISOString()).toBe(now.toISOString())
   })
 
+  it(`expires active claims with null lease after stale threshold while preserving fresh claims`, async () => {
+    const { eq } = await import(`drizzle-orm`)
+    const { consumerClaims, entityDispatchState } = await import(
+      `../src/db/schema`
+    )
+    const now = new Date(`2026-05-09T12:00:00.000Z`)
+
+    await db.insert(entityDispatchState).values([
+      {
+        entityUrl: `/chat/null-lease-stale`,
+        pendingSourceStreams: [
+          { path: `/chat/null-lease-stale/main`, offset: `21` },
+        ],
+        pendingReason: `message`,
+        activeConsumerId: `entity:chat:null-lease-stale`,
+        activeRunnerId: `runner-1`,
+        activeEpoch: 7,
+        activeClaimedAt: new Date(`2026-05-09T11:59:29.000Z`),
+        activeLeaseExpiresAt: null,
+      },
+      {
+        entityUrl: `/chat/null-lease-fresh`,
+        pendingSourceStreams: [
+          { path: `/chat/null-lease-fresh/main`, offset: `22` },
+        ],
+        pendingReason: `message`,
+        activeConsumerId: `entity:chat:null-lease-fresh`,
+        activeRunnerId: `runner-1`,
+        activeEpoch: 8,
+        activeClaimedAt: new Date(`2026-05-09T11:59:45.000Z`),
+        activeLeaseExpiresAt: null,
+      },
+    ])
+    await db.insert(consumerClaims).values([
+      {
+        consumerId: `entity:chat:null-lease-stale`,
+        epoch: 7,
+        entityUrl: `/chat/null-lease-stale`,
+        streamPath: `/chat/null-lease-stale/main`,
+        runnerId: `runner-1`,
+        status: `active`,
+        claimedAt: new Date(`2026-05-09T11:59:29.000Z`),
+        leaseExpiresAt: null,
+      },
+      {
+        consumerId: `entity:chat:null-lease-fresh`,
+        epoch: 8,
+        entityUrl: `/chat/null-lease-fresh`,
+        streamPath: `/chat/null-lease-fresh/main`,
+        runnerId: `runner-1`,
+        status: `active`,
+        claimedAt: new Date(`2026-05-09T11:59:45.000Z`),
+        leaseExpiresAt: null,
+      },
+    ])
+
+    await expect(registry.expireStaleActiveClaims({ now })).resolves.toEqual([
+      {
+        entityUrl: `/chat/null-lease-stale`,
+        pendingSourceStreams: [
+          { path: `/chat/null-lease-stale/main`, offset: `21` },
+        ],
+        pendingReason: `message`,
+      },
+    ])
+
+    const [staleState] = await db
+      .select()
+      .from(entityDispatchState)
+      .where(eq(entityDispatchState.entityUrl, `/chat/null-lease-stale`))
+    expect(staleState!.activeConsumerId).toBeNull()
+    expect(staleState!.activeLeaseExpiresAt).toBeNull()
+    expect(staleState!.lastReleasedAt?.toISOString()).toBe(now.toISOString())
+
+    const [freshState] = await db
+      .select()
+      .from(entityDispatchState)
+      .where(eq(entityDispatchState.entityUrl, `/chat/null-lease-fresh`))
+    expect(freshState!.activeConsumerId).toBe(`entity:chat:null-lease-fresh`)
+    expect(freshState!.activeEpoch).toBe(8)
+
+    const [staleClaim] = await db
+      .select()
+      .from(consumerClaims)
+      .where(eq(consumerClaims.consumerId, `entity:chat:null-lease-stale`))
+    expect(staleClaim).toMatchObject({ status: `expired` })
+    expect(staleClaim!.releasedAt?.toISOString()).toBe(now.toISOString())
+
+    const [freshClaim] = await db
+      .select()
+      .from(consumerClaims)
+      .where(eq(consumerClaims.consumerId, `entity:chat:null-lease-fresh`))
+    expect(freshClaim).toMatchObject({ status: `active` })
+    expect(freshClaim!.releasedAt).toBeNull()
+  })
+
   it(`expires stale outstanding wakes when raw SQL receives Date inputs`, async () => {
     const { eq } = await import(`drizzle-orm`)
     const { entityDispatchState, wakeNotifications } = await import(

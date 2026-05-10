@@ -178,9 +178,65 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
     expect(state.outstanding_wake_id).toBeUndefined()
     expect(state.last_completed_at).toEqual(expect.any(String))
 
+    const firstWakeId = state.last_wake_id
+    expect(firstWakeId).toEqual(expect.any(String))
+    await waitFor(async () => {
+      const wake = await (
+        electricAgentsServer as any
+      ).electricAgentsManager.registry.getWakeNotification(firstWakeId)
+      return (
+        wake?.delivery_status === `delivered` &&
+        wake?.claim_status === `completed`
+      )
+    }, 10_000)
+
+    const firstCallCount = mockStreamFn.mock.calls.length
+    const secondSendRes = await fetch(`${baseUrl}${entityUrl}/send`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json`, ...authHeaders },
+      body: JSON.stringify({
+        from: `user`,
+        payload: `Please answer via pull-wake again after idle.`,
+      }),
+    })
+    expect(secondSendRes.status).toBe(204)
+
+    await waitFor(
+      async () => mockStreamFn.mock.calls.length > firstCallCount,
+      20_000,
+      50
+    )
+
+    let secondState: any
+    await waitFor(async () => {
+      secondState = await (
+        electricAgentsServer as any
+      ).electricAgentsManager.registry.getEntityDispatchState(entityUrl)
+      return (
+        secondState.last_completed_at !== undefined &&
+        secondState.last_wake_id !== firstWakeId &&
+        secondState.outstanding_wake_id === undefined &&
+        secondState.active_runner_id === undefined
+      )
+    }, 20_000)
+    expect(secondState.active_runner_id).toBeUndefined()
+
+    await waitFor(async () => {
+      const wake = await (
+        electricAgentsServer as any
+      ).electricAgentsManager.registry.getWakeNotification(
+        secondState.last_wake_id
+      )
+      return (
+        wake?.delivery_status === `delivered` &&
+        wake?.claim_status === `completed`
+      )
+    }, 10_000)
+
     const wakeEvents = await readStreamEvents(dsServer.url, runner.wake_stream!)
     expect(
-      wakeEvents.some((event) => JSON.stringify(event).includes(entityUrl))
-    ).toBe(true)
-  }, 45_000)
+      wakeEvents.filter((event) => JSON.stringify(event).includes(entityUrl))
+        .length
+    ).toBeGreaterThanOrEqual(2)
+  }, 60_000)
 })

@@ -849,6 +849,16 @@ export class PostgresRegistry {
           },
         })
 
+      if (input.wakeId) {
+        await tx
+          .update(wakeNotifications)
+          .set({
+            claimStatus: `claimed`,
+            claimedAt: now,
+          })
+          .where(eq(wakeNotifications.wakeId, input.wakeId))
+      }
+
       await tx
         .insert(entityDispatchState)
         .values({
@@ -1000,6 +1010,16 @@ export class PostgresRegistry {
         ? (state.pendingReason ?? `pending_coalesced_wake`)
         : null
 
+      if (state.lastWakeId) {
+        await tx
+          .update(wakeNotifications)
+          .set({
+            claimStatus: `completed`,
+            resolvedAt: now,
+          })
+          .where(eq(wakeNotifications.wakeId, state.lastWakeId))
+      }
+
       await tx
         .update(entityDispatchState)
         .set({
@@ -1127,9 +1147,15 @@ export class PostgresRegistry {
           FROM ${entityDispatchState}
           WHERE ${entityDispatchState.activeConsumerId} IS NOT NULL
             AND ${entityDispatchState.activeEpoch} IS NOT NULL
-            AND ${entityDispatchState.activeLeaseExpiresAt} IS NOT NULL
-            AND ${entityDispatchState.activeLeaseExpiresAt} < ${nowIso}::timestamptz
-          ORDER BY ${entityDispatchState.activeLeaseExpiresAt} ASC
+            AND (
+              ${entityDispatchState.activeLeaseExpiresAt} < ${nowIso}::timestamptz
+              OR (
+                ${entityDispatchState.activeLeaseExpiresAt} IS NULL
+                AND ${entityDispatchState.activeClaimedAt} IS NOT NULL
+                AND ${entityDispatchState.activeClaimedAt} < (${nowIso}::timestamptz - interval '30 seconds')
+              )
+            )
+          ORDER BY COALESCE(${entityDispatchState.activeLeaseExpiresAt}, ${entityDispatchState.activeClaimedAt}) ASC
           LIMIT ${limit}
           FOR UPDATE SKIP LOCKED
         )
