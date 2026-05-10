@@ -269,47 +269,56 @@ defmodule Electric.Shapes.Consumer.Effects do
     # `with_child_span` calls in the task would be silently dropped.
     trace_context = OpenTelemetry.get_current_context()
 
+    span_attrs = [
+      "shape.handle": shape_handle,
+      "shape.root_table": shape.root_table,
+      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
+      "shape.query_reason": "move_in_query"
+    ]
+
     Task.Supervisor.start_child(supervisor, fn ->
       OpenTelemetry.set_current_context(trace_context)
 
       snapshot_name = Electric.Utils.uuid4()
 
       try do
-        SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
-          stack_id: stack_id,
-          query_reason: "move_in_query",
-          snapshot_info_fn: fn _, pg_snapshot, _lsn ->
-            send(consumer_pid, {:pg_snapshot_known, pg_snapshot})
-          end,
-          query_fn: fn conn, _pg_snapshot, lsn ->
-            task_pid = self()
+        OpenTelemetry.with_span("shape_snapshot.move_in_task", span_attrs, stack_id, fn ->
+          SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
+            stack_id: stack_id,
+            query_reason: "move_in_query",
+            snapshot_info_fn: fn _, pg_snapshot, _lsn ->
+              send(consumer_pid, {:pg_snapshot_known, pg_snapshot})
+            end,
+            query_fn: fn conn, _pg_snapshot, lsn ->
+              task_pid = self()
 
-            Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params},
-              dnf_plan: request.dnf_plan,
-              views: request.views_after_move
-            )
-            |> Stream.transform(
-              fn -> {0, 0} end,
-              fn [_, _, json] = row, {row_count, row_bytes} ->
-                {[row], {row_count + 1, row_bytes + IO.iodata_length(json)}}
-              end,
-              fn {row_count, row_bytes} ->
-                send(task_pid, {:move_in_snapshot_stats, row_count, row_bytes})
-              end
-            )
-            |> Storage.write_move_in_snapshot!(snapshot_name, consumer_state.storage)
+              Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params},
+                dnf_plan: request.dnf_plan,
+                views: request.views_after_move
+              )
+              |> Stream.transform(
+                fn -> {0, 0} end,
+                fn [_, _, json] = row, {row_count, row_bytes} ->
+                  {[row], {row_count + 1, row_bytes + IO.iodata_length(json)}}
+                end,
+                fn {row_count, row_bytes} ->
+                  send(task_pid, {:move_in_snapshot_stats, row_count, row_bytes})
+                end
+              )
+              |> Storage.write_move_in_snapshot!(snapshot_name, consumer_state.storage)
 
-            {row_count, row_bytes} =
-              receive do
-                {:move_in_snapshot_stats, row_count, row_bytes} -> {row_count, row_bytes}
-              end
+              {row_count, row_bytes} =
+                receive do
+                  {:move_in_snapshot_stats, row_count, row_bytes} -> {row_count, row_bytes}
+                end
 
-            send(
-              consumer_pid,
-              {:query_move_in_complete, snapshot_name, row_count, row_bytes, lsn}
-            )
-          end
-        )
+              send(
+                consumer_pid,
+                {:query_move_in_complete, snapshot_name, row_count, row_bytes, lsn}
+              )
+            end
+          )
+        end)
       rescue
         error ->
           send(consumer_pid, {:query_move_in_error, error, __STACKTRACE__})
