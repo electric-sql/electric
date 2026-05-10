@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useEntityTimeline } from '../../hooks/useEntityTimeline'
 import { EntityTimeline } from '../EntityTimeline'
@@ -59,6 +59,7 @@ function GenericChatBody({
     entityUrl
   )
   const navigate = useNavigate()
+  const [sentMessageSignal, setSentMessageSignal] = useState(0)
 
   // If the timeline subscription errors out for an entity that isn't
   // currently spawning (so the failure isn't transient), bounce back to
@@ -81,6 +82,7 @@ function GenericChatBody({
         tileId={tileId}
         entityUrl={entityUrl}
         entities={entities}
+        scrollToBottomSignal={sentMessageSignal}
       />
       <MessageInput
         db={db}
@@ -88,6 +90,7 @@ function GenericChatBody({
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
         drawer={<EntityContextDrawer entity={entity} db={db} tileId={tileId} />}
+        onSend={() => setSentMessageSignal((value) => value + 1)}
       />
     </>
   )

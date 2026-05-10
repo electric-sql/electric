@@ -663,6 +663,7 @@ export function EntityTimeline({
   tileId,
   entityUrl = null,
   entities = [],
+  scrollToBottomSignal = 0,
 }: {
   entries: Array<TimelineEntry>
   loading: boolean
@@ -672,6 +673,7 @@ export function EntityTimeline({
   tileId?: string | null
   entityUrl?: string | null
   entities?: Array<IncludesEntity>
+  scrollToBottomSignal?: number
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
   const { entitiesCollection } = useElectricAgents()
@@ -723,6 +725,7 @@ export function EntityTimeline({
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
   const settleCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handledScrollSignalRef = useRef(scrollToBottomSignal)
 
   const firstMessage = rows.find(
     (
@@ -1036,6 +1039,20 @@ export function EntityTimeline({
 
     return () => cancelAnimationFrame(frame)
   }, [rowVirtualizer, rows, viewport])
+
+  useLayoutEffect(() => {
+    if (handledScrollSignalRef.current === scrollToBottomSignal) return
+    handledScrollSignalRef.current = scrollToBottomSignal
+    isNearBottom.current = true
+    setShowJumpToBottom(false)
+
+    if (!viewport || rows.length === 0) return
+    const frame = requestAnimationFrame(() => {
+      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [rowVirtualizer, rows.length, scrollToBottomSignal, viewport])
 
   useEffect(
     () => () => {

@@ -11,11 +11,13 @@ export function MessageInput({
   entityUrl,
   disabled,
   drawer,
+  onSend,
 }: {
   db: EntityStreamDBWithActions | null
   baseUrl: string
   entityUrl: string
   disabled: boolean
+  onSend?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed
@@ -55,11 +57,12 @@ export function MessageInput({
     if (!value.trim() || !sendAction || disabled) return
     setError(null)
     const tx = sendAction({ text: value.trim() })
+    onSend?.()
     setValue(``)
     tx.isPersisted.promise.catch((err: Error) => {
       setError(err.message)
     })
-  }, [value, sendAction, disabled])
+  }, [value, sendAction, disabled, onSend])
 
   const isActive = Boolean(value.trim() && !disabled)
 
