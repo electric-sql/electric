@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
+  Brain,
   Check,
   ChevronRight,
-  Cpu,
   Monitor,
   Moon,
   Palette,
-  Play,
   RefreshCw,
   Settings as SettingsIcon,
   Square,
@@ -45,13 +44,11 @@ const RUNTIME_STATUS_LABELS: Record<DesktopState[`runtimeStatus`], string> = {
  * The top-level menu is a tight three-row launcher:
  *
  *   - Theme         → submenu (Light / Dark / System)
- *   - Local Runtime → submenu (status + start/restart/stop)
+ *   - Local Runtime → submenu for this window's selected server
  *   - Settings…     → opens the full Settings screen at /settings
  *
- * "Local Runtime" only renders on the desktop build (it's the only
- * place where the bundled Horton runtime exists). The Settings link
- * is always shown — Settings → General is useful in the web build
- * too once additional preferences land there.
+ * "Local Runtime" only renders on the desktop build and refers to
+ * the runtime for the server selected in the current window.
  */
 export function SettingsMenu(): React.ReactElement {
   const { preference, setPreference } = useDarkModeContext()
@@ -71,6 +68,13 @@ export function SettingsMenu(): React.ReactElement {
   const runtimeStatus = desktopState?.runtimeStatus ?? `stopped`
   const runtimeUrl = desktopState?.runtimeUrl ?? null
   const runtimeError = desktopState?.error ?? null
+  const activeServerName = desktopState?.activeServer?.name ?? `current server`
+  const activeConnection =
+    desktopState?.connections.find(
+      (entry) => entry.serverId === desktopState.selectedServerId
+    ) ?? null
+  const localRuntimeStatus = activeConnection?.localRuntimeStatus ?? `stopped`
+  const localRuntimeDisabled = localRuntimeStatus === `disabled`
   const runtimeIsRunning = runtimeStatus === `running`
   const runtimeIsStarting = runtimeStatus === `starting`
 
@@ -122,8 +126,8 @@ export function SettingsMenu(): React.ReactElement {
         {isDesktop && (
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className={styles.submenuTrigger}>
-              <Icon icon={Cpu} size={2} />
-              <Text size={2}>Local Runtime</Text>
+              <Icon icon={Brain} size={2} />
+              <Text size={2}>Local Runtime for Server</Text>
               <Icon
                 icon={ChevronRight}
                 size={2}
@@ -132,9 +136,13 @@ export function SettingsMenu(): React.ReactElement {
             </Menu.SubmenuTrigger>
             <Menu.Content side="left" align="start">
               <Menu.Group>
-                <Menu.Label>Status</Menu.Label>
+                <Menu.Label>For {activeServerName}</Menu.Label>
                 <Menu.Item disabled>
-                  <Text size={2}>{RUNTIME_STATUS_LABELS[runtimeStatus]}</Text>
+                  <Text size={2}>
+                    {localRuntimeDisabled
+                      ? `Disabled for this server`
+                      : RUNTIME_STATUS_LABELS[runtimeStatus]}
+                  </Text>
                 </Menu.Item>
                 {runtimeUrl && (
                   <Menu.Item disabled>
@@ -155,10 +163,11 @@ export function SettingsMenu(): React.ReactElement {
               <Menu.Group>
                 {!runtimeIsRunning && !runtimeIsStarting ? (
                   <Menu.Item
+                    disabled={localRuntimeDisabled}
                     onSelect={() => void window.electronAPI?.restartRuntime?.()}
                   >
-                    <Icon icon={Play} size={2} />
-                    <Text size={2}>Start runtime</Text>
+                    <Icon icon={Brain} size={2} />
+                    <Text size={2}>Start runtime for server</Text>
                   </Menu.Item>
                 ) : (
                   <Menu.Item
@@ -166,7 +175,7 @@ export function SettingsMenu(): React.ReactElement {
                     onSelect={() => void window.electronAPI?.restartRuntime?.()}
                   >
                     <Icon icon={RefreshCw} size={2} />
-                    <Text size={2}>Restart runtime</Text>
+                    <Text size={2}>Restart runtime for server</Text>
                   </Menu.Item>
                 )}
                 <Menu.Item
@@ -174,7 +183,7 @@ export function SettingsMenu(): React.ReactElement {
                   onSelect={() => void window.electronAPI?.stopRuntime?.()}
                 >
                   <Icon icon={Square} size={2} />
-                  <Text size={2}>Stop runtime</Text>
+                  <Text size={2}>Stop runtime for server</Text>
                 </Menu.Item>
               </Menu.Group>
             </Menu.Content>

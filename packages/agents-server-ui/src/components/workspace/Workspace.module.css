@@ -46,3 +46,76 @@
   align-items: center;
   justify-content: center;
 }
+
+.connectionPanelWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ds-space-6);
+}
+
+.connectionPanel {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4);
+  padding: var(--ds-space-6);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-5);
+  background: var(--ds-surface-raised);
+  box-shadow:
+    0 1px 3px rgba(15, 15, 30, 0.04),
+    0 1px 1px rgba(15, 15, 30, 0.02);
+}
+
+.statusGrid {
+  display: grid;
+  gap: var(--ds-space-2);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-3);
+  border: 1px solid var(--ds-border-1);
+  border-radius: var(--ds-radius-3);
+  background: var(--ds-bg-subtle);
+}
+
+.connectionActions {
+  display: flex;
+  gap: var(--ds-space-3);
+  flex-wrap: wrap;
+}
+
+.runtimeWarning {
+  position: absolute;
+  top: var(--ds-space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(560px, calc(100% - var(--ds-space-6)));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-4);
+  padding: var(--ds-space-3);
+  border: 1px solid var(--ds-yellow-a5);
+  border-radius: var(--ds-radius-4);
+  background: color-mix(
+    in oklab,
+    var(--ds-yellow-a2) 88%,
+    var(--ds-surface-raised)
+  );
+  box-shadow: var(--ds-shadow-2);
+}
+
+.runtimeWarningText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+}

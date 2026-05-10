@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useWorkspace } from '../../hooks/useWorkspace'
+import { useServerConnection } from '../../hooks/useServerConnection'
 import { listTiles } from '../../lib/workspace/workspaceReducer'
 import { listViews } from '../../lib/workspace/viewRegistry'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
@@ -8,9 +9,13 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { eq } from '@tanstack/db'
 import { decodeLayout } from '../../lib/workspace/layoutCodec'
 import { NEW_SESSION_VIEW_ID } from '../../lib/workspace/types'
-import { Text } from '../../ui'
+import { Badge, Button, Text } from '../../ui'
 import { NodeRenderer } from './NodeRenderer'
 import styles from './Workspace.module.css'
+import type {
+  LocalRuntimeStatus,
+  ServerConnectionStatus,
+} from '../../lib/server-connection'
 import type { ViewId } from '../../lib/workspace/viewRegistry'
 
 /**
@@ -27,6 +32,8 @@ import type { ViewId } from '../../lib/workspace/viewRegistry'
  */
 export function Workspace(): React.ReactElement {
   const { workspace, helpers } = useWorkspace()
+  const { activeServer, connected, connection, connectServer } =
+    useServerConnection()
   const params = useParams({ strict: false })
   const search = useSearch({ strict: false }) as {
     view?: string
@@ -221,6 +228,38 @@ export function Workspace(): React.ReactElement {
     })
   }, [helpers.activeTile, navigate])
 
+  const remoteStatus = getRemoteStatus(connected, connection?.status)
+  const runtimeStatus = connection?.localRuntimeStatus ?? `disabled`
+  const showConnectionPanel = Boolean(
+    activeServer && remoteStatus !== `connected`
+  )
+  const showRuntimeWarning = Boolean(
+    activeServer?.localRuntimeEnabled &&
+      remoteStatus === `connected` &&
+      (runtimeStatus === `error` || runtimeStatus === `stopped`)
+  )
+
+  if (showConnectionPanel && activeServer) {
+    return (
+      <div className={styles.workspace}>
+        <ConnectionPanel
+          serverName={activeServer.name}
+          serverUrl={activeServer.url}
+          remoteStatus={remoteStatus}
+          runtimeStatus={runtimeStatus}
+          error={connection?.lastError ?? null}
+          onRetry={() => connectServer(activeServer.id)}
+          onOpenSettings={() =>
+            navigate({
+              to: `/settings/$category`,
+              params: { category: `servers` },
+            })
+          }
+        />
+      </div>
+    )
+  }
+
   if (!workspace.root) {
     return (
       <div className={styles.workspace}>
@@ -235,7 +274,167 @@ export function Workspace(): React.ReactElement {
 
   return (
     <div className={styles.workspace}>
+      {showRuntimeWarning && activeServer && (
+        <div className={styles.runtimeWarning}>
+          <div className={styles.runtimeWarningText}>
+            <Text size={2} weight="medium">
+              Local runtime for {activeServer.name} is{` `}
+              {RUNTIME_STATUS_LABELS[runtimeStatus].toLowerCase()}
+            </Text>
+            {connection?.runtimeError && (
+              <Text size={1} tone="muted">
+                {connection.runtimeError}
+              </Text>
+            )}
+          </div>
+          <Button
+            size={1}
+            variant="soft"
+            tone="neutral"
+            onClick={() =>
+              navigate({
+                to: `/settings/$category`,
+                params: { category: `servers` },
+              })
+            }
+          >
+            Server settings
+          </Button>
+        </div>
+      )}
       <NodeRenderer node={workspace.root} chromeInsetTarget />
+    </div>
+  )
+}
+
+function getRemoteStatus(
+  connected: boolean,
+  status: ServerConnectionStatus | undefined
+): ServerConnectionStatus {
+  if (status) return status
+  return connected ? `connected` : `offline`
+}
+
+const REMOTE_STATUS_LABELS: Record<ServerConnectionStatus, string> = {
+  connected: `Connected`,
+  connecting: `Connecting`,
+  reconnecting: `Reconnecting`,
+  offline: `Offline`,
+  error: `Error`,
+  disconnected: `Disconnected`,
+}
+
+const RUNTIME_STATUS_LABELS: Record<LocalRuntimeStatus, string> = {
+  disabled: `Disabled`,
+  stopped: `Stopped`,
+  starting: `Starting`,
+  running: `Running`,
+  error: `Error`,
+}
+
+function remoteTone(
+  status: ServerConnectionStatus
+): `success` | `warning` | `danger` | `info` | `neutral` {
+  switch (status) {
+    case `connected`:
+      return `success`
+    case `connecting`:
+    case `reconnecting`:
+      return `info`
+    case `offline`:
+      return `warning`
+    case `error`:
+      return `danger`
+    case `disconnected`:
+      return `neutral`
+  }
+}
+
+function runtimeTone(
+  status: LocalRuntimeStatus
+): `success` | `warning` | `danger` | `info` | `neutral` {
+  switch (status) {
+    case `running`:
+      return `success`
+    case `starting`:
+      return `info`
+    case `error`:
+      return `danger`
+    case `stopped`:
+      return `warning`
+    case `disabled`:
+      return `neutral`
+  }
+}
+
+function ConnectionPanel({
+  serverName,
+  serverUrl,
+  remoteStatus,
+  runtimeStatus,
+  error,
+  onRetry,
+  onOpenSettings,
+}: {
+  serverName: string
+  serverUrl: string
+  remoteStatus: ServerConnectionStatus
+  runtimeStatus: LocalRuntimeStatus
+  error: string | null
+  onRetry: () => void
+  onOpenSettings: () => void
+}): React.ReactElement {
+  return (
+    <div className={styles.connectionPanelWrap}>
+      <div className={styles.connectionPanel}>
+        <Text size={4} weight="bold">
+          {remoteStatus === `connecting` || remoteStatus === `reconnecting`
+            ? `Connecting to ${serverName}`
+            : `Cannot reach ${serverName}`}
+        </Text>
+        <Text size={2} tone="muted" family="mono">
+          {serverUrl}
+        </Text>
+        <div className={styles.statusGrid}>
+          <div className={styles.statusRow}>
+            <Text size={2}>UI connection</Text>
+            <Badge tone={remoteTone(remoteStatus)}>
+              {REMOTE_STATUS_LABELS[remoteStatus]}
+            </Badge>
+          </div>
+          <div className={styles.statusRow}>
+            <Text size={2}>Local runtime</Text>
+            <Badge tone={runtimeTone(runtimeStatus)}>
+              {RUNTIME_STATUS_LABELS[runtimeStatus]}
+            </Badge>
+          </div>
+        </div>
+        {error && (
+          <Text size={2} tone="danger">
+            {error}
+          </Text>
+        )}
+        <Text size={2} tone="muted">
+          The UI connects directly to the remote agents server to list sessions
+          and start new ones. The local runtime is separate and only runs local
+          agents for this server when enabled.
+        </Text>
+        <div className={styles.connectionActions}>
+          <Button
+            variant="solid"
+            tone="accent"
+            onClick={onRetry}
+            disabled={
+              remoteStatus === `connecting` || remoteStatus === `reconnecting`
+            }
+          >
+            {remoteStatus === `disconnected` ? `Connect` : `Retry connection`}
+          </Button>
+          <Button variant="soft" tone="neutral" onClick={onOpenSettings}>
+            Server settings
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

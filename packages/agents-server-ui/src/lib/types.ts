@@ -1,6 +1,10 @@
 export interface ServerConfig {
+  id: string
   name: string
   url: string
+  source?: `manual` | `local-discovery` | `electric-cloud`
+  desiredState?: `connected` | `disconnected`
+  localRuntimeEnabled?: boolean
   auth?: string
 }
 

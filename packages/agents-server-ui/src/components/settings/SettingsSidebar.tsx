@@ -1,26 +1,23 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
-  Cpu,
+  KeyRound,
   Palette,
   Plug,
+  Server,
   Settings as SettingsIcon,
 } from 'lucide-react'
 import { Icon, ScrollArea, Stack, Text } from '../../ui'
-import {
-  loadDesktopState,
-  onDesktopStateChanged,
-  type DesktopState,
-} from '../../lib/server-connection'
 import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
 import styles from './SettingsSidebar.module.css'
 
 export type SettingsCategoryId =
   | `general`
+  | `servers`
+  | `credentials`
   | `appearance`
-  | `local-runtime`
   | `mcp-servers`
 
 interface CategoryDef {
@@ -48,7 +45,6 @@ export function SettingsSidebar({
   activeCategory: SettingsCategoryId
 }): React.ReactElement {
   const navigate = useNavigate()
-  const [desktopState, setDesktopState] = useState<DesktopState | null>(null)
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
   // See Sidebar.tsx — same overlay pattern so settings reads
   // consistently with the workspace sidebar on narrow viewports.
@@ -63,15 +59,6 @@ export function SettingsSidebar({
     if (narrow) setCollapsed(true)
   }, [narrow, setCollapsed])
 
-  useEffect(() => {
-    if (!window.electronAPI?.getDesktopState) return
-    void loadDesktopState().then(setDesktopState)
-    const unsubscribe = onDesktopStateChanged(setDesktopState)
-    return () => {
-      unsubscribe?.()
-    }
-  }, [])
-
   const categories: ReadonlyArray<CategoryDef> = [
     {
       id: `general`,
@@ -80,16 +67,22 @@ export function SettingsSidebar({
       visible: true,
     },
     {
+      id: `servers`,
+      label: `Servers`,
+      icon: <Icon icon={Server} size={2} />,
+      visible: true,
+    },
+    {
+      id: `credentials`,
+      label: `Credentials`,
+      icon: <Icon icon={KeyRound} size={2} />,
+      visible: true,
+    },
+    {
       id: `appearance`,
       label: `Appearance`,
       icon: <Icon icon={Palette} size={2} />,
       visible: true,
-    },
-    {
-      id: `local-runtime`,
-      label: `Local Runtime`,
-      icon: <Icon icon={Cpu} size={2} />,
-      visible: isDesktop || Boolean(desktopState),
     },
     {
       id: `mcp-servers`,

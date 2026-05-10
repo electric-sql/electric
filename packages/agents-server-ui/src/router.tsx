@@ -43,14 +43,16 @@ import {
 } from './components/settings/SettingsSidebar'
 import { GeneralPage } from './components/settings/pages/GeneralPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
-import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
+import { CredentialsPage } from './components/settings/pages/CredentialsPage'
+import { ServersPage } from './components/settings/pages/ServersPage'
 import { McpServersPage } from './components/settings/pages/McpServersPage'
 import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `general`,
+  `servers`,
+  `credentials`,
   `appearance`,
-  `local-runtime`,
   `mcp-servers`,
 ]
 
@@ -164,6 +166,12 @@ function RootShell(): React.ReactElement {
           navigate({
             to: `/settings/$category`,
             params: { category: `general` },
+          })
+          break
+        case `open-servers-settings`:
+          navigate({
+            to: `/settings/$category`,
+            params: { category: `servers` },
           })
           break
         case `open-search`:
@@ -405,8 +413,10 @@ function SettingsCategoryPage(): React.ReactElement {
   switch (params.category as SettingsCategoryId | undefined) {
     case `appearance`:
       return <AppearancePage />
-    case `local-runtime`:
-      return <LocalRuntimePage />
+    case `servers`:
+      return <ServersPage />
+    case `credentials`:
+      return <CredentialsPage />
     case `mcp-servers`:
       return <McpServersPage />
     case `general`:

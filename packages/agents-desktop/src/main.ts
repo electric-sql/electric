@@ -4,6 +4,7 @@ import type {
   RegistrySnapshot,
 } from '@electric-ax/agents'
 import { openAuthorizeWindow } from './oauth-window'
+import { SecretStore } from './secret-store'
 import {
   BrowserWindow,
   Menu,
@@ -18,15 +19,37 @@ import {
 } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+type ServerSource = `manual` | `local-discovery` | `electric-cloud`
+type ServerDesiredState = `connected` | `disconnected`
+
 type ServerConfig = {
+  id: string
   name: string
   url: string
+  source: ServerSource
+  desiredState: ServerDesiredState
+  localRuntimeEnabled: boolean
 }
 
+type ServerConnectionStatus =
+  | `disconnected`
+  | `connecting`
+  | `connected`
+  | `reconnecting`
+  | `offline`
+  | `error`
+
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
+type LocalRuntimeStatus =
+  | `disabled`
+  | `stopped`
+  | `starting`
+  | `running`
+  | `error`
 
 type DiscoveredServer = {
   url: string
@@ -36,6 +59,9 @@ type DiscoveredServer = {
 }
 
 type DesktopState = {
+  servers: Array<ServerConfig>
+  selectedServerId: string | null
+  connections: Array<ServerConnectionState>
   runtimeStatus: DesktopRuntimeStatus
   runtimeUrl: string | null
   activeServer: ServerConfig | null
@@ -47,6 +73,17 @@ type DesktopState = {
    * surface these as one-click "add" suggestions.
    */
   discoveredServers: Array<DiscoveredServer>
+}
+
+type ServerConnectionState = {
+  serverId: string
+  status: ServerConnectionStatus
+  localRuntimeStatus: LocalRuntimeStatus
+  runtimeUrl: string | null
+  runtimeError: string | null
+  lastError: string | null
+  reconnectAttempt: number
+  lastConnectedAt: number | null
 }
 
 type ApiKeys = {
@@ -64,15 +101,9 @@ type ApiKeys = {
 
 type DesktopSettings = {
   servers: Array<ServerConfig>
-  activeServer: ServerConfig | null
+  defaultServerId: string | null
   workingDirectory: string | null
-  /**
-   * LLM provider API keys persisted in `settings.json` and applied to
-   * `process.env` so the bundled `BuiltinAgentsServer` (Horton) picks
-   * them up. Read by `applyApiKeys()` and surfaced to the renderer
-   * via `desktop:get-api-keys-status` for the first-launch prompt.
-   */
-  apiKeys: ApiKeys
+  apiKeysRef: string
   /**
    * MCP servers shipped by the desktop app's settings — global to all
    * workspaces, edited via the Settings UI (or by hand in
@@ -88,6 +119,22 @@ type DesktopSettings = {
    * `authorizationCode` servers).
    */
   mcp?: { servers: Array<McpServerConfig> }
+}
+
+type RuntimeEntry = {
+  serverId: string
+  desiredState: ServerDesiredState
+  status: ServerConnectionStatus
+  localRuntimeStatus: LocalRuntimeStatus
+  runtime: BuiltinAgentsServer | null
+  runtimeUrl: string | null
+  runtimeError: string | null
+  reconnectTimer: NodeJS.Timeout | null
+  reconnectAttempt: number
+  generation: number
+  lastError: string | null
+  lastConnectedAt: number | null
+  mcpUnsubscribe: (() => void) | null
 }
 
 /**
@@ -122,6 +169,10 @@ const APP_ICON_FILE =
 const APP_ICON_PATH = path.join(RESOURCE_DIR, `assets`, APP_ICON_FILE)
 const APP_DISPLAY_NAME = `Electric Agents`
 const MAX_CONNECTIONS_PER_HOST = `256`
+const SETTINGS_VERSION = 2
+const GLOBAL_API_KEYS_REF = `api-keys:global`
+const RECONNECT_BASE_MS = 1_000
+const RECONNECT_MAX_MS = 30_000
 
 // Stable OAuth redirect base for MCP DCR (RFC 7591). The runtime
 // listens on an ephemeral port but the redirect URI must be constant
@@ -164,6 +215,7 @@ type DesktopCommand =
   | `close-tile`
   | `toggle-sidebar`
   | `open-settings`
+  | `open-servers-settings`
   | `open-search`
   | `open-find`
   | `find-next`
@@ -204,9 +256,9 @@ const EXTERNAL_LINK_PROTOCOLS = new Set([`http:`, `https:`, `mailto:`])
 
 const DEFAULT_SETTINGS: DesktopSettings = {
   servers: [],
-  activeServer: null,
+  defaultServerId: null,
   workingDirectory: null,
-  apiKeys: { anthropic: null, openai: null, brave: null },
+  apiKeysRef: GLOBAL_API_KEYS_REF,
 }
 
 /**
@@ -227,7 +279,11 @@ const ENV_API_KEYS_SNAPSHOT: ApiKeys = {
 }
 
 let settings: DesktopSettings = { ...DEFAULT_SETTINGS }
+let apiKeys: ApiKeys = { anthropic: null, openai: null, brave: null }
 let state: DesktopState = {
+  servers: [],
+  selectedServerId: null,
+  connections: [],
   runtimeStatus: `stopped`,
   runtimeUrl: null,
   activeServer: null,
@@ -235,14 +291,14 @@ let state: DesktopState = {
   error: null,
   discoveredServers: [],
 }
-let runtime: BuiltinAgentsServer | null = null
-let runtimeGeneration = 0
-let mcpUnsubscribe: (() => void) | null = null
-let lastMcpSnapshot: RegistrySnapshot | null = null
 let tray: Tray | null = null
 let aboutWindow: BrowserWindow | null = null
 let isQuitting = false
 const windows = new Set<BrowserWindow>()
+const windowSelections = new Map<number, string | null>()
+const runtimeEntries = new Map<string, RuntimeEntry>()
+const lastMcpSnapshots = new Map<string, RegistrySnapshot>()
+let secretStore: SecretStore | null = null
 
 function configureRuntimeEnvironment(): void {
   // Packaged macOS apps can launch with cwd `/`, which makes the agents
@@ -258,7 +314,22 @@ function settingsPath(): string {
   return path.join(app.getPath(`userData`), `settings.json`)
 }
 
-function normalizeServer(value: unknown): ServerConfig | null {
+function secretsPath(): string {
+  return path.join(app.getPath(`userData`), `secrets.json`)
+}
+
+function getSecretStore(): SecretStore {
+  if (!secretStore) secretStore = new SecretStore(secretsPath())
+  return secretStore
+}
+
+function normalizeServer(
+  value: unknown,
+  opts: {
+    activeUrl?: string | null
+    defaultDesiredState?: ServerDesiredState
+  } = {}
+): ServerConfig | null {
   if (!value || typeof value !== `object`) return null
   const maybe = value as Partial<ServerConfig>
   if (typeof maybe.name !== `string` || typeof maybe.url !== `string`) {
@@ -272,14 +343,32 @@ function normalizeServer(value: unknown): ServerConfig | null {
   } catch {
     return null
   }
-  return { name, url }
+  const id =
+    typeof maybe.id === `string` && maybe.id.trim()
+      ? maybe.id.trim()
+      : randomUUID()
+  const source: ServerSource =
+    maybe.source === `local-discovery` || maybe.source === `electric-cloud`
+      ? maybe.source
+      : `manual`
+  const desiredState: ServerDesiredState =
+    maybe.desiredState === `connected` || maybe.desiredState === `disconnected`
+      ? maybe.desiredState
+      : url === opts.activeUrl
+        ? `connected`
+        : (opts.defaultDesiredState ?? `disconnected`)
+  const localRuntimeEnabled = maybe.localRuntimeEnabled !== false
+  return { id, name, url, source, desiredState, localRuntimeEnabled }
 }
 
-function normalizeServers(value: unknown): Array<ServerConfig> {
+function normalizeServers(
+  value: unknown,
+  activeUrl?: string | null
+): Array<ServerConfig> {
   if (!Array.isArray(value)) return []
   const byUrl = new Map<string, ServerConfig>()
   for (const entry of value) {
-    const server = normalizeServer(entry)
+    const server = normalizeServer(entry, { activeUrl })
     if (server) byUrl.set(server.url, server)
   }
   return [...byUrl.values()]
@@ -289,7 +378,24 @@ function serverInList(
   server: ServerConfig | null,
   servers: Array<ServerConfig>
 ): boolean {
-  return Boolean(server && servers.some((entry) => entry.url === server.url))
+  return Boolean(
+    server &&
+      servers.some(
+        (entry) => entry.id === server.id || entry.url === server.url
+      )
+  )
+}
+
+function findServer(serverId: string | null | undefined): ServerConfig | null {
+  if (!serverId) return null
+  return settings.servers.find((server) => server.id === serverId) ?? null
+}
+
+function defaultSelectedServerId(): string | null {
+  if (serverInList(findServer(settings.defaultServerId), settings.servers)) {
+    return settings.defaultServerId
+  }
+  return settings.servers[0]?.id ?? null
 }
 
 function normalizeApiKeys(value: unknown): ApiKeys {
@@ -306,6 +412,28 @@ function normalizeApiKeys(value: unknown): ApiKeys {
     anthropic: pick(maybe.anthropic),
     openai: pick(maybe.openai),
     brave: pick(maybe.brave),
+  }
+}
+
+function hasAnyApiKey(keys: ApiKeys): boolean {
+  return Boolean(keys.anthropic || keys.openai || keys.brave)
+}
+
+async function loadApiKeysFromSecret(ref: string): Promise<ApiKeys> {
+  const raw = await getSecretStore().get(ref)
+  if (!raw) return { anthropic: null, openai: null, brave: null }
+  try {
+    return normalizeApiKeys(JSON.parse(raw))
+  } catch {
+    return { anthropic: null, openai: null, brave: null }
+  }
+}
+
+async function saveApiKeysToSecret(ref: string, keys: ApiKeys): Promise<void> {
+  if (hasAnyApiKey(keys)) {
+    await getSecretStore().set(ref, JSON.stringify(keys))
+  } else {
+    await getSecretStore().delete(ref)
   }
 }
 
@@ -381,49 +509,80 @@ function applyApiKeys(): void {
     }
   }
   resolveSlot(
-    settings.apiKeys.anthropic,
+    apiKeys.anthropic,
     ENV_API_KEYS_SNAPSHOT.anthropic,
     `ANTHROPIC_API_KEY`
   )
+  resolveSlot(apiKeys.openai, ENV_API_KEYS_SNAPSHOT.openai, `OPENAI_API_KEY`)
   resolveSlot(
-    settings.apiKeys.openai,
-    ENV_API_KEYS_SNAPSHOT.openai,
-    `OPENAI_API_KEY`
-  )
-  resolveSlot(
-    settings.apiKeys.brave,
+    apiKeys.brave,
     ENV_API_KEYS_SNAPSHOT.brave,
     `BRAVE_SEARCH_API_KEY`
   )
 }
 
 async function loadSettings(): Promise<void> {
+  let shouldSave = false
   try {
     const raw = await readFile(settingsPath(), `utf8`)
-    const parsed = JSON.parse(raw) as Partial<DesktopSettings>
-    const servers = normalizeServers(parsed.servers)
-    const activeServer = normalizeServer(parsed.activeServer)
+    const parsed = JSON.parse(raw) as Partial<DesktopSettings> & {
+      activeServer?: unknown
+      apiKeys?: unknown
+      version?: unknown
+    }
+    const legacyActiveServer = normalizeServer(parsed.activeServer)
+    const servers = normalizeServers(parsed.servers, legacyActiveServer?.url)
+    const defaultServerId =
+      typeof parsed.defaultServerId === `string` &&
+      servers.some((server) => server.id === parsed.defaultServerId)
+        ? parsed.defaultServerId
+        : (servers.find((server) => server.url === legacyActiveServer?.url)
+            ?.id ??
+          servers.find((server) => server.desiredState === `connected`)?.id ??
+          servers[0]?.id ??
+          null)
+    const apiKeysRef =
+      typeof parsed.apiKeysRef === `string` && parsed.apiKeysRef.trim()
+        ? parsed.apiKeysRef.trim()
+        : GLOBAL_API_KEYS_REF
     settings = {
       servers,
-      activeServer: serverInList(activeServer, servers) ? activeServer : null,
+      defaultServerId,
       workingDirectory:
         typeof parsed.workingDirectory === `string`
           ? parsed.workingDirectory
           : null,
-      apiKeys: normalizeApiKeys(parsed.apiKeys),
+      apiKeysRef,
       mcp: normalizeMcp(parsed.mcp),
     }
+    if (parsed.apiKeys !== undefined) {
+      apiKeys = normalizeApiKeys(parsed.apiKeys)
+      await saveApiKeysToSecret(apiKeysRef, apiKeys)
+      shouldSave = true
+    } else {
+      apiKeys = await loadApiKeysFromSecret(apiKeysRef)
+    }
+    shouldSave =
+      shouldSave ||
+      parsed.version !== SETTINGS_VERSION ||
+      parsed.activeServer !== undefined ||
+      parsed.apiKeys !== undefined ||
+      servers.some((server) => !(`id` in (server as object)))
   } catch {
     settings = { ...DEFAULT_SETTINGS }
+    apiKeys = await loadApiKeysFromSecret(settings.apiKeysRef)
   }
 
-  state = {
-    ...state,
-    activeServer: settings.activeServer,
-    workingDirectory: settings.workingDirectory,
+  for (const server of settings.servers) {
+    ensureRuntimeEntry(server)
   }
+
+  state = desktopStateForWindow(null)
 
   applyApiKeys()
+  if (shouldSave) {
+    await saveSettings()
+  }
 }
 
 async function saveSettings(): Promise<void> {
@@ -436,25 +595,138 @@ async function saveSettings(): Promise<void> {
 // copy entries between the two files. This re-keys the array before write.
 function serializeSettings(): Record<string, unknown> {
   const { mcp, ...rest } = settings
-  if (!mcp || mcp.servers.length === 0) return rest
+  const base = { version: SETTINGS_VERSION, ...rest }
+  if (!mcp || mcp.servers.length === 0) return base
   const servers: Record<string, Record<string, unknown>> = {}
   for (const s of mcp.servers) {
     const { name, ...entry } = s as McpServerConfig & Record<string, unknown>
     servers[name] = entry
   }
-  return { ...rest, mcp: { servers } }
+  return { ...base, mcp: { servers } }
 }
 
-function statusLabel(status: DesktopRuntimeStatus): string {
+function createConnectionState(entry: RuntimeEntry): ServerConnectionState {
+  return {
+    serverId: entry.serverId,
+    status: entry.status,
+    localRuntimeStatus: entry.localRuntimeStatus,
+    runtimeUrl: entry.runtimeUrl,
+    runtimeError: entry.runtimeError,
+    lastError: entry.lastError,
+    reconnectAttempt: entry.reconnectAttempt,
+    lastConnectedAt: entry.lastConnectedAt,
+  }
+}
+
+function ensureRuntimeEntry(server: ServerConfig): RuntimeEntry {
+  const existing = runtimeEntries.get(server.id)
+  if (existing) {
+    existing.desiredState = server.desiredState
+    if (!server.localRuntimeEnabled && !existing.runtime) {
+      existing.localRuntimeStatus = `disabled`
+    } else if (
+      server.localRuntimeEnabled &&
+      existing.localRuntimeStatus === `disabled`
+    ) {
+      existing.localRuntimeStatus = `stopped`
+    }
+    if (server.desiredState === `disconnected` && !existing.runtime) {
+      existing.status = `disconnected`
+    }
+    return existing
+  }
+  const entry: RuntimeEntry = {
+    serverId: server.id,
+    desiredState: server.desiredState,
+    status: server.desiredState === `connected` ? `offline` : `disconnected`,
+    localRuntimeStatus: server.localRuntimeEnabled ? `stopped` : `disabled`,
+    runtime: null,
+    runtimeUrl: null,
+    runtimeError: null,
+    reconnectTimer: null,
+    reconnectAttempt: 0,
+    generation: 0,
+    lastError: null,
+    lastConnectedAt: null,
+    mcpUnsubscribe: null,
+  }
+  runtimeEntries.set(server.id, entry)
+  return entry
+}
+
+function selectedServerIdForWindow(win: BrowserWindow | null): string | null {
+  if (win && !win.isDestroyed()) {
+    const existing = windowSelections.get(win.id)
+    if (existing && findServer(existing)) return existing
+  }
+  return defaultSelectedServerId()
+}
+
+function runtimeStatusForConnection(
+  entry: RuntimeEntry | null
+): DesktopRuntimeStatus {
+  if (!entry) return `stopped`
+  switch (entry.localRuntimeStatus) {
+    case `running`:
+      return `running`
+    case `starting`:
+      return `starting`
+    case `error`:
+      return `error`
+    case `disabled`:
+    case `stopped`:
+      return `stopped`
+  }
+}
+
+function connectionStatusLabel(status: ServerConnectionStatus): string {
   switch (status) {
+    case `connected`:
+      return `Connected`
+    case `connecting`:
+      return `Connecting`
+    case `reconnecting`:
+      return `Reconnecting`
+    case `offline`:
+      return `Offline`
+    case `error`:
+      return `Error`
+    case `disconnected`:
+      return `Disconnected`
+  }
+}
+
+function localRuntimeStatusLabel(status: LocalRuntimeStatus): string {
+  switch (status) {
+    case `disabled`:
+      return `Disabled`
+    case `stopped`:
+      return `Stopped`
     case `starting`:
       return `Starting`
     case `running`:
       return `Running`
     case `error`:
       return `Error`
-    case `stopped`:
-      return `Stopped`
+  }
+}
+
+function desktopStateForWindow(win: BrowserWindow | null): DesktopState {
+  const selectedServerId = selectedServerIdForWindow(win)
+  const activeServer = findServer(selectedServerId)
+  const entry = activeServer ? ensureRuntimeEntry(activeServer) : null
+  return {
+    servers: settings.servers,
+    selectedServerId,
+    connections: settings.servers.map((server) =>
+      createConnectionState(ensureRuntimeEntry(server))
+    ),
+    runtimeStatus: runtimeStatusForConnection(entry),
+    runtimeUrl: entry?.runtimeUrl ?? null,
+    activeServer,
+    workingDirectory: settings.workingDirectory,
+    error: entry?.lastError ?? null,
+    discoveredServers: state.discoveredServers,
   }
 }
 
@@ -488,8 +760,18 @@ function createTrayIcon(): Electron.NativeImage {
 function updateTray(): void {
   if (!tray) return
 
-  const runtimeLabel = statusLabel(state.runtimeStatus)
-  const serverLabel = state.activeServer?.name ?? `No server selected`
+  const connectedCount = [...runtimeEntries.values()].filter(
+    (entry) => entry.status === `connected`
+  ).length
+  const connectingCount = [...runtimeEntries.values()].filter(
+    (entry) => entry.status === `connecting` || entry.status === `reconnecting`
+  ).length
+  const runtimeLabel =
+    connectedCount > 0
+      ? `${connectedCount} connected`
+      : connectingCount > 0
+        ? `${connectingCount} connecting`
+        : `No connected servers`
   tray.setToolTip(`Electric Agents: ${runtimeLabel}`)
 
   const menu = Menu.buildFromTemplate([
@@ -503,28 +785,94 @@ function updateTray(): void {
     },
     { type: `separator` },
     {
-      label: `Runtime: ${runtimeLabel}`,
+      label: `Servers: ${runtimeLabel}`,
       enabled: false,
     },
-    {
-      label: `Server: ${serverLabel}`,
-      enabled: false,
-    },
-    {
-      label: `Restart Local Runtime`,
-      enabled: Boolean(state.activeServer),
-      click: () => {
-        void restartRuntime()
-      },
-    },
-    {
-      label: `Stop Local Runtime`,
-      enabled:
-        state.runtimeStatus === `running` || state.runtimeStatus === `starting`,
-      click: () => {
-        void stopRuntime()
-      },
-    },
+    ...settings.servers.map((server): Electron.MenuItemConstructorOptions => {
+      const entry = ensureRuntimeEntry(server)
+      return {
+        label: `${server.name}: ${connectionStatusLabel(entry.status)}`,
+        submenu: [
+          {
+            label: `Connection: ${connectionStatusLabel(entry.status)}`,
+            enabled: false,
+          },
+          {
+            label: `Local runtime: ${localRuntimeStatusLabel(entry.localRuntimeStatus)}`,
+            enabled: false,
+          },
+          ...(entry.runtimeUrl
+            ? ([
+                {
+                  label: entry.runtimeUrl,
+                  enabled: false,
+                },
+              ] as Electron.MenuItemConstructorOptions[])
+            : []),
+          ...(entry.runtimeError
+            ? ([
+                {
+                  label: `Runtime error: ${entry.runtimeError}`,
+                  enabled: false,
+                },
+              ] as Electron.MenuItemConstructorOptions[])
+            : []),
+          ...(entry.lastError
+            ? ([
+                {
+                  label: `Connection error: ${entry.lastError}`,
+                  enabled: false,
+                },
+              ] as Electron.MenuItemConstructorOptions[])
+            : []),
+          { type: `separator` },
+          {
+            label: `Server Settings…`,
+            click: () => sendCommand(`open-servers-settings`),
+          },
+          { type: `separator` },
+          {
+            label:
+              entry.desiredState === `connected` ? `Disconnect` : `Connect`,
+            click: () => {
+              if (entry.desiredState === `connected`) {
+                void disconnectServer(server.id)
+              } else {
+                void connectServer(server.id)
+              }
+            },
+          },
+          {
+            label: server.localRuntimeEnabled
+              ? `Disable Local Runtime`
+              : `Enable Local Runtime`,
+            click: () => {
+              server.localRuntimeEnabled = !server.localRuntimeEnabled
+              void saveSettings().then(async () => {
+                const nextEntry = ensureRuntimeEntry(server)
+                if (!server.localRuntimeEnabled && nextEntry.runtime) {
+                  await stopRuntimeEntry(nextEntry)
+                } else if (
+                  server.localRuntimeEnabled &&
+                  server.desiredState === `connected`
+                ) {
+                  await restartRuntime(server.id)
+                }
+                refreshDesktopState()
+              })
+            },
+          },
+          {
+            label: `Restart Local Runtime`,
+            enabled:
+              entry.desiredState === `connected` && server.localRuntimeEnabled,
+            click: () => {
+              void restartRuntime(server.id)
+            },
+          },
+        ],
+      }
+    }),
     { type: `separator` },
     {
       label: `Quit`,
@@ -539,7 +887,9 @@ function updateTray(): void {
 
 function broadcastState(): void {
   for (const win of windows) {
-    win.webContents.send(`desktop:state-changed`, state)
+    if (!win.isDestroyed()) {
+      win.webContents.send(`desktop:state-changed`, desktopStateForWindow(win))
+    }
   }
 }
 
@@ -565,6 +915,12 @@ function sendFullscreenState(win: BrowserWindow): void {
 
 function setState(patch: Partial<DesktopState>): void {
   state = { ...state, ...patch }
+  updateTray()
+  broadcastState()
+}
+
+function refreshDesktopState(): void {
+  state = desktopStateForWindow(null)
   updateTray()
   broadcastState()
 }
@@ -625,6 +981,7 @@ function createWindow(): BrowserWindow {
   }
 
   windows.add(win)
+  windowSelections.set(win.id, defaultSelectedServerId())
   if (!isMac) {
     win.setMenuBarVisibility(false)
   }
@@ -636,6 +993,7 @@ function createWindow(): BrowserWindow {
   win.webContents.on(`did-finish-load`, () => sendFullscreenState(win))
   win.on(`closed`, () => {
     windows.delete(win)
+    windowSelections.delete(win.id)
     buildApplicationMenu()
   })
   // The renderer keeps `document.title` in sync with the active tile's
@@ -792,19 +1150,13 @@ function showOrCreateWindow(): void {
 }
 
 async function stopExistingRuntime(): Promise<void> {
-  const current = runtime
-  runtime = null
-  if (mcpUnsubscribe) {
-    mcpUnsubscribe()
-    mcpUnsubscribe = null
-  }
-  lastMcpSnapshot = null
-  // Renderers should know the MCP list is empty while the runtime is
-  // down; otherwise they keep showing the last-known servers.
-  broadcastMcpSnapshot({ seq: 0, servers: [] })
-  if (current) {
-    await current.stop()
-  }
+  await Promise.all(
+    [...runtimeEntries.values()].map(async (entry) => {
+      await stopRuntimeEntry(entry)
+      entry.status =
+        entry.desiredState === `connected` ? `offline` : `disconnected`
+    })
+  )
 }
 
 type AgentsServerHealthResult = { ok: true } | { ok: false; reason: string }
@@ -875,17 +1227,24 @@ async function checkAgentsServerHealth(
   }
 }
 
-function broadcastMcpSnapshot(snapshot: RegistrySnapshot): void {
-  lastMcpSnapshot = snapshot
+function broadcastMcpSnapshot(
+  serverId: string,
+  snapshot: RegistrySnapshot
+): void {
+  lastMcpSnapshots.set(serverId, snapshot)
   for (const win of windows) {
     if (!win.isDestroyed()) {
-      win.webContents.send(`desktop:mcp-state`, snapshot)
+      win.webContents.send(`desktop:mcp-state`, { serverId, snapshot })
     }
   }
 }
 
-async function handleAuthorizeUrl(url: string, server: string): Promise<void> {
-  const reg = runtime?.mcpRegistry
+async function handleAuthorizeUrl(
+  serverId: string,
+  url: string,
+  server: string
+): Promise<void> {
+  const reg = runtimeEntries.get(serverId)?.runtime?.mcpRegistry
   if (!reg) return
   const redirectUriPrefix = `${MCP_OAUTH_REDIRECT_BASE}/oauth/callback/${server}`
   try {
@@ -904,29 +1263,88 @@ async function handleAuthorizeUrl(url: string, server: string): Promise<void> {
   }
 }
 
-async function restartRuntime(): Promise<void> {
-  const generation = ++runtimeGeneration
-  await stopExistingRuntime()
+function reconnectDelayMs(attempt: number): number {
+  const base = Math.min(
+    RECONNECT_MAX_MS,
+    RECONNECT_BASE_MS * Math.max(1, 2 ** Math.min(attempt, 5))
+  )
+  return Math.round(base * (0.8 + Math.random() * 0.4))
+}
 
-  const activeServer = settings.activeServer
-  if (!activeServer) {
-    setState({ runtimeStatus: `stopped`, runtimeUrl: null, error: null })
-    return
+function scheduleReconnect(serverId: string): void {
+  const server = findServer(serverId)
+  const entry = server ? ensureRuntimeEntry(server) : null
+  if (!server || !entry || entry.desiredState !== `connected`) return
+  if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer)
+  const delay = reconnectDelayMs(entry.reconnectAttempt)
+  entry.reconnectTimer = setTimeout(() => {
+    entry.reconnectTimer = null
+    void startRuntime(serverId)
+  }, delay)
+  refreshDesktopState()
+}
+
+async function stopRuntimeEntry(entry: RuntimeEntry): Promise<void> {
+  entry.generation += 1
+  if (entry.reconnectTimer) {
+    clearTimeout(entry.reconnectTimer)
+    entry.reconnectTimer = null
   }
+  if (entry.mcpUnsubscribe) {
+    entry.mcpUnsubscribe()
+    entry.mcpUnsubscribe = null
+  }
+  lastMcpSnapshots.delete(entry.serverId)
+  broadcastMcpSnapshot(entry.serverId, { seq: 0, servers: [] })
+  const current = entry.runtime
+  entry.runtime = null
+  entry.runtimeUrl = null
+  entry.runtimeError = null
+  entry.localRuntimeStatus = findServer(entry.serverId)?.localRuntimeEnabled
+    ? `stopped`
+    : `disabled`
+  if (current) {
+    await current.stop()
+  }
+}
 
-  setState({ runtimeStatus: `starting`, runtimeUrl: null, error: null })
+async function startRuntime(serverId: string): Promise<void> {
+  const activeServer = findServer(serverId)
+  if (!activeServer) return
+  const entry = ensureRuntimeEntry(activeServer)
+  if (entry.desiredState !== `connected`) return
+
+  await stopRuntimeEntry(entry)
+  if (entry.desiredState !== `connected`) return
+  const generation = ++entry.generation
+
+  entry.status = entry.reconnectAttempt > 0 ? `reconnecting` : `connecting`
+  entry.lastError = null
+  refreshDesktopState()
 
   const serverHealth = await checkAgentsServerHealth(activeServer.url, 4_000)
   if (!serverHealth.ok) {
-    setState({
-      runtimeStatus: `error`,
-      runtimeUrl: null,
-      error: `Could not reach agents-server at ${activeServer.url}: ${serverHealth.reason}.`,
-    })
+    entry.status = `offline`
+    entry.lastError = `Could not reach agents-server at ${activeServer.url}: ${serverHealth.reason}.`
+    entry.reconnectAttempt += 1
+    scheduleReconnect(serverId)
+    return
+  }
+
+  if (!activeServer.localRuntimeEnabled) {
+    entry.status = `connected`
+    entry.localRuntimeStatus = `disabled`
+    entry.runtimeUrl = null
+    entry.runtimeError = null
+    entry.lastError = null
+    entry.reconnectAttempt = 0
+    entry.lastConnectedAt = Date.now()
+    refreshDesktopState()
     return
   }
 
   configureRuntimeEnvironment()
+  applyApiKeys()
   const { BuiltinAgentsServer } = await import(`@electric-ax/agents`)
   const nextRuntime = new BuiltinAgentsServer({
     agentServerUrl: activeServer.url,
@@ -937,53 +1355,111 @@ async function restartRuntime(): Promise<void> {
     loadProjectMcpConfig: true,
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
     openAuthorizeUrl: (url, server) => {
-      void handleAuthorizeUrl(url, server)
+      void handleAuthorizeUrl(serverId, url, server)
     },
   })
-  runtime = nextRuntime
+  entry.runtime = nextRuntime
+  entry.localRuntimeStatus = `starting`
+  entry.runtimeError = null
+  refreshDesktopState()
 
   try {
     const runtimeUrl = await nextRuntime.start()
-    if (generation !== runtimeGeneration) {
+    if (generation !== entry.generation) {
       await nextRuntime.stop()
       return
     }
-    setState({ runtimeStatus: `running`, runtimeUrl, error: null })
+    entry.status = `connected`
+    entry.localRuntimeStatus = `running`
+    entry.runtimeUrl = runtimeUrl
+    entry.runtimeError = null
+    entry.lastError = null
+    entry.reconnectAttempt = 0
+    entry.lastConnectedAt = Date.now()
+    refreshDesktopState()
     // Subscribe to MCP registry state changes and forward to renderers.
     // The handler is invoked synchronously with the initial empty
     // snapshot on subscribe, so renderers always see *something*.
     const reg = nextRuntime.mcpRegistry
     if (reg) {
-      mcpUnsubscribe = reg.subscribe((snapshot: RegistrySnapshot) => {
-        broadcastMcpSnapshot(snapshot)
+      entry.mcpUnsubscribe = reg.subscribe((snapshot: RegistrySnapshot) => {
+        broadcastMcpSnapshot(serverId, snapshot)
       })
     }
   } catch (error) {
-    if (runtime === nextRuntime) {
-      runtime = null
+    if (entry.runtime === nextRuntime) {
+      entry.runtime = null
     }
     const startupNetworkError = formatStartupNetworkError(
       error,
       activeServer.url
     )
-    setState({
-      runtimeStatus: `error`,
-      runtimeUrl: null,
-      error:
-        startupNetworkError ??
-        (error instanceof Error ? error.message : String(error)),
-    })
+    entry.status = `error`
+    entry.localRuntimeStatus = `error`
+    entry.runtimeUrl = null
+    entry.runtimeError =
+      startupNetworkError ??
+      (error instanceof Error ? error.message : String(error))
+    entry.lastError =
+      startupNetworkError ??
+      (error instanceof Error ? error.message : String(error))
+    entry.reconnectAttempt += 1
+    scheduleReconnect(serverId)
   }
 }
 
-async function stopRuntime(): Promise<void> {
-  runtimeGeneration += 1
-  await stopExistingRuntime()
-  setState({ runtimeStatus: `stopped`, runtimeUrl: null, error: null })
+async function connectServer(serverId: string): Promise<void> {
+  const server = findServer(serverId)
+  if (!server) return
+  server.desiredState = `connected`
+  const entry = ensureRuntimeEntry(server)
+  entry.desiredState = `connected`
+  entry.reconnectAttempt = 0
+  await saveSettings()
+  await startRuntime(serverId)
+}
+
+async function disconnectServer(serverId: string): Promise<void> {
+  const server = findServer(serverId)
+  if (!server) return
+  server.desiredState = `disconnected`
+  const entry = ensureRuntimeEntry(server)
+  entry.desiredState = `disconnected`
+  await stopRuntimeEntry(entry)
+  entry.status = `disconnected`
+  entry.lastError = null
+  entry.reconnectAttempt = 0
+  await saveSettings()
+  refreshDesktopState()
+}
+
+async function restartRuntime(serverId?: string | null): Promise<void> {
+  const id =
+    serverId ??
+    selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
+    settings.defaultServerId
+  if (!id) return
+  const server = findServer(id)
+  if (!server) return
+  server.desiredState = `connected`
+  const entry = ensureRuntimeEntry(server)
+  entry.desiredState = `connected`
+  entry.reconnectAttempt = 0
+  await saveSettings()
+  await startRuntime(id)
+}
+
+async function stopRuntime(serverId?: string | null): Promise<void> {
+  const id =
+    serverId ??
+    selectedServerIdForWindow(BrowserWindow.getFocusedWindow()) ??
+    settings.defaultServerId
+  if (!id) return
+  await disconnectServer(id)
 }
 
 function getApiKeysStatus(): ApiKeysStatus {
-  const saved = settings.apiKeys
+  const saved = apiKeys
   // Brave is optional (falls back to Anthropic built-in search), so
   // it doesn't count toward "the app is configured" — the dialog
   // only auto-opens when the user has no LLM provider key at all.
@@ -1001,35 +1477,42 @@ function getApiKeysStatus(): ApiKeysStatus {
 }
 
 async function setApiKeys(next: ApiKeys): Promise<void> {
-  settings.apiKeys = normalizeApiKeys(next)
+  apiKeys = normalizeApiKeys(next)
+  await saveApiKeysToSecret(settings.apiKeysRef, apiKeys)
   applyApiKeys()
   await saveSettings()
-  if (settings.activeServer) {
-    await restartRuntime()
-  }
+  await Promise.all(
+    settings.servers
+      .filter((server) => server.desiredState === `connected`)
+      .map((server) => restartRuntime(server.id))
+  )
 }
 
-async function setActiveServer(server: ServerConfig | null): Promise<void> {
-  const normalized = normalizeServer(server)
-  const next =
-    normalized && serverInList(normalized, settings.servers) ? normalized : null
-  // Renderer mount fires `saveActiveServer(active)` even when the
-  // value didn't actually change (React 19 StrictMode also double-
-  // fires the effect in dev). Bail early when the active server is
-  // identical to what we already had so we don't tear down and
-  // restart Horton on every window open.
-  const same =
-    (next === null && settings.activeServer === null) ||
-    (next !== null &&
-      settings.activeServer !== null &&
-      next.url === settings.activeServer.url &&
-      next.name === settings.activeServer.name)
-  settings.activeServer = next
-  setState({ activeServer: settings.activeServer })
-  await saveSettings()
-  if (!same) {
-    await restartRuntime()
+async function setSelectedServerForWindow(
+  win: BrowserWindow | null,
+  serverId: string | null
+): Promise<void> {
+  const next = findServer(serverId)?.id ?? null
+  if (win && !win.isDestroyed()) {
+    windowSelections.set(win.id, next)
   }
+  settings.defaultServerId = next
+  await saveSettings()
+  refreshDesktopState()
+}
+
+async function setActiveServer(
+  win: BrowserWindow | null,
+  server: ServerConfig | null
+): Promise<void> {
+  const normalized = normalizeServer(server)
+  const existing =
+    normalized &&
+    settings.servers.find(
+      (candidate) =>
+        candidate.id === normalized.id || candidate.url === normalized.url
+    )
+  await setSelectedServerForWindow(win, existing?.id ?? null)
 }
 
 async function quitApp(): Promise<void> {
@@ -1073,10 +1556,20 @@ async function runDiscovery(): Promise<void> {
   discoveryInFlight = (async () => {
     // Don't probe the bundled runtime URL — that's our own Horton
     // process and isn't a separate agents-server.
-    const skip = state.runtimeUrl ? new URL(state.runtimeUrl).port : null
+    const skipPorts = new Set(
+      [...runtimeEntries.values()]
+        .map((entry) => {
+          try {
+            return entry.runtimeUrl ? new URL(entry.runtimeUrl).port : null
+          } catch {
+            return null
+          }
+        })
+        .filter((port): port is string => Boolean(port))
+    )
     const results = await Promise.all(
       DISCOVERY_PORTS.map(async (port) => {
-        if (skip && String(port) === skip) return null
+        if (skipPorts.has(String(port))) return null
         const url = `http://127.0.0.1:${port}`
         const ok = await probeAgentsServer(url)
         return ok ? { url, port, lastSeen: Date.now() } : null
@@ -1144,27 +1637,78 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     `desktop:save-servers`,
     async (_event, servers: Array<ServerConfig>) => {
-      settings.servers = normalizeServers(servers)
-      if (!serverInList(settings.activeServer, settings.servers)) {
-        settings.activeServer = null
-        setState({ activeServer: null })
-        await restartRuntime()
+      const previous = new Map(settings.servers.map((s) => [s.url, s]))
+      settings.servers = normalizeServers(servers).map((server) => ({
+        ...server,
+        desiredState:
+          previous.get(server.url)?.desiredState ?? server.desiredState,
+      }))
+      for (const server of settings.servers) {
+        const entry = ensureRuntimeEntry(server)
+        if (!server.localRuntimeEnabled && entry.runtime) {
+          await stopRuntimeEntry(entry)
+          entry.localRuntimeStatus = `disabled`
+          if (server.desiredState === `connected`) {
+            entry.status = `connected`
+            entry.lastError = null
+            entry.lastConnectedAt = Date.now()
+          }
+        } else if (server.localRuntimeEnabled && entry.status === `connected`) {
+          void restartRuntime(server.id)
+        }
+      }
+      const liveIds = new Set(settings.servers.map((server) => server.id))
+      for (const [id, entry] of runtimeEntries) {
+        if (!liveIds.has(id)) {
+          await stopRuntimeEntry(entry)
+          runtimeEntries.delete(id)
+        }
+      }
+      if (!findServer(settings.defaultServerId)) {
+        settings.defaultServerId = settings.servers[0]?.id ?? null
       }
       await saveSettings()
+      refreshDesktopState()
     }
   )
-  ipcMain.handle(`desktop:get-state`, () => state)
+  ipcMain.handle(`desktop:get-state`, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return desktopStateForWindow(win)
+  })
   ipcMain.handle(
     `desktop:set-active-server`,
     async (_event, server: ServerConfig | null) => {
-      await setActiveServer(server)
+      const win = BrowserWindow.fromWebContents(_event.sender)
+      await setActiveServer(win, server)
     }
   )
-  ipcMain.handle(`desktop:restart-runtime`, async () => {
-    await restartRuntime()
+  ipcMain.handle(`desktop:set-selected-server`, async (event, serverId) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    await setSelectedServerForWindow(
+      win,
+      typeof serverId === `string` ? serverId : null
+    )
   })
-  ipcMain.handle(`desktop:stop-runtime`, async () => {
-    await stopRuntime()
+  ipcMain.handle(`desktop:connect-server`, async (_event, serverId) => {
+    if (typeof serverId === `string`) await connectServer(serverId)
+  })
+  ipcMain.handle(`desktop:disconnect-server`, async (_event, serverId) => {
+    if (typeof serverId === `string`) await disconnectServer(serverId)
+  })
+  ipcMain.handle(
+    `desktop:restart-runtime`,
+    async (event, serverId?: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      await restartRuntime(
+        typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
+      )
+    }
+  )
+  ipcMain.handle(`desktop:stop-runtime`, async (event, serverId?: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    await stopRuntime(
+      typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
+    )
   })
   ipcMain.handle(`desktop:rescan-servers`, async () => {
     await runDiscovery()
@@ -1186,9 +1730,11 @@ function registerIpcHandlers(): void {
     settings.workingDirectory = result.filePaths[0] ?? null
     setState({ workingDirectory: settings.workingDirectory })
     await saveSettings()
-    if (settings.activeServer) {
-      await restartRuntime()
-    }
+    await Promise.all(
+      settings.servers
+        .filter((server) => server.desiredState === `connected`)
+        .map((server) => restartRuntime(server.id))
+    )
     return settings.workingDirectory
   })
   // One-shot directory picker — does NOT mutate the runtime cwd or
@@ -1267,38 +1813,72 @@ function registerIpcHandlers(): void {
   // Renderers subscribe to `desktop:mcp-state` push events; this handler
   // returns the most recent snapshot so the renderer can render before
   // the next push lands. Empty list when no runtime is running.
-  ipcMain.handle(`desktop:mcp-snapshot`, () => {
-    return lastMcpSnapshot ?? { seq: 0, servers: [] }
+  ipcMain.handle(`desktop:mcp-snapshot`, (event, serverId?: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const id =
+      typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
+    return (id ? lastMcpSnapshots.get(id) : null) ?? { seq: 0, servers: [] }
   })
   // Mutation handlers — translate IPC calls into registry methods.
   // No-op gracefully when no runtime is running; renderer should not
   // depend on these throwing.
-  ipcMain.handle(`desktop:mcp-authorize`, async (_event, name: string) => {
-    // Forces a fresh OAuth flow. The registry mutates the entry in
-    // place rather than deleting + re-adding, so the renderer's
-    // snapshot keeps showing the row throughout — no flicker.
-    await runtime?.mcpRegistry?.reauthorize(name).catch((err: unknown) => {
-      console.warn(`[agents-desktop] mcp-authorize ${name}:`, err)
-    })
-  })
-  ipcMain.handle(`desktop:mcp-reconnect`, async (_event, name: string) => {
-    const reg = runtime?.mcpRegistry
-    const entry = reg?.get(name)
-    if (!reg || !entry) return
-    await reg.addServer(entry.config).catch((err: unknown) => {
-      console.warn(`[agents-desktop] mcp-reconnect ${name}:`, err)
-    })
-  })
-  ipcMain.handle(`desktop:mcp-disable`, async (_event, name: string) => {
-    await runtime?.mcpRegistry?.disable(name).catch((err: unknown) => {
-      console.warn(`[agents-desktop] mcp-disable ${name}:`, err)
-    })
-  })
-  ipcMain.handle(`desktop:mcp-enable`, async (_event, name: string) => {
-    await runtime?.mcpRegistry?.enable(name).catch((err: unknown) => {
-      console.warn(`[agents-desktop] mcp-enable ${name}:`, err)
-    })
-  })
+  ipcMain.handle(
+    `desktop:mcp-authorize`,
+    async (event, name: string, serverId?: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const id =
+        typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
+      const reg = id ? runtimeEntries.get(id)?.runtime?.mcpRegistry : null
+      // Forces a fresh OAuth flow. The registry mutates the entry in
+      // place rather than deleting + re-adding, so the renderer's
+      // snapshot keeps showing the row throughout — no flicker.
+      await reg?.reauthorize(name).catch((err: unknown) => {
+        console.warn(`[agents-desktop] mcp-authorize ${name}:`, err)
+      })
+    }
+  )
+  ipcMain.handle(
+    `desktop:mcp-reconnect`,
+    async (event, name: string, serverId?: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const id =
+        typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
+      const reg = id ? runtimeEntries.get(id)?.runtime?.mcpRegistry : null
+      const entry = reg?.get(name)
+      if (!reg || !entry) return
+      await reg.addServer(entry.config).catch((err: unknown) => {
+        console.warn(`[agents-desktop] mcp-reconnect ${name}:`, err)
+      })
+    }
+  )
+  ipcMain.handle(
+    `desktop:mcp-disable`,
+    async (event, name: string, serverId?: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const id =
+        typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
+      await runtimeEntries
+        .get(id ?? ``)
+        ?.runtime?.mcpRegistry?.disable(name)
+        .catch((err: unknown) => {
+          console.warn(`[agents-desktop] mcp-disable ${name}:`, err)
+        })
+    }
+  )
+  ipcMain.handle(
+    `desktop:mcp-enable`,
+    async (event, name: string, serverId?: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const id =
+        typeof serverId === `string` ? serverId : selectedServerIdForWindow(win)
+      await runtimeEntries
+        .get(id ?? ``)
+        ?.runtime?.mcpRegistry?.enable(name)
+        .catch((err: unknown) => {
+          console.warn(`[agents-desktop] mcp-enable ${name}:`, err)
+        })
+    }
+  )
 }
 
 function windowDisplayLabel(win: BrowserWindow): string {
@@ -1812,8 +2392,10 @@ async function main(): Promise<void> {
   buildApplicationMenu()
 
   createWindow()
-  if (settings.activeServer) {
-    void restartRuntime()
+  for (const server of settings.servers) {
+    if (server.desiredState === `connected`) {
+      void connectServer(server.id)
+    }
   }
   startDiscoveryLoop()
 }

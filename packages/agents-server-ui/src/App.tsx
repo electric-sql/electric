@@ -11,10 +11,12 @@ import { ThemeProvider } from './ui'
 import { router } from './router'
 
 function AppInner(): React.ReactElement {
-  const { activeServer } = useServerConnection()
+  const { activeServer, connected } = useServerConnection()
 
   return (
-    <ElectricAgentsProvider baseUrl={activeServer?.url ?? null}>
+    <ElectricAgentsProvider
+      baseUrl={connected ? (activeServer?.url ?? null) : null}
+    >
       <PinnedEntitiesProvider>
         <RouterProvider router={router} />
       </PinnedEntitiesProvider>

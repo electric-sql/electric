@@ -36,11 +36,28 @@ try {
 }
 
 type ServerConfig = {
+  id: string
   name: string
   url: string
+  source: `manual` | `local-discovery` | `electric-cloud`
+  desiredState: `connected` | `disconnected`
+  localRuntimeEnabled: boolean
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
+type LocalRuntimeStatus =
+  | `disabled`
+  | `stopped`
+  | `starting`
+  | `running`
+  | `error`
+type ServerConnectionStatus =
+  | `disconnected`
+  | `connecting`
+  | `connected`
+  | `reconnecting`
+  | `offline`
+  | `error`
 
 type DiscoveredServer = {
   url: string
@@ -49,12 +66,26 @@ type DiscoveredServer = {
 }
 
 type DesktopState = {
+  servers: Array<ServerConfig>
+  selectedServerId: string | null
+  connections: Array<ServerConnectionState>
   runtimeStatus: DesktopRuntimeStatus
   runtimeUrl: string | null
   activeServer: ServerConfig | null
   workingDirectory: string | null
   error: string | null
   discoveredServers: Array<DiscoveredServer>
+}
+
+type ServerConnectionState = {
+  serverId: string
+  status: ServerConnectionStatus
+  localRuntimeStatus: LocalRuntimeStatus
+  runtimeUrl: string | null
+  runtimeError: string | null
+  lastError: string | null
+  reconnectAttempt: number
+  lastConnectedAt: number | null
 }
 
 type ApiKeys = {
@@ -77,6 +108,7 @@ type DesktopCommand =
   | `close-tile`
   | `toggle-sidebar`
   | `open-settings`
+  | `open-servers-settings`
   | `open-search`
   | `open-find`
   | `find-next`
@@ -184,9 +216,19 @@ const api = {
     ipcRenderer.invoke(`desktop:set-native-appearance`, appearance),
   setActiveServer: (server: ServerConfig | null): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-active-server`, server),
+  setSelectedServer: (serverId: string | null): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-selected-server`, serverId),
+  connectServer: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:connect-server`, serverId),
+  disconnectServer: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:disconnect-server`, serverId),
   restartRuntime: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:restart-runtime`),
+  restartServerRuntime: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:restart-runtime`, serverId),
   stopRuntime: (): Promise<void> => ipcRenderer.invoke(`desktop:stop-runtime`),
+  stopServerRuntime: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:stop-runtime`, serverId),
   rescanServers: (): Promise<Array<DiscoveredServer>> =>
     ipcRenderer.invoke(`desktop:rescan-servers`),
   getApiKeysStatus: (): Promise<ApiKeysStatus> =>
@@ -246,26 +288,40 @@ const api = {
   // if the runtime isn't up yet) so the renderer can render before the
   // first push event arrives.
   mcp: {
-    getSnapshot: (): Promise<{ seq: number; servers: Array<unknown> }> =>
-      ipcRenderer.invoke(`desktop:mcp-snapshot`),
+    getSnapshot: (
+      serverId?: string
+    ): Promise<{ seq: number; servers: Array<unknown> }> =>
+      ipcRenderer.invoke(`desktop:mcp-snapshot`, serverId),
     onState: (
-      callback: (snapshot: { seq: number; servers: Array<unknown> }) => void
+      callback: (
+        payload:
+          | { seq: number; servers: Array<unknown> }
+          | {
+              serverId: string
+              snapshot: { seq: number; servers: Array<unknown> }
+            }
+      ) => void
     ): (() => void) => {
       const listener = (
         _event: Electron.IpcRendererEvent,
-        snapshot: { seq: number; servers: Array<unknown> }
-      ) => callback(snapshot)
+        payload:
+          | { seq: number; servers: Array<unknown> }
+          | {
+              serverId: string
+              snapshot: { seq: number; servers: Array<unknown> }
+            }
+      ) => callback(payload)
       ipcRenderer.on(`desktop:mcp-state`, listener)
       return () => ipcRenderer.removeListener(`desktop:mcp-state`, listener)
     },
-    authorize: (name: string): Promise<void> =>
-      ipcRenderer.invoke(`desktop:mcp-authorize`, name),
-    reconnect: (name: string): Promise<void> =>
-      ipcRenderer.invoke(`desktop:mcp-reconnect`, name),
-    disable: (name: string): Promise<void> =>
-      ipcRenderer.invoke(`desktop:mcp-disable`, name),
-    enable: (name: string): Promise<void> =>
-      ipcRenderer.invoke(`desktop:mcp-enable`, name),
+    authorize: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-authorize`, name, serverId),
+    reconnect: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-reconnect`, name, serverId),
+    disable: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-disable`, name, serverId),
+    enable: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-enable`, name, serverId),
   },
 }
 
