@@ -283,9 +283,7 @@ defmodule Electric.Replication.Eval.ParserTest do
 
       assert {:error,
               "At location 0: explicit VARIADIC function calls are not currently supported"} =
-               Parser.parse_and_validate_expression(
-                 ~S|concat(VARIADIC NULL::text[])|
-               )
+               Parser.parse_and_validate_expression(~S|concat(VARIADIC NULL::text[])|)
     end
 
     test "should reject concat with char(n) until bpchar support exists" do
