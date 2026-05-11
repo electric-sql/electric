@@ -48,6 +48,7 @@ export const runners = pgTable(
     kind: text(`kind`).notNull().default(`local`),
     adminStatus: text(`admin_status`).notNull().default(`enabled`),
     wakeStream: text(`wake_stream`).notNull(),
+    wakeStreamOffset: text(`wake_stream_offset`),
     lastSeenAt: timestamp(`last_seen_at`, { withTimezone: true }),
     livenessLeaseExpiresAt: timestamp(`liveness_lease_expires_at`, {
       withTimezone: true,

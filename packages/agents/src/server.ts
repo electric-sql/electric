@@ -265,7 +265,9 @@ export class BuiltinAgentsServer {
       )
 
     await registerBuiltinAgentTypes(this.bootstrap)
-    if (pullWake.registerRunner) await this.registerPullWakeRunner(pullWake)
+    const registeredRunner = pullWake.registerRunner
+      ? await this.registerPullWakeRunner(pullWake)
+      : null
     this.pullWakeRunner = createPullWakeRunner({
       baseUrl: this.options.agentServerUrl,
       runnerId: pullWake.runnerId,
@@ -275,6 +277,7 @@ export class BuiltinAgentsServer {
       claimTokenHeader: pullWake.claimTokenHeader,
       heartbeatIntervalMs: pullWake.heartbeatIntervalMs,
       leaseMs: pullWake.leaseMs,
+      offset: registeredRunner?.wake_stream_offset,
       onError: (error) => {
         serverLog.error(`[builtin-agents] pull-wake runner failed`, error)
         return true
@@ -344,7 +347,7 @@ export class BuiltinAgentsServer {
 
   private async registerPullWakeRunner(
     pullWake: NonNullable<BuiltinAgentsServerOptions[`pullWake`]>
-  ): Promise<void> {
+  ): Promise<{ wake_stream_offset?: string }> {
     const headers = new Headers(
       typeof pullWake.headers === `function`
         ? await pullWake.headers()
@@ -370,5 +373,6 @@ export class BuiltinAgentsServer {
         `Failed to register pull-wake runner ${pullWake.runnerId}: ${response.status} ${await response.text()}`
       )
     }
+    return (await response.json()) as { wake_stream_offset?: string }
   }
 }

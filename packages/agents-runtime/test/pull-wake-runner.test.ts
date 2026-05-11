@@ -224,6 +224,59 @@ describe(`createPullWakeRunner`, () => {
     vi.unstubAllGlobals()
   })
 
+  it(`persists the current wake stream offset in runner heartbeats`, async () => {
+    vi.useFakeTimers()
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { status: 204 })
+    )
+    vi.stubGlobal(`fetch`, fetch)
+    const runtime = {
+      dispatchWake: vi.fn(),
+      drainWakes: vi.fn(async () => {}),
+      abortWakes: vi.fn(),
+    }
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://localhost:3000`,
+      runnerId: `runner-1`,
+      runtime,
+      heartbeatIntervalMs: 1_000,
+      leaseMs: 5_000,
+      streamFactory: async () => {
+        let cancel!: () => void
+        return {
+          get offset() {
+            return `wake-offset-1`
+          },
+          jsonStream: async function* () {
+            yield notification(`wake-1`)
+            await new Promise<void>((resolve) => {
+              cancel = resolve
+            })
+          },
+          cancel: () => cancel(),
+        }
+      },
+    })
+
+    runner.start()
+    await vi.waitFor(() => expect(runtime.dispatchWake).toHaveBeenCalledOnce())
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    const heartbeatBodies = fetch.mock.calls.map(([, init]) =>
+      JSON.parse((init as RequestInit).body as string)
+    )
+    expect(heartbeatBodies).toContainEqual({
+      lease_ms: 5_000,
+      wake_stream_offset: `wake-offset-1`,
+    })
+
+    await runner.stop()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
   it(`stop cancels periodic heartbeats`, async () => {
     vi.useFakeTimers()
     const fetch = vi.fn(

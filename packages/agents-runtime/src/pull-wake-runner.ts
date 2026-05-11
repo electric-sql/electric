@@ -112,7 +112,12 @@ export function createPullWakeRunner(
       const res = await fetch(heartbeatUrl, {
         method: `POST`,
         headers,
-        body: JSON.stringify({ lease_ms: leaseMs }),
+        body: JSON.stringify({
+          lease_ms: leaseMs,
+          ...(currentOffset !== undefined
+            ? { wake_stream_offset: currentOffset }
+            : {}),
+        }),
         signal,
       })
       if (!res.ok) {

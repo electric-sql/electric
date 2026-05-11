@@ -192,6 +192,7 @@ export interface ElectricAgentsRunner {
   liveness_lease_expires_at?: string
   active_claims?: Array<RunnerActiveClaim>
   wake_stream: string
+  wake_stream_offset?: string
   created_at: string
   updated_at: string
 }
@@ -207,6 +208,8 @@ export interface RegisterRunnerRequest {
 
 export interface RunnerHeartbeatRequest {
   lease_ms?: number
+  wake_stream_offset?: string
+  wakeStreamOffset?: string
   liveness_lease_expires_at?: string
 }
 

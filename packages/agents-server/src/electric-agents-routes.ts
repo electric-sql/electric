@@ -637,6 +637,21 @@ export class ElectricAgentsRoutes {
     if (!parsed) return
 
     const leaseMs = parsed.lease_ms ?? parsed.leaseMs
+    const wakeStreamOffset =
+      parsed.wake_stream_offset ?? parsed.wakeStreamOffset
+    if (
+      wakeStreamOffset !== undefined &&
+      typeof wakeStreamOffset !== `string`
+    ) {
+      sendJsonError(
+        res,
+        400,
+        `INVALID_REQUEST`,
+        `wake_stream_offset must be a string`
+      )
+      return
+    }
+
     if (leaseMs !== undefined && (!Number.isFinite(leaseMs) || leaseMs <= 0)) {
       sendJsonError(
         res,
@@ -669,6 +684,7 @@ export class ElectricAgentsRoutes {
       runnerId,
       leaseMs,
       livenessLeaseExpiresAt,
+      wakeStreamOffset,
     })
     if (!runner) {
       sendJsonError(res, 404, `NOT_FOUND`, `Runner not found`)

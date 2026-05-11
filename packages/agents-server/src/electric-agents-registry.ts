@@ -206,6 +206,7 @@ export interface HeartbeatRunnerInput {
   heartbeatAt?: Date
   livenessLeaseExpiresAt?: Date
   leaseMs?: number
+  wakeStreamOffset?: string
 }
 
 export interface BeginDispatchWakeInput {
@@ -385,6 +386,9 @@ export class PostgresRegistry {
       .set({
         lastSeenAt: now,
         livenessLeaseExpiresAt: leaseExpiresAt,
+        ...(input.wakeStreamOffset !== undefined
+          ? { wakeStreamOffset: input.wakeStreamOffset }
+          : {}),
         updatedAt: now,
       })
       .where(eq(runners.id, input.runnerId))
@@ -1698,6 +1702,7 @@ export class PostgresRegistry {
       last_seen_at: row.lastSeenAt?.toISOString(),
       liveness_lease_expires_at: leaseExpiresAt?.toISOString(),
       wake_stream: row.wakeStream,
+      wake_stream_offset: row.wakeStreamOffset ?? undefined,
       created_at: row.createdAt.toISOString(),
       updated_at: row.updatedAt.toISOString(),
     }

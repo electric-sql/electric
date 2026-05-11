@@ -367,6 +367,50 @@ describe(`ElectricAgentsRoutes runner management ownership`, () => {
     })
   })
 
+  it(`persists runner wake stream offsets from heartbeat requests`, async () => {
+    const runner = {
+      ...makeRunner(`kyle-mac`, `user-kyle`),
+      wake_stream_offset: `wake-offset-42`,
+    }
+    const manager = {
+      registry: {
+        getRunner: vi
+          .fn()
+          .mockResolvedValue(makeRunner(`kyle-mac`, `user-kyle`)),
+        heartbeatRunner: vi.fn().mockResolvedValue(runner),
+      },
+    } as any
+    const routes = new ElectricAgentsRoutes(
+      manager,
+      undefined,
+      vi.fn().mockReturnValue({ userId: `user-kyle` })
+    )
+    const req = createRequest({
+      lease_ms: 1000,
+      wake_stream_offset: `wake-offset-42`,
+    })
+    const res = createResponse()
+
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/_electric/runners/kyle-mac/heartbeat`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.registry.heartbeatRunner).toHaveBeenCalledWith({
+      runnerId: `kyle-mac`,
+      leaseMs: 1000,
+      livenessLeaseExpiresAt: undefined,
+      wakeStreamOffset: `wake-offset-42`,
+    })
+    expect(jsonResponse(res)).toMatchObject({
+      id: `kyle-mac`,
+      wake_stream_offset: `wake-offset-42`,
+    })
+  })
+
   it(`rejects runner heartbeat from a non-owner before updating liveness`, async () => {
     const manager = {
       registry: {
