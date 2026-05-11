@@ -170,6 +170,7 @@ export function createRuntimeRouter(
   const normalized = normalizeConfig(config)
   const {
     baseUrl,
+    serveEndpoint,
     webhookPath,
     registry,
     claimHeaders,
@@ -431,6 +432,14 @@ export function createRuntimeRouter(
             ? mapSchemas(definition.outputSchemas)
             : {}),
         },
+        ...(serveEndpoint
+          ? {
+              serve_endpoint: serveEndpoint,
+              default_dispatch_policy: {
+                targets: [{ type: `webhook`, url: serveEndpoint }],
+              },
+            }
+          : {}),
       }
 
       if (publicUrl !== undefined) {

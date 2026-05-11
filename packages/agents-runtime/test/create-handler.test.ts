@@ -573,6 +573,31 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
+  it(`sends serve_endpoint when a webhook endpoint is configured`, async () => {
+    defineEntity(`webhook-agent`, {
+      description: `Webhook agent`,
+      handler: async () => {},
+    })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    const router = createRuntimeRouter({
+      baseUrl: `http://localhost:3000`,
+      serveEndpoint: `http://localhost:4000/custom-runtime`,
+    })
+
+    await router.registerTypes()
+
+    const [, options] = fetchMock.mock.calls[0]!
+    const body = JSON.parse(options?.body as string) as Record<string, unknown>
+    expect(body.serve_endpoint).toBe(`http://localhost:4000/custom-runtime`)
+  })
+
   it(`omits serve_endpoint when no webhook endpoint is configured`, async () => {
     defineEntity(`pull-wake-agent`, {
       description: `Pull wake agent`,
