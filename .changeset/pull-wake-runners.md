@@ -3,6 +3,7 @@
 '@electric-ax/agents-server-ui': patch
 '@electric-ax/agents-runtime': patch
 '@electric-ax/agents': patch
+'@electric-ax/agents-desktop': patch
 'electric-ax': patch
 ---
 
