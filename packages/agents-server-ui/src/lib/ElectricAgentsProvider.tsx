@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
 import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { createOptimisticAction } from '@tanstack/db'
@@ -118,6 +118,20 @@ function getOrCreateAppCollections(baseUrl: string): AppCollections {
   }
   appCollectionsCache.set(baseUrl, collections)
   return collections
+}
+
+function cleanupAppCollections(baseUrl: string): void {
+  const collections = appCollectionsCache.get(baseUrl)
+  if (!collections) return
+  collections.entities.cleanup()
+  collections.entityTypes.cleanup()
+  appCollectionsCache.delete(baseUrl)
+}
+
+function cleanupAppCollectionsExcept(activeBaseUrl: string | null): void {
+  for (const baseUrl of appCollectionsCache.keys()) {
+    if (baseUrl !== activeBaseUrl) cleanupAppCollections(baseUrl)
+  }
 }
 
 export async function preloadAppCollections(
@@ -295,6 +309,17 @@ export function ElectricAgentsProvider({
   baseUrl: string | null
   children: ReactNode
 }): React.ReactElement {
+  const previousBaseUrlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const previousBaseUrl = previousBaseUrlRef.current
+    previousBaseUrlRef.current = baseUrl
+    if (previousBaseUrl && previousBaseUrl !== baseUrl) {
+      cleanupAppCollections(previousBaseUrl)
+    }
+    if (!baseUrl) cleanupAppCollectionsExcept(null)
+  }, [baseUrl])
+
   const state = useMemo<ElectricAgentsState>(() => {
     if (!baseUrl) {
       return {
