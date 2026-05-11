@@ -657,7 +657,7 @@ describe(`ElectricAgentsRoutes spawn runner safety gate`, () => {
     expect(manager.spawn).toHaveBeenCalledWith(`chat`, {
       instance_id: `test`,
       args: { prompt: `ship it` },
-      tags: undefined,
+      tags: { created_by: `user-kyle` },
       parent: undefined,
       dispatch_policy: runnerPolicy,
       initialMessage: undefined,
@@ -672,7 +672,7 @@ describe(`ElectricAgentsRoutes spawn runner safety gate`, () => {
     })
   })
 
-  it(`does not authenticate webhook/default-policy spawns`, async () => {
+  it(`does not require webhook/default-policy spawn authentication but stamps authenticated users`, async () => {
     const webhookPolicy = {
       targets: [{ type: `webhook`, url: `https://example.test/wake` }],
     } as const
@@ -688,9 +688,7 @@ describe(`ElectricAgentsRoutes spawn runner safety gate`, () => {
         txid: 7,
       }),
     } as any
-    const authenticateRequest = vi.fn(() => {
-      throw new Error(`should not authenticate webhook spawn`)
-    })
+    const authenticateRequest = vi.fn(() => ({ userId: `user-kyle` }))
     const routes = new ElectricAgentsRoutes(
       manager,
       undefined,
@@ -702,9 +700,12 @@ describe(`ElectricAgentsRoutes spawn runner safety gate`, () => {
     const handled = await routes.handleRequest(`PUT`, `/chat/webhook`, req, res)
 
     expect(handled).toBe(true)
-    expect(authenticateRequest).not.toHaveBeenCalled()
+    expect(authenticateRequest).toHaveBeenCalled()
     expect(manager.registry.getRunner).not.toHaveBeenCalled()
-    expect(manager.spawn).toHaveBeenCalledOnce()
+    expect(manager.spawn).toHaveBeenCalledWith(
+      `chat`,
+      expect.objectContaining({ tags: { created_by: `user-kyle` } })
+    )
     expect(res.writeHead).toHaveBeenCalledWith(201, {
       'content-type': `application/json`,
     })
@@ -972,5 +973,109 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     })
     expect(payload.root).not.toHaveProperty(`write_token`)
     expect(payload.root).not.toHaveProperty(`subscription_id`)
+  })
+})
+
+describe(`ElectricAgentsRoutes authenticated user stamping`, () => {
+  it(`stamps spawn tags.created_by from the authenticated user`, async () => {
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(undefined),
+      spawn: vi.fn().mockImplementation((_type, opts) =>
+        Promise.resolve(
+          makeEntity(`/chat/test`, undefined) && {
+            ...makeEntity(`/chat/test`),
+            tags: opts.tags,
+            txid: 1,
+          }
+        )
+      ),
+    } as any
+    const routes = new ElectricAgentsRoutes(manager, {
+      authenticateRequest: () => ({
+        userId: `alice-id`,
+        email: `alice@example.com`,
+        name: `Alice`,
+      }),
+    })
+
+    const req = createRequest({ tags: { created_by: `Mallory <m@x>`, x: `y` } })
+    const res = createResponse()
+    const handled = await routes.handleRequest(`PUT`, `/chat/test`, req, res)
+
+    expect(handled).toBe(true)
+    expect(manager.spawn).toHaveBeenCalledWith(
+      `chat`,
+      expect.objectContaining({
+        tags: { created_by: `Alice <alice@example.com>`, x: `y` },
+      })
+    )
+  })
+
+  it(`strips spoofed spawn tags.created_by when auth is configured but no user is authenticated`, async () => {
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(undefined),
+      spawn: vi.fn().mockImplementation((_type, opts) =>
+        Promise.resolve({
+          ...makeEntity(`/chat/test`),
+          tags: opts.tags,
+          txid: 1,
+        })
+      ),
+    } as any
+    const authenticateRequest = vi.fn().mockReturnValue(null)
+    const routes = new ElectricAgentsRoutes(manager, { authenticateRequest })
+
+    const req = createRequest({ tags: { created_by: `Mallory <m@x>`, x: `y` } })
+    const res = createResponse()
+    const handled = await routes.handleRequest(`PUT`, `/chat/test`, req, res)
+
+    expect(handled).toBe(true)
+    expect(authenticateRequest).toHaveBeenCalledWith(req)
+    expect(manager.spawn).toHaveBeenCalledWith(
+      `chat`,
+      expect.objectContaining({ tags: { x: `y` } })
+    )
+  })
+
+  it(`overrides spoofed send from with the authenticated user`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+      },
+      send: vi.fn().mockResolvedValue(undefined),
+    } as any
+    const routes = new ElectricAgentsRoutes(manager, {
+      authenticateRequest: () => ({
+        userId: `alice-id`,
+        email: `alice@example.com`,
+        name: `Alice`,
+      }),
+    })
+
+    const req = createRequest({
+      from: `Mallory <m@x>`,
+      payload: { text: `hi` },
+    })
+    const res = createResponse()
+    const handled = await routes.handleRequest(
+      `POST`,
+      `/chat/test/send`,
+      req,
+      res
+    )
+
+    expect(handled).toBe(true)
+    expect(manager.send).toHaveBeenCalledWith(
+      `/chat/test`,
+      expect.objectContaining({ from: `Alice <alice@example.com>` })
+    )
+    expect(res.writeHead).toHaveBeenCalledWith(204)
   })
 })

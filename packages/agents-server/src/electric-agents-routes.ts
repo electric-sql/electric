@@ -16,6 +16,7 @@ import {
   toPublicEntity,
 } from './electric-agents-types'
 import { runnerWakeStream } from './dispatch-wake-router'
+import { formatAuthenticatedUser } from './authenticated-user-format'
 import type { ElectricAgentsManager } from './electric-agents-manager'
 import type { StreamClient } from './stream-client'
 import type {
@@ -772,10 +773,24 @@ export class ElectricAgentsRoutes {
         if (!authorized) return
       }
 
+      const authenticatedUser = await this.authenticateIncomingRequest(req)
+      const formattedUser = formatAuthenticatedUser(authenticatedUser)
+      const parsedTags = parsed.tags ?? undefined
+      const tags = this.authenticateRequest
+        ? formattedUser
+          ? { ...(parsedTags ?? {}), created_by: formattedUser }
+          : parsedTags
+            ? Object.fromEntries(
+                Object.entries(parsedTags).filter(
+                  ([key]) => key !== `created_by`
+                )
+              )
+            : undefined
+        : parsedTags
       const entity = await this.manager.spawn(typeName, {
         instance_id: instanceId,
         args: parsed.args,
-        tags: parsed.tags,
+        tags,
         parent: parsed.parent,
         dispatch_policy: parsed.dispatch_policy,
         initialMessage: parsed.initialMessage,
@@ -827,11 +842,15 @@ export class ElectricAgentsRoutes {
     if (!parsed) return
 
     try {
+      const formattedUser = formatAuthenticatedUser(
+        await this.authenticateIncomingRequest(req)
+      )
+      const from = formattedUser ?? parsed.from
       if (parsed.afterMs && parsed.afterMs > 0) {
         await this.manager.enqueueDelayedSend(
           entityUrl,
           {
-            from: parsed.from,
+            from,
             payload: parsed.payload,
             key: parsed.key,
             type: parsed.type,
@@ -840,7 +859,7 @@ export class ElectricAgentsRoutes {
         )
       } else {
         await this.manager.send(entityUrl, {
-          from: parsed.from,
+          from,
           payload: parsed.payload,
           key: parsed.key,
           type: parsed.type,
