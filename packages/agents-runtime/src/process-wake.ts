@@ -366,6 +366,7 @@ export async function processWake(
   let activeClaimToken = claimToken
   let claimData: ClaimCallbackResponse | null = null
   let heartbeat: ReturnType<typeof setInterval> | null = null
+  let heartbeatActive = false
   let claimedWake = false
   let result: WakeResult | null = null
   let primaryError: unknown = null
@@ -743,6 +744,7 @@ export async function processWake(
     writeToken = claimed.writeToken ?? ``
 
     // 3b. Start heartbeat once this worker owns the wake
+    heartbeatActive = true
     heartbeat = setInterval(() => {
       createClaimCallbackHeaders(claimHeaderConfig, activeClaimToken)
         .then((headers) =>
@@ -753,6 +755,7 @@ export async function processWake(
           })
         )
         .then(async (r) => {
+          if (!heartbeatActive || shutdownRequested) return
           if (!r.ok) {
             failBackgroundWake(
               new Error(`heartbeat rejected (${r.status})`),
@@ -764,6 +767,7 @@ export async function processWake(
             ok: boolean
             claimToken?: string
           }
+          if (!heartbeatActive || shutdownRequested) return
           if (!data.ok) {
             failBackgroundWake(
               new Error(`heartbeat rejected: server returned ok=false`),
@@ -774,6 +778,7 @@ export async function processWake(
           if (data.claimToken) activeClaimToken = data.claimToken
         })
         .catch((err: unknown) => {
+          if (!heartbeatActive || shutdownRequested) return
           failBackgroundWake(err, `HEARTBEAT_FAILED`)
         })
     }, heartbeatInterval)
@@ -1514,8 +1519,10 @@ export async function processWake(
     shutdownSignal?.removeEventListener(`abort`, requestShutdown)
     // 6. Clean up: flush producer, dispose effects, close StreamDB, cancel heartbeat, signal done
     const cleanupErrors: Array<Error> = []
+    heartbeatActive = false
     if (heartbeat) {
       clearInterval(heartbeat)
+      heartbeat = null
     }
     try {
       await io.drain()

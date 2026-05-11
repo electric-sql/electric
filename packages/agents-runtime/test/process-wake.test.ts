@@ -959,6 +959,66 @@ describe(`processWake`, () => {
     )
   })
 
+  it(`ignores heartbeat ok=false responses that settle after cleanup`, async () => {
+    let resolveHeartbeat!: (response: Response) => void
+    const heartbeatStarted = new Promise<void>((resolveStarted) => {
+      const heartbeatResponse = new Promise<Response>((resolve) => {
+        resolveHeartbeat = resolve
+      })
+
+      fetchMock.mockImplementation((url, opts) => {
+        const urlStr = String(url)
+        if (urlStr.includes(`/_electric/wakes/wake-abc`)) {
+          const body = JSON.parse(
+            (opts?.body as string | undefined) ?? `{}`
+          ) as { wakeId?: string; done?: boolean }
+
+          if (!body.wakeId && !body.done) {
+            resolveStarted()
+            return heartbeatResponse
+          }
+        }
+
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'content-type': `application/json` },
+          })
+        )
+      })
+    })
+    const logErrorSpy = vi
+      .spyOn(runtimeLog, `error`)
+      .mockImplementation(() => undefined)
+
+    defineEntity(`test-agent`, {
+      handler: async () => {
+        await heartbeatStarted
+      },
+    })
+
+    await processWake(makeNotification(), {
+      ...BASE_CONFIG,
+      heartbeatInterval: 1,
+    })
+
+    resolveHeartbeat(
+      new Response(JSON.stringify({ ok: false }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(logErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining(`wake background task failed`),
+      expect.any(Error)
+    )
+
+    logErrorSpy.mockRestore()
+  })
+
   it(`heartbeat is registered with configured interval`, async () => {
     const setIntervalSpy = vi.spyOn(globalThis, `setInterval`)
 
