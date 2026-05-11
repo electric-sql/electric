@@ -1,6 +1,11 @@
 import { DurableStream } from '@durable-streams/client'
 import type { RuntimeRouter } from './create-handler'
-import type { ProcessWakeConfig, WakeNotification } from './types'
+import { DEFAULT_RUNNER_HEARTBEAT_INTERVAL_MS } from './constants'
+import type {
+  HeadersProvider,
+  ProcessWakeConfig,
+  WakeNotification,
+} from './types'
 
 export interface PullWakeRunnerConfig {
   /** Base URL of the durable streams / agents server. */
@@ -12,7 +17,7 @@ export interface PullWakeRunnerConfig {
   /** Resume offset for the runner wake stream. Defaults to start of stream. */
   offset?: string
   /** Headers sent when tailing the runner wake stream/registering control-plane calls. */
-  headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>)
+  headers?: HeadersProvider
   /**
    * Headers sent to entity claim callbacks. Usually carries user/session auth.
    * Electric-Runner-Id defaults to runnerId and is added unless overridden.
@@ -67,7 +72,8 @@ export function createPullWakeRunner(
     config.wakeStreamPath ??
     `/runners/${encodeURIComponent(config.runnerId)}/wake`
   const wakeUrl = new URL(wakePath, config.baseUrl).toString()
-  const heartbeatIntervalMs = config.heartbeatIntervalMs ?? 30_000
+  const heartbeatIntervalMs =
+    config.heartbeatIntervalMs ?? DEFAULT_RUNNER_HEARTBEAT_INTERVAL_MS
   const leaseMs = config.leaseMs ?? heartbeatIntervalMs * 3
   const heartbeatPath =
     config.heartbeatPath ??

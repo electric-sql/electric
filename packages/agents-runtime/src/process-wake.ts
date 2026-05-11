@@ -1,3 +1,4 @@
+import { DEFAULT_WAKE_HEARTBEAT_INTERVAL_MS } from './constants'
 import { DurableStream, IdempotentProducer } from '@durable-streams/client'
 import { createStreamDB } from '@durable-streams/state'
 import { getEntityType } from './define-entity'
@@ -59,7 +60,7 @@ interface RawClaimCallbackResponse extends Omit<ClaimCallbackResponse, `ok`> {
 }
 
 const DEFAULT_IDLE_TIMEOUT = 20_000
-const DEFAULT_HEARTBEAT_INTERVAL = 30_000
+
 type EntityStreamOptions = NonNullable<
   Parameters<typeof createEntityStreamDB>[3]
 >
@@ -238,7 +239,7 @@ export async function processWake(
     registry,
     shutdownSignal,
     idleTimeout = DEFAULT_IDLE_TIMEOUT,
-    heartbeatInterval = DEFAULT_HEARTBEAT_INTERVAL,
+    heartbeatInterval = DEFAULT_WAKE_HEARTBEAT_INTERVAL_MS,
   } = config
   const { callback, claimToken, epoch, wakeId } = notification
   const entityUrl = notification.entity?.url ?? notification.streamPath

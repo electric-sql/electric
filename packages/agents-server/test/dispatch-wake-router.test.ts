@@ -176,4 +176,132 @@ describe(`DispatchWakeRouter`, () => {
       expect.objectContaining({ notificationPublic: publicNotification })
     )
   })
+  it(`posts webhook notifications without write tokens`, async () => {
+    const notification = {
+      ...makeNotification(),
+      writeToken: `wake-write-secret`,
+      entity: {
+        ...makeNotification().entity!,
+        writeToken: `entity-write-secret`,
+      },
+    } as WakeNotification & {
+      writeToken?: string
+      entity: NonNullable<WakeNotification[`entity`]> & { writeToken?: string }
+    }
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const markWakeDelivered = vi.fn().mockResolvedValue(undefined)
+    const router = new DispatchWakeRouter({
+      streamClient: makeStreamClient(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      materializeWake: vi.fn().mockResolvedValue({ status: `queued` }),
+      markWakeDelivered,
+    })
+
+    await expect(
+      router.dispatchToTarget(
+        { type: `webhook`, url: `https://handler.test/wake` },
+        notification
+      )
+    ).resolves.toEqual({
+      target: { type: `webhook`, url: `https://handler.test/wake` },
+      status: `delivered`,
+    })
+
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(String(init.body)) as Record<string, unknown> & {
+      entity?: Record<string, unknown>
+    }
+    expect(body).not.toHaveProperty(`writeToken`)
+    expect(body.entity).not.toHaveProperty(`writeToken`)
+    expect(body).toMatchObject({
+      callback: `https://durable.test/callback`,
+      claimToken: `claim-secret`,
+    })
+    expect(markWakeDelivered).toHaveBeenCalledWith({
+      wakeId: `wake-1`,
+      target: { type: `webhook`, url: `https://handler.test/wake` },
+    })
+  })
+
+  it(`marks webhook delivery failed on non-2xx responses`, async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(`nope`, { status: 500 }))
+    const markWakeFailed = vi.fn().mockResolvedValue(undefined)
+    const router = new DispatchWakeRouter({
+      streamClient: makeStreamClient(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      materializeWake: vi.fn().mockResolvedValue({ status: `queued` }),
+      markWakeFailed,
+    })
+
+    await expect(
+      router.dispatchToTarget(
+        { type: `webhook`, url: `https://handler.test/wake` },
+        makeNotification()
+      )
+    ).rejects.toThrow(`Dispatch wake webhook failed: 500 nope`)
+    expect(markWakeFailed).toHaveBeenCalledWith({
+      wakeId: `wake-1`,
+      target: { type: `webhook`, url: `https://handler.test/wake` },
+      error: expect.any(Error),
+    })
+  })
+
+  it(`rejects missing runner targets before materialization or append`, async () => {
+    const streamClient = makeStreamClient()
+    const materializeWake = vi.fn()
+    const router = new DispatchWakeRouter({
+      streamClient,
+      registry: {
+        getEntity: vi.fn(),
+        getEntityByStream: vi.fn(),
+        getRunner: vi.fn().mockResolvedValue(null),
+      },
+      materializeWake,
+    })
+
+    await expect(
+      router.dispatchToTarget(
+        { type: `runner`, runnerId: `missing-runner` },
+        makeNotification()
+      )
+    ).rejects.toThrow(`Dispatch runner "missing-runner" was not found`)
+    expect(materializeWake).not.toHaveBeenCalled()
+    expect(streamClient.append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects runner targets without wake streams before materialization or append`, async () => {
+    const streamClient = makeStreamClient()
+    const materializeWake = vi.fn()
+    const router = new DispatchWakeRouter({
+      streamClient,
+      registry: {
+        getEntity: vi.fn(),
+        getEntityByStream: vi.fn(),
+        getRunner: vi.fn().mockResolvedValue({
+          id: `runner-1`,
+          owner_user_id: `user-1`,
+          label: `Runner 1`,
+          kind: `local`,
+          admin_status: `enabled`,
+          wake_stream: ``,
+          created_at: new Date(0).toISOString(),
+          updated_at: new Date(0).toISOString(),
+        }),
+      },
+      materializeWake,
+    })
+
+    await expect(
+      router.dispatchToTarget(
+        { type: `runner`, runnerId: `runner-1` },
+        makeNotification()
+      )
+    ).rejects.toThrow(`Dispatch runner "runner-1" has no wake stream`)
+    expect(materializeWake).not.toHaveBeenCalled()
+    expect(streamClient.append).not.toHaveBeenCalled()
+  })
 })

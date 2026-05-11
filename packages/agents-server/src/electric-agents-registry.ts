@@ -38,6 +38,8 @@ import type {
 } from './electric-agents-types.js'
 import type { EntityTags, WakeNotification } from '@electric-ax/agents-runtime'
 
+const DEFAULT_RUNNER_LEASE_MS = 30_000
+
 export class EntityAlreadyExistsError extends Error {
   constructor(public readonly url: string) {
     super(`Entity already exists at URL "${url}"`)
@@ -376,7 +378,7 @@ export class PostgresRegistry {
     const now = input.heartbeatAt ?? new Date()
     const leaseExpiresAt =
       input.livenessLeaseExpiresAt ??
-      new Date(now.getTime() + (input.leaseMs ?? 30_000))
+      new Date(now.getTime() + (input.leaseMs ?? DEFAULT_RUNNER_LEASE_MS))
 
     const rows = await this.db
       .update(runners)

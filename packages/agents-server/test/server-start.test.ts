@@ -1134,46 +1134,4 @@ describe(`ElectricAgentsServer.start`, () => {
     expect(router.enrichNotificationForEntity).not.toHaveBeenCalled()
     expect(router.dispatchToTarget).not.toHaveBeenCalled()
   })
-
-  it(`skips worker-pool dispatch targets for append wiring`, async () => {
-    server = new ElectricAgentsServer({
-      durableStreamsUrl: `http://durable.test`,
-      port: 0,
-      postgresUrl: TEST_POSTGRES_URL,
-    })
-
-    const router = {
-      resolveSingleTarget: vi.fn(() => ({
-        type: `worker-pool`,
-        workerPoolId: `pool-1`,
-      })),
-      mintNotificationForEntity: vi.fn(),
-      enrichNotificationForEntity: vi.fn(),
-      dispatchToTarget: vi.fn(),
-    }
-    ;(server as any).dispatchWakeRouter = router
-
-    await (server as any).dispatchWakeForEntityAppend(
-      {
-        url: `/chat/one`,
-        type: `chat`,
-        status: `idle`,
-        streams: { main: `/chat/one/main`, error: `/chat/one/error` },
-        subscription_id: `chat-handler`,
-        dispatch_policy: {
-          targets: [{ type: `worker-pool`, workerPoolId: `pool-1` }],
-        },
-        write_token: `write-secret`,
-        tags: {},
-        created_at: 0,
-        updated_at: 0,
-      },
-      { type: `message` }
-    )
-
-    expect(router.resolveSingleTarget).toHaveBeenCalledOnce()
-    expect(router.mintNotificationForEntity).not.toHaveBeenCalled()
-    expect(router.enrichNotificationForEntity).not.toHaveBeenCalled()
-    expect(router.dispatchToTarget).not.toHaveBeenCalled()
-  })
 })

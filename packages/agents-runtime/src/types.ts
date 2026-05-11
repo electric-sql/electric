@@ -598,6 +598,10 @@ export type WebhookNotification = WakeNotification
 
 export type ClaimTokenHeader = `authorization` | `electric-claim-token` | `both`
 
+export type HeadersProvider =
+  | HeadersInit
+  | (() => HeadersInit | Promise<HeadersInit>)
+
 export interface ProcessWakeConfig {
   /** Base URL of the durable streams server */
   baseUrl: string
@@ -608,7 +612,7 @@ export interface ProcessWakeConfig {
    * Use with claimTokenHeader: `electric-claim-token` to keep Authorization
    * available for user/session auth in local-runner flows.
    */
-  claimHeaders?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>)
+  claimHeaders?: HeadersProvider
   /**
    * Header transport for the Durable Streams claim token. Defaults to the
    * historical webhook-compatible Authorization: Bearer <claimToken> behavior.

@@ -7,6 +7,7 @@ const {
   flushMock,
   detachMock,
   headMock,
+  instanceHeadMock,
   MockFetchError,
   MockDurableStreamError,
 } = vi.hoisted(() => {
@@ -29,6 +30,7 @@ const {
     flushMock: vi.fn().mockResolvedValue(undefined),
     detachMock: vi.fn().mockResolvedValue(undefined),
     headMock: vi.fn(),
+    instanceHeadMock: vi.fn(),
     MockFetchError: HoistedFetchError,
     MockDurableStreamError: HoistedDurableStreamError,
   }
@@ -41,6 +43,7 @@ vi.mock(`@durable-streams/client`, () => ({
     static create = vi.fn()
     static delete = vi.fn()
     static head = headMock
+    head = instanceHeadMock
   },
   DurableStreamError: MockDurableStreamError,
   FetchError: MockFetchError,
@@ -58,6 +61,8 @@ describe(`StreamClient`, () => {
     flushMock.mockClear()
     detachMock.mockClear()
     headMock.mockReset()
+    instanceHeadMock.mockReset()
+    vi.unstubAllGlobals()
   })
 
   it(`appendIdempotent uses IdempotentProducer append/flush/detach`, async () => {
@@ -95,5 +100,65 @@ describe(`StreamClient`, () => {
     const client = new StreamClient(`http://127.0.0.1:4545`)
 
     await expect(client.exists(`/_cron/test`)).rejects.toBe(error)
+  })
+
+  it(`headOffset returns the stream offset or null for missing streams`, async () => {
+    headMock.mockResolvedValueOnce({ exists: true, offset: `17` })
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+
+    await expect(client.headOffset(`/_cron/test`)).resolves.toBe(`17`)
+
+    headMock.mockResolvedValueOnce({ exists: false })
+    await expect(client.headOffset(`/_cron/missing`)).resolves.toBeNull()
+
+    headMock.mockRejectedValueOnce(new MockFetchError(404))
+    await expect(client.headOffset(`/_cron/404`)).resolves.toBeNull()
+  })
+
+  it(`mintWakeNotification registers a consumer and builds a wake notification`, async () => {
+    instanceHeadMock.mockResolvedValueOnce({ exists: true, offset: `9` })
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 201 }))
+    vi.stubGlobal(`fetch`, fetch)
+    vi.spyOn(Date, `now`).mockReturnValue(12345)
+    vi.spyOn(Math, `random`).mockReturnValue(0.123456789)
+
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+    const result = await client.mintWakeNotification(`consumer-1`, {
+      streamPath: `/chat/one/main`,
+      streams: [{ path: `/chat/one/main`, offset: `9` }],
+      triggeredBy: [`append`],
+      triggerEvent: `message_received`,
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      `http://127.0.0.1:4545/consumers`,
+      expect.objectContaining({
+        method: `POST`,
+        body: JSON.stringify({
+          consumer_id: `consumer-1`,
+          streams: [`/chat/one/main`],
+        }),
+      })
+    )
+    expect(result.notification).toMatchObject({
+      consumerId: `consumer-1`,
+      epoch: 0,
+      wakeId: expect.stringMatching(/^wake-12345-/),
+      streamPath: `/chat/one/main`,
+      streams: [{ path: `/chat/one/main`, offset: `9` }],
+      triggeredBy: [`append`],
+      callback: `http://127.0.0.1:4545/consumers/consumer-1/acquire`,
+      claimToken: result.notification.wakeId,
+      triggerEvent: `message_received`,
+    })
+  })
+
+  it(`mintWakeNotification fails when the source stream is missing`, async () => {
+    instanceHeadMock.mockResolvedValueOnce({ exists: false })
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+
+    await expect(
+      client.mintWakeNotification(`consumer-1`, { streamPath: `/missing` })
+    ).rejects.toThrow(`404 Stream not found`)
   })
 })

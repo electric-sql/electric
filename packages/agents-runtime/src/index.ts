@@ -199,6 +199,10 @@ export type {
   TaggedQuery,
 } from './observation-sources'
 
+export {
+  DEFAULT_RUNNER_HEARTBEAT_INTERVAL_MS,
+  DEFAULT_WAKE_HEARTBEAT_INTERVAL_MS,
+} from './constants'
 export { processWake, processWebhookWake } from './process-wake'
 export { createPullWakeRunner } from './pull-wake-runner'
 export type {
