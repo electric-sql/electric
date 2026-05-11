@@ -110,6 +110,14 @@ function asMessageText(value: unknown): string {
   return typeof value === `string` ? value : JSON.stringify(value ?? ``)
 }
 
+function renderSenderMessageText(
+  from: string | undefined,
+  payload: unknown
+): string {
+  const text = asMessageText(payload)
+  return from ? `From: ${from}\n\n${text}` : text
+}
+
 function missingContextToolData(message: string): Promise<never> {
   return Promise.reject(new Error(message))
 }
@@ -159,18 +167,20 @@ function getTriggerMessageText(
         continue
       }
 
-      const payload = (event.value as { payload?: unknown } | undefined)
-        ?.payload
+      const value = event.value as
+        | { from?: string; payload?: unknown }
+        | undefined
+      const payload = value?.payload
       if (latestPayload === undefined) {
         latestPayload = payload
       }
       if (wakeOffset === `-1` || event.headers.offset === wakeOffset) {
-        return asMessageText(payload)
+        return renderSenderMessageText(value?.from ?? wakeEvent.source, payload)
       }
     }
 
     if (latestPayload !== undefined) {
-      return asMessageText(latestPayload)
+      return renderSenderMessageText(wakeEvent.source, latestPayload)
     }
   }
 

@@ -74,6 +74,16 @@ function renderOpenTag(
   return renderedAttrs.length > 0 ? `<${name} ${renderedAttrs}>` : `<${name}>`
 }
 
+function renderInboxMessage(item: {
+  from: string
+  payload: unknown
+}): LLMMessage {
+  return {
+    role: `user`,
+    content: `${renderOpenTag(`message`, { from: item.from })}${xmlEscape(asString(item.payload))}</message>`,
+  }
+}
+
 function renderContextInsertedMessage(item: {
   name: string
   attrs: Record<string, string | number | boolean>
@@ -119,7 +129,7 @@ export function defaultProjection(
 ): Array<LLMMessage> | null {
   switch (item.kind) {
     case `inbox`:
-      return [{ role: `user`, content: asString(item.payload) }]
+      return [renderInboxMessage(item)]
 
     case `wake`:
       return [{ role: `user`, content: asString(item.payload) }]
@@ -263,6 +273,7 @@ export function materializeTimeline(
           kind: `inbox`,
           at: orderToOffset(entry.order),
           payload: entry.item.payload,
+          from: entry.item.from,
         }
 
       case `wake`:

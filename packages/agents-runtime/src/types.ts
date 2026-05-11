@@ -316,7 +316,7 @@ export interface ContextEntry extends ContextEntryInput {
 }
 
 export type TimelineItem =
-  | { kind: `inbox`; at: number; payload: unknown }
+  | { kind: `inbox`; at: number; payload: unknown; from: string }
   | { kind: `wake`; at: number; payload: unknown }
   | {
       kind: `run`

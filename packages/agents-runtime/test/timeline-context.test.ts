@@ -96,7 +96,7 @@ describe(`timeline context`, () => {
     ]
 
     expect(buildTimelineMessages({ runs, inbox, wakes })).toEqual([
-      { role: `user`, content: `hi` },
+      { role: `user`, content: `<message from="user">hi</message>` },
       { role: `assistant`, content: `Hello there` },
       {
         role: `tool_call`,
@@ -114,6 +114,29 @@ describe(`timeline context`, () => {
       {
         role: `user`,
         content: `{"type":"wake","timestamp":"2026-03-28T00:01:00.000Z","source":"/worker/article-1","timeout":false,"changes":[{"collection":"runs","kind":"update","key":"run-0"}]}`,
+      },
+    ])
+  })
+
+  it(`includes inbox sender in LLM user content`, () => {
+    const messages = buildTimelineMessages({
+      runs: [],
+      wakes: [],
+      inbox: [
+        {
+          key: `msg-1`,
+          order: order(1),
+          from: `Alice <a@b>`,
+          payload: `who am I?`,
+          timestamp: `2026-03-28T00:00:00.000Z`,
+        },
+      ],
+    })
+
+    expect(messages).toEqual([
+      {
+        role: `user`,
+        content: `<message from="Alice &lt;a@b&gt;">who am I?</message>`,
       },
     ])
   })
@@ -206,7 +229,7 @@ describe(`timeline context`, () => {
         wakes: [],
       })
     ).toEqual([
-      { role: `user`, content: `start` },
+      { role: `user`, content: `<message from="user">start</message>` },
       { role: `assistant`, content: `assistant reply` },
       {
         role: `tool_call`,
@@ -221,7 +244,7 @@ describe(`timeline context`, () => {
         toolCallId: `tc-1`,
         isError: false,
       },
-      { role: `user`, content: `follow up` },
+      { role: `user`, content: `<message from="user">follow up</message>` },
     ])
   })
 
@@ -318,7 +341,10 @@ describe(`timeline context`, () => {
     } as unknown as EntityStreamDB
 
     expect(timelineToMessages(db)).toEqual([
-      { role: `user`, content: `{"text":"summarize"}` },
+      {
+        role: `user`,
+        content: `<message from="user">{&quot;text&quot;:&quot;summarize&quot;}</message>`,
+      },
       { role: `assistant`, content: `Hello world` },
       {
         role: `tool_call`,
