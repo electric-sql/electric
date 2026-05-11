@@ -8,6 +8,15 @@ function clean(value: string | undefined): string | undefined {
   return trimmed || undefined
 }
 
+function readHeader(
+  headers: Record<string, string>,
+  name: string
+): string | undefined {
+  return Object.entries(headers).find(
+    ([key]) => key.toLowerCase() === name
+  )?.[1]
+}
+
 export type AssertedIdentity = {
   userId?: string
   email?: string
@@ -39,11 +48,12 @@ export async function preloadDesktopFormattedAssertedIdentity(): Promise<
 > {
   if (cachedDesktopAssertedIdentity) return cachedDesktopAssertedIdentity
   preloadPromise ??= getDesktopAssertedAuthHeaders().then((headers) => {
+    const email = readHeader(headers, DEV_ASSERTED_EMAIL_HEADER)
+    const name = readHeader(headers, DEV_ASSERTED_NAME_HEADER)
     cachedDesktopAssertedIdentity = formatAssertedIdentity({
-      email: headers[DEV_ASSERTED_EMAIL_HEADER],
-      name: headers[DEV_ASSERTED_NAME_HEADER],
-      userId:
-        headers[DEV_ASSERTED_EMAIL_HEADER] ?? headers[DEV_ASSERTED_NAME_HEADER],
+      email,
+      name,
+      userId: email ?? name,
     })
     if (!cachedDesktopAssertedIdentity) preloadPromise = null
     return cachedDesktopAssertedIdentity
