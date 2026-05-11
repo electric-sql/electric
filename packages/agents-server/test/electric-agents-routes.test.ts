@@ -1014,6 +1014,37 @@ describe(`ElectricAgentsRoutes authenticated user stamping`, () => {
     )
   })
 
+  it(`preserves client supplied spawn tags.created_by when no auth hook is configured`, async () => {
+    const manager = {
+      registry: {
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+      },
+      resolveEffectiveDispatchPolicy: vi.fn().mockResolvedValue(undefined),
+      spawn: vi.fn().mockImplementation((_type, opts) =>
+        Promise.resolve({
+          ...makeEntity(`/chat/test`),
+          tags: opts.tags,
+          txid: 1,
+        })
+      ),
+    } as any
+    const routes = new ElectricAgentsRoutes(manager)
+
+    const req = createRequest({
+      tags: { created_by: `Alice <alice@example.com>`, x: `y` },
+    })
+    const res = createResponse()
+    const handled = await routes.handleRequest(`PUT`, `/chat/test`, req, res)
+
+    expect(handled).toBe(true)
+    expect(manager.spawn).toHaveBeenCalledWith(
+      `chat`,
+      expect.objectContaining({
+        tags: { created_by: `Alice <alice@example.com>`, x: `y` },
+      })
+    )
+  })
+
   it(`strips spoofed spawn tags.created_by when auth is configured but no user is authenticated`, async () => {
     const manager = {
       registry: {

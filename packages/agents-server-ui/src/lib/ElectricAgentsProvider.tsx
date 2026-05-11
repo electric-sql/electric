@@ -5,7 +5,10 @@ import { createOptimisticAction } from '@tanstack/db'
 import { z } from 'zod'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
-import { getCachedDesktopFormattedAssertedIdentity } from './assertedIdentity'
+import {
+  getCachedDesktopFormattedAssertedIdentity,
+  getDesktopFormattedAssertedIdentity,
+} from './assertedIdentity'
 
 type EntityStatus = `spawning` | `running` | `idle` | `stopped`
 
@@ -145,11 +148,17 @@ interface SpawnInput {
 }
 
 function withCreatedByTag(
-  tags: Record<string, string> | undefined
+  tags: Record<string, string> | undefined,
+  createdBy = getCachedDesktopFormattedAssertedIdentity()
 ): Record<string, string> | undefined {
-  const createdBy = getCachedDesktopFormattedAssertedIdentity()
   if (!createdBy) return tags
   return { ...(tags ?? {}), created_by: createdBy }
+}
+
+async function withCreatedByTagAsync(
+  tags: Record<string, string> | undefined
+): Promise<Record<string, string> | undefined> {
+  return withCreatedByTag(tags, await getDesktopFormattedAssertedIdentity())
 }
 
 function createSpawnAction(
@@ -179,7 +188,7 @@ function createSpawnAction(
       dispatch_policy,
     }) => {
       const body: Record<string, unknown> = {}
-      const stampedTags = withCreatedByTag(tags)
+      const stampedTags = await withCreatedByTagAsync(tags)
       if (args) body.args = args
       if (stampedTags) body.tags = stampedTags
       if (parent) body.parent = parent

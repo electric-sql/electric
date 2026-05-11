@@ -37,6 +37,7 @@ export function getCachedDesktopFormattedAssertedIdentity():
 export async function preloadDesktopFormattedAssertedIdentity(): Promise<
   string | undefined
 > {
+  if (cachedDesktopAssertedIdentity) return cachedDesktopAssertedIdentity
   preloadPromise ??= getDesktopAssertedAuthHeaders().then((headers) => {
     cachedDesktopAssertedIdentity = formatAssertedIdentity({
       email: headers[DEV_ASSERTED_EMAIL_HEADER],
@@ -44,6 +45,7 @@ export async function preloadDesktopFormattedAssertedIdentity(): Promise<
       userId:
         headers[DEV_ASSERTED_EMAIL_HEADER] ?? headers[DEV_ASSERTED_NAME_HEADER],
     })
+    if (!cachedDesktopAssertedIdentity) preloadPromise = null
     return cachedDesktopAssertedIdentity
   })
   return preloadPromise
@@ -53,4 +55,9 @@ export async function getDesktopFormattedAssertedIdentity(): Promise<
   string | undefined
 > {
   return preloadDesktopFormattedAssertedIdentity()
+}
+
+export function __resetAssertedIdentityCacheForTests(): void {
+  cachedDesktopAssertedIdentity = undefined
+  preloadPromise = null
 }
