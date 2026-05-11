@@ -263,57 +263,51 @@ describe(`createPullWakeRunner`, () => {
     vi.unstubAllGlobals()
   })
 
-  it(`reconnects with backoff after wake stream errors`, async () => {
-    vi.useFakeTimers()
+  it(`passes an onError retry handler to the durable stream client`, async () => {
     const runtime = {
       dispatchWake: vi.fn(),
       drainWakes: vi.fn(async () => {}),
       abortWakes: vi.fn(),
     }
     const onError = vi.fn(() => true)
-    const streamFactory = vi
-      .fn()
-      .mockResolvedValueOnce({
-        jsonStream: async function* () {
-          yield notification(`wake-1`)
-          throw new Error(`connection dropped`)
-        },
-      })
-      .mockResolvedValueOnce({
-        jsonStream: async function* () {
-          yield notification(`wake-2`)
-        },
-        closed: Promise.resolve(),
-      })
+    const streamCall = vi.fn(async () => ({
+      jsonStream: async function* () {},
+      closed: Promise.resolve(),
+    }))
+    const DurableStream = vi.fn(function () {
+      return { stream: streamCall }
+    })
 
-    const runner = createPullWakeRunner({
+    vi.doMock(`@durable-streams/client`, () => ({ DurableStream }))
+    vi.resetModules()
+    const { createPullWakeRunner: createRunner } = await import(
+      `../src/pull-wake-runner`
+    )
+
+    const runner = createRunner({
       baseUrl: `http://localhost:3000`,
       runnerId: `runner-1`,
       runtime,
       heartbeatIntervalMs: 0,
-      reconnectInitialDelayMs: 10,
-      reconnectMaxDelayMs: 10,
-      streamFactory,
       onError,
     })
 
     runner.start()
-    await vi.waitFor(() =>
-      expect(runtime.dispatchWake).toHaveBeenCalledTimes(1)
-    )
-    expect(onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: `connection dropped` })
-    )
-    await vi.advanceTimersByTimeAsync(10)
-    await vi.waitFor(() =>
-      expect(runtime.dispatchWake).toHaveBeenCalledTimes(2)
-    )
     await runner.waitForStopped()
 
-    expect(streamFactory).toHaveBeenCalledTimes(2)
-    expect(
-      runtime.dispatchWake.mock.calls.map(([wake]) => wake.wakeId)
-    ).toEqual([`wake-1`, `wake-2`])
-    vi.useRealTimers()
+    expect(streamCall).toHaveBeenCalledWith(
+      expect.objectContaining({ onError: expect.any(Function) })
+    )
+    const streamOptions = streamCall.mock.calls[0] as unknown as [
+      { onError: (error: Error) => unknown },
+    ]
+    const retry = streamOptions[0].onError(new Error(`dropped`))
+    expect(retry).toEqual({})
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: `dropped` })
+    )
+
+    vi.doUnmock(`@durable-streams/client`)
+    vi.resetModules()
   })
 })

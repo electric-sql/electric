@@ -28,10 +28,6 @@ export interface PullWakeRunnerConfig {
   leaseMs?: number
   /** Runner heartbeat path. Defaults to /_electric/runners/{runnerId}/heartbeat. */
   heartbeatPath?: string
-  /** Initial reconnect delay after a failed wake stream. Defaults to 1s. */
-  reconnectInitialDelayMs?: number
-  /** Maximum reconnect delay after repeated wake stream failures. Defaults to 30s. */
-  reconnectMaxDelayMs?: number
   /** Optional lifecycle error hook. Return true to mark handled. */
   onError?: (error: Error) => boolean | void
   /** Test seam for custom stream implementations. */
@@ -77,8 +73,6 @@ export function createPullWakeRunner(
     config.heartbeatPath ??
     `/_electric/runners/${encodeURIComponent(config.runnerId)}/heartbeat`
   const heartbeatUrl = new URL(heartbeatPath, config.baseUrl).toString()
-  const reconnectInitialDelayMs = config.reconnectInitialDelayMs ?? 1_000
-  const reconnectMaxDelayMs = config.reconnectMaxDelayMs ?? 30_000
 
   const resolveHeaders = async (): Promise<Record<string, string>> => {
     const init =
@@ -104,31 +98,6 @@ export function createPullWakeRunner(
     const error = err instanceof Error ? err : new Error(String(err))
     if (config.onError?.(error) !== true) throw error
   }
-
-  const reconnectDelay = (attempt: number): number =>
-    Math.min(
-      reconnectMaxDelayMs,
-      reconnectInitialDelayMs * 2 ** Math.max(0, attempt - 1)
-    )
-
-  const delay = (ms: number, signal: AbortSignal): Promise<void> => {
-    if (ms <= 0) return Promise.resolve()
-    if (signal.aborted) return Promise.reject(abortError())
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        signal.removeEventListener(`abort`, onAbort)
-        resolve()
-      }, ms)
-      const onAbort = () => {
-        clearTimeout(timeout)
-        reject(abortError())
-      }
-      signal.addEventListener(`abort`, onAbort, { once: true })
-    })
-  }
-
-  const abortError = (): DOMException =>
-    new DOMException(`pull wake runner stopped`, `AbortError`)
 
   const heartbeat = async (signal: AbortSignal): Promise<void> => {
     try {
@@ -187,41 +156,36 @@ export function createPullWakeRunner(
         json: true,
         offset: opts.offset,
         signal: opts.signal,
+        onError: (error) => {
+          config.onError?.(error)
+          return {}
+        },
       })) as PullWakeStreamResponse
     })
 
   const run = async (): Promise<void> => {
     const signal = controller!.signal
-    let attempt = 0
     try {
-      while (!signal.aborted) {
-        try {
-          response = await streamFactory({
-            url: wakeUrl,
-            headers: resolveHeaders,
-            offset: currentOffset,
-            signal,
-          })
-          for await (const notification of response.jsonStream()) {
-            if (signal.aborted) break
-            attempt = 0
-            config.runtime.dispatchWake(notification, {
-              claimHeaders: resolveClaimHeaders,
-              claimTokenHeader: config.claimTokenHeader,
-            })
-            if (response.offset !== undefined) currentOffset = response.offset
-          }
-          await response.closed?.catch((err) => {
-            if (!signal.aborted) throw err
-          })
-          break
-        } catch (err) {
-          if (signal.aborted) break
-          attempt += 1
-          reportError(err)
-          response = null
-          await delay(reconnectDelay(attempt), signal)
-        }
+      response = await streamFactory({
+        url: wakeUrl,
+        headers: resolveHeaders,
+        offset: currentOffset,
+        signal,
+      })
+      for await (const notification of response.jsonStream()) {
+        if (signal.aborted) break
+        config.runtime.dispatchWake(notification, {
+          claimHeaders: resolveClaimHeaders,
+          claimTokenHeader: config.claimTokenHeader,
+        })
+        if (response.offset !== undefined) currentOffset = response.offset
+      }
+      await response.closed?.catch((err) => {
+        if (!signal.aborted) throw err
+      })
+    } catch (err) {
+      if (!signal.aborted) {
+        reportError(err)
       }
     } finally {
       stopHeartbeat()
