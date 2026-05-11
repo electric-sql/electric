@@ -3,6 +3,7 @@
  */
 
 import type { IncomingMessage } from 'node:http'
+import type { WakeNotification } from '@electric-ax/agents-runtime'
 
 export interface AuthenticatedRequestUser {
   userId: string
@@ -33,11 +34,10 @@ export function assertEntityStatus(s: string): EntityStatus {
 export type DispatchTarget =
   | { type: `webhook`; url: string }
   | { type: `runner`; runnerId: string }
-  | { type: `worker-pool`; workerPoolId: string }
 
 export interface DispatchPolicy {
   // v1 uses exactly one target; the tuple shape leaves room for ordered targets later.
-  targets: [DispatchTarget, ...Array<DispatchTarget>]
+  readonly targets: readonly [DispatchTarget, ...ReadonlyArray<DispatchTarget>]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -86,12 +86,6 @@ export function assertDispatchPolicy(
     return value as unknown as DispatchPolicy
   }
 
-  if (type === `worker-pool`) {
-    throw new Error(
-      `${label}.targets[0].type "worker-pool" is not supported by dispatch policy v1`
-    )
-  }
-
   throw new Error(
     `${label}.targets[0].type must be "webhook" or "runner" for dispatch policy v1`
   )
@@ -101,15 +95,24 @@ export type RunnerKind = `local` | `cloud-worker` | `sandbox` | `ci` | `server`
 export type RunnerAdminStatus = `enabled` | `disabled`
 export type RunnerLiveness = `online` | `offline`
 
-const VALID_RUNNER_KINDS = new Set<string>([
-  `local`,
-  `cloud-worker`,
-  `sandbox`,
-  `ci`,
-  `server`,
-])
+const VALID_RUNNER_KIND_VALUES = {
+  local: true,
+  'cloud-worker': true,
+  sandbox: true,
+  ci: true,
+  server: true,
+} satisfies Record<RunnerKind, true>
+const VALID_RUNNER_KINDS = new Set<string>(
+  Object.keys(VALID_RUNNER_KIND_VALUES)
+)
 
-const VALID_RUNNER_ADMIN_STATUSES = new Set<string>([`enabled`, `disabled`])
+const VALID_RUNNER_ADMIN_STATUS_VALUES = {
+  enabled: true,
+  disabled: true,
+} satisfies Record<RunnerAdminStatus, true>
+const VALID_RUNNER_ADMIN_STATUSES = new Set<string>(
+  Object.keys(VALID_RUNNER_ADMIN_STATUS_VALUES)
+)
 
 export function assertRunnerKind(s: string): RunnerKind {
   if (!VALID_RUNNER_KINDS.has(s)) {
@@ -149,26 +152,7 @@ export interface WakeEvent {
   fullRef?: string
 }
 
-export interface WakeNotification {
-  consumerId: string
-  epoch: number
-  wakeId: string
-  streamPath: string
-  streams: Array<SourceStreamOffset>
-  triggeredBy?: Array<string>
-  callback: string
-  claimToken: string
-  triggerEvent?: string
-  wakeEvent?: WakeEvent
-  entity?: {
-    type?: string
-    status: string
-    url: string
-    streams: { main: string; error: string }
-    tags?: Record<string, string>
-    spawnArgs?: Record<string, unknown>
-  }
-}
+export type { WakeNotification } from '@electric-ax/agents-runtime'
 
 export type PublicWakeNotification = Omit<
   WakeNotification,

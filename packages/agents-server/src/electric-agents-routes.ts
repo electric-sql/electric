@@ -780,17 +780,18 @@ export class ElectricAgentsRoutes {
 
       const formattedUser = formatAuthenticatedUser(authenticatedUser)
       const parsedTags = parsed.tags ?? undefined
-      const tags = this.authenticateRequest
-        ? formattedUser
-          ? { ...(parsedTags ?? {}), created_by: formattedUser }
-          : parsedTags
-            ? Object.fromEntries(
-                Object.entries(parsedTags).filter(
-                  ([key]) => key !== `created_by`
-                )
-              )
-            : undefined
-        : parsedTags
+      let tags = parsedTags
+      if (this.authenticateRequest) {
+        if (formattedUser) {
+          tags = { ...(parsedTags ?? {}), created_by: formattedUser }
+        } else if (parsedTags) {
+          tags = Object.fromEntries(
+            Object.entries(parsedTags).filter(([key]) => key !== `created_by`)
+          )
+        } else {
+          tags = undefined
+        }
+      }
       const entity = await this.manager.spawn(typeName, {
         instance_id: instanceId,
         args: parsed.args,

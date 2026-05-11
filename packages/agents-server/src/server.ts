@@ -20,7 +20,7 @@ import {
   context as otelContext,
   trace,
 } from '@opentelemetry/api'
-import { sendJson, sendJsonError } from './electric-agents-http.js'
+import { readBody, sendJson, sendJsonError } from './electric-agents-http.js'
 import { PostgresRegistry } from './electric-agents-registry.js'
 import type {
   ExpiredActiveClaimRecoveryItem,
@@ -1216,13 +1216,6 @@ export class ElectricAgentsServer {
     try {
       const target = router.resolveSingleTarget(entity.dispatch_policy)
       if (!target) return
-
-      if (target.type === `worker-pool`) {
-        serverLog.info(
-          `[agent-server] worker-pool dispatch target skipped for ${entity.url}; worker pools are not wired yet`
-        )
-        return
-      }
 
       const triggerEvent =
         options?.triggerEvent ??
@@ -2684,15 +2677,6 @@ export class ElectricAgentsServer {
     headers[`access-control-expose-headers`] = `*`
     return headers
   }
-}
-
-function readBody(req: IncomingMessage): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const chunks: Array<Buffer> = []
-    req.on(`data`, (chunk: Buffer) => chunks.push(chunk))
-    req.on(`end`, () => resolve(new Uint8Array(Buffer.concat(chunks))))
-    req.on(`error`, reject)
-  })
 }
 
 function isWakeNotificationStreamNotFoundError(err: unknown): boolean {

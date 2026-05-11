@@ -127,6 +127,11 @@ export function consumerIdForEntity(entityUrl: string): string {
   return `entity:${normalized.replaceAll(`/`, `:`)}`
 }
 
+type InternalWakeNotification = WakeNotification & {
+  writeToken?: string
+  entity?: NonNullable<WakeNotification[`entity`]> & { writeToken?: string }
+}
+
 export function callbackForwardPathForConsumer(consumerId: string): string {
   if (!consumerId) {
     throw new Error(`Cannot build callback-forward path for empty consumer id`)
@@ -150,14 +155,13 @@ export function redactWakeNotification(
     writeToken: _writeToken,
     entity,
     ...publicNotification
-  } = notification as WakeNotification & { writeToken?: string }
+  } = notification as InternalWakeNotification
 
   if (!entity) {
     return publicNotification
   }
 
-  const { writeToken: _entityWriteToken, ...publicEntity } =
-    entity as NonNullable<WakeNotification[`entity`]> & { writeToken?: string }
+  const { writeToken: _entityWriteToken, ...publicEntity } = entity
   return {
     ...publicNotification,
     entity: publicEntity,
@@ -171,14 +175,13 @@ function redactDeliveryTokens(
     writeToken: _writeToken,
     entity,
     ...notificationWithoutTokens
-  } = notification as WakeNotification & { writeToken?: string }
+  } = notification as InternalWakeNotification
 
   if (!entity) {
     return notificationWithoutTokens
   }
 
-  const { writeToken: _entityWriteToken, ...entityWithoutToken } =
-    entity as NonNullable<WakeNotification[`entity`]> & { writeToken?: string }
+  const { writeToken: _entityWriteToken, ...entityWithoutToken } = entity
 
   return {
     ...notificationWithoutTokens,
@@ -310,7 +313,7 @@ export class DispatchWakeRouter {
       writeToken: _writeToken,
       entity: _entity,
       ...notificationWithoutTokens
-    } = notification as WakeNotification & { writeToken?: string }
+    } = notification as InternalWakeNotification
 
     return {
       ...notificationWithoutTokens,
