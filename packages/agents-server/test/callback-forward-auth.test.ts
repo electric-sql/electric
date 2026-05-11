@@ -156,6 +156,9 @@ describe(`ElectricAgentsServer callback-forward runner claim gate`, () => {
         authorization: `Bearer user-session`,
         'electric-runner-id': `other-runner`,
         'electric-claim-token': `claim-secret`,
+        cookie: `session=secret`,
+        'x-forward-me-not': `nope`,
+        traceparent: `00-00000000000000000000000000000001-0000000000000002-01`,
       }
     )
     const res = createResponse()
@@ -191,6 +194,9 @@ describe(`ElectricAgentsServer callback-forward runner claim gate`, () => {
         authorization: `Bearer user-session`,
         'x-runner-id': `kyle-mac`,
         'electric-claim-token': `claim-secret`,
+        cookie: `session=secret`,
+        'x-forward-me-not': `nope`,
+        traceparent: `00-00000000000000000000000000000001-0000000000000002-01`,
       }
     )
     const res = createResponse()
@@ -229,6 +235,9 @@ describe(`ElectricAgentsServer callback-forward runner claim gate`, () => {
         authorization: `Bearer user-session`,
         'electric-runner-id': `kyle-mac`,
         'electric-claim-token': `claim-secret`,
+        cookie: `session=secret`,
+        'x-forward-me-not': `nope`,
+        traceparent: `00-00000000000000000000000000000001-0000000000000002-01`,
       }
     )
     const res = createResponse()
@@ -246,6 +255,12 @@ describe(`ElectricAgentsServer callback-forward runner claim gate`, () => {
     const headers = (init as RequestInit).headers as Headers
     expect(headers.get(`authorization`)).toBe(`Bearer claim-secret`)
     expect(headers.has(`electric-claim-token`)).toBe(false)
+    expect(headers.has(`cookie`)).toBe(false)
+    expect(headers.has(`x-forward-me-not`)).toBe(false)
+    expect(headers.has(`electric-runner-id`)).toBe(false)
+    expect(headers.get(`traceparent`)).toBe(
+      `00-00000000000000000000000000000001-0000000000000002-01`
+    )
     expect(registry.updateStatus).toHaveBeenCalledWith(`/chat/one`, `running`)
     expect(registry.materializeActiveClaim).toHaveBeenCalledWith(
       expect.objectContaining({

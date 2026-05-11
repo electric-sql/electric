@@ -2203,16 +2203,7 @@ export class ElectricAgentsServer {
       if (!authorized) return
     }
 
-    const headers = this.buildForwardHeaders(req)
-    const claimToken = headers.get(`electric-claim-token`)?.trim()
-    if (claimToken) {
-      headers.set(
-        `authorization`,
-        `Bearer ${claimToken.replace(/^Bearer\s+/i, ``)}`
-      )
-      headers.delete(`electric-claim-token`)
-    }
-    headers.delete(`content-length`)
+    const headers = this.buildCallbackForwardHeaders(req)
 
     let upstream: Response
     try {
@@ -2612,6 +2603,37 @@ export class ElectricAgentsServer {
     }
 
     return fetch(upstreamUrl, init as RequestInit)
+  }
+
+  private buildCallbackForwardHeaders(req: IncomingMessage): Headers {
+    const incoming = new Headers()
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value === undefined) continue
+      if (Array.isArray(value)) {
+        for (const item of value) incoming.append(key, item)
+      } else {
+        incoming.set(key, value)
+      }
+    }
+
+    const headers = new Headers()
+    for (const key of [`content-type`, `accept`, `traceparent`, `tracestate`]) {
+      const value = incoming.get(key)
+      if (value) headers.set(key, value)
+    }
+
+    const claimToken = incoming.get(`electric-claim-token`)?.trim()
+    if (claimToken) {
+      headers.set(
+        `authorization`,
+        `Bearer ${claimToken.replace(/^Bearer\s+/i, ``)}`
+      )
+    } else {
+      const authorization = incoming.get(`authorization`)
+      if (authorization) headers.set(`authorization`, authorization)
+    }
+
+    return headers
   }
 
   private buildForwardHeaders(req: IncomingMessage): Headers {
