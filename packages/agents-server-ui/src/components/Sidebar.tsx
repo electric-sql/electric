@@ -4,7 +4,7 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { getDesktopFormattedAssertedIdentity } from '../lib/assertedIdentity'
+import { getCachedDesktopFormattedAssertedIdentity } from '../lib/assertedIdentity'
 import {
   bucketEntities,
   groupByStatus,
@@ -153,26 +153,7 @@ export function Sidebar({
   // content without an extra dismiss tap.
   const narrow = useNarrowViewport()
   const { collapsed, setCollapsed } = useSidebarCollapsed()
-  const [identityState, setIdentityState] = useState<
-    | { status: `loading`; identity: undefined }
-    | { status: `ready`; identity: string | undefined }
-  >(() => {
-    const loading =
-      typeof window !== `undefined` &&
-      Boolean(window.electronAPI?.getAssertedAuthHeaders)
-    return loading
-      ? { status: `loading`, identity: undefined }
-      : { status: `ready`, identity: undefined }
-  })
-  useEffect(() => {
-    let cancelled = false
-    getDesktopFormattedAssertedIdentity().then((identity) => {
-      if (!cancelled) setIdentityState({ status: `ready`, identity })
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const assertedIdentity = getCachedDesktopFormattedAssertedIdentity()
   // `data-state` drives the slide/fade transitions in CSS.
   // - In wide mode the sidebar is always visible (or unmounted by
   //   the parent), so no transition state is needed.
@@ -252,13 +233,11 @@ export function Sidebar({
   )
 
   const identityFilteredEntities = useMemo(() => {
-    if (identityState.status === `loading`) return []
-    return identityState.identity
-      ? visibleEntities.filter(
-          (e) => e.tags?.created_by === identityState.identity
-        )
-      : visibleEntities
-  }, [visibleEntities, identityState])
+    if (!assertedIdentity) return []
+    return visibleEntities.filter(
+      (e) => e.tags?.created_by === assertedIdentity
+    )
+  }, [visibleEntities, assertedIdentity])
 
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
   const pinnedEntities = identityFilteredEntities.filter((e) =>

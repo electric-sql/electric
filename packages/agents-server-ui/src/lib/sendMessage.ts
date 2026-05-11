@@ -1,5 +1,8 @@
 import { serverFetch } from './auth-fetch'
-import { getDesktopFormattedAssertedIdentity } from './assertedIdentity'
+import {
+  getCachedDesktopFormattedAssertedIdentity,
+  getDesktopFormattedAssertedIdentity,
+} from './assertedIdentity'
 import { createOptimisticAction } from '@tanstack/db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
@@ -61,9 +64,8 @@ export function createSendMessageAction({
   from?: string
 }) {
   const action = createOptimisticAction<SendMessageInput>({
-    onMutate: async ({ text, key, seq }) => {
-      const effectiveFrom =
-        (await getDesktopFormattedAssertedIdentity()) ?? from
+    onMutate: ({ text, key, seq }) => {
+      const effectiveFrom = getCachedDesktopFormattedAssertedIdentity() ?? from
       const message: OptimisticInboxMessage = {
         key,
         _seq: seq,
@@ -75,7 +77,9 @@ export function createSendMessageAction({
     },
     mutationFn: async ({ text, key }) => {
       const effectiveFrom =
-        (await getDesktopFormattedAssertedIdentity()) ?? from
+        getCachedDesktopFormattedAssertedIdentity() ??
+        (await getDesktopFormattedAssertedIdentity()) ??
+        from
       const res = await serverFetch(`${baseUrl}${entityUrl}/send`, {
         method: `POST`,
         headers: { 'content-type': `application/json` },

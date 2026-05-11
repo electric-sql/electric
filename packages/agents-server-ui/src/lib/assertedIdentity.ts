@@ -25,14 +25,32 @@ export function formatAssertedIdentity(
   return email ?? name ?? userId
 }
 
+let cachedDesktopAssertedIdentity: string | undefined
+let preloadPromise: Promise<string | undefined> | null = null
+
+export function getCachedDesktopFormattedAssertedIdentity():
+  | string
+  | undefined {
+  return cachedDesktopAssertedIdentity
+}
+
+export async function preloadDesktopFormattedAssertedIdentity(): Promise<
+  string | undefined
+> {
+  preloadPromise ??= getDesktopAssertedAuthHeaders().then((headers) => {
+    cachedDesktopAssertedIdentity = formatAssertedIdentity({
+      email: headers[DEV_ASSERTED_EMAIL_HEADER],
+      name: headers[DEV_ASSERTED_NAME_HEADER],
+      userId:
+        headers[DEV_ASSERTED_EMAIL_HEADER] ?? headers[DEV_ASSERTED_NAME_HEADER],
+    })
+    return cachedDesktopAssertedIdentity
+  })
+  return preloadPromise
+}
+
 export async function getDesktopFormattedAssertedIdentity(): Promise<
   string | undefined
 > {
-  const headers = await getDesktopAssertedAuthHeaders()
-  return formatAssertedIdentity({
-    email: headers[DEV_ASSERTED_EMAIL_HEADER],
-    name: headers[DEV_ASSERTED_NAME_HEADER],
-    userId:
-      headers[DEV_ASSERTED_EMAIL_HEADER] ?? headers[DEV_ASSERTED_NAME_HEADER],
-  })
+  return preloadDesktopFormattedAssertedIdentity()
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useMemo } from 'react'
 import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { createOptimisticAction } from '@tanstack/db'
@@ -97,6 +97,35 @@ function createEntityTypesCollection(baseUrl: string) {
 
 type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 type EntityTypesCollection = ReturnType<typeof createEntityTypesCollection>
+
+type AppCollections = {
+  entities: EntitiesCollection
+  entityTypes: EntityTypesCollection
+}
+
+const appCollectionsCache = new Map<string, AppCollections>()
+
+function getOrCreateAppCollections(baseUrl: string): AppCollections {
+  const cached = appCollectionsCache.get(baseUrl)
+  if (cached) return cached
+  const collections = {
+    entities: createEntitiesCollection(baseUrl),
+    entityTypes: createEntityTypesCollection(baseUrl),
+  }
+  appCollectionsCache.set(baseUrl, collections)
+  return collections
+}
+
+export async function preloadAppCollections(
+  baseUrl: string
+): Promise<AppCollections> {
+  const collections = getOrCreateAppCollections(baseUrl)
+  await Promise.all([
+    collections.entities.preload(),
+    collections.entityTypes.preload(),
+  ])
+  return collections
+}
 
 // --- Actions ---
 
@@ -247,55 +276,24 @@ export function ElectricAgentsProvider({
   baseUrl: string | null
   children: ReactNode
 }): React.ReactElement {
-  const [state, setState] = useState<ElectricAgentsState>({
-    entitiesCollection: null,
-    entityTypesCollection: null,
-    spawnEntity: null,
-    killEntity: null,
-    forkEntity: null,
-  })
-  const prevUrlRef = useRef<string | null>(null)
-  const collectionsRef = useRef<{
-    entities: EntitiesCollection | null
-    entityTypes: EntityTypesCollection | null
-  }>({ entities: null, entityTypes: null })
-
-  useEffect(() => {
-    if (baseUrl === prevUrlRef.current) return
-    prevUrlRef.current = baseUrl
-
-    // Clean up old collections to stop SSE streams
-    collectionsRef.current.entities?.cleanup()
-    collectionsRef.current.entityTypes?.cleanup()
-    collectionsRef.current = { entities: null, entityTypes: null }
-
+  const state = useMemo<ElectricAgentsState>(() => {
     if (!baseUrl) {
-      setState({
+      return {
         entitiesCollection: null,
         entityTypesCollection: null,
         spawnEntity: null,
         killEntity: null,
         forkEntity: null,
-      })
-      return
+      }
     }
 
-    const entities = createEntitiesCollection(baseUrl)
-    const entityTypes = createEntityTypesCollection(baseUrl)
-
-    collectionsRef.current = { entities, entityTypes }
-
-    setState({
+    const { entities, entityTypes } = getOrCreateAppCollections(baseUrl)
+    return {
       entitiesCollection: entities,
       entityTypesCollection: entityTypes,
       spawnEntity: createSpawnAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
       forkEntity: createForkEntity(baseUrl),
-    })
-
-    return () => {
-      collectionsRef.current.entities?.cleanup()
-      collectionsRef.current.entityTypes?.cleanup()
     }
   }, [baseUrl])
 
