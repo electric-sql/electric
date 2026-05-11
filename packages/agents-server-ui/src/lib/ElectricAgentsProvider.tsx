@@ -5,6 +5,7 @@ import { createOptimisticAction } from '@tanstack/db'
 import { z } from 'zod'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
+import { getCachedDesktopFormattedAssertedIdentity } from './assertedIdentity'
 
 type EntityStatus = `spawning` | `running` | `idle` | `stopped`
 
@@ -143,6 +144,14 @@ interface SpawnInput {
   dispatch_policy?: RunnerDispatchPolicy
 }
 
+function withCreatedByTag(
+  tags: Record<string, string> | undefined
+): Record<string, string> | undefined {
+  const createdBy = getCachedDesktopFormattedAssertedIdentity()
+  if (!createdBy) return tags
+  return { ...(tags ?? {}), created_by: createdBy }
+}
+
 function createSpawnAction(
   baseUrl: string,
   entitiesCollection: EntitiesCollection
@@ -153,7 +162,7 @@ function createSpawnAction(
         url: `/${type}/${name}`,
         type,
         status: `spawning`,
-        tags: tags ?? {},
+        tags: withCreatedByTag(tags) ?? {},
         spawn_args: args ?? {},
         parent: null,
         created_at: Date.now(),
@@ -170,8 +179,9 @@ function createSpawnAction(
       dispatch_policy,
     }) => {
       const body: Record<string, unknown> = {}
+      const stampedTags = withCreatedByTag(tags)
       if (args) body.args = args
-      if (tags) body.tags = tags
+      if (stampedTags) body.tags = stampedTags
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
       if (dispatch_policy) body.dispatch_policy = dispatch_policy
