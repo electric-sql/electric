@@ -5,12 +5,14 @@ import {
 } from '@electric-sql/client'
 import { and, eq } from 'drizzle-orm'
 import { wakeRegistrations } from './db/schema.js'
-import { serverLog } from './log.js'
-import { electricUrlWithPath } from './electric-url.js'
+import { serverLog } from './utils/log.js'
+import { electricUrlWithPath } from './utils/electric-url.js'
+import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import type { Message, Row, Value } from '@electric-sql/client'
 
 export interface WakeRegistration {
+  tenantId?: string
   subscriberUrl: string
   sourceUrl: string
   condition:
@@ -28,6 +30,7 @@ export interface WakeRegistration {
 }
 
 export interface WakeEvalResult {
+  tenantId: string
   subscriberUrl: string
   registrationDbId: number
   sourceEventKey: string
@@ -48,6 +51,7 @@ export type WakeTimeoutCallback = (result: WakeEvalResult) => void
 export type WakeDebounceCallback = (result: WakeEvalResult) => void
 
 interface CachedWakeRegistration extends WakeRegistration {
+  tenantId: string
   dbId: number
   createdAt?: Date
   timeoutConsumed?: boolean
@@ -55,6 +59,7 @@ interface CachedWakeRegistration extends WakeRegistration {
 
 interface WakeRegistrationShapeRow extends Row<Date> {
   id: number
+  tenant_id: string
   subscriber_url: string
   source_url: string
   condition: WakeRegistration[`condition`] & Value<Date>
@@ -88,6 +93,10 @@ function wakeSourceEventId(event: Record<string, unknown>): string {
   return crypto.randomUUID()
 }
 
+function sqlStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, `''`)}'`
+}
+
 export class WakeRegistry {
   private db: DrizzleDB
   private registrationCache = new Map<string, Array<CachedWakeRegistration>>()
@@ -99,8 +108,8 @@ export class WakeRegistry {
   private debounceRunStatus = new Map<string, `completed` | `failed`>()
   private timeoutTimers = new Map<string, NodeJS.Timeout>()
   private timeoutDelivered = new Set<number>()
-  private onTimeout: WakeTimeoutCallback | null = null
-  private onDebounce: WakeDebounceCallback | null = null
+  private timeoutCallbacks = new Map<string, WakeTimeoutCallback>()
+  private debounceCallbacks = new Map<string, WakeDebounceCallback>()
   private syncElectricUrl: string | null = null
   private syncElectricSecret: string | undefined
   private syncAbortController: AbortController | null = null
@@ -108,20 +117,36 @@ export class WakeRegistry {
   private syncReadyPromise: Promise<void> | null = null
   private syncRecoveryPromise: Promise<void> | null = null
 
-  constructor(db: DrizzleDB) {
+  constructor(
+    db: DrizzleDB,
+    readonly tenantId: string | null = DEFAULT_TENANT_ID
+  ) {
     this.db = db
   }
 
-  setTimeoutCallback(cb: WakeTimeoutCallback): void {
-    this.onTimeout = cb
+  setTimeoutCallback(cb: WakeTimeoutCallback, tenantId?: string): void {
+    const resolvedTenantId = this.resolveTenantId(tenantId)
+    this.timeoutCallbacks.set(resolvedTenantId, cb)
+    this.syncTenantTimeoutTimers(resolvedTenantId)
   }
 
-  setDebounceCallback(cb: WakeDebounceCallback): void {
-    this.onDebounce = cb
+  setDebounceCallback(cb: WakeDebounceCallback, tenantId?: string): void {
+    this.debounceCallbacks.set(this.resolveTenantId(tenantId), cb)
   }
 
-  private registrationKey(reg: WakeRegistration): string {
+  private resolveTenantId(tenantId?: string): string {
+    if (tenantId) return tenantId
+    if (this.tenantId) return this.tenantId
+    throw new Error(`WakeRegistry tenantId is required in shared mode`)
+  }
+
+  private cacheKey(tenantId: string, sourceUrl: string): string {
+    return `${tenantId}:${sourceUrl}`
+  }
+
+  private registrationKey(reg: CachedWakeRegistration): string {
     return [
+      reg.tenantId,
       reg.subscriberUrl,
       reg.sourceUrl,
       reg.manifestKey ?? ``,
@@ -131,6 +156,17 @@ export class WakeRegistry {
       JSON.stringify(reg.condition),
       reg.includeResponse === false ? `0` : `1`,
     ].join(`:`)
+  }
+
+  private deliverTimeout(result: WakeEvalResult): boolean {
+    const callback = this.timeoutCallbacks.get(result.tenantId)
+    if (!callback) return false
+    callback(result)
+    return true
+  }
+
+  private deliverDebounce(result: WakeEvalResult): void {
+    this.debounceCallbacks.get(result.tenantId)?.(result)
   }
 
   async startSync(electricUrl: string, electricSecret?: string): Promise<void> {
@@ -147,9 +183,13 @@ export class WakeRegistry {
       url: electricUrlWithPath(electricUrl, `/v1/shape`).toString(),
       params: {
         table: `wake_registrations`,
+        ...(this.tenantId
+          ? { where: `tenant_id = ${sqlStringLiteral(this.tenantId)}` }
+          : {}),
         ...(electricSecret ? { secret: electricSecret } : {}),
         columns: [
           `id`,
+          `tenant_id`,
           `subscriber_url`,
           `source_url`,
           `condition`,
@@ -278,9 +318,11 @@ export class WakeRegistry {
   }
 
   async register(reg: WakeRegistration): Promise<void> {
+    const tenantId = this.resolveTenantId(reg.tenantId)
     const result = await this.db
       .insert(wakeRegistrations)
       .values({
+        tenantId,
         subscriberUrl: reg.subscriberUrl,
         sourceUrl: reg.sourceUrl,
         condition: reg.condition,
@@ -303,6 +345,7 @@ export class WakeRegistry {
     const dbId = result[0]!.id
     this.upsertCachedRegistration({
       ...reg,
+      tenantId,
       dbId,
       createdAt: new Date(),
       timeoutConsumed: false,
@@ -314,21 +357,32 @@ export class WakeRegistry {
     this.startTimeoutTimerWithDuration(reg, dbId, reg.timeoutMs)
   }
 
-  private async markTimeoutConsumed(dbId: number): Promise<void> {
+  private async markTimeoutConsumed(
+    dbId: number,
+    tenantId: string
+  ): Promise<void> {
     await this.db
       .update(wakeRegistrations)
       .set({ timeoutConsumed: true })
-      .where(eq(wakeRegistrations.id, dbId))
+      .where(
+        and(
+          eq(wakeRegistrations.tenantId, tenantId),
+          eq(wakeRegistrations.id, dbId)
+        )
+      )
   }
 
   async unregisterByManifestKey(
     subscriberUrl: string,
-    manifestKey: string
+    manifestKey: string,
+    tenantId?: string
   ): Promise<void> {
+    const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
       .where(
         and(
+          eq(wakeRegistrations.tenantId, resolvedTenantId),
           eq(wakeRegistrations.subscriberUrl, subscriberUrl),
           eq(wakeRegistrations.manifestKey, manifestKey)
         )
@@ -339,7 +393,9 @@ export class WakeRegistry {
         regs
           .filter(
             (r) =>
-              r.subscriberUrl === subscriberUrl && r.manifestKey === manifestKey
+              r.tenantId === resolvedTenantId &&
+              r.subscriberUrl === subscriberUrl &&
+              r.manifestKey === manifestKey
           )
           .map((r) => r.dbId)
     )
@@ -349,51 +405,84 @@ export class WakeRegistry {
     }
   }
 
-  async unregisterBySubscriber(subscriberUrl: string): Promise<void> {
+  async unregisterBySubscriber(
+    subscriberUrl: string,
+    tenantId?: string
+  ): Promise<void> {
+    const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
-      .where(eq(wakeRegistrations.subscriberUrl, subscriberUrl))
+      .where(
+        and(
+          eq(wakeRegistrations.tenantId, resolvedTenantId),
+          eq(wakeRegistrations.subscriberUrl, subscriberUrl)
+        )
+      )
 
     const toRemove = Array.from(this.registrationCache.values()).flatMap(
       (regs) =>
-        regs.filter((r) => r.subscriberUrl === subscriberUrl).map((r) => r.dbId)
+        regs
+          .filter(
+            (r) =>
+              r.tenantId === resolvedTenantId &&
+              r.subscriberUrl === subscriberUrl
+          )
+          .map((r) => r.dbId)
     )
     for (const dbId of toRemove) {
       this.removeCachedRegistrationByDbId(dbId)
     }
   }
 
-  async unregisterBySource(sourceUrl: string): Promise<void> {
+  async unregisterBySource(
+    sourceUrl: string,
+    tenantId?: string
+  ): Promise<void> {
+    const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
-      .where(eq(wakeRegistrations.sourceUrl, sourceUrl))
+      .where(
+        and(
+          eq(wakeRegistrations.tenantId, resolvedTenantId),
+          eq(wakeRegistrations.sourceUrl, sourceUrl)
+        )
+      )
 
-    const regs = this.registrationCache.get(sourceUrl)
+    const key = this.cacheKey(resolvedTenantId, sourceUrl)
+    const regs = this.registrationCache.get(key)
     if (regs) {
       for (const reg of [...regs]) {
         this.removeCachedRegistrationByDbId(reg.dbId)
       }
-      this.registrationCache.delete(sourceUrl)
+      this.registrationCache.delete(key)
     }
   }
 
   async unregisterBySubscriberAndSource(
     subscriberUrl: string,
-    sourceUrl: string
+    sourceUrl: string,
+    tenantId?: string
   ): Promise<void> {
+    const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
       .where(
         and(
+          eq(wakeRegistrations.tenantId, resolvedTenantId),
           eq(wakeRegistrations.subscriberUrl, subscriberUrl),
           eq(wakeRegistrations.sourceUrl, sourceUrl)
         )
       )
 
-    const regs = this.registrationCache.get(sourceUrl)
+    const regs = this.registrationCache.get(
+      this.cacheKey(resolvedTenantId, sourceUrl)
+    )
     if (regs) {
       const toRemove = regs
-        .filter((r) => r.subscriberUrl === subscriberUrl)
+        .filter(
+          (r) =>
+            r.tenantId === resolvedTenantId && r.subscriberUrl === subscriberUrl
+        )
         .map((r) => r.dbId)
       for (const dbId of toRemove) {
         this.removeCachedRegistrationByDbId(dbId)
@@ -402,12 +491,19 @@ export class WakeRegistry {
   }
 
   async loadRegistrations(): Promise<void> {
-    const rows = await this.db.select().from(wakeRegistrations)
+    const rows =
+      this.tenantId === null
+        ? await this.db.select().from(wakeRegistrations)
+        : await this.db
+            .select()
+            .from(wakeRegistrations)
+            .where(eq(wakeRegistrations.tenantId, this.tenantId))
 
     this.resetCachedRegistrations()
 
     for (const row of rows) {
       const reg: CachedWakeRegistration = {
+        tenantId: row.tenantId,
         subscriberUrl: row.subscriberUrl,
         sourceUrl: row.sourceUrl,
         condition: row.condition as WakeRegistration[`condition`],
@@ -432,20 +528,7 @@ export class WakeRegistry {
     const timerKey = this.registrationKey(reg)
     const timer = setTimeout(() => {
       this.timeoutTimers.delete(timerKey)
-      this.timeoutDelivered.add(dbId)
-      void this.markTimeoutConsumed(dbId)
-      if (this.onTimeout) {
-        this.onTimeout({
-          subscriberUrl: reg.subscriberUrl,
-          registrationDbId: dbId,
-          sourceEventKey: `timeout`,
-          wakeMessage: {
-            source: reg.sourceUrl,
-            timeout: true,
-            changes: [],
-          },
-        })
-      }
+      this.deliverTimeoutForRegistration(reg, dbId)
     }, durationMs)
     this.timeoutTimers.set(timerKey, timer)
   }
@@ -468,7 +551,7 @@ export class WakeRegistry {
     }
   }
 
-  private clearRegistrationState(reg: WakeRegistration): void {
+  private clearRegistrationState(reg: CachedWakeRegistration): void {
     const timerKey = this.registrationKey(reg)
     this.clearDebounceState(timerKey)
     this.clearTimeoutState(timerKey)
@@ -491,12 +574,12 @@ export class WakeRegistry {
 
   private findCachedRegistration(
     dbId: number
-  ): { sourceUrl: string; index: number; reg: CachedWakeRegistration } | null {
-    for (const [sourceUrl, regs] of this.registrationCache) {
+  ): { cacheKey: string; index: number; reg: CachedWakeRegistration } | null {
+    for (const [cacheKey, regs] of this.registrationCache) {
       const index = regs.findIndex((reg) => reg.dbId === dbId)
       if (index >= 0) {
         return {
-          sourceUrl,
+          cacheKey,
           index,
           reg: regs[index]!,
         }
@@ -512,11 +595,11 @@ export class WakeRegistry {
 
     if (existing) {
       const previousKey = this.registrationKey(existing.reg)
-      const regs = this.registrationCache.get(existing.sourceUrl)
+      const regs = this.registrationCache.get(existing.cacheKey)
       if (regs) {
         regs.splice(existing.index, 1)
         if (regs.length === 0) {
-          this.registrationCache.delete(existing.sourceUrl)
+          this.registrationCache.delete(existing.cacheKey)
         }
       }
       if (previousKey !== nextKey) {
@@ -524,9 +607,10 @@ export class WakeRegistry {
       }
     }
 
-    const cached = this.registrationCache.get(reg.sourceUrl) ?? []
+    const cacheKey = this.cacheKey(reg.tenantId, reg.sourceUrl)
+    const cached = this.registrationCache.get(cacheKey) ?? []
     cached.push(reg)
-    this.registrationCache.set(reg.sourceUrl, cached)
+    this.registrationCache.set(cacheKey, cached)
     this.syncTimeoutTimer(reg)
   }
 
@@ -537,11 +621,11 @@ export class WakeRegistry {
     this.clearRegistrationState(existing.reg)
     this.timeoutDelivered.delete(dbId)
 
-    const regs = this.registrationCache.get(existing.sourceUrl)
+    const regs = this.registrationCache.get(existing.cacheKey)
     if (!regs) return
     regs.splice(existing.index, 1)
     if (regs.length === 0) {
-      this.registrationCache.delete(existing.sourceUrl)
+      this.registrationCache.delete(existing.cacheKey)
     }
   }
 
@@ -572,19 +656,43 @@ export class WakeRegistry {
       return
     }
 
-    this.timeoutDelivered.add(reg.dbId)
-    void this.markTimeoutConsumed(reg.dbId)
-    if (this.onTimeout) {
-      this.onTimeout({
-        subscriberUrl: reg.subscriberUrl,
-        registrationDbId: reg.dbId,
-        sourceEventKey: `timeout`,
-        wakeMessage: {
-          source: reg.sourceUrl,
-          timeout: true,
-          changes: [],
-        },
-      })
+    this.deliverTimeoutForRegistration(reg, reg.dbId)
+  }
+
+  private deliverTimeoutForRegistration(
+    reg: CachedWakeRegistration,
+    dbId: number
+  ): void {
+    if (this.deliverTimeout(this.timeoutWakeResult(reg, dbId))) {
+      this.timeoutDelivered.add(dbId)
+      void this.markTimeoutConsumed(dbId, reg.tenantId)
+    }
+  }
+
+  private syncTenantTimeoutTimers(tenantId: string): void {
+    for (const regs of this.registrationCache.values()) {
+      for (const reg of regs) {
+        if (reg.tenantId === tenantId) {
+          this.syncTimeoutTimer(reg)
+        }
+      }
+    }
+  }
+
+  private timeoutWakeResult(
+    reg: CachedWakeRegistration,
+    dbId: number
+  ): WakeEvalResult {
+    return {
+      tenantId: reg.tenantId,
+      subscriberUrl: reg.subscriberUrl,
+      registrationDbId: dbId,
+      sourceEventKey: `timeout`,
+      wakeMessage: {
+        source: reg.sourceUrl,
+        timeout: true,
+        changes: [],
+      },
     }
   }
 
@@ -592,6 +700,8 @@ export class WakeRegistry {
     row: WakeRegistrationShapeRow
   ): CachedWakeRegistration {
     return {
+      tenantId:
+        (row as { tenant_id?: string }).tenant_id ?? this.resolveTenantId(),
       subscriberUrl: row.subscriber_url,
       sourceUrl: row.source_url,
       condition: row.condition,
@@ -630,9 +740,12 @@ export class WakeRegistry {
 
   evaluate(
     sourceUrl: string,
-    event: Record<string, unknown>
+    event: Record<string, unknown>,
+    tenantId?: string
   ): Array<WakeEvalResult> {
-    const regs = this.registrationCache.get(sourceUrl)
+    const resolvedTenantId = this.resolveTenantId(tenantId)
+    const cacheKey = this.cacheKey(resolvedTenantId, sourceUrl)
+    const regs = this.registrationCache.get(cacheKey)
     if (!regs || regs.length === 0) return []
 
     const results: Array<WakeEvalResult> = []
@@ -648,7 +761,7 @@ export class WakeRegistry {
       if (timeoutTimer) {
         clearTimeout(timeoutTimer)
         this.timeoutTimers.delete(timerKey)
-        void this.markTimeoutConsumed(reg.dbId)
+        void this.markTimeoutConsumed(reg.dbId, reg.tenantId)
       }
 
       if (reg.debounceMs != null && reg.debounceMs > 0) {
@@ -667,11 +780,12 @@ export class WakeRegistry {
         const timer = setTimeout(() => {
           this.debounceTimers.delete(timerKey)
           const flushed = this.debounceBuffers.get(timerKey)
-          if (flushed && flushed.length > 0 && this.onDebounce) {
+          if (flushed && flushed.length > 0) {
             this.debounceBuffers.delete(timerKey)
             const runStatus = this.debounceRunStatus.get(timerKey)
             this.debounceRunStatus.delete(timerKey)
-            this.onDebounce({
+            this.deliverDebounce({
+              tenantId: reg.tenantId,
               subscriberUrl: reg.subscriberUrl,
               registrationDbId: reg.dbId,
               sourceEventKey: flushed[flushed.length - 1]!.key,
@@ -688,6 +802,7 @@ export class WakeRegistry {
         this.debounceTimers.set(timerKey, timer)
       } else {
         results.push({
+          tenantId: reg.tenantId,
           subscriberUrl: reg.subscriberUrl,
           registrationDbId: reg.dbId,
           sourceEventKey: wakeSourceEventId(event),
@@ -713,11 +828,16 @@ export class WakeRegistry {
         this.timeoutDelivered.delete(removed[0].dbId)
         void this.db
           .delete(wakeRegistrations)
-          .where(eq(wakeRegistrations.id, removed[0].dbId))
+          .where(
+            and(
+              eq(wakeRegistrations.tenantId, removed[0].tenantId),
+              eq(wakeRegistrations.id, removed[0].dbId)
+            )
+          )
       }
     }
     if (regs.length === 0) {
-      this.registrationCache.delete(sourceUrl)
+      this.registrationCache.delete(cacheKey)
     }
 
     return results
@@ -726,9 +846,11 @@ export class WakeRegistry {
   /** Flush any pending debounce buffers for a subscriber and return them. */
   flushDebounce(
     subscriberUrl: string,
-    sourceUrl: string
+    sourceUrl: string,
+    tenantId?: string
   ): WakeEvalResult | null {
-    const timerKeyPrefix = `${subscriberUrl}:${sourceUrl}:`
+    const resolvedTenantId = this.resolveTenantId(tenantId)
+    const timerKeyPrefix = `${resolvedTenantId}:${subscriberUrl}:${sourceUrl}:`
     const changes: Array<WakeEvalResult[`wakeMessage`][`changes`][number]> = []
 
     for (const [timerKey, buffer] of this.debounceBuffers.entries()) {
@@ -741,11 +863,13 @@ export class WakeRegistry {
         clearTimeout(timer)
         this.debounceTimers.delete(timerKey)
       }
+      this.debounceRunStatus.delete(timerKey)
     }
 
     if (changes.length === 0) return null
 
     return {
+      tenantId: resolvedTenantId,
       subscriberUrl,
       registrationDbId: -1,
       sourceEventKey: changes[changes.length - 1]!.key,

@@ -45,8 +45,8 @@
     "stylecheck": "eslint . --quiet"
   },
   "dependencies": {
-    "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.0",
-    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
+    "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350",
+    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350",
     "@electric-ax/agents": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.17",

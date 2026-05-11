@@ -1,4 +1,5 @@
 import type { EntityTags, TagOperation } from './tags'
+import { appendPathToUrl } from './url'
 
 export interface RuntimeServerClientConfig {
   baseUrl: string
@@ -126,6 +127,10 @@ export function getSharedStateStreamPath(sharedStateId: string): string {
   return `/_electric/shared-state/${sharedStateId}`
 }
 
+function entityRpcPath(entityUrl: string): string {
+  return `/_electric/entities${entityUrl}`
+}
+
 export function createRuntimeServerClient(
   config: RuntimeServerClientConfig
 ): RuntimeServerClient {
@@ -136,7 +141,7 @@ export function createRuntimeServerClient(
   }
 
   const request = (path: string, init?: RequestInit): Promise<Response> => {
-    return track(fetchImpl(`${config.baseUrl}${path}`, init))
+    return track(fetchImpl(appendPathToUrl(config.baseUrl, path), init))
   }
 
   const requireEntityInfo = (
@@ -177,7 +182,7 @@ export function createRuntimeServerClient(
     if (type !== undefined) body.type = type
     if (afterMs !== undefined) body.afterMs = afterMs
 
-    const response = await request(`${targetUrl}/send`, {
+    const response = await request(`${entityRpcPath(targetUrl)}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify(body),
@@ -193,7 +198,7 @@ export function createRuntimeServerClient(
   const getEntityInfo = async (
     entityUrl: string
   ): Promise<RuntimeEntityInfo> => {
-    const response = await request(entityUrl, { method: `GET` })
+    const response = await request(entityRpcPath(entityUrl), { method: `GET` })
     if (!response.ok) {
       throw new Error(
         `failed to resolve entity ${entityUrl} (${response.status}): ${await readErrorText(response)}`
@@ -222,7 +227,7 @@ export function createRuntimeServerClient(
     if (tags && Object.keys(tags).length > 0) body.tags = tags
     if (wake !== undefined) body.wake = wake
 
-    const response = await request(`/${type}/${id}`, {
+    const response = await request(`/_electric/entities/${type}/${id}`, {
       method: `PUT`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify(body),
@@ -277,7 +282,9 @@ export function createRuntimeServerClient(
   }
 
   const deleteEntity = async (entityUrl: string): Promise<void> => {
-    const response = await request(entityUrl, { method: `DELETE` })
+    const response = await request(entityRpcPath(entityUrl), {
+      method: `DELETE`,
+    })
     if (!response.ok && response.status !== 404) {
       throw new Error(
         `delete ${entityUrl} failed (${response.status}): ${await readErrorText(response)}`
@@ -342,7 +349,7 @@ export function createRuntimeServerClient(
     timeoutMs?: number
   }): Promise<{ txid: string }> => {
     const response = await request(
-      `${options.entityUrl}/schedules/${encodeURIComponent(options.id)}`,
+      `${entityRpcPath(options.entityUrl)}/schedules/${encodeURIComponent(options.id)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -374,7 +381,7 @@ export function createRuntimeServerClient(
     messageType?: string
   }): Promise<{ txid: string }> => {
     const response = await request(
-      `${options.entityUrl}/schedules/${encodeURIComponent(options.id)}`,
+      `${entityRpcPath(options.entityUrl)}/schedules/${encodeURIComponent(options.id)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -401,7 +408,7 @@ export function createRuntimeServerClient(
     id: string
   }): Promise<{ txid: string }> => {
     const response = await request(
-      `${options.entityUrl}/schedules/${encodeURIComponent(options.id)}`,
+      `${entityRpcPath(options.entityUrl)}/schedules/${encodeURIComponent(options.id)}`,
       {
         method: `DELETE`,
       }
@@ -433,7 +440,7 @@ export function createRuntimeServerClient(
     writeToken: string
   ): Promise<void> => {
     const response = await authedRequest(
-      `${entityUrl}/tags/${encodeURIComponent(key)}`,
+      `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
         method: `POST`,
         headers: { 'content-type': `application/json` },
@@ -454,7 +461,7 @@ export function createRuntimeServerClient(
     writeToken: string
   ): Promise<void> => {
     const response = await authedRequest(
-      `${entityUrl}/tags/${encodeURIComponent(key)}`,
+      `${entityRpcPath(entityUrl)}/tags/${encodeURIComponent(key)}`,
       {
         method: `DELETE`,
       },

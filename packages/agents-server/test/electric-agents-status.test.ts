@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ElectricAgentsManager } from '../src/electric-agents-manager'
+import { EntityManager } from '../src/entity-manager'
 import { assertEntityStatus } from '../src/electric-agents-types'
 
 describe(`assertEntityStatus`, () => {
@@ -31,7 +31,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
       .fn()
       .mockRejectedValue(new Error(`stream create failed`))
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntityType: vi.fn().mockResolvedValue({
           name: `chat`,
@@ -71,7 +71,8 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
     // After failure, the wake should be cleaned up
     expect(unregisterBySubscriberAndSource).toHaveBeenCalledWith(
       `/other/entity`,
-      `/chat/test-1`
+      `/chat/test-1`,
+      `default`
     )
   })
 
@@ -82,7 +83,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
       .fn()
       .mockRejectedValue(new Error(`registry create failed`))
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntityType: vi.fn().mockResolvedValue({
           name: `chat`,
@@ -120,7 +121,7 @@ describe(`ElectricAgentsManager.spawn wake cleanup on failure`, () => {
 
   it(`rejects duplicate entity URLs before touching stream creation`, async () => {
     const createStream = vi.fn()
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntityType: vi.fn().mockResolvedValue({
           name: `chat`,
@@ -260,7 +261,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       delete: vi.fn(),
     }
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: registry as any,
       streamClient: streamClient as any,
       validator: {} as any,
@@ -326,7 +327,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       ...makeEntity(`/manager/busy`),
       status: `running`,
     }
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntity: vi.fn().mockResolvedValue(root),
         listEntities: vi.fn().mockResolvedValue({ entities: [], total: 0 }),
@@ -382,7 +383,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       delete: vi.fn(),
     }
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntity: vi.fn(async (url: string) => entitiesByUrl.get(url) ?? null),
         listEntities: vi.fn(async ({ parent }: { parent?: string }) => ({
@@ -446,7 +447,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
       delete: vi.fn(),
     }
 
-    const manager = new ElectricAgentsManager({
+    const manager = new EntityManager({
       registry: {
         getEntity: vi.fn(async (url: string) => entitiesByUrl.get(url) ?? null),
         listEntities: vi.fn().mockResolvedValue({ entities: [], total: 0 }),
