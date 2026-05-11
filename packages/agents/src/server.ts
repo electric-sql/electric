@@ -298,7 +298,12 @@ export class BuiltinAgentsServer {
     if (this.bootstrap) {
       this.bootstrap.runtime.abortWakes()
       await Promise.race([
-        this.bootstrap.runtime.drainWakes().catch(() => {}),
+        this.bootstrap.runtime.drainWakes().catch((err) => {
+          serverLog.error(
+            `[builtin-agents] drainWakes failed during shutdown:`,
+            err
+          )
+        }),
         new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
       ])
       this.bootstrap = null

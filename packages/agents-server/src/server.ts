@@ -983,28 +983,36 @@ export class ElectricAgentsServer {
       this.electricAgentsManager
     ) {
       const body = await readBody(req)
+      let opts: {
+        subscriberUrl: string
+        sourceUrl: string
+        condition:
+          | `runFinished`
+          | {
+              on: `change`
+              collections?: Array<string>
+              ops?: Array<`insert` | `update` | `delete`>
+            }
+        debounceMs?: number
+        timeoutMs?: number
+        includeResponse?: boolean
+        manifestKey?: string
+      }
       try {
-        const opts = JSON.parse(new TextDecoder().decode(body)) as {
-          subscriberUrl: string
-          sourceUrl: string
-          condition:
-            | `runFinished`
-            | {
-                on: `change`
-                collections?: Array<string>
-                ops?: Array<`insert` | `update` | `delete`>
-              }
-          debounceMs?: number
-          timeoutMs?: number
-          includeResponse?: boolean
-          manifestKey?: string
-        }
-        await this.electricAgentsManager.registerWake(opts)
-        res.writeHead(204)
-        res.end()
+        opts = JSON.parse(new TextDecoder().decode(body))
       } catch {
         res.writeHead(400, { 'content-type': `application/json` })
         res.end(JSON.stringify({ error: `invalid wake registration body` }))
+        return
+      }
+      try {
+        await this.electricAgentsManager.registerWake(opts)
+        res.writeHead(204)
+        res.end()
+      } catch (err) {
+        serverLog.error(`[agent-server] wake registration failed:`, err)
+        res.writeHead(500, { 'content-type': `application/json` })
+        res.end(JSON.stringify({ error: `wake registration failed` }))
       }
       return
     }
@@ -1162,7 +1170,12 @@ export class ElectricAgentsServer {
       void this.syncManifestSchedules(entity.url, event).catch((err) =>
         serverLog.warn(`[agent-server] manifest schedule sync failed:`, err)
       )
-      void this.dispatchWakeForEntityAppend(entity, event)
+      void this.dispatchWakeForEntityAppend(entity, event).catch((err) =>
+        serverLog.warn(
+          `[agent-server] dispatch wake for entity append failed:`,
+          err
+        )
+      )
     }
 
     return true

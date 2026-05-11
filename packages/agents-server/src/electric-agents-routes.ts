@@ -16,6 +16,7 @@ import {
   toPublicEntity,
 } from './electric-agents-types'
 import { runnerWakeStream } from './dispatch-wake-router'
+import { serverLog } from './log.js'
 import { formatAuthenticatedUser } from './authenticated-user-format'
 import type { ElectricAgentsManager } from './electric-agents-manager'
 import type { StreamClient } from './stream-client'
@@ -303,7 +304,11 @@ export class ElectricAgentsRoutes {
         return null
       }
       return user
-    } catch {
+    } catch (err) {
+      serverLog.warn(
+        `[agent-server] authenticateRequest failed:`,
+        err instanceof Error ? err.message : String(err)
+      )
       return null
     }
   }
@@ -762,18 +767,17 @@ export class ElectricAgentsRoutes {
         }
       )
       const target = dispatchPolicy?.targets[0]
+      const authenticatedUser = await this.authenticateIncomingRequest(req)
       if (target?.type === `runner`) {
-        const user = await this.authenticateIncomingRequest(req)
         const authorized = await this.authorizeRunnerTarget(
           target.runnerId,
-          user,
+          authenticatedUser,
           res,
           `spawn`
         )
         if (!authorized) return
       }
 
-      const authenticatedUser = await this.authenticateIncomingRequest(req)
       const formattedUser = formatAuthenticatedUser(authenticatedUser)
       const parsedTags = parsed.tags ?? undefined
       const tags = this.authenticateRequest

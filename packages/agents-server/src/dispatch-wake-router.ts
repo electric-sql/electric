@@ -377,8 +377,13 @@ export class DispatchWakeRouter {
           return { target, status: `delivered` }
         }
 
+        if (!resolvedRunnerWakeStream) {
+          throw new Error(
+            `Dispatch runner "${target.runnerId}" has no wake stream`
+          )
+        }
         const append = await this.appendRunnerWake(
-          resolvedRunnerWakeStream!,
+          resolvedRunnerWakeStream,
           notification
         )
         await this.markWakeDelivered?.({
@@ -390,7 +395,7 @@ export class DispatchWakeRouter {
         return {
           target,
           status: `queued`,
-          runnerWakeStream: resolvedRunnerWakeStream!,
+          runnerWakeStream: resolvedRunnerWakeStream,
           runnerWakeStreamOffset: append.offset,
         }
       } catch (err) {

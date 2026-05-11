@@ -454,7 +454,8 @@ async function loadSettings(): Promise<void> {
       mcp: normalizeMcp(parsed.mcp),
       pullWakeRunnerId,
     }
-  } catch {
+  } catch (err) {
+    console.error(`[agents-desktop] Failed to load settings:`, err)
     settings = { ...DEFAULT_SETTINGS, pullWakeRunnerId: randomUUID() }
     shouldSaveSettings = true
   }

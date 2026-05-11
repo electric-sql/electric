@@ -119,8 +119,11 @@ export function createPullWakeRunner(
         const error = err instanceof Error ? err : new Error(String(err))
         try {
           config.onError?.(error)
-        } catch {
-          // Heartbeat errors should not kill the wake tail.
+        } catch (onErrorErr) {
+          console.error(
+            `[pull-wake-runner] heartbeat error handler failed:`,
+            onErrorErr
+          )
         }
       }
     }

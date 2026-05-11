@@ -390,7 +390,13 @@ export async function processWake(
     if (left === right) return 0
     if (left === `-1`) return -1
     if (right === `-1`) return 1
-    return left < right ? -1 : 1
+    try {
+      const leftBig = BigInt(left)
+      const rightBig = BigInt(right)
+      return leftBig === rightBig ? 0 : leftBig > rightBig ? 1 : -1
+    } catch {
+      return left > right ? 1 : -1
+    }
   }
 
   const setSafeAckOffset = (offset: string): void => {
