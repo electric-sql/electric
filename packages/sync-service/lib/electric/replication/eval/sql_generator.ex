@@ -42,7 +42,7 @@ defmodule Electric.Replication.Eval.SqlGenerator do
   membership (IN), logical operators (AND, OR, NOT), boolean tests
   (IS TRUE, IS FALSE, IS UNKNOWN, etc.), column references, constants
   (strings, integers, floats, booleans, NULL), type casts, arithmetic
-  operators (+, -, *, /, ^, |/, @, &, |, #, ~), string concatenation (||),
+  operators (+, -, *, /, ^, |/, @, &, |, #, ~), string concatenation (||, concat),
   array operators (@>, <@, &&), array/slice access, DISTINCT/NOT DISTINCT,
   ANY/ALL, and sublink membership checks.
 
@@ -216,6 +216,10 @@ defmodule Electric.Replication.Eval.SqlGenerator do
 
   defp to_sql_prec(%Func{name: "\"&&\"", args: [left, right]}),
     do: binary_op(left, "&&", right, @prec_other_op)
+
+  # Variadic concat — parser stores arguments as a single Array (see Parser.from_concrete/2).
+  defp to_sql_prec(%Func{name: "concat", args: [%Array{elements: elements}]}),
+    do: {"concat(#{Enum.map_join(elements, ", ", &to_sql/1)})", @prec_atom}
 
   # Named functions (lower, upper, like, ilike, array_*, justify_*, timezone, casts, etc.)
   # These are Func nodes where the name is a plain identifier (no quotes around operators)
