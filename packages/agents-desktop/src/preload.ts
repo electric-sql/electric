@@ -1,29 +1,63 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 // The Vite desktop build already stamps `<html data-electric-desktop="true">`
-// into the index, so CSS that targets `html[data-electric-desktop='true']`
-// matches from the first paint. We re-apply it here as a safety net in
-// case anything (HMR, navigation, etc.) drops the attribute. Wrapped in
-// try/catch so a DOM hiccup can never block `contextBridge.exposeInMainWorld`
-// further down — losing `window.electronAPI` would break the whole UI.
+// into the index, so CSS that targets desktop broadly matches from the first
+// paint. The preload adds the runtime platform for macOS-only titlebar chrome.
+// Wrapped in try/catch so a DOM hiccup can never block
+// `contextBridge.exposeInMainWorld` further down — losing
+// `window.electronAPI` would break the whole UI.
 try {
+  const applyFullscreenState = (fullscreen: boolean): void => {
+    document.documentElement.dataset.electricFullscreen = fullscreen
+      ? `true`
+      : `false`
+  }
+
   if (typeof document !== `undefined` && document.documentElement) {
     document.documentElement.dataset.electricDesktop = `true`
+    document.documentElement.dataset.electricPlatform = process.platform
+    applyFullscreenState(false)
   } else if (typeof window !== `undefined`) {
     window.addEventListener(`DOMContentLoaded`, () => {
       document.documentElement.dataset.electricDesktop = `true`
+      document.documentElement.dataset.electricPlatform = process.platform
+      applyFullscreenState(false)
     })
   }
+
+  ipcRenderer.on(
+    `desktop:fullscreen-state-changed`,
+    (_event, fullscreen: boolean) => {
+      applyFullscreenState(fullscreen)
+    }
+  )
 } catch {
   // Non-fatal — the static attribute in index.html is the source of truth.
 }
 
 type ServerConfig = {
+  id: string
   name: string
   url: string
+  source: `manual` | `local-discovery` | `electric-cloud`
+  desiredState: `connected` | `disconnected`
+  localRuntimeEnabled: boolean
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
+type LocalRuntimeStatus =
+  | `disabled`
+  | `stopped`
+  | `starting`
+  | `running`
+  | `error`
+type ServerConnectionStatus =
+  | `disconnected`
+  | `connecting`
+  | `connected`
+  | `reconnecting`
+  | `offline`
+  | `error`
 
 type DiscoveredServer = {
   url: string
@@ -32,12 +66,26 @@ type DiscoveredServer = {
 }
 
 type DesktopState = {
+  servers: Array<ServerConfig>
+  selectedServerId: string | null
+  connections: Array<ServerConnectionState>
   runtimeStatus: DesktopRuntimeStatus
   runtimeUrl: string | null
   activeServer: ServerConfig | null
   workingDirectory: string | null
   error: string | null
   discoveredServers: Array<DiscoveredServer>
+}
+
+type ServerConnectionState = {
+  serverId: string
+  status: ServerConnectionStatus
+  localRuntimeStatus: LocalRuntimeStatus
+  runtimeUrl: string | null
+  runtimeError: string | null
+  lastError: string | null
+  reconnectAttempt: number
+  lastConnectedAt: number | null
 }
 
 type ApiKeys = {
@@ -59,6 +107,8 @@ type DesktopCommand =
   | `new-chat`
   | `close-tile`
   | `toggle-sidebar`
+  | `open-settings`
+  | `open-servers-settings`
   | `open-search`
   | `open-find`
   | `find-next`
@@ -66,6 +116,29 @@ type DesktopCommand =
   | `split-right`
   | `split-down`
   | `cycle-tile`
+
+type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
+
+type DesktopMenuPopupBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+type DesktopMenuState = {
+  hasActiveTile: boolean
+  canCloseTile: boolean
+  canSplitTile: boolean
+  canCycleTile: boolean
+}
+
+type DesktopNavigationState = {
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+type DesktopAppearance = `light` | `dark` | `system`
 
 type DesktopContextMenuRequest = {
   kind: `selection`
@@ -139,11 +212,23 @@ const api = {
     ipcRenderer.invoke(`desktop:save-servers`, servers),
   getDesktopState: (): Promise<DesktopState> =>
     ipcRenderer.invoke(`desktop:get-state`),
+  setNativeAppearance: (appearance: DesktopAppearance): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-native-appearance`, appearance),
   setActiveServer: (server: ServerConfig | null): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-active-server`, server),
+  setSelectedServer: (serverId: string | null): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-selected-server`, serverId),
+  connectServer: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:connect-server`, serverId),
+  disconnectServer: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:disconnect-server`, serverId),
   restartRuntime: (): Promise<void> =>
     ipcRenderer.invoke(`desktop:restart-runtime`),
+  restartServerRuntime: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:restart-runtime`, serverId),
   stopRuntime: (): Promise<void> => ipcRenderer.invoke(`desktop:stop-runtime`),
+  stopServerRuntime: (serverId: string): Promise<void> =>
+    ipcRenderer.invoke(`desktop:stop-runtime`, serverId),
   rescanServers: (): Promise<Array<DiscoveredServer>> =>
     ipcRenderer.invoke(`desktop:rescan-servers`),
   getApiKeysStatus: (): Promise<ApiKeysStatus> =>
@@ -156,6 +241,29 @@ const api = {
     ipcRenderer.invoke(`desktop:choose-working-directory`),
   pickDirectory: (options?: { defaultPath?: string }): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:pick-directory`, options),
+  showMenuSection: (
+    section: DesktopMenuSection,
+    bounds: DesktopMenuPopupBounds,
+    state: DesktopMenuState
+  ): Promise<void> =>
+    ipcRenderer.invoke(`desktop:show-menu-section`, section, bounds, state),
+  showAppMenu: (bounds: DesktopMenuPopupBounds): Promise<void> =>
+    ipcRenderer.invoke(`desktop:show-app-menu`, bounds),
+  getNavigationState: (): Promise<DesktopNavigationState> =>
+    ipcRenderer.invoke(`desktop:get-navigation-state`),
+  navigateHistory: (direction: `back` | `forward`): Promise<void> =>
+    ipcRenderer.invoke(`desktop:navigate-history`, direction),
+  onNavigationStateChanged: (
+    callback: (state: DesktopNavigationState) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: DesktopNavigationState
+    ) => callback(state)
+    ipcRenderer.on(`desktop:navigation-state-changed`, listener)
+    return () =>
+      ipcRenderer.removeListener(`desktop:navigation-state-changed`, listener)
+  },
   onDesktopStateChanged: (
     callback: (state: DesktopState) => void
   ): (() => void) => {
@@ -173,6 +281,47 @@ const api = {
     ) => callback(command)
     ipcRenderer.on(`desktop:command`, listener)
     return () => ipcRenderer.removeListener(`desktop:command`, listener)
+  },
+  // ── MCP registry surface ────────────────────────────────────────
+  // Push-based view of the embedded BuiltinAgentsServer's MCP registry.
+  // `getSnapshot()` returns the most recent snapshot (or an empty list
+  // if the runtime isn't up yet) so the renderer can render before the
+  // first push event arrives.
+  mcp: {
+    getSnapshot: (
+      serverId?: string
+    ): Promise<{ seq: number; servers: Array<unknown> }> =>
+      ipcRenderer.invoke(`desktop:mcp-snapshot`, serverId),
+    onState: (
+      callback: (
+        payload:
+          | { seq: number; servers: Array<unknown> }
+          | {
+              serverId: string
+              snapshot: { seq: number; servers: Array<unknown> }
+            }
+      ) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        payload:
+          | { seq: number; servers: Array<unknown> }
+          | {
+              serverId: string
+              snapshot: { seq: number; servers: Array<unknown> }
+            }
+      ) => callback(payload)
+      ipcRenderer.on(`desktop:mcp-state`, listener)
+      return () => ipcRenderer.removeListener(`desktop:mcp-state`, listener)
+    },
+    authorize: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-authorize`, name, serverId),
+    reconnect: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-reconnect`, name, serverId),
+    disable: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-disable`, name, serverId),
+    enable: (name: string, serverId?: string): Promise<void> =>
+      ipcRenderer.invoke(`desktop:mcp-enable`, name, serverId),
   },
 }
 

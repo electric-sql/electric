@@ -60,7 +60,7 @@ The function that runs when an entity wakes. Receives a [`HandlerContext`](/docs
 ```ts
 registry.define("support", {
   async handler(ctx, wake) {
-    if (wake.type === "message_received") {
+    if (wake.type === "inbox") {
       ctx.useAgent({
         systemPrompt: "You are a support agent.",
         model: "claude-sonnet-4-5-20250929",
@@ -78,11 +78,11 @@ Events that trigger a handler invocation. Wake sources include incoming messages
 
 ```ts
 async handler(ctx, wake) {
-  // wake.type — "message_received", "wake", etc.
+  // wake.type — "inbox", "wake", etc.
   // wake.source — who triggered the wake
   // wake.payload — message content or wake data
 
-  if (wake.type === "message_received") {
+  if (wake.type === "inbox") {
     const userMessage = wake.payload
     // handle incoming message
   }
@@ -134,6 +134,8 @@ await ctx.agent.run()
 ## Tools
 
 Functions the LLM can call during the agent loop. Each tool has a name, description, parameters (defined with [TypeBox](https://github.com/sinclairzx81/typebox) or any [Standard Schema](https://standardschema.dev) validator), and an execute function. Tools run in the handler's context and have access to the entity's state and coordination primitives. See [Defining tools](/docs/agents/usage/defining-tools) and the [`AgentTool` reference](/docs/agents/reference/agent-tool).
+
+External tools, resources, and prompts can also be loaded from [Model Context Protocol](https://modelcontextprotocol.io) servers — declared in `mcp.json`, the desktop app's `settings.json`, or programmatically. See [MCP servers](/docs/agents/usage/mcp-servers).
 
 ```ts
 const searchKbTool: AgentTool = {

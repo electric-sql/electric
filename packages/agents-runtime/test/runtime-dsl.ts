@@ -451,7 +451,7 @@ function summarizeEvent(event: RuntimeStreamEvent): RuntimeHistorySummaryEntry {
         parentUrl: value?.parent_url,
       })
 
-    case `message_received`:
+    case `inbox`:
       return pruneUndefined({
         ...base,
         from: value?.from,

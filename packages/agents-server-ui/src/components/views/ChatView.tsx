@@ -47,7 +47,6 @@ export function ChatView({
 export function ChatLogView({
   baseUrl,
   entityUrl,
-  entity,
   entityStopped,
   isSpawning,
   tileId,
@@ -58,10 +57,8 @@ export function ChatLogView({
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
 }): React.ReactElement {
   const connectUrl = isSpawning ? null : entityUrl
-  const { entries, pendingInbox, entities, loading, error } = useEntityTimeline(
-    baseUrl || null,
-    connectUrl
-  )
+  const { entries, pendingInbox, entities, generationActive, loading, error } =
+    useEntityTimeline(baseUrl || null, connectUrl)
   const navigate = useNavigate()
   const processedInboxKeys = useMemo(
     () =>
@@ -77,14 +74,14 @@ export function ChatLogView({
     [pendingInbox]
   )
   const projectedPendingMessage = useMemo(() => {
-    if (entity.status === `running`) return null
+    if (generationActive) return null
     for (const message of inlineQueuedMessages) {
       if (processedInboxKeys.has(message.key)) continue
       return pendingInboxByKey.get(message.key) ?? message
     }
     return null
   }, [
-    entity.status,
+    generationActive,
     inlineQueuedMessages,
     pendingInboxByKey,
     processedInboxKeys,
@@ -147,9 +144,17 @@ function GenericChatBody({
   isSpawning: boolean
   tileId: string
 }): React.ReactElement {
-  const { entries, pendingInbox, entities, db, loading, error } =
-    useEntityTimeline(baseUrl || null, entityUrl)
+  const {
+    entries,
+    pendingInbox,
+    entities,
+    generationActive,
+    db,
+    loading,
+    error,
+  } = useEntityTimeline(baseUrl || null, entityUrl)
   const navigate = useNavigate()
+  const [sentMessageSignal, setSentMessageSignal] = useState(0)
   const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
     Map<string, OptimisticInboxMessage>
   >(() => new Map())
@@ -277,6 +282,7 @@ function GenericChatBody({
         tileId={tileId}
         entityUrl={entityUrl}
         entities={entities}
+        scrollToBottomSignal={sentMessageSignal}
       />
       <MessageInput
         db={db}
@@ -286,7 +292,7 @@ function GenericChatBody({
         pendingMessages={visiblePendingInbox}
         inlineQueuedSubmits={
           !entityStopped &&
-          entity.status !== `running` &&
+          !generationActive &&
           pendingInbox.length === 0 &&
           inlineQueuedMessages.size === 0
         }
@@ -304,6 +310,7 @@ function GenericChatBody({
             onReorderPending={pending.onReorder}
           />
         )}
+        onSend={() => setSentMessageSignal((value) => value + 1)}
       />
     </>
   )

@@ -38,13 +38,29 @@ async function electricAgentsFetch(
   path: string,
   opts: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${baseUrl}${path}`, {
+  return fetch(`${baseUrl}${routeControlPlanePath(path)}`, {
     ...opts,
     headers: {
       'content-type': `application/json`,
       ...opts.headers,
     },
   })
+}
+
+function routeControlPlanePath(path: string): string {
+  const pathname = path.split(`?`, 1)[0]!
+  if (pathname.startsWith(`/_electric/`) || isEntityStreamPath(pathname)) {
+    return path
+  }
+  return `/_electric/entities${path}`
+}
+
+function isEntityStreamPath(pathname: string): boolean {
+  const segments = pathname.split(`/`).filter(Boolean)
+  const lastSegment = segments.at(-1)
+  return (
+    segments.length >= 3 && (lastSegment === `main` || lastSegment === `error`)
+  )
 }
 
 async function pollEntityStatus(
@@ -56,7 +72,7 @@ async function pollEntityStatus(
   const deadline = Date.now() + timeoutMs
 
   while (Date.now() < deadline) {
-    const res = await fetch(`${baseUrl}${entityUrl}`)
+    const res = await fetch(`${baseUrl}${routeControlPlanePath(entityUrl)}`)
     expect(res.status).toBe(200)
     const entity = (await res.json()) as Record<string, unknown>
     if (statuses.includes(String(entity.status))) {
@@ -108,11 +124,14 @@ export function runElectricAgentsConformanceTests(
     test(`spawn at unregistered type returns UNKNOWN_ENTITY_TYPE`, () =>
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}/unregistered/entity-1`, {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({}),
-          })
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(`/unregistered/entity-1`)}`,
+            {
+              method: `PUT`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({}),
+            }
+          )
           expect(res.status).toBe(404)
           const body = (await res.json()) as { error: { code: string } }
           expect(body.error.code).toBe(`UNKNOWN_ENTITY_TYPE`)
@@ -174,12 +193,12 @@ export function runElectricAgentsConformanceTests(
         .expectWebhook()
         .respondDone()
         .readStream()
-        .expectStreamContains(`message_received`)
+        .expectStreamContains(`inbox`)
         .custom(async (ctx) => {
           const envelope = ctx.lastStreamMessages!.find(
-            (m) => m.type === `message_received`
+            (m) => m.type === `inbox`
           )!
-          expect(envelope.type).toBe(`message_received`)
+          expect(envelope.type).toBe(`inbox`)
           expect(envelope.key).toBeDefined()
           expect(envelope.value?.from).toBe(`user-1`)
           expect(envelope.value?.payload).toEqual({ task: `hello` })
@@ -209,7 +228,9 @@ export function runElectricAgentsConformanceTests(
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}/nonexistent-type/nonexistent-id/send`,
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `/nonexistent-type/nonexistent-id/send`
+            )}`,
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -243,9 +264,7 @@ export function runElectricAgentsConformanceTests(
         .respondDone()
         .readStream()
         .custom(async (ctx) => {
-          const msgs = ctx.lastStreamMessages!.filter(
-            (m) => m.type === `message_received`
-          )
+          const msgs = ctx.lastStreamMessages!.filter((m) => m.type === `inbox`)
           expect(msgs.length).toBe(3)
           for (let i = 0; i < 3; i++) {
             expect(msgs[i]!.value?.payload).toEqual({ seq: i + 1 })
@@ -390,10 +409,10 @@ export function runElectricAgentsConformanceTests(
         .respondDone()
         .kill()
         .readStream()
-        .expectStreamContains(`message_received`)
+        .expectStreamContains(`inbox`)
         .custom(async (ctx) => {
           const msgs = ctx.lastStreamMessages!
-          const msgReceived = msgs.find((m) => m.type === `message_received`)!
+          const msgReceived = msgs.find((m) => m.type === `inbox`)!
           expect((msgReceived as any).value?.payload).toEqual({
             before: `kill`,
           })
@@ -466,7 +485,7 @@ export function runElectricAgentsConformanceTests(
         .expectEntityContext({ type: `e2e-test-agent` })
         .respondDone()
         .readStream()
-        .expectStreamContains(`message_received`)
+        .expectStreamContains(`inbox`)
         .kill()
         .custom(async (ctx) => {
           const entity = await pollEntityStatus(
@@ -696,11 +715,16 @@ export function runElectricAgentsConformanceTests(
     test(`typed spawn at unregistered type returns UNKNOWN_ENTITY_TYPE (C9)`, () =>
       electricAgents(config.baseUrl)
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}/nonexistent/should-fail`, {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({}),
-          })
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `/nonexistent/should-fail`
+            )}`,
+            {
+              method: `PUT`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({}),
+            }
+          )
           expect(res.status).toBe(404)
           const body = (await res.json()) as { error: { code: string } }
           expect(body.error.code).toBe(`UNKNOWN_ENTITY_TYPE`)
@@ -723,13 +747,18 @@ export function runElectricAgentsConformanceTests(
           parentUrl = ctx.currentEntityUrl
         })
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}/${typeName}/child-entity`, {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              parent: parentUrl,
-            }),
-          })
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `/${typeName}/child-entity`
+            )}`,
+            {
+              method: `PUT`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({
+                parent: parentUrl,
+              }),
+            }
+          )
           expect(res.status).toBe(201)
           const entity = await res.json()
           ctx.currentEntityUrl = entity.url as string
@@ -761,13 +790,18 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}/${typeName}/orphan-entity`, {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              parent: `/nonexistent/parent`,
-            }),
-          })
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `/${typeName}/orphan-entity`
+            )}`,
+            {
+              method: `PUT`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({
+                parent: `/nonexistent/parent`,
+              }),
+            }
+          )
           expect([400, 404, 422]).toContain(res.status)
         })
         .run()
@@ -785,7 +819,9 @@ export function runElectricAgentsConformanceTests(
           tags: { color: `blue`, count: `42` },
         })
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}${ctx.currentEntityUrl!}`)
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+          )
           const entity = (await res.json()) as Record<string, unknown>
           const tags = entity.tags as Record<string, string>
           expect(tags.color).toBe(`blue`)
@@ -804,11 +840,16 @@ export function runElectricAgentsConformanceTests(
           description: `Type with string-only tags`,
         })
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}/${typeName}/should-fail`, {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({ tags: { wrong: 123 } }),
-          })
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `/${typeName}/should-fail`
+            )}`,
+            {
+              method: `PUT`,
+              headers: { 'content-type': `application/json` },
+              body: JSON.stringify({ tags: { wrong: 123 } }),
+            }
+          )
           expect(res.status).toBe(400)
         })
         .run()
@@ -824,7 +865,9 @@ export function runElectricAgentsConformanceTests(
         })
         .spawn(typeName, `entity-1`)
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}${ctx.currentEntityUrl!}`)
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+          )
           const entity = (await res.json()) as { tags: Record<string, string> }
           expect(entity.tags).toEqual({})
         })
@@ -1128,7 +1171,9 @@ export function runElectricAgentsConformanceTests(
             tagHeaders[`authorization`] = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/tags/owner`,
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `${ctx.currentEntityUrl!}/tags/owner`
+            )}`,
             {
               method: `POST`,
               headers: tagHeaders,
@@ -1157,7 +1202,9 @@ export function runElectricAgentsConformanceTests(
             tagHeaders.authorization = `Bearer ${ctx.currentWriteToken}`
           }
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/tags/priority`,
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `${ctx.currentEntityUrl!}/tags/priority`
+            )}`,
             {
               method: `DELETE`,
               headers: tagHeaders,
@@ -1300,7 +1347,9 @@ export function runElectricAgentsConformanceTests(
         .custom(async (ctx) => {
           // Existing entities pick up newly added schema keys.
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/send`,
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `${ctx.currentEntityUrl!}/send`
+            )}`,
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -1900,9 +1949,9 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
-          const msgEvent = events.find((e) => e.type === `message_received`)!
+          const msgEvent = events.find((e) => e.type === `inbox`)!
           // State Protocol format — from/payload in value, headers present
-          expect(msgEvent.type).toBe(`message_received`)
+          expect(msgEvent.type).toBe(`inbox`)
           expect(msgEvent.key).toBeDefined()
           expect(msgEvent.value?.from).toBe(`user-1`)
           expect(msgEvent.value?.payload).toEqual({ text: `hello world` })
@@ -1928,9 +1977,7 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
-          const messageEvents = events.filter(
-            (ev) => ev.type === `message_received`
-          )
+          const messageEvents = events.filter((ev) => ev.type === `inbox`)
           expect(messageEvents.length).toBe(2)
           // All events are State Protocol format — verify invariants
           checkStateProtocolInvariants(events)
@@ -1959,7 +2006,7 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!.filter(
-            (e) => e.type === `message_received`
+            (e) => e.type === `inbox`
           )
           expect(events.length).toBe(3)
 
@@ -1995,7 +2042,7 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
-          const msgEvent = events.find((e) => e.type === `message_received`)!
+          const msgEvent = events.find((e) => e.type === `inbox`)!
           expect(msgEvent).toBeDefined()
           // State Protocol — payload inside value
           expect((msgEvent as any).value?.payload).toBeDefined()
@@ -2027,8 +2074,8 @@ export function runElectricAgentsConformanceTests(
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
           expect(events.length).toBeGreaterThanOrEqual(1)
-          // Stream should contain a message_received event
-          const hasMsg = events.some((e) => e.type === `message_received`)
+          // Stream should contain a inbox event
+          const hasMsg = events.some((e) => e.type === `inbox`)
           expect(hasMsg).toBe(true)
           // All events should be State Protocol format
           for (const ev of events) {
@@ -2493,7 +2540,9 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-meta-notoken-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/tags/key`,
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `${ctx.currentEntityUrl!}/tags/key`
+            )}`,
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2539,7 +2588,9 @@ export function runElectricAgentsConformanceTests(
         .spawn(`auth-send-noauth-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
           const res = await fetch(
-            `${ctx.baseUrl}${ctx.currentEntityUrl!}/send`,
+            `${ctx.baseUrl}${routeControlPlanePath(
+              `${ctx.currentEntityUrl!}/send`
+            )}`,
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
@@ -2564,7 +2615,9 @@ export function runElectricAgentsConformanceTests(
         })
         .spawn(`auth-noleak-agent-${id}`, `entity-1`)
         .custom(async (ctx) => {
-          const res = await fetch(`${ctx.baseUrl}${ctx.currentEntityUrl!}`)
+          const res = await fetch(
+            `${ctx.baseUrl}${routeControlPlanePath(ctx.currentEntityUrl!)}`
+          )
           expect(res.status).toBe(200)
           const entity = await res.json()
           expect(entity.write_token).toBeUndefined()
@@ -2699,7 +2752,9 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         .expectStdout(/Spawned/)
         // Verify via API that the entity actually exists
         .verifyApi(async (baseUrl) => {
-          const res = await fetch(`${baseUrl}/cli-spawn-type/${id}`)
+          const res = await fetch(
+            `${baseUrl}${routeControlPlanePath(`/cli-spawn-type/${id}`)}`
+          )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
           expect([`running`, `idle`]).toContain(entity.status)
@@ -2785,7 +2840,9 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         .expectStdout(/Message sent/)
         // Verify the message actually landed in the stream via API
         .verifyApi(async (baseUrl) => {
-          const res = await fetch(`${baseUrl}/cli-send-type/${id}`)
+          const res = await fetch(
+            `${baseUrl}${routeControlPlanePath(`/cli-send-type/${id}`)}`
+          )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
           const streams = entity.streams as { main: string }
@@ -2796,10 +2853,8 @@ export function runCliConformanceTests(config: CliTestOptions): void {
             Record<string, unknown>
           >
           expect(events.length).toBeGreaterThanOrEqual(1)
-          // Should contain a State Protocol message_received event
-          const msgEvent = events.find(
-            (e: any) => e.type === `message_received`
-          )!
+          // Should contain a State Protocol inbox event
+          const msgEvent = events.find((e: any) => e.type === `inbox`)!
           expect(msgEvent).toBeDefined()
           const payload = (msgEvent as any).value?.payload as Record<
             string,
@@ -2835,7 +2890,9 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         .expectStdout(/running|idle/)
         // Verify API agrees with CLI output
         .verifyApi(async (baseUrl) => {
-          const res = await fetch(`${baseUrl}/cli-inspect-etype/${id}`)
+          const res = await fetch(
+            `${baseUrl}${routeControlPlanePath(`/cli-inspect-etype/${id}`)}`
+          )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
           expect([`running`, `idle`]).toContain(entity.status)
@@ -2900,7 +2957,9 @@ export function runCliConformanceTests(config: CliTestOptions): void {
         .expectExitCode(0)
         .expectStdout(/Spawned/)
         .verifyApi(async (baseUrl) => {
-          const res = await fetch(`${baseUrl}/cli-lifecycle-type/${id}`)
+          const res = await fetch(
+            `${baseUrl}${routeControlPlanePath(`/cli-lifecycle-type/${id}`)}`
+          )
           expect(res.status, `entity should exist after spawn`).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
           expect([`running`, `idle`]).toContain(entity.status)
@@ -2986,7 +3045,9 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     instanceId: string
   ): Promise<Record<string, unknown>> {
     const res = await fetch(
-      `${baseUrl}/${encodeURIComponent(typeName)}/${encodeURIComponent(instanceId)}`,
+      `${baseUrl}${routeControlPlanePath(
+        `/${encodeURIComponent(typeName)}/${encodeURIComponent(instanceId)}`
+      )}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -3002,21 +3063,18 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     entityUrl: string,
     text: string
   ): Promise<void> {
-    const res = await fetch(`${baseUrl}${entityUrl}/send`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ payload: { text }, from: `tester` }),
-    })
+    const res = await fetch(
+      `${baseUrl}${routeControlPlanePath(`${entityUrl}/send`)}`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ payload: { text }, from: `tester` }),
+      }
+    )
     expect(
       res.ok || res.status === 204,
       `send should succeed: ${res.status}`
     ).toBe(true)
-  }
-
-  async function killEntity(baseUrl: string, entityUrl: string): Promise<void> {
-    await fetch(`${baseUrl}${entityUrl}`, {
-      method: `DELETE`,
-    })
   }
 
   async function pollForAgentResponse(
@@ -3026,7 +3084,9 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
   ): Promise<Array<Record<string, unknown>>> {
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
-      const entityRes = await fetch(`${baseUrl}${entityUrl}`)
+      const entityRes = await fetch(
+        `${baseUrl}${routeControlPlanePath(entityUrl)}`
+      )
       if (!entityRes.ok) throw new Error(`Entity ${entityUrl} not found`)
       const entity = (await entityRes.json()) as Record<string, unknown>
 
@@ -3067,8 +3127,6 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
       expect(spEvents.some((e) => e.type === `text`)).toBe(true)
 
       checkStateProtocolInvariants(spEvents)
-
-      await killEntity(config.baseUrl, entityUrl)
     }, 15_000)
 
     test(`mock agent response contains expected text content`, async () => {
@@ -3090,8 +3148,6 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
       expect(textComplete).toBeDefined()
       const value = textComplete!.value as Record<string, unknown>
       expect(value.status).toBe(`completed`)
-
-      await killEntity(config.baseUrl, entityUrl)
     }, 15_000)
 
     test(`mock agent writes text deltas for streaming`, async () => {
@@ -3112,8 +3168,6 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
         expect(val.delta).toBeDefined()
         expect(typeof val.delta).toBe(`string`)
       }
-
-      await killEntity(config.baseUrl, entityUrl)
     }, 15_000)
   })
 }
@@ -3140,7 +3194,9 @@ export function runMockAgentCliTests(config: MockAgentCliTestOptions): void {
         .expectStdout(/Message sent/)
         .wait(3000)
         .verifyApi(async (baseUrl) => {
-          const res = await fetch(`${baseUrl}/chat/${id}`)
+          const res = await fetch(
+            `${baseUrl}${routeControlPlanePath(`/chat/${id}`)}`
+          )
           expect(res.status, `entity should exist`).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
 
@@ -3180,7 +3236,9 @@ export function runMockAgentCliTests(config: MockAgentCliTestOptions): void {
         .expectExitCode(0)
         .expectStdout(/running|idle/)
         .verifyApi(async (baseUrl) => {
-          const res = await fetch(`${baseUrl}/chat/${id}`)
+          const res = await fetch(
+            `${baseUrl}${routeControlPlanePath(`/chat/${id}`)}`
+          )
           expect(res.status).toBe(200)
           const entity = (await res.json()) as Record<string, unknown>
 

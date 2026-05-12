@@ -1,0 +1,28 @@
+{
+  "servers": {
+    "honeycomb": {
+      "transport": "http",
+      "url": "https://mcp.honeycomb.io/mcp",
+      "auth": {
+        "mode": "authorizationCode",
+        "flow": "browser",
+        "scopes": ["mcp:read", "mcp:write"]
+      }
+    },
+    "internal-api": {
+      "transport": "http",
+      "url": "https://api.example.com/mcp",
+      "auth": { "mode": "apiKey", "headerName": "X-Api-Key" }
+    },
+    "git-local": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git",
+        "--repository",
+        "${env:HOME}/repo"
+      ]
+    }
+  }
+}

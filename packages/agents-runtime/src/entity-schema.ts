@@ -770,8 +770,7 @@ export const builtInCollections: EntityCollectionsDefinition = {
     primaryKey: `key`,
   },
   inbox: {
-    schema:
-      BUILT_IN_EVENT_SCHEMAS.message_received as StandardSchemaV1<MessageReceived>,
+    schema: BUILT_IN_EVENT_SCHEMAS.inbox as StandardSchemaV1<MessageReceived>,
     type: `inbox`,
     primaryKey: `key`,
   },

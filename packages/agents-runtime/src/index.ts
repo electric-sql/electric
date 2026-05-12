@@ -128,6 +128,7 @@ export type {
 } from './entity-timeline'
 export { buildSections, buildTimelineEntries } from './use-chat'
 export type { EntityTimelineEntry } from './use-chat'
+export { appendPathToUrl } from './url'
 
 export {
   defaultProjection,
@@ -228,3 +229,6 @@ export type {
   RuntimeHandlerConfig,
   RuntimeHandlerResult,
 } from './create-handler'
+
+export { registerToolProvider, unregisterToolProvider } from './tool-providers'
+export type { ToolProviderEntry } from './tool-providers'

@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
+  Brain,
   Check,
   ChevronRight,
-  Cpu,
   Monitor,
   Moon,
   Palette,
-  Play,
   RefreshCw,
   Settings as SettingsIcon,
   Square,
@@ -19,6 +18,7 @@ import {
   loadDesktopState,
   onDesktopStateChanged,
   type DesktopState,
+  type LocalRuntimeStatus,
 } from '../lib/server-connection'
 import styles from './SettingsMenu.module.css'
 
@@ -32,7 +32,8 @@ const THEME_OPTIONS: ReadonlyArray<{
   { value: `system`, label: `System`, icon: <Icon icon={Monitor} size={2} /> },
 ]
 
-const RUNTIME_STATUS_LABELS: Record<DesktopState[`runtimeStatus`], string> = {
+const RUNTIME_STATUS_LABELS: Record<LocalRuntimeStatus, string> = {
+  disabled: `Disabled`,
   running: `Running`,
   starting: `Starting`,
   stopped: `Stopped`,
@@ -45,13 +46,11 @@ const RUNTIME_STATUS_LABELS: Record<DesktopState[`runtimeStatus`], string> = {
  * The top-level menu is a tight three-row launcher:
  *
  *   - Theme         → submenu (Light / Dark / System)
- *   - Local Runtime → submenu (status + start/restart/stop)
+ *   - Local Runtime → submenu for this window's selected server
  *   - Settings…     → opens the full Settings screen at /settings
  *
- * "Local Runtime" only renders on the desktop build (it's the only
- * place where the bundled Horton runtime exists). The Settings link
- * is always shown — Settings → General is useful in the web build
- * too once additional preferences land there.
+ * "Local Runtime" only renders on the desktop build and refers to
+ * the runtime for the server selected in the current window.
  */
 export function SettingsMenu(): React.ReactElement {
   const { preference, setPreference } = useDarkModeContext()
@@ -68,11 +67,19 @@ export function SettingsMenu(): React.ReactElement {
     }
   }, [])
 
-  const runtimeStatus = desktopState?.runtimeStatus ?? `stopped`
-  const runtimeUrl = desktopState?.runtimeUrl ?? null
-  const runtimeError = desktopState?.error ?? null
-  const runtimeIsRunning = runtimeStatus === `running`
-  const runtimeIsStarting = runtimeStatus === `starting`
+  const activeServerName = desktopState?.activeServer?.name ?? `current server`
+  const activeServerId =
+    desktopState?.selectedServerId ?? desktopState?.activeServer?.id ?? null
+  const activeConnection =
+    desktopState?.connections.find(
+      (entry) => entry.serverId === desktopState.selectedServerId
+    ) ?? null
+  const localRuntimeStatus = activeConnection?.localRuntimeStatus ?? `stopped`
+  const localRuntimeDisabled = localRuntimeStatus === `disabled`
+  const runtimeUrl = activeConnection?.runtimeUrl ?? null
+  const runtimeError = activeConnection?.runtimeError ?? null
+  const runtimeIsRunning = localRuntimeStatus === `running`
+  const runtimeIsStarting = localRuntimeStatus === `starting`
 
   return (
     <Menu.Root>
@@ -122,48 +129,89 @@ export function SettingsMenu(): React.ReactElement {
         {isDesktop && (
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className={styles.submenuTrigger}>
-              <Icon icon={Cpu} size={2} />
-              <Text size={2}>Local Runtime</Text>
+              <Icon icon={Brain} size={2} />
+              <Text size={2}>Local runtime</Text>
               <Icon
                 icon={ChevronRight}
                 size={2}
                 className={styles.submenuChevron}
               />
             </Menu.SubmenuTrigger>
-            <Menu.Content side="left" align="start">
-              <Menu.Group>
-                <Menu.Label>Status</Menu.Label>
-                <Menu.Item disabled>
-                  <Text size={2}>{RUNTIME_STATUS_LABELS[runtimeStatus]}</Text>
-                </Menu.Item>
-                {runtimeUrl && (
-                  <Menu.Item disabled>
-                    <Text size={1} family={`mono`} tone={`muted`}>
-                      {runtimeUrl}
+            <Menu.Content
+              side="left"
+              align="start"
+              className={styles.runtimeMenu}
+            >
+              <div className={styles.runtimeCard}>
+                <div className={styles.runtimeHeader}>
+                  <div className={styles.runtimeIcon}>
+                    <Icon icon={Brain} size={2} />
+                  </div>
+                  <div className={styles.runtimeTitle}>
+                    <Text size={2} weight="medium">
+                      Local runtime
                     </Text>
-                  </Menu.Item>
+                    <Text size={1} tone="muted" truncate>
+                      For {activeServerName}
+                    </Text>
+                  </div>
+                  <span
+                    className={styles.runtimeStatus}
+                    data-status={localRuntimeStatus}
+                  >
+                    <span className={styles.runtimeStatusDot} />
+                    {RUNTIME_STATUS_LABELS[localRuntimeStatus]}
+                  </span>
+                </div>
+                {runtimeUrl ? (
+                  <Text
+                    size={1}
+                    family="mono"
+                    tone="muted"
+                    truncate
+                    className={styles.runtimeUrl}
+                  >
+                    {runtimeUrl}
+                  </Text>
+                ) : (
+                  <Text size={1} tone="muted" className={styles.runtimeHint}>
+                    {localRuntimeDisabled
+                      ? `Disabled for this server`
+                      : `No runtime URL yet`}
+                  </Text>
                 )}
                 {runtimeError && (
-                  <Menu.Item disabled>
-                    <Text size={1} tone={`danger`}>
-                      {runtimeError}
-                    </Text>
-                  </Menu.Item>
+                  <Text size={1} tone="danger" className={styles.runtimeError}>
+                    {runtimeError}
+                  </Text>
                 )}
-              </Menu.Group>
+              </div>
               <Menu.Separator />
               <Menu.Group>
                 {!runtimeIsRunning && !runtimeIsStarting ? (
                   <Menu.Item
-                    onSelect={() => void window.electronAPI?.restartRuntime?.()}
+                    disabled={localRuntimeDisabled || !activeServerId}
+                    onSelect={() =>
+                      activeServerId
+                        ? void window.electronAPI?.restartServerRuntime?.(
+                            activeServerId
+                          )
+                        : undefined
+                    }
                   >
-                    <Icon icon={Play} size={2} />
+                    <Icon icon={Brain} size={2} />
                     <Text size={2}>Start runtime</Text>
                   </Menu.Item>
                 ) : (
                   <Menu.Item
                     disabled={runtimeIsStarting}
-                    onSelect={() => void window.electronAPI?.restartRuntime?.()}
+                    onSelect={() =>
+                      activeServerId
+                        ? void window.electronAPI?.restartServerRuntime?.(
+                            activeServerId
+                          )
+                        : undefined
+                    }
                   >
                     <Icon icon={RefreshCw} size={2} />
                     <Text size={2}>Restart runtime</Text>
@@ -171,10 +219,27 @@ export function SettingsMenu(): React.ReactElement {
                 )}
                 <Menu.Item
                   disabled={!runtimeIsRunning && !runtimeIsStarting}
-                  onSelect={() => void window.electronAPI?.stopRuntime?.()}
+                  onSelect={() =>
+                    activeServerId
+                      ? void window.electronAPI?.stopServerRuntime?.(
+                          activeServerId
+                        )
+                      : undefined
+                  }
                 >
                   <Icon icon={Square} size={2} />
                   <Text size={2}>Stop runtime</Text>
+                </Menu.Item>
+                <Menu.Item
+                  onSelect={() =>
+                    navigate({
+                      to: `/settings/$category`,
+                      params: { category: `servers` },
+                    })
+                  }
+                >
+                  <Icon icon={SettingsIcon} size={2} />
+                  <Text size={2}>Configure server…</Text>
                 </Menu.Item>
               </Menu.Group>
             </Menu.Content>

@@ -5,6 +5,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  appendPathToUrl,
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
@@ -39,6 +40,10 @@ export interface BuiltinAgentHandlerOptions {
   serveEndpoint?: string
   workingDirectory?: string
   streamFn?: StreamFn
+  publicUrl?: string
+  runtimeName?: string
+  /** Override for the built-in skills directory; required when embedders bundle this package. */
+  baseSkillsDir?: string
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -70,10 +75,16 @@ export async function createBuiltinAgentHandler(
 ): Promise<AgentHandlerResult | null> {
   const {
     agentServerUrl,
-    serveEndpoint = `${agentServerUrl}${DEFAULT_BUILTIN_AGENT_HANDLER_PATH}`,
+    serveEndpoint = appendPathToUrl(
+      agentServerUrl,
+      DEFAULT_BUILTIN_AGENT_HANDLER_PATH
+    ),
     workingDirectory,
     streamFn,
     createElectricTools,
+    publicUrl,
+    runtimeName,
+    baseSkillsDir: baseSkillsDirOverride,
   } = options
 
   const modelCatalog = await createBuiltinModelCatalog({
@@ -90,7 +101,7 @@ export async function createBuiltinAgentHandler(
   const cwd = workingDirectory ?? process.cwd()
 
   const here = path.dirname(fileURLToPath(import.meta.url))
-  const baseSkillsDir = path.resolve(here, `../skills`)
+  const baseSkillsDir = baseSkillsDirOverride ?? path.resolve(here, `../skills`)
 
   let skillsRegistry: SkillsRegistry | null = null
   try {
@@ -128,6 +139,8 @@ export async function createBuiltinAgentHandler(
     subscriptionPathForType: (name) => `/${name}/*/main`,
     idleTimeout: 5_000,
     createElectricTools,
+    publicUrl,
+    name: runtimeName ?? `builtin-agents`,
   })
 
   return {

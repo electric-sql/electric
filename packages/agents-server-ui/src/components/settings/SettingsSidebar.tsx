@@ -1,17 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Cpu, Palette, Settings as SettingsIcon } from 'lucide-react'
-import { Icon, ScrollArea, Stack, Text } from '../../ui'
 import {
-  loadDesktopState,
-  onDesktopStateChanged,
-  type DesktopState,
-} from '../../lib/server-connection'
+  ArrowLeft,
+  KeyRound,
+  Palette,
+  Plug,
+  Server,
+  Settings as SettingsIcon,
+} from 'lucide-react'
+import { Icon, ScrollArea, Stack, Text } from '../../ui'
 import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { useSidebarCollapsed } from '../../hooks/useSidebarCollapsed'
 import styles from './SettingsSidebar.module.css'
 
-export type SettingsCategoryId = `general` | `appearance` | `local-runtime`
+export type SettingsCategoryId =
+  | `general`
+  | `servers`
+  | `credentials`
+  | `appearance`
+  | `mcp-servers`
 
 interface CategoryDef {
   id: SettingsCategoryId
@@ -28,10 +35,9 @@ interface CategoryDef {
  * gutter) so the settings experience reads as part of the same shell
  * rather than a modal overlay.
  *
- * The header row sits in the macOS draggable region (see
- * `:global(html[data-electric-desktop='true'])` rules in the
- * stylesheet); the "Back to app" affordance opts back out via
- * `data-no-drag` so it stays clickable.
+ * In macOS desktop builds the header row sits in the draggable window
+ * region; the "Back to app" affordance opts back out via `data-no-drag`
+ * so it stays clickable.
  */
 export function SettingsSidebar({
   activeCategory,
@@ -39,7 +45,6 @@ export function SettingsSidebar({
   activeCategory: SettingsCategoryId
 }): React.ReactElement {
   const navigate = useNavigate()
-  const [desktopState, setDesktopState] = useState<DesktopState | null>(null)
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
   // See Sidebar.tsx — same overlay pattern so settings reads
   // consistently with the workspace sidebar on narrow viewports.
@@ -54,20 +59,23 @@ export function SettingsSidebar({
     if (narrow) setCollapsed(true)
   }, [narrow, setCollapsed])
 
-  useEffect(() => {
-    if (!window.electronAPI?.getDesktopState) return
-    void loadDesktopState().then(setDesktopState)
-    const unsubscribe = onDesktopStateChanged(setDesktopState)
-    return () => {
-      unsubscribe?.()
-    }
-  }, [])
-
   const categories: ReadonlyArray<CategoryDef> = [
     {
       id: `general`,
       label: `General`,
       icon: <Icon icon={SettingsIcon} size={2} />,
+      visible: true,
+    },
+    {
+      id: `servers`,
+      label: `Servers`,
+      icon: <Icon icon={Server} size={2} />,
+      visible: true,
+    },
+    {
+      id: `credentials`,
+      label: `Credentials`,
+      icon: <Icon icon={KeyRound} size={2} />,
       visible: true,
     },
     {
@@ -77,10 +85,13 @@ export function SettingsSidebar({
       visible: true,
     },
     {
-      id: `local-runtime`,
-      label: `Local Runtime`,
-      icon: <Icon icon={Cpu} size={2} />,
-      visible: isDesktop || Boolean(desktopState),
+      id: `mcp-servers`,
+      label: `MCP Servers`,
+      icon: <Plug size={14} />,
+      // Push-based view of the in-process MCP registry — desktop only.
+      // The web build doesn't have access to BuiltinAgentsServer's
+      // registry over IPC, and remote runtimes are no longer aggregated.
+      visible: isDesktop,
     },
   ]
 

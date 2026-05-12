@@ -120,7 +120,7 @@ type WakeEvent = {
 | Field        | Description                                                    |
 | ------------ | -------------------------------------------------------------- |
 | `source`     | The stream or entity that caused the wake.                     |
-| `type`       | The wake type: `"message_received"` for inbox messages or `"wake"` for child completion, observed changes, cron, and timeouts. |
+| `type`       | The wake type: `"inbox"` for inbox messages or `"wake"` for child completion, observed changes, cron, and timeouts. |
 | `fromOffset` | Start offset of the events that triggered this wake.           |
 | `toOffset`   | End offset of the events that triggered this wake.             |
 | `eventCount` | Number of new events since last wake.                          |

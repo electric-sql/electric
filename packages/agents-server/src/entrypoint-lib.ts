@@ -120,6 +120,8 @@ export function resolveElectricAgentsEntrypointOptions(
   const baseUrl = readEnv(env, [`ELECTRIC_AGENTS_BASE_URL`, `BASE_URL`])
 
   return {
+    service: readEnv(env, [`ELECTRIC_AGENTS_SERVICE`, `SERVICE`]),
+    tenantId: readEnv(env, [`ELECTRIC_AGENTS_TENANT_ID`, `TENANT_ID`]),
     baseUrl: baseUrl ? validateUrl(`base URL`, baseUrl) : undefined,
     durableStreamsUrl: durableStreamsUrl
       ? validateUrl(`durable streams URL`, durableStreamsUrl)

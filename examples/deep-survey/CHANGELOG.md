@@ -1,5 +1,20 @@
 # @electric-ax/example-deep-survey
 
+## 0.1.7
+
+### Patch Changes
+
+- 590aabb: Improve the agents UI timeline and reactivity, add a browser-safe runtime client export, and route built-in agent metadata extraction through the configurable low-cost model runner.
+- Updated dependencies [1df7cce]
+- Updated dependencies [f509387]
+- Updated dependencies [590aabb]
+- Updated dependencies [744c47f]
+- Updated dependencies [28d127b]
+- Updated dependencies [6399147]
+- Updated dependencies [a3cee92]
+- Updated dependencies [7f8947a]
+  - @electric-ax/agents-runtime@0.1.3
+
 ## 0.1.6
 
 ### Patch Changes

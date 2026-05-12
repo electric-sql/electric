@@ -53,11 +53,14 @@ describe(`Claim-scoped write tokens`, () => {
     })
     expect(typeRes.status).toBe(201)
 
-    const entityRes = await fetch(`${baseUrl}/${typeName}/${instanceId}`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+    const entityRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/${instanceId}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
     expect(entityRes.status).toBe(201)
 
     const entity = (await entityRes.json()) as {
@@ -174,7 +177,7 @@ describe(`Claim-scoped write tokens`, () => {
   }
 
   async function getEntityStatus(entityUrl: string): Promise<string> {
-    const res = await fetch(`${baseUrl}${entityUrl}`)
+    const res = await fetch(`${baseUrl}/_electric/entities${entityUrl}`)
     expect(res.status).toBe(200)
     const entity = (await res.json()) as { status: string }
     return entity.status
@@ -184,7 +187,7 @@ describe(`Claim-scoped write tokens`, () => {
     entityUrl: string,
     expected: Record<string, string>
   ): Promise<void> {
-    const entityRes = await fetch(`${baseUrl}${entityUrl}`)
+    const entityRes = await fetch(`${baseUrl}/_electric/entities${entityUrl}`)
     expect(entityRes.status).toBe(200)
     const updatedEntity = (await entityRes.json()) as {
       tags: Record<string, string>
@@ -248,7 +251,8 @@ describe(`Claim-scoped write tokens`, () => {
     const typeName = `claim-writer-${Date.now()}`
     const entity = await createEntity(typeName, `owner`)
     const pgDb = (electricAgentsServer as any).pgDb
-    const registry = (electricAgentsServer as any).registry
+    const registry = (electricAgentsServer as any).electricAgentsManager!
+      .registry
     const entityRow = await registry.getEntity(entity.url)
     const entityWriteToken = entityRow.write_token as string
 
@@ -337,7 +341,8 @@ describe(`Claim-scoped write tokens`, () => {
     const typeName = `claim-done-race-${Date.now()}`
     const entity = await createEntity(typeName, `owner`)
     const pgDb = (electricAgentsServer as any).pgDb
-    const registry = (electricAgentsServer as any).registry
+    const registry = (electricAgentsServer as any).electricAgentsManager!
+      .registry
 
     await pgDb.insert(consumerCallbacks).values([
       {
@@ -412,20 +417,34 @@ describe(`Claim-scoped write tokens`, () => {
     expect(claim.ok).toBe(true)
     expect(claim.writeToken).toBeTruthy()
 
-    const claimMap = (electricAgentsServer as any)
-      .activeClaimWriteTokens as Map<string, { token: string }>
-    const claimMapByConsumer = (electricAgentsServer as any)
-      .activeClaimWriteTokensByConsumer as Map<string, string>
-    expect(claimMap.get(entity.streams.main)?.token).toBe(claim.writeToken)
-    expect(claimMapByConsumer.get(`consumer-kill`)).toBe(entity.streams.main)
+    const claimWriteTokens = (electricAgentsServer as any).standaloneRuntime
+      .runtime.claimWriteTokens
+    expect(
+      claimWriteTokens.isValid(
+        `default`,
+        entity.streams.main,
+        claim.writeToken!
+      )
+    ).toBe(true)
+    expect(
+      claimWriteTokens.owns(`default`, entity.streams.main, `consumer-kill`)
+    ).toBe(true)
 
-    const killRes = await fetch(`${baseUrl}${entity.url}`, {
+    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}`, {
       method: `DELETE`,
     })
     expect(killRes.status).toBe(200)
 
-    expect(claimMap.has(entity.streams.main)).toBe(false)
-    expect(claimMapByConsumer.has(`consumer-kill`)).toBe(false)
+    expect(
+      claimWriteTokens.isValid(
+        `default`,
+        entity.streams.main,
+        claim.writeToken!
+      )
+    ).toBe(false)
+    expect(
+      claimWriteTokens.owns(`default`, entity.streams.main, `consumer-kill`)
+    ).toBe(false)
   }, 20_000)
 
   it(`tag writes accept the active claim token`, async () => {
@@ -440,14 +459,17 @@ describe(`Claim-scoped write tokens`, () => {
     expect(claim.ok).toBe(true)
     expect(claim.writeToken).toBeTruthy()
 
-    const setTagRes = await fetch(`${baseUrl}${entity.url}/tags/title`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${claim.writeToken}`,
-      },
-      body: JSON.stringify({ value: `Onboarding` }),
-    })
+    const setTagRes = await fetch(
+      `${baseUrl}/_electric/entities${entity.url}/tags/title`,
+      {
+        method: `POST`,
+        headers: {
+          'content-type': `application/json`,
+          authorization: `Bearer ${claim.writeToken}`,
+        },
+        body: JSON.stringify({ value: `Onboarding` }),
+      }
+    )
     expect(setTagRes.status).toBe(200)
 
     await expectTags(entity.url, { title: `Onboarding` })
@@ -535,7 +557,7 @@ describe(`Claim-scoped write tokens`, () => {
     })
     expect(claim.writeToken).toBeTruthy()
 
-    const killRes = await fetch(`${baseUrl}${entity.url}`, {
+    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}`, {
       method: `DELETE`,
     })
     expect(killRes.status).toBe(200)
@@ -605,14 +627,17 @@ describe(`Claim-scoped write tokens`, () => {
     })
     expect(claim.writeToken).toBeTruthy()
 
-    const invalidTagRes = await fetch(`${baseUrl}${entity.url}/tags/owner`, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${claim.writeToken}`,
-      },
-      body: JSON.stringify({ value: 123 }),
-    })
+    const invalidTagRes = await fetch(
+      `${baseUrl}/_electric/entities${entity.url}/tags/owner`,
+      {
+        method: `POST`,
+        headers: {
+          'content-type': `application/json`,
+          authorization: `Bearer ${claim.writeToken}`,
+        },
+        body: JSON.stringify({ value: 123 }),
+      }
+    )
     expect(invalidTagRes.status).toBe(400)
 
     for (const [key, value] of [
@@ -621,14 +646,17 @@ describe(`Claim-scoped write tokens`, () => {
       [`key2`, `updated`],
       [`key3`, `value3`],
     ] as const) {
-      const res = await fetch(`${baseUrl}${entity.url}/tags/${key}`, {
-        method: `POST`,
-        headers: {
-          'content-type': `application/json`,
-          authorization: `Bearer ${claim.writeToken}`,
-        },
-        body: JSON.stringify({ value }),
-      })
+      const res = await fetch(
+        `${baseUrl}/_electric/entities${entity.url}/tags/${key}`,
+        {
+          method: `POST`,
+          headers: {
+            'content-type': `application/json`,
+            authorization: `Bearer ${claim.writeToken}`,
+          },
+          body: JSON.stringify({ value }),
+        }
+      )
       expect(res.status).toBe(200)
     }
 
@@ -638,12 +666,15 @@ describe(`Claim-scoped write tokens`, () => {
       key3: `value3`,
     })
 
-    const deleteTagRes = await fetch(`${baseUrl}${entity.url}/tags/key2`, {
-      method: `DELETE`,
-      headers: {
-        authorization: `Bearer ${claim.writeToken}`,
-      },
-    })
+    const deleteTagRes = await fetch(
+      `${baseUrl}/_electric/entities${entity.url}/tags/key2`,
+      {
+        method: `DELETE`,
+        headers: {
+          authorization: `Bearer ${claim.writeToken}`,
+        },
+      }
+    )
     expect(deleteTagRes.status).toBe(200)
 
     await expectTags(entity.url, {

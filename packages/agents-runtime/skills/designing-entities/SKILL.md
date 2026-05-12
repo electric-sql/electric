@@ -137,7 +137,7 @@ Runtime API reference:
 Usage guides:
 
 - `/docs/usage/writing-handlers` — handler lifecycle and re-entrancy.
-- `/docs/usage/waking-entities` — how wakes are produced and consumed; authoritative mental model for `wake.type` (only `"message_received"` and `"wake"`).
+- `/docs/usage/waking-entities` — how wakes are produced and consumed; authoritative mental model for `wake.type` (only `"inbox"` and `"wake"`).
 - `/docs/usage/defining-entities` — registry and collection declaration patterns.
 
 Built-in agent types:

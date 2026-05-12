@@ -47,19 +47,25 @@ describe(`entity lifecycle`, () => {
     )
     expect(createTypeResponse.ok).toBe(true)
 
-    const spawnResponse = await fetch(`${baseUrl}/task/demo-1`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+    const spawnResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-1`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
     expect(spawnResponse.status).toBe(201)
 
-    const killResponse = await fetch(`${baseUrl}/task/demo-1`, {
-      method: `DELETE`,
-    })
+    const killResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-1`,
+      {
+        method: `DELETE`,
+      }
+    )
     expect(killResponse.status).toBe(200)
 
-    const getResponse = await fetch(`${baseUrl}/task/demo-1`)
+    const getResponse = await fetch(`${baseUrl}/_electric/entities/task/demo-1`)
     expect(getResponse.status).toBe(200)
     await expect(getResponse.json()).resolves.toMatchObject({
       url: `/task/demo-1`,
@@ -67,9 +73,12 @@ describe(`entity lifecycle`, () => {
       status: `stopped`,
     })
 
-    const headResponse = await fetch(`${baseUrl}/task/demo-1`, {
-      method: `HEAD`,
-    })
+    const headResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-1`,
+      {
+        method: `HEAD`,
+      }
+    )
     expect(headResponse.status).toBe(200)
   })
 })

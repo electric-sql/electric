@@ -266,6 +266,33 @@ defmodule Electric.Replication.Eval.ParserTest do
                )
     end
 
+    test "should reject concat with non-text date arguments" do
+      assert {:error, msg} =
+               Parser.parse_and_validate_expression(~S|concat(date '2025-05-01', 'x')|)
+
+      assert msg =~ "Could not select a function overload for concat("
+      assert msg =~ "date"
+    end
+
+    test "should keep explicit variadic concat array forms unsupported" do
+      assert {:error,
+              "At location 0: explicit VARIADIC function calls are not currently supported"} =
+               Parser.parse_and_validate_expression(
+                 ~S|concat(VARIADIC ARRAY['a', NULL::text, 'b'])|
+               )
+
+      assert {:error,
+              "At location 0: explicit VARIADIC function calls are not currently supported"} =
+               Parser.parse_and_validate_expression(~S|concat(VARIADIC NULL::text[])|)
+    end
+
+    test "should reject concat with char(n) until bpchar support exists" do
+      assert {:error, msg} =
+               Parser.parse_and_validate_expression(~S|concat('x'::char(3), 'y')|)
+
+      assert msg =~ "unsupported type bpchar"
+    end
+
     test "should correctly parse coalesce special form as a variadic function" do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(

@@ -9,6 +9,7 @@ import { getEntityType, listEntityTypes } from './define-entity'
 import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 import { passthrough } from './entity-schema'
 import { runtimeLog } from './log'
+import { appendPathToUrl } from './url'
 import type { EntityRegistry } from './define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
@@ -77,6 +78,17 @@ export interface RuntimeRouterConfig {
   onWakeError?: (error: Error) => boolean | void
   /** Max number of concurrent entity-type registrations (default: 8). */
   registrationConcurrency?: number
+  /**
+   * Public URL of this runtime, forwarded to the agents-server so it can be
+   * included in GET /api/runtimes. If omitted the runtime is registered but
+   * excluded from the public runtimes list.
+   */
+  publicUrl?: string
+  /**
+   * Human-readable name for this runtime instance. Defaults to "default".
+   * Used as the key for /api/runtimes de-duplication (last-write-wins).
+   */
+  name?: string
 }
 
 export interface RuntimeRouter {
@@ -152,6 +164,8 @@ export function createRuntimeRouter(
     heartbeatInterval,
     createElectricTools,
     registrationConcurrency,
+    publicUrl,
+    name: runtimeName,
   } = normalized
 
   const wakeConfig: ProcessWakeConfig = {
@@ -401,11 +415,19 @@ export function createRuntimeRouter(
         body.serve_endpoint = serveEndpoint
       }
 
-      const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
-        method: `POST`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify(body),
-      })
+      if (publicUrl !== undefined) {
+        body.public_url = publicUrl
+      }
+      body.runtime_name = runtimeName ?? `default`
+
+      const typeRes = await fetch(
+        appendPathToUrl(baseUrl, `/_electric/entity-types`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        }
+      )
 
       if (!typeRes.ok) {
         const err = await typeRes.text()
@@ -421,16 +443,36 @@ export function createRuntimeRouter(
         const subPath = subscriptionPathForType
           ? subscriptionPathForType(name)
           : `/${name}/**`
-        const subRes = await fetch(
-          `${baseUrl}${subPath}?subscription=${name}-handler`,
-          {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              webhook: serveEndpoint,
-            }),
-          }
+        const subscriptionId = `${name}-handler`
+        const subscriptionUrl = appendPathToUrl(
+          baseUrl,
+          `/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
         )
+        const subscriptionInit = (): RequestInit => ({
+          method: `PUT`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            type: `webhook`,
+            pattern: streamPatternFromPath(subPath),
+            webhook: { url: serveEndpoint },
+          }),
+        })
+        let subRes = await fetch(subscriptionUrl, subscriptionInit())
+
+        if (subRes.status === 409) {
+          const err = await subRes.text()
+          if (err.includes(`SUBSCRIPTION_ALREADY_EXISTS`)) {
+            const deleteRes = await fetch(subscriptionUrl, { method: `DELETE` })
+            if (deleteRes.ok || deleteRes.status === 404) {
+              subRes = await fetch(subscriptionUrl, subscriptionInit())
+            } else {
+              const deleteErr = await deleteRes.text()
+              subRes = new Response(deleteErr, { status: deleteRes.status })
+            }
+          } else {
+            subRes = new Response(err, { status: 409 })
+          }
+        }
 
         if (!subRes.ok) {
           const err = await subRes.text()
@@ -484,6 +526,10 @@ export function createRuntimeRouter(
     },
     registerTypes,
   }
+}
+
+function streamPatternFromPath(path: string): string {
+  return path.replace(/^\/+/, ``)
 }
 
 export function createRuntimeHandler(
@@ -542,6 +588,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
   heartbeatInterval?: number
   createElectricTools?: RuntimeRouterConfig[`createElectricTools`]
   registrationConcurrency?: number
+  publicUrl?: string
+  name?: string
 } {
   const serveEndpoint = config.serveEndpoint ?? config.handlerUrl
   const webhookPath =
@@ -557,6 +605,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     heartbeatInterval: config.heartbeatInterval,
     createElectricTools: config.createElectricTools,
     registrationConcurrency: config.registrationConcurrency,
+    publicUrl: config.publicUrl,
+    name: config.name,
   }
 }
 

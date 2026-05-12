@@ -21,6 +21,7 @@ const {
   runMigrationsMock,
   selectFromMock,
   selectMock,
+  selectWhereMock,
   serverAddressMock,
   serverCloseMock,
   serverListenMock,
@@ -46,6 +47,7 @@ const {
   runMigrationsMock: vi.fn(),
   selectFromMock: vi.fn(),
   selectMock: vi.fn(),
+  selectWhereMock: vi.fn(),
   serverAddressMock: vi.fn(),
   serverCloseMock: vi.fn(),
   serverListenMock: vi.fn(),
@@ -79,7 +81,7 @@ vi.mock(`node:http`, async (importOriginal) => {
   }
 })
 
-vi.mock(`../src/electric-agents-registry`, () => ({
+vi.mock(`../src/entity-registry`, () => ({
   PostgresRegistry: class MockPostgresRegistry {
     initialize(): Promise<void> {
       return registryInitializeMock()
@@ -122,7 +124,7 @@ vi.mock(`../src/db/index`, () => ({
 vi.mock(`../src/db/schema`, () => ({
   subscriptionWebhooks: {},
   consumerCallbacks: {},
-  wakeRegistrations: { sourceUrl: `source_url` },
+  wakeRegistrations: { tenantId: `tenant_id`, sourceUrl: `source_url` },
 }))
 
 vi.mock(`../src/wake-registry`, () => ({
@@ -166,10 +168,13 @@ vi.mock(`../src/scheduler`, () => ({
 }))
 
 vi.mock(`drizzle-orm`, () => ({
+  and: vi.fn(),
   eq: vi.fn(),
 }))
 
 vi.mock(`../src/stream-client`, () => ({
+  durableStreamsServiceUrl: (baseUrl: string, serviceId: string) =>
+    `${baseUrl.replace(/\/+$/, ``)}/v1/stream/${encodeURIComponent(serviceId)}`,
   StreamClient: class MockStreamClient {
     exists(): Promise<boolean> {
       return streamExistsMock()
@@ -207,6 +212,7 @@ describe(`ElectricAgentsServer.start`, () => {
     serverOnMock.mockReset()
     selectFromMock.mockReset()
     selectMock.mockReset()
+    selectWhereMock.mockReset()
     streamCreateMock.mockReset()
     streamExistsMock.mockReset()
     streamReadJsonMock.mockReset()
@@ -235,7 +241,10 @@ describe(`ElectricAgentsServer.start`, () => {
         callback?.()
       }
     )
-    selectFromMock.mockResolvedValue([])
+    selectFromMock.mockReturnValue({
+      where: selectWhereMock,
+    })
+    selectWhereMock.mockResolvedValue([])
     selectMock.mockReturnValue({
       from: selectFromMock,
     })
@@ -275,12 +284,12 @@ describe(`ElectricAgentsServer.start`, () => {
     expect(schedulerStartMock).toHaveBeenCalledOnce()
     expect(schedulerStopMock).toHaveBeenCalledOnce()
     expect(registryCloseMock).toHaveBeenCalledOnce()
-    expect(serverCloseMock).toHaveBeenCalledOnce()
+    expect(serverCloseMock).not.toHaveBeenCalled()
     expect(() => server!.url).toThrow(`Server not started`)
   })
 
   it(`continues startup when one cron rehydration row is invalid`, async () => {
-    selectFromMock.mockResolvedValueOnce([
+    selectWhereMock.mockResolvedValueOnce([
       { sourceUrl: `/_cron/not-a-valid-cron` },
       {
         sourceUrl: `/_cron/${Buffer.from(

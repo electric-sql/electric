@@ -96,4 +96,36 @@ describe(`StreamClient`, () => {
 
     await expect(client.exists(`/_cron/test`)).rejects.toBe(error)
   })
+
+  it(`createSubscription uses the stream-meta subscription contract`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(`http://127.0.0.1:4545/v1/stream/tenant-a`)
+
+    try {
+      await client.createSubscription(
+        `/chat/**`,
+        `sub-1`,
+        `http://agent.local/webhook`,
+        `test subscription`
+      )
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `http://127.0.0.1:4545/v1/stream-meta/subscriptions/sub-1?service=tenant-a`,
+        expect.objectContaining({ method: `PUT` })
+      )
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toEqual({
+        type: `webhook`,
+        pattern: `chat/**`,
+        webhook: { url: `http://agent.local/webhook` },
+        description: `test subscription`,
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
 })

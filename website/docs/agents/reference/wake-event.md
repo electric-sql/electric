@@ -30,7 +30,7 @@ type WakeEvent = {
 | Field        | Type      | Description                                                              |
 | ------------ | --------- | ------------------------------------------------------------------------ |
 | `source`     | `string`  | URL or identifier of the stream that triggered the wake.                 |
-| `type`       | `string`  | Wake type. Usually `"message_received"` or `"wake"`; fallback webhook events can use `triggerEvent` or `"message"`. See catalog. |
+| `type`       | `string`  | Wake type. Usually `"inbox"` or `"wake"`; fallback webhook events can use `triggerEvent` or `"message"`. See catalog. |
 | `fromOffset` | `number`  | Start offset of new events in the source stream.                         |
 | `toOffset`   | `number`  | End offset (exclusive) of new events.                                    |
 | `eventCount` | `number`  | Number of new events in this wake.                                       |
@@ -40,9 +40,9 @@ type WakeEvent = {
 
 ## Wake-type catalog
 
-Handlers usually see two values for `wake.type`. Direct inbox messages arrive as `"message_received"`. Most non-message triggers are flattened into `"wake"`, with the specifics carried on `wake.payload`. Low-level webhook fallbacks can surface `triggerEvent` directly, or `"message"` when no trigger event is provided.
+Handlers usually see two values for `wake.type`. Direct inbox messages arrive as `"inbox"`. Most non-message triggers are flattened into `"wake"`, with the specifics carried on `wake.payload`. Low-level webhook fallbacks can surface `triggerEvent` directly, or `"message"` when no trigger event is provided.
 
-### `"message_received"`
+### `"inbox"`
 
 An external message landed in the entity's inbox — from `ctx.send()`, the CLI's `electric agents send`, or any direct `/send` HTTP call.
 
@@ -89,7 +89,7 @@ Inspect the payload to distinguish the sub-kind:
 | Observed change     | `ctx.observe(..., { wake: { on: 'change' } })` or `observe(db(...))`        | `payload.changes` is non-empty                                                            |
 | Shared-state change | `await ctx.observe(db(...), { wake: { on: 'change' } })`                    | `payload.changes` is non-empty, `payload.source` identifies the shared-state stream       |
 | Cron fired          | A cron schedule entry on the entity's manifest                              | `payload.source` identifies the schedule; `payload.changes` is empty                      |
-| Scheduled send      | A `future_send` schedule fires                                              | Arrives as `"message_received"` (not `"wake"`) — the schedule produces a message delivery |
+| Scheduled send      | A `future_send` schedule fires                                              | Arrives as `"inbox"` (not `"wake"`) — the schedule produces a message delivery |
 | Timeout             | `timeoutMs` on a `change` wake config elapsed with no changes               | `payload.timeout === true`, `payload.changes` is empty                                    |
 
 For the narrative on how these are produced, see [Waking entities](../usage/waking-entities).

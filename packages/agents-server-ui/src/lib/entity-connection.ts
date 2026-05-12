@@ -1,4 +1,5 @@
 import {
+  appendPathToUrl,
   createEntityStreamDB,
   type EntityStreamDBWithActions,
 } from '@electric-ax/agents-runtime/client'
@@ -193,16 +194,19 @@ async function connectEntityStreamFresh(opts: {
 }): Promise<{ db: EntityStreamDBWithActions; close: () => void }> {
   const { baseUrl, entityUrl, customState, signal } = opts
   throwIfAborted(signal)
-  const res = await fetch(`${baseUrl}${entityUrl}`, {
-    headers: { accept: `application/json` },
-    signal,
-  })
+  const res = await fetch(
+    appendPathToUrl(baseUrl, `/_electric/entities${entityUrl}`),
+    {
+      headers: { accept: `application/json` },
+      signal,
+    }
+  )
   if (!res.ok) {
     throw new Error(`Failed to fetch entity at ${entityUrl}: ${res.statusText}`)
   }
   await res.body?.cancel()
   throwIfAborted(signal)
-  const streamUrl = `${baseUrl}${getMainStreamPath(entityUrl)}`
+  const streamUrl = appendPathToUrl(baseUrl, getMainStreamPath(entityUrl))
   const streamOptions = isReactNativeRuntime()
     ? { stream: createReactNativeStream(streamUrl) }
     : {}

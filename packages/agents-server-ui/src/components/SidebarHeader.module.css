@@ -1,44 +1,23 @@
-/* Tiny header row at the top of the sidebar. Holds the sidebar
-   collapse button + the search trigger as icon-only ghost buttons.
-
-   The icon column is aligned with the status dot of every row in
-   the list below. Rows live inside `.treeRow` (8px gutter) and
-   themselves carry a 3px paddingLeft (BASE_PADDING_LEFT in
-   SidebarRow.tsx), putting their 22px icon slot at x=11 from the
-   sidebar edge — center x=22. We mirror that here with padding-left
-   10px so the IconButton (size=1, 24x24) puts its 16px glyph
-   centered at the exact same x-coordinate (10 + 12 = 22).
-
-   No border-bottom, same background as the rest of the sidebar — the
-   row reads as part of the sidebar surface, not a separate top bar. */
+/* Empty header spacer at the top of the sidebar. The visible controls are fixed
+   at the shell level, but this row preserves the vertical rhythm above "New
+   session" and, on macOS desktop, provides the draggable titlebar surface. */
 .header {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  gap: 2px;
   height: 44px;
-  padding: 0 10px;
 }
 
-/* Electron desktop: extend the sidebar header up into the macOS
-   "hiddenInset" titlebar area so the toolbar buttons sit on the same
-   row as the OS traffic lights. Padding-left clears the three lights
-   (positioned at x:16, y:16 in main.ts → ~74px wide region) with a
-   small gap so the icons start to their right.
-   Height stays at the standard 44px so the 24px IconButton glyphs
-   flex-center on the same y as the traffic-light centers.
-   The whole bar is a window-drag region; interactive descendants
-   (buttons, tooltips, links, inputs) opt back out so they stay
-   clickable. */
-:global(html[data-electric-desktop='true']) .header {
-  padding-left: 84px;
+/* Windows/Linux desktop moves this whole row into DesktopTitleBar. */
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .header {
+  display: none;
+}
+
+/* macOS desktop: extend the spacer into the hiddenInset titlebar as a window
+   drag region. The fixed controls are rendered above it and opt out of drag. */
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header {
   -webkit-app-region: drag;
-}
-
-:global(html[data-electric-desktop='true']) .header button,
-:global(html[data-electric-desktop='true']) .header a,
-:global(html[data-electric-desktop='true']) .header input,
-:global(html[data-electric-desktop='true']) .header [role='button'],
-:global(html[data-electric-desktop='true']) .header [data-no-drag] {
-  -webkit-app-region: no-drag;
 }

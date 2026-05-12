@@ -22,6 +22,7 @@ export function MessageInput({
   inlineQueuedSubmits = false,
   onOptimisticQueuedMessage,
   drawer,
+  onSend,
 }: {
   db: EntityStreamDBWithActions | null
   baseUrl: string
@@ -30,6 +31,7 @@ export function MessageInput({
   pendingMessages?: EntityTimelineData[`inbox`]
   inlineQueuedSubmits?: boolean
   onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
+  onSend?: () => void
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed
@@ -109,12 +111,13 @@ export function MessageInput({
           mode: `queued`,
         })
     if (!tx) return
+    if (!editingMessage) onSend?.()
     setValue(``)
     setEditingMessage(null)
     tx.isPersisted.promise.catch((err: Error) => {
       setError(err.message)
     })
-  }, [value, sendAction, updateAction, editingMessage, disabled])
+  }, [value, sendAction, updateAction, editingMessage, disabled, onSend])
 
   const startEditing = useCallback(
     (message: EntityTimelineData[`inbox`][number]) => {

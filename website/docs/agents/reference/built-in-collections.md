@@ -23,7 +23,7 @@ Every entity automatically has these 17 collections, populated by the runtime as
 | `toolCalls`        | `tool_call`        | `ToolCall`         | Tool call lifecycle          |
 | `reasoning`        | `reasoning`        | `Reasoning`        | Reasoning block lifecycle    |
 | `errors`           | `error`            | `ErrorEvent`       | Diagnostic errors            |
-| `inbox`            | `message_received` | `MessageReceived`  | Inbound messages             |
+| `inbox`            | `inbox` | `MessageReceived`  | Inbound messages             |
 | `wakes`            | `wake`             | `WakeEntry`        | Wake delivery records        |
 | `entityCreated`    | `entity_created`   | `EntityCreated`    | Entity bootstrap metadata    |
 | `entityStopped`    | `entity_stopped`   | `EntityStopped`    | Entity shutdown signal       |

@@ -281,6 +281,7 @@ const agentsDocsSidebar = [
         text: 'Embedded built-ins',
         link: '/docs/agents/usage/embedded-builtins',
       },
+      { text: 'MCP servers', link: '/docs/agents/usage/mcp-servers' },
       { text: 'Testing', link: '/docs/agents/usage/testing' },
     ],
   },
@@ -326,6 +327,14 @@ const agentsDocsSidebar = [
       {
         text: 'RuntimeHandler',
         link: '/docs/agents/reference/runtime-handler',
+      },
+      {
+        text: 'McpRegistry',
+        link: '/docs/agents/reference/mcp-registry',
+      },
+      {
+        text: 'McpServerConfig',
+        link: '/docs/agents/reference/mcp-server-config',
       },
     ],
   },

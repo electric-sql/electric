@@ -13,6 +13,7 @@ import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
+import { composeToolsWithProviders } from './tool-providers'
 import type { ChangeEvent } from '@durable-streams/state'
 import type {
   AgentConfig,
@@ -333,13 +334,16 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         messages: Array<LLMMessage>,
         extraTools: Array<AgentTool> = []
       ): Promise<AgentRunResult> {
+        const composedTools = (await composeToolsWithProviders(
+          activeAgentConfig.tools
+        )) as Array<AgentTool>
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
 
           provider: activeAgentConfig.provider,
 
-          tools: [...activeAgentConfig.tools, ...extraTools] as Array<never>,
+          tools: [...composedTools, ...extraTools] as Array<never>,
 
           streamFn: activeAgentConfig.streamFn,
 
@@ -370,7 +374,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
             `wakeType=${config.wakeEvent.type} wakeOffset=${config.wakeOffset} ` +
             `triggerMessageLen=${messageText.length} ` +
             `runInputLen=${runInput?.length ?? 0} ` +
-            `tools=${activeAgentConfig.tools.length + extraTools.length}`
+            `tools=${composedTools.length + extraTools.length}`
         )
         if (messages.length > 0) {
           const tail = messages.slice(-3)

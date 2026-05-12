@@ -1,0 +1,179 @@
+.titleBar {
+  display: none;
+  align-items: center;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--ds-chrome-bg);
+  color: var(--ds-text-1);
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-app-region: drag;
+}
+
+:global(
+    html[data-electric-desktop='true']:not([data-electric-platform='darwin'])
+  )
+  .titleBar {
+  display: flex;
+}
+
+.appMenuButton {
+  all: unset;
+  width: 24px;
+  height: 24px;
+  margin-left: 8px;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--ds-radius-2);
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.appMenuButton:hover,
+.appMenuButton:focus-visible {
+  background: var(--ds-bg-hover);
+}
+
+.appMenuButton:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: 1px;
+}
+
+.appIcon {
+  width: 14px;
+  height: 14px;
+  background: var(--ds-text-1);
+  -webkit-mask: url('../../../agents-desktop/assets/icon-mark.svg') center /
+    contain no-repeat;
+  mask: url('../../../agents-desktop/assets/icon-mark.svg') center / contain
+    no-repeat;
+}
+
+:global(html[data-theme='dark']) .appIcon {
+  background: var(--ds-accent-9);
+}
+
+.chrome {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 4px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.menuItem {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--ds-radius-2);
+  cursor: default;
+  color: var(--ds-text-2);
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-1);
+}
+
+.menuItem:focus-visible {
+  outline: 2px solid var(--ds-accent-a8);
+  outline-offset: 1px;
+}
+
+.dragRegion {
+  flex: 1;
+  min-width: 24px;
+  height: 100%;
+}
+
+/* In Electron the native window-controls overlay owns this space. */
+.webWindowControls {
+  display: inline-flex;
+  align-items: stretch;
+  height: 100%;
+  flex-shrink: 0;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+:global(html[data-electric-desktop='true']) .webWindowControls {
+  width: 138px;
+  pointer-events: none;
+}
+
+:global(html[data-electric-desktop='true']) .webWindowControls > span {
+  visibility: hidden;
+}
+
+.webWindowControls > span {
+  width: 46px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-2);
+  position: relative;
+}
+
+.webWindowControls > span:hover {
+  background: var(--ds-bg-hover);
+}
+
+.minimize::before,
+.maximize::before,
+.close::before,
+.close::after {
+  content: '';
+  position: absolute;
+  background: currentcolor;
+}
+
+.minimize::before {
+  width: 10px;
+  height: 1px;
+}
+
+.maximize::before {
+  width: 9px;
+  height: 9px;
+  background: transparent;
+  border: 1px solid currentcolor;
+  box-sizing: border-box;
+}
+
+.close::before,
+.close::after {
+  width: 11px;
+  height: 1px;
+}
+
+.close::before {
+  transform: rotate(45deg);
+}
+
+.close::after {
+  transform: rotate(-45deg);
+}
+
+.webWindowControls > span:last-child:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}

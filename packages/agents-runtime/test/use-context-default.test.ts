@@ -29,7 +29,7 @@ describe(`zero-config default path`, () => {
 
   it(`timelineMessages default projection is byte-identical to legacy for a no-context stream`, () => {
     const db = buildStreamFixture([
-      { kind: `message_received`, at: 1, value: { payload: `hello` } },
+      { kind: `inbox`, at: 1, value: { payload: `hello` } },
       { kind: `wake`, at: 2, value: { payload: `tick` } },
     ])
 
@@ -40,7 +40,7 @@ describe(`zero-config default path`, () => {
 
   it(`agent.run without useContext hands the adapter legacy-identical messages`, async () => {
     const db = buildStreamFixture([
-      { kind: `message_received`, at: 1, value: { payload: `hello` } },
+      { kind: `inbox`, at: 1, value: { payload: `hello` } },
       { kind: `wake`, at: 2, value: { payload: `tick` } },
     ])
     const { ctx } = createTestHandlerContext({ db })

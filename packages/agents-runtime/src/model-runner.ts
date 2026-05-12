@@ -130,7 +130,7 @@ export async function completeWithLowCostModel(input: {
   log?: (message: string) => void
   logPrefix?: string
   purpose: string
-  systemPrompt?: string
+  systemPrompt: string
   prompt: string
   maxTokens: number
 }): Promise<string> {
@@ -155,7 +155,7 @@ export async function completeWithLowCostModel(input: {
   const res = await completeSimple(
     model,
     {
-      ...(input.systemPrompt && { systemPrompt: input.systemPrompt }),
+      systemPrompt: input.systemPrompt,
       messages: [
         { role: `user`, content: input.prompt, timestamp: Date.now() },
       ],

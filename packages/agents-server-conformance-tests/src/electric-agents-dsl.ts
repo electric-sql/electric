@@ -469,13 +469,37 @@ async function electricAgentsFetch(
   path: string,
   opts: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${baseUrl}${path}`, {
+  return fetch(`${baseUrl}${routeControlPlanePath(path)}`, {
     ...opts,
     headers: {
       'content-type': `application/json`,
       ...opts.headers,
     },
   })
+}
+
+function routeControlPlanePath(path: string): string {
+  const pathname = path.split(`?`, 1)[0]!
+  if (pathname.startsWith(`/_electric/`) || isEntityStreamPath(pathname)) {
+    return path
+  }
+  return `/_electric/entities${path}`
+}
+
+function isEntityStreamPath(pathname: string): boolean {
+  const segments = pathname.split(`/`).filter(Boolean)
+  const lastSegment = segments.at(-1)
+  return (
+    segments.length >= 3 && (lastSegment === `main` || lastSegment === `error`)
+  )
+}
+
+function subscriptionEndpoint(baseUrl: string, id: string): string {
+  return `${baseUrl}/v1/stream-meta/subscriptions/${encodeURIComponent(id)}`
+}
+
+function subscriptionPattern(pattern: string): string {
+  return pattern.replace(/^\/+/, ``)
 }
 
 // ============================================================================
@@ -1026,10 +1050,9 @@ export class ElectricAgentsScenario {
     } finally {
       for (const subscription of ctx.subscriptions) {
         try {
-          await fetch(
-            `${ctx.baseUrl}${subscription.pattern}?subscription=${subscription.id}`,
-            { method: `DELETE` }
-          )
+          await fetch(subscriptionEndpoint(ctx.baseUrl, subscription.id), {
+            method: `DELETE`,
+          })
         } catch {
           // best-effort cleanup
         }
@@ -1056,14 +1079,15 @@ export class ElectricAgentsScenario {
 async function executeStep(ctx: RunContext, step: Step): Promise<void> {
   switch (step.kind) {
     case `subscription`: {
-      const res = await fetch(
-        `${ctx.baseUrl}${step.pattern}?subscription=${step.id}`,
-        {
-          method: `PUT`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({ webhook: ctx.receiver.url }),
-        }
-      )
+      const res = await fetch(subscriptionEndpoint(ctx.baseUrl, step.id), {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          type: `webhook`,
+          pattern: subscriptionPattern(step.pattern),
+          webhook: { url: ctx.receiver.url },
+        }),
+      })
       expect(res.status).toBeLessThan(300)
       ctx.subscriptions.push({ pattern: step.pattern, id: step.id })
 

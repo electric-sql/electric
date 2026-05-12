@@ -80,6 +80,33 @@
   text-overflow: ellipsis;
 }
 
+.runtimeBadge {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ds-text-3);
+}
+
+.connectionBtn {
+  margin-left: auto;
+}
+
+.connectionBtn[data-state='connected'] {
+  color: var(--ds-green-11);
+  background: color-mix(in srgb, var(--ds-green-9) 10%, transparent);
+}
+
+.connectionBtn[data-state='connected']:hover {
+  background: color-mix(in srgb, var(--ds-green-9) 16%, transparent);
+}
+
+.connectionBtn[data-state='disconnected'] {
+  color: var(--ds-gray-10);
+}
+
 .removeBtn {
   margin-left: auto;
 }

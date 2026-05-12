@@ -217,38 +217,29 @@ const bootstrapTodoListAction = createOptimisticAction<string>({
 
 ## Developing Electric Agents
 
-The agents subsystem spans five packages: `agents-runtime`, `agents-server`, `agents` (built-in Horton & Worker), `agents-server-ui`, and `agents-server-conformance-tests`.
+The agents subsystem spans seven packages: `agents-runtime`, `agents-mcp` (MCP bridge library used by built-ins), `agents-server`, `agents` (built-in Horton & Worker), `agents-server-ui`, `agents-desktop` (Electron wrapper for the UI), and `agents-server-conformance-tests`.
 
-**Quick start** (all commands from project root, ensure `.env` has `ANTHROPIC_API_KEY`):
+**Quick start** (from project root, ensure `.env` has `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`):
 
 ```sh
-# 1. Install deps + build prerequisites (fresh checkout/worktree only)
-pnpm install && pnpm -C packages/typescript-client build
-
-# 2. Backing services (Postgres, Electric, Jaeger)
-docker compose -f packages/agents-server/docker-compose.dev.yml up -d
-
-# 3. Build agents-runtime first (other packages depend on it)
-pnpm -C packages/agents-runtime dev             # wait for "Build complete"
-
-# 4. Build agents-server + agents in parallel
-pnpm -C packages/agents-server dev              # terminal 2
-pnpm -C packages/agents dev                     # terminal 3
-
-# 5. Start server processes (run from root to pick up .env)
-DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents \
-  ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 \
-  ELECTRIC_INSECURE=true \
-  node packages/agents-server/dist/entrypoint.js  # terminal 4
-
-ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
-  node packages/agents/dist/entrypoint.js         # terminal 5
-
-# 6. UI dashboard
-pnpm -C packages/agents-server-ui dev             # terminal 6
+./scripts/dev.sh build       # install + build typescript-client, agents-runtime,
+                             # agents-mcp, agents-server, agents
+./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C stops everything
+./scripts/dev.sh start --with-agents   # also spawn built-in agents (Horton + Worker)
+./scripts/dev.sh desktop     # run the Electron desktop app (in a separate terminal,
+                             # against an already-running stack)
+./scripts/dev.sh stop        # stop processes + docker compose down
+./scripts/dev.sh teardown    # also remove Postgres volume + .streams-data/
 ```
 
-See **[docs/agents-development.md](docs/agents-development.md)** for the full guide: env vars, testing, iteration workflows, and teardown.
+Built-in agents (Horton + Worker) register against `agents-server` at startup and will fail with `Stream not found` if they race ahead of it. Pass `--with-agents` to `start` to spawn them after `agents-server` binds `:4437`, or run them manually in a separate terminal:
+
+```sh
+ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+  node packages/agents/dist/entrypoint.js
+```
+
+Logs land in `.dev-logs/`. Use `--detach` with `start` to background the stack. See **[docs/agents-development.md](docs/agents-development.md)** for the full manual flow, env vars, testing, and iteration workflows.
 
 ## Working on the TypeScript client
 

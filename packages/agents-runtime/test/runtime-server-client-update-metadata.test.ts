@@ -21,7 +21,9 @@ describe(`runtime-server-client.setTag`, () => {
     await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
 
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.url).toBe(`http://test.example/horton/abc/tags/title`)
+    expect(calls[0]!.url).toBe(
+      `http://test.example/_electric/entities/horton/abc/tags/title`
+    )
     expect(calls[0]!.init?.method).toBe(`POST`)
     const headers = calls[0]!.init?.headers as Record<string, string>
     expect(headers[`authorization`] ?? headers[`Authorization`]).toBe(
@@ -68,7 +70,7 @@ describe(`createHandlerContext: tags + tag mutations`, () => {
       events: [],
       writeEvent: () => {},
       wakeSession: {} as any,
-      wakeEvent: { type: `message_received`, payload: `hi` } as any,
+      wakeEvent: { type: `inbox`, payload: `hi` } as any,
       doObserve: () => Promise.resolve({} as any),
       doSpawn: () => Promise.resolve({} as any),
       doMkdb: () => ({}) as any,

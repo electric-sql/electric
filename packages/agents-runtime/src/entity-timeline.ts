@@ -11,25 +11,8 @@ import {
 } from '@durable-streams/state'
 import type { InitialQueryBuilder, QueryBuilder } from '@tanstack/db'
 import type { EntityStreamDB } from './entity-stream-db'
-import type { ChildStatusEntry, Manifest, WakeEntry } from './entity-schema'
-
-type ManifestEntry = Manifest
-type Wake =
-  | `runFinished`
-  | { on: `runFinished`; includeResponse?: boolean }
-  | {
-      on: `change`
-      collections?: Array<string>
-      ops?: Array<`insert` | `update` | `delete`>
-      debounceMs?: number
-    }
-  | {
-      on: `schedule`
-      schedule:
-        | { type: `cron`; expression: string; timezone?: string }
-        | { type: `at`; timestamp: string }
-    }
-type WakeMessage = Omit<WakeEntry, `key`>
+import type { ChildStatusEntry, MessageReceived } from './entity-schema'
+import type { ManifestEntry, Wake, WakeMessage } from './types'
 
 export type EntityTimelineState =
   | `pending`
@@ -120,17 +103,15 @@ export interface IncludesError {
   message: string
 }
 
-export interface IncludesInboxMessage {
-  key: string
+export type IncludesInboxMessage = Omit<
+  MessageReceived,
+  `_seq` | `from` | `timestamp` | `mode` | `status`
+> & {
   order: TimelineOrder
   from: string
-  payload: unknown
   timestamp: string
-  mode?: `immediate` | `queued` | `paused` | `steer`
-  status?: `pending` | `processed` | `cancelled`
-  position?: string
-  processed_at?: string
-  cancelled_at?: string
+  mode?: NonNullable<MessageReceived[`mode`]>
+  status?: NonNullable<MessageReceived[`status`]>
 }
 
 export interface IncludesWakeMessage {

@@ -100,6 +100,7 @@ function estimateRowHeight(
 }
 
 const BOTTOM_PIN_THRESHOLD = 8
+const CHAT_SURFACE_GUTTER = 24
 const ROW_GAP = 24
 const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
@@ -316,7 +317,9 @@ function ManifestTimelineRow({
   const title = manifestTitle(manifest)
   const meta = manifestMeta(manifest)
   const summary =
-    isEntity || stateSourceId ? null : [title, meta].filter(Boolean).join(` · `)
+    isEntity || stateSourceId
+      ? title
+      : [title, meta].filter(Boolean).join(` · `)
 
   const openEntity = useCallback(() => {
     if (!entityTarget) return
@@ -460,7 +463,7 @@ function manifestKindLabel(manifest: Manifest): string {
 function manifestTitle(manifest: Manifest): string {
   switch (manifest.kind) {
     case `child`:
-      return manifest.id
+      return manifest.entity_url
     case `source`:
       return manifest.sourceRef
     case `shared-state`:
@@ -474,7 +477,7 @@ function manifestTitle(manifest: Manifest): string {
 function manifestMeta(manifest: Manifest): string {
   switch (manifest.kind) {
     case `child`:
-      return `${manifest.entity_type}${manifest.observed ? `` : ` · unobserved`}`
+      return manifest.observed ? `child entity` : `child entity · unobserved`
     case `source`:
       return describeSourceConfig(manifest.config)
     case `shared-state`:
@@ -496,8 +499,11 @@ function manifestDetails(
   switch (manifest.kind) {
     case `child`:
       return [
-        { label: `Id`, value: manifest.id },
-        { label: `Type`, value: manifest.entity_type },
+        { label: `Path`, value: manifest.entity_url },
+        {
+          label: `Status`,
+          value: manifest.observed ? `observed` : `unobserved`,
+        },
       ]
     case `shared-state`:
       return [
@@ -595,6 +601,14 @@ function titleCase(value: string): string {
     .join(` `)
 }
 
+function entityUrlKey(urls: Array<string>): string {
+  return Array.from(new Set(urls)).sort().join(`\n`)
+}
+
+function entityUrlsFromKey(key: string): Array<string> {
+  return key ? key.split(`\n`) : []
+}
+
 // `section` and `responseTimestamp` are pulled out of the parent
 // `EntityTimelineEntry` so React.memo's shallow compare can hit on
 // the *section* identity. `buildTimelineEntries` returns a fresh
@@ -664,6 +678,7 @@ export function EntityTimeline({
   tileId,
   entityUrl = null,
   entities = [],
+  scrollToBottomSignal = 0,
 }: {
   entries: Array<TimelineEntry>
   loading: boolean
@@ -673,12 +688,17 @@ export function EntityTimeline({
   tileId?: string | null
   entityUrl?: string | null
   entities?: Array<IncludesEntity>
+  scrollToBottomSignal?: number
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
   const { entitiesCollection } = useElectricAgents()
-  const referencedEntityUrls = useMemo(
-    () => Array.from(new Set(entities.map((entity) => entity.url))),
+  const referencedEntityUrlKey = useMemo(
+    () => entityUrlKey(entities.map((entity) => entity.url)),
     [entities]
+  )
+  const referencedEntityUrls = useMemo(
+    () => entityUrlsFromKey(referencedEntityUrlKey),
+    [referencedEntityUrlKey]
   )
   const { data: entityStatuses = [] } = useLiveQuery(
     (q) => {
@@ -693,7 +713,7 @@ export function EntityTimeline({
           status: e.status,
         }))
     },
-    [entitiesCollection, referencedEntityUrls]
+    [entitiesCollection, referencedEntityUrlKey, referencedEntityUrls]
   )
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, IncludesEntity[`status`]>()
@@ -720,6 +740,8 @@ export function EntityTimeline({
   const lastMeasureAtRef = useRef(new Map<string, number>())
   const settledKeysRef = useRef(new Set<string>())
   const settleCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handledScrollSignalRef = useRef(scrollToBottomSignal)
+  const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
 
   const firstMessage = rows.find(
     (
@@ -810,7 +832,7 @@ export function EntityTimeline({
     getScrollElement: () => viewport,
     estimateSize: (index) =>
       cachedSizeMapRef.current.get(rows[index]?.key ?? ``) ??
-      estimateRowHeight(rows[index], contentWidth),
+      estimateRowHeight(rows[index], textColumnWidth),
     getItemKey: (index) => rows[index]?.key ?? index,
     gap: 0,
     overscan: 6,
@@ -1034,6 +1056,20 @@ export function EntityTimeline({
     return () => cancelAnimationFrame(frame)
   }, [rowVirtualizer, rows, viewport])
 
+  useLayoutEffect(() => {
+    if (handledScrollSignalRef.current === scrollToBottomSignal) return
+    handledScrollSignalRef.current = scrollToBottomSignal
+    isNearBottom.current = true
+    setShowJumpToBottom(false)
+
+    if (!viewport || rows.length === 0) return
+    const frame = requestAnimationFrame(() => {
+      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [rowVirtualizer, rows.length, scrollToBottomSignal, viewport])
+
   useEffect(
     () => () => {
       if (settleCheckTimerRef.current !== null) {
@@ -1157,7 +1193,7 @@ export function EntityTimeline({
                       responseTimestamp={row.responseTimestamp}
                       entityStopped={entityStopped}
                       isStreaming={row.key === lastStreamingAgentKey}
-                      renderWidth={contentWidth}
+                      renderWidth={textColumnWidth}
                       entityUrl={entityUrl}
                       tileId={tileId ?? null}
                       entityStatusByUrl={entityStatusByUrl}

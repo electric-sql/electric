@@ -30,6 +30,7 @@ import {
 } from '@electric-ax/agents-runtime/tools'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import type { MessageReceived } from '@electric-ax/agents-runtime'
+import { mcp } from '@electric-ax/agents-mcp'
 import type { SkillsRegistry } from '../skills/types'
 
 export const HORTON_MODEL = `claude-sonnet-4-6`
@@ -392,6 +393,7 @@ function createAssistantHandler(options: {
       ...(skillsRegistry && skillsRegistry.catalog.size > 0
         ? createSkillTools(skillsRegistry, ctx)
         : []),
+      ...mcp.tools(),
     ]
 
     const titlePromise =
@@ -527,7 +529,10 @@ function createAssistantHandler(options: {
         modelId: String(modelConfig.model),
       }),
       ...modelConfig,
-      tools,
+      // mcp.tools() inserts sentinel objects that the runtime's
+      // composeToolsWithProviders resolves at wake time. The static type of
+      // useAgent doesn't model this, so cast at the boundary.
+      tools: tools as AgentTool[],
       ...(streamFn && { streamFn }),
     })
     await ctx.agent.run()

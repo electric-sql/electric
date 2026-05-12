@@ -1,42 +1,23 @@
-export { ElectricAgentsServer } from './server.js'
-export type { ElectricAgentsServerOptions } from './server.js'
+export { createDb, runMigrations } from './db/index.js'
+export type { DrizzleDB, PgClient } from './db/index.js'
+export { AgentsHost } from './host.js'
+export type {
+  AgentsHostOptions,
+  AgentsHostTenantConfig,
+  AgentsHostTenantRuntime,
+} from './host.js'
 export { StreamClient } from './stream-client.js'
+export { globalRouter } from './routing/global-router.js'
+export type { GlobalRoutes } from './routing/global-router.js'
+export type { TenantContext } from './routing/context.js'
+export { pathPrefixedSingleTenantDurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 export type {
-  ConsumerStateResponse,
-  StreamAppendResult,
-  StreamMessage,
-  StreamReadResult,
-  WaitForMessagesResult,
-} from './stream-client.js'
-
+  DurableStreamsRoutingAdapter,
+  DurableStreamsRoutingInput,
+} from './routing/durable-streams-routing-adapter.js'
+export type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 export {
-  ElectricAgentsManager,
-  ElectricAgentsError,
-} from './electric-agents-manager.js'
-export { PostgresRegistry } from './electric-agents-registry.js'
-export { ElectricAgentsRoutes } from './electric-agents-routes.js'
-export { ElectricAgentsEntityTypeRoutes } from './electric-agents-entity-type-routes.js'
-export { assertEntityStatus, toPublicEntity } from './electric-agents-types.js'
-export type {
-  ElectricAgentsEntity,
-  ElectricAgentsEntityRow,
-  ElectricAgentsEntityType,
-  EntityStatus,
-  PublicElectricAgentsEntity,
-  TypedSpawnRequest,
-  SendRequest,
-  RegisterEntityTypeRequest,
-  EntityListFilter,
-} from './electric-agents-types.js'
-export { SchemaValidator } from './electric-agents-schema-validator.js'
-export { WakeRegistry } from './wake-registry.js'
-export type { WakeEvalResult } from './wake-registry.js'
-export type {
-  WriteEvent,
-  StreamEvent,
-  AgentAdapter,
-  AgentTypeConfig,
-  AgentTypeDefinition,
-  CreateAdapter,
-} from './electric-agents/adapter-types.js'
-export { DEFAULT_OUTPUT_SCHEMAS } from './electric-agents/default-entity-schemas.js'
+  DEFAULT_TENANT_ID,
+  UnregisteredTenantError,
+  isUnregisteredTenantError,
+} from './tenant.js'

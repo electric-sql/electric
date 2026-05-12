@@ -244,6 +244,45 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{})
     end
 
+    test "supports concat as a variadic text function, skipping NULL arguments" do
+      assert {:ok, "ab"} =
+               ~S|concat('a', 'b')|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+
+      assert {:ok, "ab"} =
+               ~S|concat('a', NULL::text, 'b')|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+
+      assert {:ok, ""} =
+               ~S|concat(NULL::text, NULL::text)|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+
+      expr =
+        ~S|concat('x', "mid", 'z')|
+        |> Parser.parse_and_validate_expression!(refs: %{["mid"] => :text})
+
+      assert {:ok, "xbz"} = Runner.execute(expr, %{["mid"] => "b"})
+      assert {:ok, "xz"} = Runner.execute(expr, %{["mid"] => nil})
+
+      assert {:ok, true} =
+               ~S|ilike(concat('%', "value", '%'), '%foo%')|
+               |> Parser.parse_and_validate_expression!(refs: %{["value"] => :text})
+               |> Runner.execute(%{["value"] => "foo"})
+
+      assert {:ok, nil} =
+               ~S{'a' || NULL::text || 'b'}
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+    end
+
+    test "concat() with zero arguments is not a supported overload" do
+      assert {:error, msg} = Parser.parse_and_validate_expression(~S|concat()|)
+      assert msg =~ "unknown or unsupported function concat/0"
+    end
+
     test "subquery" do
       assert {:ok, true} =
                ~S|test IN (SELECT val FROM tester)|
