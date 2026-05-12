@@ -22,6 +22,7 @@ import {
 import type { EmbedViewId } from '../src/lib/embedView'
 import SessionChatLogDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionChatLogDomEmbed'
 import SessionStateInspectorDomEmbedModule from '@electric-ax/agents-server-ui/src/embed/SessionStateInspectorDomEmbed'
+import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 
 const HEADER_HEIGHT = 44
 
@@ -30,6 +31,7 @@ type SessionDomEmbedProps = {
   entityUrl: string
   theme: `light` | `dark`
   scrollToBottomSignal?: number
+  inlineQueuedMessages?: Array<OptimisticInboxMessage>
   onRequestOpenEntity: (entityUrl: string) => Promise<void>
   style?: StyleProp<ViewStyle>
   matchContents?: boolean
@@ -57,6 +59,9 @@ export default function SessionRoute(): React.ReactElement {
     CHAT_COMPOSER_BASE_HEIGHT + insets.bottom
   )
   const [chatLogScrollSignal, setChatLogScrollSignal] = useState(0)
+  const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
+    Array<OptimisticInboxMessage>
+  >([])
 
   const entityUrl = Array.isArray(params.entityUrl)
     ? params.entityUrl[0]
@@ -118,6 +123,7 @@ export default function SessionRoute(): React.ReactElement {
             entityUrl={entityUrl}
             theme={scheme}
             scrollToBottomSignal={chatLogScrollSignal}
+            inlineQueuedMessages={inlineQueuedMessages}
             onRequestOpenEntity={async (target) => openSession(target)}
             dom={domOptions(styles, embedSize, tokens.bg)}
           />
@@ -143,6 +149,7 @@ export default function SessionRoute(): React.ReactElement {
           onOpenStateSource={openStateSource}
           onComposerHeightChange={setChatComposerHeight}
           onSendMessage={() => setChatLogScrollSignal(Date.now())}
+          onInlineQueuedMessagesChange={setInlineQueuedMessages}
         />
       ) : (
         <StateInspectorSessionScreen

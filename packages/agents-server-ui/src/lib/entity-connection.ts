@@ -1,6 +1,7 @@
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl } from './entity-api'
 import { DurableStream } from '@durable-streams/client'
+import type { StreamOptions } from '@durable-streams/client'
 import {
   appendPathToUrl,
   createEntityStreamDB,
@@ -53,6 +54,11 @@ type CachedConnection = {
   evictionTimer: ReturnType<typeof setTimeout> | null
 }
 
+type EntityStreamOptions = NonNullable<
+  Parameters<typeof createEntityStreamDB>[3]
+>
+type EntityStreamHandle = NonNullable<EntityStreamOptions[`stream`]>
+
 const connectionCache = new Map<string, CachedConnection>()
 
 export function __clearEntityConnectionCacheForTests(): void {
@@ -89,6 +95,23 @@ function scheduleEviction(key: string, entry: CachedConnection): void {
 
 function abortError(): DOMException {
   return new DOMException(`Entity stream preload was aborted`, `AbortError`)
+}
+
+function isReactNativeRuntime(): boolean {
+  return typeof navigator !== `undefined` && navigator.product === `ReactNative`
+}
+
+function createReactNativeStream(streamUrl: string): EntityStreamHandle {
+  const stream = new DurableStream({
+    url: streamUrl,
+    contentType: `application/json`,
+  })
+
+  return {
+    url: stream.url,
+    stream: (options?: Omit<StreamOptions, `url`>) =>
+      stream.stream({ ...options, live: `long-poll` }),
+  } as EntityStreamHandle
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -232,20 +255,18 @@ async function connectEntityStreamFresh(opts: {
   await res.body?.cancel()
   throwIfAborted(signal)
   const streamUrl = appendPathToUrl(baseUrl, getMainStreamPath(entityUrl))
-  const stream = new DurableStream({
-    url: streamUrl,
-    contentType: `application/json`,
-    fetch: serverFetch,
-  })
+  const stream: EntityStreamHandle = isReactNativeRuntime()
+    ? createReactNativeStream(streamUrl)
+    : (new DurableStream({
+        url: streamUrl,
+        contentType: `application/json`,
+        fetch: serverFetch,
+      }) as unknown as EntityStreamHandle)
   const db = createEntityStreamDB(
     streamUrl,
     customState as unknown as Parameters<typeof createEntityStreamDB>[1],
     undefined,
-    {
-      stream: stream as unknown as NonNullable<
-        Parameters<typeof createEntityStreamDB>[3]
-      >[`stream`],
-    }
+    { stream }
   )
   try {
     await preloadWithAbort(db, signal)

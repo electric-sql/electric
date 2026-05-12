@@ -24,6 +24,7 @@ import {
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
+import type { OptimisticInboxMessage } from '@electric-ax/agents-server-ui/src/lib/sendMessage'
 import { Header, HeaderBackButton } from '../components/Header'
 import { Icon } from '../components/Icon'
 import { Screen } from '../components/Screen'
@@ -44,10 +45,12 @@ export const CHAT_COMPOSER_OVERLAP = 20
 const COMPOSER_INPUT_MIN_HEIGHT = 40
 const COMPOSER_INPUT_MAX_HEIGHT = 200
 const COMPOSER_MIN_CARD_HEIGHT = 48
+const INLINE_QUEUED_TIMEOUT_MS = 15_000
 
 type EntityStreamState = ReturnType<typeof useEntityTimeline>
 type EntityStreamDB = EntityStreamState[`db`]
 type PendingInboxMessage = EntityStreamState[`pendingInbox`][number]
+type TimelineEntry = EntityStreamState[`entries`][number]
 
 export function ChatSessionScreen({
   entityUrl,
@@ -57,6 +60,7 @@ export function ChatSessionScreen({
   onOpenStateSource,
   onComposerHeightChange,
   onSendMessage,
+  onInlineQueuedMessagesChange,
 }: {
   entityUrl: string
   onBack: () => void
@@ -65,6 +69,9 @@ export function ChatSessionScreen({
   onOpenStateSource: (sourceId: string) => void
   onComposerHeightChange: (height: number) => void
   onSendMessage: () => void
+  onInlineQueuedMessagesChange?: (
+    messages: Array<OptimisticInboxMessage>
+  ) => void
 }): React.ReactElement {
   return (
     <SessionScreen
@@ -76,6 +83,7 @@ export function ChatSessionScreen({
       onOpenStateSource={onOpenStateSource}
       onComposerHeightChange={onComposerHeightChange}
       onSendMessage={onSendMessage}
+      onInlineQueuedMessagesChange={onInlineQueuedMessagesChange}
     />
   )
 }
@@ -117,6 +125,7 @@ export function SessionScreen({
   onOpenStateSource,
   onComposerHeightChange,
   onSendMessage,
+  onInlineQueuedMessagesChange,
 }: {
   entityUrl: string
   view: EmbedViewId
@@ -126,11 +135,21 @@ export function SessionScreen({
   onOpenStateSource?: (sourceId: string) => void
   onComposerHeightChange?: (height: number) => void
   onSendMessage?: () => void
+  onInlineQueuedMessagesChange?: (
+    messages: Array<OptimisticInboxMessage>
+  ) => void
 }): React.ReactElement {
   const { entitiesCollection, serverUrl } = useAgents()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const [menuOpen, setMenuOpen] = useState(false)
+  const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
+    Map<string, OptimisticInboxMessage>
+  >(() => new Map())
+  const inlineQueuedKeysRef = useRef(new Set<string>())
+  const inlineTimeoutsRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>()
+  )
 
   const { data: matches = [] } = useLiveQuery(
     (query) =>
@@ -142,7 +161,118 @@ export function SessionScreen({
   const entity = matches.at(0) ?? null
   const streamEntityUrl =
     view === `chat` && entity?.status !== `spawning` ? entityUrl : null
-  const { pendingInbox, db } = useEntityTimeline(serverUrl, streamEntityUrl)
+  const { entries, pendingInbox, db } = useEntityTimeline(
+    serverUrl,
+    streamEntityUrl
+  )
+  const manifests = useMemo(
+    () =>
+      entries
+        .filter(isManifestEntry)
+        .map((entry) => entry.section.manifest as ManifestRecord),
+    [entries]
+  )
+  const processedInboxKeySignature = useMemo(
+    () =>
+      entries
+        .filter((entry) => entry.section.kind === `user_message`)
+        .map((entry) => entry.key.replace(/^inbox:/, ``))
+        .join(`\0`),
+    [entries]
+  )
+  const processedInboxKeys = useMemo(
+    () =>
+      new Set(
+        processedInboxKeySignature ? processedInboxKeySignature.split(`\0`) : []
+      ),
+    [processedInboxKeySignature]
+  )
+  const pendingInboxByKey = useMemo(
+    () => new Map(pendingInbox.map((message) => [message.key, message])),
+    [pendingInbox]
+  )
+  const projectedPendingMessage = useMemo(() => {
+    if (entity?.status === `running`) return null
+    for (const [key, message] of inlineQueuedMessages) {
+      if (processedInboxKeys.has(key)) continue
+      return pendingInboxByKey.get(key) ?? message
+    }
+    return null
+  }, [
+    entity?.status,
+    inlineQueuedMessages,
+    pendingInboxByKey,
+    processedInboxKeys,
+  ])
+  const visiblePendingInbox = useMemo(
+    () =>
+      pendingInbox.filter((message) => {
+        if (projectedPendingMessage?.key === message.key) return false
+        return !inlineQueuedKeysRef.current.has(message.key)
+      }),
+    [pendingInbox, projectedPendingMessage]
+  )
+  const inlineQueuedSubmits =
+    entity?.status !== `running` &&
+    pendingInbox.length === 0 &&
+    inlineQueuedMessages.size === 0
+
+  const rememberInlineQueuedMessage = useCallback(
+    (message: OptimisticInboxMessage): void => {
+      inlineQueuedKeysRef.current.add(message.key)
+      setInlineQueuedMessages((current) => {
+        const next = new Map(current)
+        next.set(message.key, message)
+        return next
+      })
+      const existingTimeout = inlineTimeoutsRef.current.get(message.key)
+      if (existingTimeout) clearTimeout(existingTimeout)
+      const timeout = setTimeout(() => {
+        inlineQueuedKeysRef.current.delete(message.key)
+        inlineTimeoutsRef.current.delete(message.key)
+        setInlineQueuedMessages((current) => {
+          if (!current.has(message.key)) return current
+          const next = new Map(current)
+          next.delete(message.key)
+          return next
+        })
+      }, INLINE_QUEUED_TIMEOUT_MS)
+      inlineTimeoutsRef.current.set(message.key, timeout)
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (inlineQueuedMessages.size === 0) return
+    setInlineQueuedMessages((current) => {
+      let next: Map<string, OptimisticInboxMessage> | null = null
+      for (const key of current.keys()) {
+        if (!processedInboxKeys.has(key)) continue
+        next ??= new Map(current)
+        next.delete(key)
+        inlineQueuedKeysRef.current.delete(key)
+        const timeout = inlineTimeoutsRef.current.get(key)
+        if (timeout) clearTimeout(timeout)
+        inlineTimeoutsRef.current.delete(key)
+      }
+      return next ?? current
+    })
+  }, [inlineQueuedMessages.size, processedInboxKeys])
+
+  useEffect(
+    () => () => {
+      inlineQueuedKeysRef.current.clear()
+      for (const timeout of inlineTimeoutsRef.current.values()) {
+        clearTimeout(timeout)
+      }
+      inlineTimeoutsRef.current.clear()
+    },
+    []
+  )
+
+  useEffect(() => {
+    onInlineQueuedMessagesChange?.(Array.from(inlineQueuedMessages.values()))
+  }, [inlineQueuedMessages, onInlineQueuedMessagesChange])
 
   const title = entity
     ? getEntityDisplayTitle(entity)
@@ -169,22 +299,25 @@ export function SessionScreen({
           entityUrl={entityUrl}
           entity={entity}
           db={db}
-          pendingMessages={pendingInbox}
+          pendingMessages={visiblePendingInbox}
+          manifests={manifests}
+          inlineQueuedSubmits={inlineQueuedSubmits}
           onHeightChange={onComposerHeightChange}
           onSendMessage={onSendMessage}
+          onOptimisticQueuedMessage={rememberInlineQueuedMessage}
           onOpenEntity={onOpenEntity}
           onOpenStateSource={onOpenStateSource}
           disabled={
-            !entity ||
-            entity.status === `stopped` ||
-            entity.status === `spawning`
+            !db || entity?.status === `stopped` || entity?.status === `spawning`
           }
           placeholder={
             entity?.status === `stopped`
               ? `Entity stopped`
               : entity?.status === `spawning`
                 ? `Starting...`
-                : `Send a message...`
+                : !db
+                  ? `Connecting...`
+                  : `Send a message...`
           }
         />
       )}
@@ -205,8 +338,11 @@ function NativeMessageComposer({
   entity,
   db,
   pendingMessages,
+  manifests,
+  inlineQueuedSubmits,
   onHeightChange,
   onSendMessage,
+  onOptimisticQueuedMessage,
   onOpenEntity,
   onOpenStateSource,
   disabled,
@@ -216,8 +352,11 @@ function NativeMessageComposer({
   entity: ElectricEntity | null
   db: EntityStreamDB
   pendingMessages: Array<PendingInboxMessage>
+  manifests: Array<ManifestRecord>
+  inlineQueuedSubmits: boolean
   onHeightChange?: (height: number) => void
   onSendMessage?: () => void
+  onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
   onOpenEntity?: (entityUrl: string) => void
   onOpenStateSource?: (sourceId: string) => void
   disabled: boolean
@@ -236,12 +375,20 @@ function NativeMessageComposer({
   } | null>(null)
   const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT)
   const text = value.trim()
-  const canSend = text.length > 0 && !disabled && !sending && Boolean(db)
   const bottomPadding = keyboardVisible ? 4 : Math.max(insets.bottom, 8)
   const sendAction = useMemo(() => {
     if (!db) return null
-    return createSendMessageAction({ db, baseUrl: serverUrl, entityUrl })
-  }, [db, serverUrl, entityUrl])
+    return createSendMessageAction({
+      db,
+      baseUrl: serverUrl,
+      entityUrl,
+      onOptimisticMessage: (message) => {
+        if (inlineQueuedSubmits && message.mode === `queued`) {
+          onOptimisticQueuedMessage?.(message)
+        }
+      },
+    })
+  }, [db, entityUrl, inlineQueuedSubmits, onOptimisticQueuedMessage, serverUrl])
   const updateAction = useMemo(() => {
     if (!db) return null
     return createUpdateInboxMessageAction({ db, baseUrl: serverUrl, entityUrl })
@@ -254,6 +401,7 @@ function NativeMessageComposer({
     if (!db) return null
     return createSteerInboxMessageAction({ db, baseUrl: serverUrl, entityUrl })
   }, [db, serverUrl, entityUrl])
+  const canSend = text.length > 0 && !disabled && !sending
   const setMeasuredInputHeight = (height: number): void => {
     const nextHeight = Math.min(
       COMPOSER_INPUT_MAX_HEIGHT,
@@ -298,15 +446,26 @@ function NativeMessageComposer({
     setSending(true)
     setError(null)
 
-    const tx = editingMessage
-      ? updateAction?.({
-          key: editingMessage.key,
-          text,
-          mode: `queued`,
-          status: `pending`,
-        })
-      : sendAction?.({ text, mode: `queued` })
+    if (editingMessage) {
+      const tx = updateAction?.({
+        key: editingMessage.key,
+        text,
+        mode: `queued`,
+        status: `pending`,
+      })
+      if (!tx) {
+        setSending(false)
+        return
+      }
 
+      setValue(``)
+      setEditingMessage(null)
+      onSendMessage?.()
+      finishPersistedAction(tx.isPersisted.promise)
+      return
+    }
+
+    const tx = sendAction?.({ text, mode: `queued` })
     if (!tx) {
       setSending(false)
       return
@@ -400,8 +559,8 @@ function NativeMessageComposer({
       {entity && (
         <NativeEntityContextDrawer
           entity={entity}
-          db={db}
           pendingMessages={pendingMessages}
+          manifests={manifests}
           editingKey={editingMessage?.key ?? null}
           onEditPending={startEditing}
           onDeletePending={deleteMessage}
@@ -474,6 +633,14 @@ type DrawerEntity = Pick<
 
 type ManifestRecord = Record<string, unknown>
 
+function isManifestEntry(
+  entry: TimelineEntry
+): entry is TimelineEntry & {
+  section: { kind: `manifest`; manifest: unknown }
+} {
+  return entry.section.kind === `manifest`
+}
+
 type DrawerEntry = {
   key: string
   groupKey: string
@@ -496,8 +663,8 @@ type DrawerGroup = {
 
 function NativeEntityContextDrawer({
   entity,
-  db,
   pendingMessages,
+  manifests,
   editingKey,
   onEditPending,
   onDeletePending,
@@ -507,8 +674,8 @@ function NativeEntityContextDrawer({
   onOpenStateSource,
 }: {
   entity: ElectricEntity
-  db: EntityStreamDB
   pendingMessages: Array<PendingInboxMessage>
+  manifests: Array<ManifestRecord>
   editingKey: string | null
   onEditPending: (message: PendingInboxMessage) => void
   onDeletePending: (key: string) => void
@@ -525,20 +692,10 @@ function NativeEntityContextDrawer({
   )
   const [inspectedKey, setInspectedKey] = useState<string | null>(null)
 
-  const { data: manifests = [] } = useLiveQuery(
-    (query) =>
-      db
-        ? query
-            .from({ manifest: db.collections.manifests as any })
-            .orderBy(({ manifest }: any) => manifest._seq, `asc`)
-        : undefined,
-    [db]
-  )
-
   const referencedEntityUrls = useMemo(() => {
     const urls = new Set<string>()
     if (entity.parent) urls.add(entity.parent)
-    for (const manifest of manifests as Array<ManifestRecord>) {
+    for (const manifest of manifests) {
       if (
         manifest.kind === `child` &&
         typeof manifest.entity_url === `string`
@@ -586,12 +743,7 @@ function NativeEntityContextDrawer({
     ? (entitiesByUrl.get(entity.parent) ?? null)
     : null
   const groups = useMemo(
-    () =>
-      buildDrawerGroups(
-        parent,
-        manifests as Array<ManifestRecord>,
-        entitiesByUrl
-      ),
+    () => buildDrawerGroups(parent, manifests, entitiesByUrl),
     [entitiesByUrl, manifests, parent]
   )
 

@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  type ReactNode,
-} from 'react'
+import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import {
   createEntitiesCollection,
   createEntityTypesCollection,
@@ -34,13 +28,6 @@ export function AgentsProvider({
       entityTypesCollection: createEntityTypesCollection(serverUrl),
     }
   }, [serverUrl])
-
-  useEffect(() => {
-    return () => {
-      value.entitiesCollection.cleanup()
-      value.entityTypesCollection.cleanup()
-    }
-  }, [value])
 
   return (
     <AgentsContext.Provider value={value}>{children}</AgentsContext.Provider>
