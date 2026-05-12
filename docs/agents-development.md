@@ -25,14 +25,23 @@ For day-to-day development, use the bundled dev script:
 
 ```sh
 ./scripts/dev.sh build       # one-shot install + build of all required packages
-./scripts/dev.sh start       # docker + all six dev processes; Ctrl-C to stop
+./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C to stop
 ./scripts/dev.sh start --detach   # same, but exits after spawning (logs to .dev-logs/)
 ./scripts/dev.sh stop        # stop processes + docker compose down
-./scripts/dev.sh teardown    # stop + remove Postgres volume
+./scripts/dev.sh teardown    # stop + remove Postgres volume + .streams-data/
 ./scripts/dev.sh status      # show which services are running
 ```
 
 `build` covers `typescript-client`, `agents-runtime`, `agents-mcp`, `agents-server`, and `agents`. Re-run it after any dep change before restarting — entrypoints do not auto-restart on `dist/` rebuilds.
+
+**Built-in agents (`packages/agents`) are intentionally not managed by the script.** They must register against `agents-server` _after_ it has finished startup, so the operator starts them manually once `start` reports the server is up:
+
+```sh
+ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+  node packages/agents/dist/entrypoint.js
+```
+
+Ctrl-C in that terminal stops the built-in agents; the rest of the stack keeps running.
 
 The rest of this document describes the manual flow that the script automates.
 

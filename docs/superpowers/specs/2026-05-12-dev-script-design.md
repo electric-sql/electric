@@ -40,19 +40,27 @@ Provide a single script that starts, stops, builds, and tears down the Electric 
 
 ## Services managed
 
-Six processes plus one docker compose stack:
+Five processes plus one docker compose stack:
 
-| Name                  | Command                                                                                                                                   | Purpose                             |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `docker`              | `docker compose -f packages/agents-server/docker-compose.dev.yml up -d`                                                                   | Postgres, Electric, Jaeger          |
-| `agents-runtime`      | `pnpm -C packages/agents-runtime dev`                                                                                                     | tsdown watch                        |
-| `agents-server-build` | `pnpm -C packages/agents-server dev`                                                                                                      | tsdown watch                        |
-| `agents-build`        | `pnpm -C packages/agents dev`                                                                                                             | tsdown watch                        |
-| `agents-server`       | `DATABASE_URL=… ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 ELECTRIC_INSECURE=true node packages/agents-server/dist/entrypoint.js` | Server on `localhost:4437`          |
-| `agents`              | `ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 node packages/agents/dist/entrypoint.js`                                                | Built-in agents on `localhost:4448` |
-| `agents-server-ui`    | `pnpm -C packages/agents-server-ui dev`                                                                                                   | Vite dev server (HMR)               |
+| Name                  | Command                                                                                                                                   | Purpose                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `docker`              | `docker compose -f packages/agents-server/docker-compose.dev.yml up -d`                                                                   | Postgres, Electric, Jaeger |
+| `agents-runtime`      | `pnpm -C packages/agents-runtime dev`                                                                                                     | tsdown watch               |
+| `agents-server-build` | `pnpm -C packages/agents-server dev`                                                                                                      | tsdown watch               |
+| `agents-build`        | `pnpm -C packages/agents dev`                                                                                                             | tsdown watch               |
+| `agents-server`       | `DATABASE_URL=… ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 ELECTRIC_INSECURE=true node packages/agents-server/dist/entrypoint.js` | Server on `localhost:4437` |
+| `agents-server-ui`    | `pnpm -C packages/agents-server-ui dev`                                                                                                   | Vite dev server (HMR)      |
 
-All six processes are spawned in parallel by `start`. The entrypoints depend on `dist/` existing — `start` checks for that and bails with a clear message pointing to `./scripts/dev.sh build` if anything is missing.
+All five processes are spawned in parallel by `start`. The entrypoints depend on `dist/` existing — `start` checks for that and bails with a clear message pointing to `./scripts/dev.sh build` if anything is missing.
+
+**Built-in agents (`packages/agents`) are NOT managed by the script.** They register their entity types against `agents-server` at startup; if they race ahead of it they fail with `Stream not found`. To keep the iteration loop simple and avoid hiding the race behind a polling check, the operator runs them manually in a dedicated terminal after `agents-server` has finished startup:
+
+```sh
+ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+  node packages/agents/dist/entrypoint.js
+```
+
+The `start` banner prints this command. Ctrl-C in that terminal stops the built-in agents; the rest of the stack keeps running.
 
 ## Layout
 
@@ -65,7 +73,6 @@ scripts/
   agents-server-build.log
   agents-build.log
   agents-server.log
-  agents.log
   agents-server-ui.log
   <name>.pid                 # one PID file per process (not docker)
 ```
@@ -94,7 +101,7 @@ If any step fails, the script exits non-zero and prints the failing command. No 
    - No existing `.dev-logs/*.pid` files for live processes. If found, suggest `./scripts/dev.sh stop` first.
 2. `mkdir -p .dev-logs`
 3. **Start docker** synchronously: `docker compose … up -d > .dev-logs/docker.log 2>&1`. Wait for it to return; bail if non-zero.
-4. **Spawn 6 processes** in parallel. Each redirects stdout+stderr to `.dev-logs/<name>.log` and writes its PID to `.dev-logs/<name>.pid`. Pattern:
+4. **Spawn 5 processes** in parallel. Each redirects stdout+stderr to `.dev-logs/<name>.log` and writes its PID to `.dev-logs/<name>.pid`. Pattern:
    ```sh
    ( <command> ) > .dev-logs/<name>.log 2>&1 &
    echo $! > .dev-logs/<name>.pid
@@ -102,7 +109,7 @@ If any step fails, the script exits non-zero and prints the failing command. No 
 5. **Foreground mode (default):**
    - Print: ports, log paths, "Ctrl-C to stop".
    - `trap 'stop_all; exit 0' INT TERM`
-   - `exec tail -F .dev-logs/agents-runtime.log .dev-logs/agents-server-build.log .dev-logs/agents-build.log .dev-logs/agents-server.log .dev-logs/agents.log .dev-logs/agents-server-ui.log` (Note: `tail -F` shows `==> file <==` headers between switches — fine for prefixing.)
+   - `exec tail -F .dev-logs/agents-runtime.log .dev-logs/agents-server-build.log .dev-logs/agents-build.log .dev-logs/agents-server.log .dev-logs/agents-server-ui.log` (Note: `tail -F` shows `==> file <==` headers between switches — fine for prefixing.)
 6. **Detach mode (`--detach`):** print same summary, exit 0. Processes continue with their parent reparented to PID 1 (using `disown` after `&`).
 
 ## `stop` behavior
@@ -136,7 +143,7 @@ docker compose -f packages/agents-server/docker-compose.dev.yml down
 
 ## `teardown` behavior
 
-`stop` logic, but the `docker compose down` uses `-v` to remove volumes.
+`stop` logic, but the `docker compose down` uses `-v` to remove volumes, and `rm -rf .streams-data/` to wipe local durable-streams state. Both are dev-only state.
 
 ## `status` behavior
 
@@ -155,4 +162,4 @@ For each PID file, check `kill -0` and print `<name>: running (pid N)` or `not r
 
 ## .gitignore
 
-`.dev-logs/` is already gitignored on this branch. No change needed.
+`.dev-logs/` and `.streams-data/` are gitignored.

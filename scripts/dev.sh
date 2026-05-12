@@ -12,13 +12,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$REPO_ROOT/.dev-logs"
 DOCKER_COMPOSE_FILE="$REPO_ROOT/packages/agents-server/docker-compose.dev.yml"
 
-# Service names. Order matters only for display.
+# Service names managed by start/stop. Order matters only for display.
+# The built-in agents (packages/agents) are NOT managed here — start them
+# manually so you can iterate on them in a dedicated terminal. See the
+# banner printed by `start` for the exact command.
 SERVICES=(
   agents-runtime
   agents-server-build
   agents-build
   agents-server
-  agents
   agents-server-ui
 )
 
@@ -178,24 +180,26 @@ cmd_start() {
   spawn agents-runtime pnpm -C "$REPO_ROOT/packages/agents-runtime" dev
   spawn agents-server-build pnpm -C "$REPO_ROOT/packages/agents-server" dev
   spawn agents-build pnpm -C "$REPO_ROOT/packages/agents" dev
+  spawn agents-server-ui pnpm -C "$REPO_ROOT/packages/agents-server-ui" dev
   spawn agents-server env \
     DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents \
     ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 \
     ELECTRIC_INSECURE=true \
     node packages/agents-server/dist/entrypoint.js
-  spawn agents env \
-    ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
-    node packages/agents/dist/entrypoint.js
-  spawn agents-server-ui pnpm -C "$REPO_ROOT/packages/agents-server-ui" dev
 
   cat <<EOF
 
   [dev] Agents stack started.
         agents-server:    http://localhost:4437
-        built-in agents:  http://localhost:4448
         agents-server-ui: (see $LOG_DIR/agents-server-ui.log for vite URL)
         Jaeger:           http://localhost:16686
         Logs:             $LOG_DIR/
+
+  To run the built-in agents (Horton + Worker), wait until agents-server
+  has finished startup, then in a separate terminal:
+
+        ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \\
+          node packages/agents/dist/entrypoint.js
 
 EOF
 
@@ -213,7 +217,6 @@ EOF
     "$LOG_DIR/agents-server-build.log" \
     "$LOG_DIR/agents-build.log" \
     "$LOG_DIR/agents-server.log" \
-    "$LOG_DIR/agents.log" \
     "$LOG_DIR/agents-server-ui.log"
 }
 
@@ -228,7 +231,11 @@ cmd_teardown() {
   mkdir -p "$LOG_DIR"
   stop_processes
   stop_docker true
-  log "torn down (volumes removed)."
+  if [[ -d "$REPO_ROOT/.streams-data" ]]; then
+    log "removing .streams-data/ (durable streams local state)"
+    rm -rf "$REPO_ROOT/.streams-data"
+  fi
+  log "torn down (volumes + local streams data removed)."
 }
 
 cmd_status() {

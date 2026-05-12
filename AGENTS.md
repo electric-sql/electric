@@ -224,9 +224,16 @@ The agents subsystem spans six packages: `agents-runtime`, `agents-mcp` (MCP bri
 ```sh
 ./scripts/dev.sh build       # install + build typescript-client, agents-runtime,
                              # agents-mcp, agents-server, agents
-./scripts/dev.sh start       # docker + all six dev processes; Ctrl-C stops everything
+./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C stops everything
 ./scripts/dev.sh stop        # stop processes + docker compose down
-./scripts/dev.sh teardown    # also remove Postgres volume
+./scripts/dev.sh teardown    # also remove Postgres volume + .streams-data/
+```
+
+The built-in agents (Horton + Worker) are NOT started by the script — they must register against `agents-server` after it has finished startup, so to avoid a race the operator runs them manually in a separate terminal once `start` reports the server is up:
+
+```sh
+ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+  node packages/agents/dist/entrypoint.js
 ```
 
 Logs land in `.dev-logs/`. Use `--detach` with `start` to background the stack. See **[docs/agents-development.md](docs/agents-development.md)** for the full manual flow, env vars, testing, and iteration workflows.
