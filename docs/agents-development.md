@@ -26,7 +26,8 @@ For day-to-day development, use the bundled dev script:
 ```sh
 ./scripts/dev.sh build       # one-shot install + build of all required packages
 ./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C to stop
-./scripts/dev.sh start --detach   # same, but exits after spawning (logs to .dev-logs/)
+./scripts/dev.sh start --detach        # same, but exits after spawning (logs to .dev-logs/)
+./scripts/dev.sh start --with-agents   # also spawn built-in agents (Horton + Worker)
 ./scripts/dev.sh stop        # stop processes + docker compose down
 ./scripts/dev.sh teardown    # stop + remove Postgres volume + .streams-data/
 ./scripts/dev.sh status      # show which services are running
@@ -34,14 +35,12 @@ For day-to-day development, use the bundled dev script:
 
 `build` covers `typescript-client`, `agents-runtime`, `agents-mcp`, `agents-server`, and `agents`. Re-run it after any dep change before restarting — entrypoints do not auto-restart on `dist/` rebuilds.
 
-**Built-in agents (`packages/agents`) are intentionally not managed by the script.** They must register against `agents-server` _after_ it has finished startup, so the operator starts them manually once `start` reports the server is up:
+**Built-in agents (`packages/agents`)** register against `agents-server` at startup and will fail with `Stream not found` if they race ahead of it. Pass `--with-agents` to `start` to spawn them after `agents-server` binds `:4437`. Without the flag, run them manually in a separate terminal once `start` reports the server is up — Ctrl-C in that terminal stops only the built-in agents:
 
 ```sh
 ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
   node packages/agents/dist/entrypoint.js
 ```
-
-Ctrl-C in that terminal stops the built-in agents; the rest of the stack keeps running.
 
 The rest of this document describes the manual flow that the script automates.
 

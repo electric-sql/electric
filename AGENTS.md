@@ -225,11 +225,12 @@ The agents subsystem spans six packages: `agents-runtime`, `agents-mcp` (MCP bri
 ./scripts/dev.sh build       # install + build typescript-client, agents-runtime,
                              # agents-mcp, agents-server, agents
 ./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C stops everything
+./scripts/dev.sh start --with-agents   # also spawn built-in agents (Horton + Worker)
 ./scripts/dev.sh stop        # stop processes + docker compose down
 ./scripts/dev.sh teardown    # also remove Postgres volume + .streams-data/
 ```
 
-The built-in agents (Horton + Worker) are NOT started by the script — they must register against `agents-server` after it has finished startup, so to avoid a race the operator runs them manually in a separate terminal once `start` reports the server is up:
+Built-in agents (Horton + Worker) register against `agents-server` at startup and will fail with `Stream not found` if they race ahead of it. Pass `--with-agents` to `start` to spawn them after `agents-server` binds `:4437`, or run them manually in a separate terminal:
 
 ```sh
 ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \

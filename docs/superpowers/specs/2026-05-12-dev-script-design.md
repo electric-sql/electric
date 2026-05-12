@@ -23,9 +23,14 @@ Provide a single script that starts, stops, builds, and tears down the Electric 
               on a fresh checkout, after pulling, or after changing
               code in agents-runtime, agents-server, or agents.
 
-  start       Bring up docker services + all dev processes.
+  start [--detach] [--with-agents]
+              Bring up docker services + dev processes.
               Foreground by default (Ctrl-C stops everything).
-              With --detach, exits after spawning; processes keep running.
+              --detach        exits after spawning; processes keep running.
+              --with-agents   also spawn the built-in agents (Horton + Worker)
+                              after waiting for agents-server to bind :4437.
+                              Without it, run them manually in a separate
+                              terminal — the start banner prints the command.
 
   stop        Stop all dev processes (read PIDs from .dev-logs/) and
               `docker compose down`. Volumes preserved.
@@ -40,27 +45,28 @@ Provide a single script that starts, stops, builds, and tears down the Electric 
 
 ## Services managed
 
-Five processes plus one docker compose stack:
+Five processes plus one docker compose stack are always managed by `start`. A sixth (`agents`, the built-in Horton + Worker server) is opt-in via `--with-agents`.
 
-| Name                  | Command                                                                                                                                   | Purpose                    |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `docker`              | `docker compose -f packages/agents-server/docker-compose.dev.yml up -d`                                                                   | Postgres, Electric, Jaeger |
-| `agents-runtime`      | `pnpm -C packages/agents-runtime dev`                                                                                                     | tsdown watch               |
-| `agents-server-build` | `pnpm -C packages/agents-server dev`                                                                                                      | tsdown watch               |
-| `agents-build`        | `pnpm -C packages/agents dev`                                                                                                             | tsdown watch               |
-| `agents-server`       | `DATABASE_URL=… ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 ELECTRIC_INSECURE=true node packages/agents-server/dist/entrypoint.js` | Server on `localhost:4437` |
-| `agents-server-ui`    | `pnpm -C packages/agents-server-ui dev`                                                                                                   | Vite dev server (HMR)      |
+| Name                  | Command                                                                                                                                   | Purpose                             | When                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | -------------------- |
+| `docker`              | `docker compose -f packages/agents-server/docker-compose.dev.yml up -d`                                                                   | Postgres, Electric, Jaeger          | always               |
+| `agents-server`       | `DATABASE_URL=… ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 ELECTRIC_INSECURE=true node packages/agents-server/dist/entrypoint.js` | Server on `localhost:4437`          | always               |
+| `agents`              | `ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 node packages/agents/dist/entrypoint.js`                                                | Built-in agents on `localhost:4448` | only `--with-agents` |
+| `agents-runtime`      | `pnpm -C packages/agents-runtime dev`                                                                                                     | tsdown watch                        | always               |
+| `agents-server-build` | `pnpm -C packages/agents-server dev`                                                                                                      | tsdown watch                        | always               |
+| `agents-build`        | `pnpm -C packages/agents dev`                                                                                                             | tsdown watch                        | always               |
+| `agents-server-ui`    | `pnpm -C packages/agents-server-ui dev`                                                                                                   | Vite dev server (HMR)               | always               |
 
-All five processes are spawned in parallel by `start`. The entrypoints depend on `dist/` existing — `start` checks for that and bails with a clear message pointing to `./scripts/dev.sh build` if anything is missing.
+**Spawn order matters** because `tsdown --watch` cleans `dist/` on startup. `start` therefore spawns the long-lived entrypoints (`agents-server`, optionally `agents`) **first** so they load `dist/` into memory before the watchers clean it. The watchers come up afterwards and keep `dist/` fresh for subsequent restarts.
 
-**Built-in agents (`packages/agents`) are NOT managed by the script.** They register their entity types against `agents-server` at startup; if they race ahead of it they fail with `Stream not found`. To keep the iteration loop simple and avoid hiding the race behind a polling check, the operator runs them manually in a dedicated terminal after `agents-server` has finished startup:
+**Race between `agents` and `agents-server`:** the built-in agents register entity types against `agents-server` at startup; if they race ahead of it they fail with `Stream not found`. With `--with-agents`, `start` waits for `agents-server` to bind `:4437` (TCP poll, 60s timeout) before spawning `agents`. Without the flag, the operator runs them manually in a dedicated terminal after `start` has settled:
 
 ```sh
 ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
   node packages/agents/dist/entrypoint.js
 ```
 
-The `start` banner prints this command. Ctrl-C in that terminal stops the built-in agents; the rest of the stack keeps running.
+The `start` banner prints this command when `--with-agents` is not set. Ctrl-C in that terminal stops only the built-in agents; the rest of the stack keeps running.
 
 ## Layout
 

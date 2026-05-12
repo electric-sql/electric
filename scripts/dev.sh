@@ -13,15 +13,17 @@ LOG_DIR="$REPO_ROOT/.dev-logs"
 DOCKER_COMPOSE_FILE="$REPO_ROOT/packages/agents-server/docker-compose.dev.yml"
 
 # Service names managed by start/stop. Order matters only for display.
-# The built-in agents (packages/agents) are NOT managed here — start them
-# manually so you can iterate on them in a dedicated terminal. See the
-# banner printed by `start` for the exact command.
+# `agents` (the built-in Horton + Worker server) is only spawned when
+# `start --with-agents` is passed; otherwise the operator runs it
+# manually. It is still listed here so stop/status/teardown clean up
+# any pid file left behind.
 SERVICES=(
   agents-runtime
   agents-server-build
   agents-build
   agents-server
   agents-server-ui
+  agents
 )
 
 usage() {
@@ -31,9 +33,14 @@ Usage: $0 <subcommand> [options]
 Subcommands:
   build              Install deps and build typescript-client, agents-runtime,
                      agents-server, agents (one-shot, no watch).
-  start [--detach]   Start docker services + all dev processes.
+  start [--detach] [--with-agents]
+                     Start docker services + dev processes.
                      Foreground by default (Ctrl-C stops everything).
-                     --detach exits after spawning; processes keep running.
+                     --detach        Exit after spawning; processes keep running.
+                     --with-agents   Also spawn the built-in agents (Horton +
+                                     Worker) after agents-server is ready.
+                                     Without this, run them manually in a
+                                     separate terminal.
   stop               Stop all dev processes + docker compose down (volumes kept).
   teardown           Stop + docker compose down -v (wipes Postgres volume).
   status             Print which services are running.
@@ -97,6 +104,20 @@ spawn() {
   echo "$pid" > "$pidfile"
   disown "$pid" 2>/dev/null || true
   log "started $name (pid $pid) -> $logfile"
+}
+
+wait_for_tcp() {
+  # Poll TCP host:port until it accepts a connection or timeout (seconds) elapses.
+  local host="$1" port="$2" timeout="${3:-60}" elapsed=0
+  while (( elapsed < timeout )); do
+    if (exec 3<>"/dev/tcp/$host/$port") 2>/dev/null; then
+      exec 3<&- 3>&-
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  return 1
 }
 
 _signal_pg() {
@@ -166,8 +187,15 @@ stop_docker() {
 }
 
 cmd_start() {
-  local detach=false
-  if [[ "${1:-}" == "--detach" ]]; then detach=true; fi
+  local detach=false with_agents=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --detach)      detach=true ;;
+      --with-agents) with_agents=true ;;
+      *) die "unknown option: $1" ;;
+    esac
+    shift
+  done
 
   preflight
   mkdir -p "$LOG_DIR"
@@ -177,15 +205,31 @@ cmd_start() {
   docker compose -f "$DOCKER_COMPOSE_FILE" up -d >>"$LOG_DIR/docker.log" 2>&1 \
     || die "docker compose up failed (see $LOG_DIR/docker.log)"
 
-  spawn agents-runtime pnpm -C "$REPO_ROOT/packages/agents-runtime" dev
-  spawn agents-server-build pnpm -C "$REPO_ROOT/packages/agents-server" dev
-  spawn agents-build pnpm -C "$REPO_ROOT/packages/agents" dev
-  spawn agents-server-ui pnpm -C "$REPO_ROOT/packages/agents-server-ui" dev
+  # Spawn entrypoints first so they load dist/ into memory before the
+  # tsdown watchers clean+rebuild dist/. The running processes hold their
+  # modules; the watchers below just keep dist/ up to date for the next
+  # restart.
   spawn agents-server env \
     DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents \
     ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 \
     ELECTRIC_INSECURE=true \
     node packages/agents-server/dist/entrypoint.js
+
+  if $with_agents; then
+    log "waiting for agents-server on :4437..."
+    if ! wait_for_tcp 127.0.0.1 4437 60; then
+      warn "agents-server did not bind :4437 within 60s (see $LOG_DIR/agents-server.log)"
+      warn "starting built-in agents anyway; they may fail to register types."
+    fi
+    spawn agents env \
+      ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 \
+      node packages/agents/dist/entrypoint.js
+  fi
+
+  spawn agents-runtime pnpm -C "$REPO_ROOT/packages/agents-runtime" dev
+  spawn agents-server-build pnpm -C "$REPO_ROOT/packages/agents-server" dev
+  spawn agents-build pnpm -C "$REPO_ROOT/packages/agents" dev
+  spawn agents-server-ui pnpm -C "$REPO_ROOT/packages/agents-server-ui" dev
 
   cat <<EOF
 
@@ -194,6 +238,12 @@ cmd_start() {
         agents-server-ui: (see $LOG_DIR/agents-server-ui.log for vite URL)
         Jaeger:           http://localhost:16686
         Logs:             $LOG_DIR/
+EOF
+
+  if $with_agents; then
+    printf '        built-in agents:  http://localhost:4448\n\n'
+  else
+    cat <<EOF
 
   To run the built-in agents (Horton + Worker), wait until agents-server
   has finished startup, then in a separate terminal:
@@ -202,6 +252,7 @@ cmd_start() {
           node packages/agents/dist/entrypoint.js
 
 EOF
+  fi
 
   if $detach; then
     log "detached; processes continue running. Use '$0 stop' to stop them."
@@ -212,12 +263,15 @@ EOF
   trap 'echo; log "shutting down..."; stop_processes; stop_docker; exit 0' INT TERM
 
   # tail -F all log files; switching adds ==> file <== headers as prefix
-  tail -F \
-    "$LOG_DIR/agents-runtime.log" \
-    "$LOG_DIR/agents-server-build.log" \
-    "$LOG_DIR/agents-build.log" \
-    "$LOG_DIR/agents-server.log" \
+  local tail_files=(
+    "$LOG_DIR/agents-runtime.log"
+    "$LOG_DIR/agents-server-build.log"
+    "$LOG_DIR/agents-build.log"
+    "$LOG_DIR/agents-server.log"
     "$LOG_DIR/agents-server-ui.log"
+  )
+  $with_agents && tail_files+=("$LOG_DIR/agents.log")
+  tail -F "${tail_files[@]}"
 }
 
 cmd_stop() {
