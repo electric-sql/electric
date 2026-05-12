@@ -128,6 +128,40 @@ export type DesktopNavigationState = {
 
 export type DesktopAppearance = `light` | `dark` | `system`
 
+/**
+ * Electric Cloud account state mirrored from the Electron main process.
+ *
+ * - `signed-out`: no stored JWT, or the stored token was expired at
+ *   launch and discarded.
+ * - `signing-in`: an OAuth BrowserWindow is open and waiting on the
+ *   user to complete the GitHub/Google flow.
+ * - `signed-in`: a non-expired JWT is held in encrypted storage; the
+ *   email/expiresAt fields are the values returned from the admin-API
+ *   callback redirect.
+ * - `error`: the most recent sign-in attempt failed; `error` carries
+ *   the message. The previous `signed-in` state is restored on next
+ *   attempt or app launch (we only flip back to `error` for the
+ *   in-progress attempt, not the persisted session).
+ */
+export type CloudAuthProvider = `github` | `google`
+export type CloudAuthStatus =
+  | `signed-out`
+  | `signing-in`
+  | `signed-in`
+  | `error`
+export interface CloudAuthWorkspace {
+  id: string
+  name: string
+}
+export interface CloudAuthState {
+  status: CloudAuthStatus
+  email: string | null
+  name: string | null
+  userId: string | null
+  workspaces: ReadonlyArray<CloudAuthWorkspace> | null
+  error: string | null
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -206,6 +240,20 @@ declare global {
         reconnect: (name: string, serverId?: string) => Promise<void>
         disable: (name: string, serverId?: string) => Promise<void>
         enable: (name: string, serverId?: string) => Promise<void>
+      }
+      /**
+       * Electric Cloud sign-in surface. The Electron main process owns
+       * the OAuth BrowserWindow and the JWT storage; the renderer only
+       * observes state and triggers verbs.
+       */
+      cloudAuth?: {
+        getState: () => Promise<CloudAuthState>
+        signIn: (provider: CloudAuthProvider) => Promise<void>
+        signOut: () => Promise<void>
+        openDashboard: () => Promise<void>
+        onStateChanged: (
+          callback: (state: CloudAuthState) => void
+        ) => () => void
       }
     }
   }
@@ -315,4 +363,26 @@ export async function loadApiKeysStatus(): Promise<ApiKeysStatus | null> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
+}
+
+export async function loadCloudAuthState(): Promise<CloudAuthState | null> {
+  return (await window.electronAPI?.cloudAuth?.getState?.()) ?? null
+}
+
+export async function cloudSignIn(provider: CloudAuthProvider): Promise<void> {
+  await window.electronAPI?.cloudAuth?.signIn?.(provider)
+}
+
+export async function cloudSignOut(): Promise<void> {
+  await window.electronAPI?.cloudAuth?.signOut?.()
+}
+
+export async function cloudOpenDashboard(): Promise<void> {
+  await window.electronAPI?.cloudAuth?.openDashboard?.()
+}
+
+export function onCloudAuthStateChanged(
+  callback: (state: CloudAuthState) => void
+): (() => void) | null {
+  return window.electronAPI?.cloudAuth?.onStateChanged?.(callback) ?? null
 }

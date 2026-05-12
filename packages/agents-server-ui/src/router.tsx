@@ -42,6 +42,7 @@ import {
   type SettingsCategoryId,
 } from './components/settings/SettingsSidebar'
 import { GeneralPage } from './components/settings/pages/GeneralPage'
+import { AccountPage } from './components/settings/pages/AccountPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
 import { CredentialsPage } from './components/settings/pages/CredentialsPage'
 import { ServersPage } from './components/settings/pages/ServersPage'
@@ -50,6 +51,7 @@ import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `general`,
+  `account`,
   `servers`,
   `credentials`,
   `appearance`,
@@ -413,6 +415,8 @@ function SettingsCategoryPage(): React.ReactElement {
   switch (params.category as SettingsCategoryId | undefined) {
     case `appearance`:
       return <AppearancePage />
+    case `account`:
+      return <AccountPage />
     case `servers`:
       return <ServersPage />
     case `credentials`:

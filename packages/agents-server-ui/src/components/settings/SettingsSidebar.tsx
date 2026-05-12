@@ -7,6 +7,7 @@ import {
   Plug,
   Server,
   Settings as SettingsIcon,
+  UserCircle,
 } from 'lucide-react'
 import { Icon, ScrollArea, Stack, Text } from '../../ui'
 import { useNarrowViewport } from '../../hooks/useNarrowViewport'
@@ -15,6 +16,7 @@ import styles from './SettingsSidebar.module.css'
 
 export type SettingsCategoryId =
   | `general`
+  | `account`
   | `servers`
   | `credentials`
   | `appearance`
@@ -65,6 +67,14 @@ export function SettingsSidebar({
       label: `General`,
       icon: <Icon icon={SettingsIcon} size={2} />,
       visible: true,
+    },
+    {
+      id: `account`,
+      label: `Account`,
+      icon: <Icon icon={UserCircle} size={2} />,
+      // Sign-in only makes sense in the desktop build; the web build
+      // doesn't have IPC to safely hold the resulting JWT.
+      visible: isDesktop,
     },
     {
       id: `servers`,

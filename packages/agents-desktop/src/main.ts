@@ -6,6 +6,11 @@ import type {
 import { openAuthorizeWindow } from './oauth-window'
 import { SecretStore } from './secret-store'
 import {
+  CloudAuth,
+  type CloudAuthProvider,
+  type CloudAuthState,
+} from './cloud-auth'
+import {
   BrowserWindow,
   Menu,
   Tray,
@@ -299,6 +304,7 @@ const windowSelections = new Map<number, string | null>()
 const runtimeEntries = new Map<string, RuntimeEntry>()
 const lastMcpSnapshots = new Map<string, RegistrySnapshot>()
 let secretStore: SecretStore | null = null
+let cloudAuth: CloudAuth | null = null
 
 function configureRuntimeEnvironment(): void {
   // Packaged macOS apps can launch with cwd `/`, which makes the agents
@@ -321,6 +327,22 @@ function secretsPath(): string {
 function getSecretStore(): SecretStore {
   if (!secretStore) secretStore = new SecretStore(secretsPath())
   return secretStore
+}
+
+function getCloudAuth(): CloudAuth {
+  if (!cloudAuth) {
+    cloudAuth = new CloudAuth(getSecretStore())
+    cloudAuth.subscribe((next) => broadcastCloudAuthState(next))
+  }
+  return cloudAuth
+}
+
+function broadcastCloudAuthState(next: CloudAuthState): void {
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(`desktop:cloud-auth-state-changed`, next)
+    }
+  }
 }
 
 function normalizeServer(
@@ -1812,6 +1834,27 @@ function registerIpcHandlers(): void {
     }
   )
 
+  // ── Electric Cloud auth IPC ─────────────────────────────────────
+  // OAuth via dashboard.electric-sql.cloud's CLI flow: we open a child
+  // BrowserWindow, the user signs in with GitHub/Google, the admin-API
+  // 302s to the loopback `cli_port` redirect URI, and `CloudAuth`
+  // intercepts that redirect to capture the JWT. State pushes come
+  // through `desktop:cloud-auth-state-changed` (see broadcaster).
+  ipcMain.handle(`desktop:cloud-auth-state`, () => getCloudAuth().getState())
+  ipcMain.handle(
+    `desktop:cloud-auth-sign-in`,
+    async (event, provider: CloudAuthProvider) => {
+      const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined
+      await getCloudAuth().signIn(provider, parent)
+    }
+  )
+  ipcMain.handle(`desktop:cloud-auth-sign-out`, async () => {
+    await getCloudAuth().signOut()
+  })
+  ipcMain.handle(`desktop:cloud-auth-open-dashboard`, () => {
+    getCloudAuth().openDashboard()
+  })
+
   // ── MCP registry IPC ─────────────────────────────────────────────
   // Renderers subscribe to `desktop:mcp-state` push events; this handler
   // returns the most recent snapshot so the renderer can render before
@@ -2353,6 +2396,7 @@ async function main(): Promise<void> {
   configureRuntimeEnvironment()
   await loadSettings()
   registerIpcHandlers()
+  await getCloudAuth().initialize()
   nativeTheme.on(`updated`, refreshNativeTitleBars)
 
   app.setAboutPanelOptions({
