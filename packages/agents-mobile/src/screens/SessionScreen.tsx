@@ -633,9 +633,7 @@ type DrawerEntity = Pick<
 
 type ManifestRecord = Record<string, unknown>
 
-function isManifestEntry(
-  entry: TimelineEntry
-): entry is TimelineEntry & {
+function isManifestEntry(entry: TimelineEntry): entry is TimelineEntry & {
   section: { kind: `manifest`; manifest: unknown }
 } {
   return entry.section.kind === `manifest`
@@ -1012,12 +1010,14 @@ function ManifestDrawerRow({
         {entry.entity ? <StatusDot status={entry.entity.status} /> : null}
       </View>
       <View style={styles.rowMain}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {entry.title}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {entry.meta}
-        </Text>
+        <View style={styles.rowLine}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {entry.title}
+          </Text>
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {entry.meta}
+          </Text>
+        </View>
         {inspected && entry.manifest ? (
           <ScrollView style={styles.inspectBox} nestedScrollEnabled>
             <Text style={styles.inspectText}>
@@ -1459,13 +1459,22 @@ function createDrawerStyles(tokens: Tokens) {
       flex: 1,
       minWidth: 0,
     },
+    rowLine: {
+      flexDirection: `row`,
+      alignItems: `baseline`,
+      gap: spacing.sm,
+      minWidth: 0,
+    },
     rowTitle: {
+      flex: 1,
+      minWidth: 0,
       color: tokens.text1,
       fontSize: fontSize.sm,
       lineHeight: lineHeight.sm,
     },
     rowMeta: {
-      marginTop: 1,
+      flexShrink: 0,
+      maxWidth: `45%`,
       color: tokens.text3,
       fontSize: fontSize.xs,
       lineHeight: lineHeight.xs,
