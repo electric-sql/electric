@@ -33,8 +33,7 @@ interface ApiKeysFormProps {
 /**
  * Shared API-keys form for the local Horton runtime. Used by:
  *
- *  - `ApiKeysModal` — the first-launch dialog that fires when no
- *    keys are saved yet.
+ *  - `OnboardingModal` — the first-launch wizard's API-keys step.
  *  - `GeneralPage` (Settings → General) — the always-on editor for
  *    revising keys after initial setup.
  *

@@ -85,6 +85,23 @@ export interface ApiKeysStatus {
 }
 
 /**
+ * Snapshot consumed by the renderer's onboarding wizard.
+ *
+ * - `dismissed`: persisted "Don't show again" flag — once set the
+ *   wizard never reopens automatically (Settings remains available).
+ * - `hasAnyKey`: at least one LLM provider key already saved.
+ * - `signedIn`: Electric Cloud session restored on launch.
+ *
+ * The renderer decides whether to render the modal based on these
+ * three bits; main process doesn't make the policy call.
+ */
+export interface OnboardingState {
+  dismissed: boolean
+  hasAnyKey: boolean
+  signedIn: boolean
+}
+
+/**
  * Commands fired from the Electron application menu / tray over the
  * `desktop:command` IPC channel. The renderer's command handler (see
  * `RootShell` in `router.tsx`) maps each one to the same UI action a
@@ -180,6 +197,8 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      getOnboardingState?: () => Promise<OnboardingState>
+      setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
@@ -363,6 +382,16 @@ export async function loadApiKeysStatus(): Promise<ApiKeysStatus | null> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
+}
+
+export async function loadOnboardingState(): Promise<OnboardingState | null> {
+  return (await window.electronAPI?.getOnboardingState?.()) ?? null
+}
+
+export async function setOnboardingDismissed(
+  dismissed: boolean
+): Promise<void> {
+  await window.electronAPI?.setOnboardingDismissed?.(dismissed)
 }
 
 export async function loadCloudAuthState(): Promise<CloudAuthState | null> {

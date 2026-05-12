@@ -34,7 +34,7 @@ import { PaneFindProvider, usePaneFindCommands } from './hooks/usePaneFind'
 import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
-import { ApiKeysModal } from './components/ApiKeysModal'
+import { OnboardingModal } from './components/OnboardingModal'
 import { DesktopTitleBar } from './components/DesktopTitleBar'
 import { TitlebarControls } from './components/TitlebarControls'
 import {
@@ -299,7 +299,7 @@ function RootShell(): React.ReactElement {
         )}
         <Outlet />
         <SearchPalette />
-        <ApiKeysModal />
+        <OnboardingModal />
       </div>
       {!inSettings && <TitlebarControls />}
     </div>
