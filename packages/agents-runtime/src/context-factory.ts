@@ -21,6 +21,7 @@ import type {
   AgentModel,
   AgentRunResult,
   AgentTool,
+  EntitySignal,
   EntityHandle,
   EntityStreamDBWithActions,
   HandlerContext,
@@ -66,6 +67,13 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   wakeSession: WakeSession
   wakeEvent: WakeEvent
   runSignal?: AbortSignal
+  registerSignalHandler?: (
+    handler: (signal: {
+      signal: EntitySignal
+      reason?: string
+      payload?: unknown
+    }) => void | Promise<void>
+  ) => void
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -575,6 +583,9 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         type: opts?.type,
         afterMs: opts?.afterMs,
       })
+    },
+    onSignal(handler): void {
+      config.registerSignalHandler?.(handler)
     },
     recordRun(): RunHandle {
       const key = nextRunKey()

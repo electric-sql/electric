@@ -37,6 +37,7 @@ import type {
   ContextEntryAttrs as EntityContextEntryAttrs,
   ContextInserted as EntityContextInserted,
   ContextRemoved as EntityContextRemoved,
+  EntitySignal,
   Manifest as EntityManifest,
   ManifestChildEntry as EntityManifestChildEntry,
   ManifestContextEntry as EntityManifestContextEntry,
@@ -61,6 +62,7 @@ export type EntityStreamDBWithActions<
   actions: GeneratedStateActions<TState> & HandlerActions<TActions>
 }
 export type ChildStatus = ChildStatusEntry
+export type { EntitySignal }
 export type ObservationCollectionMap = Record<string, StateCollectionDefinition>
 export type ObservationStreamDB = BaseStreamDB<ObservationCollectionMap>
 export type EntitiesObservationHandle = ObservationHandle & {
@@ -884,6 +886,18 @@ export interface HandlerContext<
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
+  ) => void
+  /**
+   * Register a handler for lifecycle signals delivered while this wake is active.
+   * Only catchable signals are delivered here; SIGKILL is terminal and bypasses
+   * entity code.
+   */
+  onSignal: (
+    handler: (signal: {
+      signal: EntitySignal
+      reason?: string
+      payload?: unknown
+    }) => void | Promise<void>
   ) => void
   /**
    * Record a non-LLM run on the entity's built-in `runs` collection.

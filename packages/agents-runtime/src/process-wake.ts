@@ -452,6 +452,15 @@ export async function processWebhookWake(
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let idleController: AbortController | null = null
   let runAbortController: AbortController | null = null
+  let activeSignalHandler:
+    | ((
+        signal: Pick<Signal, `signal` | `reason` | `payload`>
+      ) => void | Promise<void>)
+    | null = null
+  let signalAbortRequested = false
+  let pauseRequested = false
+  let resumeRequested = false
+  const pendingSignalHandlers: Array<Promise<void>> = []
   const secondaryDbs: Array<{
     drainPendingWrites?: () => Promise<void>
     flushWrites?: () => Promise<void>
@@ -611,7 +620,13 @@ export async function processWebhookWake(
 
   const markSignalHandled = (
     event: ChangeEvent,
-    outcome: `aborted` | `ignored` | `shutdown_requested`,
+    outcome:
+      | `aborted`
+      | `ignored`
+      | `shutdown_requested`
+      | `transitioned`
+      | `delivered`
+      | `failed`,
     newState?: string
   ): void => {
     const value = event.value as Partial<Signal> | undefined
@@ -632,6 +647,35 @@ export async function processWebhookWake(
     )
   }
 
+  const invokeSignalHandler = (
+    value: Partial<Signal>,
+    onSettled: (outcome: `delivered` | `failed`) => void
+  ): void => {
+    if (!activeSignalHandler || !value.signal) {
+      onSettled(`delivered`)
+      return
+    }
+
+    const task = Promise.resolve(
+      activeSignalHandler({
+        signal: value.signal,
+        reason: value.reason,
+        payload: value.payload,
+      })
+    ).then(
+      () => onSettled(`delivered`),
+      (err) => {
+        failBackgroundWake(err, `SIGNAL_HANDLER_FAILED`)
+        onSettled(`failed`)
+      }
+    )
+    pendingSignalHandlers.push(task)
+    void task.finally(() => {
+      const index = pendingSignalHandlers.indexOf(task)
+      if (index >= 0) pendingSignalHandlers.splice(index, 1)
+    })
+  }
+
   const handleSignalEvent = (event: ChangeEvent): void => {
     if (!isUnhandledSignalEvent(event)) return
     const key = String(event.key)
@@ -642,7 +686,10 @@ export async function processWebhookWake(
     switch (value.signal) {
       case `SIGINT`:
         log.info(`SIGINT received, aborting active run`)
+        signalAbortRequested = true
         runAbortController?.abort()
+        clearIdleTimer()
+        idleController?.abort()
         markSignalHandled(event, `aborted`, notification.entity?.status)
         void flushProducedWrites().catch((err) =>
           failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
@@ -650,6 +697,7 @@ export async function processWebhookWake(
         return
       case `SIGKILL`:
         log.info(`SIGKILL received, aborting active run and closing wake`)
+        signalAbortRequested = true
         runAbortController?.abort()
         requestShutdown()
         markSignalHandled(event, `shutdown_requested`, `killed`)
@@ -660,23 +708,56 @@ export async function processWebhookWake(
       case `SIGHUP`:
         log.info(`SIGHUP received, closing wake after current checkpoint`)
         requestShutdown()
-        markSignalHandled(
-          event,
-          `shutdown_requested`,
-          notification.entity?.status
-        )
+        invokeSignalHandler(value, () => {
+          markSignalHandled(
+            event,
+            `shutdown_requested`,
+            notification.entity?.status
+          )
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        })
+        return
+      case `SIGTERM`:
+        log.info(`SIGTERM received, closing wake after cleanup`)
+        requestShutdown()
+        invokeSignalHandler(value, (outcome) => {
+          markSignalHandled(
+            event,
+            outcome === `failed` ? `failed` : `shutdown_requested`,
+            `stopped`
+          )
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        })
+        return
+      case `SIGSTOP`:
+        log.info(`SIGSTOP received, pausing after current checkpoint`)
+        pauseRequested = true
+        markSignalHandled(event, `transitioned`, `paused`)
         void flushProducedWrites().catch((err) =>
           failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
         )
         return
-      case `SIGTERM`:
-      case `SIGSTOP`:
       case `SIGCONT`:
-      case `SIGUSR`:
-        markSignalHandled(event, `ignored`, notification.entity?.status)
+        log.info(`SIGCONT received, resuming queued work`)
+        resumeRequested = true
+        clearIdleTimer()
+        idleController?.abort()
+        markSignalHandled(event, `transitioned`, `idle`)
         void flushProducedWrites().catch((err) =>
           failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
         )
+        return
+      case `SIGUSR`:
+        invokeSignalHandler(value, (outcome) => {
+          markSignalHandled(event, outcome, notification.entity?.status)
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        })
         return
     }
   }
@@ -1442,6 +1523,10 @@ export async function processWebhookWake(
     const waitForSharedStateWiring = async (): Promise<void> => {
       await pendingSharedStateWiring
     }
+    const waitForSignalHandlers = async (): Promise<void> => {
+      if (pendingSignalHandlers.length === 0) return
+      await Promise.allSettled([...pendingSignalHandlers])
+    }
     const drainAllPendingWrites = async (): Promise<void> => {
       await db.utils.drainPendingWrites()
       for (const sdb of secondaryDbs) {
@@ -1591,6 +1676,13 @@ export async function processWebhookWake(
     for (;;) {
       if (skipInitialHandlerPass) {
         skipInitialHandlerPass = false
+        if (resumeRequested) {
+          resumeRequested = false
+          if (await promoteNextPendingInboxMessage()) {
+            currentWakeEvents = []
+            continue
+          }
+        }
         const resumed = await awaitIdleForFreshWork(
           `skipping initial handler pass: no fresh wake input in catch-up; entering idle (${idleTimeout / 1000}s timeout)`
         )
@@ -1651,6 +1743,9 @@ export async function processWebhookWake(
         wakeSession,
         wakeEvent: currentWakeEvent,
         runSignal: runAbortController.signal,
+        registerSignalHandler: (handler) => {
+          activeSignalHandler = handler
+        },
         doObserve,
         doSpawn,
         doMkdb,
@@ -1682,6 +1777,8 @@ export async function processWebhookWake(
         await definition.handler(handlerCtx, currentWakeEvent)
         handlerMs += +(performance.now() - handlerT0).toFixed(2)
         log.info(`handler returned`)
+        await waitForSignalHandlers()
+        activeSignalHandler = null
         await waitForSharedStateWiring()
         await drainAllPendingWrites()
         await Promise.all(pendingWakeRegistrations)
@@ -1701,6 +1798,7 @@ export async function processWebhookWake(
         }
       } catch (setupErr) {
         runAbortController = null
+        activeSignalHandler = null
         wakeSession.rollbackManifestEntries()
         const errMsg = toError(setupErr).message
         log.error(`handler failed for ${entityUrl}:`, errMsg)
@@ -1741,6 +1839,7 @@ export async function processWebhookWake(
         throw setupErr
       }
       runAbortController = null
+      activeSignalHandler = null
 
       if (!result) {
         result = {
@@ -1754,6 +1853,13 @@ export async function processWebhookWake(
 
       if (shutdownRequested) {
         log.info(`shutdown requested, closing wake`)
+        break
+      }
+
+      if (signalAbortRequested) {
+        signalAbortRequested = false
+        drainNonFreshPendingBatches()
+        log.info(`signal abort completed, closing wake`)
         break
       }
 
@@ -1785,6 +1891,13 @@ export async function processWebhookWake(
         continue
       }
       if (queueHeadPaused) {
+        break
+      }
+
+      if (pauseRequested) {
+        pauseRequested = false
+        drainNonFreshPendingBatches()
+        log.info(`pause requested, closing wake`)
         break
       }
 

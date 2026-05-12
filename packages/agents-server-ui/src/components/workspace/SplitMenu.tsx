@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import {
+  ChevronRight,
   Copy,
   Eye,
   GitFork,
   Link2,
   MoreHorizontal,
+  OctagonX,
   Pin,
   PinOff,
   SplitSquareHorizontal,
   SplitSquareVertical,
-  Trash2,
+  Zap,
   X,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -31,9 +33,54 @@ import {
 } from '../../ui'
 import { modKeyLabel } from '../../lib/keyLabels'
 import { getEntityDisplayTitle } from '../../lib/entityDisplay'
-import type { ElectricEntity } from '../../lib/ElectricAgentsProvider'
+import type {
+  ElectricEntity,
+  EntitySignal,
+} from '../../lib/ElectricAgentsProvider'
 import type { Tile } from '../../lib/workspace/types'
 import styles from './SplitMenu.module.css'
+
+const SIGNAL_OPTIONS: ReadonlyArray<{
+  signal: EntitySignal
+  shortName: string
+  description: string
+}> = [
+  {
+    signal: `SIGINT`,
+    shortName: `Interrupt`,
+    description: `Stop the active generation`,
+  },
+  {
+    signal: `SIGHUP`,
+    shortName: `Reload`,
+    description: `Restart runtime after current run`,
+  },
+  {
+    signal: `SIGTERM`,
+    shortName: `Terminate`,
+    description: `Gracefully stop the entity`,
+  },
+  {
+    signal: `SIGKILL`,
+    shortName: `Kill`,
+    description: `Force-stop the entity`,
+  },
+  {
+    signal: `SIGSTOP`,
+    shortName: `Pause`,
+    description: `Pause processing after checkpoint`,
+  },
+  {
+    signal: `SIGCONT`,
+    shortName: `Resume`,
+    description: `Resume queued work`,
+  },
+  {
+    signal: `SIGUSR`,
+    shortName: `Custom`,
+    description: `Deliver a user signal`,
+  },
+]
 
 /**
  * Per-tile workspace menu. Shown in the tile header (the `…` button)
@@ -71,7 +118,7 @@ export function SplitMenu({
   entity: ElectricEntity | null
 }): React.ReactElement {
   const { workspace, helpers } = useWorkspace()
-  const { forkEntity, killEntity } = useElectricAgents()
+  const { forkEntity, killEntity, signalEntity } = useElectricAgents()
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
   const hasEntity = entity !== null && tile.entityUrl !== null
@@ -117,6 +164,16 @@ export function SplitMenu({
   const handleKill = () => {
     if (!killEntity || entityUrl === null) return
     const tx = killEntity(entityUrl)
+    tx.isPersisted.promise.catch(() => {})
+  }
+
+  const handleSignal = (signal: EntitySignal) => {
+    if (!signalEntity || entityUrl === null) return
+    const tx = signalEntity({
+      entityUrl,
+      signal,
+      reason: `Sent from tile menu`,
+    })
     tx.isPersisted.promise.catch(() => {})
   }
 
@@ -240,6 +297,35 @@ export function SplitMenu({
               <Text size={2}>Fork subtree</Text>
             </Menu.Item>
           )}
+          {hasEntity && entity && !entityTerminal && signalEntity && (
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger className={styles.submenuTrigger}>
+                <UiIcon icon={Zap} size={2} />
+                <Text size={2}>Send signal</Text>
+                <UiIcon
+                  icon={ChevronRight}
+                  size={2}
+                  className={styles.submenuChevron}
+                />
+              </Menu.SubmenuTrigger>
+              <Menu.Content side="left" align="start">
+                {SIGNAL_OPTIONS.map((option) => (
+                  <Menu.Item
+                    key={option.signal}
+                    onSelect={() => handleSignal(option.signal)}
+                  >
+                    <span className={styles.signalText}>
+                      <Text size={2}>{option.shortName}</Text>
+                      <Text size={1} tone="muted">
+                        {option.description}
+                      </Text>
+                    </span>
+                    <span className={styles.shortcut}>{option.signal}</span>
+                  </Menu.Item>
+                ))}
+              </Menu.Content>
+            </Menu.SubmenuRoot>
+          )}
 
           {!isOnlyTile && (
             <>
@@ -255,11 +341,8 @@ export function SplitMenu({
           {hasEntity && entity && !entityTerminal && killEntity && (
             <>
               <Menu.Separator />
-              <Menu.Item
-                onSelect={() => setShowKillConfirm(true)}
-                tone="danger"
-              >
-                <UiIcon icon={Trash2} size={2} />
+              <Menu.Item onSelect={() => setShowKillConfirm(true)}>
+                <UiIcon icon={OctagonX} size={2} />
                 <Text size={2}>Kill entity</Text>
               </Menu.Item>
             </>

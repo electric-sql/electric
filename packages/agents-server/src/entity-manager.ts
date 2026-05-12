@@ -2437,6 +2437,9 @@ export class EntityManager {
 
     const shouldCloseStreams = isTerminalEntityStatus(handling.status)
     await this.appendSignalEvent(entity, signalEvent, shouldCloseStreams)
+    if (!shouldCloseStreams) {
+      await this.evaluateWakes(entityUrl, signalEvent)
+    }
 
     if (handling.unregisterWakes) {
       await this.wakeRegistry.unregisterBySubscriber(entityUrl, this.tenantId)
@@ -2500,10 +2503,10 @@ export class EntityManager {
         }
       }
     }
-    if (signal === `SIGSTOP` && status === `idle`) {
+    if (signal === `SIGSTOP` && (status === `idle` || status === `running`)) {
       return {
         status: `paused`,
-        handled: true,
+        handled: status === `idle`,
         outcome: `transitioned`,
         unregisterWakes: false,
       }
@@ -2511,7 +2514,7 @@ export class EntityManager {
     if (signal === `SIGCONT` && status === `paused`) {
       return {
         status: `idle`,
-        handled: true,
+        handled: false,
         outcome: `transitioned`,
         unregisterWakes: false,
       }
