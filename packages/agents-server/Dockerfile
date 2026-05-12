@@ -25,6 +25,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 COPY packages/typescript-client/package.json ./packages/typescript-client/package.json
+COPY packages/agents-mcp/package.json ./packages/agents-mcp/package.json
 COPY packages/agents-runtime/package.json ./packages/agents-runtime/package.json
 COPY packages/agents/package.json ./packages/agents/package.json
 COPY packages/agents-server-conformance-tests/package.json ./packages/agents-server-conformance-tests/package.json
@@ -36,6 +37,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 COPY tsconfig.base.json tsconfig.build.json ./
 COPY packages/typescript-client ./packages/typescript-client
 RUN pnpm --filter @electric-sql/client build
+
+COPY packages/agents-mcp ./packages/agents-mcp
+RUN pnpm --filter @electric-ax/agents-mcp build
 
 COPY packages/agents-runtime ./packages/agents-runtime
 RUN pnpm --filter @electric-ax/agents-runtime build
