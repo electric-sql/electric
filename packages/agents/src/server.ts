@@ -295,9 +295,6 @@ export class BuiltinAgentsServer {
         publicUrl,
         runtimeName: `builtin-agents`,
         serverHeaders: pullWake.headers,
-        defaultDispatchPolicyForType: () => ({
-          targets: [{ type: `runner`, runnerId: pullWake.runnerId }],
-        }),
       })
       if (!this.bootstrap) {
         throw new Error(
