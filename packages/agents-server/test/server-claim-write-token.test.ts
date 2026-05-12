@@ -430,8 +430,10 @@ describe(`Claim-scoped write tokens`, () => {
       claimWriteTokens.owns(`default`, entity.streams.main, `consumer-kill`)
     ).toBe(true)
 
-    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}`, {
-      method: `DELETE`,
+    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}/signal`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
     })
     expect(killRes.status).toBe(200)
 
@@ -614,8 +616,10 @@ describe(`Claim-scoped write tokens`, () => {
     })
     expect(claim.writeToken).toBeTruthy()
 
-    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}`, {
-      method: `DELETE`,
+    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}/signal`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
     })
     expect(killRes.status).toBe(200)
 

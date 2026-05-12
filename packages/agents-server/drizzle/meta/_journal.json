@@ -50,6 +50,13 @@
       "when": 1776268800000,
       "tag": "0006_principals",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778540000000,
+      "tag": "0007_entity_signal_statuses",
+      "breakpoints": true
     }
   ]
 }

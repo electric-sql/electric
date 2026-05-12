@@ -7,12 +7,14 @@ describe(`assertEntityStatus`, () => {
     expect(assertEntityStatus(`spawning`)).toBe(`spawning`)
     expect(assertEntityStatus(`running`)).toBe(`running`)
     expect(assertEntityStatus(`idle`)).toBe(`idle`)
+    expect(assertEntityStatus(`paused`)).toBe(`paused`)
+    expect(assertEntityStatus(`stopping`)).toBe(`stopping`)
     expect(assertEntityStatus(`stopped`)).toBe(`stopped`)
+    expect(assertEntityStatus(`killed`)).toBe(`killed`)
   })
 
   it(`throws on invalid status strings`, () => {
     expect(() => assertEntityStatus(`active`)).toThrow(`Invalid entity status`)
-    expect(() => assertEntityStatus(`paused`)).toThrow(`Invalid entity status`)
     expect(() => assertEntityStatus(``)).toThrow(`Invalid entity status`)
   })
 })
