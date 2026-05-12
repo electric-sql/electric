@@ -426,7 +426,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   defp maybe_flush_pending_events(state, _commit?), do: state
 
   defp finalize_txids(events) do
-    Map.update(events, :txids, [], &Enum.sort(MapSet.to_list(&1)))
+    Map.update(events, :txids, [], &Enum.sort(&1))
   end
 
   defp merge_events(pending, new) when pending == %{}, do: new
