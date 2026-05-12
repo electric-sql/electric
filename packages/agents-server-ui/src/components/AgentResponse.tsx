@@ -283,7 +283,12 @@ export const AgentResponse = memo(function AgentResponse({
   const hasLeadingMeta = showThinking || section.done || Boolean(section.error)
 
   return (
-    <Stack direction="column" gap={2} className={styles.root}>
+    <Stack
+      direction="column"
+      gap={2}
+      className={styles.root}
+      data-agent-response=""
+    >
       {section.items.map((item: EntityTimelineContentItem, i: number) => {
         if (item.kind === `text`) {
           const isLastText = isStreaming && i === section.items.length - 1

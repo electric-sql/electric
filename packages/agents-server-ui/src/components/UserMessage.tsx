@@ -17,8 +17,13 @@ export const UserMessage = memo(function UserMessage({
   const sender = section.from ?? `user`
 
   return (
-    <Stack direction="column" gap={1} className={styles.root}>
-      <Stack p={3} className={styles.bubble}>
+    <Stack
+      direction="column"
+      gap={1}
+      className={styles.root}
+      data-user-message=""
+    >
+      <Stack p={3} className={styles.bubble} data-user-message-bubble="">
         <Text size={2} className={styles.body}>
           {section.text}
         </Text>

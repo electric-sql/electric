@@ -1084,7 +1084,11 @@ export function EntityTimeline({
         viewportClassName={styles.scrollViewport}
         scrollbars="vertical"
       >
-        <div ref={contentRef} className={styles.content}>
+        <div
+          ref={contentRef}
+          className={styles.content}
+          data-entity-timeline-content=""
+        >
           <Stack>
             {spawnTime ? (
               <Tooltip content={formatAbsoluteDateTimeVerbose(spawnTime)}>

@@ -36,11 +36,12 @@ html[data-electric-mobile-dom='true'] {
   --ds-font-mono:
     'SF Mono', ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
+  --mobile-chat-drawer-gutter: calc(var(--ds-space-4) + var(--ds-space-1));
+  --mobile-chat-input-gutter: var(--ds-space-4);
 }
 
-html[data-electric-mobile-dom='true']
-  [class*='EntityTimeline'][class*='_content_'] {
-  padding: var(--ds-space-4) var(--ds-space-4) 96px !important;
+html[data-electric-mobile-dom='true'] [data-entity-timeline-content] {
+  padding: var(--ds-space-4) var(--mobile-chat-drawer-gutter) 96px !important;
   max-width: 100% !important;
 }
 
@@ -53,8 +54,29 @@ html[data-electric-mobile-dom='true'] [class*='MessageInput'][class*='_root_'] {
   max-width: 100% !important;
 }
 
-html[data-electric-mobile-dom='true']
-  [class*='UserMessage'][class*='_bubble_'] {
+html[data-electric-mobile-dom='true'] [data-agent-response] {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+html[data-electric-mobile-dom='true'] [data-user-message] {
+  width: calc(
+    100% +
+      (var(--mobile-chat-drawer-gutter) - var(--mobile-chat-input-gutter)) * 2
+  ) !important;
+  max-width: calc(
+    100% +
+      (var(--mobile-chat-drawer-gutter) - var(--mobile-chat-input-gutter)) * 2
+  ) !important;
+  margin-left: calc(
+    -1 * (var(--mobile-chat-drawer-gutter) - var(--mobile-chat-input-gutter))
+  ) !important;
+  margin-right: calc(
+    -1 * (var(--mobile-chat-drawer-gutter) - var(--mobile-chat-input-gutter))
+  ) !important;
+}
+
+html[data-electric-mobile-dom='true'] [data-user-message-bubble] {
   padding: var(--ds-space-2) var(--ds-space-3) !important;
 }
 
