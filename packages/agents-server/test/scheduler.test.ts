@@ -17,6 +17,10 @@ function createMockPgClient(opts?: {
   const responses = [...(opts?.responses ?? [])]
   const txResponses = [...(opts?.txResponses ?? [])]
   const unlistenMock = vi.fn().mockResolvedValue(undefined)
+  const arrayMock = vi.fn(
+    (value: Array<unknown>, type?: number) =>
+      ({ __postgresArray: true, value, type }) as unknown
+  )
 
   const pgClient = vi.fn(
     async (strings: TemplateStringsArray, ...values: Array<unknown>) => {
@@ -26,6 +30,7 @@ function createMockPgClient(opts?: {
   ) as any
 
   pgClient.json = (value: unknown) => value
+  pgClient.array = arrayMock
   pgClient.listen = vi
     .fn()
     .mockImplementation(async () => ({ unlisten: unlistenMock }))
@@ -37,6 +42,7 @@ function createMockPgClient(opts?: {
       }
     ) as any
     tx.json = (value: unknown) => value
+    tx.array = arrayMock
     return cb(tx)
   })
 
@@ -44,6 +50,7 @@ function createMockPgClient(opts?: {
     pgClient,
     calls,
     txCalls,
+    arrayMock,
     unlistenMock,
   }
 }
@@ -198,8 +205,52 @@ describe(`Scheduler`, () => {
     const tasks = await (scheduler as any).claimReadyTasks()
 
     expect(tasks).toHaveLength(1)
-    expect(mock.calls[0]!.sql).toContain(`tenant_id = any(?::text[])`)
-    expect(mock.calls[0]!.values).toContainEqual([`svc-a`, `svc-b`])
+    expect(mock.calls[0]!.sql).toContain(`tenant_id = any(?)`)
+    expect(mock.calls[0]!.sql).not.toContain(`::text[]`)
+    expect(mock.arrayMock).toHaveBeenCalledWith([`svc-a`, `svc-b`], 25)
+    expect(mock.calls[0]!.values).toContain(
+      mock.arrayMock.mock.results[0]!.value
+    )
+  })
+
+  it(`uses typed postgres arrays for shared stale claim reclaim`, async () => {
+    const mock = createMockPgClient()
+    const scheduler = new Scheduler({
+      pgClient: mock.pgClient,
+      instanceId: `instance-1`,
+      tenantId: null,
+      tenantIds: () => [`svc-a`, `svc-b`],
+      executors: {
+        delayed_send: vi.fn(),
+        cron_tick: vi.fn(),
+      },
+    })
+
+    await (scheduler as any).reclaimStaleClaims()
+
+    expect(mock.calls[0]!.sql).toContain(`tenant_id = any(?)`)
+    expect(mock.calls[0]!.sql).not.toContain(`::text[]`)
+    expect(mock.arrayMock).toHaveBeenCalledWith([`svc-a`, `svc-b`], 25)
+  })
+
+  it(`uses typed postgres arrays for shared next-fire lookup`, async () => {
+    const mock = createMockPgClient({ responses: [[]] })
+    const scheduler = new Scheduler({
+      pgClient: mock.pgClient,
+      instanceId: `instance-1`,
+      tenantId: null,
+      tenantIds: () => [`svc-a`, `svc-b`],
+      executors: {
+        delayed_send: vi.fn(),
+        cron_tick: vi.fn(),
+      },
+    })
+
+    await (scheduler as any).getNextFireAt()
+
+    expect(mock.calls[0]!.sql).toContain(`tenant_id = any(?)`)
+    expect(mock.calls[0]!.sql).not.toContain(`::text[]`)
+    expect(mock.arrayMock).toHaveBeenCalledWith([`svc-a`, `svc-b`], 25)
   })
 
   it(`does not claim shared tasks when no tenants are registered`, async () => {
