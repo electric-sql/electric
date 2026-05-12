@@ -454,6 +454,13 @@ export type SharedStateHandle<
   >
 }
 
+export interface RuntimePrincipal {
+  url: string
+  key?: string | null
+  kind?: string
+  id?: string
+}
+
 export interface RuntimeContext {
   entityUrl: string
   entityType: string
@@ -591,7 +598,9 @@ export interface WebhookNotification {
     streams: { main: string; error: string }
     tags?: Record<string, string>
     spawnArgs?: Record<string, unknown>
+    createdBy?: string
   }
+  principal?: RuntimePrincipal
 }
 
 export type WakeNotification = WebhookNotification
@@ -636,7 +645,6 @@ export interface ProcessWakeConfig {
       payload: unknown
       targetUrl?: string
       fireAt: string
-      from?: string
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
@@ -822,6 +830,7 @@ export interface HandlerContext<
 > {
   firstWake: boolean
   tags: Readonly<EntityTags>
+  principal?: RuntimePrincipal
   entityUrl: string
   entityType: string
   args: TArgs

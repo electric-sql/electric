@@ -231,7 +231,6 @@ type ManifestFutureSendScheduleEntryValue = {
   targetUrl: string
   payload: unknown
   producerId: string
-  from?: string
   messageType?: string
   status?: FutureSendScheduleStatus
   sentAt?: string
@@ -541,7 +540,6 @@ function createManifestSchema(): Schema<
       targetUrl: z.string(),
       payload: z.unknown(),
       producerId: z.string(),
-      from: z.string().optional(),
       messageType: z.string().optional(),
       status: z.enum([`pending`, `sent`, `failed`]).default(`pending`),
       sentAt: z.string().optional(),
@@ -628,7 +626,6 @@ export type Manifest = ManifestUnion & {
   fireAt?: string
   targetUrl?: string
   producerId?: string
-  from?: string
   messageType?: string
   status?: FutureSendScheduleStatus
   sentAt?: string

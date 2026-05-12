@@ -23,7 +23,7 @@ exports[`A: basic entity lifecycle > A2: spawn with initial message writes inbox
     "type": "entity_created",
   },
   {
-    "from": "spawn",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "hello on create",
     "type": "message_received",
@@ -40,7 +40,7 @@ exports[`A: basic entity lifecycle > A3: single message produces a full run hist
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "hello",
     "type": "message_received",
@@ -105,7 +105,7 @@ exports[`A: basic entity lifecycle > A4: agent text output is reflected in the f
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -170,7 +170,7 @@ exports[`A: basic entity lifecycle > A5: multiple messages produce two completed
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "msg 1",
     "type": "message_received",
@@ -224,7 +224,7 @@ exports[`A: basic entity lifecycle > A5: multiple messages produce two completed
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "msg 2",
     "type": "message_received",
@@ -289,7 +289,7 @@ exports[`A: basic entity lifecycle > A6: agent-less entity records only inbound 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "hello",
     "type": "message_received",
@@ -306,7 +306,7 @@ exports[`A: basic entity lifecycle > A7: setup state writes appear before the ru
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -380,7 +380,7 @@ exports[`A: basic entity lifecycle > A8: manifest history includes the configure
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -445,7 +445,7 @@ exports[`A: basic entity lifecycle > A9: sync tool calls appear in-order within 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "sync_echo hello tool",
     "type": "message_received",
@@ -531,7 +531,7 @@ exports[`A: basic entity lifecycle > A10: async tool completion preserves a sing
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "async_lookup widget-7",
     "type": "message_received",
@@ -617,7 +617,7 @@ exports[`A: basic entity lifecycle > A11: repeated tool calls keep ordering stab
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "sync_echo first && sync_echo second",
     "type": "message_received",
@@ -724,7 +724,7 @@ exports[`A: basic entity lifecycle > A12: stateful note writes persist across wa
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "stateful_note write memo-1 first draft",
     "type": "message_received",
@@ -812,7 +812,7 @@ exports[`A: basic entity lifecycle > A12: stateful note writes persist across wa
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "stateful_note read memo-1",
     "type": "message_received",
@@ -900,7 +900,7 @@ exports[`A: basic entity lifecycle > A13: failing tools close the run cleanly wi
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "fail_tool deterministic-boom",
     "type": "message_received",
@@ -986,7 +986,7 @@ exports[`A: basic entity lifecycle > A14: an entity can recover from a failed to
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "fail_tool deterministic-boom",
     "type": "message_received",
@@ -1061,7 +1061,7 @@ exports[`A: basic entity lifecycle > A14: an entity can recover from a failed to
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "sync_echo recovered",
     "type": "message_received",
@@ -1148,7 +1148,7 @@ exports[`B: spawn mechanics > B1: spawn creates a child entity that can receive 
     "type": "entity_created",
   },
   {
-    "from": "parent",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": {
       "text": "hello child",
@@ -1167,7 +1167,7 @@ exports[`B: spawn mechanics > B1: spawn creates a child entity that can receive 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1245,7 +1245,7 @@ exports[`B: spawn mechanics > B2: spawn with initial message writes the child hi
     "type": "entity_created",
   },
   {
-    "from": "/parent2-b2/p-2",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "hello child",
     "type": "message_received",
@@ -1262,7 +1262,7 @@ exports[`B: spawn mechanics > B2: spawn with initial message writes the child hi
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1339,7 +1339,7 @@ exports[`B: spawn mechanics > B3: spawn manifest history includes the resolved e
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1416,7 +1416,7 @@ exports[`B: spawn mechanics > B4: spawn marks the child manifest row as observed
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1493,7 +1493,7 @@ exports[`C: state collections > C1: ctx.state inserts are reflected in full stre
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1567,7 +1567,7 @@ exports[`C: state collections > C2: setup-initialized state remains visible in f
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1641,7 +1641,7 @@ exports[`C: state collections > C3: self-authored state writes do not trigger a 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "save",
     "type": "message_received",
@@ -1715,7 +1715,7 @@ exports[`D: shared state > D1: mkdb produces entity history with a manifest entr
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1797,7 +1797,7 @@ exports[`D: shared state > D2: shared state stream exists even before any writes
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "go",
     "type": "message_received",
@@ -1881,7 +1881,7 @@ exports[`D: shared state > D3: writes to shared state are reflected in both hist
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "write something",
     "type": "message_received",
@@ -2004,7 +2004,7 @@ exports[`D: shared state > D4: a second entity can connect to existing shared st
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
     "type": "message_received",
@@ -2127,7 +2127,7 @@ exports[`D: shared state > D5: shared state update and delete events remain dura
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
     "type": "message_received",
@@ -2265,7 +2265,7 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "summary",
     "type": "message_received",
@@ -2406,7 +2406,7 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "write_article art-1 Alpha|First body && write_comment c-1 art-1|Looks good",
     "type": "message_received",
@@ -2522,7 +2522,7 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "count",
     "type": "message_received",
@@ -2655,7 +2655,7 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
     "type": "message_received",
@@ -2763,7 +2763,7 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert art-2 Beta|Second body",
     "type": "message_received",
@@ -2871,7 +2871,7 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
     "type": "message_received",
@@ -3004,7 +3004,7 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
     "type": "message_received",
@@ -3112,7 +3112,7 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "update art-1 Beta|Second body",
     "type": "message_received",
@@ -3220,7 +3220,7 @@ exports[`D: shared state > D9: a setup-registered shared-state effect fires on t
     "type": "entity_created",
   },
   {
-    "from": "spawn",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
     "type": "message_received",
@@ -3324,7 +3324,7 @@ exports[`D: shared state > D9: a setup-registered shared-state effect fires on t
     "type": "manifest",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
     "type": "message_received",
@@ -3406,7 +3406,7 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "summary",
     "type": "message_received",
@@ -3547,7 +3547,7 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "write_article art-1 Alpha|First body",
     "type": "message_received",
@@ -3663,7 +3663,7 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "write_comment c-1 art-1|Looks good",
     "type": "message_received",
@@ -3777,7 +3777,7 @@ exports[`E: observation replay > E1: observed effects do not duplicate old child
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
     "type": "message_received",
@@ -3840,7 +3840,7 @@ exports[`E: observation replay > E1: observed effects do not duplicate old child
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert item-2 beta",
     "type": "message_received",
@@ -3935,7 +3935,7 @@ exports[`E: observation replay > E2: updating an observed row preserves a single
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
     "type": "message_received",
@@ -3998,7 +3998,7 @@ exports[`E: observation replay > E2: updating an observed row preserves a single
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "update item-1 beta",
     "type": "message_received",
@@ -4095,7 +4095,7 @@ exports[`E: observation replay > E3: an observed row update is replayed as an up
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
     "type": "message_received",
@@ -4158,7 +4158,7 @@ exports[`E: observation replay > E3: an observed row update is replayed as an up
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "update item-1 beta",
     "type": "message_received",
@@ -4256,7 +4256,7 @@ exports[`F: coordination orchestration > F1: dispatcher routes to the requested 
     "type": "entity_created",
   },
   {
-    "from": "/dispatcher-f1/dispatch-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "hello routing",
     "type": "message_received",
@@ -4321,7 +4321,7 @@ exports[`F: coordination orchestration > F1: dispatcher routes to the requested 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "dispatch assistant hello routing",
     "type": "message_received",
@@ -4444,7 +4444,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "type": "entity_created",
   },
   {
-    "from": "/manager-f2/manager-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "Should we ship the feature?",
     "type": "message_received",
@@ -4509,7 +4509,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "spawn_perspectives Should we ship the feature?",
     "type": "message_received",
@@ -4593,7 +4593,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     },
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "wait_for_all",
     "type": "message_received",
@@ -4653,7 +4653,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "type": "entity_created",
   },
   {
-    "from": "/manager-f2/manager-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "Should we ship the feature?",
     "type": "message_received",
@@ -4722,7 +4722,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "type": "entity_created",
   },
   {
-    "from": "/manager-f2/manager-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "Should we ship the feature?",
     "type": "message_received",
@@ -4791,7 +4791,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "type": "entity_created",
   },
   {
-    "from": "/map-reduce-g1/map-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "summarize:alpha",
     "type": "message_received",
@@ -4860,7 +4860,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "type": "entity_created",
   },
   {
-    "from": "/map-reduce-g1/map-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "summarize:beta",
     "type": "message_received",
@@ -4929,7 +4929,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "type": "entity_created",
   },
   {
-    "from": "/map-reduce-g1/map-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "summarize:gamma",
     "type": "message_received",
@@ -4994,7 +4994,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "map_chunks summarize :: alpha@30|beta@0|gamma@10",
     "type": "message_received",
@@ -5190,7 +5190,7 @@ exports[`H: pipeline sequencing > H1: pipeline writes its state row during the f
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "run_pipeline seed :: stage-one",
     "type": "message_received",
@@ -5357,7 +5357,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "run_pipeline seed :: stage-one|stage-two|stage-three",
     "type": "message_received",
@@ -5609,7 +5609,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "type": "entity_created",
   },
   {
-    "from": "/pipeline-h1/pipeline-2",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "seed",
     "type": "message_received",
@@ -5677,7 +5677,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "type": "entity_created",
   },
   {
-    "from": "/pipeline-h1/pipeline-2",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "stage-one::seed",
     "type": "message_received",
@@ -5745,7 +5745,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "type": "entity_created",
   },
   {
-    "from": "/pipeline-h1/pipeline-2",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "stage-two::stage-one::seed",
     "type": "message_received",
@@ -5816,7 +5816,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "type": "entity_created",
   },
   {
-    "from": "/peer-review-i1/review-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "launch checklist",
     "type": "message_received",
@@ -5928,7 +5928,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "type": "entity_created",
   },
   {
-    "from": "/peer-review-i1/review-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "launch checklist",
     "type": "message_received",
@@ -6040,7 +6040,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "type": "entity_created",
   },
   {
-    "from": "/peer-review-i1/review-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "launch checklist",
     "type": "message_received",
@@ -6146,7 +6146,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "start_review launch checklist",
     "type": "message_received",
@@ -6346,7 +6346,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "type": "manifest",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "summarize_reviews",
     "type": "message_received",
@@ -6489,7 +6489,7 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     "type": "entity_created",
   },
   {
-    "from": "/debate-parent-j1/debate-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "Should we refactor now?",
     "type": "message_received",
@@ -6600,7 +6600,7 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     "type": "entity_created",
   },
   {
-    "from": "/debate-parent-j1/debate-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "Should we refactor now?",
     "type": "message_received",
@@ -6737,7 +6737,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "type": "entity_created",
   },
   {
-    "from": "/wiki-parent-k1/wiki-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "Durable Streams",
     "type": "message_received",
@@ -6847,7 +6847,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "type": "entity_created",
   },
   {
-    "from": "/wiki-parent-k1/wiki-1",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "Durable Streams",
     "type": "message_received",
@@ -6953,7 +6953,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "create_wiki Durable Streams :: History|Applications",
     "type": "message_received",
@@ -7131,7 +7131,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "type": "manifest",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "query_wiki Durable Streams",
     "type": "message_received",
@@ -7244,7 +7244,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
     "type": "message_received",
@@ -7307,7 +7307,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "update item-1 beta",
     "type": "message_received",
@@ -7370,7 +7370,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "delete item-1",
     "type": "message_received",
@@ -7440,7 +7440,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "watch /observed-child-e1/child-l1",
     "type": "message_received",
@@ -7548,7 +7548,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "type": "state:_mirror",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "report",
     "type": "message_received",
@@ -7613,7 +7613,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
     "type": "message_received",
@@ -7687,7 +7687,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     "type": "entity_created",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "watch /observed-child-e1/child-l2",
     "type": "message_received",
@@ -7761,7 +7761,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     },
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "report",
     "type": "message_received",
@@ -7815,7 +7815,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     "type": "run",
   },
   {
-    "from": "user",
+    "from": "/principal/system:runtime-dsl-test",
     "operation": "insert",
     "payload": "report",
     "type": "message_received",

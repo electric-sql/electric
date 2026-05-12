@@ -2846,7 +2846,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A3: single message produces a full run history`, async () => {
     const entity = await t.spawn(TYPES.a3, `r-1`)
-    await entity.send(`hello`, { from: `user` })
+    await entity.send(`hello`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -2854,7 +2854,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A4: agent text output is reflected in the final history`, async () => {
     const entity = await t.spawn(TYPES.a4, `t-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForTypeCount(`text_delta`, 1)
     await entity.waitForRun()
 
@@ -2864,9 +2864,9 @@ describe(`A: basic entity lifecycle`, () => {
   it(`A5: multiple messages produce two completed runs`, async () => {
     const entity = await t.spawn(TYPES.a5, `m-1`)
 
-    await entity.send(`msg 1`, { from: `user` })
+    await entity.send(`msg 1`)
     await entity.waitForRun()
-    await entity.send(`msg 2`, { from: `user` })
+    await entity.send(`msg 2`)
     await entity.waitForRunCount(2)
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -2875,7 +2875,7 @@ describe(`A: basic entity lifecycle`, () => {
   it(`A5b: entity.waitForSettled returns the settled history without run-count polling`, async () => {
     const entity = await t.spawn(TYPES.a5, `m-settled-1`)
 
-    await entity.send(`msg 1`, { from: `user` })
+    await entity.send(`msg 1`)
     await entity.waitForSettled()
     const history = await entity.waitForRunCount(1)
 
@@ -2886,7 +2886,7 @@ describe(`A: basic entity lifecycle`, () => {
   it(`A5c: t.waitForSettled waits for runtime quiescence`, async () => {
     const entity = await t.spawn(TYPES.a5, `m-settled-2`)
 
-    await entity.send(`msg 1`, { from: `user` })
+    await entity.send(`msg 1`)
     await t.waitForSettled()
     await entity.waitForRunCount(1)
 
@@ -2895,7 +2895,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A6: agent-less entity records only inbound messages`, async () => {
     const entity = await t.spawn(TYPES.a6, `na-1`)
-    await entity.send(`hello`, { from: `user` })
+    await entity.send(`hello`)
     await entity.waitForTypeCount(`message_received`, 1)
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -2903,7 +2903,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A7: setup state writes appear before the run history`, async () => {
     const entity = await t.spawn(TYPES.a7, `s-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     const history = await entity.waitForRun()
 
     expect(history.indexOf(`state:status`)).toBeLessThan(history.indexOf(`run`))
@@ -2912,7 +2912,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A8: manifest history includes the configured agent`, async () => {
     const entity = await t.spawn(TYPES.a8, `mf-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -2920,7 +2920,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A9: sync tool calls appear in-order within one completed run`, async () => {
     const entity = await t.spawn(TYPES.a9, `tool-sync-1`)
-    await entity.send(`sync_echo hello tool`, { from: `user` })
+    await entity.send(`sync_echo hello tool`)
     const history = await entity.waitForRun()
 
     expect(history.count(`tool_call`)).toBe(2)
@@ -2941,7 +2941,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A10: async tool completion preserves a single clean run history`, async () => {
     const entity = await t.spawn(TYPES.a9, `tool-async-1`)
-    await entity.send(`async_lookup widget-7`, { from: `user` })
+    await entity.send(`async_lookup widget-7`)
     const history = await entity.waitForRun()
 
     expect(history.completedRunCount()).toBe(1)
@@ -2956,7 +2956,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A11: repeated tool calls keep ordering stable and use the last result`, async () => {
     const entity = await t.spawn(TYPES.a9, `tool-double-1`)
-    await entity.send(`sync_echo first && sync_echo second`, { from: `user` })
+    await entity.send(`sync_echo first && sync_echo second`)
     const history = await entity.waitForRun()
 
     expect(
@@ -2973,11 +2973,9 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A12: stateful note writes persist across wakes and can be read later`, async () => {
     const entity = await t.spawn(TYPES.a9, `tool-note-1`)
-    await entity.send(`stateful_note write memo-1 first draft`, {
-      from: `user`,
-    })
+    await entity.send(`stateful_note write memo-1 first draft`)
     await entity.waitForRun()
-    await entity.send(`stateful_note read memo-1`, { from: `user` })
+    await entity.send(`stateful_note read memo-1`)
     await entity.waitFor((streamHistory) =>
       streamHistory.some(
         `text_delta`,
@@ -3004,7 +3002,7 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A13: failing tools close the run cleanly with durable failure history`, async () => {
     const entity = await t.spawn(TYPES.a9, `tool-fail-1`)
-    await entity.send(`fail_tool deterministic-boom`, { from: `user` })
+    await entity.send(`fail_tool deterministic-boom`)
     const history = await entity.waitForRun()
 
     expect(
@@ -3018,10 +3016,10 @@ describe(`A: basic entity lifecycle`, () => {
 
   it(`A14: an entity can recover from a failed tool call in a later run`, async () => {
     const entity = await t.spawn(TYPES.a9, `tool-recover-1`)
-    await entity.send(`fail_tool deterministic-boom`, { from: `user` })
+    await entity.send(`fail_tool deterministic-boom`)
     await entity.waitForRun()
 
-    await entity.send(`sync_echo recovered`, { from: `user` })
+    await entity.send(`sync_echo recovered`)
     const history = await entity.waitFor((stream) =>
       stream.some(
         `text_delta`,
@@ -3045,11 +3043,11 @@ describe(`A: basic entity lifecycle`, () => {
 describe(`B: spawn mechanics`, () => {
   it(`B1: spawn creates a child entity that can receive messages`, async () => {
     const parent = await t.spawn(TYPES.b1Parent, `p-1`)
-    await parent.send(`go`, { from: `user` })
+    await parent.send(`go`)
     await parent.waitForRun()
 
     const child = t.entity(`/${TYPES.b1Child}/c-1`)
-    await child.send({ text: `hello child` }, { from: `parent` })
+    await child.send({ text: `hello child` })
     await child.waitForTypeCount(`message_received`, 1)
 
     expect(await parent.snapshot()).toMatchSnapshot(`parent history`)
@@ -3058,7 +3056,7 @@ describe(`B: spawn mechanics`, () => {
 
   it(`B2: spawn with initial message writes the child history`, async () => {
     const parent = await t.spawn(TYPES.b2Parent, `p-2`)
-    await parent.send(`go`, { from: `user` })
+    await parent.send(`go`)
     await parent.waitForRun()
 
     const child = t.entity(`/${TYPES.b2Child}/c-2`)
@@ -3070,7 +3068,7 @@ describe(`B: spawn mechanics`, () => {
 
   it(`B3: spawn manifest history includes the resolved entityUrl`, async () => {
     const entity = await t.spawn(TYPES.b3Parent, `s-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -3078,7 +3076,7 @@ describe(`B: spawn mechanics`, () => {
 
   it(`B4: spawn marks the child manifest row as observed`, async () => {
     const entity = await t.spawn(TYPES.b4Parent, `op-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -3088,7 +3086,7 @@ describe(`B: spawn mechanics`, () => {
 describe(`C: state collections`, () => {
   it(`C1: ctx.state inserts are reflected in full stream history`, async () => {
     const entity = await t.spawn(TYPES.c1, `sw-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -3096,7 +3094,7 @@ describe(`C: state collections`, () => {
 
   it(`C2: setup-initialized state remains visible in final history`, async () => {
     const entity = await t.spawn(TYPES.c2, `se-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -3104,7 +3102,7 @@ describe(`C: state collections`, () => {
 
   it(`C3: self-authored state writes do not trigger a second run`, async () => {
     const entity = await t.spawn(TYPES.c3, `loop-1`)
-    await entity.send(`save`, { from: `user` })
+    await entity.send(`save`)
     const history = await entity.waitForRun()
 
     expect(history.count(`run`)).toBe(2)
@@ -3123,7 +3121,7 @@ describe(`C: state collections`, () => {
 describe(`D: shared state`, () => {
   it(`D1: mkdb produces entity history with a manifest entry`, async () => {
     const entity = await t.spawn(TYPES.d1, `ssc-1`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -3133,7 +3131,7 @@ describe(`D: shared state`, () => {
     const sharedState = t.sharedState(`ss-d2`)
 
     const entity = await t.spawn(TYPES.d2, `ssc-2`)
-    await entity.send(`go`, { from: `user` })
+    await entity.send(`go`)
     await entity.waitForRun()
 
     expect(await entity.snapshot()).toMatchSnapshot(`entity history`)
@@ -3144,7 +3142,7 @@ describe(`D: shared state`, () => {
     const sharedState = t.sharedState(`ss-d3`)
 
     const entity = await t.spawn(TYPES.d3, `ssw-1`)
-    await entity.send(`write something`, { from: `user` })
+    await entity.send(`write something`)
     await entity.waitForRun()
     await sharedState.waitForTypeCount(`shared:article`, 1)
 
@@ -3158,14 +3156,14 @@ describe(`D: shared state`, () => {
     const writer = await t.spawn(TYPES.d4, `ssc-4`, {
       sharedStateId: `ss-d4`,
     })
-    await writer.send(`insert art-1 Alpha|First body`, { from: `user` })
+    await writer.send(`insert art-1 Alpha|First body`)
     await writer.waitForRun()
     await sharedState.waitForTypeCount(`shared:article`, 1)
 
     const reader = await t.spawn(TYPES.d5, `ssr-4`, {
       sharedStateId: `ss-d4`,
     })
-    await reader.send(`read art-1`, { from: `user` })
+    await reader.send(`read art-1`)
     const readerHistory = await reader.waitForRun()
 
     expect(
@@ -3198,11 +3196,11 @@ describe(`D: shared state`, () => {
     const writer = await t.spawn(TYPES.d4, `ssc-5`, {
       sharedStateId: `ss-d5`,
     })
-    await writer.send(`insert art-1 Alpha|First body`, { from: `user` })
+    await writer.send(`insert art-1 Alpha|First body`)
     await writer.waitForRun()
-    await writer.send(`update art-1 Beta|Second body`, { from: `user` })
+    await writer.send(`update art-1 Beta|Second body`)
     await sharedState.waitForOperation(`shared:article`, `update`)
-    await writer.send(`delete art-1`, { from: `user` })
+    await writer.send(`delete art-1`)
     await sharedState.waitForOperation(`shared:article`, `delete`)
     const sharedHistory = await sharedState.waitForTypeCount(
       `shared:article`,
@@ -3212,7 +3210,7 @@ describe(`D: shared state`, () => {
     const reader = await t.spawn(TYPES.d5, `ssr-5`, {
       sharedStateId: `ss-d5`,
     })
-    await reader.send(`read art-1`, { from: `user` })
+    await reader.send(`read art-1`)
     const readerHistory = await reader.waitForRun()
 
     expect(
@@ -3274,10 +3272,7 @@ describe(`D: shared state`, () => {
       sharedStateId: `ss-d6`,
     })
     await writer.send(
-      `write_article art-1 Alpha|First body && write_comment c-1 art-1|Looks good`,
-      {
-        from: `user`,
-      }
+      `write_article art-1 Alpha|First body && write_comment c-1 art-1|Looks good`
     )
     await writer.waitForRun()
     await sharedState.waitFor((history) => {
@@ -3290,7 +3285,7 @@ describe(`D: shared state`, () => {
     const reader = await t.spawn(TYPES.d6Reader, `ssr-6`, {
       sharedStateId: `ss-d6`,
     })
-    await reader.send(`summary`, { from: `user` })
+    await reader.send(`summary`)
     const readerHistory = await reader.waitForRun()
 
     expect(
@@ -3318,16 +3313,16 @@ describe(`D: shared state`, () => {
       sharedStateId: `ss-d7`,
     })
 
-    await writerA.send(`insert art-1 Alpha|First body`, { from: `user` })
+    await writerA.send(`insert art-1 Alpha|First body`)
     await writerA.waitForRun()
-    await writerB.send(`insert art-2 Beta|Second body`, { from: `user` })
+    await writerB.send(`insert art-2 Beta|Second body`)
     await writerB.waitForRun()
     await sharedState.waitForTypeCount(`shared:article`, 2)
 
     const reader = await t.spawn(TYPES.d5, `ssr-7`, {
       sharedStateId: `ss-d7`,
     })
-    await reader.send(`count`, { from: `user` })
+    await reader.send(`count`)
     const readerHistory = await reader.waitForRun()
 
     expect(
@@ -3354,9 +3349,9 @@ describe(`D: shared state`, () => {
       sharedStateId: `ss-d8`,
     })
 
-    await writerA.send(`insert art-1 Alpha|First body`, { from: `user` })
+    await writerA.send(`insert art-1 Alpha|First body`)
     await writerA.waitForRun()
-    await writerB.send(`update art-1 Beta|Second body`, { from: `user` })
+    await writerB.send(`update art-1 Beta|Second body`)
     await writerB.waitForRun()
     const sharedHistory = await sharedState.waitForTypeCount(
       `shared:article`,
@@ -3366,7 +3361,7 @@ describe(`D: shared state`, () => {
     const reader = await t.spawn(TYPES.d5, `ssr-8`, {
       sharedStateId: `ss-d8`,
     })
-    await reader.send(`read art-1`, { from: `user` })
+    await reader.send(`read art-1`)
     const readerHistory = await reader.waitForRun()
 
     expect(
@@ -3424,7 +3419,7 @@ describe(`D: shared state`, () => {
     ).toMatchObject({
       text: `noticed:Alpha`,
     })
-    await entity.send(`read art-1`, { from: `user` })
+    await entity.send(`read art-1`)
     const rereadHistory = await entity.waitFor((history) => {
       return history.some(
         `text_delta`,
@@ -3455,13 +3450,9 @@ describe(`D: shared state`, () => {
       sharedStateId: `ss-d10`,
     })
 
-    await writerA.send(`write_article art-1 Alpha|First body`, {
-      from: `user`,
-    })
+    await writerA.send(`write_article art-1 Alpha|First body`)
     await writerA.waitForRun()
-    await writerB.send(`write_comment c-1 art-1|Looks good`, {
-      from: `user`,
-    })
+    await writerB.send(`write_comment c-1 art-1|Looks good`)
     await writerB.waitForRun()
     await sharedState.waitFor((history) => {
       return (
@@ -3473,7 +3464,7 @@ describe(`D: shared state`, () => {
     const reader = await t.spawn(TYPES.d6Reader, `ssr-10`, {
       sharedStateId: `ss-d10`,
     })
-    await reader.send(`summary`, { from: `user` })
+    await reader.send(`summary`)
     const readerHistory = await reader.waitForRun()
 
     expect(
@@ -3502,11 +3493,11 @@ describe(`D: shared state`, () => {
       sharedStateId: `ss-d11`,
     })
 
-    await writerA.send(`insert art-1 Alpha|First body`, { from: `user` })
+    await writerA.send(`insert art-1 Alpha|First body`)
     await writerA.waitForRun()
-    await writerB.send(`update art-1 Beta|Second body`, { from: `user` })
+    await writerB.send(`update art-1 Beta|Second body`)
     await writerB.waitForRun()
-    await writerA.send(`update art-1 Gamma|Third body`, { from: `user` })
+    await writerA.send(`update art-1 Gamma|Third body`)
 
     const sharedHistory = await sharedState.waitForTypeCount(
       `shared:article`,
@@ -3516,7 +3507,7 @@ describe(`D: shared state`, () => {
     const reader = await t.spawn(TYPES.d5, `ssr-11`, {
       sharedStateId: `ss-d11`,
     })
-    await reader.send(`read art-1`, { from: `user` })
+    await reader.send(`read art-1`)
     const readerHistory = await reader.waitForRun()
 
     expect(
@@ -3557,13 +3548,11 @@ describe(`D: shared state`, () => {
       sharedStateId: `ss-d12`,
     })
 
-    await articleWriter.send(`write_article art-1 Alpha|First body`, {
-      from: `user`,
-    })
+    await articleWriter.send(`write_article art-1 Alpha|First body`)
     await articleWriter.waitForRun()
     await sharedState.waitForTypeCount(`shared:article`, 1)
 
-    await reader.send(`summary`, { from: `user` })
+    await reader.send(`summary`)
     const firstSummary = await reader.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -3573,9 +3562,7 @@ describe(`D: shared state`, () => {
       )
     )
 
-    await commentWriter.send(`write_comment c-1 art-1|Looks good`, {
-      from: `user`,
-    })
+    await commentWriter.send(`write_comment c-1 art-1|Looks good`)
     await commentWriter.waitForRun()
     await sharedState.waitFor((history) => {
       return (
@@ -3584,7 +3571,7 @@ describe(`D: shared state`, () => {
       )
     })
 
-    await reader.send(`summary`, { from: `user` })
+    await reader.send(`summary`)
     const secondSummary = await reader.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -3624,11 +3611,11 @@ describe(`E: observation replay`, () => {
       childUrl: child.entityUrl,
     })
 
-    await parent.send(`poke-0`, { from: `user` })
+    await parent.send(`poke-0`)
     const initialHistory = await parent.waitForRun()
     const initialRunCount = initialHistory.completedRunCount()
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForOperation(`observed_item`, `insert`)
     await t.waitForSettled()
 
@@ -3636,7 +3623,7 @@ describe(`E: observation replay`, () => {
     expect(postChildWriteHistory.completedRunCount()).toBe(initialRunCount)
     expect(postChildWriteHistory.count(`observed_count`)).toBe(0)
 
-    await parent.send(`poke-1`, { from: `user` })
+    await parent.send(`poke-1`)
     const parentHistory = await parent.waitForTypeCount(`observed_count`, 1)
 
     expect(parentHistory.find(`observed_count`)?.value).toMatchObject({
@@ -3651,15 +3638,15 @@ describe(`E: observation replay`, () => {
       childUrl: child.entityUrl,
     })
 
-    await parent.send(`poke-0`, { from: `user` })
+    await parent.send(`poke-0`)
     await parent.waitForRun()
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForOperation(`observed_item`, `insert`)
-    await parent.send(`poke-1`, { from: `user` })
+    await parent.send(`poke-1`)
     await parent.waitForTypeCount(`observed_count`, 1)
 
-    await parent.send(`poke-2`, { from: `user` })
+    await parent.send(`poke-2`)
     await parent.waitFor((history) =>
       history.some(
         `message_received`,
@@ -3674,9 +3661,9 @@ describe(`E: observation replay`, () => {
       count: 1,
     })
 
-    await child.send(`insert item-2 beta`, { from: `user` })
+    await child.send(`insert item-2 beta`)
     await child.waitForOperation(`observed_item`, `insert`, { count: 2 })
-    await parent.send(`poke-3`, { from: `user` })
+    await parent.send(`poke-3`)
     const parentHistory = await parent.waitForTypeCount(`observed_count`, 2)
 
     expect(parentHistory.count(`observed_count`)).toBe(2)
@@ -3697,17 +3684,17 @@ describe(`E: observation replay`, () => {
       childUrl: child.entityUrl,
     })
 
-    await parent.send(`poke-0`, { from: `user` })
+    await parent.send(`poke-0`)
     await parent.waitForRun()
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForRun()
-    await parent.send(`poke-1`, { from: `user` })
+    await parent.send(`poke-1`)
     await parent.waitForTypeCount(`mirrored_item`, 1)
 
-    await child.send(`update item-1 beta`, { from: `user` })
+    await child.send(`update item-1 beta`)
     await child.waitForOperation(`observed_item`, `update`)
-    await parent.send(`poke-2`, { from: `user` })
+    await parent.send(`poke-2`)
     const parentHistory = await parent.waitFor(
       (history) =>
         history.count(
@@ -3752,17 +3739,17 @@ describe(`E: observation replay`, () => {
       childUrl: child.entityUrl,
     })
 
-    await parent.send(`poke-0`, { from: `user` })
+    await parent.send(`poke-0`)
     await parent.waitForRun()
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForRun()
-    await parent.send(`poke-1`, { from: `user` })
+    await parent.send(`poke-1`)
     await parent.waitForTypeCount(`mirrored_item`, 1)
 
-    await child.send(`update item-1 beta`, { from: `user` })
+    await child.send(`update item-1 beta`)
     await child.waitForOperation(`observed_item`, `update`)
-    await parent.send(`poke-2`, { from: `user` })
+    await parent.send(`poke-2`)
     const parentHistory = await parent.waitFor(
       (history) =>
         history.count(
@@ -3805,7 +3792,7 @@ describe(`E: observation replay`, () => {
 describe(`F: coordination orchestration`, () => {
   it(`F1: dispatcher routes to the requested specialist type and records the child`, async () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-1`)
-    await parent.send(`dispatch assistant hello routing`, { from: `user` })
+    await parent.send(`dispatch assistant hello routing`)
     const parentHistory = await parent.waitForRun()
 
     const child = t.entity(`/${TYPES.f1AssistantChild}/dispatch-1-dispatch-1`)
@@ -3828,14 +3815,12 @@ describe(`F: coordination orchestration`, () => {
 
   it(`F2: manager-worker spawns, observes, and later collects all perspectives in a stable order`, async () => {
     const parent = await t.spawn(TYPES.f2Manager, `manager-1`)
-    await parent.send(`spawn_perspectives Should we ship the feature?`, {
-      from: `user`,
-    })
+    await parent.send(`spawn_perspectives Should we ship the feature?`)
     await parent.waitForRun()
     await parent.waitForTypeCount(`child_status`, 3)
     await parent.waitForSettled(60_000)
 
-    await parent.send(`wait_for_all`, { from: `user` })
+    await parent.send(`wait_for_all`)
     const expectedDelta =
       `optimist:optimist::Should we ship the feature? | ` +
       `pessimist:pessimist::Should we ship the feature? | ` +
@@ -3934,10 +3919,10 @@ describe(`F: coordination orchestration`, () => {
   it(`F3: dispatcher increments dispatch count and keeps both child rows across wakes`, async () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-2`)
 
-    await parent.send(`dispatch assistant first task`, { from: `user` })
+    await parent.send(`dispatch assistant first task`)
     await parent.waitForRun()
 
-    await parent.send(`dispatch worker second task`, { from: `user` })
+    await parent.send(`dispatch worker second task`)
     const parentHistory = await parent.waitFor((history) => {
       const counter = history.find(
         `state:counters`,
@@ -3987,7 +3972,7 @@ describe(`F: coordination orchestration`, () => {
 
   it(`F4: dispatcher records the expected status progression during a dispatch`, async () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-3`)
-    await parent.send(`dispatch assistant status please`, { from: `user` })
+    await parent.send(`dispatch assistant status please`)
     const expectedStatuses = [
       `idle`,
       `classifying`,
@@ -4017,7 +4002,7 @@ describe(`F: coordination orchestration`, () => {
 
   it(`F5: dispatcher returns the documented placeholder when a child produces no text`, async () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-4`)
-    await parent.send(`dispatch assistant __silent__`, { from: `user` })
+    await parent.send(`dispatch assistant __silent__`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -4041,7 +4026,7 @@ describe(`F: coordination orchestration`, () => {
 
   it(`F6: wait_for_all before spawning perspectives returns the documented error path`, async () => {
     const parent = await t.spawn(TYPES.f2Manager, `manager-2`)
-    await parent.send(`wait_for_all`, { from: `user` })
+    await parent.send(`wait_for_all`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -4076,12 +4061,12 @@ describe(`F: coordination orchestration`, () => {
 
   it(`F7: manager-worker uses placeholders when every perspective child is silent`, async () => {
     const parent = await t.spawn(TYPES.f2Manager, `manager-3`)
-    await parent.send(`spawn_perspectives __silent__`, { from: `user` })
+    await parent.send(`spawn_perspectives __silent__`)
     await parent.waitForRun()
     await parent.waitForTypeCount(`child_status`, 3)
     await parent.waitForSettled(60_000)
 
-    await parent.send(`wait_for_all`, { from: `user` })
+    await parent.send(`wait_for_all`)
     const parentHistory = await parent.waitFor(
       (history) =>
         history.some(
@@ -4114,12 +4099,12 @@ describe(`F: coordination orchestration`, () => {
     const pessimist = t.entity(`/${TYPES.fCoordWorker}/manager-4-pessimist`)
     const pragmatist = t.entity(`/${TYPES.fCoordWorker}/manager-4-pragmatist`)
 
-    await parent.send(`spawn_perspectives first question`, { from: `user` })
+    await parent.send(`spawn_perspectives first question`)
     await parent.waitForRun()
     await parent.waitForTypeCount(`child_status`, 3)
     await parent.waitForSettled(60_000)
 
-    await parent.send(`spawn_perspectives second question`, { from: `user` })
+    await parent.send(`spawn_perspectives second question`)
 
     const secondOptimist = await optimist.waitFor(
       (history) => history.count(`message_received`) >= 2,
@@ -4170,10 +4155,7 @@ describe(`F: coordination orchestration`, () => {
     t.expectWakeError(`deterministic failure for pessimist`)
 
     await parent.send(
-      `spawn_perspectives __fail__:pessimist Should we ship the feature?`,
-      {
-        from: `user`,
-      }
+      `spawn_perspectives __fail__:pessimist Should we ship the feature?`
     )
     const spawnHistory = await parent.waitFor((history) => {
       const statuses = new Map(
@@ -4195,7 +4177,7 @@ describe(`F: coordination orchestration`, () => {
     })
     await parent.waitForSettled(60_000)
 
-    await parent.send(`wait_for_all`, { from: `user` })
+    await parent.send(`wait_for_all`)
     const expectedDelta =
       `optimist:optimist::Should we ship the feature? | ` +
       `pessimist:(no text output) | ` +
@@ -4242,10 +4224,7 @@ describe(`F: coordination orchestration`, () => {
     const pessimist = t.entity(`/${TYPES.fCoordWorker}/manager-6-pessimist`)
 
     await parent.send(
-      `spawn_perspectives __fail__:pessimist Should we ship the feature?`,
-      {
-        from: `user`,
-      }
+      `spawn_perspectives __fail__:pessimist Should we ship the feature?`
     )
     await parent.waitFor((history) => {
       const statuses = new Map(
@@ -4261,9 +4240,7 @@ describe(`F: coordination orchestration`, () => {
       )
       return statuses.get(`pessimist`) === `failed`
     })
-    await parent.send(`spawn_perspectives Should we ship the feature?`, {
-      from: `user`,
-    })
+    await parent.send(`spawn_perspectives Should we ship the feature?`)
     await pessimist.waitFor((history) => {
       const runs = history.events
         .filter((event) => event.type === `run`)
@@ -4297,7 +4274,7 @@ describe(`F: coordination orchestration`, () => {
       )
       return statuses.get(`pessimist`) === `completed`
     })
-    await parent.send(`wait_for_all`, { from: `user` })
+    await parent.send(`wait_for_all`)
     const expectedDelta =
       `optimist:optimist::Should we ship the feature? | ` +
       `pessimist:pessimist::Should we ship the feature? | ` +
@@ -4339,12 +4316,7 @@ describe(`F: coordination orchestration`, () => {
     const parent = await t.spawn(TYPES.f1Dispatcher, `dispatch-11`)
     t.expectWakeError(`deterministic failure for worker`)
 
-    await parent.send(
-      `dispatch worker __fail__:worker Investigate the outage`,
-      {
-        from: `user`,
-      }
-    )
+    await parent.send(`dispatch worker __fail__:worker Investigate the outage`)
     const parentHistory = await parent.waitFor((history) => {
       const countRow = history.find(
         `state:counters`,
@@ -4419,12 +4391,7 @@ describe(`F: coordination orchestration`, () => {
     t.expectWakeError(`deterministic failure for worker`)
     t.expectWakeError(`deterministic failure for assistant`)
 
-    await parent.send(
-      `dispatch worker __fail__:worker Investigate the outage`,
-      {
-        from: `user`,
-      }
-    )
+    await parent.send(`dispatch worker __fail__:worker Investigate the outage`)
     await parent.waitFor((history) =>
       history.some(
         `state:children`,
@@ -4433,9 +4400,7 @@ describe(`F: coordination orchestration`, () => {
     )
     await parent.waitForRun()
 
-    await parent.send(`dispatch assistant __fail__:assistant Draft a summary`, {
-      from: `user`,
-    })
+    await parent.send(`dispatch assistant __fail__:assistant Draft a summary`)
     const parentHistory = await parent.waitFor((history) => {
       return (
         history.some(
@@ -4539,9 +4504,7 @@ describe(`F: coordination orchestration`, () => {
 describe(`G: map-reduce ordering`, () => {
   it(`G1: map-reduce returns results in chunk order even when completions differ`, async () => {
     const parent = await t.spawn(TYPES.g1MapReduce, `map-1`)
-    await parent.send(`map_chunks summarize :: alpha@30|beta@0|gamma@10`, {
-      from: `user`,
-    })
+    await parent.send(`map_chunks summarize :: alpha@30|beta@0|gamma@10`)
     const parentHistory = await parent.waitForRun()
 
     const chunk1 = t.entity(`/${TYPES.fCoordWorker}/map-1-chunk-1`)
@@ -4595,7 +4558,7 @@ describe(`G: map-reduce ordering`, () => {
 
   it(`G2: map-reduce with one chunk still uses the orchestration path`, async () => {
     const parent = await t.spawn(TYPES.g1MapReduce, `map-2`)
-    await parent.send(`map_chunks summarize :: only-one@0`, { from: `user` })
+    await parent.send(`map_chunks summarize :: only-one@0`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -4637,9 +4600,7 @@ describe(`G: map-reduce ordering`, () => {
   it(`G3: map-reduce reuses chunk children across later wakes and returns only the latest chunk outputs`, async () => {
     const parent = await t.spawn(TYPES.g1MapReduce, `map-3`)
 
-    await parent.send(`map_chunks summarize :: alpha@0|beta@0`, {
-      from: `user`,
-    })
+    await parent.send(`map_chunks summarize :: alpha@0|beta@0`)
     await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -4654,9 +4615,7 @@ describe(`G: map-reduce ordering`, () => {
     await chunk1.waitForRun()
     await chunk2.waitForRun()
 
-    await parent.send(`map_chunks summarize :: newer-alpha@0|newer-beta@0`, {
-      from: `user`,
-    })
+    await parent.send(`map_chunks summarize :: newer-alpha@0|newer-beta@0`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -4683,8 +4642,7 @@ describe(`G: map-reduce ordering`, () => {
 
     const parent = await t.spawn(TYPES.g1MapReduce, `map-4`)
     await parent.send(
-      `map_chunks __fail__:chunk-2 summarize :: alpha@0|beta@0|gamma@0`,
-      { from: `user` }
+      `map_chunks __fail__:chunk-2 summarize :: alpha@0|beta@0|gamma@0`
     )
     const parentHistory = await parent.waitFor((history) =>
       history.some(
@@ -4729,7 +4687,7 @@ describe(`G: map-reduce ordering`, () => {
 describe(`H: pipeline sequencing`, () => {
   it(`H1: pipeline writes its state row during the first wake before stage execution`, async () => {
     const entity = await t.spawn(TYPES.h1Pipeline, `pipeline-1`)
-    await entity.send(`run_pipeline seed :: stage-one`, { from: `user` })
+    await entity.send(`run_pipeline seed :: stage-one`)
     const history = await entity.waitForRun()
 
     expect(
@@ -4751,9 +4709,7 @@ describe(`H: pipeline sequencing`, () => {
 
   it(`H2: pipeline feeds each stage the previous stage output and persists final state`, async () => {
     const parent = await t.spawn(TYPES.h1Pipeline, `pipeline-2`)
-    await parent.send(`run_pipeline seed :: stage-one|stage-two|stage-three`, {
-      from: `user`,
-    })
+    await parent.send(`run_pipeline seed :: stage-one|stage-two|stage-three`)
     const parentHistory = await parent.waitForRun()
 
     const stage1 = t.entity(`/${TYPES.fCoordWorker}/pipeline-2-stage-1`)
@@ -4783,12 +4739,7 @@ describe(`H: pipeline sequencing`, () => {
 
   it(`H3: pipeline status caps at stage_5 while longer pipelines still complete`, async () => {
     const parent = await t.spawn(TYPES.h1Pipeline, `pipeline-3`)
-    await parent.send(
-      `run_pipeline seed :: one|two|three|four|five|six|seven`,
-      {
-        from: `user`,
-      }
-    )
+    await parent.send(`run_pipeline seed :: one|two|three|four|five|six|seven`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `state:pipeline`,
@@ -4824,9 +4775,7 @@ describe(`H: pipeline sequencing`, () => {
 
   it(`H4: pipeline persists stage-by-stage currentInput updates through the run`, async () => {
     const parent = await t.spawn(TYPES.h1Pipeline, `pipeline-4`)
-    await parent.send(`run_pipeline seed :: stage-one|stage-two|stage-three`, {
-      from: `user`,
-    })
+    await parent.send(`run_pipeline seed :: stage-one|stage-two|stage-three`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `state:pipeline`,
@@ -4867,9 +4816,7 @@ describe(`H: pipeline sequencing`, () => {
   it(`H5: pipeline later runs reuse stage children but reset to the latest input chain`, async () => {
     const parent = await t.spawn(TYPES.h1Pipeline, `pipeline-5`)
 
-    await parent.send(`run_pipeline seed :: stage-one|stage-two`, {
-      from: `user`,
-    })
+    await parent.send(`run_pipeline seed :: stage-one|stage-two`)
     await parent.waitFor((history) =>
       history.some(
         `state:pipeline`,
@@ -4884,9 +4831,7 @@ describe(`H: pipeline sequencing`, () => {
     await stage1.waitForRun()
     await stage2.waitForRun()
 
-    await parent.send(`run_pipeline fresh :: stage-one|stage-two`, {
-      from: `user`,
-    })
+    await parent.send(`run_pipeline fresh :: stage-one|stage-two`)
     const parentHistory = await parent.waitForRunCount(2)
 
     expect(
@@ -4916,9 +4861,7 @@ describe(`H: pipeline sequencing`, () => {
     const parent = await t.spawn(TYPES.h1Pipeline, `pipeline-6`)
     t.expectWakeError(`deterministic failure for explode`)
 
-    await parent.send(`run_pipeline __fail__:explode seed :: explode|recover`, {
-      from: `user`,
-    })
+    await parent.send(`run_pipeline __fail__:explode seed :: explode|recover`)
     const parentHistory = await parent.waitForRun()
 
     const stage1 = t.entity(`/${TYPES.fCoordWorker}/pipeline-6-stage-1`)
@@ -4973,10 +4916,7 @@ describe(`M: deep researcher coordination`, () => {
     const parent = await t.spawn(TYPES.m1Researcher, `research-1`)
 
     await parent.send(
-      `spawn_researchers Durable Streams :: History|Applications`,
-      {
-        from: `user`,
-      }
+      `spawn_researchers Durable Streams :: History|Applications`
     )
     await parent.waitForRun()
 
@@ -5002,7 +4942,7 @@ describe(`M: deep researcher coordination`, () => {
   it(`M2: wait_for_results before spawning researchers returns the empty-state error path`, async () => {
     const parent = await t.spawn(TYPES.m1Researcher, `research-2`)
 
-    await parent.send(`wait_for_results`, { from: `user` })
+    await parent.send(`wait_for_results`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5029,17 +4969,13 @@ describe(`M: deep researcher coordination`, () => {
     const alpha = await t.spawn(TYPES.m1Researcher, `research-3a`)
     const beta = await t.spawn(TYPES.m1Researcher, `research-3b`)
 
-    await alpha.send(`spawn_researchers Alpha Topic :: History|Applications`, {
-      from: `user`,
-    })
-    await beta.send(`spawn_researchers Beta Topic :: History|Applications`, {
-      from: `user`,
-    })
+    await alpha.send(`spawn_researchers Alpha Topic :: History|Applications`)
+    await beta.send(`spawn_researchers Beta Topic :: History|Applications`)
     await alpha.waitForRun()
     await beta.waitForRun()
 
-    await alpha.send(`wait_for_results`, { from: `user` })
-    await beta.send(`wait_for_results`, { from: `user` })
+    await alpha.send(`wait_for_results`)
+    await beta.send(`wait_for_results`)
 
     const alphaHistory = await alpha.waitFor((history) =>
       history.some(
@@ -5114,7 +5050,7 @@ describe(`I: peer review coordination`, () => {
     const parent = await t.spawn(TYPES.i1PeerReview, `review-1`)
     const sharedState = t.sharedState(`review-review-1`)
 
-    await parent.send(`start_review launch checklist`, { from: `user` })
+    await parent.send(`start_review launch checklist`)
     await parent.waitForRun()
     await sharedState.waitForTypeCount(`shared:review`, 3)
     await parent.waitFor(
@@ -5131,7 +5067,7 @@ describe(`I: peer review coordination`, () => {
         }) === 4
     )
 
-    await parent.send(`summarize_reviews`, { from: `user` })
+    await parent.send(`summarize_reviews`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5173,7 +5109,7 @@ describe(`I: peer review coordination`, () => {
 
   it(`I2: summarize_reviews before any reviews exist returns the empty-state error path`, async () => {
     const parent = await t.spawn(TYPES.i1PeerReview, `review-2`)
-    await parent.send(`summarize_reviews`, { from: `user` })
+    await parent.send(`summarize_reviews`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5210,11 +5146,11 @@ describe(`I: peer review coordination`, () => {
     })
     const sharedState = t.sharedState(`review-review-3`)
 
-    await parent.send(`start_review launch checklist`, { from: `user` })
+    await parent.send(`start_review launch checklist`)
     await parent.waitForRun()
     await sharedState.waitForTypeCount(`shared:review`, 1)
 
-    await parent.send(`summarize_reviews`, { from: `user` })
+    await parent.send(`summarize_reviews`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5248,11 +5184,11 @@ describe(`I: peer review coordination`, () => {
     })
     const sharedState = t.sharedState(`review-review-4`)
 
-    await parent.send(`start_review launch checklist`, { from: `user` })
+    await parent.send(`start_review launch checklist`)
     await parent.waitForRun()
     await sharedState.waitForTypeCount(`shared:review`, 2)
 
-    await parent.send(`summarize_reviews`, { from: `user` })
+    await parent.send(`summarize_reviews`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5286,11 +5222,11 @@ describe(`J: debate coordination`, () => {
     const parent = await t.spawn(TYPES.j1Debate, `debate-1`)
     const sharedState = t.sharedState(`debate-debate-1`)
 
-    await parent.send(`start_debate Should we refactor now?`, { from: `user` })
+    await parent.send(`start_debate Should we refactor now?`)
     await parent.waitForRun()
     await sharedState.waitForTypeCount(`shared:argument`, 2)
 
-    await parent.send(`end_debate`, { from: `user` })
+    await parent.send(`end_debate`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5356,7 +5292,7 @@ describe(`J: debate coordination`, () => {
 
   it(`J2: end_debate before any arguments exist returns the empty-state error path`, async () => {
     const parent = await t.spawn(TYPES.j1Debate, `debate-2`)
-    await parent.send(`end_debate`, { from: `user` })
+    await parent.send(`end_debate`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5393,13 +5329,11 @@ describe(`J: debate coordination`, () => {
     const parent = await t.spawn(TYPES.j1Debate, `debate-3`)
     const sharedState = t.sharedState(`debate-debate-3`)
 
-    await parent.send(`start_side pro Should we refactor now?`, {
-      from: `user`,
-    })
+    await parent.send(`start_side pro Should we refactor now?`)
     await parent.waitForRun()
     await sharedState.waitForTypeCount(`shared:argument`, 1)
 
-    await parent.send(`end_debate`, { from: `user` })
+    await parent.send(`end_debate`)
     const partialHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5421,12 +5355,10 @@ describe(`J: debate coordination`, () => {
       status: `failed`,
     })
 
-    await parent.send(`start_side con Should we refactor now?`, {
-      from: `user`,
-    })
+    await parent.send(`start_side con Should we refactor now?`)
     await sharedState.waitForTypeCount(`shared:argument`, 2)
 
-    await parent.send(`end_debate`, { from: `user` })
+    await parent.send(`end_debate`)
     const finalHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5454,14 +5386,12 @@ describe(`K: wiki coordination`, () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-1`)
     const sharedState = t.sharedState(`wiki-wiki-1`)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitForTypeCount(`state:children`, 2)
     await sharedState.waitForTypeCount(`shared:wiki_article`, 2)
     await t.waitForSettled(60_000)
 
-    await parent.send(`query_wiki Durable Streams`, { from: `user` })
+    await parent.send(`query_wiki Durable Streams`)
     const parentHistory = await parent.waitFor(
       (history) =>
         history.some(
@@ -5505,18 +5435,13 @@ describe(`K: wiki coordination`, () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-2`)
     const sharedState = t.sharedState(`wiki-wiki-2`)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitForRun()
     await parent.waitForTypeCount(`state:children`, 2)
     await sharedState.waitForTypeCount(`shared:wiki_article`, 2)
 
     await parent.send(
-      `create_wiki Durable Streams :: History|Applications|Internals`,
-      {
-        from: `user`,
-      }
+      `create_wiki Durable Streams :: History|Applications|Internals`
     )
     const parentHistory = await parent.waitFor((history) => {
       const childKeys = new Set(
@@ -5596,13 +5521,11 @@ describe(`K: wiki coordination`, () => {
   it(`K3: get_wiki_status reports complete coverage after specialist articles land`, async () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-3`)
     const sharedState = t.sharedState(`wiki-wiki-3`)
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitForTypeCount(`state:children`, 2)
     await sharedState.waitForTypeCount(`shared:wiki_article`, 2)
 
-    await parent.send(`get_wiki_status`, { from: `user` })
+    await parent.send(`get_wiki_status`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5624,15 +5547,11 @@ describe(`K: wiki coordination`, () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-4`)
     const sharedState = t.sharedState(`wiki-wiki-4`)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitForTypeCount(`state:children`, 2)
     await sharedState.waitForTypeCount(`shared:wiki_article`, 2)
 
-    await parent.send(`create_wiki Ancient Rome :: Agriculture|Politics`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Ancient Rome :: Agriculture|Politics`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5675,7 +5594,7 @@ describe(`K: wiki coordination`, () => {
 
   it(`K5: query_wiki before any specialist articles exist returns the empty-state message`, async () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-5`)
-    await parent.send(`query_wiki Durable Streams`, { from: `user` })
+    await parent.send(`query_wiki Durable Streams`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5712,15 +5631,11 @@ describe(`K: wiki coordination`, () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-6`)
     const sharedState = t.sharedState(`wiki-wiki-6`)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitForTypeCount(`state:children`, 2)
     await sharedState.waitForTypeCount(`shared:wiki_article`, 2)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5752,7 +5667,7 @@ describe(`K: wiki coordination`, () => {
 
   it(`K7: get_wiki_status before creating a wiki reports the empty state`, async () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-7`)
-    await parent.send(`get_wiki_status`, { from: `user` })
+    await parent.send(`get_wiki_status`)
     const parentHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5774,9 +5689,7 @@ describe(`K: wiki coordination`, () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-8`)
     const sharedState = t.sharedState(`wiki-wiki-8`)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     const parentHistory = await parent.waitFor((history) => {
       const childKeys = new Set(
         history.events
@@ -5848,15 +5761,11 @@ describe(`K: wiki coordination`, () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-9`)
     const sharedState = t.sharedState(`wiki-wiki-9`)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitForTypeCount(`state:children`, 2)
     await sharedState.waitForTypeCount(`shared:wiki_article`, 2)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5883,21 +5792,16 @@ describe(`K: wiki coordination`, () => {
     const parent = await t.spawn(TYPES.k1Wiki, `wiki-10`)
     const sharedState = t.sharedState(`wiki-wiki-10`)
 
-    await parent.send(`create_wiki Durable Streams :: History|Applications`, {
-      from: `user`,
-    })
+    await parent.send(`create_wiki Durable Streams :: History|Applications`)
     await parent.waitForTypeCount(`state:children`, 2)
     await sharedState.waitForTypeCount(`shared:wiki_article`, 2)
 
     await parent.send(
-      `create_wiki Durable Streams :: History|Applications|Internals`,
-      {
-        from: `user`,
-      }
+      `create_wiki Durable Streams :: History|Applications|Internals`
     )
     await sharedState.waitForTypeCount(`shared:wiki_article`, 3)
 
-    await parent.send(`query_wiki Durable Streams`, { from: `user` })
+    await parent.send(`query_wiki Durable Streams`)
     const queryHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5931,7 +5835,7 @@ describe(`K: wiki coordination`, () => {
         `history-1:History Basics;internals-1:Internals Basics`,
     })
 
-    await parent.send(`get_wiki_status`, { from: `user` })
+    await parent.send(`get_wiki_status`)
     const statusHistory = await parent.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -5955,24 +5859,24 @@ describe(`L: reactive observation flows`, () => {
     const child = await t.spawn(TYPES.e1Child, `child-l1`)
     const watcher = await t.spawn(TYPES.l1Watcher, `watcher-l1`)
 
-    await watcher.send(`watch ${child.entityUrl}`, { from: `user` })
+    await watcher.send(`watch ${child.entityUrl}`)
     await watcher.waitForRun()
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForOperation(`observed_item`, `insert`)
     await watcher.waitForTypeCount(`state:notice`, 1)
 
-    await child.send(`update item-1 beta`, { from: `user` })
+    await child.send(`update item-1 beta`)
     await child.waitForOperation(`observed_item`, `update`)
     await watcher.waitForTypeCount(`state:notice`, 2)
 
-    await child.send(`delete item-1`, { from: `user` })
+    await child.send(`delete item-1`)
     await child.waitForOperation(`observed_item`, `delete`)
     await watcher.waitForTypeCount(`state:notice`, 3)
 
     const watcherHistory = await watcher.history()
 
-    await watcher.send(`report`, { from: `user` })
+    await watcher.send(`report`)
     const expectedReport =
       `insert:items:item-1:alpha|` +
       `update:items:item-1:alpha->beta|` +
@@ -6016,15 +5920,15 @@ describe(`L: reactive observation flows`, () => {
     const child = await t.spawn(TYPES.e1Child, `child-l2`)
     const watcher = await t.spawn(TYPES.l1Watcher, `watcher-l2`)
 
-    await watcher.send(`watch ${child.entityUrl}`, { from: `user` })
+    await watcher.send(`watch ${child.entityUrl}`)
     await watcher.waitForRun()
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForRun()
     await watcher.waitForTypeCount(`state:notice`, 1)
 
     const reportDelta = `insert:items:item-1:alpha`
-    await watcher.send(`report`, { from: `user` })
+    await watcher.send(`report`)
     await watcher.waitFor(
       (history) =>
         history.count(
@@ -6034,7 +5938,7 @@ describe(`L: reactive observation flows`, () => {
     )
     await t.waitForSettled(60_000)
 
-    await watcher.send(`report`, { from: `user` })
+    await watcher.send(`report`)
     const watcherHistory = await watcher.waitFor(
       (history) =>
         history.count(
@@ -6075,16 +5979,16 @@ describe(`L: reactive observation flows`, () => {
     const child = await t.spawn(TYPES.e1Child, `child-l3`)
     const watcher = await t.spawn(TYPES.l1Watcher, `watcher-l3`)
 
-    await watcher.send(`watch ${child.entityUrl}`, { from: `user` })
+    await watcher.send(`watch ${child.entityUrl}`)
     await watcher.waitForRun()
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForRun()
     await watcher.waitForTypeCount(`state:notice`, 1)
     await t.waitForSettled(60_000)
 
     const initialReportDelta = `insert:items:item-1:alpha`
-    await watcher.send(`report`, { from: `user` })
+    await watcher.send(`report`)
     await watcher.waitFor(
       (history) =>
         history.count(
@@ -6095,13 +5999,13 @@ describe(`L: reactive observation flows`, () => {
     )
     await watcher.waitForSettled(60_000)
 
-    await child.send(`delete item-1`, { from: `user` })
+    await child.send(`delete item-1`)
     await child.waitForOperation(`observed_item`, `delete`)
     await watcher.waitForTypeCount(`state:notice`, 2, { timeoutMs: 30_000 })
     await t.waitForSettled(60_000)
 
     const finalReportDelta = `insert:items:item-1:alpha|delete:items:item-1:alpha`
-    await watcher.send(`report`, { from: `user` })
+    await watcher.send(`report`)
     await watcher.waitFor(
       (history) =>
         history.count(
@@ -6110,7 +6014,7 @@ describe(`L: reactive observation flows`, () => {
         ) >= 1
     )
 
-    await watcher.send(`report`, { from: `user` })
+    await watcher.send(`report`)
     const watcherHistory = await watcher.waitFor(
       (history) =>
         history.count(
@@ -6138,10 +6042,10 @@ describe(`L: reactive observation flows`, () => {
     const child = await t.spawn(TYPES.e1Child, `child-l4`)
     const watcher = await t.spawn(TYPES.l1Watcher, `watcher-l4`)
 
-    await watcher.send(`watch ${child.entityUrl}`, { from: `user` })
+    await watcher.send(`watch ${child.entityUrl}`)
     await watcher.waitForRun()
 
-    await watcher.send(`watch ${child.entityUrl}`, { from: `user` })
+    await watcher.send(`watch ${child.entityUrl}`)
     const postSecondWatch = await watcher.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -6168,7 +6072,7 @@ describe(`L: reactive observation flows`, () => {
       )
     ).toHaveLength(1)
 
-    await child.send(`insert item-1 alpha`, { from: `user` })
+    await child.send(`insert item-1 alpha`)
     await child.waitForRun()
     const watcherHistory = await watcher.waitForTypeCount(`state:notice`, 1)
 
@@ -6189,9 +6093,9 @@ describe(`L: reactive observation flows`, () => {
     const childB = await t.spawn(TYPES.e1Child, `child-l5-b`)
     const watcher = await t.spawn(TYPES.l1Watcher, `watcher-l5`)
 
-    await watcher.send(`watch ${childA.entityUrl}`, { from: `user` })
+    await watcher.send(`watch ${childA.entityUrl}`)
     await watcher.waitForRun()
-    await watcher.send(`watch ${childB.entityUrl}`, { from: `user` })
+    await watcher.send(`watch ${childB.entityUrl}`)
     await watcher.waitFor((history) =>
       history.some(
         `text_delta`,
@@ -6201,11 +6105,11 @@ describe(`L: reactive observation flows`, () => {
       )
     )
 
-    await childA.send(`insert item-a alpha`, { from: `user` })
+    await childA.send(`insert item-a alpha`)
     await childA.waitForRun()
     await watcher.waitForTypeCount(`state:notice`, 1)
 
-    await childB.send(`insert item-b beta`, { from: `user` })
+    await childB.send(`insert item-b beta`)
     await childB.waitForRun()
 
     const watcherHistory = await watcher.waitForTypeCount(`state:notice`, 2)
@@ -6237,7 +6141,7 @@ describe(`N: wake primitives verification`, () => {
     const parent = await t.spawn(TYPES.n1WakeTypeParent, `wake-type-1`)
 
     // First wake: parent spawns and observes child with wake
-    await parent.send(`spawn_and_observe wt-child-1`, { from: `user` })
+    await parent.send(`spawn_and_observe wt-child-1`)
     await parent.waitForRun()
 
     // The child should complete its run
@@ -6283,18 +6187,18 @@ describe(`N: wake primitives verification`, () => {
     const writer = await t.spawn(TYPES.n2SsWakeWriter, `ss-writer-n2`, {
       ssId,
     })
-    await writer.send(`write item-1 alpha`, { from: `user` })
+    await writer.send(`write item-1 alpha`)
     await writer.waitForRun()
 
     // Spawn the subscriber that connects to the shared state with wake
     const subscriber = await t.spawn(TYPES.n2SsWakeSubscriber, `ss-sub-n2`, {
       ssId,
     })
-    await subscriber.send(`check`, { from: `user` })
+    await subscriber.send(`check`)
     await subscriber.waitForRun()
 
     // Now have the writer write again — this should trigger a wake for the subscriber
-    await writer.send(`write item-2 beta`, { from: `user` })
+    await writer.send(`write item-2 beta`)
 
     // Wait for the subscriber to get a wake_log entry with wakeType === "wake"
     // (indicating the handler ran due to a shared-state wake).
@@ -6319,7 +6223,7 @@ describe(`N: wake primitives verification`, () => {
 
   it(`N4: ctx.agent.run receives the wake payload and performs a second run on child completion`, async () => {
     const parent = await t.spawn(TYPES.n3IdleWakeParent, `wake-agent-1`)
-    await parent.send(`spawn wake-agent-child-1`, { from: `user` })
+    await parent.send(`spawn wake-agent-child-1`)
     await parent.waitForRun()
 
     const child = t.entity(`/${TYPES.n3IdleWakeChild}/wake-agent-child-1`)
@@ -6346,7 +6250,7 @@ describe(`N: wake primitives verification`, () => {
   it(`N5: runFinished wake records the finished child on the parent stream`, async () => {
     const parentId = `wake-summary-1`
     const parent = await t.spawn(TYPES.n4WakeSummaryParent, parentId)
-    await parent.send(`spawn trio`, { from: `user` })
+    await parent.send(`spawn trio`)
     await parent.waitForRun()
 
     const alphaUrl = `/${TYPES.n4WakeSummaryChild}/${parentId}-alpha`
@@ -6404,7 +6308,7 @@ describe(`N: wake primitives verification`, () => {
     // 2. The re-wake observes wake.type === "wake".
 
     const parent = await t.spawn(TYPES.n1WakeTypeParent, `idle-test-1`)
-    await parent.send(`spawn_and_observe idle-test-child-1`, { from: `user` })
+    await parent.send(`spawn_and_observe idle-test-child-1`)
     await parent.waitForRun()
 
     const child = t.entity(`/${TYPES.n1WakeTypeChild}/idle-test-child-1`)

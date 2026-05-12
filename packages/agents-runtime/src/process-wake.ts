@@ -293,6 +293,7 @@ export async function processWebhookWake(
     baseUrl,
     headers: serverHeaders,
     writeTokenHeader: config.claimTokenHeader,
+    principalKey: notification.principal?.key ?? undefined,
     track: <T>(promise: Promise<T>) => {
       const httpT0 = performance.now()
       const tracked = io.track(promise)
@@ -806,7 +807,6 @@ export async function processWebhookWake(
       void serverClient
         .sendEntityMessage({
           targetUrl: send.targetUrl,
-          from: entityUrl,
           payload: send.payload,
           type: send.type,
           afterMs: send.afterMs,
@@ -1390,6 +1390,7 @@ export async function processWebhookWake(
           (notification.entity as { tags?: Record<string, string> } | undefined)
             ?.tags ?? {}
         ),
+        principal: notification.principal,
         args: entityArgs,
         db,
         state: setupCtx.state,

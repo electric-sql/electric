@@ -55,6 +55,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   wakeOffset: string
   firstWake: boolean
   tags: Readonly<Record<string, string>>
+  principal?: HandlerContext[`principal`]
   args: Readonly<Record<string, unknown>>
   db: EntityStreamDBWithActions
   state: TState
@@ -497,6 +498,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
   const ctx: DebugHandlerContext<TState> = {
     firstWake: config.firstWake,
     tags: config.tags,
+    principal: config.principal,
     entityUrl: config.entityUrl,
     entityType: config.entityType,
     args: config.args,
