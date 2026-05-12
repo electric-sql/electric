@@ -27,10 +27,10 @@ import {
   ErrCodeUnknownMessageType,
 } from './electric-agents-types.js'
 import { parseDispatchPolicy } from './dispatch-policy-schema.js'
+import { applyTypeDefaultSubscriptionScope } from './routing/dispatch-policy.js'
 import {
   isBuiltInSystemPrincipalUrl,
-  parsePrincipalKey,
-  principalKeyFromUrl,
+  principalFromCreatedBy,
   principalIdentityStateSchema,
   principalUpdateIdentityMessageSchema,
 } from './principal.js'
@@ -51,7 +51,6 @@ import type { SchemaValidator } from './electric-agents/schema-validator.js'
 import type { StreamClient } from './stream-client.js'
 import type {
   DispatchPolicy,
-  DispatchTarget,
   ElectricAgentsEntity,
   ElectricAgentsEntityType,
   RegisterEntityTypeRequest,
@@ -99,33 +98,6 @@ type ForkResult = {
 const DEFAULT_FORK_WAIT_TIMEOUT_MS = 120_000
 const DEFAULT_FORK_WAIT_POLL_MS = 250
 
-function applyTypeDefaultSubscriptionScope(
-  policy: DispatchPolicy,
-  typeDefault: DispatchPolicy | undefined
-): DispatchPolicy {
-  const target = policy.targets[0]
-  const defaultTarget = typeDefault?.targets[0]
-  if (!target || !defaultTarget?.subscription_id) return policy
-  if (!sameDispatchDestination(target, defaultTarget)) return policy
-  if (target.subscription_id === defaultTarget.subscription_id) return policy
-
-  return {
-    targets: [{ ...target, subscription_id: defaultTarget.subscription_id }],
-  }
-}
-
-function sameDispatchDestination(
-  a: DispatchTarget,
-  b: DispatchTarget
-): boolean {
-  if (a.type !== b.type) return false
-  if (a.type === `runner` && b.type === `runner`) {
-    return a.runnerId === b.runnerId
-  }
-  if (a.type === `webhook` && b.type === `webhook`) return a.url === b.url
-  return false
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -142,23 +114,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function cloneRecord<T extends Record<string, unknown>>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
-}
-
-function principalFromCreatedBy(
-  createdBy: string | undefined
-):
-  | { url: string; key?: string | null; kind?: string; id?: string }
-  | undefined {
-  if (!createdBy) return undefined
-  const key = principalKeyFromUrl(createdBy)
-  if (!key) return { url: createdBy, key: null }
-  const principal = parsePrincipalKey(key)
-  return {
-    url: principal.url,
-    key: principal.key,
-    kind: principal.kind,
-    id: principal.id,
-  }
 }
 
 /**

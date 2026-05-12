@@ -82,7 +82,7 @@ export async function backfillEntityDispatchPolicy(
   )
 }
 
-function applyTypeDefaultSubscriptionScope(
+export function applyTypeDefaultSubscriptionScope(
   policy: DispatchPolicy,
   typeDefault: DispatchPolicy | undefined
 ): DispatchPolicy {

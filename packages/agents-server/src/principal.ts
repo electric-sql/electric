@@ -69,6 +69,23 @@ export function isBuiltInSystemPrincipalUrl(url: string | undefined): boolean {
   }
 }
 
+export function principalFromCreatedBy(
+  createdBy: string | undefined
+):
+  | { url: string; key?: string | null; kind?: string; id?: string }
+  | undefined {
+  if (!createdBy) return undefined
+  const key = principalKeyFromUrl(createdBy)
+  if (!key) return { url: createdBy, key: null }
+  const principal = parsePrincipalKey(key)
+  return {
+    url: principal.url,
+    key: principal.key,
+    kind: principal.kind,
+    id: principal.id,
+  }
+}
+
 export const principalIdentityStateSchema = {
   type: `object`,
   additionalProperties: false,

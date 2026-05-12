@@ -13,7 +13,7 @@ import {
 import { routeBody, withSchema } from './schema.js'
 import { subscriptionIdForDispatchTarget } from './dispatch-policy.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
-import { parsePrincipalKey, principalKeyFromUrl } from '../principal.js'
+import { principalFromCreatedBy } from '../principal.js'
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
@@ -411,22 +411,5 @@ async function notificationFromClaim(
       createdBy: entity.created_by,
     },
     principal: principalFromCreatedBy(entity.created_by),
-  }
-}
-
-function principalFromCreatedBy(
-  createdBy: string | undefined
-):
-  | { url: string; key?: string | null; kind?: string; id?: string }
-  | undefined {
-  if (!createdBy) return undefined
-  const key = principalKeyFromUrl(createdBy)
-  if (!key) return { url: createdBy, key: null }
-  const principal = parsePrincipalKey(key)
-  return {
-    url: principal.url,
-    key: principal.key,
-    kind: principal.kind,
-    id: principal.id,
   }
 }
