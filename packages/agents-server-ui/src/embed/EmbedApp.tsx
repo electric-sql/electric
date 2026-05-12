@@ -16,6 +16,7 @@ import { ThemeProvider } from '../ui/ThemeProvider'
 import { ChatLogView, ChatView } from '../components/views/ChatView'
 import { StateExplorerView } from '../components/views/StateExplorerView'
 import styles from './EmbedApp.module.css'
+import type { OptimisticInboxMessage } from '../lib/sendMessage'
 
 const TILE_ID = `mobile-embed`
 
@@ -57,6 +58,7 @@ type EmbedState = {
   view: EmbedView
   theme: EmbedTheme
   scrollToBottomSignal?: number
+  inlineQueuedMessages?: Array<OptimisticInboxMessage>
 }
 
 const EmbedStateContext = createContext<EmbedState | null>(null)
@@ -142,6 +144,7 @@ function EmbedSurface({ state }: { state: EmbedState }): ReactElement {
       view={state.view}
       serverUrl={state.serverUrl}
       scrollToBottomSignal={state.scrollToBottomSignal}
+      inlineQueuedMessages={state.inlineQueuedMessages}
     />
   )
 }
@@ -151,11 +154,13 @@ function EntityHost({
   view,
   serverUrl,
   scrollToBottomSignal,
+  inlineQueuedMessages,
 }: {
   entityUrl: string
   view: EmbedView
   serverUrl: string
   scrollToBottomSignal?: number
+  inlineQueuedMessages?: Array<OptimisticInboxMessage>
 }): ReactElement {
   const { entitiesCollection } = useElectricAgents()
   const { data: matches = [], isLoading } = useLiveQuery(
@@ -194,7 +199,11 @@ function EntityHost({
   if (view === `chat-log`) {
     return (
       <div className={styles.column}>
-        <ChatLogView {...props} scrollToBottomSignal={scrollToBottomSignal} />
+        <ChatLogView
+          {...props}
+          scrollToBottomSignal={scrollToBottomSignal}
+          inlineQueuedMessages={inlineQueuedMessages}
+        />
       </div>
     )
   }
