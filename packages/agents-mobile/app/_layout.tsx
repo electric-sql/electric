@@ -16,6 +16,7 @@ import {
   MobileAppStateProvider,
   useMobileAppState,
 } from '../src/lib/MobileAppState'
+import { CloudAuthProvider } from '../src/lib/CloudAuthContext'
 
 export default function RootLayout(): React.ReactElement {
   return (
@@ -23,7 +24,9 @@ export default function RootLayout(): React.ReactElement {
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
           <MobileAppStateProvider>
-            <RootNavigator />
+            <CloudAuthProvider>
+              <RootNavigator />
+            </CloudAuthProvider>
           </MobileAppStateProvider>
         </ThemeProvider>
       </SafeAreaProvider>
