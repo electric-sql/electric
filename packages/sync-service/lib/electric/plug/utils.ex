@@ -74,11 +74,21 @@ defmodule Electric.Plug.Utils do
     long_poll_timeout_sec = div(long_poll_timeout_ms, 1000)
     diff_in_seconds = DateTime.diff(DateTime.utc_now(), @oct9th2024, :second)
     next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
+    prev_int = parse_prev_interval(prev_interval)
 
-    if "#{next_interval}" == prev_interval do
-      next_interval + Enum.random(1..3_600)
-    else
+    if next_interval > prev_int do
       next_interval
+    else
+      prev_int + Enum.random(1..3_600)
+    end
+  end
+
+  defp parse_prev_interval(nil), do: 0
+
+  defp parse_prev_interval(prev_interval) when is_binary(prev_interval) do
+    case Integer.parse(prev_interval) do
+      {n, ""} -> n
+      _ -> 0
     end
   end
 

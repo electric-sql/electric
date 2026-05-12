@@ -231,5 +231,35 @@ defmodule Electric.Plug.UtilsTest do
                "#{expected_interval}"
              ) != expected_interval
     end
+
+    test "never returns a cursor smaller than prev_interval" do
+      # Reproduces a 2-cycle observed in production: when a client polls with
+      # a jittered cursor (bucket + delta) and the wall clock has not yet
+      # crossed that jittered value, the function used to return the plain
+      # bucket value — i.e. a cursor smaller than the one the client sent.
+      # Combined with `Cache-Control: public, max-age=<sse_timeout-1>` on the
+      # response, two cached entries would end up pointing at each other and
+      # the client would bounce between them at line rate.
+      long_poll_timeout_ms = 20_000
+      long_poll_timeout_sec = div(long_poll_timeout_ms, 1000)
+
+      now = DateTime.utc_now()
+      oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+      diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
+      current_bucket = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
+
+      # Simulate a jittered prev cursor that sits ahead of the current bucket
+      # for every possible delta the jitter branch can produce (1..3_600).
+      for delta <- 1..3_600 do
+        prev = current_bucket + delta
+
+        result =
+          Utils.get_next_interval_timestamp(long_poll_timeout_ms, "#{prev}")
+
+        assert result > prev,
+               "cursor went backward: prev=#{prev}, result=#{result}, " <>
+                 "current_bucket=#{current_bucket}"
+      end
+    end
   end
 end
