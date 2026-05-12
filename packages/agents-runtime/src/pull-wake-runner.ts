@@ -32,7 +32,7 @@ export interface PullWakeRunnerConfig {
   onError?: (error: Error) => boolean | void
   streamFactory?: (opts: {
     url: string
-    headers?: Record<string, string> | (() => Promise<Record<string, string>>)
+    headers?: Record<string, string>
     offset?: string
     signal: AbortSignal
   }) => Promise<PullWakeStreamResponse>
@@ -204,7 +204,7 @@ export function createPullWakeRunner(
     try {
       response = await streamFactory({
         url: wakeUrl,
-        headers: resolveHeaders,
+        headers: await resolveHeaders(),
         offset: currentOffset,
         signal,
       })

@@ -3,8 +3,22 @@ import { createPullWakeRunner } from '../src/pull-wake-runner'
 import type { PullWakeEvent } from '../src/pull-wake-runner'
 import type { WakeNotification } from '../src/types'
 
+const durableStreamMocks = vi.hoisted(() => {
+  const stream = vi.fn()
+  const DurableStream = vi.fn(function (_opts: unknown) {
+    return { stream }
+  })
+  return { DurableStream, stream }
+})
+
+vi.mock(`@durable-streams/client`, () => ({
+  DurableStream: durableStreamMocks.DurableStream,
+}))
+
 describe(`createPullWakeRunner`, () => {
   afterEach(() => {
+    durableStreamMocks.DurableStream.mockClear()
+    durableStreamMocks.stream.mockReset()
     vi.unstubAllGlobals()
   })
 
@@ -184,5 +198,50 @@ describe(`createPullWakeRunner`, () => {
       `http://server/root/_electric/runners/runner-1/claim?secret=s1`,
       expect.objectContaining({ method: `POST` })
     )
+  })
+
+  it(`resolves async headers before opening the durable stream`, async () => {
+    durableStreamMocks.stream.mockResolvedValueOnce({
+      offset: `42`,
+      async *jsonStream() {},
+      closed: Promise.resolve(),
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal(`fetch`, fetchMock)
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: {
+        dispatchWake: vi.fn(),
+        drainWakes: vi.fn(),
+        abortWakes: vi.fn(),
+      },
+      headers: async () => ({
+        Authorization: `Bearer tenant-token`,
+        'X-Tenant': `tenant-a`,
+      }),
+      heartbeatIntervalMs: 0,
+    })
+
+    runner.start()
+    await runner.waitForStopped()
+
+    expect(durableStreamMocks.DurableStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: `http://server/runners/runner-1/wake`,
+        headers: {
+          authorization: `Bearer tenant-token`,
+          'x-tenant': `tenant-a`,
+        },
+      })
+    )
+    expect(durableStreamMocks.stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        live: true,
+        json: true,
+      })
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
