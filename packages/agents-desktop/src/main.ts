@@ -119,6 +119,16 @@ const TRAY_ICON_2X_PATH = path.resolve(
 const APP_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/icon.png`)
 const APP_DISPLAY_NAME = `Electric Agents`
 const MAX_CONNECTIONS_PER_HOST = `256`
+const DESKTOP_USER_DATA_DIR =
+  process.env.ELECTRIC_DESKTOP_USER_DATA_DIR?.trim() || null
+const INITIAL_SERVER_URL =
+  process.env.ELECTRIC_DESKTOP_SERVER_URL?.trim() ||
+  process.env.ELECTRIC_AGENTS_SERVER_URL?.trim() ||
+  null
+
+if (DESKTOP_USER_DATA_DIR) {
+  app.setPath(`userData`, path.resolve(DESKTOP_USER_DATA_DIR))
+}
 
 // Stable OAuth redirect base for MCP DCR (RFC 7591). The runtime
 // listens on an ephemeral port but the redirect URI must be constant
@@ -476,6 +486,47 @@ function applyApiKeys(): void {
   )
 }
 
+function initialServerFromEnv(): ServerConfig | null {
+  if (!INITIAL_SERVER_URL) return null
+  try {
+    const url = new URL(INITIAL_SERVER_URL)
+    if (url.protocol !== `http:` && url.protocol !== `https:`) {
+      console.warn(
+        `[agents-desktop] Ignoring ELECTRIC_DESKTOP_SERVER_URL with unsupported protocol: ${INITIAL_SERVER_URL}`
+      )
+      return null
+    }
+    url.hash = ``
+    url.search = ``
+    return {
+      name: `Environment server`,
+      url: url.toString().replace(/\/$/, ``),
+    }
+  } catch {
+    console.warn(
+      `[agents-desktop] Ignoring invalid ELECTRIC_DESKTOP_SERVER_URL: ${INITIAL_SERVER_URL}`
+    )
+    return null
+  }
+}
+
+async function applyInitialServerFromEnv(): Promise<void> {
+  const server = initialServerFromEnv()
+  if (!server) return
+
+  const existing = settings.servers.find((entry) => entry.url === server.url)
+  const next = existing ?? server
+  if (!existing) {
+    settings.servers = [...settings.servers, next]
+  }
+  settings.activeServer = next
+  state = {
+    ...state,
+    activeServer: settings.activeServer,
+  }
+  await saveSettings()
+}
+
 async function loadSettings(): Promise<void> {
   let shouldSaveSettings = false
   try {
@@ -520,6 +571,7 @@ async function loadSettings(): Promise<void> {
     pullWakeRunnerId: PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId ?? null,
   }
 
+  await applyInitialServerFromEnv()
   applyApiKeys()
 }
 
