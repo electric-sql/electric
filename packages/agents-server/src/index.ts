@@ -8,6 +8,8 @@ export type {
 } from './host.js'
 export { StreamClient } from './stream-client.js'
 export type {
+  DurableStreamsBearerProvider,
+  StreamClientOptions,
   SubscriptionClaimResponse,
   SubscriptionCreateInput,
   SubscriptionResponse,

@@ -6,6 +6,13 @@ import {
 } from '@durable-streams/client'
 import { ErrCodeNotFound } from './electric-agents-types.js'
 import { ATTR, injectTraceHeaders, withSpan } from './tracing.js'
+import type { HeadersRecord, MaybePromise } from '@durable-streams/client'
+
+export type DurableStreamsBearerProvider = string | (() => MaybePromise<string>)
+
+export interface StreamClientOptions {
+  bearer?: DurableStreamsBearerProvider
+}
 
 export interface StreamAppendResult {
   offset: string
@@ -99,6 +106,39 @@ export class DurableStreamsSubscriptionError extends Error {
   }
 }
 
+async function resolveDurableStreamsBearer(
+  bearer: DurableStreamsBearerProvider | undefined
+): Promise<string | undefined> {
+  if (!bearer) return undefined
+  const value = typeof bearer === `function` ? await bearer() : bearer
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  return /^Bearer\s+/i.test(trimmed) ? trimmed : `Bearer ${trimmed}`
+}
+
+export async function applyDurableStreamsBearer(
+  headers: Headers,
+  bearer: DurableStreamsBearerProvider | undefined,
+  opts: { overwrite?: boolean } = {}
+): Promise<void> {
+  if (!bearer) return
+  if (!opts.overwrite && headers.has(`authorization`)) return
+  const value = await resolveDurableStreamsBearer(bearer)
+  if (value) {
+    headers.set(`authorization`, value)
+  }
+}
+
+function durableStreamsBearerHeaders(
+  bearer: DurableStreamsBearerProvider | undefined
+): HeadersRecord | undefined {
+  if (!bearer) return undefined
+  return {
+    authorization: async () =>
+      (await resolveDurableStreamsBearer(bearer)) ?? ``,
+  }
+}
+
 export function durableStreamsServiceUrl(
   baseUrl: string,
   serviceId: string
@@ -138,10 +178,28 @@ function normalizeSubscriptionPath(path: string): string {
 }
 
 export class StreamClient {
-  constructor(readonly baseUrl: string) {}
+  constructor(
+    readonly baseUrl: string,
+    readonly options: StreamClientOptions = {}
+  ) {}
 
   private streamUrl(path: string): string {
     return `${this.baseUrl}${path}`
+  }
+
+  private streamHeaders(): HeadersRecord | undefined {
+    return durableStreamsBearerHeaders(this.options.bearer)
+  }
+
+  private async requestHeaders(
+    init?: HeadersInit,
+    opts: { overwriteBearer?: boolean } = {}
+  ): Promise<Headers> {
+    const headers = new Headers(init)
+    await applyDurableStreamsBearer(headers, this.options.bearer, {
+      overwrite: opts.overwriteBearer,
+    })
+    return headers
   }
 
   private subscriptionServiceId(): string | null {
@@ -205,6 +263,7 @@ export class StreamClient {
       })
       await DurableStream.create({
         url: this.streamUrl(path),
+        headers: this.streamHeaders(),
         contentType: opts.contentType,
         body: opts.body,
       })
@@ -225,7 +284,7 @@ export class StreamClient {
 
       const response = await fetch(this.streamUrl(path), {
         method: `PUT`,
-        headers,
+        headers: await this.requestHeaders(headers),
       })
 
       if (response.ok) return
@@ -248,6 +307,7 @@ export class StreamClient {
       })
       const handle = new DurableStream({
         url: this.streamUrl(path),
+        headers: this.streamHeaders(),
         contentType: `application/json`,
         batching: false,
       })
@@ -274,6 +334,7 @@ export class StreamClient {
       })
       const stream = new DurableStream({
         url: this.streamUrl(path),
+        headers: this.streamHeaders(),
         contentType: `application/json`,
       })
       const producer = new IdempotentProducer(stream, opts.producerId, {
@@ -308,7 +369,7 @@ export class StreamClient {
       injectTraceHeaders(headers)
       const response = await fetch(this.streamUrl(path), {
         method: `POST`,
-        headers,
+        headers: await this.requestHeaders(headers),
         body: typeof data === `string` ? data : Buffer.from(data),
       })
 
@@ -328,7 +389,10 @@ export class StreamClient {
         [ATTR.STREAM_PATH]: path,
         [ATTR.STREAM_OP]: `read`,
       })
-      const handle = new DurableStream({ url: this.streamUrl(path) })
+      const handle = new DurableStream({
+        url: this.streamUrl(path),
+        headers: this.streamHeaders(),
+      })
       const response = await handle.stream({
         offset: fromOffset ?? `-1`,
         live: false,
@@ -377,7 +441,10 @@ export class StreamClient {
         [ATTR.STREAM_PATH]: path,
         [ATTR.STREAM_OP]: `readJson`,
       })
-      const handle = new DurableStream({ url: this.streamUrl(path) })
+      const handle = new DurableStream({
+        url: this.streamUrl(path),
+        headers: this.streamHeaders(),
+      })
       const response = await handle.stream<T>({
         offset: fromOffset ?? `-1`,
         live: false,
@@ -396,7 +463,10 @@ export class StreamClient {
         [ATTR.STREAM_PATH]: path,
         [ATTR.STREAM_OP]: `waitForMessages`,
       })
-      const handle = new DurableStream({ url: this.streamUrl(path) })
+      const handle = new DurableStream({
+        url: this.streamUrl(path),
+        headers: this.streamHeaders(),
+      })
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -457,7 +527,10 @@ export class StreamClient {
   }
 
   async delete(path: string): Promise<void> {
-    await DurableStream.delete({ url: this.streamUrl(path) })
+    await DurableStream.delete({
+      url: this.streamUrl(path),
+      headers: this.streamHeaders(),
+    })
   }
 
   async ensure(path: string, opts: { contentType: string }): Promise<void> {
@@ -479,7 +552,10 @@ export class StreamClient {
 
   async exists(path: string): Promise<boolean> {
     try {
-      const result = await DurableStream.head({ url: this.streamUrl(path) })
+      const result = await DurableStream.head({
+        url: this.streamUrl(path),
+        headers: this.streamHeaders(),
+      })
       return result.exists
     } catch (err) {
       if (isNotFoundError(err)) {
@@ -510,7 +586,9 @@ export class StreamClient {
   ): Promise<SubscriptionResponse> {
     const res = await fetch(this.subscriptionUrl(subscriptionId), {
       method: `PUT`,
-      headers: { 'content-type': `application/json` },
+      headers: await this.requestHeaders({
+        'content-type': `application/json`,
+      }),
       body: JSON.stringify({
         ...input,
         pattern:
@@ -538,6 +616,7 @@ export class StreamClient {
   ): Promise<SubscriptionResponse | null> {
     const res = await fetch(this.subscriptionUrl(subscriptionId), {
       method: `GET`,
+      headers: await this.requestHeaders(),
     })
     if (res.status === 404) return null
     return await this.subscriptionJson(res, `Subscription query failed`)
@@ -546,6 +625,7 @@ export class StreamClient {
   async deleteSubscription(subscriptionId: string): Promise<void> {
     const res = await fetch(this.subscriptionUrl(subscriptionId), {
       method: `DELETE`,
+      headers: await this.requestHeaders(),
     })
     if (res.status === 404 || res.status === 204) return
     if (!res.ok) {
@@ -563,7 +643,9 @@ export class StreamClient {
       this.subscriptionChildUrl(subscriptionId, `streams`),
       {
         method: `POST`,
-        headers: { 'content-type': `application/json` },
+        headers: await this.requestHeaders({
+          'content-type': `application/json`,
+        }),
         body: JSON.stringify({
           streams: streams.map((stream) =>
             this.backendSubscriptionPath(
@@ -588,7 +670,7 @@ export class StreamClient {
           normalizeSubscriptionStreamPath(streamPath)
         )
       ),
-      { method: `DELETE` }
+      { method: `DELETE`, headers: await this.requestHeaders() }
     )
     if (res.status === 404 || res.status === 204) return
     if (!res.ok) {
@@ -606,7 +688,9 @@ export class StreamClient {
       this.subscriptionChildUrl(subscriptionId, `claim`),
       {
         method: `POST`,
-        headers: { 'content-type': `application/json` },
+        headers: await this.requestHeaders({
+          'content-type': `application/json`,
+        }),
         body: JSON.stringify({ worker }),
       }
     )
@@ -624,10 +708,10 @@ export class StreamClient {
   ): Promise<SubscriptionResponse> {
     const res = await fetch(this.subscriptionChildUrl(subscriptionId, `ack`), {
       method: `POST`,
-      headers: {
+      headers: await this.requestHeaders({
         'content-type': `application/json`,
         authorization: `Bearer ${token}`,
-      },
+      }),
       body: JSON.stringify(this.subscriptionRequestBody(body)),
     })
     return await this.subscriptionJson(res, `Subscription ack failed`)
@@ -642,10 +726,10 @@ export class StreamClient {
       this.subscriptionChildUrl(subscriptionId, `release`),
       {
         method: `POST`,
-        headers: {
+        headers: await this.requestHeaders({
           'content-type': `application/json`,
           authorization: `Bearer ${token}`,
-        },
+        }),
         body: JSON.stringify(this.subscriptionRequestBody(body)),
       }
     )
@@ -745,7 +829,7 @@ export class StreamClient {
   ): Promise<ConsumerStateResponse | null> {
     const res = await fetch(
       `${this.baseUrl}/consumers/${encodeURIComponent(consumerId)}`,
-      { method: `GET` }
+      { method: `GET`, headers: await this.requestHeaders() }
     )
     if (res.status === 404) return null
     if (!res.ok) {

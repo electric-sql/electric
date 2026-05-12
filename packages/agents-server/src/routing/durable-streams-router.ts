@@ -93,6 +93,12 @@ async function forwardToDurableStreams(
     },
     body: requestBody,
     durableStreamsUrl: ctx.durableStreamsUrl,
+    durableStreamsBearer: ctx.durableStreamsBearer,
+    durableStreamsBearerMode: usesSubscriptionScopedBearer(
+      urlOverride ?? request.url
+    )
+      ? `if-missing`
+      : `overwrite`,
     durableStreamsRouting: ctx.durableStreamsRouting,
     serviceId: ctx.service,
     dispatcher: ctx.durableStreamsDispatcher,
@@ -109,6 +115,13 @@ function subscriptionIdFromPath(pathname: string): string | null {
 
 function isSubscriptionBasePath(pathname: string): boolean {
   return /^\/v1\/stream-meta\/subscriptions\/[^/]+\/?$/.test(pathname)
+}
+
+function usesSubscriptionScopedBearer(requestUrl: string): boolean {
+  const pathname = new URL(requestUrl, `http://localhost`).pathname
+  return /^\/v1\/stream-meta\/subscriptions\/[^/]+\/(?:ack|release|callback)\/?$/.test(
+    pathname
+  )
 }
 
 function rewriteSubscriptionBodyForBackend(
@@ -362,6 +375,8 @@ async function streamAppend(
         },
         body,
         durableStreamsUrl: ctx.durableStreamsUrl,
+        durableStreamsBearer: ctx.durableStreamsBearer,
+        durableStreamsBearerMode: `overwrite`,
         durableStreamsRouting: ctx.durableStreamsRouting,
         serviceId: ctx.service,
         dispatcher: ctx.durableStreamsDispatcher,

@@ -6,6 +6,7 @@ import type { ElectricAgentsTenantRuntime } from '../runtime.js'
 import type { StreamClient } from '../stream-client.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { AuthenticatedRequestUser } from '../electric-agents-types.js'
+import type { DurableStreamsBearerProvider } from '../stream-client.js'
 
 /**
  * Per-request tenant context passed through every router and handler.
@@ -19,6 +20,7 @@ export interface TenantContext {
   publicUrl: string
   localUrl?: string
   durableStreamsUrl: string
+  durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   durableStreamsDispatcher: Agent
   electricUrl?: string

@@ -8,10 +8,12 @@ import { TagStreamOutboxDrainer } from './tag-stream-outbox-drainer.js'
 import { DEFAULT_TENANT_ID, UnregisteredTenantError } from './tenant.js'
 import { WakeRegistry } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
+import type { DurableStreamsBearerProvider } from './stream-client.js'
 
 export interface AgentsHostTenantConfig {
   serviceId: string
   durableStreamsUrl?: string
+  durableStreamsBearer?: DurableStreamsBearerProvider
   streamClient?: StreamClient
 }
 
@@ -308,7 +310,8 @@ export class AgentsHost {
     if (config.streamClient) return config.streamClient
     if (config.durableStreamsUrl) {
       return new StreamClient(
-        durableStreamsServiceUrl(config.durableStreamsUrl, config.serviceId)
+        durableStreamsServiceUrl(config.durableStreamsUrl, config.serviceId),
+        { bearer: config.durableStreamsBearer }
       )
     }
     throw new Error(

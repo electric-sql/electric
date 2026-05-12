@@ -107,6 +107,10 @@ export function resolveElectricAgentsEntrypointOptions(
     `DURABLE_STREAMS_URL`,
     `STREAMS_URL`,
   ])
+  const durableStreamsBearer = readEnv(env, [
+    `ELECTRIC_AGENTS_DURABLE_STREAMS_BEARER`,
+    `DURABLE_STREAMS_BEARER`,
+  ])
   const postgresUrl = validateUrl(
     `Postgres URL`,
     readRequiredEnv(
@@ -134,6 +138,7 @@ export function resolveElectricAgentsEntrypointOptions(
     durableStreamsUrl: durableStreamsUrl
       ? validateUrl(`durable streams URL`, durableStreamsUrl)
       : undefined,
+    ...(durableStreamsBearer ? { durableStreamsBearer } : {}),
     postgresUrl,
     electricUrl: electricUrl
       ? validateUrl(`Electric URL`, electricUrl)

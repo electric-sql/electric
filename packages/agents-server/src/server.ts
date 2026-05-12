@@ -27,6 +27,7 @@ import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import type { OssServerContext } from './routing/oss-server-router.js'
 import type { StartedStandaloneAgentsRuntime } from './standalone-runtime.js'
+import type { DurableStreamsBearerProvider } from './stream-client.js'
 
 const MOCK_AGENT_HANDLER_PATH = `/_electric/mock-agent-handler`
 
@@ -35,6 +36,7 @@ export interface ElectricAgentsServerOptions {
   tenantId?: string
   baseUrl?: string
   durableStreamsUrl?: string
+  durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   durableStreamsServer?: DurableStreamTestServer
   port: number
@@ -123,7 +125,8 @@ export class ElectricAgentsServer {
     this.options = options
     this.streamClient = options.durableStreamsUrl
       ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId)
+          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId),
+          { bearer: options.durableStreamsBearer }
         )
       : null!
   }
@@ -163,7 +166,8 @@ export class ElectricAgentsServer {
         )
         this.options.durableStreamsUrl = streamsUrl
         this.streamClient = new StreamClient(
-          durableStreamsServiceUrl(streamsUrl, this.tenantId)
+          durableStreamsServiceUrl(streamsUrl, this.tenantId),
+          { bearer: this.options.durableStreamsBearer }
         )
       }
 
@@ -336,6 +340,7 @@ export class ElectricAgentsServer {
       publicUrl: this.publicUrl,
       localUrl: this._url,
       durableStreamsUrl: this.options.durableStreamsUrl,
+      durableStreamsBearer: this.options.durableStreamsBearer,
       durableStreamsRouting:
         this.options.durableStreamsRouting ??
         pathPrefixedSingleTenantDurableStreamsRoutingAdapter,

@@ -15,6 +15,7 @@ import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
+import type { DurableStreamsBearerProvider } from './stream-client.js'
 import type {
   CronTickPayload,
   DelayedSendPayload,
@@ -34,6 +35,7 @@ export interface ElectricAgentsTenantRuntimeOptions {
   db: DrizzleDB
   registry?: PostgresRegistry
   durableStreamsUrl?: string
+  durableStreamsBearer?: DurableStreamsBearerProvider
   streamClient?: StreamClient
   wakeRegistry: WakeRegistry
   scheduler: SchedulerClient
@@ -62,7 +64,8 @@ export class ElectricAgentsTenantRuntime {
       this.streamClient = options.streamClient
     } else if (options.durableStreamsUrl) {
       this.streamClient = new StreamClient(
-        durableStreamsServiceUrl(options.durableStreamsUrl, this.serviceId)
+        durableStreamsServiceUrl(options.durableStreamsUrl, this.serviceId),
+        { bearer: options.durableStreamsBearer }
       )
     } else {
       throw new Error(`Either durableStreamsUrl or streamClient is required`)

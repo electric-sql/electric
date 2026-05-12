@@ -31,6 +31,7 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
       resolveElectricAgentsEntrypointOptions(
         {
           ELECTRIC_AGENTS_DURABLE_STREAMS_URL: `http://streams:8787`,
+          ELECTRIC_AGENTS_DURABLE_STREAMS_BEARER: `streams-token`,
           DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
           ELECTRIC_URL: `http://electric:3000`,
           ELECTRIC_AGENTS_ELECTRIC_SECRET: `electric-secret`,
@@ -43,6 +44,7 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
       )
     ).toEqual({
       baseUrl: `https://electric-agents.example.com`,
+      durableStreamsBearer: `streams-token`,
       durableStreamsUrl: `http://streams:8787`,
       electricSecret: `electric-secret`,
       electricUrl: `http://electric:3000`,

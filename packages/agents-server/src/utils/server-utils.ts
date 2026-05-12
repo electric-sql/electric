@@ -5,8 +5,10 @@ import {
   electricUrlWithPath,
 } from './electric-url.js'
 import { resolveDurableStreamsRoutingAdapter } from '../routing/durable-streams-routing-adapter.js'
+import { applyDurableStreamsBearer } from '../stream-client.js'
 import type { Agent } from 'undici'
 import type { DurableStreamsRoutingAdapter } from '../routing/durable-streams-routing-adapter.js'
+import type { DurableStreamsBearerProvider } from '../stream-client.js'
 
 export function contentTypeForStaticFile(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase()
@@ -166,6 +168,8 @@ export async function forwardFetchRequest(options: {
   body?: Uint8Array
   dispatcher?: Agent
   route?: `stream` | `stream-meta`
+  durableStreamsBearer?: DurableStreamsBearerProvider
+  durableStreamsBearerMode?: `overwrite` | `if-missing` | `none`
 }): Promise<Response> {
   const routingAdapter = resolveDurableStreamsRoutingAdapter(
     options.durableStreamsRouting
@@ -181,6 +185,11 @@ export async function forwardFetchRequest(options: {
       : routingAdapter.streamUrl(routingInput)
 
   const headers = new Headers(options.request.headers)
+  if (options.durableStreamsBearerMode !== `none`) {
+    await applyDurableStreamsBearer(headers, options.durableStreamsBearer, {
+      overwrite: options.durableStreamsBearerMode !== `if-missing`,
+    })
+  }
 
   const init: RequestInit & { duplex?: `half`; dispatcher?: Agent } = {
     method: options.request.method,
