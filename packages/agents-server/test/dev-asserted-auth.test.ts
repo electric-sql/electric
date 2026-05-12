@@ -3,6 +3,7 @@ import {
   createDevAssertedAuthenticateRequest,
   devAssertedAuthOptionsFromEnv,
 } from '../src/dev-asserted-auth'
+import { parsePrincipalKey } from '../src/principal'
 
 function req(headers: Record<string, string | undefined>): Request {
   const requestHeaders = new Headers()
@@ -33,11 +34,7 @@ describe(`dev asserted auth`, () => {
           'x-electric-asserted-name': `Alice`,
         })
       )
-    ).toEqual({
-      userId: `alice@example.com`,
-      email: `alice@example.com`,
-      name: `Alice`,
-    })
+    ).toEqual(parsePrincipalKey(`user:alice@example.com`))
   })
 
   it(`falls back to defaults and then name for userId`, () => {
@@ -45,11 +42,7 @@ describe(`dev asserted auth`, () => {
       enabled: true,
       defaultName: `Desktop A`,
     })!
-    expect(auth(req({}))).toEqual({
-      userId: `Desktop A`,
-      email: undefined,
-      name: `Desktop A`,
-    })
+    expect(auth(req({}))).toEqual(parsePrincipalKey(`user:Desktop A`))
   })
 
   it(`reads enable flag and default identity from environment`, () => {
@@ -61,10 +54,6 @@ describe(`dev asserted auth`, () => {
       })
     )!
 
-    expect(auth(req({}))).toEqual({
-      userId: `default@example.com`,
-      email: `default@example.com`,
-      name: `Default User`,
-    })
+    expect(auth(req({}))).toEqual(parsePrincipalKey(`user:default@example.com`))
   })
 })

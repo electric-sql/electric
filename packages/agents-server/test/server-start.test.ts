@@ -16,6 +16,7 @@ const {
   schedulerStartMock,
   schedulerStopMock,
   registryCloseMock,
+  registryEnsureEntityTypeMock,
   registryInitializeMock,
   registryListEntitiesMock,
   runMigrationsMock,
@@ -42,6 +43,7 @@ const {
   schedulerStartMock: vi.fn(),
   schedulerStopMock: vi.fn(),
   registryCloseMock: vi.fn(),
+  registryEnsureEntityTypeMock: vi.fn(),
   registryInitializeMock: vi.fn(),
   registryListEntitiesMock: vi.fn(),
   runMigrationsMock: vi.fn(),
@@ -89,6 +91,10 @@ vi.mock(`../src/entity-registry`, () => ({
 
     listEntities(): Promise<{ entities: Array<never> }> {
       return registryListEntitiesMock()
+    }
+
+    ensureEntityType(entityType: unknown): Promise<unknown> {
+      return registryEnsureEntityTypeMock(entityType)
     }
 
     clearEntityManifestSources(): Promise<void> {
@@ -204,6 +210,7 @@ describe(`ElectricAgentsServer.start`, () => {
     schedulerStartMock.mockReset()
     schedulerStopMock.mockReset()
     registryCloseMock.mockReset()
+    registryEnsureEntityTypeMock.mockReset()
     registryInitializeMock.mockReset()
     registryListEntitiesMock.mockReset()
     serverAddressMock.mockReset()
@@ -230,6 +237,9 @@ describe(`ElectricAgentsServer.start`, () => {
     schedulerSyncManifestDelayedSendMock.mockResolvedValue(undefined)
     schedulerStartMock.mockResolvedValue(undefined)
     schedulerStopMock.mockResolvedValue(undefined)
+    registryEnsureEntityTypeMock.mockImplementation(
+      async (entityType) => entityType
+    )
     registryInitializeMock.mockResolvedValue(undefined)
     registryListEntitiesMock.mockResolvedValue({ entities: [] })
     serverAddressMock.mockReturnValue({ port: 4437 })
