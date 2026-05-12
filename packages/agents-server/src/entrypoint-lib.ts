@@ -78,6 +78,24 @@ function validateUrl(name: string, value: string): string {
   }
 }
 
+function readOptionalPositiveInteger(
+  env: EnvSource,
+  names: Array<string>,
+  description: string
+): number | undefined {
+  const raw = readEnv(env, names)
+  if (!raw) return undefined
+
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `Invalid ${description} "${raw}". Expected a positive integer.`
+    )
+  }
+
+  return value
+}
+
 function readOptionalPort(
   env: EnvSource,
   names: Array<string>,
@@ -151,6 +169,16 @@ export function resolveElectricAgentsEntrypointOptions(
         `ELECTRIC_AGENTS_WORKING_DIRECTORY`,
         `WORKING_DIRECTORY`,
       ]) ?? cwd,
+    dispatchRecoveryIntervalMs: readOptionalPositiveInteger(
+      env,
+      [`ELECTRIC_AGENTS_DISPATCH_RECOVERY_INTERVAL_MS`],
+      `dispatch recovery interval`
+    ),
+    staleOutstandingWakeAfterMs: readOptionalPositiveInteger(
+      env,
+      [`ELECTRIC_AGENTS_STALE_OUTSTANDING_WAKE_AFTER_MS`],
+      `stale outstanding wake age`
+    ),
   }
 }
 

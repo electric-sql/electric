@@ -47,6 +47,16 @@ export interface ElectricAgentsServerOptions {
   electricUrl?: string
   electricSecret?: string
   authenticateRequest?: AuthenticateRequest
+  /**
+   * Disabled by default. When set to a positive interval, periodically
+   * recovers expired dispatch claims and stale outstanding wakes.
+   */
+  dispatchRecoveryIntervalMs?: number
+  /**
+   * Age threshold for outstanding wakes recovered by the periodic loop.
+   * Defaults to dispatchRecoveryIntervalMs when periodic recovery is enabled.
+   */
+  staleOutstandingWakeAfterMs?: number
 }
 
 interface MockAgentBootstrap {
