@@ -147,7 +147,6 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
 
   it(`dispatches explicit runner-policy wakes and Horton writes mocked responses`, async () => {
     const id = `pull-wake-horton-${Date.now()}`
-    const entityUrl = `/horton/${id}`
     const entityApiUrl = `${baseUrl}/_electric/entities/horton/${id}`
     const dispatch_policy = { targets: [{ type: `runner`, runnerId }] }
 
@@ -220,11 +219,15 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       }
     }, 20_000)
 
-    const wakeEvents = await readStreamEvents(streamBaseUrl, runner.wake_stream!)
+    const wakeEvents = await readStreamEvents(
+      streamBaseUrl,
+      runner.wake_stream!
+    )
     expect(wakeEvents.length).toBeGreaterThanOrEqual(1)
     expect(
-      wakeEvents.filter((event) => JSON.stringify(event).includes(`runner:${runnerId}`))
-        .length
+      wakeEvents.filter((event) =>
+        JSON.stringify(event).includes(`runner:${runnerId}`)
+      ).length
     ).toBeGreaterThanOrEqual(1)
   }, 60_000)
 })
