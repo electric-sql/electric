@@ -91,6 +91,34 @@ describe(`desktop asserted auth fetch helpers`, () => {
     expect(headers.get(`x-tenant`)).toBe(`tenant-1`)
   })
 
+  it(`prefers configured server user headers over desktop asserted defaults`, async () => {
+    installWindow({
+      getAssertedAuthHeaders: async () => ({
+        'X-Electric-Asserted-Email': `desktop@example.com`,
+        'X-Electric-Asserted-Name': `Desktop User`,
+      }),
+    } as unknown as Window[`electronAPI`])
+    registerActiveServerHeaders({
+      name: `Tenant`,
+      url: `https://agents.example.test`,
+      headers: {
+        'X-Electric-Asserted-Email': `tenant-user@example.com`,
+      },
+    })
+
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`ok`))
+
+    await serverFetch(`https://agents.example.test/_electric/runners`)
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers)
+    expect(headers.get(`x-electric-asserted-email`)).toBe(
+      `tenant-user@example.com`
+    )
+    expect(headers.get(`x-electric-asserted-name`)).toBe(`Desktop User`)
+  })
+
   it(`does not send configured active server headers to other origins`, async () => {
     registerActiveServerHeaders({
       name: `Tenant`,

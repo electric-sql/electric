@@ -145,9 +145,9 @@ app.commandLine.appendSwitch(
  * so production keeps loading the static bundle from disk.
  */
 const DEV_SERVER_URL = process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ?? null
-const ASSERTED_AUTH_EMAIL =
+const CONFIGURED_ASSERTED_AUTH_EMAIL =
   process.env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || undefined
-const ASSERTED_AUTH_NAME =
+const CONFIGURED_ASSERTED_AUTH_NAME =
   process.env.ELECTRIC_ASSERTED_AUTH_NAME?.trim() || undefined
 const PULL_WAKE_RUNNER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
@@ -157,19 +157,19 @@ const PULL_WAKE_REGISTER_RUNNER = [`1`, `true`].includes(
 )
 const PULL_WAKE_OWNER_USER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
-  ASSERTED_AUTH_EMAIL ||
-  ASSERTED_AUTH_NAME ||
+  CONFIGURED_ASSERTED_AUTH_EMAIL ||
+  CONFIGURED_ASSERTED_AUTH_NAME ||
   `local-desktop`
+const DESKTOP_ASSERTED_AUTH_EMAIL =
+  CONFIGURED_ASSERTED_AUTH_EMAIL ?? PULL_WAKE_OWNER_USER_ID
+const DESKTOP_ASSERTED_AUTH_NAME =
+  CONFIGURED_ASSERTED_AUTH_NAME ?? `Electric Agents Desktop`
 
-function buildAssertedAuthHeaders(): Record<string, string> | undefined {
-  const headers: Record<string, string> = {}
-  if (ASSERTED_AUTH_EMAIL) {
-    headers[`X-Electric-Asserted-Email`] = ASSERTED_AUTH_EMAIL
+function buildAssertedAuthHeaders(): Record<string, string> {
+  return {
+    'X-Electric-Asserted-Email': DESKTOP_ASSERTED_AUTH_EMAIL,
+    'X-Electric-Asserted-Name': DESKTOP_ASSERTED_AUTH_NAME,
   }
-  if (ASSERTED_AUTH_NAME) {
-    headers[`X-Electric-Asserted-Name`] = ASSERTED_AUTH_NAME
-  }
-  return Object.keys(headers).length > 0 ? headers : undefined
 }
 
 function mergeHeaders(
@@ -189,6 +189,17 @@ function hasHeader(
   name: string
 ): boolean {
   return headers ? new Headers(headers).has(name) : false
+}
+
+function runnerOwnerUserIdFromHeaders(
+  headers: Record<string, string> | undefined
+): string {
+  const normalized = new Headers(headers)
+  return (
+    normalized.get(`x-electric-asserted-email`)?.trim() ||
+    normalized.get(`x-electric-asserted-name`)?.trim() ||
+    PULL_WAKE_OWNER_USER_ID
+  )
 }
 
 /**
@@ -899,13 +910,14 @@ async function restartRuntime(): Promise<void> {
     buildAssertedAuthHeaders(),
     activeServer.headers
   )
+  const runnerOwnerUserId = runnerOwnerUserIdFromHeaders(runtimeHeaders)
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
   )
   console.info(`[agents-desktop] Pull-wake runner id: ${runnerId}`)
   if (PULL_WAKE_REGISTER_RUNNER) {
     console.info(
-      `[agents-desktop] Pull-wake runner registration enabled; owner user id: ${PULL_WAKE_OWNER_USER_ID}`
+      `[agents-desktop] Pull-wake runner registration enabled; owner user id: ${runnerOwnerUserId}`
     )
   } else {
     console.info(
@@ -925,9 +937,7 @@ async function restartRuntime(): Promise<void> {
     pullWake: {
       runnerId,
       registerRunner: PULL_WAKE_REGISTER_RUNNER,
-      ownerUserId: PULL_WAKE_REGISTER_RUNNER
-        ? PULL_WAKE_OWNER_USER_ID
-        : undefined,
+      ownerUserId: PULL_WAKE_REGISTER_RUNNER ? runnerOwnerUserId : undefined,
       label: `Electric Agents Desktop`,
       headers: runtimeHeaders,
       claimHeaders: runtimeHeaders,
