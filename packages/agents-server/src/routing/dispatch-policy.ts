@@ -9,6 +9,7 @@ import {
 } from '../electric-agents-types.js'
 import { runnerWakeStream } from '../entity-registry.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
+import { serverLog } from '../utils/log.js'
 import type {
   DispatchPolicy,
   DispatchTarget,
@@ -168,7 +169,13 @@ export async function unlinkEntityDispatchSubscription(
   )
   await ctx.streamClient
     .removeSubscriptionStream(subscriptionId, entity.streams.main)
-    .catch(() => {})
+    .catch((err) => {
+      serverLog.warn(
+        `[dispatch-policy] failed to remove stream from subscription`,
+        { subscriptionId, stream: entity.streams.main },
+        err
+      )
+    })
 }
 
 async function linkStreamToTargetSubscription(

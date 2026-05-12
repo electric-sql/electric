@@ -17,11 +17,10 @@ const PRINCIPAL_KINDS = new Set<PrincipalKind>([
 ])
 
 export function parsePrincipalKey(input: string): Principal {
-  const value = input
-  const colon = value.indexOf(`:`)
+  const colon = input.indexOf(`:`)
   if (colon <= 0) throw new Error(`Invalid principal key`)
-  const kind = value.slice(0, colon) as PrincipalKind
-  const id = value.slice(colon + 1)
+  const kind = input.slice(0, colon) as PrincipalKind
+  const id = input.slice(colon + 1)
   if (!PRINCIPAL_KINDS.has(kind)) throw new Error(`Invalid principal kind`)
   if (!id || id.includes(`/`)) throw new Error(`Invalid principal id`)
   const key = `${kind}:${id}`
@@ -58,14 +57,16 @@ const BUILT_IN_SYSTEM_PRINCIPAL_IDS = new Set([
 ])
 
 export function isBuiltInSystemPrincipalUrl(url: string | undefined): boolean {
-  if (!url) return false
-  const key = principalKeyFromUrl(url)
-  if (!key) return false
-  const principal = parsePrincipalKey(key)
-  return (
-    principal.kind === `system` &&
-    BUILT_IN_SYSTEM_PRINCIPAL_IDS.has(principal.id)
-  )
+  if (!url?.startsWith(`/principal/`)) return false
+  try {
+    const principal = parsePrincipalKey(url.slice(`/principal/`.length))
+    return (
+      principal.kind === `system` &&
+      BUILT_IN_SYSTEM_PRINCIPAL_IDS.has(principal.id)
+    )
+  } catch {
+    return false
+  }
 }
 
 export const principalIdentityStateSchema = {
