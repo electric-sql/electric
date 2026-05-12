@@ -1,19 +1,32 @@
 import { and, desc, eq, lt, ne, sql } from 'drizzle-orm'
 import { buildTagsIndex, normalizeTags } from '@electric-ax/agents-runtime'
 import {
+  consumerClaims,
   entities,
   entityBridges,
+  entityDispatchState,
   entityManifestSources,
   entityTypes,
+  runners,
   tagStreamOutbox,
 } from './db/schema.js'
-import { assertEntityStatus } from './electric-agents-types.js'
+import {
+  assertEntityStatus,
+  assertRunnerAdminStatus,
+  assertRunnerKind,
+} from './electric-agents-types.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import type {
   ElectricAgentsEntity,
   ElectricAgentsEntityType,
+  ElectricAgentsRunner,
   EntityStatus,
+  RunnerAdminStatus,
+  RunnerKind,
+  SourceStreamOffset,
+  ConsumerClaim,
+  DispatchPolicy,
 } from './electric-agents-types.js'
 import type { EntityTags } from '@electric-ax/agents-runtime'
 
@@ -58,6 +71,54 @@ export interface TagStreamOutboxRow {
   createdAt: Date
 }
 
+export interface RegisterRunnerInput {
+  id: string
+  ownerUserId: string
+  label: string
+  kind?: RunnerKind
+  adminStatus?: RunnerAdminStatus
+  wakeStream?: string
+}
+
+export interface HeartbeatRunnerInput {
+  runnerId: string
+  heartbeatAt?: Date
+  livenessLeaseExpiresAt?: Date
+  leaseMs?: number
+  wakeStreamOffset?: string
+}
+
+export interface MaterializeActiveClaimInput {
+  consumerId: string
+  epoch: number
+  entityUrl: string
+  streamPath: string
+  wakeId?: string
+  runnerId?: string
+  claimedAt?: Date
+  leaseExpiresAt?: Date
+}
+
+export interface MaterializeHeartbeatClaimInput {
+  consumerId: string
+  epoch: number
+  heartbeatAt?: Date
+  leaseExpiresAt?: Date
+}
+
+export interface MaterializeReleasedClaimInput {
+  consumerId: string
+  epoch: number
+  ackedStreams?: Array<SourceStreamOffset>
+  releasedAt?: Date
+}
+
+const DEFAULT_RUNNER_LEASE_MS = 30_000
+
+export function runnerWakeStream(runnerId: string): string {
+  return `/runners/${runnerId}/wake`
+}
+
 export class PostgresRegistry {
   constructor(
     private db: DrizzleDB,
@@ -67,6 +128,243 @@ export class PostgresRegistry {
   async initialize(): Promise<void> {}
 
   close(): void {}
+
+  async createRunner(
+    input: RegisterRunnerInput
+  ): Promise<ElectricAgentsRunner> {
+    const now = new Date()
+    const wakeStream = input.wakeStream ?? runnerWakeStream(input.id)
+
+    await this.db
+      .insert(runners)
+      .values({
+        tenantId: this.tenantId,
+        id: input.id,
+        ownerUserId: input.ownerUserId,
+        label: input.label,
+        kind: input.kind ?? `local`,
+        adminStatus: input.adminStatus ?? `enabled`,
+        wakeStream,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [runners.tenantId, runners.id],
+        set: {
+          ownerUserId: input.ownerUserId,
+          label: input.label,
+          kind: input.kind ?? `local`,
+          adminStatus: input.adminStatus ?? `enabled`,
+          wakeStream,
+          updatedAt: now,
+        },
+      })
+
+    const runner = await this.getRunner(input.id)
+    if (!runner) {
+      throw new Error(`Failed to read back runner "${input.id}"`)
+    }
+    return runner
+  }
+
+  async getRunner(id: string): Promise<ElectricAgentsRunner | null> {
+    const rows = await this.db
+      .select()
+      .from(runners)
+      .where(and(eq(runners.tenantId, this.tenantId), eq(runners.id, id)))
+      .limit(1)
+    return rows[0] ? this.rowToRunner(rows[0]) : null
+  }
+
+  async listRunners(filter?: {
+    ownerUserId?: string
+  }): Promise<Array<ElectricAgentsRunner>> {
+    const conditions = [eq(runners.tenantId, this.tenantId)]
+    if (filter?.ownerUserId) {
+      conditions.push(eq(runners.ownerUserId, filter.ownerUserId))
+    }
+    const rows = await this.db
+      .select()
+      .from(runners)
+      .where(and(...conditions))
+      .orderBy(desc(runners.createdAt))
+    return rows.map((row) => this.rowToRunner(row))
+  }
+
+  async heartbeatRunner(
+    input: HeartbeatRunnerInput
+  ): Promise<ElectricAgentsRunner | null> {
+    const now = input.heartbeatAt ?? new Date()
+    const leaseExpiresAt =
+      input.livenessLeaseExpiresAt ??
+      new Date(now.getTime() + (input.leaseMs ?? DEFAULT_RUNNER_LEASE_MS))
+
+    const rows = await this.db
+      .update(runners)
+      .set({
+        lastSeenAt: now,
+        livenessLeaseExpiresAt: leaseExpiresAt,
+        ...(input.wakeStreamOffset !== undefined
+          ? { wakeStreamOffset: input.wakeStreamOffset }
+          : {}),
+        updatedAt: now,
+      })
+      .where(
+        and(eq(runners.tenantId, this.tenantId), eq(runners.id, input.runnerId))
+      )
+      .returning()
+
+    return rows[0] ? this.rowToRunner(rows[0]) : null
+  }
+
+  async setRunnerAdminStatus(
+    runnerId: string,
+    adminStatus: RunnerAdminStatus
+  ): Promise<ElectricAgentsRunner | null> {
+    const rows = await this.db
+      .update(runners)
+      .set({
+        adminStatus,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(runners.tenantId, this.tenantId), eq(runners.id, runnerId)))
+      .returning()
+
+    return rows[0] ? this.rowToRunner(rows[0]) : null
+  }
+
+  async materializeActiveClaim(
+    input: MaterializeActiveClaimInput
+  ): Promise<void> {
+    const claimedAt = input.claimedAt ?? new Date()
+    await this.db.transaction(async (tx) => {
+      await tx
+        .insert(consumerClaims)
+        .values({
+          tenantId: this.tenantId,
+          consumerId: input.consumerId,
+          epoch: input.epoch,
+          wakeId: input.wakeId ?? null,
+          entityUrl: input.entityUrl,
+          streamPath: input.streamPath,
+          runnerId: input.runnerId ?? null,
+          status: `active`,
+          claimedAt,
+          leaseExpiresAt: input.leaseExpiresAt ?? null,
+          updatedAt: claimedAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            consumerClaims.tenantId,
+            consumerClaims.consumerId,
+            consumerClaims.epoch,
+          ],
+          set: {
+            wakeId: input.wakeId ?? null,
+            entityUrl: input.entityUrl,
+            streamPath: input.streamPath,
+            runnerId: input.runnerId ?? null,
+            status: `active`,
+            claimedAt,
+            leaseExpiresAt: input.leaseExpiresAt ?? null,
+            releasedAt: null,
+            updatedAt: claimedAt,
+          },
+        })
+
+      await tx
+        .insert(entityDispatchState)
+        .values({
+          tenantId: this.tenantId,
+          entityUrl: input.entityUrl,
+          activeConsumerId: input.consumerId,
+          activeRunnerId: input.runnerId ?? null,
+          activeEpoch: input.epoch,
+          activeClaimedAt: claimedAt,
+          activeLeaseExpiresAt: input.leaseExpiresAt ?? null,
+          lastClaimedAt: claimedAt,
+          updatedAt: claimedAt,
+        })
+        .onConflictDoUpdate({
+          target: [entityDispatchState.tenantId, entityDispatchState.entityUrl],
+          set: {
+            activeConsumerId: input.consumerId,
+            activeRunnerId: input.runnerId ?? null,
+            activeEpoch: input.epoch,
+            activeClaimedAt: claimedAt,
+            activeLeaseExpiresAt: input.leaseExpiresAt ?? null,
+            lastClaimedAt: claimedAt,
+            updatedAt: claimedAt,
+          },
+        })
+    })
+  }
+
+  async materializeHeartbeatClaim(
+    input: MaterializeHeartbeatClaimInput
+  ): Promise<void> {
+    const heartbeatAt = input.heartbeatAt ?? new Date()
+    await this.db
+      .update(consumerClaims)
+      .set({
+        lastHeartbeatAt: heartbeatAt,
+        leaseExpiresAt: input.leaseExpiresAt ?? null,
+        updatedAt: heartbeatAt,
+      })
+      .where(
+        and(
+          eq(consumerClaims.tenantId, this.tenantId),
+          eq(consumerClaims.consumerId, input.consumerId),
+          eq(consumerClaims.epoch, input.epoch)
+        )
+      )
+  }
+
+  async materializeReleasedClaim(
+    input: MaterializeReleasedClaimInput
+  ): Promise<ConsumerClaim | null> {
+    const releasedAt = input.releasedAt ?? new Date()
+    const rows = await this.db
+      .update(consumerClaims)
+      .set({
+        status: `released`,
+        releasedAt,
+        ackedStreams: input.ackedStreams ?? null,
+        updatedAt: releasedAt,
+      })
+      .where(
+        and(
+          eq(consumerClaims.tenantId, this.tenantId),
+          eq(consumerClaims.consumerId, input.consumerId),
+          eq(consumerClaims.epoch, input.epoch)
+        )
+      )
+      .returning()
+
+    const claim = rows[0] ? this.rowToConsumerClaim(rows[0]) : null
+    if (claim) {
+      await this.db
+        .update(entityDispatchState)
+        .set({
+          activeConsumerId: null,
+          activeRunnerId: null,
+          activeEpoch: null,
+          activeClaimedAt: null,
+          activeLeaseExpiresAt: null,
+          lastReleasedAt: releasedAt,
+          lastCompletedAt: releasedAt,
+          updatedAt: releasedAt,
+        })
+        .where(
+          and(
+            eq(entityDispatchState.tenantId, this.tenantId),
+            eq(entityDispatchState.entityUrl, claim.entity_url),
+            eq(entityDispatchState.activeConsumerId, input.consumerId),
+            eq(entityDispatchState.activeEpoch, input.epoch)
+          )
+        )
+    }
+    return claim
+  }
 
   private entityTypeWhere(name: string) {
     return and(
@@ -97,6 +395,7 @@ export class PostgresRegistry {
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
+        defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
         createdAt: et.created_at,
         updatedAt: et.updated_at,
@@ -109,6 +408,7 @@ export class PostgresRegistry {
           inboxSchemas: et.inbox_schemas ?? null,
           stateSchemas: et.state_schemas ?? null,
           serveEndpoint: et.serve_endpoint ?? null,
+          defaultDispatchPolicy: et.default_dispatch_policy ?? null,
           revision: et.revision,
           updatedAt: et.updated_at,
         },
@@ -147,6 +447,7 @@ export class PostgresRegistry {
         inboxSchemas: et.inbox_schemas ?? null,
         stateSchemas: et.state_schemas ?? null,
         serveEndpoint: et.serve_endpoint ?? null,
+        defaultDispatchPolicy: et.default_dispatch_policy ?? null,
         revision: et.revision,
         updatedAt: et.updated_at,
       })
@@ -155,29 +456,43 @@ export class PostgresRegistry {
 
   async createEntity(entity: ElectricAgentsEntity): Promise<number> {
     try {
-      const result = await this.db
-        .insert(entities)
-        .values({
-          tenantId: this.tenantId,
-          url: entity.url,
-          type: entity.type,
-          status: entity.status,
-          subscriptionId: entity.subscription_id,
-          writeToken: entity.write_token,
-          tags: normalizeTags(entity.tags),
-          tagsIndex: buildTagsIndex(entity.tags),
-          spawnArgs: entity.spawn_args ?? {},
-          parent: entity.parent ?? null,
-          typeRevision: entity.type_revision ?? null,
-          inboxSchemas: entity.inbox_schemas ?? null,
-          stateSchemas: entity.state_schemas ?? null,
-          createdAt: entity.created_at,
-          updatedAt: entity.updated_at,
-        })
-        .returning({
-          txid: sql<string>`pg_current_xact_id()::xid::text`,
-        })
-      return parseInt(result[0]!.txid)
+      return await this.db.transaction(async (tx) => {
+        const result = await tx
+          .insert(entities)
+          .values({
+            tenantId: this.tenantId,
+            url: entity.url,
+            type: entity.type,
+            status: entity.status,
+            subscriptionId: entity.subscription_id,
+            dispatchPolicy: entity.dispatch_policy ?? null,
+            writeToken: entity.write_token,
+            tags: normalizeTags(entity.tags),
+            tagsIndex: buildTagsIndex(entity.tags),
+            spawnArgs: entity.spawn_args ?? {},
+            parent: entity.parent ?? null,
+            typeRevision: entity.type_revision ?? null,
+            inboxSchemas: entity.inbox_schemas ?? null,
+            stateSchemas: entity.state_schemas ?? null,
+            createdAt: entity.created_at,
+            updatedAt: entity.updated_at,
+          })
+          .returning({
+            txid: sql<string>`pg_current_xact_id()::xid::text`,
+          })
+
+        await tx
+          .insert(entityDispatchState)
+          .values({
+            tenantId: this.tenantId,
+            entityUrl: entity.url,
+            pendingSourceStreams: [],
+            updatedAt: new Date(),
+          })
+          .onConflictDoNothing()
+
+        return parseInt(result[0]!.txid)
+      })
     } catch (err) {
       if (isDuplicateUrlError(err)) {
         throw new EntityAlreadyExistsError(entity.url)
@@ -194,6 +509,18 @@ export class PostgresRegistry {
       .limit(1)
     if (rows.length === 0) return null
     return this.rowToEntity(rows[0]!)
+  }
+
+  async updateEntityDispatchPolicy(
+    url: string,
+    dispatchPolicy: DispatchPolicy
+  ): Promise<ElectricAgentsEntity | null> {
+    const [row] = await this.db
+      .update(entities)
+      .set({ dispatchPolicy, updatedAt: Date.now() })
+      .where(this.entityWhere(url))
+      .returning()
+    return row ? this.rowToEntity(row) : null
   }
 
   async getEntityByStream(
@@ -701,6 +1028,9 @@ export class PostgresRegistry {
         | Record<string, Record<string, unknown>>
         | undefined,
       serve_endpoint: row.serveEndpoint ?? undefined,
+      default_dispatch_policy:
+        (row.defaultDispatchPolicy as ElectricAgentsEntityType[`default_dispatch_policy`]) ??
+        undefined,
       revision: row.revision,
       created_at: row.createdAt,
       updated_at: row.updatedAt,
@@ -717,6 +1047,9 @@ export class PostgresRegistry {
         error: `${row.url}/error`,
       },
       subscription_id: row.subscriptionId,
+      dispatch_policy:
+        (row.dispatchPolicy as ElectricAgentsEntity[`dispatch_policy`]) ??
+        undefined,
       write_token: row.writeToken,
       tags: (row.tags as EntityTags | null | undefined) ?? {},
       spawn_args: row.spawnArgs as Record<string, unknown> | undefined,
@@ -780,6 +1113,50 @@ export class PostgresRegistry {
       claimedAt: row.claimedAt ?? undefined,
       deadLetteredAt: row.deadLetteredAt ?? undefined,
       createdAt: row.createdAt,
+    }
+  }
+
+  private rowToRunner(row: typeof runners.$inferSelect): ElectricAgentsRunner {
+    const now = Date.now()
+    const livenessExpiry = row.livenessLeaseExpiresAt?.getTime()
+    return {
+      id: row.id,
+      owner_user_id: row.ownerUserId,
+      label: row.label,
+      kind: assertRunnerKind(row.kind),
+      admin_status: assertRunnerAdminStatus(row.adminStatus),
+      liveness:
+        livenessExpiry !== undefined && livenessExpiry > now
+          ? `online`
+          : `offline`,
+      last_seen_at: row.lastSeenAt?.toISOString(),
+      liveness_lease_expires_at: row.livenessLeaseExpiresAt?.toISOString(),
+      wake_stream: row.wakeStream,
+      wake_stream_offset: row.wakeStreamOffset ?? undefined,
+      created_at: row.createdAt.toISOString(),
+      updated_at: row.updatedAt.toISOString(),
+    }
+  }
+
+  private rowToConsumerClaim(
+    row: typeof consumerClaims.$inferSelect
+  ): ConsumerClaim {
+    return {
+      consumer_id: row.consumerId,
+      epoch: row.epoch,
+      wake_id: row.wakeId ?? undefined,
+      entity_url: row.entityUrl,
+      stream_path: row.streamPath,
+      runner_id: row.runnerId ?? undefined,
+      status: row.status as ConsumerClaim[`status`],
+      claimed_at: row.claimedAt.toISOString(),
+      last_heartbeat_at: row.lastHeartbeatAt?.toISOString(),
+      lease_expires_at: row.leaseExpiresAt?.toISOString(),
+      released_at: row.releasedAt?.toISOString(),
+      acked_streams:
+        (row.ackedStreams as Array<SourceStreamOffset> | null | undefined) ??
+        undefined,
+      updated_at: row.updatedAt.toISOString(),
     }
   }
 }

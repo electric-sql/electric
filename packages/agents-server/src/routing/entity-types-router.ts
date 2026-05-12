@@ -4,6 +4,7 @@
 
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json, status } from 'itty-router'
+import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import { ElectricAgentsError } from '../entity-manager.js'
 import {
   ErrCodeNotFound,
@@ -51,6 +52,7 @@ const registerEntityTypeBodySchema = Type.Object({
   input_schemas: Type.Optional(schemaMapSchema),
   output_schemas: Type.Optional(schemaMapSchema),
   serve_endpoint: Type.Optional(Type.String()),
+  default_dispatch_policy: Type.Optional(dispatchPolicySchema),
 })
 
 const amendEntityTypeSchemasBodySchema = Type.Object({
@@ -194,15 +196,24 @@ async function deleteEntityType(
 }
 
 function normalizeEntityTypeRequest(
-  parsed: RegisterEntityTypeBody
+  parsed: RegisterEntityTypeBody | RegisterEntityTypeRequest
 ): RegisterEntityTypeRequest {
+  const serveEndpoint = rewriteLoopbackWebhookUrl(parsed.serve_endpoint)
+  const compatibilityFields = parsed as RegisterEntityTypeBody
   return {
     name: parsed.name ?? ``,
     description: parsed.description ?? ``,
     creation_schema: parsed.creation_schema,
-    inbox_schemas: parsed.inbox_schemas ?? parsed.input_schemas,
-    state_schemas: parsed.state_schemas ?? parsed.output_schemas,
-    serve_endpoint: rewriteLoopbackWebhookUrl(parsed.serve_endpoint),
+    inbox_schemas: parsed.inbox_schemas ?? compatibilityFields.input_schemas,
+    state_schemas: parsed.state_schemas ?? compatibilityFields.output_schemas,
+    serve_endpoint: serveEndpoint,
+    default_dispatch_policy:
+      parsed.default_dispatch_policy ??
+      (serveEndpoint
+        ? ({
+            targets: [{ type: `webhook`, url: serveEndpoint }],
+          } as RegisterEntityTypeRequest[`default_dispatch_policy`])
+        : undefined),
   }
 }
 

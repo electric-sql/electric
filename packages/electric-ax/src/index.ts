@@ -6,6 +6,7 @@ import { basename, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
+import { assertedIdentityHeaders, entityApiPath } from './entity-api.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
 import type {
   ElectricAgentsEntityRow,
@@ -25,6 +26,8 @@ import type {
 export interface ElectricCliEnv {
   electricAgentsUrl: string
   electricAgentsIdentity: string
+  electricAssertedAuthEmail?: string
+  electricAssertedAuthName?: string
 }
 
 export interface SpawnCommandOptions {
@@ -100,10 +103,14 @@ function getDefaultElectricAgentsIdentity(): string {
 export function getElectricCliEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ElectricCliEnv {
+  const explicitIdentity = env.ELECTRIC_AGENTS_IDENTITY?.trim()
   return {
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
     electricAgentsIdentity:
-      env.ELECTRIC_AGENTS_IDENTITY || getDefaultElectricAgentsIdentity(),
+      explicitIdentity || getDefaultElectricAgentsIdentity(),
+    electricAssertedAuthEmail:
+      env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || explicitIdentity || undefined,
+    electricAssertedAuthName: env.ELECTRIC_ASSERTED_AUTH_NAME?.trim(),
   }
 }
 
@@ -296,6 +303,10 @@ async function electricAgentsFetch(
       ...opts,
       headers: {
         'content-type': `application/json`,
+        ...assertedIdentityHeaders(env.electricAssertedAuthEmail),
+        ...(env.electricAssertedAuthName
+          ? { 'x-electric-asserted-name': env.electricAssertedAuthName }
+          : {}),
         ...opts.headers,
       },
     })
@@ -432,7 +443,7 @@ async function spawnEntity(
     }
   }
 
-  const res = await electricAgentsFetch(env, urlPath, {
+  const res = await electricAgentsFetch(env, entityApiPath(urlPath), {
     method: `PUT`,
     body: JSON.stringify({ args: spawnArgs }),
   })
@@ -468,7 +479,7 @@ async function sendMessage(
     body.type = options.type
   }
 
-  const res = await electricAgentsFetch(env, `${url}/send`, {
+  const res = await electricAgentsFetch(env, entityApiPath(url, `/send`), {
     method: `POST`,
     body: JSON.stringify(body),
   })
@@ -495,12 +506,14 @@ async function observeEntity(
     entityUrl: url,
     baseUrl: env.electricAgentsUrl,
     identity: env.electricAgentsIdentity,
+    assertedAuthEmail: env.electricAssertedAuthEmail,
+    assertedAuthName: env.electricAssertedAuthName,
     initialOffset: options.from,
   })
 }
 
 async function inspectEntity(env: ElectricCliEnv, url: string): Promise<void> {
-  const res = await electricAgentsFetch(env, url)
+  const res = await electricAgentsFetch(env, entityApiPath(url))
   const data = await parseJsonResponse(res)
   if (!res.ok) {
     failFromResponse(data, res)
@@ -548,7 +561,7 @@ async function listEntities(
 }
 
 async function killEntity(env: ElectricCliEnv, url: string): Promise<void> {
-  const res = await electricAgentsFetch(env, url, {
+  const res = await electricAgentsFetch(env, entityApiPath(url), {
     method: `DELETE`,
   })
 

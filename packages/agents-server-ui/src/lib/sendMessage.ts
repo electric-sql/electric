@@ -1,8 +1,11 @@
-import { createOptimisticAction } from '@tanstack/db'
+import { serverFetch } from './auth-fetch'
+import { entityApiUrl } from './entity-api'
 import {
-  appendPathToUrl,
-  type EntityStreamDBWithActions,
-} from '@electric-ax/agents-runtime/client'
+  getCachedDesktopFormattedAssertedIdentity,
+  getDesktopFormattedAssertedIdentity,
+} from './assertedIdentity'
+import { createOptimisticAction } from '@tanstack/db'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
 // Timeline queries sort inbox messages by `_seq`. Pending local rows do not
 // have a server sequence yet, so put them after streamed rows until the real
@@ -63,24 +66,26 @@ export function createSendMessageAction({
 }) {
   const action = createOptimisticAction<SendMessageInput>({
     onMutate: ({ text, key, seq }) => {
+      const effectiveFrom = getCachedDesktopFormattedAssertedIdentity() ?? from
       const message: OptimisticInboxMessage = {
         key,
         _seq: seq,
-        from,
+        from: effectiveFrom,
         payload: { text },
         timestamp: new Date().toISOString(),
       }
       db.collections.inbox.insert(message)
     },
     mutationFn: async ({ text, key }) => {
-      const res = await fetch(
-        appendPathToUrl(baseUrl, `/_electric/entities${entityUrl}/send`),
-        {
-          method: `POST`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({ from, key, payload: { text } }),
-        }
-      )
+      const effectiveFrom =
+        getCachedDesktopFormattedAssertedIdentity() ??
+        (await getDesktopFormattedAssertedIdentity()) ??
+        from
+      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/send`), {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ from: effectiveFrom, key, payload: { text } }),
+      })
       if (!res.ok) {
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)

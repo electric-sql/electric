@@ -120,7 +120,7 @@ describe(`StreamClient`, () => {
       const [, init] = fetchMock.mock.calls[0]!
       expect(JSON.parse(init?.body as string)).toEqual({
         type: `webhook`,
-        pattern: `chat/**`,
+        pattern: `tenant-a/chat/**`,
         webhook: { url: `http://agent.local/webhook` },
         description: `test subscription`,
       })

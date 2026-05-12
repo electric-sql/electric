@@ -14,6 +14,7 @@ import {
 } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -43,6 +44,7 @@ type DesktopState = {
    * surface these as one-click "add" suggestions.
    */
   discoveredServers: Array<DiscoveredServer>
+  pullWakeRunnerId: string | null
 }
 
 type ApiKeys = {
@@ -84,6 +86,7 @@ type DesktopSettings = {
    * `authorizationCode` servers).
    */
   mcp?: { servers: Array<McpServerConfig> }
+  pullWakeRunnerId?: string
 }
 
 /**
@@ -141,6 +144,32 @@ app.commandLine.appendSwitch(
  * so production keeps loading the static bundle from disk.
  */
 const DEV_SERVER_URL = process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ?? null
+const ASSERTED_AUTH_EMAIL =
+  process.env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || undefined
+const ASSERTED_AUTH_NAME =
+  process.env.ELECTRIC_ASSERTED_AUTH_NAME?.trim() || undefined
+const PULL_WAKE_RUNNER_ID =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
+const PULL_WAKE_REGISTER_RUNNER = [`1`, `true`].includes(
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER?.trim().toLowerCase() ??
+    ``
+)
+const PULL_WAKE_OWNER_USER_ID =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
+  ASSERTED_AUTH_EMAIL ||
+  ASSERTED_AUTH_NAME ||
+  `local-desktop`
+
+function buildAssertedAuthHeaders(): Record<string, string> | undefined {
+  const headers: Record<string, string> = {}
+  if (ASSERTED_AUTH_EMAIL) {
+    headers[`X-Electric-Asserted-Email`] = ASSERTED_AUTH_EMAIL
+  }
+  if (ASSERTED_AUTH_NAME) {
+    headers[`X-Electric-Asserted-Name`] = ASSERTED_AUTH_NAME
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined
+}
 
 /**
  * Commands sent from the menu / tray (main process) to the focused
@@ -203,6 +232,7 @@ let state: DesktopState = {
   workingDirectory: null,
   error: null,
   discoveredServers: [],
+  pullWakeRunnerId: null,
 }
 let runtime: BuiltinAgentsServer | null = null
 let runtimeGeneration = 0
@@ -357,11 +387,18 @@ function applyApiKeys(): void {
 }
 
 async function loadSettings(): Promise<void> {
+  let shouldSaveSettings = false
   try {
     const raw = await readFile(settingsPath(), `utf8`)
     const parsed = JSON.parse(raw) as Partial<DesktopSettings>
     const servers = normalizeServers(parsed.servers)
     const activeServer = normalizeServer(parsed.activeServer)
+    const parsedPullWakeRunnerId =
+      typeof parsed.pullWakeRunnerId === `string`
+        ? parsed.pullWakeRunnerId.trim()
+        : null
+    const pullWakeRunnerId = parsedPullWakeRunnerId || randomUUID()
+    shouldSaveSettings = !parsedPullWakeRunnerId
     settings = {
       servers,
       activeServer: serverInList(activeServer, servers) ? activeServer : null,
@@ -371,15 +408,23 @@ async function loadSettings(): Promise<void> {
           : null,
       apiKeys: normalizeApiKeys(parsed.apiKeys),
       mcp: normalizeMcp(parsed.mcp),
+      pullWakeRunnerId,
     }
-  } catch {
-    settings = { ...DEFAULT_SETTINGS }
+  } catch (err) {
+    console.error(`[agents-desktop] Failed to load settings:`, err)
+    settings = { ...DEFAULT_SETTINGS, pullWakeRunnerId: randomUUID() }
+    shouldSaveSettings = true
+  }
+
+  if (shouldSaveSettings) {
+    await saveSettings()
   }
 
   state = {
     ...state,
     activeServer: settings.activeServer,
     workingDirectory: settings.workingDirectory,
+    pullWakeRunnerId: PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId ?? null,
   }
 
   applyApiKeys()
@@ -741,22 +786,66 @@ async function restartRuntime(): Promise<void> {
 
   const activeServer = settings.activeServer
   if (!activeServer) {
-    setState({ runtimeStatus: `stopped`, runtimeUrl: null, error: null })
+    setState({
+      runtimeStatus: `stopped`,
+      runtimeUrl: null,
+      error: null,
+      pullWakeRunnerId:
+        PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId ?? null,
+    })
     return
   }
 
-  setState({ runtimeStatus: `starting`, runtimeUrl: null, error: null })
+  setState({
+    runtimeStatus: `starting`,
+    runtimeUrl: null,
+    error: null,
+    pullWakeRunnerId: PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId ?? null,
+  })
+
+  const runnerId = PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId
+  if (!runnerId) {
+    throw new Error(`Desktop built-in agents require a pull-wake runner id`)
+  }
+  if (!settings.pullWakeRunnerId) {
+    settings.pullWakeRunnerId = runnerId
+    await saveSettings()
+  }
+  setState({ pullWakeRunnerId: runnerId })
+
+  const assertedAuthHeaders = buildAssertedAuthHeaders()
+  console.info(
+    `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
+  )
+  console.info(`[agents-desktop] Pull-wake runner id: ${runnerId}`)
+  if (PULL_WAKE_REGISTER_RUNNER) {
+    console.info(
+      `[agents-desktop] Pull-wake runner registration enabled; owner user id: ${PULL_WAKE_OWNER_USER_ID}`
+    )
+  } else {
+    console.info(
+      `[agents-desktop] Pull-wake runner registration skipped; runner must already be registered with the agents server.`
+    )
+  }
 
   const nextRuntime = new BuiltinAgentsServer({
     agentServerUrl: activeServer.url,
-    host: `127.0.0.1`,
-    port: 0,
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
     extraMcpServers: settings.mcp?.servers,
     loadProjectMcpConfig: true,
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
     openAuthorizeUrl: (url, server) => {
       void handleAuthorizeUrl(url, server)
+    },
+    pullWake: {
+      runnerId,
+      registerRunner: PULL_WAKE_REGISTER_RUNNER,
+      ownerUserId: PULL_WAKE_REGISTER_RUNNER
+        ? PULL_WAKE_OWNER_USER_ID
+        : undefined,
+      label: `Electric Agents Desktop`,
+      headers: assertedAuthHeaders,
+      claimHeaders: assertedAuthHeaders,
     },
   })
   runtime = nextRuntime
@@ -961,6 +1050,10 @@ function registerIpcHandlers(): void {
     }
   )
   ipcMain.handle(`desktop:get-state`, () => state)
+  ipcMain.handle(
+    `desktop:get-asserted-auth-headers`,
+    () => buildAssertedAuthHeaders() ?? {}
+  )
   ipcMain.handle(
     `desktop:set-active-server`,
     async (_event, server: ServerConfig | null) => {

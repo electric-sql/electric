@@ -58,6 +58,14 @@ type InspectTarget = {
   value: unknown
 }
 
+function stableEntityUrlKey(urls: Iterable<string>): string {
+  return Array.from(new Set(urls)).sort().join(`\0`)
+}
+
+function entityUrlsFromKey(key: string): Array<string> {
+  return key.length === 0 ? [] : key.split(`\0`)
+}
+
 /**
  * Drawer that docks ABOVE the chat composer at the bottom of an entity
  * session, surfacing context about related entities (and, in time,
@@ -101,7 +109,7 @@ export function EntityContextDrawer({
     [db]
   )
 
-  const referencedEntityUrls = useMemo(() => {
+  const referencedEntityUrlKey = useMemo(() => {
     const urls = new Set<string>()
     if (parentUrl) urls.add(parentUrl)
     for (const manifest of manifests as Array<Manifest>) {
@@ -114,8 +122,12 @@ export function EntityContextDrawer({
         urls.add(manifest.sourceRef)
       }
     }
-    return Array.from(urls)
+    return stableEntityUrlKey(urls)
   }, [manifests, parentUrl])
+  const referencedEntityUrls = useMemo(
+    () => entityUrlsFromKey(referencedEntityUrlKey),
+    [referencedEntityUrlKey]
+  )
 
   const { data: referencedEntities = [] } = useLiveQuery(
     (q) => {
@@ -133,7 +145,7 @@ export function EntityContextDrawer({
           spawn_args: e.spawn_args,
         }))
     },
-    [entitiesCollection, referencedEntityUrls]
+    [entitiesCollection, referencedEntityUrlKey]
   )
 
   const entitiesByUrl = useMemo(() => {

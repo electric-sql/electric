@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import pathModule from 'node:path'
 import { loadConfig, type McpConfig } from './loader'
 
 export interface WatchOpts {
@@ -30,10 +31,26 @@ export async function watchConfig(
       opts.onError?.(err)
     }
   }
-  const watcher = fs.watch(path, () => {
+  const watchPath = pathModule.resolve(path)
+  const watchParentPath = pathModule.dirname(watchPath)
+  const watchFileName = pathModule.basename(watchPath)
+  let watcher: fs.FSWatcher
+  const onFileChanged = () => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(reload, debounce)
-  })
+  }
+
+  try {
+    watcher = fs.watch(watchPath, onFileChanged)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== `ENOENT`) throw err
+    watcher = fs.watch(watchParentPath, (_event, filename) => {
+      if (filename === null || filename.toString() === watchFileName) {
+        onFileChanged()
+      }
+    })
+  }
+
   return () => {
     if (timer) clearTimeout(timer)
     watcher.close()

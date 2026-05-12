@@ -34,6 +34,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsdown",
+    "prepare": "pnpm build",
     "dev": "tsdown --watch",
     "start": "cross-env DATABASE_URL=postgresql://electric_agents:electric_agents@localhost:5432/electric_agents ELECTRIC_URL=http://localhost:3060 tsx --watch src/entrypoint.ts",
     "test": "vitest run",

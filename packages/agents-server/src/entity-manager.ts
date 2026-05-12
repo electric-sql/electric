@@ -26,6 +26,7 @@ import {
   ErrCodeUnknownEventType,
   ErrCodeUnknownMessageType,
 } from './electric-agents-types.js'
+import { parseDispatchPolicy } from './dispatch-policy-schema.js'
 import { EntityAlreadyExistsError } from './entity-registry.js'
 import { serverLog } from './utils/log.js'
 import {
@@ -42,6 +43,8 @@ import type { PostgresRegistry } from './entity-registry.js'
 import type { SchemaValidator } from './electric-agents/schema-validator.js'
 import type { StreamClient } from './stream-client.js'
 import type {
+  DispatchPolicy,
+  DispatchTarget,
   ElectricAgentsEntity,
   ElectricAgentsEntityType,
   RegisterEntityTypeRequest,
@@ -87,6 +90,33 @@ type ForkResult = {
 
 const DEFAULT_FORK_WAIT_TIMEOUT_MS = 120_000
 const DEFAULT_FORK_WAIT_POLL_MS = 250
+
+function applyTypeDefaultSubscriptionScope(
+  policy: DispatchPolicy,
+  typeDefault: DispatchPolicy | undefined
+): DispatchPolicy {
+  const target = policy.targets[0]
+  const defaultTarget = typeDefault?.targets[0]
+  if (!target || !defaultTarget?.subscription_id) return policy
+  if (!sameDispatchDestination(target, defaultTarget)) return policy
+  if (target.subscription_id === defaultTarget.subscription_id) return policy
+
+  return {
+    targets: [{ ...target, subscription_id: defaultTarget.subscription_id }],
+  }
+}
+
+function sameDispatchDestination(
+  a: DispatchTarget,
+  b: DispatchTarget
+): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === `runner` && b.type === `runner`) {
+    return a.runnerId === b.runnerId
+  }
+  if (a.type === `webhook` && b.type === `webhook`) return a.url === b.url
+  return false
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -228,6 +258,11 @@ export class EntityManager {
     this.validateSchema(req.creation_schema)
     this.validateSchemaMap(req.inbox_schemas)
     this.validateSchemaMap(req.state_schemas)
+    const defaultDispatchPolicy = req.default_dispatch_policy
+      ? this.validateDispatchPolicy(req.default_dispatch_policy, {
+          label: `default_dispatch_policy`,
+        })
+      : undefined
 
     const existing = await this.registry.getEntityType(req.name)
     const now = new Date().toISOString()
@@ -238,6 +273,7 @@ export class EntityManager {
       inbox_schemas: req.inbox_schemas,
       state_schemas: req.state_schemas,
       serve_endpoint: req.serve_endpoint,
+      default_dispatch_policy: defaultDispatchPolicy,
       revision: existing ? existing.revision + 1 : 1,
       created_at: existing?.created_at ?? now,
       updated_at: now,
@@ -356,9 +392,10 @@ export class EntityManager {
       )
     }
 
+    let parentEntity: ElectricAgentsEntity | null = null
     if (req.parent) {
-      const parent = await this.registry.getEntity(req.parent)
-      if (!parent) {
+      parentEntity = await this.registry.getEntity(req.parent)
+      if (!parentEntity) {
         throw new ElectricAgentsError(
           ErrCodeNotFound,
           `Parent entity "${req.parent}" not found`,
@@ -366,6 +403,17 @@ export class EntityManager {
         )
       }
     }
+
+    const dispatchPolicy = req.dispatch_policy
+      ? this.validateDispatchPolicy(req.dispatch_policy, {
+          label: `dispatch_policy`,
+        })
+      : parentEntity?.dispatch_policy
+        ? applyTypeDefaultSubscriptionScope(
+            parentEntity.dispatch_policy,
+            entityType.default_dispatch_policy
+          )
+        : entityType.default_dispatch_policy
 
     const now = Date.now()
     const entityData: ElectricAgentsEntity = {
@@ -377,6 +425,7 @@ export class EntityManager {
         error: errorPath,
       },
       subscription_id: subscriptionId,
+      dispatch_policy: dispatchPolicy,
       write_token: writeToken,
       tags: initialTags,
       spawn_args: req.args,
@@ -2370,6 +2419,21 @@ export class EntityManager {
     if (!schemas) return
     for (const schema of Object.values(schemas)) {
       this.validateSchema(schema)
+    }
+  }
+
+  private validateDispatchPolicy(
+    input: unknown,
+    opts: { label: string }
+  ): DispatchPolicy {
+    try {
+      return parseDispatchPolicy(input, opts.label)
+    } catch (error) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        error instanceof Error ? error.message : `Invalid dispatch policy`,
+        400
+      )
     }
   }
 

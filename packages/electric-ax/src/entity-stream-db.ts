@@ -9,6 +9,7 @@
 
 import { createStreamDB } from '@durable-streams/state'
 import { entityStateSchema } from '@electric-ax/agents-runtime'
+import { assertedIdentityHeaders, entityApiUrl } from './entity-api.js'
 import type { EntityStreamDB } from '@electric-ax/agents-runtime'
 
 export type { EntityStreamDB } from '@electric-ax/agents-runtime'
@@ -28,8 +29,16 @@ export async function createEntityStreamDB(opts: {
   baseUrl: string
   entityUrl: string
   initialOffset?: string
+  assertedAuthEmail?: string
+  assertedAuthName?: string
 }): Promise<{ db: EntityStreamDB; close: () => void }> {
-  const { baseUrl, entityUrl, initialOffset } = opts
+  const {
+    baseUrl,
+    entityUrl,
+    initialOffset,
+    assertedAuthEmail,
+    assertedAuthName,
+  } = opts
 
   console.log(
     `[createEntityStreamDB] Creating entity stream DB for ${baseUrl}${entityUrl}`
@@ -37,8 +46,14 @@ export async function createEntityStreamDB(opts: {
 
   let res: Response
   try {
-    res = await fetch(`${baseUrl}${entityUrl}`, {
-      headers: { 'content-type': `application/json` },
+    res = await fetch(entityApiUrl(baseUrl, entityUrl), {
+      headers: {
+        'content-type': `application/json`,
+        ...assertedIdentityHeaders(assertedAuthEmail),
+        ...(assertedAuthName
+          ? { 'x-electric-asserted-name': assertedAuthName }
+          : {}),
+      },
     })
   } catch (err) {
     throw new Error(

@@ -116,13 +116,37 @@ export function buildElectricProxyTarget(options: {
   if (table === `entities`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","url","type","status","tags","spawn_args","parent","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
+      `"tenant_id","url","type","status","dispatch_policy","tags","spawn_args","parent","type_revision","inbox_schemas","state_schemas","created_at","updated_at"`
     )
     applyTenantShapeWhere(target, options.tenantId)
   } else if (table === `entity_types`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","name","description","creation_schema","inbox_schemas","state_schemas","serve_endpoint","revision","created_at","updated_at"`
+      `"tenant_id","name","description","creation_schema","inbox_schemas","state_schemas","serve_endpoint","default_dispatch_policy","revision","created_at","updated_at"`
+    )
+    applyTenantShapeWhere(target, options.tenantId)
+  } else if (table === `runners`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","id","owner_user_id","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","created_at","updated_at"`
+    )
+    applyTenantShapeWhere(target, options.tenantId)
+  } else if (table === `entity_dispatch_state`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","entity_url","pending_source_streams","pending_reason","pending_since","outstanding_wake_id","outstanding_wake_target","outstanding_wake_created_at","active_consumer_id","active_runner_id","active_epoch","active_claimed_at","active_lease_expires_at","last_wake_id","last_claimed_at","last_released_at","last_completed_at","last_error","updated_at"`
+    )
+    applyTenantShapeWhere(target, options.tenantId)
+  } else if (table === `wake_notifications`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","wake_id","entity_url","target_type","target_runner_id","target_webhook_url","target_worker_pool_id","runner_wake_stream","runner_wake_stream_offset","notification_public","delivery_status","claim_status","created_at","delivered_at","claimed_at","resolved_at"`
+    )
+    applyTenantShapeWhere(target, options.tenantId)
+  } else if (table === `consumer_claims`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","consumer_id","epoch","wake_id","entity_url","stream_path","runner_id","status","claimed_at","last_heartbeat_at","lease_expires_at","released_at","acked_streams","updated_at"`
     )
     applyTenantShapeWhere(target, options.tenantId)
   }

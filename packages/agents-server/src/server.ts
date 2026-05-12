@@ -22,6 +22,7 @@ import type {
   EntityRegistry,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
+import type { AuthenticateRequest } from './electric-agents-types.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import type { OssServerContext } from './routing/oss-server-router.js'
@@ -43,6 +44,7 @@ export interface ElectricAgentsServerOptions {
   postgresUrl: string
   electricUrl?: string
   electricSecret?: string
+  authenticateRequest?: AuthenticateRequest
 }
 
 interface MockAgentBootstrap {
@@ -309,11 +311,13 @@ export class ElectricAgentsServer {
 
     return await ossServerRouter.fetch(
       request as Parameters<typeof ossServerRouter.fetch>[0],
-      this.buildTenantContext()
+      await this.buildTenantContext(request)
     )
   }
 
-  private buildTenantContext(): OssServerContext {
+  private async buildTenantContext(
+    request: Request
+  ): Promise<OssServerContext> {
     if (
       !this.standaloneRuntime ||
       !this.electricAgentsManager ||
@@ -327,6 +331,8 @@ export class ElectricAgentsServer {
 
     return {
       service: this.tenantId,
+      authenticatedUser:
+        (await this.options.authenticateRequest?.(request)) ?? undefined,
       publicUrl: this.publicUrl,
       localUrl: this._url,
       durableStreamsUrl: this.options.durableStreamsUrl,

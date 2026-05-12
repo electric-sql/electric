@@ -15,9 +15,10 @@ import type {
 export { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
-const DEFAULT_BUILTIN_AGENTS_PORT = 4448
-const DEFAULT_BUILTIN_AGENTS_HOST = `0.0.0.0`
 const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
+const DEFAULT_PULL_WAKE_RUNNER_ID = `builtin-agents`
+const DEFAULT_PULL_WAKE_OWNER_ID = `builtin-agents`
+const DEFAULT_PULL_WAKE_OWNER_NAME = `Built-in agents`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
 )
@@ -34,9 +35,8 @@ export interface StoppedDevEnvironment {
 }
 
 export interface StartedBuiltinAgentsEnvironment {
-  port: number
+  runnerId: string
   url: string
-  registeredBaseUrl: string
   agentServerUrl: string
 }
 
@@ -44,31 +44,6 @@ interface WaitForServerOptions {
   fetchImpl?: typeof globalThis.fetch
   timeoutMs?: number
   intervalMs?: number
-}
-
-export function resolveBuiltinAgentsPort(
-  env: NodeJS.ProcessEnv = process.env,
-  fileEnv: Record<string, string> = readDotEnvFile()
-): number {
-  const raw =
-    env.ELECTRIC_AGENTS_BUILTIN_PORT?.trim() ||
-    fileEnv.ELECTRIC_AGENTS_BUILTIN_PORT?.trim()
-  const parsed = raw ? Number(raw) : DEFAULT_BUILTIN_AGENTS_PORT
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`ELECTRIC_AGENTS_BUILTIN_PORT must be a positive integer`)
-  }
-  return parsed
-}
-
-export function resolveBuiltinAgentsHost(
-  env: NodeJS.ProcessEnv = process.env,
-  fileEnv: Record<string, string> = readDotEnvFile()
-): string {
-  return (
-    env.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
-    fileEnv.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
-    DEFAULT_BUILTIN_AGENTS_HOST
-  )
 }
 
 export function resolveElectricAgentsPort(
@@ -108,11 +83,81 @@ export function getStartedBuiltinAgentsMessage(
   started: StartedBuiltinAgentsEnvironment
 ): string {
   return [
-    `Builtin Horton server is up.`,
-    `Webhook server: ${started.url}`,
+    `Builtin agents pull-wake runner is up.`,
+    `Runner: ${started.runnerId}`,
+    `Runtime: ${started.url}`,
     `Registers with: ${started.agentServerUrl}`,
     `Press Ctrl-C to stop.`,
   ].join(`\n`)
+}
+
+function readConfigValue(
+  env: NodeJS.ProcessEnv,
+  fileEnv: Record<string, string>,
+  names: Array<string>
+): string | undefined {
+  for (const name of names) {
+    const value = env[name]?.trim() || fileEnv[name]?.trim()
+    if (value) return value
+  }
+  return undefined
+}
+
+function runnerIdFromIdentity(identity: string | undefined): string {
+  if (!identity) return DEFAULT_PULL_WAKE_RUNNER_ID
+  const slug = identity
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, `-`)
+    .replace(/^-+|-+$/g, ``)
+  return slug ? `builtin-${slug}` : DEFAULT_PULL_WAKE_RUNNER_ID
+}
+
+export function resolvePullWakeRunnerId(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): string {
+  return (
+    readConfigValue(env, fileEnv, [
+      `ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID`,
+      `PULL_WAKE_RUNNER_ID`,
+    ]) ??
+    runnerIdFromIdentity(
+      readConfigValue(env, fileEnv, [
+        `ELECTRIC_ASSERTED_AUTH_EMAIL`,
+        `ELECTRIC_AGENTS_IDENTITY`,
+      ])
+    )
+  )
+}
+
+export function resolvePullWakeOwnerId(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): string {
+  return (
+    readConfigValue(env, fileEnv, [
+      `ELECTRIC_ASSERTED_AUTH_EMAIL`,
+      `ELECTRIC_AGENTS_IDENTITY`,
+    ]) ?? DEFAULT_PULL_WAKE_OWNER_ID
+  )
+}
+
+function buildAssertedAuthHeaders(
+  env: NodeJS.ProcessEnv,
+  fileEnv: Record<string, string>
+): { headers: Record<string, string>; ownerUserId: string; name: string } {
+  const email = resolvePullWakeOwnerId(env, fileEnv)
+  const name =
+    readConfigValue(env, fileEnv, [`ELECTRIC_ASSERTED_AUTH_NAME`]) ??
+    DEFAULT_PULL_WAKE_OWNER_NAME
+  const headers: Record<string, string> = {}
+  headers[`X-Electric-Asserted-Email`] = email
+  headers[`X-Electric-Asserted-Name`] = name
+  return {
+    headers,
+    ownerUserId: email,
+    name,
+  }
 }
 
 export function resolveComposeProjectName(
@@ -203,6 +248,7 @@ export async function startElectricAgentsDevEnvironment(
   const fileEnv = readDotEnvFile(cwd)
   const port = resolveElectricAgentsPort(env, fileEnv)
   const composeProjectName = resolveComposeProjectName(cwd, env)
+  const assertedAuth = buildAssertedAuthHeaders(env, fileEnv)
 
   await runDockerCompose([`compose`, `-f`, DOCKER_COMPOSE_FILE, `up`, `-d`], {
     ...env,
@@ -211,6 +257,18 @@ export async function startElectricAgentsDevEnvironment(
     ELECTRIC_IMAGE_TAG: env.ELECTRIC_IMAGE_TAG ?? ELECTRIC_IMAGE_TAG,
     ELECTRIC_AGENTS_SERVER_IMAGE_TAG:
       env.ELECTRIC_AGENTS_SERVER_IMAGE_TAG ?? ELECTRIC_AGENTS_SERVER_IMAGE_TAG,
+    ELECTRIC_AGENTS_DEV_ASSERTED_AUTH:
+      env.ELECTRIC_AGENTS_DEV_ASSERTED_AUTH ??
+      fileEnv.ELECTRIC_AGENTS_DEV_ASSERTED_AUTH ??
+      `1`,
+    ELECTRIC_ASSERTED_AUTH_EMAIL:
+      env.ELECTRIC_ASSERTED_AUTH_EMAIL ??
+      fileEnv.ELECTRIC_ASSERTED_AUTH_EMAIL ??
+      assertedAuth.ownerUserId,
+    ELECTRIC_ASSERTED_AUTH_NAME:
+      env.ELECTRIC_ASSERTED_AUTH_NAME ??
+      fileEnv.ELECTRIC_ASSERTED_AUTH_NAME ??
+      assertedAuth.name,
   })
 
   const uiUrl = `http://localhost:${port}`
@@ -300,8 +358,8 @@ export async function startBuiltinAgentsServer(
   const cwd = params.cwd ?? process.cwd()
   const fileEnv = readDotEnvFile(cwd)
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
-  const host = resolveBuiltinAgentsHost(env, fileEnv)
-  const port = resolveBuiltinAgentsPort(env, fileEnv)
+  const runnerId = resolvePullWakeRunnerId(env, fileEnv)
+  const assertedAuth = buildAssertedAuthHeaders(env, fileEnv)
   const agentServerUrl =
     params.agentServerUrl ??
     env.ELECTRIC_AGENTS_URL?.trim() ??
@@ -312,18 +370,22 @@ export async function startBuiltinAgentsServer(
 
   const server = new BuiltinAgentsServer({
     agentServerUrl,
-    host,
-    port,
     workingDirectory: cwd,
     loadProjectMcpConfig: true,
+    pullWake: {
+      runnerId,
+      ownerUserId: assertedAuth.ownerUserId,
+      registerRunner: true,
+      headers: assertedAuth.headers,
+      claimHeaders: assertedAuth.headers,
+    },
   })
 
-  await server.start()
+  const url = await server.start()
 
   const started = {
-    port,
-    url: server.url,
-    registeredBaseUrl: server.registeredBaseUrl,
+    runnerId,
+    url,
     agentServerUrl,
   }
 

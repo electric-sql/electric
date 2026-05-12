@@ -2,6 +2,20 @@
  * Types for the Electric Agents entity runtime.
  */
 
+import type { WebhookNotification } from '@electric-ax/agents-runtime'
+
+type WakeNotification = WebhookNotification
+
+export interface AuthenticatedRequestUser {
+  userId: string
+  email?: string
+  name?: string
+}
+
+export type AuthenticateRequest = (
+  request: Request
+) => Promise<AuthenticatedRequestUser | null> | AuthenticatedRequestUser | null
+
 export type EntityStatus = `spawning` | `running` | `idle` | `stopped`
 
 const VALID_ENTITY_STATUSES = new Set<string>([
@@ -18,6 +32,168 @@ export function assertEntityStatus(s: string): EntityStatus {
   return s as EntityStatus
 }
 
+export type DispatchTarget =
+  | { type: `webhook`; url: string; subscription_id?: string }
+  | { type: `runner`; runnerId: string; subscription_id?: string }
+
+export interface DispatchPolicy {
+  readonly targets: readonly [DispatchTarget, ...ReadonlyArray<DispatchTarget>]
+}
+
+export type RunnerKind = `local` | `cloud-worker` | `sandbox` | `ci` | `server`
+export type RunnerAdminStatus = `enabled` | `disabled`
+export type RunnerLiveness = `online` | `offline`
+
+const VALID_RUNNER_KINDS = new Set<string>([
+  `local`,
+  `cloud-worker`,
+  `sandbox`,
+  `ci`,
+  `server`,
+])
+const VALID_RUNNER_ADMIN_STATUSES = new Set<string>([`enabled`, `disabled`])
+
+export function assertRunnerKind(s: string): RunnerKind {
+  if (!VALID_RUNNER_KINDS.has(s)) {
+    throw new Error(`Invalid runner kind: "${s}"`)
+  }
+  return s as RunnerKind
+}
+
+export function assertRunnerAdminStatus(s: string): RunnerAdminStatus {
+  if (!VALID_RUNNER_ADMIN_STATUSES.has(s)) {
+    throw new Error(`Invalid runner admin status: "${s}"`)
+  }
+  return s as RunnerAdminStatus
+}
+
+export type WakeDeliveryStatus =
+  | `queued`
+  | `delivered`
+  | `failed`
+  | `superseded`
+export type WakeClaimStatus = `unclaimed` | `claimed` | `completed` | `expired`
+export type ConsumerClaimStatus = `active` | `released` | `expired` | `failed`
+
+export interface SourceStreamOffset {
+  path: string
+  offset: string
+}
+
+export type PublicWakeNotification = Omit<
+  WakeNotification,
+  `callback` | `claimToken` | `entity`
+> & {
+  entity?: NonNullable<WakeNotification[`entity`]>
+}
+
+export interface ElectricAgentsUser {
+  id: string
+  display_name?: string
+  email?: string
+  avatar_url?: string
+  auth_provider?: string
+  auth_subject?: string
+  profile: Record<string, unknown>
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface RunnerActiveClaim {
+  entityPath: string
+  consumerId: string
+  claimedAt: string
+  leaseExpiresAt?: string
+}
+
+export interface ElectricAgentsRunner {
+  id: string
+  owner_user_id: string
+  label: string
+  kind: RunnerKind
+  admin_status: RunnerAdminStatus
+  liveness?: RunnerLiveness
+  last_seen_at?: string
+  liveness_lease_expires_at?: string
+  active_claims?: Array<RunnerActiveClaim>
+  wake_stream: string
+  wake_stream_offset?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RegisterRunnerRequest {
+  id: string
+  owner_user_id: string
+  label: string
+  kind?: RunnerKind
+  admin_status?: RunnerAdminStatus
+  wake_stream?: string
+}
+
+export interface RunnerHeartbeatRequest {
+  lease_ms?: number
+  wake_stream_offset?: string
+  wakeStreamOffset?: string
+  liveness_lease_expires_at?: string
+}
+
+export interface EntityDispatchState {
+  entity_url: string
+  pending_source_streams: Array<SourceStreamOffset>
+  pending_reason?: string
+  pending_since?: string
+  outstanding_wake_id?: string
+  outstanding_wake_target?: DispatchTarget
+  outstanding_wake_created_at?: string
+  active_consumer_id?: string
+  active_runner_id?: string
+  active_epoch?: number
+  active_claimed_at?: string
+  active_lease_expires_at?: string
+  last_wake_id?: string
+  last_claimed_at?: string
+  last_released_at?: string
+  last_completed_at?: string
+  last_error?: string
+  updated_at: string
+}
+
+export interface WakeNotificationRow {
+  wake_id: string
+  entity_url: string
+  target_type: DispatchTarget[`type`]
+  target_runner_id?: string
+  target_webhook_url?: string
+  target_worker_pool_id?: string
+  runner_wake_stream?: string
+  runner_wake_stream_offset?: string
+  notification_public: PublicWakeNotification
+  delivery_status: WakeDeliveryStatus
+  claim_status: WakeClaimStatus
+  created_at: string
+  delivered_at?: string
+  claimed_at?: string
+  resolved_at?: string
+}
+
+export interface ConsumerClaim {
+  consumer_id: string
+  epoch: number
+  wake_id?: string
+  entity_url: string
+  stream_path: string
+  runner_id?: string
+  status: ConsumerClaimStatus
+  claimed_at: string
+  last_heartbeat_at?: string
+  lease_expires_at?: string
+  released_at?: string
+  acked_streams?: Array<SourceStreamOffset>
+  updated_at: string
+}
+
 export interface ElectricAgentsEntity {
   url: string
   type: string
@@ -27,6 +203,7 @@ export interface ElectricAgentsEntity {
     error: string
   }
   subscription_id: string
+  dispatch_policy?: DispatchPolicy
   write_token: string
   tags: Record<string, string>
   spawn_args?: Record<string, unknown>
@@ -44,6 +221,7 @@ export interface PublicElectricAgentsEntity {
   type: string
   status: EntityStatus
   streams: { main: string; error: string }
+  dispatch_policy?: DispatchPolicy
   tags: Record<string, string>
   spawn_args?: Record<string, unknown>
   parent?: string
@@ -66,6 +244,7 @@ export function toPublicEntity(
     type: entity.type,
     status: entity.status,
     streams: entity.streams,
+    dispatch_policy: entity.dispatch_policy,
     tags: entity.tags,
     spawn_args: entity.spawn_args,
     parent: entity.parent,
@@ -81,6 +260,7 @@ export interface ElectricAgentsEntityType {
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
   serve_endpoint?: string
+  default_dispatch_policy?: DispatchPolicy
   revision: number
   created_at: string
   updated_at: string
@@ -93,6 +273,7 @@ export interface RegisterEntityTypeRequest {
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
   serve_endpoint?: string
+  default_dispatch_policy?: DispatchPolicy
 }
 
 export interface TypedSpawnRequest {
@@ -100,6 +281,7 @@ export interface TypedSpawnRequest {
   args?: Record<string, unknown>
   tags?: Record<string, string>
   parent?: string
+  dispatch_policy?: DispatchPolicy
   initialMessage?: unknown
   wake?: {
     subscriberUrl: string

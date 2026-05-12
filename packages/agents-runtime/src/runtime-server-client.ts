@@ -13,6 +13,16 @@ export interface RuntimeEntityInfo {
   streamPath: string
 }
 
+export type RunnerDispatchPolicy = {
+  targets: [{ type: `runner`; runnerId: string; subscription_id?: string }]
+}
+
+export type WebhookDispatchPolicy = {
+  targets: [{ type: `webhook`; url: string; subscription_id?: string }]
+}
+
+export type DispatchPolicy = RunnerDispatchPolicy | WebhookDispatchPolicy
+
 export interface SpawnEntityOptions {
   type: string
   id: string
@@ -20,6 +30,7 @@ export interface SpawnEntityOptions {
   parentUrl?: string
   initialMessage?: unknown
   tags?: Record<string, string>
+  dispatch_policy?: DispatchPolicy
   wake?: {
     subscriberUrl: string
     condition:
@@ -218,6 +229,7 @@ export function createRuntimeServerClient(
     parentUrl,
     initialMessage,
     tags,
+    dispatch_policy,
     wake,
   }: SpawnEntityOptions): Promise<RuntimeEntityInfo> => {
     const body: Record<string, unknown> = {}
@@ -225,6 +237,7 @@ export function createRuntimeServerClient(
     if (parentUrl !== undefined) body.parent = parentUrl
     if (initialMessage !== undefined) body.initialMessage = initialMessage
     if (tags && Object.keys(tags).length > 0) body.tags = tags
+    if (dispatch_policy !== undefined) body.dispatch_policy = dispatch_policy
     if (wake !== undefined) body.wake = wake
 
     const response = await request(`/_electric/entities/${type}/${id}`, {

@@ -411,18 +411,17 @@ describe(`createRuntimeHandler`, () => {
     defineEntity(`good-agent`, { handler: async () => {} })
     defineEntity(`bad-agent`, { handler: async () => {} })
 
-    vi.spyOn(globalThis, `fetch`).mockImplementation((url) => {
-      if (
-        String(url).includes(`/v1/stream-meta/subscriptions/good-agent-handler`)
-      ) {
+    vi.spyOn(globalThis, `fetch`).mockImplementation((_url, init) => {
+      const body =
+        typeof init?.body === `string`
+          ? (JSON.parse(init.body) as { name?: string })
+          : {}
+      if (body.name === `good-agent`) {
         return Promise.resolve(new Response(`server error`, { status: 500 }))
       }
 
-      const body = JSON.stringify(
-        String(url).includes(`entity-types`) ? { ok: true } : {}
-      )
       return Promise.resolve(
-        new Response(body, {
+        new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: { 'content-type': `application/json` },
         })
@@ -439,7 +438,7 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
-  it(`registers entity types and creates a serve-endpoint subscription`, async () => {
+  it(`registers entity types with a webhook default dispatch policy`, async () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,
       outputSchemas: { custom: makeStandardSchema({ type: `object` }) },
@@ -460,31 +459,28 @@ describe(`createRuntimeHandler`, () => {
 
     await handler.registerTypes()
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith(
       `http://localhost:3000/_electric/entity-types`,
       expect.objectContaining({
         method: `POST`,
       })
     )
-    expect(fetchMock).toHaveBeenCalledWith(
-      `http://localhost:3000/v1/stream-meta/subscriptions/schema-agent-handler`,
-      expect.objectContaining({
-        method: `PUT`,
-      })
-    )
-    const [, subscriptionOptions] = fetchMock.mock.calls[1]!
-    expect(JSON.parse(subscriptionOptions?.body as string)).toEqual({
-      type: `webhook`,
-      pattern: `schema-agent/**`,
-      webhook: { url: `http://localhost:4000/electric-agents` },
-    })
 
     const [, options] = fetchMock.mock.calls[0]!
     expect(JSON.parse(options?.body as string)).toMatchObject({
       name: `schema-agent`,
       description: `Schema agent`,
       serve_endpoint: `http://localhost:4000/electric-agents`,
+      default_dispatch_policy: {
+        targets: [
+          {
+            type: `webhook`,
+            url: `http://localhost:4000/electric-agents`,
+            subscription_id: `webhook:schema-agent`,
+          },
+        ],
+      },
       output_schemas: expect.objectContaining({
         custom: { type: `object` },
         run: expect.any(Object),
@@ -494,54 +490,49 @@ describe(`createRuntimeHandler`, () => {
     })
   })
 
-  it(`recreates owned webhook subscriptions when DS reports a config mismatch`, async () => {
+  it(`registers entity types with an explicit default dispatch policy`, async () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,
       handler: async () => {},
     })
 
-    const fetchMock = vi
-      .spyOn(globalThis, `fetch`)
-      .mockImplementation((url, init) => {
-        const target = String(url)
-        if (target.endsWith(`/_electric/entity-types`)) {
-          return Promise.resolve(
-            new Response(JSON.stringify({ ok: true }), {
-              status: 200,
-              headers: { 'content-type': `application/json` },
-            })
-          )
-        }
-        if (
-          init?.method === `PUT` &&
-          target.endsWith(`/v1/stream-meta/subscriptions/schema-agent-handler`)
-        ) {
-          const putCount = fetchMock.mock.calls.filter(
-            ([calledUrl, calledInit]) =>
-              String(calledUrl).endsWith(
-                `/v1/stream-meta/subscriptions/schema-agent-handler`
-              ) && calledInit?.method === `PUT`
-          ).length
-          if (putCount === 1) {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  error: { code: `SUBSCRIPTION_ALREADY_EXISTS` },
-                }),
-                { status: 409, headers: { 'content-type': `application/json` } }
-              )
-            )
-          }
-          return Promise.resolve(new Response(null, { status: 201 }))
-        }
-        if (
-          init?.method === `DELETE` &&
-          target.endsWith(`/v1/stream-meta/subscriptions/schema-agent-handler`)
-        ) {
-          return Promise.resolve(new Response(null, { status: 204 }))
-        }
-        return Promise.resolve(new Response(null, { status: 500 }))
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
       })
+    )
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      defaultDispatchPolicyForType: () => ({
+        targets: [{ type: `runner`, runnerId: `runner-1` }],
+      }),
+    })
+
+    await handler.registerTypes()
+
+    const [, options] = fetchMock.mock.calls[0]!
+    expect(JSON.parse(options?.body as string)).toMatchObject({
+      name: `schema-agent`,
+      default_dispatch_policy: {
+        targets: [{ type: `runner`, runnerId: `runner-1` }],
+      },
+    })
+  })
+
+  it(`does not create runtime-owned webhook subscriptions during registration`, async () => {
+    defineEntity(`schema-agent`, {
+      description: `Schema agent`,
+      handler: async () => {},
+    })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
 
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
@@ -550,20 +541,9 @@ describe(`createRuntimeHandler`, () => {
 
     await handler.registerTypes()
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      `http://localhost:3000/v1/stream-meta/subscriptions/schema-agent-handler`,
-      expect.objectContaining({ method: `PUT` })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      `http://localhost:3000/v1/stream-meta/subscriptions/schema-agent-handler`,
-      expect.objectContaining({ method: `DELETE` })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
-      `http://localhost:3000/v1/stream-meta/subscriptions/schema-agent-handler`,
-      expect.objectContaining({ method: `PUT` })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      `http://localhost:3000/_electric/entity-types`
     )
   })
 
@@ -590,12 +570,7 @@ describe(`createRuntimeHandler`, () => {
         method: `POST`,
       })
     )
-    expect(fetchMock).toHaveBeenCalledWith(
-      `http://localhost:3000/v1/stream-meta/subscriptions/schema-agent-handler?service=tenant-a&secret=shared-secret`,
-      expect.objectContaining({
-        method: `PUT`,
-      })
-    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it(`registers custom state collections as output schemas`, async () => {

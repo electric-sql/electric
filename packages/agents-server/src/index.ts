@@ -7,6 +7,30 @@ export type {
   AgentsHostTenantRuntime,
 } from './host.js'
 export { StreamClient } from './stream-client.js'
+export type {
+  SubscriptionClaimResponse,
+  SubscriptionCreateInput,
+  SubscriptionResponse,
+  SubscriptionStreamInfo,
+} from './stream-client.js'
+export type {
+  AuthenticatedRequestUser,
+  AuthenticateRequest,
+  ConsumerClaim,
+  DispatchPolicy,
+  DispatchTarget,
+  ElectricAgentsRunner,
+  ElectricAgentsUser,
+  EntityDispatchState,
+  PublicWakeNotification,
+  RegisterRunnerRequest,
+  RunnerAdminStatus,
+  RunnerHeartbeatRequest,
+  RunnerKind,
+  RunnerLiveness,
+  SourceStreamOffset,
+  WakeNotificationRow,
+} from './electric-agents-types.js'
 export { globalRouter } from './routing/global-router.js'
 export type { GlobalRoutes } from './routing/global-router.js'
 export type { TenantContext } from './routing/context.js'

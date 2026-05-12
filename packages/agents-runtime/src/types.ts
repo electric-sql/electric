@@ -594,11 +594,28 @@ export interface WebhookNotification {
   }
 }
 
+export type WakeNotification = WebhookNotification
+
+export type ClaimTokenHeader = `authorization` | `electric-claim-token` | `both`
+
+export type HeadersProvider =
+  | HeadersInit
+  | (() => HeadersInit | Promise<HeadersInit>)
+
 export interface ProcessWakeConfig {
   /** Base URL of the durable streams server */
   baseUrl: string
   /** Entity registry used by this runtime instance */
   registry?: EntityRegistry
+  /**
+   * Additional headers sent to claim callback requests.
+   */
+  claimHeaders?: HeadersProvider
+  /**
+   * Header transport for the Durable Streams claim token. Defaults to
+   * Authorization for webhook compatibility.
+   */
+  claimTokenHeader?: ClaimTokenHeader
   /** Optional tool factory invoked per wake context. */
   createElectricTools?: (context: {
     entityUrl: string
@@ -628,7 +645,7 @@ export interface ProcessWakeConfig {
   shutdownSignal?: AbortSignal
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
-  /** Heartbeat interval in ms (default: 30_000) */
+  /** Heartbeat interval in ms (default: 10_000) */
   heartbeatInterval?: number
 }
 

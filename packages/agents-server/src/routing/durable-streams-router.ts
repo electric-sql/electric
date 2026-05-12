@@ -129,6 +129,25 @@ function rewriteSubscriptionBodyForBackend(
         : stream
     )
   }
+  if (typeof payload.wake_stream === `string`) {
+    payload.wake_stream = routingAdapter.toBackendStreamPath(
+      service,
+      payload.wake_stream
+    )
+  }
+  if (Array.isArray(payload.acks)) {
+    payload.acks = payload.acks.map((ack) => {
+      if (!ack || typeof ack !== `object`) return ack
+      const next = { ...(ack as Record<string, unknown>) }
+      if (typeof next.stream === `string`) {
+        next.stream = routingAdapter.toBackendStreamPath(service, next.stream)
+      }
+      if (typeof next.path === `string`) {
+        next.path = routingAdapter.toBackendStreamPath(service, next.path)
+      }
+      return next
+    })
+  }
 }
 
 function rewriteSubscriptionResponseForClient(
@@ -168,6 +187,28 @@ function rewriteSubscriptionResponseForClient(
         }
       }
       return stream
+    })
+  }
+  if (typeof payload.wake_stream === `string`) {
+    payload.wake_stream = routingAdapter.toRuntimeStreamPath(
+      service,
+      payload.wake_stream
+    )
+  }
+  if (typeof payload.stream === `string`) {
+    payload.stream = routingAdapter.toRuntimeStreamPath(service, payload.stream)
+  }
+  if (Array.isArray(payload.acks)) {
+    payload.acks = payload.acks.map((ack) => {
+      if (!ack || typeof ack !== `object`) return ack
+      const next = { ...(ack as Record<string, unknown>) }
+      if (typeof next.stream === `string`) {
+        next.stream = routingAdapter.toRuntimeStreamPath(service, next.stream)
+      }
+      if (typeof next.path === `string`) {
+        next.path = routingAdapter.toRuntimeStreamPath(service, next.path)
+      }
+      return next
     })
   }
 

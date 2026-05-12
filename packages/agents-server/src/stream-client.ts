@@ -34,6 +34,71 @@ export interface ConsumerStateResponse {
   }
 }
 
+export interface SubscriptionStreamInfo {
+  path: string
+  tail_offset?: string
+  has_pending?: boolean
+}
+
+export interface SubscriptionResponse {
+  subscription_id?: string
+  id?: string
+  type?: `webhook` | `pull-wake`
+  pattern?: string
+  streams?: Array<string | SubscriptionStreamInfo>
+  webhook?: { url?: string }
+  wake_stream?: string
+  callback_url?: string
+  callback_token?: string
+  webhook_secret?: string
+}
+
+export interface SubscriptionCreateInput {
+  type: `webhook` | `pull-wake`
+  pattern?: string
+  streams?: Array<string>
+  webhook?: { url: string }
+  wake_stream?: string
+  lease_ttl_ms?: number
+  description?: string
+}
+
+export interface SubscriptionClaimResponse {
+  wake_id: string
+  generation: number
+  token: string
+  streams: Array<SubscriptionStreamInfo>
+  lease_ttl_ms?: number
+}
+
+export class DurableStreamsSubscriptionError extends Error {
+  readonly code?: string
+  readonly errorMessage?: string
+
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: string
+  ) {
+    super(`${message}: ${status} ${body}`)
+    this.name = `DurableStreamsSubscriptionError`
+
+    try {
+      const parsed = JSON.parse(body) as {
+        error?: { code?: unknown; message?: unknown }
+      }
+      if (typeof parsed.error?.code === `string`) {
+        this.code = parsed.error.code
+      }
+      if (typeof parsed.error?.message === `string`) {
+        this.errorMessage = parsed.error.message
+      }
+    } catch {
+      // Preserve the raw body in the error message when DS returns non-JSON.
+    }
+  }
+}
+
 export function durableStreamsServiceUrl(
   baseUrl: string,
   serviceId: string
@@ -64,11 +129,44 @@ function normalizeSubscriptionPattern(pattern: string): string {
   return pattern.replace(/^\/+/, ``)
 }
 
+function normalizeSubscriptionStreamPath(path: string): string {
+  return path.replace(/^\/+/, ``)
+}
+
+function normalizeSubscriptionPath(path: string): string {
+  return path.replace(/^\/+/, ``).replace(/\/+$/, ``)
+}
+
 export class StreamClient {
   constructor(readonly baseUrl: string) {}
 
   private streamUrl(path: string): string {
     return `${this.baseUrl}${path}`
+  }
+
+  private subscriptionServiceId(): string | null {
+    const url = new URL(this.baseUrl)
+    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
+    return match ? decodeURIComponent(match[2]!) : null
+  }
+
+  private backendSubscriptionPath(path: string): string {
+    const normalized = normalizeSubscriptionPath(path)
+    const serviceId = this.subscriptionServiceId()
+    if (!serviceId) return normalized
+    if (normalized === serviceId || normalized.startsWith(`${serviceId}/`)) {
+      return normalized
+    }
+    return `${serviceId}/${normalized}`
+  }
+
+  private runtimeSubscriptionPath(path: string): string {
+    const normalized = normalizeSubscriptionPath(path)
+    const serviceId = this.subscriptionServiceId()
+    if (!serviceId) return normalized
+    return normalized.startsWith(`${serviceId}/`)
+      ? normalized.slice(serviceId.length + 1)
+      : normalized
   }
 
   private subscriptionUrl(subscriptionId: string): string {
@@ -82,6 +180,17 @@ export class StreamClient {
     }
 
     url.pathname = `${url.pathname.replace(/\/+$/, ``)}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
+    return url.toString()
+  }
+
+  private subscriptionChildUrl(
+    subscriptionId: string,
+    ...segments: Array<string>
+  ): string {
+    const url = new URL(this.subscriptionUrl(subscriptionId))
+    url.pathname = `${url.pathname.replace(/\/+$/, ``)}/${segments
+      .map((segment) => encodeURIComponent(segment))
+      .join(`/`)}`
     return url.toString()
   }
 
@@ -351,6 +460,23 @@ export class StreamClient {
     await DurableStream.delete({ url: this.streamUrl(path) })
   }
 
+  async ensure(path: string, opts: { contentType: string }): Promise<void> {
+    if (await this.exists(path)) return
+    try {
+      await this.create(path, opts)
+    } catch (err) {
+      if (
+        err &&
+        typeof err === `object` &&
+        `status` in err &&
+        (err as { status?: unknown }).status === 409
+      ) {
+        return
+      }
+      throw err
+    }
+  }
+
   async exists(path: string): Promise<boolean> {
     try {
       const result = await DurableStream.head({ url: this.streamUrl(path) })
@@ -369,26 +495,249 @@ export class StreamClient {
     webhookUrl: string,
     description?: string
   ): Promise<{ subscription_id: string; webhook_secret?: string }> {
-    const url = this.subscriptionUrl(subscriptionId)
-    const res = await fetch(url, {
+    const res = await this.putSubscription(subscriptionId, {
+      type: `webhook`,
+      pattern: normalizeSubscriptionPattern(pattern),
+      webhook: { url: webhookUrl },
+      ...(description ? { description } : {}),
+    })
+    return res as { subscription_id: string; webhook_secret?: string }
+  }
+
+  async putSubscription(
+    subscriptionId: string,
+    input: SubscriptionCreateInput
+  ): Promise<SubscriptionResponse> {
+    const res = await fetch(this.subscriptionUrl(subscriptionId), {
       method: `PUT`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({
-        type: `webhook`,
-        pattern: normalizeSubscriptionPattern(pattern),
-        webhook: { url: webhookUrl },
-        ...(description ? { description } : {}),
+        ...input,
+        pattern:
+          typeof input.pattern === `string`
+            ? this.backendSubscriptionPath(
+                normalizeSubscriptionPattern(input.pattern)
+              )
+            : undefined,
+        streams: input.streams?.map((stream) =>
+          this.backendSubscriptionPath(normalizeSubscriptionStreamPath(stream))
+        ),
+        wake_stream:
+          typeof input.wake_stream === `string`
+            ? this.backendSubscriptionPath(
+                normalizeSubscriptionStreamPath(input.wake_stream)
+              )
+            : undefined,
       }),
     })
+    return await this.subscriptionJson(res, `Subscription creation failed`)
+  }
+
+  async getSubscription(
+    subscriptionId: string
+  ): Promise<SubscriptionResponse | null> {
+    const res = await fetch(this.subscriptionUrl(subscriptionId), {
+      method: `GET`,
+    })
+    if (res.status === 404) return null
+    return await this.subscriptionJson(res, `Subscription query failed`)
+  }
+
+  async deleteSubscription(subscriptionId: string): Promise<void> {
+    const res = await fetch(this.subscriptionUrl(subscriptionId), {
+      method: `DELETE`,
+    })
+    if (res.status === 404 || res.status === 204) return
     if (!res.ok) {
       throw new Error(
-        `Subscription creation failed: ${res.status} ${await res.text()}`
+        `Subscription delete failed: ${res.status} ${await res.text()}`
       )
     }
-    return res.json() as Promise<{
-      subscription_id: string
-      webhook_secret?: string
-    }>
+  }
+
+  async addSubscriptionStreams(
+    subscriptionId: string,
+    streams: Array<string>
+  ): Promise<SubscriptionResponse> {
+    const res = await fetch(
+      this.subscriptionChildUrl(subscriptionId, `streams`),
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          streams: streams.map((stream) =>
+            this.backendSubscriptionPath(
+              normalizeSubscriptionStreamPath(stream)
+            )
+          ),
+        }),
+      }
+    )
+    return await this.subscriptionJson(res, `Subscription stream add failed`)
+  }
+
+  async removeSubscriptionStream(
+    subscriptionId: string,
+    streamPath: string
+  ): Promise<void> {
+    const res = await fetch(
+      this.subscriptionChildUrl(
+        subscriptionId,
+        `streams`,
+        this.backendSubscriptionPath(
+          normalizeSubscriptionStreamPath(streamPath)
+        )
+      ),
+      { method: `DELETE` }
+    )
+    if (res.status === 404 || res.status === 204) return
+    if (!res.ok) {
+      throw new Error(
+        `Subscription stream remove failed: ${res.status} ${await res.text()}`
+      )
+    }
+  }
+
+  async claimSubscription(
+    subscriptionId: string,
+    worker: string
+  ): Promise<SubscriptionClaimResponse | null> {
+    const res = await fetch(
+      this.subscriptionChildUrl(subscriptionId, `claim`),
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ worker }),
+      }
+    )
+    if (res.status === 204 || res.status === 404) return null
+    return (await this.subscriptionJson(
+      res,
+      `Subscription claim failed`
+    )) as SubscriptionClaimResponse
+  }
+
+  async ackSubscription(
+    subscriptionId: string,
+    token: string,
+    body: Record<string, unknown>
+  ): Promise<SubscriptionResponse> {
+    const res = await fetch(this.subscriptionChildUrl(subscriptionId, `ack`), {
+      method: `POST`,
+      headers: {
+        'content-type': `application/json`,
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(this.subscriptionRequestBody(body)),
+    })
+    return await this.subscriptionJson(res, `Subscription ack failed`)
+  }
+
+  async releaseSubscription(
+    subscriptionId: string,
+    token: string,
+    body: Record<string, unknown>
+  ): Promise<SubscriptionResponse> {
+    const res = await fetch(
+      this.subscriptionChildUrl(subscriptionId, `release`),
+      {
+        method: `POST`,
+        headers: {
+          'content-type': `application/json`,
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(this.subscriptionRequestBody(body)),
+      }
+    )
+    return await this.subscriptionJson(res, `Subscription release failed`)
+  }
+
+  private subscriptionRequestBody(
+    body: Record<string, unknown>
+  ): Record<string, unknown> {
+    const next = { ...body }
+    if (typeof next.stream === `string`) {
+      next.stream = this.backendSubscriptionPath(next.stream)
+    }
+    if (typeof next.path === `string`) {
+      next.path = this.backendSubscriptionPath(next.path)
+    }
+    if (Array.isArray(next.acks)) {
+      next.acks = next.acks.map((ack) => {
+        if (!ack || typeof ack !== `object`) return ack
+        const mapped = { ...(ack as Record<string, unknown>) }
+        if (typeof mapped.stream === `string`) {
+          mapped.stream = this.backendSubscriptionPath(mapped.stream)
+        }
+        if (typeof mapped.path === `string`) {
+          mapped.path = this.backendSubscriptionPath(mapped.path)
+        }
+        return mapped
+      })
+    }
+    return next
+  }
+
+  private subscriptionResponseBody(
+    body: SubscriptionResponse
+  ): SubscriptionResponse {
+    const next = { ...body }
+    if (typeof next.pattern === `string`) {
+      next.pattern = this.runtimeSubscriptionPath(next.pattern)
+    }
+    if (typeof next.wake_stream === `string`) {
+      next.wake_stream = this.runtimeSubscriptionPath(next.wake_stream)
+    }
+    if (Array.isArray(next.streams)) {
+      next.streams = next.streams.map((stream) => {
+        if (typeof stream === `string`)
+          return this.runtimeSubscriptionPath(stream)
+        return {
+          ...stream,
+          path: this.runtimeSubscriptionPath(stream.path),
+        }
+      })
+    }
+    if (Array.isArray((next as { acks?: unknown }).acks)) {
+      ;(next as { acks?: Array<Record<string, unknown>> }).acks = (
+        next as { acks: Array<Record<string, unknown>> }
+      ).acks.map((ack) => {
+        if (!ack || typeof ack !== `object`) return ack
+        const mapped = { ...ack }
+        if (typeof mapped.stream === `string`) {
+          mapped.stream = this.runtimeSubscriptionPath(mapped.stream)
+        }
+        if (typeof mapped.path === `string`) {
+          mapped.path = this.runtimeSubscriptionPath(mapped.path)
+        }
+        return mapped
+      })
+    }
+    if (typeof (next as { stream?: unknown }).stream === `string`) {
+      ;(next as { stream: string }).stream = this.runtimeSubscriptionPath(
+        (next as { stream: string }).stream
+      )
+    }
+    return next
+  }
+
+  private async subscriptionJson(
+    res: Response,
+    message: string
+  ): Promise<SubscriptionResponse> {
+    if (!res.ok) {
+      throw new DurableStreamsSubscriptionError(
+        message,
+        res.status,
+        await res.text()
+      )
+    }
+    if (res.status === 204) return {}
+    const text = await res.text()
+    if (!text.trim()) return {}
+    return this.subscriptionResponseBody(
+      JSON.parse(text) as SubscriptionResponse
+    )
   }
 
   async getConsumerState(
