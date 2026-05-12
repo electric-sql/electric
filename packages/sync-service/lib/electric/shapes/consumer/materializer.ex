@@ -404,7 +404,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   defp xid_set(nil), do: MapSet.new()
-  defp xid_set(xid) when is_integer(xid), do: MapSet.new([xid])
+  defp xid_set(xid) when is_integer(xid) and xid > 0, do: MapSet.new([xid])
 
   defp maybe_flush_pending_events(state, true) do
     events =
