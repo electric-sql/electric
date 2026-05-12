@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLiveQuery } from '@tanstack/react-db'
+import { eq } from '@tanstack/db'
 import { useNavigate } from '@tanstack/react-router'
 import { useEntityTimeline } from '../../hooks/useEntityTimeline'
+import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { EntityTimeline } from '../EntityTimeline'
 import { MessageInput } from '../MessageInput'
 import { EntityContextDrawer } from '../EntityContextDrawer'
 import { readTextPayload } from '../../lib/sendMessage'
+import type { ElectricEntityType } from '../../lib/ElectricAgentsProvider'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { TimelineEntry } from '../../lib/timelineEntries'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
@@ -32,11 +36,24 @@ export function ChatView({
   // timeline / disabled composer.
   const connectUrl = isSpawning ? null : entityUrl
 
+  const { entityTypesCollection } = useElectricAgents()
+  const { data: entityTypeMatches = [] } = useLiveQuery(
+    (q) => {
+      if (!entityTypesCollection) return undefined
+      return q
+        .from({ t: entityTypesCollection })
+        .where(({ t }) => eq(t.name, entity.type))
+    },
+    [entityTypesCollection, entity.type]
+  )
+  const entityType = entityTypeMatches.at(0) ?? null
+
   return (
     <GenericChatBody
       baseUrl={baseUrl}
       entityUrl={connectUrl}
       entity={entity}
+      entityType={entityType}
       entityStopped={entityStopped}
       isSpawning={isSpawning}
       tileId={tileId}
@@ -48,6 +65,7 @@ function GenericChatBody({
   baseUrl,
   entityUrl,
   entity,
+  entityType,
   entityStopped,
   isSpawning,
   tileId,
@@ -55,6 +73,7 @@ function GenericChatBody({
   baseUrl: string
   entityUrl: string | null
   entity: ViewProps[`entity`]
+  entityType: ElectricEntityType | null
   entityStopped: boolean
   isSpawning: boolean
   tileId: string
@@ -226,6 +245,8 @@ function GenericChatBody({
           />
         )}
         onSend={() => setSentMessageSignal((value) => value + 1)}
+        entity={entity}
+        entityType={entityType}
       />
     </>
   )
