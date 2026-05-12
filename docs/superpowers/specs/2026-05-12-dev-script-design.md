@@ -42,15 +42,15 @@ Provide a single script that starts, stops, builds, and tears down the Electric 
 
 Six processes plus one docker compose stack:
 
-| Name                | Command                                                                                                                                                                          | Purpose                          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `docker`            | `docker compose -f packages/agents-server/docker-compose.dev.yml up -d`                                                                                                          | Postgres, Electric, Jaeger       |
-| `agents-runtime`    | `pnpm -C packages/agents-runtime dev`                                                                                                                                            | tsdown watch                     |
-| `agents-server-build` | `pnpm -C packages/agents-server dev`                                                                                                                                           | tsdown watch                     |
-| `agents-build`      | `pnpm -C packages/agents dev`                                                                                                                                                    | tsdown watch                     |
-| `agents-server`     | `DATABASE_URL=… ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 ELECTRIC_INSECURE=true node packages/agents-server/dist/entrypoint.js`                                         | Server on `localhost:4437`       |
-| `agents`            | `ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 node packages/agents/dist/entrypoint.js`                                                                                       | Built-in agents on `localhost:4448` |
-| `agents-server-ui`  | `pnpm -C packages/agents-server-ui dev`                                                                                                                                          | Vite dev server (HMR)            |
+| Name                  | Command                                                                                                                                   | Purpose                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `docker`              | `docker compose -f packages/agents-server/docker-compose.dev.yml up -d`                                                                   | Postgres, Electric, Jaeger          |
+| `agents-runtime`      | `pnpm -C packages/agents-runtime dev`                                                                                                     | tsdown watch                        |
+| `agents-server-build` | `pnpm -C packages/agents-server dev`                                                                                                      | tsdown watch                        |
+| `agents-build`        | `pnpm -C packages/agents dev`                                                                                                             | tsdown watch                        |
+| `agents-server`       | `DATABASE_URL=… ELECTRIC_AGENTS_ELECTRIC_URL=http://localhost:3060 ELECTRIC_INSECURE=true node packages/agents-server/dist/entrypoint.js` | Server on `localhost:4437`          |
+| `agents`              | `ELECTRIC_AGENTS_SERVER_URL=http://localhost:4437 node packages/agents/dist/entrypoint.js`                                                | Built-in agents on `localhost:4448` |
+| `agents-server-ui`    | `pnpm -C packages/agents-server-ui dev`                                                                                                   | Vite dev server (HMR)               |
 
 All six processes are spawned in parallel by `start`. The entrypoints depend on `dist/` existing — `start` checks for that and bails with a clear message pointing to `./scripts/dev.sh build` if anything is missing.
 
@@ -76,6 +76,7 @@ scripts/
 pnpm install
 pnpm -C packages/typescript-client build
 pnpm -C packages/agents-runtime build
+pnpm -C packages/agents-mcp build
 pnpm -C packages/agents-server build
 pnpm -C packages/agents build
 ```
@@ -87,8 +88,8 @@ If any step fails, the script exits non-zero and prints the failing command. No 
 ## `start` behavior
 
 1. **Preflight checks** (all fail loud):
-   - `.env` exists at repo root and contains `ANTHROPIC_API_KEY`.
-   - `dist/` directories exist for `typescript-client`, `agents-runtime`, `agents-server`, `agents`. If any are missing → print `run ./scripts/dev.sh build first` and exit 1.
+   - `.env` exists at repo root and contains `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
+   - `dist/` directories exist for `typescript-client`, `agents-runtime`, `agents-mcp`, `agents-server`, `agents`. If any are missing → print `run ./scripts/dev.sh build first` and exit 1.
    - `docker` daemon reachable (`docker info` quick check).
    - No existing `.dev-logs/*.pid` files for live processes. If found, suggest `./scripts/dev.sh stop` first.
 2. `mkdir -p .dev-logs`

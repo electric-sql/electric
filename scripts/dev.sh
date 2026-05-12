@@ -6,6 +6,7 @@
 
 set -u
 set -o pipefail
+set -m  # enable job control so each `&` runs in its own process group
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$REPO_ROOT/.dev-logs"
@@ -47,7 +48,7 @@ cmd_build() {
   cd "$REPO_ROOT"
   log "pnpm install"
   pnpm install || die "pnpm install failed"
-  for pkg in typescript-client agents-runtime agents-server agents; do
+  for pkg in typescript-client agents-runtime agents-mcp agents-server agents; do
     log "build packages/$pkg"
     pnpm -C "packages/$pkg" build || die "build failed for packages/$pkg"
   done
@@ -57,10 +58,11 @@ cmd_build() {
 preflight() {
   cd "$REPO_ROOT"
 
-  [[ -f .env ]] || die ".env not found at repo root. Create one with ANTHROPIC_API_KEY."
-  grep -q '^ANTHROPIC_API_KEY=' .env || die ".env is missing ANTHROPIC_API_KEY."
+  [[ -f .env ]] || die ".env not found at repo root. Create one with ANTHROPIC_API_KEY or OPENAI_API_KEY."
+  grep -qE '^(ANTHROPIC_API_KEY|OPENAI_API_KEY)=' .env \
+    || die ".env is missing ANTHROPIC_API_KEY or OPENAI_API_KEY."
 
-  for pkg in typescript-client agents-runtime agents-server agents; do
+  for pkg in typescript-client agents-runtime agents-mcp agents-server agents; do
     [[ -d "packages/$pkg/dist" ]] || die "packages/$pkg/dist is missing. Run: $0 build"
   done
 
@@ -95,6 +97,13 @@ spawn() {
   log "started $name (pid $pid) -> $logfile"
 }
 
+_signal_pg() {
+  # Send signal $1 to process group of pid $2 (and to the pid itself
+  # in case it isn't a group leader). Errors suppressed.
+  local sig="$1" pid="$2"
+  kill "-$sig" -- "-$pid" 2>/dev/null || kill "-$sig" "$pid" 2>/dev/null || true
+}
+
 stop_processes() {
   local any_alive=false
   for name in "${SERVICES[@]}"; do
@@ -103,7 +112,7 @@ stop_processes() {
     local pid
     pid=$(cat "$pidfile")
     if kill -0 "$pid" 2>/dev/null; then
-      kill -TERM "$pid" 2>/dev/null || true
+      _signal_pg TERM "$pid"
       any_alive=true
     fi
   done
@@ -129,24 +138,29 @@ stop_processes() {
       pid=$(cat "$pidfile")
       if kill -0 "$pid" 2>/dev/null; then
         warn "$name (pid $pid) did not exit, sending SIGKILL"
-        kill -KILL "$pid" 2>/dev/null || true
+        _signal_pg KILL "$pid"
       fi
       rm -f "$pidfile"
     done
   fi
 
-  # Always clean up stale pid files (process already gone)
   for name in "${SERVICES[@]}"; do
     rm -f "$LOG_DIR/$name.pid"
   done
 }
 
 stop_docker() {
-  local extra=("$@")
+  local with_volumes="${1:-false}"
   cd "$REPO_ROOT"
-  log "docker compose down ${extra[*]:-}"
-  docker compose -f "$DOCKER_COMPOSE_FILE" down "${extra[@]}" \
-    >>"$LOG_DIR/docker.log" 2>&1 || warn "docker compose down returned non-zero"
+  if [[ "$with_volumes" == "true" ]]; then
+    log "docker compose down -v"
+    docker compose -f "$DOCKER_COMPOSE_FILE" down -v \
+      >>"$LOG_DIR/docker.log" 2>&1 || warn "docker compose down returned non-zero"
+  else
+    log "docker compose down"
+    docker compose -f "$DOCKER_COMPOSE_FILE" down \
+      >>"$LOG_DIR/docker.log" 2>&1 || warn "docker compose down returned non-zero"
+  fi
 }
 
 cmd_start() {
@@ -213,7 +227,7 @@ cmd_stop() {
 cmd_teardown() {
   mkdir -p "$LOG_DIR"
   stop_processes
-  stop_docker -v
+  stop_docker true
   log "torn down (volumes removed)."
 }
 
