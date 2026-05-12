@@ -76,6 +76,8 @@ export function SplitMenu({
   const navigate = useNavigate()
   const hasEntity = entity !== null && tile.entityUrl !== null
   const entityUrl = tile.entityUrl
+  const entityTerminal =
+    entity?.status === `stopped` || entity?.status === `killed`
   const pinned = entityUrl !== null && pinnedUrls.includes(entityUrl)
   // Hide "Close tile" when this is the only tile in the workspace —
   // closing it would leave the workspace empty (which the URL ↔
@@ -233,10 +235,7 @@ export function SplitMenu({
             </Menu.Item>
           )}
           {hasEntity && entity && forkEntity && !entity.parent && (
-            <Menu.Item
-              onSelect={handleFork}
-              disabled={entity.status === `stopped`}
-            >
+            <Menu.Item onSelect={handleFork} disabled={entityTerminal}>
               <UiIcon icon={GitFork} size={2} />
               <Text size={2}>Fork subtree</Text>
             </Menu.Item>
@@ -253,7 +252,7 @@ export function SplitMenu({
             </>
           )}
 
-          {hasEntity && entity && entity.status !== `stopped` && killEntity && (
+          {hasEntity && entity && !entityTerminal && killEntity && (
             <>
               <Menu.Separator />
               <Menu.Item

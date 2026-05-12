@@ -160,15 +160,18 @@ export function groupByType(
 }
 
 /**
- * Group by `status`, ordered by lifecycle (running → idle → spawning
- * → stopped) so the user's eye lands on currently-active sessions
+ * Group by `status`, ordered by lifecycle so the user's eye lands on
+ * currently-active sessions
  * first. Same in-group sort as `groupByType`.
  */
 const STATUS_ORDER: Record<string, number> = {
   running: 0,
   idle: 1,
-  spawning: 2,
-  stopped: 3,
+  paused: 2,
+  spawning: 3,
+  stopping: 4,
+  stopped: 5,
+  killed: 6,
 }
 
 export function groupByStatus(

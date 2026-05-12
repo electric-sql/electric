@@ -1,6 +1,7 @@
 import { memo } from 'react'
+import { Square } from 'lucide-react'
 import type { EntityTimelineSection } from '@electric-ax/agents-runtime/client'
-import { Stack, Text } from '../ui'
+import { Icon, Stack, Text } from '../ui'
 import { TimeText } from './TimeText'
 import styles from './UserMessage.module.css'
 
@@ -11,14 +12,42 @@ type UserMessageSection = Extract<
 
 export const UserMessage = memo(function UserMessage({
   section,
+  showStop = false,
+  stopPending = false,
+  onStop,
 }: {
   section: UserMessageSection
+  showStop?: boolean
+  stopPending?: boolean
+  onStop?: () => void
 }): React.ReactElement {
   const sender = formatSender(section.from)
 
   return (
     <Stack direction="column" gap={1} className={styles.root}>
-      <Stack p={3} className={styles.bubble}>
+      <Stack
+        p={3}
+        className={[styles.bubble, showStop ? styles.withStop : null]
+          .filter(Boolean)
+          .join(` `)}
+      >
+        {showStop && onStop && (
+          <button
+            type="button"
+            aria-label="Stop generating"
+            title="Stop generating"
+            className={[
+              styles.stopButton,
+              stopPending ? styles.stopPending : null,
+            ]
+              .filter(Boolean)
+              .join(` `)}
+            disabled={stopPending}
+            onClick={onStop}
+          >
+            <Icon icon={Square} size={2} fill="currentColor" strokeWidth={0} />
+          </button>
+        )}
         <Text size={2} className={styles.body}>
           {section.text}
         </Text>

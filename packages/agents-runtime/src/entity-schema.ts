@@ -45,7 +45,31 @@ type SequencedPersistedRow<T extends { key?: string | undefined }> = Omit<
   _seq?: number
 }
 type Schema<T> = z.ZodType<T>
-type ChildEntityStatusValue = `spawning` | `running` | `idle` | `stopped`
+type ChildEntityStatusValue =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
+type SignalHandlingStatus = `unhandled` | `handled`
+type SignalOutcome =
+  | `transitioned`
+  | `ignored`
+  | `invalid_for_state`
+  | `delivered`
+  | `aborted`
+  | `shutdown_requested`
+  | `failed`
 type TagEntryValue = {
   key?: string
   value: string
@@ -162,6 +186,20 @@ type EntityStoppedValue = {
   timestamp: string
   reason?: string
 }
+type SignalValue = {
+  key?: string
+  signal: EntitySignal
+  status: SignalHandlingStatus
+  sender?: string
+  reason?: string
+  payload?: unknown
+  timestamp: string
+  handled_at?: string
+  handled_by?: string
+  outcome?: SignalOutcome
+  previous_state?: ChildEntityStatusValue
+  new_state?: ChildEntityStatusValue
+}
 type ChildStatusEntryValue = {
   key?: string
   entity_url: string
@@ -270,7 +308,27 @@ function createJsonObjectSchema(): Schema<Record<string, JsonValue>> {
 }
 
 function createChildEntityStatusSchema(): Schema<ChildEntityStatusValue> {
-  return z.enum([`spawning`, `running`, `idle`, `stopped`])
+  return z.enum([
+    `spawning`,
+    `running`,
+    `idle`,
+    `paused`,
+    `stopping`,
+    `stopped`,
+    `killed`,
+  ])
+}
+
+function createEntitySignalSchema(): Schema<EntitySignal> {
+  return z.enum([
+    `SIGINT`,
+    `SIGHUP`,
+    `SIGTERM`,
+    `SIGKILL`,
+    `SIGSTOP`,
+    `SIGCONT`,
+    `SIGUSR`,
+  ])
 }
 
 function createWakeChangeSchema(): Schema<WakeChangeEntryValue> {
@@ -437,6 +495,33 @@ function createEntityStoppedSchema(): Schema<EntityStoppedValue> {
   })
 }
 
+function createSignalSchema(): Schema<SignalValue> {
+  return z.object({
+    key: z.string().optional(),
+    signal: createEntitySignalSchema(),
+    status: z.enum([`unhandled`, `handled`]),
+    sender: z.string().optional(),
+    reason: z.string().optional(),
+    payload: z.unknown().optional(),
+    timestamp: z.string(),
+    handled_at: z.string().optional(),
+    handled_by: z.string().optional(),
+    outcome: z
+      .enum([
+        `transitioned`,
+        `ignored`,
+        `invalid_for_state`,
+        `delivered`,
+        `aborted`,
+        `shutdown_requested`,
+        `failed`,
+      ])
+      .optional(),
+    previous_state: createChildEntityStatusSchema().optional(),
+    new_state: createChildEntityStatusSchema().optional(),
+  })
+}
+
 function createChildStatusSchema(): Schema<ChildStatusEntryValue> {
   return z.object({
     key: z.string().optional(),
@@ -591,6 +676,7 @@ export type MessageReceived = SequencedPersistedRow<MessageReceivedValue>
 export type WakeEntry = SequencedPersistedRow<WakeEntryValue>
 export type EntityCreated = SequencedPersistedRow<EntityCreatedValue>
 export type EntityStopped = SequencedPersistedRow<EntityStoppedValue>
+export type Signal = SequencedPersistedRow<SignalValue>
 export type ChildStatusEntry = SequencedPersistedRow<ChildStatusEntryValue>
 export type TagEntry = SequencedPersistedRow<TagEntryValue>
 export type ContextInserted = SequencedPersistedRow<ContextInsertedValue>
@@ -660,6 +746,7 @@ export const ENTITY_COLLECTIONS = {
   wakes: `wakes`,
   entityCreated: `entityCreated`,
   entityStopped: `entityStopped`,
+  signals: `signals`,
   childStatus: `childStatus`,
   tags: `tags`,
   manifests: `manifests`,
@@ -685,6 +772,7 @@ export const BUILT_IN_EVENT_SCHEMAS = {
     createEntityCreatedSchema() as unknown as BuiltInEntitySchema<EntityCreated>,
   entity_stopped:
     createEntityStoppedSchema() as unknown as BuiltInEntitySchema<EntityStopped>,
+  signal: createSignalSchema() as unknown as BuiltInEntitySchema<Signal>,
   child_status:
     createChildStatusSchema() as unknown as BuiltInEntitySchema<ChildStatusEntry>,
   tags: createTagEntrySchema() as unknown as BuiltInEntitySchema<TagEntry>,
@@ -714,6 +802,7 @@ type EntityCollectionsDefinition = {
   wakes: CollectionDefinition<WakeEntry>
   entityCreated: CollectionDefinition<EntityCreated>
   entityStopped: CollectionDefinition<EntityStopped>
+  signals: CollectionDefinition<Signal>
   childStatus: CollectionDefinition<ChildStatusEntry>
   tags: CollectionDefinition<TagEntry>
   manifests: CollectionDefinition<Manifest>
@@ -786,6 +875,11 @@ export const builtInCollections: EntityCollectionsDefinition = {
     type: `entity_stopped`,
     primaryKey: `key`,
   },
+  signals: {
+    schema: BUILT_IN_EVENT_SCHEMAS.signal as StandardSchemaV1<Signal>,
+    type: `signal`,
+    primaryKey: `key`,
+  },
   childStatus: {
     schema:
       BUILT_IN_EVENT_SCHEMAS.child_status as StandardSchemaV1<ChildStatusEntry>,
@@ -836,6 +930,7 @@ export const entityStateSchema: StateSchema<EntityCollectionsDefinition> =
 /** Event types that are management/bookkeeping rather than agent content. */
 const MANAGEMENT_TYPES = new Set<string>([
   `entity_created`,
+  `signal`,
   `manifest`,
   `replay_watermark`,
   `ack`,

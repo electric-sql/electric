@@ -27,7 +27,10 @@ import {
 } from '../lib/timelineRowHeights'
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
 import { useWorkspace } from '../hooks/useWorkspace'
-import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import {
+  useElectricAgents,
+  type ElectricEntity,
+} from '../lib/ElectricAgentsProvider'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
 import { UserMessage } from './UserMessage'
@@ -103,6 +106,7 @@ const CHAT_SURFACE_GUTTER = 24
 const ROW_GAP = 24
 const MANIFEST_ROW_GAP = 10
 const ROW_SETTLE_MS = 500
+type EntityStatus = ElectricEntity[`status`]
 
 function timelineRowGap(row: TimelineEntry): number {
   return row.section.kind === `manifest` || row.section.kind === `wake`
@@ -306,7 +310,7 @@ function ManifestTimelineRow({
   manifest: Manifest
   entityUrl: string | null
   tileId: string | null
-  entityStatus?: IncludesEntity[`status`]
+  entityStatus?: EntityStatus
 }): React.ReactElement {
   const { helpers } = useWorkspace()
   const entityTarget = getManifestEntityUrl(manifest)
@@ -556,16 +560,20 @@ function getManifestStateSourceId(manifest: Manifest): string | null {
   return null
 }
 
-function statusTone(status: NonNullable<IncludesEntity[`status`]>) {
+function statusTone(status: EntityStatus) {
   switch (status) {
     case `idle`:
       return `success`
     case `spawning`:
+    case `paused`:
+    case `stopping`:
       return `warning`
     case `running`:
       return `info`
     case `stopped`:
       return `neutral`
+    case `killed`:
+      return `danger`
     default:
       return `neutral`
   }
@@ -611,6 +619,7 @@ function entityUrlsFromKey(key: string): Array<string> {
 // object; splitting the props lets memo skip every settled row and
 // only re-render the streaming row + the row that just settled.
 const TimelineRow = memo(function TimelineRow({
+  rowKey,
   section,
   responseTimestamp,
   entityStopped,
@@ -619,7 +628,11 @@ const TimelineRow = memo(function TimelineRow({
   entityUrl,
   tileId,
   entityStatusByUrl,
+  stopUserMessageKey,
+  stopPending,
+  onStopGeneration,
 }: {
+  rowKey: string
   section: TimelineEntry[`section`]
   responseTimestamp: TimelineEntry[`responseTimestamp`]
   entityStopped: boolean
@@ -627,10 +640,20 @@ const TimelineRow = memo(function TimelineRow({
   renderWidth: number
   entityUrl: string | null
   tileId: string | null
-  entityStatusByUrl: Map<string, IncludesEntity[`status`]>
+  entityStatusByUrl: Map<string, EntityStatus>
+  stopUserMessageKey: string | null
+  stopPending: boolean
+  onStopGeneration?: () => void
 }): React.ReactElement {
   if (section.kind === `user_message`) {
-    return <UserMessage section={section} />
+    return (
+      <UserMessage
+        section={section}
+        showStop={stopUserMessageKey !== null && rowKey === stopUserMessageKey}
+        stopPending={stopPending}
+        onStop={onStopGeneration}
+      />
+    )
   }
   if (section.kind === `wake`) {
     return <WakeTimelineRow section={section} />
@@ -670,6 +693,8 @@ export function EntityTimeline({
   entityUrl = null,
   entities = [],
   scrollToBottomSignal = 0,
+  stopPending = false,
+  onStopGeneration,
 }: {
   entries: Array<TimelineEntry>
   loading: boolean
@@ -680,6 +705,8 @@ export function EntityTimeline({
   entityUrl?: string | null
   entities?: Array<IncludesEntity>
   scrollToBottomSignal?: number
+  stopPending?: boolean
+  onStopGeneration?: () => void
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
   const { entitiesCollection } = useElectricAgents()
@@ -707,9 +734,9 @@ export function EntityTimeline({
     [entitiesCollection, referencedEntityUrlKey]
   )
   const entityStatusByUrl = useMemo(() => {
-    const statusByUrl = new Map<string, IncludesEntity[`status`]>()
+    const statusByUrl = new Map<string, EntityStatus>()
     for (const entity of entities) {
-      statusByUrl.set(entity.url, entity.status)
+      if (entity.status) statusByUrl.set(entity.url, entity.status)
     }
     for (const entity of entityStatuses) {
       statusByUrl.set(entity.url, entity.status)
@@ -752,6 +779,21 @@ export function EntityTimeline({
     }
     return null
   }, [rows])
+
+  const stopUserMessageKey = useMemo(() => {
+    if (!lastStreamingAgentKey) return null
+    const streamingIndex = rows.findIndex(
+      (row) => row.key === lastStreamingAgentKey
+    )
+    if (streamingIndex < 0) return null
+    for (let index = streamingIndex - 1; index >= 0; index--) {
+      const row = rows[index]
+      if (row?.section.kind === `user_message`) {
+        return row.key
+      }
+    }
+    return null
+  }, [lastStreamingAgentKey, rows])
 
   const persistSettledRows = useCallback(() => {
     if (!cacheKey || viewportWidth <= 0) return
@@ -1176,6 +1218,7 @@ export function EntityTimeline({
                     }}
                   >
                     <TimelineRow
+                      rowKey={row.key}
                       section={row.section}
                       responseTimestamp={row.responseTimestamp}
                       entityStopped={entityStopped}
@@ -1184,6 +1227,9 @@ export function EntityTimeline({
                       entityUrl={entityUrl}
                       tileId={tileId ?? null}
                       entityStatusByUrl={entityStatusByUrl}
+                      stopUserMessageKey={stopUserMessageKey}
+                      stopPending={stopPending}
+                      onStopGeneration={onStopGeneration}
                     />
                   </div>
                 )

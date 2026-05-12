@@ -96,7 +96,8 @@ function EntityTileBody({
   )
   const entity = matches.at(0) ?? null
   const isSpawning = entity?.status === `spawning`
-  const entityStopped = entity?.status === `stopped`
+  const entityStopped =
+    entity?.status === `stopped` || entity?.status === `killed`
 
   const setView = useCallback(
     (viewId: ViewId) => helpers.setTileView(tile.id, viewId),

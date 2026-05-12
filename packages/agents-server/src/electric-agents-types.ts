@@ -12,13 +12,42 @@ export type AuthenticateRequest = (
   request: Request
 ) => Promise<Principal | null> | Principal | null
 
-export type EntityStatus = `spawning` | `running` | `idle` | `stopped`
+export type EntityStatus =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
+
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
 
 const VALID_ENTITY_STATUSES = new Set<string>([
   `spawning`,
   `running`,
   `idle`,
+  `paused`,
+  `stopping`,
   `stopped`,
+  `killed`,
+])
+
+const VALID_ENTITY_SIGNALS = new Set<string>([
+  `SIGINT`,
+  `SIGHUP`,
+  `SIGTERM`,
+  `SIGKILL`,
+  `SIGSTOP`,
+  `SIGCONT`,
+  `SIGUSR`,
 ])
 
 export function assertEntityStatus(s: string): EntityStatus {
@@ -190,6 +219,41 @@ export interface ConsumerClaim {
   updated_at: string
 }
 
+export function assertEntitySignal(s: string): EntitySignal {
+  if (!VALID_ENTITY_SIGNALS.has(s)) {
+    throw new Error(`Invalid entity signal: "${s}"`)
+  }
+  return s as EntitySignal
+}
+
+export function isTerminalEntityStatus(status: EntityStatus): boolean {
+  return status === `stopped` || status === `killed`
+}
+
+export function rejectsNormalWrites(status: EntityStatus): boolean {
+  return status === `stopping` || isTerminalEntityStatus(status)
+}
+
+export function expectedSignalStatus(
+  status: EntityStatus,
+  signal: EntitySignal
+): EntityStatus {
+  switch (signal) {
+    case `SIGKILL`:
+      return `killed`
+    case `SIGTERM`:
+      return status === `idle` ? `stopped` : `stopping`
+    case `SIGSTOP`:
+      return status === `idle` ? `paused` : status
+    case `SIGCONT`:
+      return status === `paused` ? `idle` : status
+    case `SIGINT`:
+    case `SIGHUP`:
+    case `SIGUSR`:
+      return status
+  }
+}
+
 export interface ElectricAgentsEntity {
   url: string
   type: string
@@ -307,6 +371,21 @@ export interface SendRequest {
   position?: string
 }
 
+export interface SignalRequest {
+  signal: EntitySignal
+  reason?: string
+  payload?: unknown
+}
+
+export interface SignalResponse {
+  url: string
+  signal: EntitySignal
+  previous_state: EntityStatus
+  new_state: EntityStatus
+  created_at: number
+  txid: number
+}
+
 export interface SetTagRequest {
   value: string
 }
@@ -323,6 +402,7 @@ export const ErrCodeNoSubscription = `NO_SUBSCRIPTION`
 export const ErrCodeNotFound = `NOT_FOUND`
 export const ErrCodeNotRunning = `NOT_RUNNING`
 export const ErrCodeInvalidRequest = `INVALID_REQUEST`
+export const ErrCodeInvalidSignal = `INVALID_SIGNAL`
 export const ErrCodeUnknownEntityType = `UNKNOWN_ENTITY_TYPE`
 export const ErrCodeSchemaValidationFailed = `SCHEMA_VALIDATION_FAILED`
 export const ErrCodeUnknownMessageType = `UNKNOWN_MESSAGE_TYPE`

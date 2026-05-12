@@ -320,7 +320,8 @@ export function SearchPalette(): React.ReactElement | null {
       if (
         forkEntity &&
         !activeEntity.parent &&
-        activeEntity.status !== `stopped`
+        activeEntity.status !== `stopped` &&
+        activeEntity.status !== `killed`
       ) {
         out.push({
           kind: `action`,
@@ -343,7 +344,11 @@ export function SearchPalette(): React.ReactElement | null {
         })
       }
 
-      if (killEntity && activeEntity.status !== `stopped`) {
+      if (
+        killEntity &&
+        activeEntity.status !== `stopped` &&
+        activeEntity.status !== `killed`
+      ) {
         out.push({
           kind: `action`,
           id: `kill-current-entity`,

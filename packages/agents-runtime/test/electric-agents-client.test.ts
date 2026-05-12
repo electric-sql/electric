@@ -7,6 +7,7 @@ const { mockState } = vi.hoisted(() => ({
   mockState: {
     registerEntitiesSource: vi.fn(),
     registerCronSource: vi.fn(),
+    signalEntity: vi.fn(),
     createStreamDB: vi.fn(),
     preload: vi.fn(),
     observedDb: {
@@ -22,6 +23,7 @@ vi.mock(`../src/runtime-server-client`, () => ({
   createRuntimeServerClient: () => ({
     registerEntitiesSource: mockState.registerEntitiesSource,
     registerCronSource: mockState.registerCronSource,
+    signalEntity: mockState.signalEntity,
   }),
 }))
 
@@ -43,6 +45,7 @@ describe(`createAgentsClient`, () => {
       streamUrl: `/_entities/source-1`,
     })
     mockState.createStreamDB = vi.fn()
+    mockState.signalEntity = vi.fn().mockResolvedValue({ txid: 123 })
     mockState.observedDb = {
       preload: vi.fn().mockResolvedValue(undefined),
       collections: {
@@ -115,6 +118,33 @@ describe(`createAgentsClient`, () => {
         contentType: `application/json`,
       },
       state: source.schema,
+    })
+  })
+
+  it(`exposes signal and kill helpers through the server client`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test`,
+    })
+
+    await expect(
+      client.signal({
+        entityUrl: `/chat/demo`,
+        signal: `SIGINT`,
+        reason: `stop`,
+      })
+    ).resolves.toEqual({ txid: 123 })
+
+    await client.kill(`/chat/demo`, `cleanup`)
+
+    expect(mockState.signalEntity).toHaveBeenNthCalledWith(1, {
+      entityUrl: `/chat/demo`,
+      signal: `SIGINT`,
+      reason: `stop`,
+    })
+    expect(mockState.signalEntity).toHaveBeenNthCalledWith(2, {
+      entityUrl: `/chat/demo`,
+      signal: `SIGKILL`,
+      reason: `cleanup`,
     })
   })
 })

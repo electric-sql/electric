@@ -4,6 +4,7 @@ import {
   resolvePiModel,
   toAgentHistory,
 } from '../src/pi-adapter'
+import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import type { OutboundIdSeed } from '../src/outbound-bridge'
 import type { LLMMessage } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
@@ -52,7 +53,76 @@ describe(`createPiAgentAdapter`, () => {
     expect(typeof handle.run).toBe(`function`)
     expect(typeof handle.steer).toBe(`function`)
     expect(typeof handle.isRunning).toBe(`function`)
+    expect(typeof handle.abort).toBe(`function`)
     expect(typeof handle.dispose).toBe(`function`)
+  })
+
+  it(`aborts an active run when the run signal is aborted`, async () => {
+    let abortSeenResolve: (() => void) | null = null
+    const abortSeen = new Promise<void>((resolve) => {
+      abortSeenResolve = resolve
+    })
+    const abortedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `aborted`,
+      timestamp: Date.now(),
+    }
+
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: (_model, _context, options) => {
+        const stream = createAssistantMessageEventStream()
+        if (options?.signal?.aborted) {
+          abortSeenResolve?.()
+          stream.end(abortedMessage)
+          return stream
+        }
+        options?.signal?.addEventListener(
+          `abort`,
+          () => {
+            abortSeenResolve?.()
+            stream.end(abortedMessage)
+          },
+          { once: true }
+        )
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+    const controller = new AbortController()
+    const runPromise = handle.run(`hello`, controller.signal)
+
+    controller.abort()
+    await abortSeen
+    await expect(runPromise).resolves.toBeUndefined()
+    expect(handle.isRunning()).toBe(false)
   })
 
   it(`isRunning returns false initially`, () => {

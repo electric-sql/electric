@@ -14,7 +14,10 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   running: `info`,
   idle: `success`,
   spawning: `warning`,
+  paused: `warning`,
+  stopping: `warning`,
   stopped: `neutral`,
+  killed: `danger`,
 }
 
 type EntityHeaderProps = {

@@ -65,6 +65,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
   writeEvent: (event: ChangeEvent) => void
   wakeSession: WakeSession
   wakeEvent: WakeEvent
+  runSignal?: AbortSignal
   doObserve: (
     source: ObservationSource,
     wake?: Wake
@@ -396,7 +397,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           )
         }
 
-        await handle.run(runInput)
+        await handle.run(runInput, config.runSignal)
         runtimeLog.info(logPrefix, `agent.run completed`)
 
         return {

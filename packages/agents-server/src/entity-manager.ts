@@ -16,6 +16,7 @@ import {
   ErrCodeEntityPersistFailed,
   ErrCodeForkInProgress,
   ErrCodeForkWaitTimeout,
+  ErrCodeInvalidSignal,
   ErrCodeInvalidRequest,
   ErrCodeNotFound,
   ErrCodeNotRunning,
@@ -25,6 +26,8 @@ import {
   ErrCodeUnknownEntityType,
   ErrCodeUnknownEventType,
   ErrCodeUnknownMessageType,
+  isTerminalEntityStatus,
+  rejectsNormalWrites,
 } from './electric-agents-types.js'
 import { parseDispatchPolicy } from './dispatch-policy-schema.js'
 import { applyTypeDefaultSubscriptionScope } from './routing/dispatch-policy.js'
@@ -54,9 +57,12 @@ import type {
   DispatchPolicy,
   ElectricAgentsEntity,
   ElectricAgentsEntityType,
+  EntitySignal,
   RegisterEntityTypeRequest,
   SendRequest,
   SetTagRequest,
+  SignalRequest,
+  SignalResponse,
   TypedSpawnRequest,
 } from './electric-agents-types.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
@@ -102,6 +108,8 @@ type ForkResult = {
 
 const DEFAULT_FORK_WAIT_TIMEOUT_MS = 120_000
 const DEFAULT_FORK_WAIT_POLL_MS = 250
+
+const SERVER_SIGNAL_SENDER = `/_electric/server`
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -928,16 +936,20 @@ export class EntityManager {
       }
 
       const subtree = await this.listEntitySubtree(root)
-      const stopped = subtree.find((entity) => entity.status === `stopped`)
+      const stopped = subtree.find((entity) =>
+        isTerminalEntityStatus(entity.status)
+      )
       if (stopped) {
         throw new ElectricAgentsError(
           ErrCodeNotRunning,
-          `Cannot fork stopped entity "${stopped.url}"`,
+          `Cannot fork terminal entity "${stopped.url}"`,
           409
         )
       }
 
-      let active = subtree.filter((entity) => entity.status !== `idle`)
+      let active = subtree.filter(
+        (entity) => entity.status !== `idle` && entity.status !== `paused`
+      )
       if (active.length === 0) {
         this.addForkLocks(
           this.forkWorkLockedEntities,
@@ -959,7 +971,7 @@ export class EntityManager {
           workLocks
         )
         const lockedActive = lockedSubtree.filter(
-          (entity) => entity.status !== `idle`
+          (entity) => entity.status !== `idle` && entity.status !== `paused`
         )
         if (lockedActive.length === 0) {
           return lockedSubtree
@@ -1725,8 +1737,12 @@ export class EntityManager {
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
-    if (entity.status === `stopped`) {
-      throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
     }
 
     const now = new Date().toISOString()
@@ -1763,8 +1779,12 @@ export class EntityManager {
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
-    if (entity.status === `stopped`) {
-      throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
     }
 
     const envelope = entityStateSchema.inbox.delete({ key } as any)
@@ -1796,8 +1816,12 @@ export class EntityManager {
         401
       )
     }
-    if (entity.status === `stopped`) {
-      throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
     }
 
     if (typeof req.value !== `string`) {
@@ -1842,8 +1866,12 @@ export class EntityManager {
         401
       )
     }
-    if (entity.status === `stopped`) {
-      throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
     }
 
     const result = await this.registry.removeEntityTag(entityUrl, key)
@@ -2354,37 +2382,174 @@ export class EntityManager {
   }
 
   // ==========================================================================
-  // Kill
+  // Signals
   // ==========================================================================
 
-  async kill(entityUrl: string): Promise<{ txid: number }> {
+  async signal(entityUrl: string, req: SignalRequest): Promise<SignalResponse> {
     const entity = await this.registry.getEntity(entityUrl)
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
 
-    await this.wakeRegistry.unregisterBySubscriber(entityUrl, this.tenantId)
-    await this.wakeRegistry.unregisterBySource(entityUrl, this.tenantId)
+    if (isTerminalEntityStatus(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidSignal,
+        `Cannot signal a ${entity.status} entity`,
+        409
+      )
+    }
 
-    const txid = await this.registry.updateStatusWithTxid(entityUrl, `stopped`)
-    if (this.entityBridgeManager) {
+    const now = new Date()
+    const previousState = entity.status
+    const handling = this.serverHandlingForSignal(previousState, req.signal)
+    const txid =
+      handling.status === previousState
+        ? await this.registry.touchEntityWithTxid(entityUrl)
+        : await this.registry.updateStatusWithTxid(entityUrl, handling.status)
+
+    const key = `sig-${now.getTime()}-${randomUUID().slice(0, 8)}`
+    const signalValue: Record<string, unknown> = {
+      signal: req.signal,
+      status: handling.handled ? `handled` : `unhandled`,
+      sender: SERVER_SIGNAL_SENDER,
+      timestamp: now.toISOString(),
+    }
+    if (req.reason !== undefined) signalValue.reason = req.reason
+    if (req.payload !== undefined) signalValue.payload = req.payload
+    if (handling.handled) {
+      signalValue.handled_at = now.toISOString()
+      signalValue.handled_by = SERVER_SIGNAL_SENDER
+      signalValue.outcome = handling.outcome
+      signalValue.previous_state = previousState
+      signalValue.new_state = handling.status
+    }
+
+    const signalEvent = {
+      type: `signal`,
+      key,
+      value: signalValue,
+      headers: {
+        operation: `insert`,
+        timestamp: now.toISOString(),
+        txid: String(txid),
+      },
+    }
+
+    const shouldCloseStreams = isTerminalEntityStatus(handling.status)
+    await this.appendSignalEvent(entity, signalEvent, shouldCloseStreams)
+
+    if (handling.unregisterWakes) {
+      await this.wakeRegistry.unregisterBySubscriber(entityUrl, this.tenantId)
+      await this.wakeRegistry.unregisterBySource(entityUrl, this.tenantId)
+    }
+
+    if (handling.status !== previousState && this.entityBridgeManager) {
       await this.entityBridgeManager.onEntityChanged(entityUrl)
     }
 
-    // Append entity_stopped to main/error streams and close them.
-    const stoppedEvent = entityStateSchema.entityStopped.insert({
-      key: `stopped`,
-      value: {
-        timestamp: new Date().toISOString(),
-      },
-    } as any)
-    const eofData = this.encodeChangeEvent(
-      stoppedEvent as Record<string, unknown>
-    )
+    return {
+      url: entityUrl,
+      signal: req.signal,
+      previous_state: previousState,
+      new_state: handling.status,
+      created_at: now.getTime(),
+      txid,
+    }
+  }
 
-    for (const streamPath of [entity.streams.main, entity.streams.error]) {
+  async kill(entityUrl: string): Promise<{ txid: number }> {
+    const response = await this.signal(entityUrl, {
+      signal: `SIGKILL`,
+      reason: `Legacy kill command`,
+    })
+    return { txid: response.txid }
+  }
+
+  private serverHandlingForSignal(
+    status: ElectricAgentsEntity[`status`],
+    signal: EntitySignal
+  ): {
+    status: ElectricAgentsEntity[`status`]
+    handled: boolean
+    outcome: `transitioned` | `ignored`
+    unregisterWakes: boolean
+  } {
+    if (signal === `SIGKILL`) {
+      return {
+        status: `killed`,
+        handled: true,
+        outcome: `transitioned`,
+        unregisterWakes: true,
+      }
+    }
+    if (signal === `SIGTERM`) {
+      if (status === `idle` || status === `paused`) {
+        return {
+          status: `stopped`,
+          handled: true,
+          outcome: `transitioned`,
+          unregisterWakes: true,
+        }
+      }
+      if (status === `running`) {
+        return {
+          status: `stopping`,
+          handled: false,
+          outcome: `transitioned`,
+          unregisterWakes: false,
+        }
+      }
+    }
+    if (signal === `SIGSTOP` && status === `idle`) {
+      return {
+        status: `paused`,
+        handled: true,
+        outcome: `transitioned`,
+        unregisterWakes: false,
+      }
+    }
+    if (signal === `SIGCONT` && status === `paused`) {
+      return {
+        status: `idle`,
+        handled: true,
+        outcome: `transitioned`,
+        unregisterWakes: false,
+      }
+    }
+
+    return {
+      status,
+      handled: false,
+      outcome: `ignored`,
+      unregisterWakes: false,
+    }
+  }
+
+  private async appendSignalEvent(
+    entity: ElectricAgentsEntity,
+    signalEvent: Record<string, unknown>,
+    closeStreams: boolean
+  ): Promise<void> {
+    const signalData = this.encodeChangeEvent(signalEvent)
+    if (!closeStreams) {
+      await this.streamClient.append(entity.streams.main, signalData)
+      return
+    }
+
+    const errorCloseEvent = {
+      type: `signal`,
+      key: signalEvent.key,
+      value: signalEvent.value,
+      headers: signalEvent.headers,
+    }
+    const errorSignalData = this.encodeChangeEvent(errorCloseEvent)
+
+    for (const [streamPath, data] of [
+      [entity.streams.main, signalData],
+      [entity.streams.error, errorSignalData],
+    ] as const) {
       try {
-        await this.streamClient.append(streamPath, eofData, { close: true })
+        await this.streamClient.append(streamPath, data, { close: true })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         if (
@@ -2398,8 +2563,6 @@ export class EntityManager {
         throw err
       }
     }
-
-    return { txid }
   }
 
   // ==========================================================================
@@ -2627,8 +2790,12 @@ export class EntityManager {
     if (!entity) {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
-    if (entity.status === `stopped`) {
-      throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
+    if (rejectsNormalWrites(entity.status)) {
+      throw new ElectricAgentsError(
+        ErrCodeNotRunning,
+        `Entity is not accepting writes`,
+        409
+      )
     }
 
     if (req.type && entity.type) {

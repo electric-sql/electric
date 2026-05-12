@@ -31,6 +31,7 @@ import type {
   WakeSession,
   WebhookNotification,
 } from './types'
+import type { Signal } from './entity-schema'
 import type { JsonBatch } from '@durable-streams/client'
 import type { ChangeEvent, StateEvent } from '@durable-streams/state'
 
@@ -450,6 +451,7 @@ export async function processWebhookWake(
   // Live event handler — wired after preload, processes child_status + inbox
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let idleController: AbortController | null = null
+  let runAbortController: AbortController | null = null
   const secondaryDbs: Array<{
     drainPendingWrites?: () => Promise<void>
     flushWrites?: () => Promise<void>
@@ -458,6 +460,7 @@ export async function processWebhookWake(
   }> = []
   let liveProcessError: Error | null = null
   let acceptLiveInputs = false
+  const handledSignalKeys = new Set<string>()
 
   const compareOffsets = (left: string, right: string): number => {
     if (left === right) return 0
@@ -537,6 +540,10 @@ export async function processWebhookWake(
   }
 
   function handleRuntimeSideEffectEvent(event: ChangeEvent): void {
+    if (event.type === `signal`) {
+      handleSignalEvent(event)
+      return
+    }
     if (event.type === `child_status` && result) {
       const spawnHandles = result.wakeSession.getSpawnHandles()
       const val = event.value as
@@ -594,6 +601,84 @@ export async function processWebhookWake(
 
   const isFreshEvent = (event: ChangeEvent): boolean => {
     return event.type === `inbox` || event.type === `wake`
+  }
+
+  const isUnhandledSignalEvent = (event: ChangeEvent): boolean => {
+    if (event.type !== `signal`) return false
+    const value = event.value as Partial<Signal> | undefined
+    return value?.status === `unhandled`
+  }
+
+  const markSignalHandled = (
+    event: ChangeEvent,
+    outcome: `aborted` | `ignored` | `shutdown_requested`,
+    newState?: string
+  ): void => {
+    const value = event.value as Partial<Signal> | undefined
+    const key = String(event.key)
+    writeEvent(
+      entityStateSchema.signals.update({
+        key,
+        value: {
+          ...value,
+          status: `handled`,
+          handled_at: new Date().toISOString(),
+          handled_by: entityUrl,
+          outcome,
+          previous_state: notification.entity?.status,
+          ...(newState ? { new_state: newState } : {}),
+        } as never,
+      }) as ChangeEvent
+    )
+  }
+
+  const handleSignalEvent = (event: ChangeEvent): void => {
+    if (!isUnhandledSignalEvent(event)) return
+    const key = String(event.key)
+    if (handledSignalKeys.has(key)) return
+    handledSignalKeys.add(key)
+
+    const value = event.value as Partial<Signal>
+    switch (value.signal) {
+      case `SIGINT`:
+        log.info(`SIGINT received, aborting active run`)
+        runAbortController?.abort()
+        markSignalHandled(event, `aborted`, notification.entity?.status)
+        void flushProducedWrites().catch((err) =>
+          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+        )
+        return
+      case `SIGKILL`:
+        log.info(`SIGKILL received, aborting active run and closing wake`)
+        runAbortController?.abort()
+        requestShutdown()
+        markSignalHandled(event, `shutdown_requested`, `killed`)
+        void flushProducedWrites().catch((err) =>
+          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+        )
+        return
+      case `SIGHUP`:
+        log.info(`SIGHUP received, closing wake after current checkpoint`)
+        requestShutdown()
+        markSignalHandled(
+          event,
+          `shutdown_requested`,
+          notification.entity?.status
+        )
+        void flushProducedWrites().catch((err) =>
+          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+        )
+        return
+      case `SIGTERM`:
+      case `SIGSTOP`:
+      case `SIGCONT`:
+      case `SIGUSR`:
+        markSignalHandled(event, `ignored`, notification.entity?.status)
+        void flushProducedWrites().catch((err) =>
+          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+        )
+        return
+    }
   }
 
   const filterAcceptedLiveEvents = (
@@ -781,6 +866,12 @@ export async function processWebhookWake(
       return
     }
 
+    for (const event of changeEvents) {
+      if (event.type === `signal`) {
+        handleSignalEvent(event)
+      }
+    }
+
     catchUpEvents.push(...changeEvents)
 
     if (
@@ -841,6 +932,12 @@ export async function processWebhookWake(
     if (!claimed.ok) return null
     claimedWake = true
     writeToken = claimed.writeToken ?? ``
+
+    for (const event of catchUpEvents) {
+      if (event.type === `signal`) {
+        handleSignalEvent(event)
+      }
+    }
 
     // 3b. Start heartbeat once this worker owns the wake
     heartbeat = setInterval(() => {
@@ -1532,6 +1629,7 @@ export async function processWebhookWake(
         await promoteNextPendingInboxMessage()
       }
 
+      runAbortController = new AbortController()
       const { ctx: handlerCtx, getSleepRequested } = createHandlerContext({
         entityUrl,
         entityType: typeName,
@@ -1552,6 +1650,7 @@ export async function processWebhookWake(
         writeEvent,
         wakeSession,
         wakeEvent: currentWakeEvent,
+        runSignal: runAbortController.signal,
         doObserve,
         doSpawn,
         doMkdb,
@@ -1601,6 +1700,7 @@ export async function processWebhookWake(
           throw liveProcessError
         }
       } catch (setupErr) {
+        runAbortController = null
         wakeSession.rollbackManifestEntries()
         const errMsg = toError(setupErr).message
         log.error(`handler failed for ${entityUrl}:`, errMsg)
@@ -1640,6 +1740,7 @@ export async function processWebhookWake(
         }
         throw setupErr
       }
+      runAbortController = null
 
       if (!result) {
         result = {

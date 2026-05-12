@@ -711,6 +711,77 @@ describe(`ElectricAgentsRoutes spawn endpoint request validation`, () => {
   })
 })
 
+describe(`ElectricAgentsRoutes signal endpoint`, () => {
+  it(`routes valid signals to the manager and returns the signal response`, async () => {
+    const signalResponse = {
+      url: `/chat/test`,
+      signal: `SIGINT`,
+      previous_state: `running`,
+      new_state: `running`,
+      created_at: 1_760_000_000_000,
+      txid: 123,
+    }
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          streams: { main: `/chat/test/main`, error: `/chat/test/error` },
+        }),
+        getEntityType: vi.fn(),
+      },
+      signal: vi.fn().mockResolvedValue(signalResponse),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/signal`,
+      {
+      signal: `SIGINT`,
+      reason: `Stop from UI`,
+      payload: { source: `test` },
+      }
+    )
+
+    expect(manager.signal).toHaveBeenCalledWith(`/chat/test`, {
+      signal: `SIGINT`,
+      reason: `Stop from UI`,
+      payload: { source: `test` },
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(signalResponse)
+  })
+
+  it(`rejects unknown signals before calling the manager`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          streams: { main: `/chat/test/main`, error: `/chat/test/error` },
+        }),
+        getEntityType: vi.fn(),
+      },
+      signal: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/chat/test/signal`,
+      { signal: `NOPE` }
+    )
+
+    expect(manager.signal).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: `INVALID_SIGNAL`,
+        message: `Invalid signal: NOPE`,
+      },
+    })
+  })
+})
+
 describe(`ElectricAgentsRoutes fork endpoint`, () => {
   it(`routes fork requests to the manager and returns public entities`, async () => {
     const forkedRoot = {

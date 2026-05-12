@@ -51,9 +51,10 @@ interface PiAgentAdapterConfig {
 }
 
 interface PiAgentHandle {
-  run: (input?: string) => Promise<void>
+  run: (input?: string, abortSignal?: AbortSignal) => Promise<void>
   steer: (message: string) => void
   isRunning: () => boolean
+  abort: () => void
   dispose: () => void
 }
 
@@ -177,6 +178,7 @@ export function createPiAgentAdapter(
     let disposed = false
     let stepStartTime = 0
     let textStarted = false
+    let abortedRun = false
 
     const model = resolvePiModel({
       model: opts.model,
@@ -267,7 +269,12 @@ export function createPiAgentAdapter(
                   | undefined
 
                 const isError =
-                  msg?.stopReason === `error` || !!msg?.errorMessage
+                  msg?.stopReason === `error` ||
+                  (!!msg?.errorMessage && msg.stopReason !== `aborted`)
+                const isAborted = msg?.stopReason === `aborted`
+                if (isAborted) {
+                  abortedRun = true
+                }
 
                 if (isError) {
                   runtimeLog.error(
@@ -295,9 +302,11 @@ export function createPiAgentAdapter(
                 )
                 const finishReason = isError
                   ? `error`
-                  : hasToolCalls
-                    ? `tool_calls`
-                    : `stop`
+                  : isAborted
+                    ? `aborted`
+                    : hasToolCalls
+                      ? `tool_calls`
+                      : `stop`
                 bridge.onStepEnd({
                   finishReason,
                   durationMs: Date.now() - stepStartTime,
@@ -335,7 +344,9 @@ export function createPiAgentAdapter(
               }
 
               case `agent_end`: {
-                bridge.onRunEnd({ finishReason: `stop` })
+                bridge.onRunEnd({
+                  finishReason: abortedRun ? `aborted` : `stop`,
+                })
                 runtimeLog.debug(
                   logPrefix,
                   `pi-adapter agent_end textDeltas=${textDeltaCount} ` +
@@ -367,29 +378,40 @@ export function createPiAgentAdapter(
     }
 
     return {
-      async run(input?: string): Promise<void> {
+      async run(input?: string, abortSignal?: AbortSignal): Promise<void> {
         running = true
+        abortedRun = false
 
         bridge.onRunStart()
 
         return new Promise<void>((resolve, reject) => {
+          const abortRun = (): void => {
+            agent.abort()
+          }
           const unsubscribe = processAgentEvents(
             () => {
+              abortSignal?.removeEventListener(`abort`, abortRun)
               unsubscribe()
               resolve()
             },
             (err) => {
+              abortSignal?.removeEventListener(`abort`, abortRun)
               unsubscribe()
               reject(err)
             }
           )
 
+          abortSignal?.addEventListener(`abort`, abortRun, { once: true })
           const runPromise =
             input !== undefined ? agent.prompt(input) : agent.continue()
+          if (abortSignal?.aborted) {
+            abortRun()
+          }
 
           Promise.resolve(runPromise).catch((err: Error) => {
             running = false
             bridge.onRunEnd({ finishReason: `error` })
+            abortSignal?.removeEventListener(`abort`, abortRun)
             unsubscribe()
             reject(err)
           })
@@ -408,8 +430,13 @@ export function createPiAgentAdapter(
         return running
       },
 
+      abort(): void {
+        agent.abort()
+      },
+
       dispose(): void {
         disposed = true
+        agent.abort()
         running = false
       },
     }

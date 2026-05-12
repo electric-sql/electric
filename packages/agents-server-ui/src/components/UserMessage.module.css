@@ -18,6 +18,63 @@
   box-shadow:
     0 1px 3px rgba(15, 15, 30, 0.04),
     0 1px 1px rgba(15, 15, 30, 0.02);
+  position: relative;
+}
+
+.bubble.withStop {
+  padding-right: 44px;
+}
+
+.stopButton {
+  all: unset;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-accent-9);
+  color: var(--ds-text-on-accent);
+  cursor: pointer;
+  box-shadow:
+    0 1px 3px rgba(15, 15, 30, 0.08),
+    0 1px 1px rgba(15, 15, 30, 0.04);
+  transition: background 0.12s ease;
+}
+
+.stopButton:hover {
+  background: var(--ds-accent-10);
+}
+
+.stopButton:disabled {
+  cursor: progress;
+}
+
+.stopPending {
+  opacity: 0.72;
+  animation: stopPendingPulse 1s ease-in-out infinite;
+}
+
+.stopPending:hover {
+  background: var(--ds-accent-9);
+}
+
+.stopButton:focus-visible {
+  outline: 2px solid var(--ds-accent-a6);
+  outline-offset: 2px;
+}
+
+@keyframes stopPendingPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.92);
+  }
 }
 
 .body {

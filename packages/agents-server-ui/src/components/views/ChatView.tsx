@@ -5,6 +5,7 @@ import { EntityTimeline } from '../EntityTimeline'
 import { MessageInput } from '../MessageInput'
 import { EntityContextDrawer } from '../EntityContextDrawer'
 import { readTextPayload } from '../../lib/sendMessage'
+import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
 import type { TimelineEntry } from '../../lib/timelineEntries'
 import type { OptimisticInboxMessage } from '../../lib/sendMessage'
@@ -68,8 +69,10 @@ function GenericChatBody({
     loading,
     error,
   } = useEntityTimeline(baseUrl || null, entityUrl)
+  const { signalEntity } = useElectricAgents()
   const navigate = useNavigate()
   const [sentMessageSignal, setSentMessageSignal] = useState(0)
+  const [stopPending, setStopPending] = useState(false)
   const [inlineQueuedMessages, setInlineQueuedMessages] = useState<
     Map<string, OptimisticInboxMessage>
   >(() => new Map())
@@ -186,6 +189,29 @@ function GenericChatBody({
     }
   }, [error, navigate, isSpawning])
 
+  useEffect(() => {
+    if (!generationActive) {
+      setStopPending(false)
+    }
+  }, [generationActive])
+
+  useEffect(() => {
+    setStopPending(false)
+  }, [entityUrl])
+
+  const stopGeneration = useCallback(() => {
+    if (!entityUrl || !signalEntity || !generationActive || stopPending) return
+    setStopPending(true)
+    const tx = signalEntity({
+      entityUrl,
+      signal: `SIGINT`,
+      reason: `Stopped from chat UI`,
+    })
+    tx.isPersisted.promise.catch(() => {
+      setStopPending(false)
+    })
+  }, [entityUrl, generationActive, signalEntity, stopPending])
+
   return (
     <>
       <EntityTimeline
@@ -198,12 +224,16 @@ function GenericChatBody({
         entityUrl={entityUrl}
         entities={entities}
         scrollToBottomSignal={sentMessageSignal}
+        onStopGeneration={stopGeneration}
+        stopPending={stopPending}
       />
       <MessageInput
         db={db}
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
+        generationActive={generationActive}
+        stopPending={stopPending}
         pendingMessages={visiblePendingInbox}
         inlineQueuedSubmits={
           !entityStopped &&
@@ -226,6 +256,7 @@ function GenericChatBody({
           />
         )}
         onSend={() => setSentMessageSignal((value) => value + 1)}
+        onStop={stopGeneration}
       />
     </>
   )

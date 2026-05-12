@@ -8,7 +8,23 @@ import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
 
-type EntityStatus = `spawning` | `running` | `idle` | `stopped`
+type EntityStatus =
+  | `spawning`
+  | `running`
+  | `idle`
+  | `paused`
+  | `stopping`
+  | `stopped`
+  | `killed`
+
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
 
 // --- Schemas ---
 
@@ -16,7 +32,10 @@ const ENTITY_STATUSES: [EntityStatus, ...Array<EntityStatus>] = [
   `spawning`,
   `running`,
   `idle`,
+  `paused`,
+  `stopping`,
   `stopped`,
+  `killed`,
 ]
 
 const entitySchema = z.object({
@@ -159,6 +178,13 @@ interface SpawnInput {
   dispatch_policy?: RunnerDispatchPolicy
 }
 
+export interface SignalInput {
+  entityUrl: string
+  signal: EntitySignal
+  reason?: string
+  payload?: unknown
+}
+
 function createSpawnAction(
   baseUrl: string,
   entitiesCollection: EntitiesCollection
@@ -229,16 +255,71 @@ function createKillAction(
   return createOptimisticAction<string>({
     onMutate: (entityUrl) => {
       entitiesCollection.update(entityUrl, (draft) => {
-        draft.status = `stopped`
+        draft.status = `killed`
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl), {
-        method: `DELETE`,
+      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/signal`), {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          signal: `SIGKILL`,
+          reason: `Killed from agents UI`,
+        }),
       })
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
         throw new Error(text || `Kill failed (${res.status})`)
+      }
+      const data = (await res.json()) as { txid: number }
+      return { txid: data.txid }
+    },
+  })
+}
+
+function optimisticStatusForSignal(signal: EntitySignal): EntityStatus | null {
+  switch (signal) {
+    case `SIGKILL`:
+      return `killed`
+    case `SIGINT`:
+    case `SIGTERM`:
+      return `stopping`
+    case `SIGSTOP`:
+      return `paused`
+    case `SIGCONT`:
+      return `idle`
+    case `SIGHUP`:
+    case `SIGUSR`:
+      return null
+  }
+}
+
+function createSignalAction(
+  baseUrl: string,
+  entitiesCollection: EntitiesCollection
+) {
+  return createOptimisticAction<SignalInput>({
+    onMutate: ({ entityUrl, signal }) => {
+      const optimisticStatus = optimisticStatusForSignal(signal)
+      if (!optimisticStatus) return
+
+      entitiesCollection.update(entityUrl, (draft) => {
+        draft.status = optimisticStatus
+      })
+    },
+    mutationFn: async ({ entityUrl, signal, reason, payload }) => {
+      const body: Record<string, unknown> = { signal }
+      if (reason !== undefined) body.reason = reason
+      if (payload !== undefined) body.payload = payload
+
+      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/signal`), {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => ``)
+        throw new Error(text || `Signal failed (${res.status})`)
       }
       const data = (await res.json()) as { txid: number }
       return { txid: data.txid }
@@ -281,6 +362,7 @@ interface ElectricAgentsState {
   entitiesCollection: EntitiesCollection | null
   entityTypesCollection: EntityTypesCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
+  signalEntity: ReturnType<typeof createSignalAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
   forkEntity: ReturnType<typeof createForkEntity> | null
 }
@@ -289,6 +371,7 @@ const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entitiesCollection: null,
   entityTypesCollection: null,
   spawnEntity: null,
+  signalEntity: null,
   killEntity: null,
   forkEntity: null,
 })
@@ -317,6 +400,7 @@ export function ElectricAgentsProvider({
         entitiesCollection: null,
         entityTypesCollection: null,
         spawnEntity: null,
+        signalEntity: null,
         killEntity: null,
         forkEntity: null,
       }
@@ -327,6 +411,7 @@ export function ElectricAgentsProvider({
       entitiesCollection: entities,
       entityTypesCollection: entityTypes,
       spawnEntity: createSpawnAction(baseUrl, entities),
+      signalEntity: createSignalAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),
       forkEntity: createForkEntity(baseUrl),
     }

@@ -5,7 +5,10 @@ const STATUS_COLORS: Record<string, string> = {
   running: `var(--ds-blue-9)`,
   idle: `var(--ds-green-9)`,
   spawning: `var(--ds-amber-9)`,
+  paused: `var(--ds-amber-9)`,
+  stopping: `var(--ds-amber-9)`,
   stopped: `var(--ds-gray-8)`,
+  killed: `var(--ds-red-9)`,
 }
 
 export function StatusDot({

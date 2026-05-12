@@ -90,6 +90,8 @@ export type {
   WakeEntry,
   EntityCreated,
   EntityStopped,
+  EntitySignal,
+  Signal,
   ChildStatusEntry,
   TagEntry,
   ContextInserted as ContextInsertedEvent,

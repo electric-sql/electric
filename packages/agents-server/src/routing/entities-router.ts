@@ -8,6 +8,8 @@ import { apiError } from '../electric-agents-http.js'
 import { parsePrincipalKey, principalUrl } from '../principal.js'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import {
+  assertEntitySignal,
+  ErrCodeInvalidSignal,
   ErrCodeNotFound,
   ErrCodeUnknownEntityType,
   ErrCodeInvalidRequest,
@@ -133,6 +135,12 @@ const setTagBodySchema = Type.Object({
   value: Type.String(),
 })
 
+const signalBodySchema = Type.Object({
+  signal: Type.String(),
+  reason: Type.Optional(Type.String()),
+  payload: Type.Optional(Type.Unknown()),
+})
+
 const scheduleBodySchema = Type.Union([
   Type.Object({
     scheduleType: Type.Literal(`cron`),
@@ -161,6 +169,7 @@ type SendBody = Static<typeof sendBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
+type SignalBody = Static<typeof signalBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
 type EntitiesRegisterBody = Static<typeof entitiesRegisterBodySchema>
 
@@ -187,6 +196,12 @@ entitiesRouter.put(
 entitiesRouter.get(`/:type/:instanceId`, withExistingEntity, getEntity)
 entitiesRouter.head(`/:type/:instanceId`, withExistingEntity, headEntity)
 entitiesRouter.delete(`/:type/:instanceId`, withExistingEntity, killEntity)
+entitiesRouter.post(
+  `/:type/:instanceId/signal`,
+  withExistingEntity,
+  withSchema(signalBodySchema),
+  signalEntity
+)
 entitiesRouter.post(
   `/:type/:instanceId/send`,
   withExistingEntity,
@@ -653,5 +668,29 @@ async function killEntity(
   await unlinkEntityDispatchSubscription(ctx, entity)
   const result = await ctx.entityManager.kill(entityUrl)
   ctx.runtime.claimWriteTokens.clearStream(ctx.service, entity.streams.main)
+  return json(result)
+}
+
+async function signalEntity(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const parsed = routeBody<SignalBody>(request)
+  const { entityUrl, entity } = requireExistingEntityRoute(request)
+  let signal
+  try {
+    signal = assertEntitySignal(parsed.signal)
+  } catch {
+    return apiError(400, ErrCodeInvalidSignal, `Invalid signal: ${parsed.signal}`)
+  }
+  const result = await ctx.entityManager.signal(entityUrl, {
+    signal,
+    reason: parsed.reason,
+    payload: parsed.payload,
+  })
+  if (result.new_state === `stopped` || result.new_state === `killed`) {
+    await unlinkEntityDispatchSubscription(ctx, entity)
+    ctx.runtime.claimWriteTokens.clearStream(ctx.service, entity.streams.main)
+  }
   return json(result)
 }

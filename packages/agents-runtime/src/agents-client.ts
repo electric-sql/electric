@@ -3,6 +3,7 @@ import { createEntityStreamDB } from './entity-stream-db'
 import { normalizeObservationSchema } from './observation-schema'
 import { createRuntimeServerClient } from './runtime-server-client'
 import { appendPathToUrl } from './url'
+import type { EntitySignal } from './runtime-server-client'
 import type {
   EntitiesObservationSource,
   EntityObservationSource,
@@ -23,12 +24,26 @@ export interface AgentsClient {
   observe: (
     source: ObservationSource
   ) => Promise<EntityStreamDB | ObservationStreamDB>
+  signal: (options: {
+    entityUrl: string
+    signal: EntitySignal
+    reason?: string
+    payload?: unknown
+  }) => Promise<{ txid: number }>
+  kill: (entityUrl: string, reason?: string) => Promise<{ txid: number }>
 }
 
 export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
   const serverClient = createRuntimeServerClient(config)
 
   return {
+    signal: (options) => serverClient.signalEntity(options),
+    kill: (entityUrl, reason) =>
+      serverClient.signalEntity({
+        entityUrl,
+        signal: `SIGKILL`,
+        reason,
+      }),
     async observe(source) {
       if (source.sourceType === `entity`) {
         const info = await serverClient.getEntityInfo(

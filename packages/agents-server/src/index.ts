@@ -15,6 +15,14 @@ export type {
   SubscriptionResponse,
   SubscriptionStreamInfo,
 } from './stream-client.js'
+export {
+  assertEntitySignal,
+  assertEntityStatus,
+  expectedSignalStatus,
+  isTerminalEntityStatus,
+  rejectsNormalWrites,
+  toPublicEntity,
+} from './electric-agents-types.js'
 export type {
   AuthenticateRequest,
   ConsumerClaim,
@@ -32,6 +40,18 @@ export type {
   RunnerLiveness,
   SourceStreamOffset,
   WakeNotificationRow,
+  ElectricAgentsEntity,
+  ElectricAgentsEntityRow,
+  ElectricAgentsEntityType,
+  EntityStatus,
+  EntitySignal,
+  PublicElectricAgentsEntity,
+  EntityListFilter,
+  RegisterEntityTypeRequest,
+  SendRequest,
+  SignalRequest,
+  SignalResponse,
+  TypedSpawnRequest,
 } from './electric-agents-types.js'
 export type { Principal, PrincipalKind } from './principal.js'
 export { globalRouter } from './routing/global-router.js'

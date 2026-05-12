@@ -66,7 +66,7 @@ export const entities = pgTable(
     index(`entities_tags_index_gin`).using(`gin`, table.tagsIndex),
     check(
       `chk_entities_status`,
-      sql`${table.status} IN ('spawning', 'running', 'idle', 'stopped')`
+      sql`${table.status} IN ('spawning', 'running', 'idle', 'paused', 'stopping', 'stopped', 'killed')`
     ),
   ]
 )
