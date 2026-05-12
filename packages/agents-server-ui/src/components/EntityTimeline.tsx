@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useLiveQuery } from '@tanstack/react-db'
 import { inArray } from '@tanstack/db'
 import {
@@ -26,7 +27,7 @@ import {
   persistTimelineRowHeights,
 } from '../lib/timelineRowHeights'
 import { usePaneFindAdapterRegistration } from '../hooks/usePaneFind'
-import { useWorkspace } from '../hooks/useWorkspace'
+import { useOptionalWorkspace } from '../hooks/useWorkspace'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import { warmMarkdownRenderCache } from '../lib/markdownRenderCache'
 import { Icon, IconButton, ScrollArea, Stack, Text, Tooltip } from '../ui'
@@ -308,7 +309,8 @@ function ManifestTimelineRow({
   tileId: string | null
   entityStatus?: IncludesEntity[`status`]
 }): React.ReactElement {
-  const { helpers } = useWorkspace()
+  const workspace = useOptionalWorkspace()
+  const navigate = useNavigate()
   const entityTarget = getManifestEntityUrl(manifest)
   const stateSourceId = getManifestStateSourceId(manifest)
   const isEntity = entityTarget !== null
@@ -321,16 +323,23 @@ function ManifestTimelineRow({
 
   const openEntity = useCallback(() => {
     if (!entityTarget) return
-    helpers.openEntity(entityTarget)
-  }, [entityTarget, helpers])
+    if (workspace) {
+      workspace.helpers.openEntity(entityTarget)
+      return
+    }
+    navigate({
+      to: `/entity/$`,
+      params: { _splat: entityTarget.replace(/^\//, ``) },
+    })
+  }, [entityTarget, navigate, workspace])
 
   const openStateInspector = useCallback(() => {
-    if (!entityUrl || !stateSourceId) return
-    helpers.openEntity(entityUrl, {
+    if (!entityUrl || !stateSourceId || !workspace) return
+    workspace.helpers.openEntity(entityUrl, {
       viewId: `state-explorer`,
       viewParams: { source: stateSourceId },
     })
-  }, [entityUrl, helpers, stateSourceId])
+  }, [entityUrl, stateSourceId, workspace])
 
   const statusBadge = entityStatus ? (
     <InlineStatusBadge tone={statusTone(entityStatus)}>
@@ -348,7 +357,7 @@ function ManifestTimelineRow({
         className={styles.manifestActionButton}
         aria-label="Open State Explorer"
         onClick={openStateInspector}
-        disabled={!entityUrl}
+        disabled={!entityUrl || !workspace}
       >
         <Icon icon={ExternalLink} size={1} />
       </IconButton>
