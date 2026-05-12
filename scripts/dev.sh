@@ -41,6 +41,9 @@ Subcommands:
                                      Worker) after agents-server is ready.
                                      Without this, run them manually in a
                                      separate terminal.
+  desktop            Run the Electron desktop app (packages/agents-desktop)
+                     in the current terminal. Requires the rest of the
+                     stack to already be running via 'start'.
   stop               Stop all dev processes + docker compose down (volumes kept).
   teardown           Stop + docker compose down -v (wipes Postgres volume).
   status             Print which services are running.
@@ -274,6 +277,14 @@ EOF
   tail -F "${tail_files[@]}"
 }
 
+cmd_desktop() {
+  [[ -d "$REPO_ROOT/packages/agents-desktop" ]] \
+    || die "packages/agents-desktop not found"
+  log "starting Electron desktop app (Ctrl-C to stop)..."
+  cd "$REPO_ROOT"
+  exec pnpm -C packages/agents-desktop dev
+}
+
 cmd_stop() {
   mkdir -p "$LOG_DIR"
   stop_processes
@@ -325,6 +336,7 @@ main() {
   case "$sub" in
     build)    cmd_build "$@" ;;
     start)    cmd_start "$@" ;;
+    desktop)  cmd_desktop "$@" ;;
     stop)     cmd_stop "$@" ;;
     teardown) cmd_teardown "$@" ;;
     status)   cmd_status "$@" ;;

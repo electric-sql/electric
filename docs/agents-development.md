@@ -2,7 +2,7 @@
 
 ## Package overview
 
-The agents subsystem lives in six packages under `packages/`:
+The agents subsystem lives in seven packages under `packages/`:
 
 | Package                           | Description                                                                           |
 | --------------------------------- | ------------------------------------------------------------------------------------- |
@@ -11,6 +11,7 @@ The agents subsystem lives in six packages under `packages/`:
 | `agents-server`                   | Orchestration server — wake registry, scheduling, Electric + Postgres integration     |
 | `agents`                          | Built-in agents (Horton & Worker) with tools (bash, read, write, edit, fetch, search) |
 | `agents-server-ui`                | React dashboard for agent monitoring and interaction                                  |
+| `agents-desktop`                  | Electron wrapper around `agents-server-ui` for a native desktop experience            |
 | `agents-server-conformance-tests` | Conformance test suite for agents-server                                              |
 
 ## Prerequisites
@@ -28,10 +29,13 @@ For day-to-day development, use the bundled dev script:
 ./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C to stop
 ./scripts/dev.sh start --detach        # same, but exits after spawning (logs to .dev-logs/)
 ./scripts/dev.sh start --with-agents   # also spawn built-in agents (Horton + Worker)
+./scripts/dev.sh desktop     # run the Electron desktop app in this terminal
 ./scripts/dev.sh stop        # stop processes + docker compose down
 ./scripts/dev.sh teardown    # stop + remove Postgres volume + .streams-data/
 ./scripts/dev.sh status      # show which services are running
 ```
+
+`desktop` is a separate command because the Electron app is interactive — it opens a window. Run it in its own terminal after `start` has the rest of the stack up; Ctrl-C in that terminal closes the app without touching the backing services.
 
 `build` covers `typescript-client`, `agents-runtime`, `agents-mcp`, `agents-server`, and `agents`. Re-run it after any dep change before restarting — entrypoints do not auto-restart on `dist/` rebuilds.
 

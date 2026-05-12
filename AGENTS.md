@@ -217,7 +217,7 @@ const bootstrapTodoListAction = createOptimisticAction<string>({
 
 ## Developing Electric Agents
 
-The agents subsystem spans six packages: `agents-runtime`, `agents-mcp` (MCP bridge library used by built-ins), `agents-server`, `agents` (built-in Horton & Worker), `agents-server-ui`, and `agents-server-conformance-tests`.
+The agents subsystem spans seven packages: `agents-runtime`, `agents-mcp` (MCP bridge library used by built-ins), `agents-server`, `agents` (built-in Horton & Worker), `agents-server-ui`, `agents-desktop` (Electron wrapper for the UI), and `agents-server-conformance-tests`.
 
 **Quick start** (from project root, ensure `.env` has `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`):
 
@@ -226,6 +226,8 @@ The agents subsystem spans six packages: `agents-runtime`, `agents-mcp` (MCP bri
                              # agents-mcp, agents-server, agents
 ./scripts/dev.sh start       # docker + 5 dev processes; Ctrl-C stops everything
 ./scripts/dev.sh start --with-agents   # also spawn built-in agents (Horton + Worker)
+./scripts/dev.sh desktop     # run the Electron desktop app (in a separate terminal,
+                             # against an already-running stack)
 ./scripts/dev.sh stop        # stop processes + docker compose down
 ./scripts/dev.sh teardown    # also remove Postgres volume + .streams-data/
 ```
