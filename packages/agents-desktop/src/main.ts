@@ -157,6 +157,10 @@ const RESOURCE_DIR = app.isPackaged ? process.resourcesPath : PACKAGE_DIR
 const RENDERER_INDEX = app.isPackaged
   ? path.join(RESOURCE_DIR, `renderer`, `index.html`)
   : path.resolve(PACKAGE_DIR, `../agents-server-ui/dist-desktop/index.html`)
+// Bundled `@electric-ax/agents` can't resolve its own skills dir; supply it explicitly.
+const AGENT_SKILLS_DIR = app.isPackaged
+  ? path.join(RESOURCE_DIR, `agent-skills`)
+  : path.resolve(PACKAGE_DIR, `../agents/skills`)
 const PRELOAD_PATH = path.resolve(MODULE_DIR, `preload.cjs`)
 const TRAY_ICON_PATH = path.join(RESOURCE_DIR, `assets`, `trayTemplate.png`)
 const TRAY_ICON_2X_PATH = path.join(
@@ -1354,6 +1358,7 @@ async function startRuntime(serverId: string): Promise<void> {
     extraMcpServers: settings.mcp?.servers,
     loadProjectMcpConfig: true,
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
+    baseSkillsDir: AGENT_SKILLS_DIR,
     openAuthorizeUrl: (url, server) => {
       void handleAuthorizeUrl(serverId, url, server)
     },

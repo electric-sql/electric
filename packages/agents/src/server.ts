@@ -64,6 +64,8 @@ export interface BuiltinAgentsServerOptions {
    * so the embedder must opt in.
    */
   loadProjectMcpConfig?: boolean
+  /** Override for the built-in skills directory; required when embedders bundle this package. */
+  baseSkillsDir?: string
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -337,6 +339,7 @@ export class BuiltinAgentsServer {
             createElectricTools: this.options.createElectricTools,
             publicUrl,
             runtimeName: `builtin-agents`,
+            baseSkillsDir: this.options.baseSkillsDir,
           })
           if (!this.bootstrap) {
             throw new Error(

@@ -20,6 +20,10 @@ extraResources:
     to: assets
     filter:
       - '**/*'
+  - from: ../agents/skills
+    to: agent-skills
+    filter:
+      - '**/*'
 
 asar: true
 asarUnpack:
