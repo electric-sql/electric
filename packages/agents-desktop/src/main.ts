@@ -112,6 +112,14 @@ type DesktopSettings = {
   workingDirectory: string | null
   apiKeysRef: string
   /**
+   * Onboarding wizard ("Sign in to Electric Cloud" → API keys) gets
+   * surfaced on launch until the user finishes it or explicitly
+   * clicks "Don't show again". Once set, the modal stays hidden even
+   * if the user later signs out / clears keys. Settings → General and
+   * Settings → Account are the recovery paths after that.
+   */
+  onboardingDismissed?: boolean
+  /**
    * MCP servers shipped by the desktop app's settings — global to all
    * workspaces, edited via the Settings UI (or by hand in
    * `settings.json` for now). On disk this mirrors `mcp.json`'s
@@ -741,6 +749,7 @@ async function loadSettings(): Promise<void> {
           ? parsed.workingDirectory
           : null,
       apiKeysRef,
+      onboardingDismissed: parsed.onboardingDismissed === true,
       mcp: normalizeMcp(parsed.mcp),
       pullWakeRunnerId,
     }
@@ -1733,6 +1742,34 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
   )
 }
 
+/**
+ * Snapshot consumed by the renderer's onboarding wizard. `dismissed`
+ * is the persisted "Don't show again" flag; `hasAnyKey` lets the
+ * wizard skip the API-keys step when keys already exist; `signedIn`
+ * lets it skip the Electric Cloud step when a session is already
+ * restored. The renderer decides whether to render the modal based on
+ * those three bits — the main process doesn't make the policy call.
+ */
+type OnboardingState = {
+  dismissed: boolean
+  hasAnyKey: boolean
+  signedIn: boolean
+}
+
+function getOnboardingState(): OnboardingState {
+  const cloudStatus = cloudAuth?.getState().status
+  return {
+    dismissed: settings.onboardingDismissed === true,
+    hasAnyKey: Boolean(apiKeys.anthropic || apiKeys.openai),
+    signedIn: cloudStatus === `signed-in`,
+  }
+}
+
+async function setOnboardingDismissed(dismissed: boolean): Promise<void> {
+  settings.onboardingDismissed = dismissed
+  await saveSettings()
+}
+
 async function setSelectedServerForWindow(
   win: BrowserWindow | null,
   serverId: string | null
@@ -1966,6 +2003,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle(`desktop:save-api-keys`, async (_event, keys: ApiKeys) => {
     await setApiKeys(keys)
   })
+  ipcMain.handle(`desktop:get-onboarding-state`, () => getOnboardingState())
+  ipcMain.handle(
+    `desktop:set-onboarding-dismissed`,
+    async (_event, dismissed: boolean) => {
+      await setOnboardingDismissed(Boolean(dismissed))
+    }
+  )
   ipcMain.handle(
     `desktop:get-working-directory`,
     () => settings.workingDirectory

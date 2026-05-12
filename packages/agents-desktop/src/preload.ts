@@ -102,6 +102,12 @@ type ApiKeysStatus = {
   suggested: ApiKeys
 }
 
+type OnboardingState = {
+  dismissed: boolean
+  hasAnyKey: boolean
+  signedIn: boolean
+}
+
 // Mirror of `DesktopCommand` in main.ts. Kept as a string union here so
 // the preload bundle has zero runtime cost; main is the source of
 // truth for which commands actually fire.
@@ -254,6 +260,10 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  getOnboardingState: (): Promise<OnboardingState> =>
+    ipcRenderer.invoke(`desktop:get-onboarding-state`),
+  setOnboardingDismissed: (dismissed: boolean): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-onboarding-dismissed`, dismissed),
   getWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:get-working-directory`),
   chooseWorkingDirectory: (): Promise<string | null> =>
