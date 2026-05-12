@@ -20,7 +20,14 @@ function createMockDb(): any {
       }),
     }),
     select: () => ({
-      from: () => Promise.resolve([]),
+      from: () =>
+        Object.assign(Promise.resolve([]), {
+          where: () =>
+            Object.assign(Promise.resolve([]), {
+              limit: () => Promise.resolve([]),
+              orderBy: () => Promise.resolve([]),
+            }),
+        }),
     }),
   }
 }

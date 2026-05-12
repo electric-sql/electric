@@ -1,110 +1,343 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Electric Agents: Principals RFC</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.6; }
-  .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
-  h1 { font-size: 2rem; font-weight: 700; color: #fff; margin-bottom: 8px; }
-  .subtitle { color: #888; font-size: 1.1rem; margin-bottom: 48px; }
-  .subtitle a { color: #7aa2f7; text-decoration: none; }
-  .subtitle a:hover { text-decoration: underline; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Electric Agents: Principals RFC</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        background: #0a0a0a;
+        color: #e0e0e0;
+        line-height: 1.6;
+      }
+      .container {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 40px 24px 80px;
+      }
+      h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 8px;
+      }
+      .subtitle {
+        color: #888;
+        font-size: 1.1rem;
+        margin-bottom: 48px;
+      }
+      .subtitle a {
+        color: #7aa2f7;
+        text-decoration: none;
+      }
+      .subtitle a:hover {
+        text-decoration: underline;
+      }
 
-  /* Section */
-  .section { margin-bottom: 48px; }
-  .section-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #7aa2f7; margin-bottom: 12px; }
-  .section h2 { font-size: 1.3rem; font-weight: 600; color: #fff; margin-bottom: 16px; }
+      /* Section */
+      .section {
+        margin-bottom: 48px;
+      }
+      .section-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #7aa2f7;
+        margin-bottom: 12px;
+      }
+      .section h2 {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 16px;
+      }
 
-  /* Decision cards */
-  .decision { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
-  .decision h3 { font-size: 1.05rem; font-weight: 600; color: #fff; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-  .decision p { color: #aaa; font-size: 0.95rem; }
-  .decision code { background: #1a1a2e; color: #7aa2f7; padding: 2px 7px; border-radius: 4px; font-size: 0.88rem; font-family: 'SF Mono', 'Fira Code', monospace; }
-  .badge { display: inline-block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 8px; border-radius: 4px; }
-  .badge-required { background: #2d1b1b; color: #f7768e; border: 1px solid #3d2525; }
-  .badge-integrator { background: #1b2d1b; color: #9ece6a; border: 1px solid #253d25; }
-  .badge-cloud { background: #1b1b2d; color: #7aa2f7; border: 1px solid #25253d; }
-  .badge-future { background: #2d2b1b; color: #e0af68; border: 1px solid #3d3525; }
+      /* Decision cards */
+      .decision {
+        background: #141414;
+        border: 1px solid #222;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 16px;
+      }
+      .decision h3 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .decision p {
+        color: #aaa;
+        font-size: 0.95rem;
+      }
+      .decision code {
+        background: #1a1a2e;
+        color: #7aa2f7;
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-size: 0.88rem;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 3px 8px;
+        border-radius: 4px;
+      }
+      .badge-required {
+        background: #2d1b1b;
+        color: #f7768e;
+        border: 1px solid #3d2525;
+      }
+      .badge-integrator {
+        background: #1b2d1b;
+        color: #9ece6a;
+        border: 1px solid #253d25;
+      }
+      .badge-cloud {
+        background: #1b1b2d;
+        color: #7aa2f7;
+        border: 1px solid #25253d;
+      }
+      .badge-future {
+        background: #2d2b1b;
+        color: #e0af68;
+        border: 1px solid #3d3525;
+      }
 
-  /* Diagram */
-  .diagram { background: #111; border: 1px solid #222; border-radius: 12px; padding: 32px 24px; margin: 24px 0; overflow-x: auto; }
-  .diagram pre { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.82rem; line-height: 1.7; color: #ccc; white-space: pre; }
-  .diagram .hl-blue { color: #7aa2f7; }
-  .diagram .hl-green { color: #9ece6a; }
-  .diagram .hl-red { color: #f7768e; }
-  .diagram .hl-yellow { color: #e0af68; }
-  .diagram .hl-dim { color: #555; }
-  .diagram .hl-white { color: #fff; font-weight: 600; }
+      /* Diagram */
+      .diagram {
+        background: #111;
+        border: 1px solid #222;
+        border-radius: 12px;
+        padding: 32px 24px;
+        margin: 24px 0;
+        overflow-x: auto;
+      }
+      .diagram pre {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 0.82rem;
+        line-height: 1.7;
+        color: #ccc;
+        white-space: pre;
+      }
+      .diagram .hl-blue {
+        color: #7aa2f7;
+      }
+      .diagram .hl-green {
+        color: #9ece6a;
+      }
+      .diagram .hl-red {
+        color: #f7768e;
+      }
+      .diagram .hl-yellow {
+        color: #e0af68;
+      }
+      .diagram .hl-dim {
+        color: #555;
+      }
+      .diagram .hl-white {
+        color: #fff;
+        font-weight: 600;
+      }
 
-  /* Code block */
-  .code-block { background: #111; border: 1px solid #222; border-radius: 12px; padding: 20px 24px; margin: 16px 0; overflow-x: auto; }
-  .code-block pre { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.82rem; line-height: 1.7; color: #ccc; }
-  .code-block .kw { color: #bb9af7; }
-  .code-block .fn { color: #7aa2f7; }
-  .code-block .str { color: #9ece6a; }
-  .code-block .cm { color: #555; }
-  .code-block .type { color: #e0af68; }
+      /* Code block */
+      .code-block {
+        background: #111;
+        border: 1px solid #222;
+        border-radius: 12px;
+        padding: 20px 24px;
+        margin: 16px 0;
+        overflow-x: auto;
+      }
+      .code-block pre {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 0.82rem;
+        line-height: 1.7;
+        color: #ccc;
+      }
+      .code-block .kw {
+        color: #bb9af7;
+      }
+      .code-block .fn {
+        color: #7aa2f7;
+      }
+      .code-block .str {
+        color: #9ece6a;
+      }
+      .code-block .cm {
+        color: #555;
+      }
+      .code-block .type {
+        color: #e0af68;
+      }
 
-  /* Use cases */
-  .use-cases { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
-  .use-case { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 20px; }
-  .use-case h4 { font-size: 0.95rem; color: #fff; margin-bottom: 8px; }
-  .use-case p { font-size: 0.85rem; color: #888; }
-  .use-case .uc-tag { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin-bottom: 8px; }
+      /* Use cases */
+      .use-cases {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .use-case {
+        background: #141414;
+        border: 1px solid #222;
+        border-radius: 12px;
+        padding: 20px;
+      }
+      .use-case h4 {
+        font-size: 0.95rem;
+        color: #fff;
+        margin-bottom: 8px;
+      }
+      .use-case p {
+        font-size: 0.85rem;
+        color: #888;
+      }
+      .use-case .uc-tag {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #555;
+        margin-bottom: 8px;
+      }
 
-  /* Future items */
-  .future-list { list-style: none; padding: 0; }
-  .future-list li { padding: 12px 0; border-bottom: 1px solid #1a1a1a; color: #888; font-size: 0.92rem; display: flex; align-items: flex-start; gap: 10px; }
-  .future-list li:last-child { border-bottom: none; }
-  .future-dot { width: 6px; height: 6px; border-radius: 50%; background: #e0af68; margin-top: 8px; flex-shrink: 0; }
+      /* Future items */
+      .future-list {
+        list-style: none;
+        padding: 0;
+      }
+      .future-list li {
+        padding: 12px 0;
+        border-bottom: 1px solid #1a1a1a;
+        color: #888;
+        font-size: 0.92rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .future-list li:last-child {
+        border-bottom: none;
+      }
+      .future-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #e0af68;
+        margin-top: 8px;
+        flex-shrink: 0;
+      }
 
-  /* Separator */
-  hr { border: none; border-top: 1px solid #1a1a1a; margin: 48px 0; }
-</style>
-</head>
-<body>
-<div class="container">
+      /* Separator */
+      hr {
+        border: none;
+        border-top: 1px solid #1a1a1a;
+        margin: 48px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Principals in Electric Agents</h1>
+      <p class="subtitle">
+        RFC summary for the team &mdash;
+        <a href="https://github.com/electric-sql/electric/issues/4306">#4306</a>
+        &middot; builds on
+        <a href="https://github.com/electric-sql/electric/pull/4305">#4305</a>
+      </p>
 
-<h1>Principals in Electric Agents</h1>
-<p class="subtitle">RFC summary for the team &mdash; <a href="https://github.com/electric-sql/electric/issues/4306">#4306</a> &middot; builds on <a href="https://github.com/electric-sql/electric/pull/4305">#4305</a></p>
+      <!-- CORE DECISIONS -->
+      <div class="section">
+        <div class="section-label">Core Decisions</div>
 
-<!-- CORE DECISIONS -->
-<div class="section">
-  <div class="section-label">Core Decisions</div>
+        <div class="decision">
+          <h3>
+            <span class="badge badge-required">Required</span> Every request
+            needs a principal
+          </h3>
+          <p>
+            All requests must include an <code>Electric-Principal</code> header
+            identifying who is acting. Format: <code>type:id</code> (e.g.
+            <code>user:kyle</code>, <code>agent:ci-bot</code>,
+            <code>service:deploy-hook</code>). In dev mode, defaults to
+            <code>dev:local</code> when absent.
+          </p>
+        </div>
 
-  <div class="decision">
-    <h3><span class="badge badge-required">Required</span> Every request needs a principal</h3>
-    <p>All requests must include an <code>Electric-Principal</code> header identifying who is acting. Format: <code>type:id</code> (e.g. <code>user:kyle</code>, <code>agent:ci-bot</code>, <code>service:deploy-hook</code>). In dev mode, defaults to <code>dev:local</code> when absent.</p>
-  </div>
+        <div class="decision">
+          <h3>
+            <span class="badge badge-integrator">Integrator</span> Auth is not
+            our problem
+          </h3>
+          <p>
+            Electric Agents doesn't authenticate users or validate identity. The
+            integrator's edge (reverse proxy, Clerk, Better Auth, SSO)
+            authenticates the user and sets the header. We trust the header. We
+            don't care <em>what</em> the identity is, just that there
+            <em>is</em> one.
+          </p>
+        </div>
 
-  <div class="decision">
-    <h3><span class="badge badge-integrator">Integrator</span> Auth is not our problem</h3>
-    <p>Electric Agents doesn't authenticate users or validate identity. The integrator's edge (reverse proxy, Clerk, Better Auth, SSO) authenticates the user and sets the header. We trust the header. We don't care <em>what</em> the identity is, just that there <em>is</em> one.</p>
-  </div>
+        <div class="decision">
+          <h3>
+            <span class="badge badge-integrator">Integrator</span> Authorization
+            lives in handlers &amp; tools
+          </h3>
+          <p>
+            No framework-level permission model. The handler decides what
+            tools/functions to give each agent based on
+            <code>ctx.principal</code>. Handlers can load auth rules from any
+            external API (Clerk, your own DB, a permissions service).
+          </p>
+        </div>
 
-  <div class="decision">
-    <h3><span class="badge badge-integrator">Integrator</span> Authorization lives in handlers &amp; tools</h3>
-    <p>No framework-level permission model. The handler decides what tools/functions to give each agent based on <code>ctx.principal</code>. Handlers can load auth rules from any external API (Clerk, your own DB, a permissions service).</p>
-  </div>
+        <div class="decision">
+          <h3>
+            <span class="badge badge-cloud">Electric Cloud</span> API tokens for
+            system principals
+          </h3>
+          <p>
+            Electric Cloud needs to issue API tokens for non-human principals
+            (<code>system:cron</code>, <code>service:ci</code>) that spawn
+            agents, send messages, or trigger workflows. These tokens map to a
+            specific principal identity in the header.
+          </p>
+        </div>
 
-  <div class="decision">
-    <h3><span class="badge badge-cloud">Electric Cloud</span> API tokens for system principals</h3>
-    <p>Electric Cloud needs to issue API tokens for non-human principals (<code>system:cron</code>, <code>service:ci</code>) that spawn agents, send messages, or trigger workflows. These tokens map to a specific principal identity in the header.</p>
-  </div>
+        <div class="decision">
+          <h3>
+            <span class="badge badge-required">Required</span> Agents are owned
+            by principals
+          </h3>
+          <p>
+            Every agent records <code>created_by</code> at spawn. Enables:
+            querying all agents for a user, audit trails, cascading cleanup.
+            Without this you can't build basics like "show me my agent
+            sessions."
+          </p>
+        </div>
+      </div>
 
-  <div class="decision">
-    <h3><span class="badge badge-required">Required</span> Agents are owned by principals</h3>
-    <p>Every agent records <code>created_by</code> at spawn. Enables: querying all agents for a user, audit trails, cascading cleanup. Without this you can't build basics like "show me my agent sessions."</p>
-  </div>
-</div>
-
-<!-- DIAGRAM -->
-<div class="section">
-  <div class="section-label">How It Flows</div>
-  <div class="diagram"><pre>
+      <!-- DIAGRAM -->
+      <div class="section">
+        <div class="section-label">How It Flows</div>
+        <div class="diagram">
+          <pre>
 <span class="hl-dim">                    ┌─────────────────────────────────┐</span>
 <span class="hl-dim">                    │</span>  <span class="hl-white">Integrator's Edge</span>                <span class="hl-dim">│</span>
 <span class="hl-dim">                    │</span>  Clerk / Better Auth / SSO        <span class="hl-dim">│</span>
@@ -131,13 +364,15 @@
 <span class="hl-dim">          │</span>  Can call Clerk API, query DB, etc.              <span class="hl-dim">│</span>
 <span class="hl-dim">          │</span>  Decides what the agent can do                   <span class="hl-dim">│</span>
 <span class="hl-dim">          └─────────────────────────────────────────────┘</span>
-</pre></div>
-</div>
+</pre>
+        </div>
+      </div>
 
-<!-- CODE EXAMPLE -->
-<div class="section">
-  <div class="section-label">Handler Example</div>
-  <div class="code-block"><pre><span class="fn">defineEntity</span>(<span class="str">"support-agent"</span>, {
+      <!-- CODE EXAMPLE -->
+      <div class="section">
+        <div class="section-label">Handler Example</div>
+        <div class="code-block">
+          <pre><span class="fn">defineEntity</span>(<span class="str">"support-agent"</span>, {
   <span class="kw">async</span> <span class="fn">handler</span>(<span class="type">ctx</span>) {
     <span class="kw">const</span> { type, id } = ctx.<span class="type">principal</span>;  <span class="cm">// { type: "user", id: "kyle" }</span>
 
@@ -161,47 +396,73 @@
     });
     <span class="kw">await</span> ctx.<span class="type">agent</span>.<span class="fn">run</span>();
   }
-});</pre></div>
-</div>
+});</pre>
+        </div>
+      </div>
 
-<!-- USE CASES -->
-<div class="section">
-  <div class="section-label">Use Cases This Covers</div>
-  <div class="use-cases">
-    <div class="use-case">
-      <div class="uc-tag">Personal system</div>
-      <h4>Solo developer</h4>
-      <p>Dev mode defaults to <code>dev:local</code>. Zero auth config. Principals exist for observability but impose no restrictions.</p>
+      <!-- USE CASES -->
+      <div class="section">
+        <div class="section-label">Use Cases This Covers</div>
+        <div class="use-cases">
+          <div class="use-case">
+            <div class="uc-tag">Personal system</div>
+            <h4>Solo developer</h4>
+            <p>
+              Dev mode defaults to <code>dev:local</code>. Zero auth config.
+              Principals exist for observability but impose no restrictions.
+            </p>
+          </div>
+          <div class="use-case">
+            <div class="uc-tag">Software factory</div>
+            <h4>Multi-engineer team</h4>
+            <p>
+              Each engineer is a principal. Agents are scoped by what tools the
+              handler gives them. CI bots get <code>service:ci</code> identity.
+            </p>
+          </div>
+          <div class="use-case">
+            <div class="uc-tag">Customer app</div>
+            <h4>SaaS with end users</h4>
+            <p>
+              Clerk/SSO authenticates users at the edge, sets the header.
+              Handler loads per-customer permissions from your DB.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- FUTURE WORK -->
+      <div class="section">
+        <div class="section-label">Known Future Layers</div>
+        <h2>Not now, but the principal substrate supports these later</h2>
+        <ul class="future-list">
+          <li>
+            <span class="future-dot"></span>Public sharing links &mdash;
+            HMAC-signed URLs for scoped read-only access to agent sessions,
+            dashboards
+          </li>
+          <li>
+            <span class="future-dot"></span>Capability expressions &mdash;
+            runtime-evaluated authorization conditions stored in principal
+            entity streams (time, relationship, context-based)
+          </li>
+          <li>
+            <span class="future-dot"></span>Named capability sets &mdash;
+            <code>viewer</code> / <code>editor</code> / <code>admin</code> as
+            shortcuts over capability expressions
+          </li>
+          <li>
+            <span class="future-dot"></span>Delegation attenuation &mdash; child
+            agents get provably narrower authority than parent
+          </li>
+          <li>
+            <span class="future-dot"></span>Cross-principal policy &mdash;
+            framework-level rules for inter-principal messaging
+          </li>
+        </ul>
+      </div>
     </div>
-    <div class="use-case">
-      <div class="uc-tag">Software factory</div>
-      <h4>Multi-engineer team</h4>
-      <p>Each engineer is a principal. Agents are scoped by what tools the handler gives them. CI bots get <code>service:ci</code> identity.</p>
-    </div>
-    <div class="use-case">
-      <div class="uc-tag">Customer app</div>
-      <h4>SaaS with end users</h4>
-      <p>Clerk/SSO authenticates users at the edge, sets the header. Handler loads per-customer permissions from your DB.</p>
-    </div>
-  </div>
-</div>
-
-<hr>
-
-<!-- FUTURE WORK -->
-<div class="section">
-  <div class="section-label">Known Future Layers</div>
-  <h2>Not now, but the principal substrate supports these later</h2>
-  <ul class="future-list">
-    <li><span class="future-dot"></span>Public sharing links &mdash; HMAC-signed URLs for scoped read-only access to agent sessions, dashboards</li>
-    <li><span class="future-dot"></span>Capability expressions &mdash; runtime-evaluated authorization conditions stored in principal entity streams (time, relationship, context-based)</li>
-    <li><span class="future-dot"></span>Named capability sets &mdash; <code>viewer</code> / <code>editor</code> / <code>admin</code> as shortcuts over capability expressions</li>
-    <li><span class="future-dot"></span>Delegation attenuation &mdash; child agents get provably narrower authority than parent</li>
-    <li><span class="future-dot"></span>Cross-principal policy &mdash; framework-level rules for inter-principal messaging</li>
-  </ul>
-</div>
-
-
-</div>
-</body>
+  </body>
 </html>

@@ -557,6 +557,7 @@ describe(`ElectricAgentsRoutes send endpoint`, () => {
         getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
         getEntityType: vi.fn(),
       },
+      ensurePrincipal: vi.fn().mockResolvedValue(undefined),
       enqueueDelayedSend: vi
         .fn()
         .mockRejectedValue(

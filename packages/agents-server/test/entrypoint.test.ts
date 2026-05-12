@@ -121,9 +121,10 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
         new Request(`http://agents.test/`, { headers: new Headers() })
       )
     ).toEqual({
-      userId: `alice@example.com`,
-      email: `alice@example.com`,
-      name: undefined,
+      kind: `user`,
+      id: `alice@example.com`,
+      key: `user:alice@example.com`,
+      url: `/principal/user:alice@example.com`,
     })
   })
 
