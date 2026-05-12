@@ -293,6 +293,7 @@ export class BuiltinAgentsServer {
         createElectricTools: this.options.createElectricTools,
         publicUrl,
         runtimeName: `builtin-agents`,
+        serverHeaders: pullWake.headers,
         defaultDispatchPolicyForType: () => ({
           targets: [{ type: `runner`, runnerId: pullWake.runnerId }],
         }),

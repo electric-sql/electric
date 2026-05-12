@@ -15,6 +15,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
   AgentTool,
   EntityStreamDBWithActions,
+  HeadersProvider,
   ProcessWakeConfig,
   WakeNotification,
   WebhookNotification,
@@ -48,6 +49,8 @@ export interface RuntimeRouterConfig {
   defaultDispatchPolicyForType?: (
     typeName: string
   ) => DispatchPolicy | undefined
+  /** Additional headers sent to agents-server control-plane requests. */
+  serverHeaders?: HeadersProvider
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
   /** Heartbeat interval in ms (default: 10_000) */
@@ -180,6 +183,7 @@ export function createRuntimeRouter(
     defaultDispatchPolicyForType,
     publicUrl,
     name: runtimeName,
+    serverHeaders,
   } = normalized
 
   const wakeConfig: ProcessWakeConfig = {
@@ -200,6 +204,16 @@ export function createRuntimeRouter(
   const pendingWakeControllers = new Map<Promise<void>, AbortController>()
   const wakeErrors: Array<Error> = []
   const debugCleanup = process.env.ELECTRIC_AGENTS_DEBUG_CLEANUP === `1`
+
+  const registrationHeaders = async (): Promise<Headers> => {
+    const init =
+      typeof serverHeaders === `function`
+        ? await serverHeaders()
+        : serverHeaders
+    const headers = new Headers(init)
+    headers.set(`content-type`, `application/json`)
+    return headers
+  }
 
   const forEachWithConcurrency = async <T>(
     items: Array<T>,
@@ -460,7 +474,7 @@ export function createRuntimeRouter(
         appendPathToUrl(baseUrl, `/_electric/entity-types`),
         {
           method: `POST`,
-          headers: { 'content-type': `application/json` },
+          headers: await registrationHeaders(),
           body: JSON.stringify(body),
         }
       )
@@ -573,6 +587,7 @@ function normalizeConfig(config: RuntimeRouterConfig): {
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
   defaultDispatchPolicyForType?: RuntimeRouterConfig[`defaultDispatchPolicyForType`]
+  serverHeaders?: RuntimeRouterConfig[`serverHeaders`]
   idleTimeout?: number
   heartbeatInterval?: number
   createElectricTools?: RuntimeRouterConfig[`createElectricTools`]
@@ -591,6 +606,7 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     registry: config.registry,
     subscriptionPathForType: config.subscriptionPathForType,
     defaultDispatchPolicyForType: config.defaultDispatchPolicyForType,
+    serverHeaders: config.serverHeaders,
     idleTimeout: config.idleTimeout,
     heartbeatInterval: config.heartbeatInterval,
     createElectricTools: config.createElectricTools,

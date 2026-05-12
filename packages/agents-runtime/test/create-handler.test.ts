@@ -573,6 +573,33 @@ describe(`createRuntimeHandler`, () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it(`sends configured server headers when registering types`, async () => {
+    defineEntity(`schema-agent`, { handler: async () => {} })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      serverHeaders: {
+        Authorization: `Bearer tenant-token`,
+        'X-Tenant': `tenant-a`,
+      },
+    })
+
+    await handler.registerTypes()
+
+    const [, options] = fetchMock.mock.calls[0]!
+    const headers = new Headers(options?.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer tenant-token`)
+    expect(headers.get(`x-tenant`)).toBe(`tenant-a`)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
+  })
+
   it(`registers custom state collections as output schemas`, async () => {
     defineEntity(`stateful-agent`, {
       state: {
