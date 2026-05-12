@@ -49,7 +49,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_in: [{1, "01"}]}, MapSet.new())
       |> MoveQueue.enqueue(@dep, %{move_in: [{1, "1"}], move_out: []}, MapSet.new())
 
-    assert %MoveQueue{move_in: %{0 => [{1, "1"}]}, move_out: empty_out} = queue
+    assert %MoveQueue{move_in: %{0 => {[{1, "1"}], _}}, move_out: empty_out} = queue
     assert empty_out == %{}
   end
 
@@ -59,7 +59,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_out: [{1, "01"}]}, MapSet.new([1]))
       |> MoveQueue.enqueue(@dep, %{move_out: [{1, "1"}], move_in: []}, MapSet.new([1]))
 
-    assert %MoveQueue{move_out: %{0 => [{1, "1"}]}, move_in: empty_in} = queue
+    assert %MoveQueue{move_out: %{0 => {[{1, "1"}], _}}, move_in: empty_in} = queue
     assert empty_in == %{}
   end
 
@@ -69,7 +69,10 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_in: [{2, "2"}]}, MapSet.new([1]))
       |> MoveQueue.enqueue(@dep, %{move_out: [{1, "1"}]}, MapSet.new([1]))
 
-    assert %MoveQueue{move_out: %{0 => [{1, "1"}]}, move_in: %{0 => [{2, "2"}]}} = queue
+    assert %MoveQueue{
+             move_out: %{0 => {[{1, "1"}], _}},
+             move_in: %{0 => {[{2, "2"}], _}}
+           } = queue
   end
 
   test "uses the provided base view when reducing buffering follow-up moves" do
@@ -89,14 +92,31 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_in: [{2, "2"}], move_out: [{1, "1"}]}, MapSet.new([1]))
       |> MoveQueue.enqueue(@dep, %{move_in: [{3, "3"}]}, MapSet.new([1]))
 
-    assert {{:move_out, 0, [{1, "1"}]}, queue} = MoveQueue.pop_next(queue)
+    assert {{:move_out, 0, [{1, "1"}], []}, queue} = MoveQueue.pop_next(queue)
     assert queue.move_out == %{}
-    assert queue.move_in == %{0 => [{2, "2"}, {3, "3"}]}
+    assert {[{2, "2"}, {3, "3"}], _} = Map.fetch!(queue.move_in, 0)
 
-    assert {{:move_in, 0, [{2, "2"}, {3, "3"}]}, queue} = MoveQueue.pop_next(queue)
+    assert {{:move_in, 0, [{2, "2"}, {3, "3"}], []}, queue} = MoveQueue.pop_next(queue)
     assert queue.move_out == %{}
     assert queue.move_in == %{}
     assert nil == MoveQueue.pop_next(queue)
+  end
+
+  test "accumulates txids from successive enqueues per dependency" do
+    queue =
+      MoveQueue.new()
+      |> MoveQueue.enqueue(
+        @dep,
+        %{move_in: [{1, "1"}], txids: [10]},
+        MapSet.new()
+      )
+      |> MoveQueue.enqueue(
+        @dep,
+        %{move_in: [{2, "2"}], txids: [20]},
+        MapSet.new()
+      )
+
+    assert {{:move_in, 0, _, [10, 20]}, _queue} = MoveQueue.pop_next(queue)
   end
 
   test "length counts queued values across both batches" do

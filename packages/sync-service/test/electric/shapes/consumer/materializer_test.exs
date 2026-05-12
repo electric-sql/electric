@@ -114,6 +114,39 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       assert_receive {:materializer_changes, _, %{move_in: [{1, "1"}]}}
     end
 
+    test "the supplied xid is included in the broadcast payload's txids", ctx do
+      ctx = with_materializer(ctx)
+
+      Materializer.new_changes(
+        ctx,
+        [%Changes.NewRecord{key: "1", record: %{"value" => "1"}}],
+        xid: 4242
+      )
+
+      assert_receive {:materializer_changes, _, %{move_in: [{1, "1"}], txids: [4242]}}
+    end
+
+    test "txids accumulate across multiple non-committing batches", ctx do
+      ctx = with_materializer(ctx)
+
+      Materializer.new_changes(
+        ctx,
+        [%Changes.NewRecord{key: "1", record: %{"value" => "1"}}],
+        xid: 100,
+        commit: false
+      )
+
+      Materializer.new_changes(
+        ctx,
+        [%Changes.NewRecord{key: "2", record: %{"value" => "2"}}],
+        xid: 200,
+        commit: true
+      )
+
+      assert_receive {:materializer_changes, _,
+                      %{move_in: [{1, "1"}, {2, "2"}], txids: [100, 200]}}
+    end
+
     @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
     test "on-load insert of a new value is seen & does not cause a move-in", ctx do
       ctx = with_materializer(ctx)

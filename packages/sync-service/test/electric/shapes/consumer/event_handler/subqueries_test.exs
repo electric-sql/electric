@@ -546,7 +546,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
                  {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
                )
 
-      assert queue.move_in == %{0 => [{2, "2"}]}
+      assert {[{2, "2"}], _} = Map.fetch!(queue.move_in, 0)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(handler, {:pg_snapshot_known, {100, 200, []}})

@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
   alias Electric.Shapes.SubqueryTags
 
   @type move_value() :: {term(), term()}
+  @type txid() :: pos_integer()
   @type move() :: %{dep_index: non_neg_integer(), values: [move_value()]}
 
   @spec effect_for_move_in(move(), ShapeInfo.t()) :: %Effects.AppendControl{}
@@ -17,6 +18,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
           shape_info.dnf_plan,
           active_move.dep_index,
           active_move.values,
+          active_move.txids,
           "move-in",
           shape_info.stack_id,
           shape_info.shape_handle
@@ -24,15 +26,20 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
     }
   end
 
-  @spec effect_for_move_out(non_neg_integer(), [move_value()], ShapeInfo.t()) ::
-          %Effects.AppendControl{}
-  def effect_for_move_out(dep_index, values, %ShapeInfo{} = shape_info) do
+  @spec effect_for_move_out(
+          non_neg_integer(),
+          [move_value()],
+          [txid()],
+          ShapeInfo.t()
+        ) :: %Effects.AppendControl{}
+  def effect_for_move_out(dep_index, values, txids, %ShapeInfo{} = shape_info) do
     %Effects.AppendControl{
       message:
         make(
           shape_info.dnf_plan,
           dep_index,
           values,
+          txids,
           "move-out",
           shape_info.stack_id,
           shape_info.shape_handle
@@ -44,11 +51,12 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
           DnfPlan.t(),
           non_neg_integer(),
           [move_value()],
+          [txid()],
           String.t(),
           String.t(),
           String.t()
         ) :: map()
-  defp make(plan, dep_index, values, event, stack_id, shape_handle)
+  defp make(plan, dep_index, values, txids, event, stack_id, shape_handle)
        when event in ["move-in", "move-out"] do
     positions = Map.get(plan.dependency_positions, dep_index, [])
 
@@ -61,7 +69,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
         end)
       end)
 
-    %{headers: %{event: event, patterns: patterns}}
+    %{headers: %{event: event, patterns: patterns, txids: txids}}
   end
 
   defp make_hash(%{tag_columns: [_col]}, stack_id, shape_handle, value) do
