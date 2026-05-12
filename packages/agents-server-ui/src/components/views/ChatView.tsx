@@ -44,6 +44,43 @@ export function ChatView({
   )
 }
 
+export function ChatLogView({
+  baseUrl,
+  entityUrl,
+  entityStopped,
+  isSpawning,
+  tileId,
+  scrollToBottomSignal,
+}: ViewProps & {
+  scrollToBottomSignal?: number
+}): React.ReactElement {
+  const connectUrl = isSpawning ? null : entityUrl
+  const { entries, entities, loading, error } = useEntityTimeline(
+    baseUrl || null,
+    connectUrl
+  )
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (error && !isSpawning) {
+      void navigate({ to: `/` })
+    }
+  }, [error, navigate, isSpawning])
+
+  return (
+    <EntityTimeline
+      entries={entries}
+      loading={loading}
+      error={error}
+      entityStopped={entityStopped}
+      cacheKey={`${baseUrl}${connectUrl ?? ``}:${scrollToBottomSignal ?? 0}`}
+      tileId={tileId}
+      entityUrl={connectUrl}
+      entities={entities}
+    />
+  )
+}
+
 function GenericChatBody({
   baseUrl,
   entityUrl,

@@ -97,6 +97,9 @@ export default function SessionRoute(): React.ReactElement {
   const setView = (next: EmbedViewId): void => {
     router.setParams({ view: next })
   }
+  const openStateSource = (_sourceId: string): void => {
+    router.setParams({ view: `state-explorer` })
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: tokens.bg }]}>
@@ -136,6 +139,8 @@ export default function SessionRoute(): React.ReactElement {
           entityUrl={entityUrl}
           onBack={goBack}
           onSetView={setView}
+          onOpenEntity={openSession}
+          onOpenStateSource={openStateSource}
           onComposerHeightChange={setChatComposerHeight}
           onSendMessage={() => setChatLogScrollSignal(Date.now())}
         />
