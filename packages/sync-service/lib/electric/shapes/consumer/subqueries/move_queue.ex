@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
   """
 
   @type move_value() :: {term(), term()}
-  @type txid() :: non_neg_integer()
+  @type txid() :: pos_integer()
   @type entry() :: {[move_value()], MapSet.t(txid())}
 
   # move_out/move_in are maps from dep_index to {[move_value], MapSet<txid>}

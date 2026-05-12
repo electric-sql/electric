@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
   alias Electric.Shapes.SubqueryTags
 
   @type move_value() :: {term(), term()}
+  @type txid() :: pos_integer()
   @type move() :: %{dep_index: non_neg_integer(), values: [move_value()]}
 
   @spec effect_for_move_in(move(), ShapeInfo.t()) :: %Effects.AppendControl{}
@@ -28,7 +29,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
   @spec effect_for_move_out(
           non_neg_integer(),
           [move_value()],
-          [non_neg_integer()],
+          [txid()],
           ShapeInfo.t()
         ) :: %Effects.AppendControl{}
   def effect_for_move_out(dep_index, values, txids, %ShapeInfo{} = shape_info) do
@@ -50,7 +51,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
           DnfPlan.t(),
           non_neg_integer(),
           [move_value()],
-          [non_neg_integer()],
+          [txid()],
           String.t(),
           String.t(),
           String.t()
