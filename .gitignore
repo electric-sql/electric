@@ -37,6 +37,7 @@ _artifacts
 **/.env
 .opentrace/
 .opentrace-index.log
+.dev-logs/
 
 # npm local cache/logs
 .npm/
