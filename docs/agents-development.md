@@ -2,11 +2,12 @@
 
 ## Package overview
 
-The agents subsystem lives in five packages under `packages/`:
+The agents subsystem lives in six packages under `packages/`:
 
 | Package                           | Description                                                                           |
 | --------------------------------- | ------------------------------------------------------------------------------------- |
 | `agents-runtime`                  | Core runtime — entity definitions, context, handler lifecycle                         |
+| `agents-mcp`                      | MCP (Model Context Protocol) bridge library used by built-in agents                   |
 | `agents-server`                   | Orchestration server — wake registry, scheduling, Electric + Postgres integration     |
 | `agents`                          | Built-in agents (Horton & Worker) with tools (bash, read, write, edit, fetch, search) |
 | `agents-server-ui`                | React dashboard for agent monitoring and interaction                                  |
@@ -18,17 +19,35 @@ The agents subsystem lives in five packages under `packages/`:
 - **Node.js** and **pnpm** (see `.tool-versions` for exact versions)
 - **`.env` file** at the project root with at least `ANTHROPIC_API_KEY` (needed by built-in agents). Both entrypoints call `process.loadEnvFile()` on startup, loading from the current working directory — so always run entrypoints from the project root.
 
+## Quick start: `./scripts/dev.sh`
+
+For day-to-day development, use the bundled dev script:
+
+```sh
+./scripts/dev.sh build       # one-shot install + build of all required packages
+./scripts/dev.sh start       # docker + all six dev processes; Ctrl-C to stop
+./scripts/dev.sh start --detach   # same, but exits after spawning (logs to .dev-logs/)
+./scripts/dev.sh stop        # stop processes + docker compose down
+./scripts/dev.sh teardown    # stop + remove Postgres volume
+./scripts/dev.sh status      # show which services are running
+```
+
+`build` covers `typescript-client`, `agents-runtime`, `agents-mcp`, `agents-server`, and `agents`. Re-run it after any dep change before restarting — entrypoints do not auto-restart on `dist/` rebuilds.
+
+The rest of this document describes the manual flow that the script automates.
+
 ## Starting the dev environment
 
 All commands below assume you are in the project root. All `pnpm dev` commands use `tsdown --watch` (or Vite for the UI) — they do an initial build then watch for changes. The build order matters because packages import from each other's `dist/`.
 
 ### Step 1 — Install dependencies and build workspace prerequisites
 
-In a fresh checkout or worktree, workspace packages have no `dist/` directories. Agent packages depend on `@electric-sql/client` (the typescript-client) at runtime, so it must be built before starting any agent server.
+In a fresh checkout or worktree, workspace packages have no `dist/` directories. The agent packages depend on `@electric-sql/client` (the typescript-client) and on `@electric-ax/agents-mcp` at runtime, so both must be built before starting any agent server.
 
 ```sh
 pnpm install
 pnpm -C packages/typescript-client build
+pnpm -C packages/agents-mcp build
 ```
 
 ### Step 2 — Start backing services (Postgres + Electric + Jaeger)
