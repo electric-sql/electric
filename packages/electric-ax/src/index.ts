@@ -609,8 +609,12 @@ async function listEntities(
 }
 
 async function killEntity(env: ElectricCliEnv, url: string): Promise<void> {
-  const res = await electricAgentsFetch(env, entityApiPath(url), {
-    method: `DELETE`,
+  const res = await electricAgentsFetch(env, entityApiPath(url, `/signal`), {
+    method: `POST`,
+    body: JSON.stringify({
+      signal: `SIGKILL`,
+      reason: `Killed from CLI`,
+    }),
   })
 
   if (!res.ok) {
