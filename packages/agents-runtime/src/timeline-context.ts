@@ -153,6 +153,14 @@ export function defaultProjection(
             toolCallId: runItem.key,
             isError: runItem.status === `failed`,
           })
+        } else {
+          // Tool was interrupted (crashed mid-execution) - synthesize error result
+          messages.push({
+            role: `tool_result`,
+            content: `Tool execution was interrupted before completion (status: ${runItem.status})`,
+            toolCallId: runItem.key,
+            isError: true,
+          })
         }
       }
 
