@@ -10,9 +10,6 @@ export default function AccountRoute(): React.ReactElement {
         if (router.canGoBack()) router.back()
         else router.replace(`/`)
       }}
-      onStartSignIn={(provider) => {
-        router.push({ pathname: `/sign-in`, params: { provider } })
-      }}
     />
   )
 }

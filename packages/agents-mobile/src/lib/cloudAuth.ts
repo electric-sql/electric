@@ -1,25 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as WebBrowser from 'expo-web-browser'
 
 /**
  * Electric Cloud sign-in for the mobile app.
  *
- * Mirrors the desktop flow (`packages/agents-desktop/src/cloud-auth.ts`)
- * over the same backend endpoints — the only thing that differs is the
- * vehicle that opens the OAuth page and intercepts the loopback redirect:
+ * Uses the admin-API's native-redirect flow: the OAuth page opens
+ * inside an `ASWebAuthenticationSession` (iOS) / Chrome Custom Tab
+ * (Android) via `expo-web-browser`, and the dashboard redirects to
+ * `electric-agents://oauth/callback?token=…` once the user has signed
+ * in. The system browser surfaces that deep link to us via the
+ * `openAuthSessionAsync` result and the session dismisses itself.
  *
- *   - desktop: a sandboxed `BrowserWindow` + `webContents.will-redirect`
- *   - mobile:  a full-screen `<WebView>` + `onShouldStartLoadWithRequest`
- *
- * Both flows ask the admin-API to redirect to
- * `http://127.0.0.1:53118/callback?token=…` after the user signs in.
- * Nothing actually listens on that port — the WebView cancels the
- * navigation by URL prefix before any request goes out, and we pull
- * `token`, `state`, `email`, `expiresAt` off the URL.
- *
- * The JWT is persisted in AsyncStorage. We'd prefer the OS keychain
- * (`expo-secure-store`) here, but staying within the deps the mobile
- * package already ships avoids new native modules; storage is sandboxed
- * per-app on iOS/Android either way.
+ * Why the custom scheme rather than the desktop / CLI's loopback HTTP
+ * URL: Google's "Use Secure Browsers" policy blocks OAuth from
+ * embedded `WebView`s, so the mobile flow has to run inside a real
+ * system browser (which is what `openAuthSessionAsync` opens). A real
+ * browser won't tunnel back to a local loopback port the app is
+ * listening on, so the redirect has to terminate in a deep link the
+ * OS routes back to us. The desktop / CLI path keeps using the
+ * loopback URL; the admin-API picks per-request based on which query
+ * param the client sent.
  */
 
 export type CloudAuthProvider = `github` | `google`
@@ -44,14 +44,6 @@ export type CloudAuthState = {
   error: string | null
 }
 
-export type CloudAuthCallbackResult = {
-  token: string
-  state: string
-  email: string
-  expiresAt: string
-  provider: CloudAuthProvider
-}
-
 type StoredAuth = {
   token: string
   email: string
@@ -69,43 +61,48 @@ type WhoamiUserResponse = {
 
 const STORAGE_KEY = `electric-agents-mobile.cloud-auth`
 
-// Stable loopback "port" threaded through the OAuth flow as `cli_port`.
-// Nothing listens on this port — the WebView cancels the navigation by
-// URL prefix before any request goes out. Picked to match the desktop
-// app so a single backend redirect target serves both clients.
-export const CLOUD_AUTH_CLI_PORT = 53118
-export const CLOUD_AUTH_REDIRECT_PREFIX = `http://127.0.0.1:${CLOUD_AUTH_CLI_PORT}/callback`
+/**
+ * Native-app redirect scheme registered on the admin-API allowlist.
+ * Must match the `scheme` declared in `app.json` so the OS routes the
+ * dashboard's redirect back to this app. The admin-API rejects any
+ * other value at the login endpoint.
+ */
+export const CLOUD_AUTH_REDIRECT_SCHEME = `electric-agents`
+export const CLOUD_AUTH_REDIRECT_URI = `${CLOUD_AUTH_REDIRECT_SCHEME}://oauth/callback`
 
 const PROD_DASHBOARD_URL = `https://dashboard.electric-sql.cloud`
 
 export function getCloudBaseUrl(): string {
-  // `process.env.EXPO_PUBLIC_*` is inlined at bundle time by Metro — same
-  // override knob the rest of the Expo ecosystem uses to point at a
-  // dev/staging admin-API.
+  // `process.env.EXPO_PUBLIC_*` is inlined at bundle time by Metro —
+  // same override knob the rest of the Expo ecosystem uses to point at
+  // a dev/staging admin-API.
   const fromEnv = process.env.EXPO_PUBLIC_ELECTRIC_DASHBOARD_URL?.trim()
   return fromEnv && fromEnv.length > 0 ? fromEnv : PROD_DASHBOARD_URL
 }
 
-export function buildAuthorizeUrl(
+function buildAuthorizeUrl(
   provider: CloudAuthProvider,
   cliState: string
 ): string {
   const url = new URL(`/api/public/auth/${provider}/login`, getCloudBaseUrl())
-  url.searchParams.set(`cli_port`, String(CLOUD_AUTH_CLI_PORT))
+  url.searchParams.set(`cli_redirect_scheme`, CLOUD_AUTH_REDIRECT_SCHEME)
   url.searchParams.set(`cli_state`, cliState)
   return url.toString()
 }
 
-/**
- * Parse a `http://127.0.0.1:53118/callback?token=…` URL into a typed
- * callback result. Returns `null` for any URL that doesn't match the
- * expected redirect prefix or is missing required query params.
- */
-export function parseCallbackUrl(
+type CloudAuthCallbackResult = {
+  token: string
+  state: string
+  email: string
+  expiresAt: string
+  provider: CloudAuthProvider
+}
+
+function parseCallbackUrl(
   url: string,
   provider: CloudAuthProvider
 ): CloudAuthCallbackResult | null {
-  if (!url.startsWith(CLOUD_AUTH_REDIRECT_PREFIX)) return null
+  if (!url.startsWith(CLOUD_AUTH_REDIRECT_URI)) return null
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -170,10 +167,9 @@ function isExpired(expiresAtIso: string): boolean {
 /**
  * Singleton state machine that owns the cloud-auth session.
  *
- * The class isn't a React hook — instead the
- * `CloudAuthContext` wraps it so any component can subscribe via
- * `useCloudAuth()` without re-instantiating storage / network on every
- * render.
+ * The class isn't a React hook — instead the `CloudAuthContext` wraps
+ * it so any component can subscribe via `useCloudAuth()` without
+ * re-instantiating storage / network on every render.
  */
 export class CloudAuth {
   private state: CloudAuthState = {
@@ -227,66 +223,91 @@ export class CloudAuth {
   }
 
   /**
-   * Start a new sign-in flow. Transitions to `signing-in` so the
-   * caller (the WebView screen) can render its loading state. The
-   * actual OAuth dance and redirect interception happen in the
-   * `<SignInWebView>` component; it invokes `completeSignIn` with the
-   * captured token on success.
+   * Run the OAuth flow end-to-end: open the system browser sheet,
+   * wait for the dashboard's deep-link redirect, validate the CSRF
+   * state nonce, persist the JWT, kick off a `whoami` refresh.
+   *
+   * Returns silently on cancellation (user backed out of the sheet) —
+   * the UI just falls back to whatever the previous state was.
+   * Failures are surfaced through `setState({ status: 'error' })`.
    */
-  beginSignIn(_provider: CloudAuthProvider): void {
-    void _provider
+  async signIn(provider: CloudAuthProvider): Promise<void> {
+    const previous = this.state
     this.setState({
-      ...this.state,
+      ...previous,
       status: `signing-in`,
       error: null,
     })
-  }
 
-  /**
-   * Cancel an in-progress sign-in (user backed out of the WebView).
-   * Returns to the prior signed-in/signed-out state without an error
-   * banner — that's reserved for actual failures.
-   */
-  cancelSignIn(): void {
-    if (this.state.status !== `signing-in`) return
-    this.setState({
-      ...this.state,
-      status: this.state.email ? `signed-in` : `signed-out`,
-      error: null,
-    })
-  }
+    const cliState = generateState()
+    const authorizeUrl = buildAuthorizeUrl(provider, cliState)
 
-  /** Surface an unrecoverable error from the sign-in flow. */
-  reportSignInError(message: string): void {
-    this.setState({
-      ...this.state,
-      status: `error`,
-      error: message,
-    })
-  }
+    let result: WebBrowser.WebBrowserAuthSessionResult
+    try {
+      result = await WebBrowser.openAuthSessionAsync(
+        authorizeUrl,
+        CLOUD_AUTH_REDIRECT_URI,
+        {
+          // ASWebAuthenticationSession by default shares cookies with
+          // Safari (iOS) / the system browser (Android) — leaving that
+          // on means a user already signed into GitHub or Google in
+          // their phone's browser skips the password prompt.
+          preferEphemeralSession: false,
+        }
+      )
+    } catch (err) {
+      this.setState({
+        ...previous,
+        status: `error`,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return
+    }
 
-  /**
-   * Persist the credential captured from the loopback redirect and
-   * flip into `signed-in`. Kicks off a background `whoami` refresh —
-   * we already have `email`, name/workspaces fill in shortly after.
-   */
-  async completeSignIn(result: CloudAuthCallbackResult): Promise<void> {
+    if (result.type !== `success` || !result.url) {
+      // `cancel`, `dismiss`, `locked`, or no URL — return to prior state.
+      this.setState({
+        ...previous,
+        status: previous.email ? `signed-in` : `signed-out`,
+        error: null,
+      })
+      return
+    }
+
+    const parsed = parseCallbackUrl(result.url, provider)
+    if (!parsed) {
+      this.setState({
+        ...previous,
+        status: `error`,
+        error: `Sign-in callback was missing required fields.`,
+      })
+      return
+    }
+    if (parsed.state !== cliState) {
+      this.setState({
+        ...previous,
+        status: `error`,
+        error: `Sign-in state mismatch — please try again.`,
+      })
+      return
+    }
+
     const stored: StoredAuth = {
-      token: result.token,
-      email: result.email,
-      expiresAt: result.expiresAt,
-      provider: result.provider,
+      token: parsed.token,
+      email: parsed.email,
+      expiresAt: parsed.expiresAt,
+      provider: parsed.provider,
     }
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
     this.setState({
       status: `signed-in`,
-      email: result.email,
+      email: parsed.email,
       name: null,
       userId: null,
       workspaces: null,
       error: null,
     })
-    void this.refreshWhoami(result.token)
+    void this.refreshWhoami(parsed.token)
   }
 
   async signOut(): Promise<void> {
@@ -396,6 +417,27 @@ export class CloudAuth {
       }
     }
   }
+}
+
+/**
+ * Random CSRF nonce. The dashboard echoes it back via the redirect
+ * URL, and `signIn` rejects the callback if the value doesn't match
+ * what we sent.
+ *
+ * Prefers `crypto.randomUUID()` (polyfilled at app boot via
+ * `react-native-random-uuid`) but falls back to a `Math.random`-based
+ * UUID so the auth flow keeps working if the polyfill ever stops
+ * loading early enough — the value isn't a secret, just a uniqueness
+ * marker.
+ */
+function generateState(): string {
+  if (
+    typeof crypto !== `undefined` &&
+    typeof crypto.randomUUID === `function`
+  ) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 // One instance shared across the app — the React context just wraps it.

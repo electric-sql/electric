@@ -6,7 +6,6 @@ import { Screen } from '../components/Screen'
 import { useTokens } from '../lib/ThemeProvider'
 import { useCloudAuth } from '../lib/CloudAuthContext'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
-import type { CloudAuthProvider } from '../lib/cloudAuth'
 import type { Tokens } from '../lib/theme'
 
 /**
@@ -14,20 +13,20 @@ import type { Tokens } from '../lib/theme'
  * shows the GitHub/Google sign-in buttons when signed out, and the
  * user's name + workspaces + dashboard link when signed in.
  *
- * The actual OAuth flow runs in `<SignInScreen>` (pushed as a separate
- * route). We just observe state through `useCloudAuth` here.
+ * The OAuth flow runs in an in-system browser sheet via
+ * `expo-web-browser.openAuthSessionAsync` (kicked off by `signIn` on
+ * the cloud-auth context); this screen just observes state and pushes
+ * verbs.
  */
 export function AccountScreen({
   onBack,
-  onStartSignIn,
 }: {
   onBack: () => void
-  onStartSignIn: (provider: CloudAuthProvider) => void
 }): React.ReactElement {
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const auth = useCloudAuth()
-  const { state, beginSignIn, signOut, openDashboard } = auth
+  const { state, signIn, signOut, openDashboard } = auth
   const isBusy = state.status === `signing-in`
   const isSignedIn = state.status === `signed-in`
   const workspaces = state.workspaces ?? null
@@ -123,8 +122,7 @@ export function AccountScreen({
                 title={isBusy ? `Opening browser…` : `Sign in with GitHub`}
                 disabled={isBusy}
                 onPress={() => {
-                  beginSignIn(`github`)
-                  onStartSignIn(`github`)
+                  void signIn(`github`)
                 }}
               />
               <PrimaryButton
@@ -132,8 +130,7 @@ export function AccountScreen({
                 disabled={isBusy}
                 variant="soft"
                 onPress={() => {
-                  beginSignIn(`google`)
-                  onStartSignIn(`google`)
+                  void signIn(`google`)
                 }}
               />
             </View>

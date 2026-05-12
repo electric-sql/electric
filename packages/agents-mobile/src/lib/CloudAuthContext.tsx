@@ -3,7 +3,6 @@ import * as Linking from 'expo-linking'
 import {
   cloudAuth,
   getCloudBaseUrl,
-  type CloudAuthCallbackResult,
   type CloudAuthProvider,
   type CloudAuthState,
 } from './cloudAuth'
@@ -11,17 +10,14 @@ import {
 /**
  * React-side surface for the cloud-auth singleton. Subscribes to state
  * changes in the global `cloudAuth` and exposes the verbs the UI calls
- * (start sign-in / complete sign-in / cancel / sign out / open
- * dashboard). The actual OAuth interception lives in the WebView screen
- * — this context is just a thin wrapper.
+ * (sign in / sign out / open dashboard). The actual OAuth flow lives
+ * in `cloudAuth.signIn` — this context is just a thin wrapper so
+ * components don't import the singleton directly.
  */
 
 type CloudAuthContextValue = {
   state: CloudAuthState
-  beginSignIn: (provider: CloudAuthProvider) => void
-  cancelSignIn: () => void
-  reportSignInError: (message: string) => void
-  completeSignIn: (result: CloudAuthCallbackResult) => Promise<void>
+  signIn: (provider: CloudAuthProvider) => Promise<void>
   signOut: () => Promise<void>
   openDashboard: () => Promise<void>
 }
@@ -44,10 +40,7 @@ export function CloudAuthProvider({
   const value = useMemo<CloudAuthContextValue>(
     () => ({
       state,
-      beginSignIn: (provider) => cloudAuth.beginSignIn(provider),
-      cancelSignIn: () => cloudAuth.cancelSignIn(),
-      reportSignInError: (message) => cloudAuth.reportSignInError(message),
-      completeSignIn: (result) => cloudAuth.completeSignIn(result),
+      signIn: (provider) => cloudAuth.signIn(provider),
       signOut: () => cloudAuth.signOut(),
       openDashboard: async () => {
         if (cloudAuth.getState().status !== `signed-in`) return
