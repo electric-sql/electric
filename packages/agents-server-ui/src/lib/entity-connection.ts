@@ -1,6 +1,8 @@
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl } from './entity-api'
+import { DurableStream } from '@durable-streams/client'
 import {
+  appendPathToUrl,
   createEntityStreamDB,
   type EntityStreamDBWithActions,
 } from '@electric-ax/agents-runtime/client'
@@ -229,10 +231,21 @@ async function connectEntityStreamFresh(opts: {
   })
   await res.body?.cancel()
   throwIfAborted(signal)
-  const streamUrl = `${baseUrl}${getMainStreamPath(entityUrl)}`
+  const streamUrl = appendPathToUrl(baseUrl, getMainStreamPath(entityUrl))
+  const stream = new DurableStream({
+    url: streamUrl,
+    contentType: `application/json`,
+    fetch: serverFetch,
+  })
   const db = createEntityStreamDB(
     streamUrl,
-    customState as unknown as Parameters<typeof createEntityStreamDB>[1]
+    customState as unknown as Parameters<typeof createEntityStreamDB>[1],
+    undefined,
+    {
+      stream: stream as unknown as NonNullable<
+        Parameters<typeof createEntityStreamDB>[3]
+      >[`stream`],
+    }
   )
   try {
     await preloadWithAbort(db, signal)

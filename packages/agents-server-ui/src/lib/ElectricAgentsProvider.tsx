@@ -3,6 +3,7 @@ import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { createOptimisticAction } from '@tanstack/db'
 import { z } from 'zod'
+import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
 import {
@@ -58,7 +59,7 @@ function createEntitiesCollection(baseUrl: string) {
       id: `entities`,
       schema: entitySchema,
       shapeOptions: {
-        url: `${baseUrl}/_electric/electric/v1/shape`,
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
         params: {
           table: `entities`,
           columns: [
@@ -91,7 +92,7 @@ function createEntityTypesCollection(baseUrl: string) {
       id: `entity-types`,
       schema: entityTypeSchema,
       shapeOptions: {
-        url: `${baseUrl}/_electric/electric/v1/shape`,
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
         params: { table: `entity_types` },
         fetchClient: serverFetch,
       },

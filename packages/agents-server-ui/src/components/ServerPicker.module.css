@@ -97,3 +97,20 @@
 .addFormActions {
   margin-top: var(--ds-space-2);
 }
+
+.headerRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 32px;
+  gap: var(--ds-space-2);
+  align-items: center;
+}
+
+.addHeaderButton {
+  align-self: flex-start;
+}
+
+@media (max-width: 520px) {
+  .headerRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

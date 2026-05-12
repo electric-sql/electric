@@ -21,6 +21,7 @@ try {
 type ServerConfig = {
   name: string
   url: string
+  headers?: Record<string, string>
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`

@@ -475,6 +475,35 @@ describe(`Claim-scoped write tokens`, () => {
     await expectTags(entity.url, { title: `Onboarding` })
   }, 20_000)
 
+  it(`tag writes accept the active claim token in electric-claim-token`, async () => {
+    const typeName = `claim-tag-write-alt-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-tags-alt`,
+      wakeId: `wake-tags-alt`,
+    })
+    expect(claim.ok).toBe(true)
+    expect(claim.writeToken).toBeTruthy()
+
+    const setTagRes = await fetch(
+      `${baseUrl}/_electric/entities${entity.url}/tags/title`,
+      {
+        method: `POST`,
+        headers: {
+          'content-type': `application/json`,
+          authorization: `Bearer tenant-token`,
+          'electric-claim-token': claim.writeToken!,
+        },
+        body: JSON.stringify({ value: `Onboarding` }),
+      }
+    )
+    expect(setTagRes.status).toBe(200)
+
+    await expectTags(entity.url, { title: `Onboarding` })
+  }, 20_000)
+
   it(`claim-scoped writes validate state schemas and unknown event types`, async () => {
     const typeName = `claim-write-schemas-${Date.now()}`
     const entity = await createEntity(typeName, `owner`, {
@@ -544,6 +573,34 @@ describe(`Claim-scoped write tokens`, () => {
         value: { anything: `goes` },
       }),
     })
+    expect(writeRes.status).toBe(204)
+  }, 20_000)
+
+  it(`stream appends accept the active claim token in electric-claim-token`, async () => {
+    const typeName = `claim-write-alt-header-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-write-alt-header`,
+    })
+    expect(claim.writeToken).toBeTruthy()
+
+    const writeRes = await fetch(`${baseUrl}${entity.streams.main}`, {
+      method: `POST`,
+      headers: {
+        'content-type': `application/json`,
+        authorization: `Bearer tenant-token`,
+        'electric-claim-token': claim.writeToken!,
+      },
+      body: JSON.stringify(
+        stateEvent({
+          key: `alt-header`,
+          value: { ok: true },
+        })
+      ),
+    })
+
     expect(writeRes.status).toBe(204)
   }, 20_000)
 

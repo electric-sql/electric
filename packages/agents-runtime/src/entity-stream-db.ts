@@ -30,6 +30,7 @@ type StreamDBOptions = CreateStreamDBOptions<
   EntityCollectionsDefinition,
   Record<string, ActionDefinition>
 >
+type EntityStreamOptions = NonNullable<StreamDBOptions[`streamOptions`]>
 
 interface EntityWriteUtils {
   createWriteTransaction: (opts?: {
@@ -77,6 +78,7 @@ export type EntityStreamDBWithActions = StreamDBWithActions<
 
 type EntityStreamDBOptions = {
   stream?: StreamDBOptions[`stream`]
+  streamOptions?: Omit<EntityStreamOptions, `url` | `contentType`>
   onBeforeBatch?: (batch: JsonBatch<StateEvent>) => void
   onEvent?: (event: ChangeEvent) => void
   onBatch?: (batch: JsonBatch<StateEvent>) => void
@@ -258,7 +260,13 @@ export function createEntityStreamDB(
   const db = createStreamDB({
     ...(opts?.stream
       ? { stream: opts.stream }
-      : { streamOptions: { url: streamUrl, contentType: `application/json` } }),
+      : {
+          streamOptions: {
+            ...opts?.streamOptions,
+            url: streamUrl,
+            contentType: `application/json`,
+          },
+        }),
     ...(opts?.onEvent && { onEvent: opts.onEvent }),
     onBeforeBatch: (batch) => {
       opts?.onBeforeBatch?.(batch)

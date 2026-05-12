@@ -8,6 +8,7 @@ import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
 import { assertedIdentityHeaders, entityApiPath } from './entity-api.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,
@@ -28,6 +29,7 @@ export interface ElectricCliEnv {
   electricAgentsIdentity: string
   electricAssertedAuthEmail?: string
   electricAssertedAuthName?: string
+  electricAgentsHeaders?: Record<string, string>
 }
 
 export interface SpawnCommandOptions {
@@ -100,6 +102,35 @@ function getDefaultElectricAgentsIdentity(): string {
   return `${userInfo().username}@${hostname()}`
 }
 
+function parseElectricAgentsHeaders(
+  raw: string | undefined
+): Record<string, string> | undefined {
+  const trimmed = raw?.trim()
+  if (!trimmed) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    fail(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected JSON`)
+  }
+  if (!parsed || typeof parsed !== `object` || Array.isArray(parsed)) {
+    fail(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected a JSON object`)
+  }
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(
+    parsed as Record<string, unknown>
+  )) {
+    if (typeof value !== `string`) {
+      fail(
+        `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: header "${name}" must be a string`
+      )
+    }
+    headers.set(name, value)
+  }
+  const normalized = Object.fromEntries(headers.entries())
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
 export function getElectricCliEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ElectricCliEnv {
@@ -111,6 +142,9 @@ export function getElectricCliEnv(
     electricAssertedAuthEmail:
       env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || explicitIdentity || undefined,
     electricAssertedAuthName: env.ELECTRIC_ASSERTED_AUTH_NAME?.trim(),
+    electricAgentsHeaders: parseElectricAgentsHeaders(
+      env.ELECTRIC_AGENTS_SERVER_HEADERS
+    ),
   }
 }
 
@@ -299,7 +333,7 @@ async function electricAgentsFetch(
   opts: RequestInit = {}
 ): Promise<Response> {
   try {
-    return await fetch(`${env.electricAgentsUrl}${path}`, {
+    return await fetch(appendPathToUrl(env.electricAgentsUrl, path), {
       ...opts,
       headers: {
         'content-type': `application/json`,
@@ -307,6 +341,7 @@ async function electricAgentsFetch(
         ...(env.electricAssertedAuthName
           ? { 'x-electric-asserted-name': env.electricAssertedAuthName }
           : {}),
+        ...env.electricAgentsHeaders,
         ...opts.headers,
       },
     })
@@ -508,6 +543,7 @@ async function observeEntity(
     identity: env.electricAgentsIdentity,
     assertedAuthEmail: env.electricAssertedAuthEmail,
     assertedAuthName: env.electricAssertedAuthName,
+    headers: env.electricAgentsHeaders,
     initialOffset: options.from,
   })
 }

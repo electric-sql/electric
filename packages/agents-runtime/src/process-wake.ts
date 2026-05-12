@@ -9,6 +9,7 @@ import { createHandlerContext } from './context-factory'
 import { createSetupContext } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
+import { appendPathToUrl } from './url'
 import type {
   CronObservationSource,
   EntitiesObservationSource,
@@ -71,6 +72,14 @@ type EntityStreamHandle = NonNullable<EntityStreamOptions[`stream`]>
 
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
+}
+
+async function resolveHeadersProvider(
+  provider: ProcessWakeConfig[`claimHeaders`]
+): Promise<Record<string, string> | undefined> {
+  const init = typeof provider === `function` ? await provider() : provider
+  const headers = Object.fromEntries(new Headers(init).entries())
+  return Object.keys(headers).length > 0 ? headers : undefined
 }
 
 async function createClaimCallbackHeaders(
@@ -257,6 +266,7 @@ export async function processWebhookWake(
     claimHeaders: config.claimHeaders,
     claimTokenHeader: config.claimTokenHeader,
   }
+  const serverHeaders = await resolveHeadersProvider(config.claimHeaders)
   const debugWakeTypes = process.env.ELECTRIC_AGENTS_DEBUG_WAKE_TYPES === `1`
 
   if (!typeName) {
@@ -272,7 +282,7 @@ export async function processWebhookWake(
     return null
   }
 
-  const streamUrl = `${baseUrl}${streamPath}`
+  const streamUrl = appendPathToUrl(baseUrl, streamPath)
   const notificationOffset =
     notification.streams.find((streamEntry) => streamEntry.path === streamPath)
       ?.offset ?? `-1`
@@ -281,6 +291,8 @@ export async function processWebhookWake(
   let serverHttpCount = 0
   const serverClient = createRuntimeServerClient({
     baseUrl,
+    headers: serverHeaders,
+    writeTokenHeader: config.claimTokenHeader,
     track: <T>(promise: Promise<T>) => {
       const httpT0 = performance.now()
       const tracked = io.track(promise)
@@ -320,6 +332,7 @@ export async function processWebhookWake(
   let writeToken = ``
   const stream = new DurableStream({
     url: streamUrl,
+    headers: serverHeaders,
     contentType: `application/json`,
   })
 
@@ -330,7 +343,11 @@ export async function processWebhookWake(
     fetch: (input, init) => {
       const headers = new Headers(init?.headers)
       if (writeToken) {
-        headers.set(`authorization`, `Bearer ${writeToken}`)
+        applyClaimTokenHeader(
+          headers,
+          config.claimTokenHeader ?? `authorization`,
+          writeToken
+        )
       }
       return globalThis.fetch(input, { ...init, headers })
     },
@@ -861,7 +878,10 @@ export async function processWebhookWake(
           childStreamUrl,
           childEntry?.definition.state,
           childEntry?.definition.actions,
-          onEvent ? { onEvent } : undefined
+          {
+            ...(onEvent ? { onEvent } : {}),
+            streamOptions: { headers: serverHeaders },
+          }
         )
         secondaryDbs.push({
           drainPendingWrites: () => childDb.utils.drainPendingWrites(),
@@ -883,6 +903,7 @@ export async function processWebhookWake(
           streamOptions: {
             url: sourceStreamUrl,
             contentType: `application/json`,
+            headers: serverHeaders,
           },
           ...(onEvent ? { onEvent } : {}),
           state: normalizeObservationSchema(sourceSchema),
@@ -905,6 +926,7 @@ export async function processWebhookWake(
         if (mode === `create`) {
           await serverClient.ensureSharedStateStream(ssId)
         }
+        const ssStreamUrl = appendPathToUrl(baseUrl, ssStreamPath)
         const ssCollections: Record<string, CollectionDefinition> = {}
         for (const [collName, collSchema] of Object.entries(ssSchema)) {
           ssCollections[collName] = {
@@ -913,7 +935,8 @@ export async function processWebhookWake(
           }
         }
         const sharedStream = new DurableStream({
-          url: `${baseUrl}${ssStreamPath}`,
+          url: ssStreamUrl,
+          headers: serverHeaders,
           contentType: `application/json`,
         })
         const sharedProducer = new IdempotentProducer(
@@ -928,7 +951,7 @@ export async function processWebhookWake(
           }
         )
         const sharedDb = createEntityStreamDB(
-          `${baseUrl}${ssStreamPath}`,
+          ssStreamUrl,
           ssCollections,
           undefined,
           {

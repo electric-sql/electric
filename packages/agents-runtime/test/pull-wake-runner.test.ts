@@ -137,4 +137,52 @@ describe(`createPullWakeRunner`, () => {
     expect(onError).not.toHaveBeenCalled()
     expect(runner.offset).toBe(`42`)
   })
+
+  it(`preserves base URL query parameters on stream, claim, and heartbeat requests`, async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => {
+      return new Response(null, { status: 204 })
+    })
+    vi.stubGlobal(`fetch`, fetchMock)
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield {
+          type: `wake`,
+          subscription_id: `runner:runner-1`,
+          stream: `chat/one/main`,
+          generation: 7,
+        } satisfies PullWakeEvent
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server/root?secret=s1`,
+      runnerId: `runner-1`,
+      runtime: {
+        dispatchWake: vi.fn(),
+        drainWakes: vi.fn(),
+        abortWakes: vi.fn(),
+      },
+      heartbeatIntervalMs: 1,
+      streamFactory,
+    })
+
+    runner.start()
+    await runner.waitForStopped()
+
+    expect(streamFactory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: `http://server/root/runners/runner-1/wake?secret=s1`,
+      })
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://server/root/_electric/runners/runner-1/heartbeat?secret=s1`,
+      expect.any(Object)
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://server/root/_electric/runners/runner-1/claim?secret=s1`,
+      expect.objectContaining({ method: `POST` })
+    )
+  })
 })

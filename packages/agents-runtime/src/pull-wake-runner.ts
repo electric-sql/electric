@@ -1,5 +1,6 @@
 import { DurableStream } from '@durable-streams/client'
 import { DEFAULT_RUNNER_HEARTBEAT_INTERVAL_MS } from './constants'
+import { appendPathToUrl } from './url'
 import type { RuntimeRouter } from './create-handler'
 import type {
   HeadersProvider,
@@ -64,18 +65,18 @@ export function createPullWakeRunner(
   const wakePath =
     config.wakeStreamPath ??
     `/runners/${encodeURIComponent(config.runnerId)}/wake`
-  const wakeUrl = new URL(wakePath, config.baseUrl).toString()
+  const wakeUrl = appendPathToUrl(config.baseUrl, wakePath)
   const heartbeatIntervalMs =
     config.heartbeatIntervalMs ?? DEFAULT_RUNNER_HEARTBEAT_INTERVAL_MS
   const leaseMs = config.leaseMs ?? heartbeatIntervalMs * 3
   const heartbeatPath =
     config.heartbeatPath ??
     `/_electric/runners/${encodeURIComponent(config.runnerId)}/heartbeat`
-  const heartbeatUrl = new URL(heartbeatPath, config.baseUrl).toString()
+  const heartbeatUrl = appendPathToUrl(config.baseUrl, heartbeatPath)
   const claimPath =
     config.claimPath ??
     `/_electric/runners/${encodeURIComponent(config.runnerId)}/claim`
-  const claimUrl = new URL(claimPath, config.baseUrl).toString()
+  const claimUrl = appendPathToUrl(config.baseUrl, claimPath)
 
   const resolveHeaders = async (): Promise<Record<string, string>> => {
     const init =

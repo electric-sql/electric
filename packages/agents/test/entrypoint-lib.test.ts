@@ -28,9 +28,32 @@ describe(`resolveBuiltinAgentsEntrypointOptions`, () => {
     )
 
     expect(options.pullWake.headers).toEqual({
-      'X-Electric-Asserted-Email': `agent@example.test`,
-      'X-Electric-Asserted-Name': `Agent User`,
+      'x-electric-asserted-email': `agent@example.test`,
+      'x-electric-asserted-name': `Agent User`,
     })
     expect(options.pullWake.claimHeaders).toEqual(options.pullWake.headers)
+  })
+
+  test(`merges configured server headers and moves claim tokens out of authorization`, () => {
+    const options = resolveBuiltinAgentsEntrypointOptions(
+      {
+        ELECTRIC_AGENTS_SERVER_URL: `http://localhost:4437`,
+        PULL_WAKE_RUNNER_ID: `runner-1`,
+        ELECTRIC_ASSERTED_AUTH_EMAIL: `agent@example.test`,
+        ELECTRIC_AGENTS_SERVER_HEADERS: JSON.stringify({
+          Authorization: `Bearer tenant-token`,
+          'X-Tenant': `tenant-1`,
+        }),
+      },
+      `/tmp/project`
+    )
+
+    expect(options.pullWake.headers).toEqual({
+      authorization: `Bearer tenant-token`,
+      'x-electric-asserted-email': `agent@example.test`,
+      'x-tenant': `tenant-1`,
+    })
+    expect(options.pullWake.claimHeaders).toEqual(options.pullWake.headers)
+    expect(options.pullWake.claimTokenHeader).toBe(`electric-claim-token`)
   })
 })

@@ -1,9 +1,12 @@
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
+import type { ClaimTokenHeader, HeadersProvider } from './types'
 
 export interface RuntimeServerClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
+  headers?: HeadersProvider
+  writeTokenHeader?: ClaimTokenHeader
   track?: <T>(promise: Promise<T>) => Promise<T>
 }
 
@@ -147,12 +150,49 @@ export function createRuntimeServerClient(
 ): RuntimeServerClient {
   const fetchImpl = config.fetch ?? globalThis.fetch
 
+  const resolveHeaders = async (
+    initHeaders?: HeadersInit
+  ): Promise<Headers> => {
+    const baseHeaders =
+      typeof config.headers === `function`
+        ? await config.headers()
+        : config.headers
+    const headers = new Headers(baseHeaders)
+    new Headers(initHeaders).forEach((value, key) => headers.set(key, value))
+    return headers
+  }
+
+  const applyTokenHeader = (
+    headers: Headers,
+    tokenHeader: ClaimTokenHeader,
+    token: string
+  ): void => {
+    if (
+      tokenHeader === `authorization` ||
+      (tokenHeader === `both` && !headers.has(`authorization`))
+    ) {
+      headers.set(`authorization`, `Bearer ${token}`)
+    }
+    if (tokenHeader === `electric-claim-token` || tokenHeader === `both`) {
+      headers.set(`electric-claim-token`, token)
+    }
+  }
+
   const track = <T>(promise: Promise<T>): Promise<T> => {
     return config.track ? config.track(promise) : promise
   }
 
-  const request = (path: string, init?: RequestInit): Promise<Response> => {
-    return track(fetchImpl(appendPathToUrl(config.baseUrl, path), init))
+  const request = async (
+    path: string,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const headers = await resolveHeaders(init?.headers)
+    return track(
+      fetchImpl(appendPathToUrl(config.baseUrl, path), {
+        ...init,
+        headers,
+      })
+    )
   }
 
   const requireEntityInfo = (
@@ -439,10 +479,12 @@ export function createRuntimeServerClient(
     init: RequestInit,
     writeToken: string
   ): Promise<Response> => {
-    const headers: Record<string, string> = {
-      ...(init.headers as Record<string, string> | undefined),
-      authorization: `Bearer ${writeToken}`,
-    }
+    const headers = new Headers(init.headers)
+    applyTokenHeader(
+      headers,
+      config.writeTokenHeader ?? `authorization`,
+      writeToken
+    )
     return request(path, { ...init, headers })
   }
 

@@ -20,6 +20,7 @@ import type {
 } from '@electric-ax/agents-mcp'
 import {
   createPullWakeRunner,
+  appendPathToUrl,
   registerToolProvider,
   unregisterToolProvider,
 } from '@electric-ax/agents-runtime'
@@ -399,7 +400,7 @@ export class BuiltinAgentsServer {
     )
     headers.set(`content-type`, `application/json`)
     const response = await fetch(
-      new URL(`/_electric/runners`, this.options.agentServerUrl).toString(),
+      appendPathToUrl(this.options.agentServerUrl, `/_electric/runners`),
       {
         method: `POST`,
         headers,

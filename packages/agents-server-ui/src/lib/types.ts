@@ -1,6 +1,8 @@
 export interface ServerConfig {
   name: string
   url: string
+  headers?: Record<string, string>
+  /** Legacy field from older UI builds. Kept so persisted configs still parse. */
   auth?: string
 }
 

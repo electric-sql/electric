@@ -9,6 +9,8 @@ vi.mock(`./auth-fetch`, () => ({
 }))
 
 vi.mock(`@electric-ax/agents-runtime/client`, () => ({
+  appendPathToUrl: (baseUrl: string, path: string) =>
+    `${baseUrl.replace(/\/+$/, ``)}${path}`,
   createEntityStreamDB: vi.fn(() => ({
     preload: preloadMock,
     close: closeMock,

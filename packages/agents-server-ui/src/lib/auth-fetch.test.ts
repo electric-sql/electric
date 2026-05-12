@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getDesktopAssertedAuthHeaders, serverFetch } from './auth-fetch'
+import {
+  getDesktopAssertedAuthHeaders,
+  registerActiveServerHeaders,
+  serverFetch,
+} from './auth-fetch'
 
 function installWindow(electronAPI?: Window[`electronAPI`]): void {
   Object.defineProperty(globalThis, `window`, {
@@ -11,6 +15,7 @@ function installWindow(electronAPI?: Window[`electronAPI`]): void {
 describe(`desktop asserted auth fetch helpers`, () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    registerActiveServerHeaders(null)
     delete (globalThis as { window?: unknown }).window
   })
 
@@ -61,5 +66,45 @@ describe(`desktop asserted auth fetch helpers`, () => {
 
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers)
     expect(headers.get(`x-electric-asserted-email`)).toBe(`request@example.com`)
+  })
+
+  it(`adds configured active server headers to matching requests`, async () => {
+    registerActiveServerHeaders({
+      name: `Tenant`,
+      url: `https://agents.example.test/workspace?secret=abc`,
+      headers: {
+        Authorization: `Bearer tenant-token`,
+        'X-Tenant': `tenant-1`,
+      },
+    })
+
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`ok`))
+
+    await serverFetch(
+      `https://agents.example.test/workspace/_electric/entities/horton/a`
+    )
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer tenant-token`)
+    expect(headers.get(`x-tenant`)).toBe(`tenant-1`)
+  })
+
+  it(`does not send configured active server headers to other origins`, async () => {
+    registerActiveServerHeaders({
+      name: `Tenant`,
+      url: `https://agents.example.test`,
+      headers: { Authorization: `Bearer tenant-token` },
+    })
+
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`ok`))
+
+    await serverFetch(`https://other.example.test/_electric/health`)
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers)
+    expect(headers.has(`authorization`)).toBe(false)
   })
 })

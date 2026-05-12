@@ -40,6 +40,17 @@ export type EntitiesRoutes = RouterType<
 
 const stringRecordSchema = Type.Record(Type.String(), Type.String())
 
+function writeTokenFromRequest(request: AgentsRouteRequest): string {
+  const electricClaimToken = request.headers.get(`electric-claim-token`)?.trim()
+  if (electricClaimToken) return electricClaimToken
+  return (
+    request.headers
+      .get(`authorization`)
+      ?.replace(/^Bearer\s+/i, ``)
+      .trim() ?? ``
+  )
+}
+
 const wakeConditionSchema = Type.Union([
   Type.Literal(`runFinished`),
   Type.Object({
@@ -331,8 +342,7 @@ async function setTag(
 ): Promise<Response> {
   const parsed = routeBody<SetTagBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token =
-    request.headers.get(`authorization`)?.replace(/^Bearer\s+/i, ``) ?? ``
+  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.setTag(
     entityUrl,
     decodeURIComponent(request.params.tagKey),
@@ -347,8 +357,7 @@ async function removeTag(
   ctx: TenantContext
 ): Promise<Response> {
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token =
-    request.headers.get(`authorization`)?.replace(/^Bearer\s+/i, ``) ?? ``
+  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.removeTag(
     entityUrl,
     decodeURIComponent(request.params.tagKey),

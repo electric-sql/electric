@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 import {
   ELECTRIC_IMAGE_TAG,
@@ -42,6 +43,7 @@ export interface StartedBuiltinAgentsEnvironment {
 
 interface WaitForServerOptions {
   fetchImpl?: typeof globalThis.fetch
+  headers?: Record<string, string>
   timeoutMs?: number
   intervalMs?: number
 }
@@ -160,6 +162,57 @@ function buildAssertedAuthHeaders(
   }
 }
 
+function parseAdditionalServerHeaders(
+  env: NodeJS.ProcessEnv,
+  fileEnv: Record<string, string>
+): Record<string, string> | undefined {
+  const raw = readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_SERVER_HEADERS`])
+  if (!raw) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected JSON`)
+  }
+  if (!parsed || typeof parsed !== `object` || Array.isArray(parsed)) {
+    throw new Error(
+      `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected a JSON object`
+    )
+  }
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(
+    parsed as Record<string, unknown>
+  )) {
+    if (typeof value !== `string`) {
+      throw new Error(
+        `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: header "${name}" must be a string`
+      )
+    }
+    headers.set(name, value)
+  }
+  const normalized = Object.fromEntries(headers.entries())
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function mergeHeaders(
+  ...sources: Array<Record<string, string> | undefined>
+): Record<string, string> | undefined {
+  const headers = new Headers()
+  for (const source of sources) {
+    if (!source) continue
+    new Headers(source).forEach((value, key) => headers.set(key, value))
+  }
+  const merged = Object.fromEntries(headers.entries())
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+function hasHeader(
+  headers: Record<string, string> | undefined,
+  name: string
+): boolean {
+  return headers ? new Headers(headers).has(name) : false
+}
+
 export function resolveComposeProjectName(
   _cwd: string = process.cwd(),
   env: NodeJS.ProcessEnv = process.env
@@ -216,12 +269,13 @@ export async function waitForElectricAgentsServer(
   const timeoutMs = options.timeoutMs ?? 60_000
   const intervalMs = options.intervalMs ?? 1_000
   const deadline = Date.now() + timeoutMs
-  const healthUrl = `${baseUrl.replace(/\/$/, ``)}/_electric/health`
+  const healthUrl = appendPathToUrl(baseUrl, `/_electric/health`)
   let lastError: string | null = null
 
   while (Date.now() < deadline) {
     try {
       const response = await fetchImpl(healthUrl, {
+        headers: options.headers,
         signal: AbortSignal.timeout(5_000),
       })
       if (response.ok) {
@@ -360,13 +414,17 @@ export async function startBuiltinAgentsServer(
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
   const runnerId = resolvePullWakeRunnerId(env, fileEnv)
   const assertedAuth = buildAssertedAuthHeaders(env, fileEnv)
+  const serverHeaders = mergeHeaders(
+    assertedAuth.headers,
+    parseAdditionalServerHeaders(env, fileEnv)
+  )
   const agentServerUrl =
     params.agentServerUrl ??
     env.ELECTRIC_AGENTS_URL?.trim() ??
     `http://localhost:${resolveElectricAgentsPort(env, fileEnv)}`
 
   process.env.ANTHROPIC_API_KEY = anthropicApiKey
-  await waitForElectricAgentsServer(agentServerUrl)
+  await waitForElectricAgentsServer(agentServerUrl, { headers: serverHeaders })
 
   const server = new BuiltinAgentsServer({
     agentServerUrl,
@@ -376,8 +434,11 @@ export async function startBuiltinAgentsServer(
       runnerId,
       ownerUserId: assertedAuth.ownerUserId,
       registerRunner: true,
-      headers: assertedAuth.headers,
-      claimHeaders: assertedAuth.headers,
+      headers: serverHeaders,
+      claimHeaders: serverHeaders,
+      claimTokenHeader: hasHeader(serverHeaders, `authorization`)
+        ? `electric-claim-token`
+        : undefined,
     },
   })
 

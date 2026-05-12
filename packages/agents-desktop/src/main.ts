@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 type ServerConfig = {
   name: string
   url: string
+  headers?: Record<string, string>
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -171,6 +172,25 @@ function buildAssertedAuthHeaders(): Record<string, string> | undefined {
   return Object.keys(headers).length > 0 ? headers : undefined
 }
 
+function mergeHeaders(
+  ...sources: Array<Record<string, string> | undefined>
+): Record<string, string> | undefined {
+  const headers = new Headers()
+  for (const source of sources) {
+    if (!source) continue
+    new Headers(source).forEach((value, key) => headers.set(key, value))
+  }
+  const merged = headersToRecord(headers)
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+function hasHeader(
+  headers: Record<string, string> | undefined,
+  name: string
+): boolean {
+  return headers ? new Headers(headers).has(name) : false
+}
+
 /**
  * Commands sent from the menu / tray (main process) to the focused
  * renderer over the `desktop:command` IPC channel. The renderer
@@ -261,7 +281,42 @@ function normalizeServer(value: unknown): ServerConfig | null {
   } catch {
     return null
   }
-  return { name, url }
+  const headers = normalizeHeaderRecord(maybe.headers)
+  return {
+    name,
+    url,
+    ...(headers ? { headers } : {}),
+  }
+}
+
+function normalizeHeaderRecord(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== `object` || Array.isArray(value)) return null
+  const headers = new Headers()
+  for (const [rawName, rawValue] of Object.entries(
+    value as Record<string, unknown>
+  )) {
+    if (typeof rawValue !== `string`) continue
+    const name = rawName.trim()
+    const headerValue = rawValue.trim()
+    if (!name || !headerValue) continue
+    try {
+      headers.set(name, headerValue)
+    } catch {
+      console.warn(
+        `[agents-desktop] settings.json: invalid server header '${rawName}' ignored`
+      )
+    }
+  }
+  const normalized = headersToRecord(headers)
+  return Object.keys(normalized).length > 0 ? normalized : null
+}
+
+function headersToRecord(headers: Headers): Record<string, string> {
+  const record: Record<string, string> = {}
+  headers.forEach((value, key) => {
+    record[key] = value
+  })
+  return record
 }
 
 function normalizeServers(value: unknown): Array<ServerConfig> {
@@ -274,11 +329,35 @@ function normalizeServers(value: unknown): Array<ServerConfig> {
   return [...byUrl.values()]
 }
 
-function serverInList(
+function findServerByUrl(
   server: ServerConfig | null,
   servers: Array<ServerConfig>
+): ServerConfig | null {
+  if (!server) return null
+  return servers.find((entry) => entry.url === server.url) ?? null
+}
+
+function sameHeaders(
+  left: Record<string, string> | undefined,
+  right: Record<string, string> | undefined
 ): boolean {
-  return Boolean(server && servers.some((entry) => entry.url === server.url))
+  const leftHeaders = normalizeHeaderRecord(left) ?? {}
+  const rightHeaders = normalizeHeaderRecord(right) ?? {}
+  const leftEntries = Object.entries(leftHeaders)
+  if (leftEntries.length !== Object.keys(rightHeaders).length) return false
+  return leftEntries.every(([key, value]) => rightHeaders[key] === value)
+}
+
+function sameServer(
+  left: ServerConfig | null,
+  right: ServerConfig | null
+): boolean {
+  if (left === null || right === null) return left === right
+  return (
+    left.url === right.url &&
+    left.name === right.name &&
+    sameHeaders(left.headers, right.headers)
+  )
 }
 
 function normalizeApiKeys(value: unknown): ApiKeys {
@@ -392,7 +471,10 @@ async function loadSettings(): Promise<void> {
     const raw = await readFile(settingsPath(), `utf8`)
     const parsed = JSON.parse(raw) as Partial<DesktopSettings>
     const servers = normalizeServers(parsed.servers)
-    const activeServer = normalizeServer(parsed.activeServer)
+    const activeServer = findServerByUrl(
+      normalizeServer(parsed.activeServer),
+      servers
+    )
     const parsedPullWakeRunnerId =
       typeof parsed.pullWakeRunnerId === `string`
         ? parsed.pullWakeRunnerId.trim()
@@ -401,7 +483,7 @@ async function loadSettings(): Promise<void> {
     shouldSaveSettings = !parsedPullWakeRunnerId
     settings = {
       servers,
-      activeServer: serverInList(activeServer, servers) ? activeServer : null,
+      activeServer,
       workingDirectory:
         typeof parsed.workingDirectory === `string`
           ? parsed.workingDirectory
@@ -813,7 +895,10 @@ async function restartRuntime(): Promise<void> {
   }
   setState({ pullWakeRunnerId: runnerId })
 
-  const assertedAuthHeaders = buildAssertedAuthHeaders()
+  const runtimeHeaders = mergeHeaders(
+    buildAssertedAuthHeaders(),
+    activeServer.headers
+  )
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
   )
@@ -844,8 +929,11 @@ async function restartRuntime(): Promise<void> {
         ? PULL_WAKE_OWNER_USER_ID
         : undefined,
       label: `Electric Agents Desktop`,
-      headers: assertedAuthHeaders,
-      claimHeaders: assertedAuthHeaders,
+      headers: runtimeHeaders,
+      claimHeaders: runtimeHeaders,
+      claimTokenHeader: hasHeader(runtimeHeaders, `authorization`)
+        ? `electric-claim-token`
+        : undefined,
     },
   })
   runtime = nextRuntime
@@ -913,19 +1001,13 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
 
 async function setActiveServer(server: ServerConfig | null): Promise<void> {
   const normalized = normalizeServer(server)
-  const next =
-    normalized && serverInList(normalized, settings.servers) ? normalized : null
+  const next = findServerByUrl(normalized, settings.servers)
   // Renderer mount fires `saveActiveServer(active)` even when the
   // value didn't actually change (React 19 StrictMode also double-
   // fires the effect in dev). Bail early when the active server is
   // identical to what we already had so we don't tear down and
   // restart Horton on every window open.
-  const same =
-    (next === null && settings.activeServer === null) ||
-    (next !== null &&
-      settings.activeServer !== null &&
-      next.url === settings.activeServer.url &&
-      next.name === settings.activeServer.name)
+  const same = sameServer(next, settings.activeServer)
   settings.activeServer = next
   setState({ activeServer: settings.activeServer })
   await saveSettings()
@@ -1040,13 +1122,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     `desktop:save-servers`,
     async (_event, servers: Array<ServerConfig>) => {
+      const previousActive = settings.activeServer
       settings.servers = normalizeServers(servers)
-      if (!serverInList(settings.activeServer, settings.servers)) {
-        settings.activeServer = null
-        setState({ activeServer: null })
-        await restartRuntime()
+      settings.activeServer = findServerByUrl(
+        settings.activeServer,
+        settings.servers
+      )
+      const activeChanged = !sameServer(previousActive, settings.activeServer)
+      if (activeChanged) {
+        setState({ activeServer: settings.activeServer })
       }
       await saveSettings()
+      if (activeChanged) {
+        await restartRuntime()
+      }
     }
   )
   ipcMain.handle(`desktop:get-state`, () => state)

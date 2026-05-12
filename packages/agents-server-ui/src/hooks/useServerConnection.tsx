@@ -12,7 +12,9 @@ import {
   saveActiveServer,
   saveServers,
 } from '../lib/server-connection'
+import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { registerActiveBaseUrl } from '../lib/entity-connection'
+import { registerActiveServerHeaders, serverFetch } from '../lib/auth-fetch'
 import type { ReactNode } from 'react'
 import type { ServerConfig } from '../lib/types'
 
@@ -21,6 +23,28 @@ function currentServer(): ServerConfig {
   return {
     name: `This Server`,
     url: origin,
+  }
+}
+
+function normalizeServerConfig(server: ServerConfig): ServerConfig {
+  const headers = new Headers()
+  for (const [rawName, rawValue] of Object.entries(server.headers ?? {})) {
+    const name = rawName.trim()
+    const value = rawValue.trim()
+    if (!name || !value) continue
+    try {
+      headers.set(name, value)
+    } catch {
+      // Ignore invalid header rows from old localStorage/settings payloads.
+    }
+  }
+  const normalizedHeaders = Object.fromEntries(headers.entries())
+  return {
+    name: server.name.trim(),
+    url: server.url.trim(),
+    ...(Object.keys(normalizedHeaders).length > 0
+      ? { headers: normalizedHeaders }
+      : {}),
   }
 }
 
@@ -62,6 +86,8 @@ export function ServerConnectionProvider({
           next.some((server) => server.url === desktopState.activeServer?.url)
             ? desktopState.activeServer
             : (next[0] ?? null)
+        registerActiveBaseUrl(active?.url ?? null)
+        registerActiveServerHeaders(active)
         setServers(next)
         setActiveServerState(active)
         if (loaded.length === 0) {
@@ -74,6 +100,8 @@ export function ServerConnectionProvider({
       .catch((err) => {
         console.error(`Failed to load saved servers:`, err)
         const next = window.electronAPI ? [] : [currentServer()]
+        registerActiveBaseUrl(next[0]?.url ?? null)
+        registerActiveServerHeaders(next[0] ?? null)
         setServers(next)
         setActiveServerState(next[0] ?? null)
       })
@@ -81,6 +109,8 @@ export function ServerConnectionProvider({
 
   useEffect(() => {
     const unsubscribe = onDesktopStateChanged((state) => {
+      registerActiveBaseUrl(state.activeServer?.url ?? null)
+      registerActiveServerHeaders(state.activeServer)
       setActiveServerState(state.activeServer)
     })
     return () => {
@@ -90,6 +120,7 @@ export function ServerConnectionProvider({
 
   useEffect(() => {
     registerActiveBaseUrl(activeServer?.url ?? null)
+    registerActiveServerHeaders(activeServer)
   }, [activeServer])
 
   useEffect(() => {
@@ -102,9 +133,12 @@ export function ServerConnectionProvider({
 
     const check = async () => {
       try {
-        const res = await fetch(`${activeServer.url}/_electric/health`, {
-          signal: AbortSignal.timeout(3000),
-        })
+        const res = await serverFetch(
+          appendPathToUrl(activeServer.url, `/_electric/health`),
+          {
+            signal: AbortSignal.timeout(3000),
+          }
+        )
         if (!cancelled) setConnected(res.ok)
       } catch {
         if (!cancelled) setConnected(false)
@@ -120,17 +154,25 @@ export function ServerConnectionProvider({
   }, [activeServer])
 
   const setActiveServer = useCallback((server: ServerConfig | null) => {
+    registerActiveBaseUrl(server?.url ?? null)
+    registerActiveServerHeaders(server)
     setActiveServerState(server)
     void saveActiveServer(server)
   }, [])
 
   const addServer = useCallback(
     (server: ServerConfig) => {
-      if (servers.some((s) => s.url === server.url)) return
-      const next = [...servers, server]
+      const normalized = normalizeServerConfig(server)
+      const next = servers.some((s) => s.url === normalized.url)
+        ? servers.map((entry) =>
+            entry.url === normalized.url ? normalized : entry
+          )
+        : [...servers, normalized]
       setServers(next)
-      setActiveServerState(server)
-      void saveServers(next).then(() => saveActiveServer(server))
+      registerActiveBaseUrl(normalized.url)
+      registerActiveServerHeaders(normalized)
+      setActiveServerState(normalized)
+      void saveServers(next).then(() => saveActiveServer(normalized))
     },
     [servers]
   )

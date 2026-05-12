@@ -1,6 +1,4 @@
-function trimTrailingSlash(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, ``)
-}
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
 
 function withLeadingSlash(path: string): string {
   return path.startsWith(`/`) ? path : `/${path}`
@@ -15,7 +13,7 @@ export function entityApiUrl(
   entityUrl: string,
   suffix = ``
 ): string {
-  return `${trimTrailingSlash(baseUrl)}${entityApiPath(entityUrl, suffix)}`
+  return appendPathToUrl(baseUrl, entityApiPath(entityUrl, suffix))
 }
 
 export function assertedIdentityHeaders(
