@@ -147,6 +147,23 @@ type DesktopContextMenuRequest = {
   selectionText: string
 }
 
+// Mirror of `cloud-auth.ts` types — kept inline here so the preload
+// bundle stays self-contained (no shared workspace type imports).
+type CloudAuthProvider = `github` | `google`
+type CloudAuthStatus = `signed-out` | `signing-in` | `signed-in` | `error`
+type CloudAuthWorkspace = {
+  id: string
+  name: string
+}
+type CloudAuthState = {
+  status: CloudAuthStatus
+  email: string | null
+  name: string | null
+  userId: string | null
+  workspaces: ReadonlyArray<CloudAuthWorkspace> | null
+  error: string | null
+}
+
 function isEditableElement(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
   const editable = target.closest(
@@ -324,6 +341,31 @@ const api = {
       ipcRenderer.invoke(`desktop:mcp-disable`, name, serverId),
     enable: (name: string, serverId?: string): Promise<void> =>
       ipcRenderer.invoke(`desktop:mcp-enable`, name, serverId),
+  },
+  // ── Electric Cloud auth surface ────────────────────────────────
+  // Sign-in opens a child BrowserWindow that intercepts the
+  // dashboard OAuth callback redirect; the resolved state is pushed
+  // through `onStateChanged`.
+  cloudAuth: {
+    getState: (): Promise<CloudAuthState> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-state`),
+    signIn: (provider: CloudAuthProvider): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-sign-in`, provider),
+    signOut: (): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-sign-out`),
+    openDashboard: (): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-open-dashboard`),
+    onStateChanged: (
+      callback: (state: CloudAuthState) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        state: CloudAuthState
+      ) => callback(state)
+      ipcRenderer.on(`desktop:cloud-auth-state-changed`, listener)
+      return () =>
+        ipcRenderer.removeListener(`desktop:cloud-auth-state-changed`, listener)
+    },
   },
 }
 
