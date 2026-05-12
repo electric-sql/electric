@@ -68,7 +68,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveBroadcast do
         end)
       end)
 
-    %{headers: %{event: event, patterns: patterns, txids: List.wrap(txids)}}
+    %{headers: %{event: event, patterns: patterns, txids: txids}}
   end
 
   defp make_hash(%{tag_columns: [_col]}, stack_id, shape_handle, value) do
