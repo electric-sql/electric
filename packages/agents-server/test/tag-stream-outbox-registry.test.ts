@@ -6,7 +6,7 @@ import {
   entityManifestSources,
   tagStreamOutbox,
 } from '../src/db/schema'
-import { PostgresRegistry } from '../src/electric-agents-registry'
+import { PostgresRegistry } from '../src/entity-registry'
 import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,

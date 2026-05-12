@@ -95,4 +95,26 @@ describe(`createAgentsClient`, () => {
     expect(mockState.observedDb.preload).toHaveBeenCalledOnce()
     expect(db).toBe(mockState.observedDb)
   })
+
+  it(`preserves base URL query params on observed stream URLs`, async () => {
+    const client = createAgentsClient({
+      baseUrl: `http://electric-agents.test?service=tenant-a&secret=shared-secret`,
+    })
+
+    const source = entities({
+      tags: {
+        role: `reviewer`,
+      },
+    })
+
+    await client.observe(source)
+
+    expect(mockState.createStreamDB).toHaveBeenCalledWith({
+      streamOptions: {
+        url: `http://electric-agents.test${source.streamUrl}?service=tenant-a&secret=shared-secret`,
+        contentType: `application/json`,
+      },
+      state: source.schema,
+    })
+  })
 })

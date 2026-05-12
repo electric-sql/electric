@@ -41,7 +41,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
           :ok
   def new_changes(state, changes, opts \\ []) do
     commit? = Keyword.get(opts, :commit, true)
-    GenServer.call(name(state), {:new_changes, changes, commit?}, :infinity)
+    xid = Keyword.get(opts, :xid)
+    GenServer.call(name(state), {:new_changes, changes, xid, commit?}, :infinity)
   end
 
   def wait_until_ready(state) do
@@ -205,23 +206,23 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, {range_start, range_end}, commit?}, _from, state) do
+  def handle_call({:new_changes, {range_start, range_end}, xid, commit?}, _from, state) do
     stack_storage = Storage.for_stack(state.stack_id)
     storage = Storage.for_shape(state.shape_handle, stack_storage)
 
     state =
       Storage.get_log_stream(range_start, range_end, storage)
       |> decode_json_stream()
-      |> apply_and_accumulate_events(state)
+      |> apply_and_accumulate_events(xid, state)
       |> maybe_flush_pending_events(commit?)
 
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, changes, commit?}, _from, state) when is_list(changes) do
+  def handle_call({:new_changes, changes, xid, commit?}, _from, state) when is_list(changes) do
     state =
       changes
-      |> apply_and_accumulate_events(state)
+      |> apply_and_accumulate_events(xid, state)
       |> maybe_flush_pending_events(commit?)
 
     {:reply, :ok, state}
@@ -343,21 +344,21 @@ defmodule Electric.Shapes.Consumer.Materializer do
             }
         end
 
-      %{"headers" => %{"event" => "move-out", "patterns" => patterns}} ->
+      %{"headers" => %{"event" => "move-out", "patterns" => patterns} = headers} ->
         patterns =
           Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
             %{pos: pos, value: value}
           end)
 
-        %{headers: %{event: "move-out", patterns: patterns}}
+        %{headers: %{event: "move-out", patterns: patterns, txids: Map.get(headers, "txids", [])}}
 
-      %{"headers" => %{"event" => "move-in", "patterns" => patterns}} ->
+      %{"headers" => %{"event" => "move-in", "patterns" => patterns} = headers} ->
         patterns =
           Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
             %{pos: pos, value: value}
           end)
 
-        %{headers: %{event: "move-in", patterns: patterns}}
+        %{headers: %{event: "move-in", patterns: patterns, txids: Map.get(headers, "txids", [])}}
     end)
   end
 
@@ -390,16 +391,28 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
   end
 
-  defp apply_and_accumulate_events(changes, state) do
+  defp apply_and_accumulate_events(changes, xid, state) do
     {state, events} = apply_changes(changes, state)
+    events = with_txids(events, xid)
     %{state | pending_events: merge_events(state.pending_events, events)}
   end
+
+  defp with_txids(events, _xid) when events == %{}, do: events
+
+  defp with_txids(events, xid) do
+    Map.put(events, :txids, xid_set(xid))
+  end
+
+  defp xid_set(nil), do: MapSet.new()
+  defp xid_set(xid) when is_integer(xid) and xid > 0, do: MapSet.new([xid])
 
   defp maybe_flush_pending_events(state, true) do
     events =
       cancel_matching_move_events(state.pending_events)
 
     if events != %{} do
+      events = finalize_txids(events)
+
       for pid <- state.subscribers do
         send(pid, {:materializer_changes, state.shape_handle, events})
       end
@@ -412,13 +425,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   defp maybe_flush_pending_events(state, _commit?), do: state
 
+  defp finalize_txids(events) do
+    Map.update(events, :txids, [], &Enum.sort(&1))
+  end
+
   defp merge_events(pending, new) when pending == %{}, do: new
   defp merge_events(pending, new) when new == %{}, do: pending
 
   defp merge_events(pending, new) do
     %{
       move_in: Map.get(new, :move_in, []) ++ Map.get(pending, :move_in, []),
-      move_out: Map.get(new, :move_out, []) ++ Map.get(pending, :move_out, [])
+      move_out: Map.get(new, :move_out, []) ++ Map.get(pending, :move_out, []),
+      txids:
+        MapSet.union(Map.get(pending, :txids, MapSet.new()), Map.get(new, :txids, MapSet.new()))
     }
   end
 
@@ -433,7 +452,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
   defp cancel_matching_move_events(events) do
     ins = events |> Map.get(:move_in, []) |> Enum.sort_by(fn {v, _} -> v end)
     outs = events |> Map.get(:move_out, []) |> Enum.sort_by(fn {v, _} -> v end)
-    cancel_sorted_pairs(ins, outs, %{move_in: [], move_out: []})
+
+    case cancel_sorted_pairs(ins, outs, %{move_in: [], move_out: []}) do
+      empty when empty == %{} -> empty
+      result -> Map.put(result, :txids, Map.get(events, :txids, MapSet.new()))
+    end
   end
 
   defp cancel_sorted_pairs([{v, _} | ins], [{v, _} | outs], acc),

@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Built-in Electric Agents runtimes such as Horton and worker",
   "repository": {
     "type": "git",
@@ -41,7 +41,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.1",
+    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350",
     "@electric-ax/agents-mcp": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",

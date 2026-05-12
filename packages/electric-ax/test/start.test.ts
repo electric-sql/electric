@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
@@ -8,6 +10,12 @@ import {
   resolveElectricAgentsPort,
   waitForElectricAgentsServer,
 } from '../src/start'
+
+const dockerComposeFull = readFileSync(
+  fileURLToPath(new URL(`../docker-compose.full.yml`, import.meta.url)),
+  `utf8`
+)
+const localAgentsServerPullPolicy = `\${ELECTRIC_AGENTS_SERVER_PULL_POLICY:-missing}`
 
 describe(`resolveAnthropicApiKey`, () => {
   it(`prefers the explicit CLI option`, () => {
@@ -127,6 +135,14 @@ describe(`readDotEnvFile`, () => {
   it(`returns an empty object when .env is missing`, () => {
     expect(readDotEnvFile(`/tmp/definitely-missing-electric-ax-env`)).toEqual(
       {}
+    )
+  })
+})
+
+describe(`docker compose full stack config`, () => {
+  it(`does not force-pull over a locally built agents-server image`, () => {
+    expect(dockerComposeFull).toContain(
+      `pull_policy: ${localAgentsServerPullPolicy}`
     )
   })
 })

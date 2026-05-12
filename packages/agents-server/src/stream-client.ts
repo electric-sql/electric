@@ -4,6 +4,7 @@ import {
   FetchError,
   IdempotentProducer,
 } from '@durable-streams/client'
+import { ErrCodeNotFound } from './electric-agents-types.js'
 import { ATTR, injectTraceHeaders, withSpan } from './tracing.js'
 
 export interface StreamAppendResult {
@@ -33,9 +34,21 @@ export interface ConsumerStateResponse {
   }
 }
 
+export function durableStreamsServiceUrl(
+  baseUrl: string,
+  serviceId: string
+): string {
+  const url = new URL(baseUrl)
+  if (/^\/v1\/stream\/[^/]+\/?$/.test(url.pathname)) {
+    return baseUrl.replace(/\/+$/, ``)
+  }
+  const base = baseUrl.replace(/\/+$/, ``)
+  return `${base}/v1/stream/${encodeURIComponent(serviceId)}`
+}
+
 function isNotFoundError(err: unknown): boolean {
   return (
-    (err instanceof DurableStreamError && err.code === `NOT_FOUND`) ||
+    (err instanceof DurableStreamError && err.code === ErrCodeNotFound) ||
     (err instanceof FetchError && err.status === 404)
   )
 }
@@ -47,11 +60,29 @@ function isAbortLikeError(err: unknown): boolean {
   )
 }
 
+function normalizeSubscriptionPattern(pattern: string): string {
+  return pattern.replace(/^\/+/, ``)
+}
+
 export class StreamClient {
   constructor(readonly baseUrl: string) {}
 
   private streamUrl(path: string): string {
     return `${this.baseUrl}${path}`
+  }
+
+  private subscriptionUrl(subscriptionId: string): string {
+    const url = new URL(this.baseUrl)
+    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
+    if (match) {
+      const [, prefix = ``, serviceId] = match
+      url.pathname = `${prefix}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
+      url.searchParams.set(`service`, decodeURIComponent(serviceId!))
+      return url.toString()
+    }
+
+    url.pathname = `${url.pathname.replace(/\/+$/, ``)}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
+    return url.toString()
   }
 
   async create(
@@ -338,12 +369,14 @@ export class StreamClient {
     webhookUrl: string,
     description?: string
   ): Promise<{ subscription_id: string; webhook_secret?: string }> {
-    const url = `${this.baseUrl}${pattern}?subscription=${encodeURIComponent(subscriptionId)}`
+    const url = this.subscriptionUrl(subscriptionId)
     const res = await fetch(url, {
       method: `PUT`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({
-        webhook: webhookUrl,
+        type: `webhook`,
+        pattern: normalizeSubscriptionPattern(pattern),
+        webhook: { url: webhookUrl },
         ...(description ? { description } : {}),
       }),
     })

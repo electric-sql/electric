@@ -13,6 +13,7 @@ describe(`Scheduler Integration`, () => {
   let dsServer: DurableStreamTestServer
   let electricAgentsServer: ElectricAgentsServer | null = null
   let baseUrl = ``
+  let streamBaseUrl = ``
 
   async function startElectricAgentsServer(): Promise<void> {
     electricAgentsServer = new ElectricAgentsServer({
@@ -22,6 +23,7 @@ describe(`Scheduler Integration`, () => {
       electricUrl: TEST_ELECTRIC_URL,
     })
     baseUrl = await electricAgentsServer.start()
+    streamBaseUrl = electricAgentsServer.streamClient.baseUrl
   }
 
   async function stopElectricAgentsServer(): Promise<void> {
@@ -29,6 +31,7 @@ describe(`Scheduler Integration`, () => {
     await electricAgentsServer.stop()
     electricAgentsServer = null
     baseUrl = ``
+    streamBaseUrl = ``
   }
 
   async function createEntity(
@@ -48,11 +51,14 @@ describe(`Scheduler Integration`, () => {
     })
     expect(typeRes.status).toBe(201)
 
-    const entityRes = await fetch(`${baseUrl}/${typeName}/${instanceId}`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+    const entityRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/${instanceId}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
     expect(entityRes.status).toBe(201)
 
     const entity = (await entityRes.json()) as {
@@ -92,29 +98,35 @@ describe(`Scheduler Integration`, () => {
     const typeName = `sched-delay-${Date.now()}`
     const entity = await createEntity(typeName, `target`)
 
-    const sendRes = await fetch(`${baseUrl}${entity.url}/send`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({
-        from: `tester`,
-        payload: `hello later`,
-        afterMs: 750,
-      }),
-    })
+    const sendRes = await fetch(
+      `${baseUrl}/_electric/entities${entity.url}/send`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          from: `tester`,
+          payload: `hello later`,
+          afterMs: 750,
+        }),
+      }
+    )
     expect(sendRes.status).toBe(204)
 
     await stopElectricAgentsServer()
     await startElectricAgentsServer()
     await waitFor(
       async () => {
-        const events = await readStreamEvents(dsServer.url, entity.streams.main)
+        const events = await readStreamEvents(
+          streamBaseUrl,
+          entity.streams.main
+        )
         return events.some((event) => event.type === `inbox`)
       },
       6_000,
       150
     )
 
-    const events = await readStreamEvents(dsServer.url, entity.streams.main)
+    const events = await readStreamEvents(streamBaseUrl, entity.streams.main)
     const inboxEvents = events.filter((event) => event.type === `inbox`)
 
     expect(inboxEvents, JSON.stringify(events, null, 2)).toHaveLength(1)
@@ -175,7 +187,7 @@ describe(`Scheduler Integration`, () => {
     const manifestKey = `schedule:demo-send`
 
     const firstRes = await fetch(
-      `${baseUrl}${entity.url}/schedules/${encodeURIComponent(`demo-send`)}`,
+      `${baseUrl}/_electric/entities${entity.url}/schedules/${encodeURIComponent(`demo-send`)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -190,7 +202,7 @@ describe(`Scheduler Integration`, () => {
     expect(firstRes.status).toBe(200)
 
     const secondRes = await fetch(
-      `${baseUrl}${entity.url}/schedules/${encodeURIComponent(`demo-send`)}`,
+      `${baseUrl}/_electric/entities${entity.url}/schedules/${encodeURIComponent(`demo-send`)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -206,7 +218,10 @@ describe(`Scheduler Integration`, () => {
 
     await waitFor(
       async () => {
-        const events = await readStreamEvents(dsServer.url, entity.streams.main)
+        const events = await readStreamEvents(
+          streamBaseUrl,
+          entity.streams.main
+        )
         const hasDeliveredMessage = events.some(
           (event) =>
             event.type === `inbox` &&
@@ -229,7 +244,7 @@ describe(`Scheduler Integration`, () => {
       150
     )
 
-    const events = await readStreamEvents(dsServer.url, entity.streams.main)
+    const events = await readStreamEvents(streamBaseUrl, entity.streams.main)
     const inboxEvents = events.filter((event) => event.type === `inbox`)
     expect(inboxEvents, JSON.stringify(events, null, 2)).toHaveLength(1)
     expect(
@@ -259,7 +274,7 @@ describe(`Scheduler Integration`, () => {
     const sourceUrl = getCronStreamPath(expression, timezone)
 
     const scheduleRes = await fetch(
-      `${baseUrl}${entity.url}/schedules/${encodeURIComponent(`demo-cron`)}`,
+      `${baseUrl}/_electric/entities${entity.url}/schedules/${encodeURIComponent(`demo-cron`)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
@@ -275,7 +290,10 @@ describe(`Scheduler Integration`, () => {
 
     await waitFor(
       async () => {
-        const events = await readStreamEvents(dsServer.url, entity.streams.main)
+        const events = await readStreamEvents(
+          streamBaseUrl,
+          entity.streams.main
+        )
         return events.some(
           (event) =>
             event.type === `wake` &&
@@ -287,7 +305,7 @@ describe(`Scheduler Integration`, () => {
       150
     )
 
-    const events = await readStreamEvents(dsServer.url, entity.streams.main)
+    const events = await readStreamEvents(streamBaseUrl, entity.streams.main)
     const wakeEvents = events.filter(
       (event) =>
         event.type === `wake` &&

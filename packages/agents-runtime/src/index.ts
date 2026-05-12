@@ -128,6 +128,7 @@ export type {
 } from './entity-timeline'
 export { buildSections, buildTimelineEntries } from './use-chat'
 export type { EntityTimelineEntry } from './use-chat'
+export { appendPathToUrl } from './url'
 
 export {
   defaultProjection,

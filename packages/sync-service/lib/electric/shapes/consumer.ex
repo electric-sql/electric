@@ -308,7 +308,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info(
-        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}},
+        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out} = payload},
         state
       ) do
     Logger.debug(fn ->
@@ -317,10 +317,7 @@ defmodule Electric.Shapes.Consumer do
 
     handle_apply_event_result(
       state,
-      apply_event(
-        state,
-        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}}
-      )
+      apply_event(state, {:materializer_changes, dep_handle, payload})
     )
   end
 
@@ -649,7 +646,8 @@ defmodule Electric.Shapes.Consumer do
         # The Materializer must see all txn changes for correct tracking of move-ins and
         # move-outs for the outer shape. The commit=false flag ensure it doesn't yet notify
         # outer consumers about those changes.
-        :ok = notify_materializer_of_new_changes(state, converted_changes, commit: false)
+        :ok =
+          notify_materializer_of_new_changes(state, converted_changes, commit: false, xid: xid)
 
         txn =
           PendingTxn.update_with_changes(
@@ -720,7 +718,7 @@ defmodule Electric.Shapes.Consumer do
       # Signal commit to storage to allow it to advance its internal txn offset
       writer = ShapeCache.Storage.signal_txn_commit!(txn.xid, writer)
 
-      :ok = notify_new_changes(state, [], state.latest_offset)
+      :ok = notify_new_changes_with_offset(state, [], state.latest_offset, xid: txn.xid)
 
       lag = calculate_replication_lag(txn_fragment.commit.commit_timestamp)
 
@@ -805,7 +803,7 @@ defmodule Electric.Shapes.Consumer do
 
       {state, notification, num_changes, total_size} ->
         if notification do
-          :ok = notify_new_changes(state, notification)
+          :ok = notify_new_changes(state, notification, xid: txn.xid)
 
           OpenTelemetry.add_span_attributes(%{
             num_bytes: total_size,
@@ -897,19 +895,21 @@ defmodule Electric.Shapes.Consumer do
     mark_for_removal(state)
   end
 
-  defp notify_new_changes(_state, nil), do: :ok
+  defp notify_new_changes(state, notification, opts \\ [])
+  defp notify_new_changes(_state, nil, _opts), do: :ok
 
-  defp notify_new_changes(state, {changes, upper_bound}) do
-    notify_new_changes(state, changes, upper_bound)
+  defp notify_new_changes(state, {changes, upper_bound}, opts) do
+    notify_new_changes_with_offset(state, changes, upper_bound, opts)
   end
 
-  @spec notify_new_changes(
+  @spec notify_new_changes_with_offset(
           state :: map(),
           changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
-          latest_log_offset :: LogOffset.t()
+          latest_log_offset :: LogOffset.t(),
+          opts :: keyword()
         ) :: :ok
-  defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
-    :ok = notify_materializer_of_new_changes(state, changes_or_bounds)
+  defp notify_new_changes_with_offset(state, changes_or_bounds, latest_log_offset, opts) do
+    :ok = notify_materializer_of_new_changes(state, changes_or_bounds, opts)
     :ok = notify_clients_of_new_changes(state, latest_log_offset)
   end
 
@@ -937,8 +937,6 @@ defmodule Electric.Shapes.Consumer do
           changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
           opts :: keyword()
         ) :: :ok
-  defp notify_materializer_of_new_changes(state, changes_or_bounds, opts \\ [])
-
   defp notify_materializer_of_new_changes(
          %{materializer_subscribed?: true} = state,
          changes_or_bounds,

@@ -135,6 +135,7 @@ export interface EntityListFilter {
 }
 
 export const ErrCodeDuplicateURL = `DUPLICATE_URL`
+export const ErrCodeUnauthorized = `UNAUTHORIZED`
 export const ErrCodeNoSubscription = `NO_SUBSCRIPTION`
 export const ErrCodeNotFound = `NOT_FOUND`
 export const ErrCodeNotRunning = `NOT_RUNNING`
@@ -148,3 +149,7 @@ export const ErrCodeServeEndpointUnreachable = `SERVE_ENDPOINT_UNREACHABLE`
 export const ErrCodeServeEndpointNameMismatch = `SERVE_ENDPOINT_NAME_MISMATCH`
 export const ErrCodeForkInProgress = `FORK_IN_PROGRESS`
 export const ErrCodeForkWaitTimeout = `FORK_WAIT_TIMEOUT`
+export const ErrCodeEntityPersistFailed = `ENTITY_PERSIST_FAILED`
+export const ErrCodeAgentUiNotFound = `AGENT_UI_NOT_FOUND`
+export const ErrCodeSubscriptionNotFound = `SUBSCRIPTION_NOT_FOUND`
+export const ErrCodeCallbackNotFound = `CALLBACK_NOT_FOUND`

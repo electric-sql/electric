@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-runtime",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Electric agent runtime — behavioral stack for agent entities over durable streams",
   "keywords": [
     "tanstack-intent"
@@ -81,8 +81,8 @@
   "dependencies": {
     "@electric-ax/agents-mcp": "workspace:*",
     "@anthropic-ai/sdk": "^0.78.0",
-    "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.1",
-    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.1",
+    "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350",
+    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350",
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@mariozechner/pi-ai": "^0.70.2",
     "@mozilla/readability": "^0.6.0",

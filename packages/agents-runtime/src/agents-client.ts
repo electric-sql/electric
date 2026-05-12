@@ -2,6 +2,7 @@ import { createStreamDB } from '@durable-streams/state'
 import { createEntityStreamDB } from './entity-stream-db'
 import { normalizeObservationSchema } from './observation-schema'
 import { createRuntimeServerClient } from './runtime-server-client'
+import { appendPathToUrl } from './url'
 import type {
   EntitiesObservationSource,
   EntityObservationSource,
@@ -32,7 +33,9 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
         const info = await serverClient.getEntityInfo(
           (source as EntityObservationSource).entityUrl
         )
-        const db = createEntityStreamDB(`${config.baseUrl}${info.streamPath}`)
+        const db = createEntityStreamDB(
+          appendPathToUrl(config.baseUrl, info.streamPath)
+        )
         await db.preload()
         return db
       }
@@ -57,7 +60,7 @@ export function createAgentsClient(config: AgentsClientConfig): AgentsClient {
 
       const db = createStreamDB({
         streamOptions: {
-          url: `${config.baseUrl}${source.streamUrl}`,
+          url: appendPathToUrl(config.baseUrl, source.streamUrl),
           contentType: `application/json`,
         },
         state: normalizeObservationSchema(source.schema),

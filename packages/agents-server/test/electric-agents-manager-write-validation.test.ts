@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ElectricAgentsManager } from '../src/electric-agents-manager'
-import { SchemaValidator } from '../src/electric-agents-schema-validator'
+import { EntityManager } from '../src/entity-manager'
+import { SchemaValidator } from '../src/electric-agents/schema-validator'
 
 const observedItemSchema = {
   type: `object`,
@@ -12,7 +12,7 @@ const observedItemSchema = {
 }
 
 function createManager() {
-  return new ElectricAgentsManager({
+  return new EntityManager({
     registry: {
       getEntityType: vi.fn().mockResolvedValue({
         name: `observed-child-e1`,
