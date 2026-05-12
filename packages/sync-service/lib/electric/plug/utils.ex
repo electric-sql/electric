@@ -76,11 +76,6 @@ defmodule Electric.Plug.Utils do
     next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
     prev_int = parse_prev_interval(prev_interval)
 
-    # The returned cursor MUST be strictly greater than the client's prev
-    # cursor. Otherwise CDN-cached live responses (cached for ~sse_timeout
-    # via `Cache-Control: public, max-age=<sse_timeout-1>` to enable request
-    # collapsing) can end up referencing each other in a cycle, causing the
-    # client to bounce between two cached entries at line rate.
     if next_interval > prev_int do
       next_interval
     else
