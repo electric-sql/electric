@@ -1,5 +1,21 @@
 # @core/sync-service
 
+## 1.6.3
+
+### Patch Changes
+
+- 5fcf002: Emit `number_to_expire` and `max_shapes` as Logger metadata (instead of interpolating them into the message body) for the "Expiring shapes as the number of shapes has exceeded the limit" notice. This keeps the message text static so log aggregators can group these events and so Honeycomb can filter by `shape.expiry.*` attributes.
+- f460584: Add CONCAT(variadic text) support
+- 7cfa58d: Add `txids` to `move-in`/`move-out` control messages, mirroring the per-row `headers.txids` already emitted on insert/update/delete log entries. The list contains the upstream Postgres xid(s) whose commit caused the dependency boundary to flip.
+- 686ebdb: Propagate OpenTelemetry context so that child spans in ShapeStatus and SnapshotQuery are linked to originating traces:
+  - `Effects.query_move_in_async`: propagate context into spawned task
+  - `ShapeCache.handle_call({:create_or_wait_shape_handle, ...})`: set context before calling ShapeStatus functions
+  - `ShapeCache.handle_call({:start_consumer_for_handle, ...})`: accept and set context from ConsumerRegistry
+
+- 093449a: Demote the log entry about expiring shapes to level info so that it's excluded from logs in Honeycomb.
+- 5a8d70d: Replace literal shape handles in log output with metadata. Makes it easier to search through and group log entries in observability tools.
+- 4c52d76: Update Elixir deps to latest available versions
+
 ## 1.6.2
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@electric-ax/agents-runtime",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Electric agent runtime — behavioral stack for agent entities over durable streams",
   "keywords": [
     "tanstack-intent"

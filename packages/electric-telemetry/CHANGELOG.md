@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.2.5
+
+### Patch Changes
+
+- 4c52d76: Update Elixir deps to latest available versions
+
 ## 0.2.4
 
 ### Patch Changes
