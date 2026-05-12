@@ -100,7 +100,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
 
   def pop_next(%__MODULE__{}), do: nil
 
-  defp sorted_txids(%MapSet{} = txids), do: txids |> MapSet.to_list() |> Enum.sort()
+  defp sorted_txids(%MapSet{} = txids), do: Enum.sort(txids)
 
   defp payload_to_ops(payload) do
     Enum.map(Map.get(payload, :move_out, []), &{:move_out, &1}) ++
