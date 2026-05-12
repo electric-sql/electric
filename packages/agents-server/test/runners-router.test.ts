@@ -15,7 +15,7 @@ function request(method: string, path: string, body?: unknown): Request {
 function runner(overrides: Record<string, unknown> = {}) {
   return {
     id: `runner-1`,
-    owner_user_id: `owner@example.com`,
+    owner_user_id: `user:owner@example.com`,
     label: `Local runner`,
     kind: `local`,
     admin_status: `enabled`,
@@ -56,6 +56,12 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
   }
   return {
     service: `tenant-test`,
+    principal: {
+      kind: `user`,
+      id: `owner@example.com`,
+      key: `user:owner@example.com`,
+      url: `/principal/user:owner@example.com`,
+    },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
     durableStreamsDispatcher: undefined as any,
@@ -84,7 +90,12 @@ describe(`runner routes`, () => {
         label: `Local runner`,
       }),
       buildContext({
-        authenticatedUser: { userId: `owner@example.com` },
+        principal: {
+          kind: `user`,
+          id: `owner@example.com`,
+          key: `user:owner@example.com`,
+          url: `/principal/user:owner@example.com`,
+        },
       })
     )
 
@@ -93,13 +104,18 @@ describe(`runner routes`, () => {
 
   it(`registers a runner and ensures its wake stream`, async () => {
     const ctx = buildContext({
-      authenticatedUser: { userId: `owner@example.com` },
+      principal: {
+        kind: `user`,
+        id: `owner@example.com`,
+        key: `user:owner@example.com`,
+        url: `/principal/user:owner@example.com`,
+      },
     })
 
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners`, {
         id: `runner-1`,
-        owner_user_id: `owner@example.com`,
+        owner_user_id: `user:owner@example.com`,
         label: `Local runner`,
       }),
       ctx
@@ -109,7 +125,7 @@ describe(`runner routes`, () => {
     expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
         id: `runner-1`,
-        ownerUserId: `owner@example.com`,
+        ownerUserId: `user:owner@example.com`,
       })
     )
     expect(ctx.streamClient.ensure).toHaveBeenCalledWith(
@@ -120,7 +136,12 @@ describe(`runner routes`, () => {
 
   it(`infers runner owner from the authenticated user when omitted`, async () => {
     const ctx = buildContext({
-      authenticatedUser: { userId: `owner@example.com` },
+      principal: {
+        kind: `user`,
+        id: `owner@example.com`,
+        key: `user:owner@example.com`,
+        url: `/principal/user:owner@example.com`,
+      },
     })
 
     const response = await globalRouter.fetch(
@@ -134,7 +155,7 @@ describe(`runner routes`, () => {
     expect(response.status).toBe(201)
     expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
-        ownerUserId: `owner@example.com`,
+        ownerUserId: `user:owner@example.com`,
       })
     )
   })
@@ -146,7 +167,7 @@ describe(`runner routes`, () => {
         stream: `chat/one/main`,
         generation: 7,
       }),
-      buildContext()
+      buildContext({ principal: undefined as any })
     )
 
     expect(response.status).toBe(401)
@@ -154,7 +175,12 @@ describe(`runner routes`, () => {
 
   it(`returns DS claim conflicts as 409 responses`, async () => {
     const ctx = buildContext({
-      authenticatedUser: { userId: `owner@example.com` },
+      principal: {
+        kind: `user`,
+        id: `owner@example.com`,
+        key: `user:owner@example.com`,
+        url: `/principal/user:owner@example.com`,
+      },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockRejectedValue(
       new DurableStreamsSubscriptionError(
@@ -192,7 +218,12 @@ describe(`runner routes`, () => {
 
   it(`claims compact DS wake events and returns enriched notifications`, async () => {
     const ctx = buildContext({
-      authenticatedUser: { userId: `owner@example.com` },
+      principal: {
+        kind: `user`,
+        id: `owner@example.com`,
+        key: `user:owner@example.com`,
+        url: `/principal/user:owner@example.com`,
+      },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({
       wake_id: `wake-1`,
@@ -243,7 +274,12 @@ describe(`runner routes`, () => {
 
   it(`uses the pending stream from multi-stream claim responses`, async () => {
     const ctx = buildContext({
-      authenticatedUser: { userId: `owner@example.com` },
+      principal: {
+        kind: `user`,
+        id: `owner@example.com`,
+        key: `user:owner@example.com`,
+        url: `/principal/user:owner@example.com`,
+      },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({
       wake_id: `wake-1`,

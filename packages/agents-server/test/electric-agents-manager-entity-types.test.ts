@@ -69,6 +69,25 @@ describe(`ElectricAgentsManager entity type persistence`, () => {
     })
   })
 
+  it(`rejects built-in principal entity type registration and amendment`, async () => {
+    const { manager, registry } = createManager()
+
+    await expect(
+      manager.registerEntityType({
+        name: `principal`,
+        description: `custom principal`,
+      })
+    ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      manager.amendSchemas(`principal`, {
+        inbox_schemas: { custom: { type: `object` } },
+      })
+    ).rejects.toMatchObject({ status: 400 })
+
+    expect(registry.createEntityType).not.toHaveBeenCalled()
+    expect(registry.updateEntityTypeInPlace).not.toHaveBeenCalled()
+  })
+
   it(`amendSchemas updates the registry in place without the materializer`, async () => {
     const { manager, registry, streamClient } = createManager()
 

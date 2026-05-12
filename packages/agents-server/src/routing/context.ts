@@ -5,7 +5,7 @@ import type { EntityManager } from '../entity-manager.js'
 import type { ElectricAgentsTenantRuntime } from '../runtime.js'
 import type { StreamClient } from '../stream-client.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
-import type { AuthenticatedRequestUser } from '../electric-agents-types.js'
+import type { Principal } from '../principal.js'
 import type { DurableStreamsBearerProvider } from '../stream-client.js'
 
 /**
@@ -16,7 +16,7 @@ import type { DurableStreamsBearerProvider } from '../stream-client.js'
  */
 export interface TenantContext {
   service: string
-  authenticatedUser?: AuthenticatedRequestUser
+  principal: Principal
   publicUrl: string
   localUrl?: string
   durableStreamsUrl: string

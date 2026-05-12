@@ -27,6 +27,13 @@ import {
   ErrCodeUnknownMessageType,
 } from './electric-agents-types.js'
 import { parseDispatchPolicy } from './dispatch-policy-schema.js'
+import {
+  isBuiltInSystemPrincipalUrl,
+  parsePrincipalKey,
+  principalKeyFromUrl,
+  principalIdentityStateSchema,
+  principalUpdateIdentityMessageSchema,
+} from './principal.js'
 import { EntityAlreadyExistsError } from './entity-registry.js'
 import { serverLog } from './utils/log.js'
 import {
@@ -53,6 +60,7 @@ import type {
   TypedSpawnRequest,
 } from './electric-agents-types.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
+import type { Principal } from './principal.js'
 
 type SpawnPersistResult = [
   PromiseSettledResult<void>,
@@ -134,6 +142,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function cloneRecord<T extends Record<string, unknown>>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function principalFromCreatedBy(
+  createdBy: string | undefined
+):
+  | { url: string; key?: string | null; kind?: string; id?: string }
+  | undefined {
+  if (!createdBy) return undefined
+  const key = principalKeyFromUrl(createdBy)
+  if (!key) return { url: createdBy, key: null }
+  const principal = parsePrincipalKey(key)
+  return {
+    url: principal.url,
+    key: principal.key,
+    kind: principal.kind,
+    id: principal.id,
+  }
 }
 
 /**
@@ -239,6 +264,13 @@ export class EntityManager {
         400
       )
     }
+    if (req.name === `principal`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Entity type "principal" is built in and cannot be registered or updated`,
+        400
+      )
+    }
     if (req.name.startsWith(`_`)) {
       throw new ElectricAgentsError(
         ErrCodeInvalidRequest,
@@ -290,6 +322,13 @@ export class EntityManager {
   }
 
   async deleteEntityType(name: string): Promise<void> {
+    if (name === `principal`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Entity type "principal" is built in and cannot be deleted`,
+        400
+      )
+    }
     const existing = await this.registry.getEntityType(name)
     if (!existing) {
       throw new ElectricAgentsError(
@@ -300,6 +339,59 @@ export class EntityManager {
     }
 
     await this.registry.deleteEntityType(name)
+  }
+
+  async ensurePrincipalEntityType(): Promise<ElectricAgentsEntityType> {
+    const now = new Date().toISOString()
+    return await this.registry.ensureEntityType({
+      name: `principal`,
+      description: `built-in principal entity`,
+      inbox_schemas: { update_identity: principalUpdateIdentityMessageSchema },
+      state_schemas: { identity: principalIdentityStateSchema },
+      revision: 1,
+      created_at: now,
+      updated_at: now,
+    })
+  }
+
+  async ensurePrincipal(principal: Principal): Promise<ElectricAgentsEntity> {
+    const existing = await this.registry.getEntity(principal.url)
+    if (existing) return existing
+    await this.ensurePrincipalEntityType()
+    try {
+      const entity = await this.spawn(`principal`, {
+        instance_id: principal.key,
+        args: { kind: principal.kind, id: principal.id, key: principal.key },
+        tags: { principal_kind: principal.kind, principal_id: principal.id },
+        created_by: principal.url,
+      })
+      const now = new Date().toISOString()
+      await this.streamClient.append(
+        entity.streams.main,
+        this.encodeChangeEvent({
+          type: `identity`,
+          key: `self`,
+          value: {
+            kind: principal.kind,
+            id: principal.id,
+            key: principal.key,
+            url: principal.url,
+            created_at: now,
+            updated_at: now,
+          },
+        })
+      )
+      return entity
+    } catch (error) {
+      if (
+        error instanceof ElectricAgentsError &&
+        error.code === ErrCodeDuplicateURL
+      ) {
+        const raced = await this.registry.getEntity(principal.url)
+        if (raced) return raced
+      }
+      throw error
+    }
   }
 
   // ==========================================================================
@@ -328,6 +420,17 @@ export class EntityManager {
     typeName: string,
     req: TypedSpawnRequest
   ): Promise<ElectricAgentsEntity & { txid: number }> {
+    if (
+      typeName === `principal` &&
+      req.created_by !== `/${typeName}/${req.instance_id}`
+    ) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Principal entities are built in and can only be materialized by the system`,
+        400
+      )
+    }
+
     if (typeName.startsWith(`_`)) {
       throw new ElectricAgentsError(
         ErrCodeInvalidRequest,
@@ -433,6 +536,7 @@ export class EntityManager {
       inbox_schemas: entityType.inbox_schemas,
       state_schemas: entityType.state_schemas,
       created_at: now,
+      created_by: req.created_by ?? parentEntity?.created_by,
       updated_at: now,
     }
     if (req.parent) {
@@ -473,7 +577,7 @@ export class EntityManager {
       const inboxEvent = entityStateSchema.inbox.insert({
         key: `msg-in-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         value: {
-          from: req.parent ?? `spawn`,
+          from: req.created_by ?? req.parent ?? `spawn`,
           payload: req.initialMessage,
           timestamp: msgNow,
         },
@@ -1371,10 +1475,10 @@ export class EntityManager {
           changed = true
         }
       }
-      if (typeof next.from === `string`) {
-        const forkFrom = entityUrlMap.get(next.from)
-        if (forkFrom) {
-          next.from = forkFrom
+      if (typeof next.senderUrl === `string`) {
+        const forkSender = entityUrlMap.get(next.senderUrl)
+        if (forkSender) {
+          next.senderUrl = forkSender
           changed = true
         }
       }
@@ -1490,6 +1594,10 @@ export class EntityManager {
     const fireAtRaw = manifest.fireAt
     const producerId = manifest.producerId
     const targetUrl = manifest.targetUrl
+    const senderUrl =
+      typeof manifest.senderUrl === `string`
+        ? manifest.senderUrl
+        : ownerEntityUrl
     if (
       typeof fireAtRaw !== `string` ||
       typeof producerId !== `string` ||
@@ -1514,8 +1622,7 @@ export class EntityManager {
       manifestKey,
       {
         entityUrl: targetUrl,
-        from:
-          typeof manifest.from === `string` ? manifest.from : ownerEntityUrl,
+        from: senderUrl,
         payload: manifest.payload,
         key: `scheduled-${producerId}`,
         type:
@@ -1532,6 +1639,7 @@ export class EntityManager {
             kind: `schedule`,
             scheduleType: `future_send`,
             targetUrl,
+            senderUrl,
             fireAt: fireAt.toISOString(),
             producerId,
             status: `pending`,
@@ -1604,6 +1712,17 @@ export class EntityManager {
       }
 
       await this.streamClient.append(entity.streams.main, encoded)
+      if (entity.type === `principal` && req.type === `update_identity`) {
+        const identity = (req.payload as { identity?: unknown })?.identity
+        await this.streamClient.append(
+          entity.streams.main,
+          this.encodeChangeEvent({
+            type: `identity`,
+            key: `self`,
+            value: identity,
+          })
+        )
+      }
     } catch (err) {
       if (this.isClosedStreamError(err)) {
         throw new ElectricAgentsError(
@@ -1830,7 +1949,7 @@ export class EntityManager {
       payload: unknown
       targetUrl?: string
       fireAt: string
-      from?: string
+      senderUrl?: string
       messageType?: string
     }
   ): Promise<{ txid: string }> {
@@ -1839,7 +1958,7 @@ export class EntityManager {
     }
 
     const targetUrl = req.targetUrl ?? ownerEntityUrl
-    const from = req.from ?? ownerEntityUrl
+    const from = req.senderUrl ?? ownerEntityUrl
     const fireAt = new Date(req.fireAt)
     if (Number.isNaN(fireAt.getTime())) {
       throw new ElectricAgentsError(
@@ -1883,9 +2002,9 @@ export class EntityManager {
             scheduleType: `future_send`,
             fireAt: fireAt.toISOString(),
             targetUrl,
+            senderUrl: from,
             payload: req.payload,
             producerId,
-            ...(req.from ? { from: req.from } : {}),
             ...(req.messageType ? { messageType: req.messageType } : {}),
             status: `pending`,
           },
@@ -1906,9 +2025,9 @@ export class EntityManager {
         scheduleType: `future_send`,
         fireAt: fireAt.toISOString(),
         targetUrl,
+        senderUrl: from,
         payload: req.payload,
         producerId,
-        ...(req.from ? { from: req.from } : {}),
         ...(req.messageType ? { messageType: req.messageType } : {}),
         status: `pending`,
       },
@@ -2308,6 +2427,14 @@ export class EntityManager {
       state_schemas?: Record<string, Record<string, unknown>>
     }
   ): Promise<ElectricAgentsEntityType> {
+    if (typeName === `principal`) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `Entity type "principal" is built in and cannot be amended`,
+        400
+      )
+    }
+
     // Validate each provided schema via validateSchemaSubset.
     this.validateSchemaMap(schemas.inbox_schemas)
     this.validateSchemaMap(schemas.state_schemas)
@@ -2400,7 +2527,9 @@ export class EntityManager {
         streams: entity.streams,
         tags: entity.tags,
         spawnArgs: entity.spawn_args,
+        createdBy: entity.created_by,
       },
+      principal: principalFromCreatedBy(entity.created_by),
       triggerEvent: `message_received`,
     }
   }
@@ -2491,6 +2620,18 @@ export class EntityManager {
         400
       )
     }
+    if (
+      entity.type === `principal` &&
+      req.type === `update_identity` &&
+      !isBuiltInSystemPrincipalUrl(req.from)
+    ) {
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Only built-in system principals can update principal identity`,
+        403
+      )
+    }
+
     if (req.payload === undefined) {
       throw new ElectricAgentsError(
         ErrCodeInvalidRequest,

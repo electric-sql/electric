@@ -30,6 +30,12 @@ async function routeResponse(
       service: `test`,
       entityManager: manager,
       isShuttingDown: () => false,
+      principal: {
+        kind: `system`,
+        id: `dev-local`,
+        key: `system:dev-local`,
+        url: `/principal/system:dev-local`,
+      },
     } as unknown as TenantContext
   )
   expect(result).toBeInstanceOf(Response)
@@ -118,7 +124,7 @@ describe(`ElectricAgentsRoutes schedule endpoints`, () => {
         payload: { text: `hi` },
         targetUrl: undefined,
         fireAt: `2026-04-10T02:30:00.000Z`,
-        from: undefined,
+        senderUrl: `/principal/system:dev-local`,
         messageType: undefined,
       }
     )

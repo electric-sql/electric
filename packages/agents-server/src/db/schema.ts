@@ -50,6 +50,7 @@ export const entities = pgTable(
       .default(sql`'{}'::text[]`),
     spawnArgs: jsonb(`spawn_args`).default({}),
     parent: text(`parent`),
+    createdBy: text(`created_by`),
     typeRevision: integer(`type_revision`),
     inboxSchemas: jsonb(`inbox_schemas`),
     stateSchemas: jsonb(`state_schemas`),
@@ -61,6 +62,7 @@ export const entities = pgTable(
     index(`idx_entities_type`).on(table.tenantId, table.type),
     index(`idx_entities_status`).on(table.tenantId, table.status),
     index(`idx_entities_parent`).on(table.tenantId, table.parent),
+    index(`idx_entities_created_by`).on(table.tenantId, table.createdBy),
     index(`entities_tags_index_gin`).using(`gin`, table.tagsIndex),
     check(
       `chk_entities_status`,

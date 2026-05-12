@@ -84,6 +84,12 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
 
   return {
     service: `tenant-a`,
+    principal: {
+      kind: `system`,
+      id: `framework`,
+      key: `system:framework`,
+      url: `/principal/system:framework`,
+    },
     publicUrl: `http://agents.local`,
     durableStreamsUrl: `http://durable.local`,
     durableStreamsDispatcher: undefined as any,

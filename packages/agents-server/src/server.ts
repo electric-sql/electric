@@ -12,6 +12,13 @@ import { ossServerRouter } from './routing/oss-server-router.js'
 import { startStandaloneAgentsRuntime } from './standalone-runtime.js'
 import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
+import { getDevPrincipal, getPrincipalFromRequest } from './principal.js'
+import { apiError } from './electric-agents-http.js'
+import {
+  ErrCodeInvalidRequest,
+  ErrCodeUnauthorized,
+} from './electric-agents-types.js'
+import { ElectricAgentsError } from './entity-manager.js'
 import { serverLog } from './utils/log.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { Server } from 'node:http'
@@ -22,7 +29,7 @@ import type {
   EntityRegistry,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
-import type { AuthenticateRequest } from './electric-agents-types.js'
+import type { Principal } from './principal.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import type { OssServerContext } from './routing/oss-server-router.js'
@@ -46,7 +53,10 @@ export interface ElectricAgentsServerOptions {
   postgresUrl: string
   electricUrl?: string
   electricSecret?: string
-  authenticateRequest?: AuthenticateRequest
+  authenticateRequest?: (
+    request: Request
+  ) => Promise<Principal | null> | Principal | null
+  allowDevPrincipalFallback?: boolean
   /**
    * Disabled by default. When set to a positive interval, periodically
    * recovers expired dispatch claims and stale outstanding wakes.
@@ -207,6 +217,7 @@ export class ElectricAgentsServer {
       })
       this.electricAgentsManager = this.standaloneRuntime.manager
       this.entityBridgeManager = this.standaloneRuntime.entityBridgeManager
+      await this.electricAgentsManager.ensurePrincipalEntityType()
 
       const serverAdapter = createServerAdapter((request) =>
         this.handleRequest(request)
@@ -323,9 +334,27 @@ export class ElectricAgentsServer {
       return new Response(null, { status: 503 })
     }
 
-    return await ossServerRouter.fetch(
-      request as Parameters<typeof ossServerRouter.fetch>[0],
-      await this.buildTenantContext(request)
+    try {
+      return await ossServerRouter.fetch(
+        request as Parameters<typeof ossServerRouter.fetch>[0],
+        await this.buildTenantContext(request)
+      )
+    } catch (error) {
+      if (error instanceof ElectricAgentsError) {
+        return apiError(error.status, error.code, error.message, error.details)
+      }
+      throw error
+    }
+  }
+
+  private allowDevPrincipalFallback(): boolean {
+    if (this.options.allowDevPrincipalFallback !== undefined) {
+      return this.options.allowDevPrincipalFallback
+    }
+    return (
+      process.env.ELECTRIC_INSECURE === `true` ||
+      process.env.NODE_ENV !== `production` ||
+      Boolean(this.options.durableStreamsServer)
     )
   }
 
@@ -343,10 +372,33 @@ export class ElectricAgentsServer {
       throw new Error(`agents-server runtime is not started`)
     }
 
+    let principal: Principal | null
+    try {
+      principal =
+        (await this.options.authenticateRequest?.(request)) ??
+        getPrincipalFromRequest(request)
+    } catch (error) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        error instanceof Error ? error.message : `Invalid principal`,
+        400
+      )
+    }
+
+    if (!principal && this.allowDevPrincipalFallback()) {
+      principal = getDevPrincipal()
+    }
+    if (!principal) {
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Missing Electric-Principal`,
+        401
+      )
+    }
+
     return {
       service: this.tenantId,
-      authenticatedUser:
-        (await this.options.authenticateRequest?.(request)) ?? undefined,
+      principal,
       publicUrl: this.publicUrl,
       localUrl: this._url,
       durableStreamsUrl: this.options.durableStreamsUrl,

@@ -271,6 +271,8 @@ export class AgentsHost {
   private async startTenantRuntime(
     runtime: AgentsHostTenantRuntime
   ): Promise<void> {
+    await runtime.manager.ensurePrincipalEntityType()
+
     if (this.rehydrateTenantOnStart) {
       await runtime.rehydrateCronSchedules()
     }
@@ -302,6 +304,8 @@ export class AgentsHost {
       scheduler,
       entityBridgeManager: this.entityProjector.forTenant(serviceId, registry),
     })
+
+    await runtime.manager.ensurePrincipalEntityType()
 
     return runtime
   }

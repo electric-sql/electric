@@ -13,6 +13,12 @@ function buildTenantContext(
 ): TenantContext {
   return {
     service: `tenant-test`,
+    principal: {
+      kind: `system`,
+      id: `framework`,
+      key: `system:framework`,
+      url: `/principal/system:framework`,
+    },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
     durableStreamsDispatcher: undefined as any,

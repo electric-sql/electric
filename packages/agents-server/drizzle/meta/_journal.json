@@ -43,6 +43,13 @@
       "when": 1776265200000,
       "tag": "0005_pull_wake_control_plane",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776268800000,
+      "tag": "0006_principals",
+      "breakpoints": true
     }
   ]
 }

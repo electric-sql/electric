@@ -1,17 +1,7 @@
-import type { AuthenticatedRequestUser } from './electric-agents-types.js'
+import type { Principal } from './principal.js'
 
-function clean(value: string | undefined): string | undefined {
-  const trimmed = value?.trim()
-  return trimmed || undefined
-}
-
-export function formatAuthenticatedUser(
-  user: AuthenticatedRequestUser | null | undefined
+export function formatRequestPrincipal(
+  principal: Principal | null | undefined
 ): string | undefined {
-  if (!user) return undefined
-  const email = clean(user.email)
-  const name = clean(user.name)
-  const userId = clean(user.userId)
-  if (name && email) return `${name} <${email}>`
-  return email ?? name ?? userId
+  return principal?.key
 }

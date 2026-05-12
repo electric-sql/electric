@@ -1,7 +1,5 @@
-import type {
-  AuthenticateRequest,
-  AuthenticatedRequestUser,
-} from './electric-agents-types.js'
+import { parsePrincipalKey } from './principal.js'
+import type { Principal } from './principal.js'
 
 export interface DevAssertedAuthOptions {
   enabled?: boolean
@@ -19,19 +17,17 @@ function clean(value: string | undefined | null): string | undefined {
 
 export function createDevAssertedAuthenticateRequest(
   options: DevAssertedAuthOptions
-): AuthenticateRequest | undefined {
+): ((request: Request) => Principal | null) | undefined {
   if (!options.enabled) return undefined
-
-  return (request): AuthenticatedRequestUser | null => {
+  return (request): Principal | null => {
     const email =
       clean(request.headers.get(DEV_ASSERTED_EMAIL_HEADER)) ??
       clean(options.defaultEmail)
     const name =
       clean(request.headers.get(DEV_ASSERTED_NAME_HEADER)) ??
       clean(options.defaultName)
-    const userId = email ?? name
-    if (!userId) return null
-    return { userId, email, name }
+    const id = email ?? name
+    return id ? parsePrincipalKey(`user:${id}`) : null
   }
 }
 

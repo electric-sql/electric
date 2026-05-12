@@ -5,10 +5,12 @@
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json, status } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
+import { parsePrincipalKey } from '../principal.js'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import {
   ErrCodeNotFound,
   ErrCodeUnknownEntityType,
+  ErrCodeInvalidRequest,
   toPublicEntity,
 } from '../electric-agents-types.js'
 import {
@@ -86,11 +88,11 @@ const spawnBodySchema = Type.Object({
 })
 
 const sendBodySchema = Type.Object({
-  from: Type.Optional(Type.String()),
   payload: Type.Optional(Type.Unknown()),
   key: Type.Optional(Type.String()),
   type: Type.Optional(Type.String()),
   afterMs: Type.Optional(Type.Number()),
+  from: Type.Optional(Type.String()),
 })
 
 const forkBodySchema = Type.Object({
@@ -116,8 +118,8 @@ const scheduleBodySchema = Type.Union([
     payload: Type.Unknown(),
     targetUrl: Type.Optional(Type.String()),
     fireAt: Type.String(),
-    from: Type.Optional(Type.String()),
     messageType: Type.Optional(Type.String()),
+    from: Type.Optional(Type.String()),
   }),
 ])
 
@@ -216,6 +218,20 @@ function requireExistingEntityRoute(
   return request.entityRoute
 }
 
+function rejectPrincipalEntityMutation(
+  request: AgentsRouteRequest,
+  action: string
+): Response | undefined {
+  const { entity } = requireExistingEntityRoute(request)
+  if (entity.type !== `principal`) return undefined
+
+  return apiError(
+    400,
+    ErrCodeInvalidRequest,
+    `Principal entities are built in and cannot be ${action}`
+  )
+}
+
 async function withExistingEntity(
   request: AgentsRouteRequest,
   ctx: TenantContext
@@ -231,6 +247,21 @@ async function withExistingEntity(
     const entityType = await ctx.entityManager.registry.getEntityType(
       request.params.type
     )
+    if (request.params.type === `principal`) {
+      try {
+        const materialized = await ctx.entityManager.ensurePrincipal(
+          parsePrincipalKey(request.params.instanceId)
+        )
+        request.entityRoute = { entityUrl, entity: materialized }
+        return undefined
+      } catch (error) {
+        return apiError(
+          400,
+          ErrCodeInvalidRequest,
+          error instanceof Error ? error.message : `Invalid principal`
+        )
+      }
+    }
     if (entityType) {
       return apiError(404, ErrCodeNotFound, `Entity not found at ${entityUrl}`)
     }
@@ -251,6 +282,14 @@ async function withSpawnableEntityType(
 ): Promise<AgentsRouteResult> {
   if (!entityUrlFromSegments(request.params.type, request.params.instanceId)) {
     return undefined
+  }
+
+  if (request.params.type === `principal`) {
+    return apiError(
+      400,
+      ErrCodeInvalidRequest,
+      `Principal entities are built in and cannot be spawned directly`
+    )
   }
 
   const entityType = await ctx.entityManager.registry.getEntityType(
@@ -275,6 +314,7 @@ async function listEntities(
     type: firstQueryValue(query.type),
     status: firstQueryValue(query.status),
     parent: firstQueryValue(query.parent),
+    created_by: firstQueryValue(query.created_by),
   })
   return json(entities.map((entity) => toPublicEntity(entity)))
 }
@@ -294,6 +334,12 @@ async function upsertSchedule(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `scheduled`
+  )
+  if (principalMutationError) return principalMutationError
+
   const parsed = routeBody<ScheduleBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
   const scheduleId = decodeURIComponent(request.params.scheduleId)
@@ -311,12 +357,19 @@ async function upsertSchedule(
   }
 
   if (parsed.scheduleType === `future_send`) {
+    if (parsed.from !== undefined && parsed.from !== ctx.principal.url) {
+      return apiError(
+        400,
+        ErrCodeInvalidRequest,
+        `Request from must match Electric-Principal`
+      )
+    }
     const result = await ctx.entityManager.upsertFutureSendSchedule(entityUrl, {
       id: scheduleId,
       payload: parsed.payload,
       targetUrl: parsed.targetUrl,
       fireAt: parsed.fireAt,
-      from: parsed.from,
+      senderUrl: ctx.principal.url,
       messageType: parsed.messageType,
     })
     return json(result)
@@ -329,6 +382,12 @@ async function deleteSchedule(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `unscheduled`
+  )
+  if (principalMutationError) return principalMutationError
+
   const { entityUrl } = requireExistingEntityRoute(request)
   const result = await ctx.entityManager.deleteSchedule(entityUrl, {
     id: decodeURIComponent(request.params.scheduleId),
@@ -340,6 +399,12 @@ async function setTag(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `tagged`
+  )
+  if (principalMutationError) return principalMutationError
+
   const parsed = routeBody<SetTagBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
   const token = writeTokenFromRequest(request)
@@ -356,6 +421,12 @@ async function removeTag(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `untagged`
+  )
+  if (principalMutationError) return principalMutationError
+
   const { entityUrl } = requireExistingEntityRoute(request)
   const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.removeTag(
@@ -370,6 +441,12 @@ async function forkEntity(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `forked`
+  )
+  if (principalMutationError) return principalMutationError
+
   const parsed = routeBody<ForkBody>(request)
   const { entityUrl, entity } = requireExistingEntityRoute(request)
   await assertDispatchPolicyAllowed(ctx, entity.dispatch_policy)
@@ -394,6 +471,15 @@ async function sendEntity(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<SendBody>(request)
+  const principal = ctx.principal
+  if (parsed.from !== undefined && parsed.from !== principal.url) {
+    return apiError(
+      400,
+      ErrCodeInvalidRequest,
+      `Request from must match Electric-Principal`
+    )
+  }
+  await ctx.entityManager.ensurePrincipal(principal)
   const { entityUrl, entity } = requireExistingEntityRoute(request)
 
   if (!entity.dispatch_policy) {
@@ -405,7 +491,7 @@ async function sendEntity(
     await ctx.entityManager.enqueueDelayedSend(
       entityUrl,
       {
-        from: parsed.from,
+        from: principal.url,
         payload: parsed.payload,
         key: parsed.key,
         type: parsed.type,
@@ -414,7 +500,7 @@ async function sendEntity(
     )
   } else {
     await ctx.entityManager.send(entityUrl, {
-      from: parsed.from,
+      from: principal.url,
       payload: parsed.payload,
       key: parsed.key,
       type: parsed.type,
@@ -429,6 +515,8 @@ async function spawnEntity(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<SpawnBody>(request)
+  const principal = ctx.principal
+  await ctx.entityManager.ensurePrincipal(principal)
   const dispatchPolicy = await resolveEffectiveDispatchPolicyForSpawn(
     ctx,
     request.params.type,
@@ -446,11 +534,12 @@ async function spawnEntity(
     dispatch_policy: dispatchPolicy,
     initialMessage: undefined,
     wake: parsed.wake,
+    created_by: principal.url,
   })
   await linkEntityDispatchSubscription(ctx, entity)
   if (parsed.initialMessage !== undefined) {
     await ctx.entityManager.send(entity.url, {
-      from: parsed.parent ?? `spawn`,
+      from: principal.url,
       payload: parsed.initialMessage,
     })
   }
@@ -476,6 +565,12 @@ async function killEntity(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `killed`
+  )
+  if (principalMutationError) return principalMutationError
+
   const { entityUrl, entity } = requireExistingEntityRoute(request)
   await unlinkEntityDispatchSubscription(ctx, entity)
   const result = await ctx.entityManager.kill(entityUrl)
