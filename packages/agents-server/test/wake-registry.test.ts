@@ -13,7 +13,7 @@
 import { createServer } from 'node:http'
 import { DurableStreamTestServer } from '@durable-streams/server'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { ElectricAgentsManager } from '../src/electric-agents-manager'
+import { EntityManager } from '../src/entity-manager'
 import { ElectricAgentsServer } from '../src/server'
 import { WakeRegistry } from '../src/wake-registry'
 import { timeStep, waitForStreamEvents } from './test-utils'
@@ -50,6 +50,99 @@ function createMockDb(): any {
 }
 
 describe(`Wake Registry`, () => {
+  it(`keeps shared registrations scoped by tenant`, async () => {
+    const registry = new WakeRegistry(createMockDb(), null)
+    await registry.register({
+      tenantId: `tenant-a`,
+      subscriberUrl: `/tenant-a/parent`,
+      sourceUrl: `/source/shared`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+    await registry.register({
+      tenantId: `tenant-b`,
+      subscriberUrl: `/tenant-b/parent`,
+      sourceUrl: `/source/shared`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+
+    const event = {
+      type: `texts`,
+      key: `text-1`,
+      value: {},
+      headers: { operation: `insert` },
+    }
+    const tenantA = registry.evaluate(`/source/shared`, event, `tenant-a`)
+    const tenantB = registry.evaluate(`/source/shared`, event, `tenant-b`)
+
+    expect(tenantA).toHaveLength(1)
+    expect(tenantA[0]!.tenantId).toBe(`tenant-a`)
+    expect(tenantA[0]!.subscriberUrl).toBe(`/tenant-a/parent`)
+    expect(tenantB).toHaveLength(1)
+    expect(tenantB[0]!.tenantId).toBe(`tenant-b`)
+    expect(tenantB[0]!.subscriberUrl).toBe(`/tenant-b/parent`)
+  })
+
+  it(`dispatches shared timeout callbacks by tenant`, async () => {
+    const registry = new WakeRegistry(createMockDb(), null)
+    const tenantA: Array<WakeEvalResult> = []
+    const tenantB: Array<WakeEvalResult> = []
+    registry.setTimeoutCallback((result) => tenantA.push(result), `tenant-a`)
+    registry.setTimeoutCallback((result) => tenantB.push(result), `tenant-b`)
+
+    await registry.register({
+      tenantId: `tenant-a`,
+      subscriberUrl: `/tenant-a/parent`,
+      sourceUrl: `/tenant-a/source`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 50,
+    })
+    await registry.register({
+      tenantId: `tenant-b`,
+      subscriberUrl: `/tenant-b/parent`,
+      sourceUrl: `/tenant-b/source`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 50,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 150))
+
+    expect(tenantA).toHaveLength(1)
+    expect(tenantA[0]!.tenantId).toBe(`tenant-a`)
+    expect(tenantB).toHaveLength(1)
+    expect(tenantB[0]!.tenantId).toBe(`tenant-b`)
+  })
+
+  it(`does not consume shared timeout before tenant callback is registered`, async () => {
+    const registry = new WakeRegistry(createMockDb(), null)
+    const delivered: Array<WakeEvalResult> = []
+
+    await registry.register({
+      tenantId: `tenant-late`,
+      subscriberUrl: `/tenant-late/parent`,
+      sourceUrl: `/tenant-late/source`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 50,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 120))
+
+    expect(delivered).toHaveLength(0)
+
+    registry.setTimeoutCallback(
+      (result) => delivered.push(result),
+      `tenant-late`
+    )
+
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]!.tenantId).toBe(`tenant-late`)
+    expect(delivered[0]!.sourceEventKey).toBe(`timeout`)
+  })
+
   it(`evaluates runFinished condition on completed run event`, async () => {
     const registry = new WakeRegistry(createMockDb())
     await registry.register({
@@ -507,19 +600,16 @@ describe(`Wake Registry`, () => {
       })),
     } as any
 
-    await (ElectricAgentsManager.prototype as any).deliverWakeResult.call(
-      manager,
-      {
-        subscriberUrl: `/watcher/w1`,
-        registrationDbId: 41,
-        sourceEventKey: `tick-7`,
-        wakeMessage: {
-          source: `/_cron/abc`,
-          timeout: false,
-          changes: [{ collection: `cron_tick`, kind: `insert`, key: `tick-7` }],
-        },
-      }
-    )
+    await (EntityManager.prototype as any).deliverWakeResult.call(manager, {
+      subscriberUrl: `/watcher/w1`,
+      registrationDbId: 41,
+      sourceEventKey: `tick-7`,
+      wakeMessage: {
+        source: `/_cron/abc`,
+        timeout: false,
+        changes: [{ collection: `cron_tick`, kind: `insert`, key: `tick-7` }],
+      },
+    })
 
     const event = JSON.parse(
       new TextDecoder().decode(appendIdempotent.mock.calls[0]![1] as Uint8Array)
@@ -667,9 +757,8 @@ describe(`Wake Registry Integration`, () => {
   let wakeCount = 0
   let wakeResolvers: Array<() => void> = []
 
-  function getElectricAgentsManager(): ElectricAgentsManager {
-    return (electricAgentsServer as any)
-      .electricAgentsManager as ElectricAgentsManager
+  function getElectricAgentsManager(): EntityManager {
+    return (electricAgentsServer as any).electricAgentsManager as EntityManager
   }
 
   beforeAll(async () => {
@@ -782,6 +871,25 @@ describe(`Wake Registry Integration`, () => {
     )
   }
 
+  async function createWebhookSubscription(
+    id: string,
+    pattern: string
+  ): Promise<void> {
+    const subRes = await fetch(
+      `${baseUrl}/v1/stream-meta/subscriptions/${encodeURIComponent(id)}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          type: `webhook`,
+          pattern,
+          webhook: { url: receiverUrl },
+        }),
+      }
+    )
+    expect(subRes.status).toBeLessThan(300)
+  }
+
   it(`spawn with wake registers condition and delivers wake on child run completion`, async () => {
     const startCount = wakeCount
     const ts = Date.now()
@@ -799,22 +907,17 @@ describe(`Wake Registry Integration`, () => {
     expect(typeRes.status).toBe(201)
 
     // Create subscription pointing to our webhook receiver
-    const subRes = await fetch(
-      `${baseUrl}/${typeName}/**?subscription=wake-sub-${ts}`,
+    await createWebhookSubscription(`wake-sub-${ts}`, `${typeName}/**`)
+
+    // Spawn parent entity
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ webhook: receiverUrl }),
+        body: JSON.stringify({}),
       }
     )
-    expect(subRes.status).toBeLessThan(300)
-
-    // Spawn parent entity
-    const parentRes = await fetch(`${baseUrl}/${typeName}/parent`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
     expect(parentRes.status).toBe(201)
     const parent = (await parentRes.json()) as {
       url: string
@@ -822,7 +925,7 @@ describe(`Wake Registry Integration`, () => {
     }
 
     // Send a message to trigger the initial webhook wake for parent
-    await fetch(`${baseUrl}${parent.url}/send`, {
+    await fetch(`${baseUrl}/_electric/entities${parent.url}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({ from: `test`, payload: `init` }),
@@ -832,11 +935,14 @@ describe(`Wake Registry Integration`, () => {
     await waitForWakes(startCount + 1)
 
     // Spawn child entity
-    const childRes = await fetch(`${baseUrl}/${typeName}/child`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ parent: parent.url }),
-    })
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
     expect(childRes.status).toBe(201)
     const child = (await childRes.json()) as {
       url: string
@@ -893,21 +999,16 @@ describe(`Wake Registry Integration`, () => {
     expect(typeRes.status).toBe(201)
 
     // Create subscription (matches existing test pattern)
-    const subRes = await fetch(
-      `${baseUrl}/${typeName}/**?subscription=wake-resp-${ts}`,
+    await createWebhookSubscription(`wake-resp-${ts}`, `${typeName}/**`)
+
+    // Spawn parent
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ webhook: receiverUrl }),
       }
     )
-    expect(subRes.status).toBeLessThan(300)
-
-    // Spawn parent
-    const parentRes = await fetch(`${baseUrl}/${typeName}/parent`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-    })
     expect(parentRes.status).toBe(201)
     const parent = (await parentRes.json()) as {
       url: string
@@ -915,11 +1016,14 @@ describe(`Wake Registry Integration`, () => {
     }
 
     // Spawn child with parent
-    const childRes = await fetch(`${baseUrl}/${typeName}/child`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ parent: parent.url }),
-    })
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
     expect(childRes.status).toBe(201)
     const child = (await childRes.json()) as {
       url: string
@@ -998,31 +1102,29 @@ describe(`Wake Registry Integration`, () => {
     })
     expect(typeRes.status).toBe(201)
 
-    const subRes = await fetch(
-      `${baseUrl}/${typeName}/**?subscription=wake-noresp-${ts}`,
+    await createWebhookSubscription(`wake-noresp-${ts}`, `${typeName}/**`)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ webhook: receiverUrl }),
       }
     )
-    expect(subRes.status).toBeLessThan(300)
-
-    const parentRes = await fetch(`${baseUrl}/${typeName}/parent`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-    })
     expect(parentRes.status).toBe(201)
     const parent = (await parentRes.json()) as {
       url: string
       streams: { main: string }
     }
 
-    const childRes = await fetch(`${baseUrl}/${typeName}/child`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ parent: parent.url }),
-    })
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
     expect(childRes.status).toBe(201)
     const child = (await childRes.json()) as {
       url: string
@@ -1091,31 +1193,29 @@ describe(`Wake Registry Integration`, () => {
     })
     expect(typeRes.status).toBe(201)
 
-    const subRes = await fetch(
-      `${baseUrl}/${typeName}/**?subscription=wake-err-${ts}`,
+    await createWebhookSubscription(`wake-err-${ts}`, `${typeName}/**`)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ webhook: receiverUrl }),
       }
     )
-    expect(subRes.status).toBeLessThan(300)
-
-    const parentRes = await fetch(`${baseUrl}/${typeName}/parent`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-    })
     expect(parentRes.status).toBe(201)
     const parent = (await parentRes.json()) as {
       url: string
       streams: { main: string }
     }
 
-    const childRes = await fetch(`${baseUrl}/${typeName}/child`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ parent: parent.url }),
-    })
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
     expect(childRes.status).toBe(201)
     const child = (await childRes.json()) as {
       url: string
@@ -1198,31 +1298,29 @@ describe(`Wake Registry Integration`, () => {
     })
     expect(typeRes.status).toBe(201)
 
-    const subRes = await fetch(
-      `${baseUrl}/${typeName}/**?subscription=wake-unscoped-${ts}`,
+    await createWebhookSubscription(`wake-unscoped-${ts}`, `${typeName}/**`)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ webhook: receiverUrl }),
       }
     )
-    expect(subRes.status).toBeLessThan(300)
-
-    const parentRes = await fetch(`${baseUrl}/${typeName}/parent`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-    })
     expect(parentRes.status).toBe(201)
     const parent = (await parentRes.json()) as {
       url: string
       streams: { main: string }
     }
 
-    const childRes = await fetch(`${baseUrl}/${typeName}/child`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ parent: parent.url }),
-    })
+    const childRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/child`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ parent: parent.url }),
+      }
+    )
     expect(childRes.status).toBe(201)
     const child = (await childRes.json()) as {
       url: string
@@ -1305,22 +1403,17 @@ describe(`Wake Registry Integration`, () => {
     expect(typeRes.status).toBe(201)
 
     // Create subscription
-    const subRes = await fetch(
-      `${baseUrl}/${typeName}/**?subscription=wake-chg-sub-${ts}`,
+    await createWebhookSubscription(`wake-chg-sub-${ts}`, `${typeName}/**`)
+
+    // Spawn watcher entity
+    const watcherRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/watcher`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ webhook: receiverUrl }),
+        body: JSON.stringify({}),
       }
     )
-    expect(subRes.status).toBeLessThan(300)
-
-    // Spawn watcher entity
-    const watcherRes = await fetch(`${baseUrl}/${typeName}/watcher`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
     expect(watcherRes.status).toBe(201)
     const watcher = (await watcherRes.json()) as {
       url: string
@@ -1328,11 +1421,14 @@ describe(`Wake Registry Integration`, () => {
     }
 
     // Spawn source entity
-    const sourceRes = await fetch(`${baseUrl}/${typeName}/source`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+    const sourceRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/source`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
     expect(sourceRes.status).toBe(201)
     const source = (await sourceRes.json()) as {
       url: string
@@ -1349,7 +1445,7 @@ describe(`Wake Registry Integration`, () => {
     })
 
     // Send a message to watcher to trigger initial webhook (transition consumer to idle)
-    await fetch(`${baseUrl}${watcher.url}/send`, {
+    await fetch(`${baseUrl}/_electric/entities${watcher.url}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({ from: `test`, payload: `init` }),
@@ -1384,22 +1480,17 @@ describe(`Wake Registry Integration`, () => {
     expect(typeRes.status).toBe(201)
 
     // Create subscription
-    const subRes = await fetch(
-      `${baseUrl}/${typeName}/**?subscription=wake-body-sub-${ts}`,
+    await createWebhookSubscription(`wake-body-sub-${ts}`, `${typeName}/**`)
+
+    // Spawn subscriber entity
+    const subscriberRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/subscriber`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ webhook: receiverUrl }),
+        body: JSON.stringify({}),
       }
     )
-    expect(subRes.status).toBeLessThan(300)
-
-    // Spawn subscriber entity
-    const subscriberRes = await fetch(`${baseUrl}/${typeName}/subscriber`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
     expect(subscriberRes.status).toBe(201)
     const subscriber = (await subscriberRes.json()) as {
       url: string
@@ -1407,11 +1498,14 @@ describe(`Wake Registry Integration`, () => {
     }
 
     // Spawn observed entity
-    const observedRes = await fetch(`${baseUrl}/${typeName}/observed`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+    const observedRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/observed`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
     expect(observedRes.status).toBe(201)
     const observed = (await observedRes.json()) as {
       url: string
@@ -1428,7 +1522,7 @@ describe(`Wake Registry Integration`, () => {
     })
 
     // Trigger initial webhook for subscriber
-    await fetch(`${baseUrl}${subscriber.url}/send`, {
+    await fetch(`${baseUrl}/_electric/entities${subscriber.url}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({ from: `test`, payload: `init` }),

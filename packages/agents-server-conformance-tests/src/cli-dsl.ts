@@ -55,6 +55,14 @@ export interface CliHistory {
   exitCode: number
 }
 
+function subscriptionEndpoint(baseUrl: string, id: string): string {
+  return `${baseUrl}/v1/stream-meta/subscriptions/${encodeURIComponent(id)}`
+}
+
+function subscriptionPattern(pattern: string): string {
+  return pattern.replace(/^\/+/, ``)
+}
+
 // ============================================================================
 // CliScenario — Fluent builder
 // ============================================================================
@@ -190,11 +198,15 @@ export class CliScenario {
 
           case `setupSubscription`: {
             const res = await fetch(
-              `${this.baseUrl}${step.pattern}?subscription=${step.id}`,
+              subscriptionEndpoint(this.baseUrl, step.id),
               {
                 method: `PUT`,
                 headers: { 'content-type': `application/json` },
-                body: JSON.stringify({ webhook: receiver.url }),
+                body: JSON.stringify({
+                  type: `webhook`,
+                  pattern: subscriptionPattern(step.pattern),
+                  webhook: { url: receiver.url },
+                }),
               }
             )
             expect(

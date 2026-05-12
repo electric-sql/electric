@@ -8,28 +8,35 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
   unique,
 } from 'drizzle-orm/pg-core'
 
-export const entityTypes = pgTable(`entity_types`, {
-  name: text(`name`).primaryKey(),
-  description: text(`description`).notNull(),
-  creationSchema: jsonb(`creation_schema`),
-  inboxSchemas: jsonb(`inbox_schemas`),
-  stateSchemas: jsonb(`state_schemas`),
-  serveEndpoint: text(`serve_endpoint`),
-  revision: integer(`revision`).notNull().default(1),
-  createdAt: text(`created_at`).notNull(),
-  updatedAt: text(`updated_at`).notNull(),
-})
+export const entityTypes = pgTable(
+  `entity_types`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    name: text(`name`).notNull(),
+    description: text(`description`).notNull(),
+    creationSchema: jsonb(`creation_schema`),
+    inboxSchemas: jsonb(`inbox_schemas`),
+    stateSchemas: jsonb(`state_schemas`),
+    serveEndpoint: text(`serve_endpoint`),
+    revision: integer(`revision`).notNull().default(1),
+    createdAt: text(`created_at`).notNull(),
+    updatedAt: text(`updated_at`).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.name] })]
+)
 
 export const entities = pgTable(
   `entities`,
   {
-    url: text(`url`).primaryKey(),
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    url: text(`url`).notNull(),
     type: text(`type`).notNull(),
     status: text(`status`).notNull().default(`idle`),
     subscriptionId: text(`subscription_id`).notNull(),
@@ -48,9 +55,10 @@ export const entities = pgTable(
     updatedAt: bigint(`updated_at`, { mode: `number` }).notNull(),
   },
   (table) => [
-    index(`idx_entities_type`).on(table.type),
-    index(`idx_entities_status`).on(table.status),
-    index(`idx_entities_parent`).on(table.parent),
+    primaryKey({ columns: [table.tenantId, table.url] }),
+    index(`idx_entities_type`).on(table.tenantId, table.type),
+    index(`idx_entities_status`).on(table.tenantId, table.status),
+    index(`idx_entities_parent`).on(table.tenantId, table.parent),
     index(`entities_tags_index_gin`).using(`gin`, table.tagsIndex),
     check(
       `chk_entities_status`,
@@ -63,6 +71,7 @@ export const wakeRegistrations = pgTable(
   `wake_registrations`,
   {
     id: serial(`id`).primaryKey(),
+    tenantId: text(`tenant_id`).notNull().default(`default`),
     subscriberUrl: text(`subscriber_url`).notNull(),
     sourceUrl: text(`source_url`).notNull(),
     condition: jsonb(`condition`).notNull(),
@@ -77,8 +86,9 @@ export const wakeRegistrations = pgTable(
       .defaultNow(),
   },
   (table) => [
-    index(`idx_wake_source_url`).on(table.sourceUrl),
+    index(`idx_wake_source_url`).on(table.tenantId, table.sourceUrl),
     unique(`uq_wake_registration`).on(
+      table.tenantId,
       table.subscriberUrl,
       table.sourceUrl,
       table.oneShot,
@@ -90,27 +100,44 @@ export const wakeRegistrations = pgTable(
   ]
 )
 
-export const subscriptionWebhooks = pgTable(`subscription_webhooks`, {
-  subscriptionId: text(`subscription_id`).primaryKey(),
-  webhookUrl: text(`webhook_url`).notNull(),
-  createdAt: timestamp(`created_at`, { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-})
+export const subscriptionWebhooks = pgTable(
+  `subscription_webhooks`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    subscriptionId: text(`subscription_id`).notNull(),
+    webhookUrl: text(`webhook_url`).notNull(),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.subscriptionId] })]
+)
 
-export const consumerCallbacks = pgTable(`consumer_callbacks`, {
-  consumerId: text(`consumer_id`).primaryKey(),
-  callbackUrl: text(`callback_url`).notNull(),
-  primaryStream: text(`primary_stream`),
-  createdAt: timestamp(`created_at`, { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-})
+export const consumerCallbacks = pgTable(
+  `consumer_callbacks`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    consumerId: text(`consumer_id`).notNull(),
+    callbackUrl: text(`callback_url`).notNull(),
+    primaryStream: text(`primary_stream`),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.consumerId] }),
+    index(`idx_consumer_callbacks_primary_stream`).on(
+      table.tenantId,
+      table.primaryStream
+    ),
+  ]
+)
 
 export const scheduledTasks = pgTable(
   `scheduled_tasks`,
   {
     id: bigserial(`id`, { mode: `number` }).primaryKey(),
+    tenantId: text(`tenant_id`).notNull().default(`default`),
     kind: text(`kind`).notNull(),
     payload: jsonb(`payload`).notNull(),
     fireAt: timestamp(`fire_at`, { withTimezone: true }).notNull(),
@@ -133,48 +160,58 @@ export const scheduledTasks = pgTable(
       sql`${table.kind} IN ('delayed_send', 'cron_tick')`
     ),
     index(`idx_scheduled_tasks_fire_ready`)
-      .on(table.fireAt)
+      .on(table.tenantId, table.fireAt)
       .where(sql`${table.completedAt} IS NULL AND ${table.claimedAt} IS NULL`),
     unique(`uq_cron_tick`).on(
+      table.tenantId,
       table.cronExpression,
       table.cronTimezone,
       table.cronTickNumber
     ),
     index(`idx_scheduled_tasks_manifest_pending`)
-      .on(table.ownerEntityUrl, table.manifestKey)
+      .on(table.tenantId, table.ownerEntityUrl, table.manifestKey)
       .where(
         sql`${table.kind} = 'delayed_send' AND ${table.completedAt} IS NULL AND ${table.manifestKey} IS NOT NULL`
       ),
     index(`idx_scheduled_tasks_stale_claims`)
-      .on(table.claimedAt)
+      .on(table.tenantId, table.claimedAt)
       .where(
         sql`${table.completedAt} IS NULL AND ${table.claimedAt} IS NOT NULL`
       ),
   ]
 )
 
-export const entityBridges = pgTable(`entity_bridges`, {
-  sourceRef: text(`source_ref`).primaryKey(),
-  tags: jsonb(`tags`).notNull(),
-  streamUrl: text(`stream_url`).notNull().unique(),
-  shapeHandle: text(`shape_handle`),
-  shapeOffset: text(`shape_offset`),
-  lastObserverActivityAt: timestamp(`last_observer_activity_at`, {
-    withTimezone: true,
-  })
-    .notNull()
-    .defaultNow(),
-  createdAt: timestamp(`created_at`, { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp(`updated_at`, { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-})
+export const entityBridges = pgTable(
+  `entity_bridges`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    sourceRef: text(`source_ref`).notNull(),
+    tags: jsonb(`tags`).notNull(),
+    streamUrl: text(`stream_url`).notNull(),
+    shapeHandle: text(`shape_handle`),
+    shapeOffset: text(`shape_offset`),
+    lastObserverActivityAt: timestamp(`last_observer_activity_at`, {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp(`created_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.sourceRef] }),
+    unique(`uq_entity_bridges_stream_url`).on(table.tenantId, table.streamUrl),
+  ]
+)
 
 export const entityManifestSources = pgTable(
   `entity_manifest_sources`,
   {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
     ownerEntityUrl: text(`owner_entity_url`).notNull(),
     manifestKey: text(`manifest_key`).notNull(),
     sourceRef: text(`source_ref`).notNull(),
@@ -187,10 +224,14 @@ export const entityManifestSources = pgTable(
   },
   (table) => [
     unique(`uq_entity_manifest_source`).on(
+      table.tenantId,
       table.ownerEntityUrl,
       table.manifestKey
     ),
-    index(`idx_entity_manifest_sources_source_ref`).on(table.sourceRef),
+    index(`idx_entity_manifest_sources_source_ref`).on(
+      table.tenantId,
+      table.sourceRef
+    ),
   ]
 )
 
@@ -198,6 +239,7 @@ export const tagStreamOutbox = pgTable(
   `tag_stream_outbox`,
   {
     id: bigserial(`id`, { mode: `number` }).primaryKey(),
+    tenantId: text(`tenant_id`).notNull().default(`default`),
     entityUrl: text(`entity_url`).notNull(),
     collection: text(`collection`).notNull(),
     op: text(`op`).notNull(),
@@ -214,12 +256,12 @@ export const tagStreamOutbox = pgTable(
   },
   (table) => [
     index(`idx_tag_stream_outbox_unclaimed`)
-      .on(table.createdAt)
+      .on(table.tenantId, table.createdAt)
       .where(
         sql`${table.claimedAt} IS NULL AND ${table.deadLetteredAt} IS NULL`
       ),
     index(`idx_tag_stream_outbox_stale_claims`)
-      .on(table.claimedAt)
+      .on(table.tenantId, table.claimedAt)
       .where(
         sql`${table.claimedAt} IS NOT NULL AND ${table.deadLetteredAt} IS NULL`
       ),

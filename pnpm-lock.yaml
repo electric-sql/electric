@@ -1506,8 +1506,8 @@ importers:
   packages/agents:
     dependencies:
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
-        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)
       '@electric-ax/agents-mcp':
         specifier: workspace:*
         version: link:../agents-mcp
@@ -1644,11 +1644,11 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.3.6)
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
-        version: '@electric-ax/durable-streams-client-beta@0.3.1'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
-        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)
       '@electric-ax/agents-mcp':
         specifier: workspace:*
         version: link:../agents-mcp
@@ -1735,14 +1735,14 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.3.6)
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
-        version: '@electric-ax/durable-streams-client-beta@0.3.1'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
       '@durable-streams/server':
-        specifier: npm:@electric-ax/durable-streams-server-beta@^0.3.2
-        version: '@electric-ax/durable-streams-server-beta@0.3.2(typescript@5.8.3)'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350(typescript@5.8.3)
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
-        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
@@ -1758,6 +1758,9 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.48
         version: 0.34.49
+      '@whatwg-node/server':
+        specifier: ^0.10.18
+        version: 0.10.18
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
@@ -1770,6 +1773,9 @@ importers:
       fastq:
         specifier: ^1.20.1
         version: 1.20.1
+      itty-router:
+        specifier: ^5.0.23
+        version: 5.0.23
       lmdb:
         specifier: ^3.5.1
         version: 3.5.4
@@ -1823,8 +1829,8 @@ importers:
   packages/agents-server-conformance-tests:
     dependencies:
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
-        version: '@electric-ax/durable-streams-client-beta@0.3.1'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
       '@electric-sql/client':
         specifier: ^1.5.17
         version: link:../typescript-client
@@ -1854,11 +1860,11 @@ importers:
         specifier: ^1.4.1
         version: 1.4.1(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.1
-        version: '@electric-ax/durable-streams-client-beta@0.3.1'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.1
-        version: '@electric-ax/durable-streams-state-beta@0.3.1(typescript@5.8.3)'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)
       '@electric-ax/agents-runtime':
         specifier: workspace:*
         version: link:../agents-runtime
@@ -1939,11 +1945,11 @@ importers:
   packages/electric-ax:
     dependencies:
       '@durable-streams/client':
-        specifier: npm:@electric-ax/durable-streams-client-beta@^0.3.0
-        version: '@electric-ax/durable-streams-client-beta@0.3.0'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
       '@durable-streams/state':
-        specifier: npm:@electric-ax/durable-streams-state-beta@^0.3.0
-        version: '@electric-ax/durable-streams-state-beta@0.3.0(typescript@5.8.3)'
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)
       '@electric-ax/agents':
         specifier: workspace:*
         version: link:../agents
@@ -4140,6 +4146,35 @@ packages:
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
 
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f}
+    version: 0.2.3
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350}
+    version: 0.2.3
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@durable-streams/server@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350}
+    version: 0.3.1
+    engines: {node: '>=18.0.0'}
+
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f}
+    version: 0.2.5
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350}
+    version: 0.2.5
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
   '@ecies/ciphers@0.2.5':
     resolution: {integrity: sha512-GalEZH4JgOMHYYcYmVqnFirFsjZHeoGMDt9IxEnM9F7GRUUyUksJ7Ou53L83WHJq3RWKD3AcBpo0iQh0oMpf8A==}
     engines: {bun: '>=1', deno: '>=2', node: '>=16'}
@@ -4254,6 +4289,10 @@ packages:
 
   '@emotion/unitless@0.8.1':
     resolution: {integrity: sha512-KOEGMu6dmJZtpadb476IsZBclKvILjopjUii3V+7MnXIQCYh8W3NgNcgwo21n9LXZX6EDIKvqfjYxXebDwxKmQ==}
+
+  '@envelop/instrumentation@1.0.0':
+    resolution: {integrity: sha512-cxgkB66RQB95H3X27jlnxCRNTmPuSTgmBAq6/4n2Dtv4hsk4yz8FadA1ggmd0uZzvKqWD6CR+WFgTjhDqg7eyw==}
+    engines: {node: '>=18.0.0'}
 
   '@epic-web/invariant@1.0.0':
     resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
@@ -5490,6 +5529,9 @@ packages:
   '@faker-js/faker@8.4.1':
     resolution: {integrity: sha512-XQ3cU+Q8Uqmrbf2e0cIC/QN43sTBSC8KF12u29Mb47tWrt2hAgBXSgpZMj4Ao8Uk0iJcU99QsOCaIL8934obCg==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0, npm: '>=6.14.13'}
+
+  '@fastify/busboy@3.2.0':
+    resolution: {integrity: sha512-m9FVDXU3GT2ITSe0UaMA5rU3QkfC/UXtCU8y0gSN/GugTqtVldOBWIB5V6V3sbmenVZUIpU6f+mPEO2+m5iTaA==}
 
   '@firefox-devtools/react-contextmenu@5.1.1':
     resolution: {integrity: sha512-I4/hSZPE6A9Whu9Xut80gJbyz0fWCggNiDJOM0Bhdl9RJa4gBiFj5Q5MDjQSP1vpI3InP33lS747Z3LUnivw9w==}
@@ -10317,6 +10359,26 @@ packages:
   '@vueuse/shared@11.2.0':
     resolution: {integrity: sha512-VxFjie0EanOudYSgMErxXfq6fo8vhr5ICI+BuE3I9FnX7ePllEsVrRQ7O6Q1TLgApeLuPKcHQxAXpP+KnlrJsg==}
 
+  '@whatwg-node/disposablestack@0.0.6':
+    resolution: {integrity: sha512-LOtTn+JgJvX8WfBVJtF08TGrdjuFzGJc4mkP8EdDI8ADbvO7kiexYep1o8dwnt0okb0jYclCDXF13xU7Ge4zSw==}
+    engines: {node: '>=18.0.0'}
+
+  '@whatwg-node/fetch@0.10.13':
+    resolution: {integrity: sha512-b4PhJ+zYj4357zwk4TTuF2nEe0vVtOrwdsrNo5hL+u1ojXNhh1FgJ6pg1jzDlwlT4oBdzfSwaBwMCtFCsIWg8Q==}
+    engines: {node: '>=18.0.0'}
+
+  '@whatwg-node/node-fetch@0.8.5':
+    resolution: {integrity: sha512-4xzCl/zphPqlp9tASLVeUhB5+WJHbuWGYpfoC2q1qh5dw0AqZBW7L27V5roxYWijPxj4sspRAAoOH3d2ztaHUQ==}
+    engines: {node: '>=18.0.0'}
+
+  '@whatwg-node/promise-helpers@1.3.2':
+    resolution: {integrity: sha512-Nst5JdK47VIl9UcGwtv2Rcgyn5lWtZ0/mhRQ4G8NN2isxpq2TO30iqHzmwoJycjWuyUfg3GFXqP/gFHXeV57IA==}
+    engines: {node: '>=16.0.0'}
+
+  '@whatwg-node/server@0.10.18':
+    resolution: {integrity: sha512-kMwLlxUbduttIgaPdSkmEarFpP+mSY8FEm+QWMBRJwxOHWkri+cxd8KZHO9EMrB9vgUuz+5WEaCawaL5wGVoXg==}
+    engines: {node: '>=18.0.0'}
+
   '@xmldom/xmldom@0.8.10':
     resolution: {integrity: sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==}
     engines: {node: '>=10.0.0'}
@@ -13985,6 +14047,9 @@ packages:
   iterator.prototype@1.1.5:
     resolution: {integrity: sha512-H0dkQoCa3b2VEeKQBOxFph+JAbcrQdE7KC0UkqwpLmv2EC4P41QXP+rqo9wYodACiG5/WM5s9oDApTU8utwj9g==}
     engines: {node: '>= 0.4'}
+
+  itty-router@5.0.23:
+    resolution: {integrity: sha512-i49WU+SNPrwOZA4Z61En1RYd5h2Lcqa+5IvCpMrNi4dxymzJK15ozUUnRrWIUAv95Zamd4eJPAot2UvHRrQg7w==}
 
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
@@ -18364,6 +18429,9 @@ packages:
   url@0.10.3:
     resolution: {integrity: sha512-hzSUW2q06EqL1gKM/a+obYHLIO6ct2hwPuviqTTOcfFVc61UbfJ2Q32+uGL/HCPxKqrdGB5QUwIe7UqlDgwsOQ==}
 
+  urlpattern-polyfill@10.1.0:
+    resolution: {integrity: sha512-IGjKp/o0NL3Bso1PymYURCJxMPNAf/ILOpendP9f5B6e1rTJgdgiOvgfoT8VxCAdY+Wisb9uhGaJJf3yZ2V9nw==}
+
   use-callback-ref@1.3.2:
     resolution: {integrity: sha512-elOQwe6Q8gqZgDA8mrh44qRTQqpIHDcZ3hXTLjBe1i4ph8XpNJnO+aQf3NaG+lriLopI4HMx9VjQLfPQ6vhnoA==}
     engines: {node: '>=10'}
@@ -22126,6 +22194,43 @@ snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
 
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f':
+    dependencies:
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      fastq: 1.20.1
+
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350':
+    dependencies:
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      fastq: 1.20.1
+
+  '@durable-streams/server@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350(typescript@5.8.3)':
+    dependencies:
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f
+      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f(typescript@5.8.3)
+      '@neophi/sieve-cache': 1.5.0
+      lmdb: 3.5.4
+      pino: 10.3.1
+      pino-pretty: 13.1.3
+    transitivePeerDependencies:
+      - typescript
+
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f(typescript@5.8.3)':
+    dependencies:
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.6.5(typescript@5.8.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)':
+    dependencies:
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.6.5(typescript@5.8.3)
+    transitivePeerDependencies:
+      - typescript
+
   '@ecies/ciphers@0.2.5(@noble/ciphers@1.3.0)':
     dependencies:
       '@noble/ciphers': 1.3.0
@@ -22333,6 +22438,11 @@ snapshots:
   '@emotion/memoize@0.8.1': {}
 
   '@emotion/unitless@0.8.1': {}
+
+  '@envelop/instrumentation@1.0.0':
+    dependencies:
+      '@whatwg-node/promise-helpers': 1.3.2
+      tslib: 2.8.1
 
   '@epic-web/invariant@1.0.0': {}
 
@@ -23329,6 +23439,8 @@ snapshots:
       js-yaml: 4.1.1
 
   '@faker-js/faker@8.4.1': {}
+
+  '@fastify/busboy@3.2.0': {}
 
   '@firefox-devtools/react-contextmenu@5.1.1(prop-types@15.8.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -29323,6 +29435,35 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
+  '@whatwg-node/disposablestack@0.0.6':
+    dependencies:
+      '@whatwg-node/promise-helpers': 1.3.2
+      tslib: 2.8.1
+
+  '@whatwg-node/fetch@0.10.13':
+    dependencies:
+      '@whatwg-node/node-fetch': 0.8.5
+      urlpattern-polyfill: 10.1.0
+
+  '@whatwg-node/node-fetch@0.8.5':
+    dependencies:
+      '@fastify/busboy': 3.2.0
+      '@whatwg-node/disposablestack': 0.0.6
+      '@whatwg-node/promise-helpers': 1.3.2
+      tslib: 2.8.1
+
+  '@whatwg-node/promise-helpers@1.3.2':
+    dependencies:
+      tslib: 2.8.1
+
+  '@whatwg-node/server@0.10.18':
+    dependencies:
+      '@envelop/instrumentation': 1.0.0
+      '@whatwg-node/disposablestack': 0.0.6
+      '@whatwg-node/fetch': 0.10.13
+      '@whatwg-node/promise-helpers': 1.3.2
+      tslib: 2.8.1
+
   '@xmldom/xmldom@0.8.10': {}
 
   abort-controller@3.0.0:
@@ -33701,6 +33842,8 @@ snapshots:
       get-proto: 1.0.1
       has-symbols: 1.1.0
       set-function-name: 2.0.2
+
+  itty-router@5.0.23: {}
 
   jackspeak@3.4.3:
     dependencies:
@@ -39016,6 +39159,8 @@ snapshots:
     dependencies:
       punycode: 1.3.2
       querystring: 0.2.0
+
+  urlpattern-polyfill@10.1.0: {}
 
   use-callback-ref@1.3.2(@types/react@19.2.14)(react@18.3.1):
     dependencies:

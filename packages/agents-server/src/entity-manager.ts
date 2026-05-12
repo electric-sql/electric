@@ -1,11 +1,3 @@
-/**
- * Orchestrates the Electric Agents entity lifecycle: register types, spawn, send, kill.
- *
- * Entity identity is the URL (/{type}/{instance_id}). Entity tags and
- * lifecycle state are persisted directly in Postgres. Durable streams remain
- * the append-only transport for inbox/state events.
- */
-
 import { randomUUID } from 'node:crypto'
 import fastq from 'fastq'
 import {
@@ -21,6 +13,7 @@ import {
 } from '@electric-ax/agents-runtime'
 import {
   ErrCodeDuplicateURL,
+  ErrCodeEntityPersistFailed,
   ErrCodeForkInProgress,
   ErrCodeForkWaitTimeout,
   ErrCodeInvalidRequest,
@@ -28,23 +21,25 @@ import {
   ErrCodeNotRunning,
   ErrCodeSchemaKeyExists,
   ErrCodeSchemaValidationFailed,
+  ErrCodeUnauthorized,
   ErrCodeUnknownEntityType,
   ErrCodeUnknownEventType,
   ErrCodeUnknownMessageType,
 } from './electric-agents-types.js'
-import { EntityAlreadyExistsError } from './electric-agents-registry.js'
-import { serverLog } from './log.js'
+import { EntityAlreadyExistsError } from './entity-registry.js'
+import { serverLog } from './utils/log.js'
+import {
+  buildManifestWakeRegistration,
+  extractManifestCronSpec,
+} from './manifest-side-effects.js'
+import { DEFAULT_TENANT_ID } from './tenant.js'
 import { ATTR, withSpan } from './tracing.js'
 import type { queueAsPromised } from 'fastq'
-import type { Scheduler } from './scheduler.js'
-import type {
-  WakeEvalResult,
-  WakeRegistration,
-  WakeRegistry,
-} from './wake-registry.js'
+import type { SchedulerClient } from './scheduler.js'
+import type { WakeEvalResult, WakeRegistry } from './wake-registry.js'
 import type { WakeMessage } from '@electric-ax/agents-runtime'
-import type { PostgresRegistry } from './electric-agents-registry.js'
-import type { SchemaValidator } from './electric-agents-schema-validator.js'
+import type { PostgresRegistry } from './entity-registry.js'
+import type { SchemaValidator } from './electric-agents/schema-validator.js'
 import type { StreamClient } from './stream-client.js'
 import type {
   ElectricAgentsEntity,
@@ -54,7 +49,7 @@ import type {
   SetTagRequest,
   TypedSpawnRequest,
 } from './electric-agents-types.js'
-import type { EntityBridgeManager } from './entity-bridge-manager.js'
+import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 
 type SpawnPersistResult = [
   PromiseSettledResult<void>,
@@ -62,6 +57,10 @@ type SpawnPersistResult = [
   PromiseSettledResult<number>,
 ]
 type SpawnPersistJob = () => Promise<SpawnPersistResult>
+type WriteTokenValidator = (
+  entity: ElectricAgentsEntity,
+  token: string
+) => boolean
 
 type ForkSubtreeOptions = {
   rootInstanceId?: string
@@ -107,15 +106,21 @@ function cloneRecord<T extends Record<string, unknown>>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-export class ElectricAgentsManager {
+/**
+ * Orchestrates the Electric Agents entity lifecycle: register types, spawn, send, kill.
+ *
+ * Entity identity is the URL (/{type}/{instance_id}). Entity tags and
+ * lifecycle state are persisted directly in Postgres. Durable streams remain
+ * the append-only transport for inbox/state events.
+ */
+export class EntityManager {
   readonly registry: PostgresRegistry
+  private readonly tenantId: string
   private streamClient: StreamClient
   private validator: SchemaValidator
-  private scheduler: Scheduler | null = null
-  private entityBridgeManager: EntityBridgeManager | null = null
-  private writeTokenValidator:
-    | ((entity: ElectricAgentsEntity, token: string) => boolean)
-    | null = null
+  private scheduler: SchedulerClient | null = null
+  private entityBridgeManager: EntityBridgeCoordinator | null = null
+  private writeTokenValidator: WriteTokenValidator | null = null
   readonly wakeRegistry: WakeRegistry
   private forkWorkLockedEntities = new Map<string, number>()
   private forkWriteLockedEntities = new Map<string, number>()
@@ -124,18 +129,28 @@ export class ElectricAgentsManager {
     SpawnPersistJob,
     SpawnPersistResult
   >
+  private readonly stopWakeRegistryOnShutdown: boolean
 
   constructor(opts: {
     registry: PostgresRegistry
     streamClient: StreamClient
     validator: SchemaValidator
     wakeRegistry: WakeRegistry
+    scheduler?: SchedulerClient
+    entityBridgeManager?: EntityBridgeCoordinator
+    writeTokenValidator?: WriteTokenValidator
     spawnConcurrency?: number
+    stopWakeRegistryOnShutdown?: boolean
   }) {
     this.registry = opts.registry
+    this.tenantId = opts.registry.tenantId ?? DEFAULT_TENANT_ID
     this.streamClient = opts.streamClient
     this.validator = opts.validator
     this.wakeRegistry = opts.wakeRegistry
+    this.scheduler = opts.scheduler ?? null
+    this.entityBridgeManager = opts.entityBridgeManager ?? null
+    this.writeTokenValidator = opts.writeTokenValidator ?? null
+    this.stopWakeRegistryOnShutdown = opts.stopWakeRegistryOnShutdown ?? true
 
     const spawnConcurrency =
       opts.spawnConcurrency ??
@@ -148,10 +163,10 @@ export class ElectricAgentsManager {
 
     this.wakeRegistry.setTimeoutCallback((result) => {
       void this.deliverWakeResult(result)
-    })
+    }, this.tenantId)
     this.wakeRegistry.setDebounceCallback((result) => {
       void this.deliverWakeResult(result)
-    })
+    }, this.tenantId)
   }
 
   async rebuildWakeRegistry(
@@ -166,24 +181,11 @@ export class ElectricAgentsManager {
     await this.wakeRegistry.loadRegistrations()
   }
 
-  setScheduler(scheduler: Scheduler): void {
-    this.scheduler = scheduler
-  }
-
-  setEntityBridgeManager(entityBridgeManager: EntityBridgeManager): void {
-    this.entityBridgeManager = entityBridgeManager
-  }
-
-  setWriteTokenValidator(
-    validator: (entity: ElectricAgentsEntity, token: string) => boolean
-  ): void {
+  setWriteTokenValidator(validator: WriteTokenValidator): void {
     this.writeTokenValidator = validator
   }
 
-  private isValidWriteToken(
-    entity: ElectricAgentsEntity,
-    token: string
-  ): boolean {
+  isValidWriteToken(entity: ElectricAgentsEntity, token: string): boolean {
     return this.writeTokenValidator
       ? this.writeTokenValidator(entity, token)
       : token === entity.write_token
@@ -390,6 +392,7 @@ export class ElectricAgentsManager {
 
     if (req.wake) {
       await this.wakeRegistry.register({
+        tenantId: this.tenantId,
         subscriberUrl: req.wake.subscriberUrl,
         sourceUrl: entityURL,
         condition: req.wake.condition,
@@ -506,7 +509,8 @@ export class ElectricAgentsManager {
           rollbacks.push(
             this.wakeRegistry.unregisterBySubscriberAndSource(
               req.wake.subscriberUrl,
-              entityURL
+              entityURL,
+              this.tenantId
             )
           )
         }
@@ -699,12 +703,15 @@ export class ElectricAgentsManager {
       } catch (err) {
         await Promise.allSettled([
           ...createdEntities.flatMap((entityUrl) => [
-            this.wakeRegistry.unregisterBySubscriber(entityUrl),
-            this.wakeRegistry.unregisterBySource(entityUrl),
+            this.wakeRegistry.unregisterBySubscriber(entityUrl, this.tenantId),
+            this.wakeRegistry.unregisterBySource(entityUrl, this.tenantId),
             this.registry.deleteEntity(entityUrl),
           ]),
           ...Array.from(sharedStateIdMap.values()).map((id) =>
-            this.wakeRegistry.unregisterBySource(getSharedStateStreamPath(id))
+            this.wakeRegistry.unregisterBySource(
+              getSharedStateStreamPath(id),
+              this.tenantId
+            )
           ),
           ...createdStreams.map((streamPath) =>
             this.streamClient.delete(streamPath)
@@ -1392,16 +1399,19 @@ export class ElectricAgentsManager {
         manifest
       )
 
-      const wake = this.buildManifestWakeRegistration(
+      const wake = buildManifestWakeRegistration(
         entityUrl,
-        manifestKey,
-        manifest
+        manifest,
+        manifestKey
       )
       if (wake) {
-        await this.wakeRegistry.register(wake)
+        await this.wakeRegistry.register({
+          ...wake,
+          tenantId: this.tenantId,
+        })
       }
 
-      const cronSpec = this.extractManifestCronSpec(manifest)
+      const cronSpec = extractManifestCronSpec(manifest)
       if (cronSpec && this.scheduler) {
         await this.getOrCreateCronStream(cronSpec.expression, cronSpec.timezone)
       }
@@ -1412,162 +1422,6 @@ export class ElectricAgentsManager {
         manifest
       )
     }
-  }
-
-  private buildManifestWakeRegistration(
-    subscriberUrl: string,
-    manifestKey: string,
-    manifest: Record<string, unknown>
-  ): WakeRegistration | null {
-    const sourceUrl = this.extractManifestSourceUrl(manifest)
-    if (!sourceUrl) return null
-
-    const wake =
-      manifest.kind === `schedule` && manifest.scheduleType === `cron`
-        ? (manifest.wake ?? { on: `change` })
-        : manifest.wake
-
-    if (wake === `runFinished`) {
-      return {
-        subscriberUrl,
-        sourceUrl,
-        condition: `runFinished`,
-        oneShot: false,
-        manifestKey,
-      }
-    }
-
-    if (!isRecord(wake)) return null
-
-    if (wake.on === `runFinished`) {
-      return {
-        subscriberUrl,
-        sourceUrl,
-        condition: `runFinished`,
-        oneShot: false,
-        includeResponse:
-          typeof wake.includeResponse === `boolean`
-            ? wake.includeResponse
-            : undefined,
-        manifestKey,
-      }
-    }
-
-    if (wake.on !== `change`) return null
-
-    const collections = Array.isArray(wake.collections)
-      ? wake.collections.filter((c): c is string => typeof c === `string`)
-      : undefined
-    const ops = Array.isArray(wake.ops)
-      ? wake.ops.filter(
-          (op): op is `insert` | `update` | `delete` =>
-            op === `insert` || op === `update` || op === `delete`
-        )
-      : undefined
-
-    return {
-      subscriberUrl,
-      sourceUrl,
-      condition: {
-        on: `change`,
-        ...(collections ? { collections } : {}),
-        ...(ops ? { ops } : {}),
-      },
-      debounceMs:
-        typeof wake.debounceMs === `number` ? wake.debounceMs : undefined,
-      timeoutMs:
-        typeof wake.timeoutMs === `number` ? wake.timeoutMs : undefined,
-      oneShot: false,
-      manifestKey,
-    }
-  }
-
-  private extractManifestSourceUrl(
-    manifest: Record<string, unknown>
-  ): string | undefined {
-    if (manifest.kind === `child`) {
-      return typeof manifest.entity_url === `string`
-        ? manifest.entity_url
-        : undefined
-    }
-    if (manifest.kind === `source`) {
-      const config = isRecord(manifest.config) ? manifest.config : undefined
-      if (manifest.sourceType === `entity`) {
-        return typeof config?.entityUrl === `string`
-          ? config.entityUrl
-          : typeof manifest.sourceRef === `string`
-            ? manifest.sourceRef
-            : undefined
-      }
-      if (manifest.sourceType === `cron` && config) {
-        const expression = config.expression
-        if (typeof expression === `string`) {
-          const spec = resolveCronScheduleSpec(
-            expression,
-            typeof config.timezone === `string` ? config.timezone : undefined,
-            { fallback: `utc` }
-          )
-          return getCronStreamPath(spec.expression, spec.timezone)
-        }
-      }
-      if (manifest.sourceType === `entities`) {
-        return typeof manifest.sourceRef === `string`
-          ? `/_entities/${manifest.sourceRef}`
-          : undefined
-      }
-      if (manifest.sourceType === `db`) {
-        return typeof manifest.sourceRef === `string`
-          ? getSharedStateStreamPath(manifest.sourceRef)
-          : undefined
-      }
-    }
-    if (manifest.kind === `shared-state`) {
-      return typeof manifest.id === `string`
-        ? getSharedStateStreamPath(manifest.id)
-        : undefined
-    }
-    if (
-      manifest.kind === `schedule` &&
-      manifest.scheduleType === `cron` &&
-      typeof manifest.expression === `string`
-    ) {
-      const spec = resolveCronScheduleSpec(
-        manifest.expression,
-        typeof manifest.timezone === `string` ? manifest.timezone : undefined,
-        { fallback: `utc` }
-      )
-      return getCronStreamPath(spec.expression, spec.timezone)
-    }
-    return undefined
-  }
-
-  private extractManifestCronSpec(
-    manifest: Record<string, unknown>
-  ): { expression: string; timezone: string } | undefined {
-    if (manifest.kind === `source` && manifest.sourceType === `cron`) {
-      const config = isRecord(manifest.config) ? manifest.config : undefined
-      if (typeof config?.expression === `string`) {
-        return resolveCronScheduleSpec(
-          config.expression,
-          typeof config.timezone === `string` ? config.timezone : undefined,
-          { fallback: `utc` }
-        )
-      }
-    }
-
-    if (
-      manifest.kind === `schedule` &&
-      manifest.scheduleType === `cron` &&
-      typeof manifest.expression === `string`
-    ) {
-      return resolveCronScheduleSpec(
-        manifest.expression,
-        typeof manifest.timezone === `string` ? manifest.timezone : undefined,
-        { fallback: `utc` }
-      )
-    }
-
-    return undefined
   }
 
   private async syncManifestFutureSendSchedule(
@@ -1729,7 +1583,11 @@ export class ElectricAgentsManager {
     }
 
     if (!this.isValidWriteToken(entity, token)) {
-      throw new ElectricAgentsError(`UNAUTHORIZED`, `Invalid write token`, 401)
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Invalid write token`,
+        401
+      )
     }
     if (entity.status === `stopped`) {
       throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
@@ -1747,7 +1605,7 @@ export class ElectricAgentsManager {
     const updated = result.entity
     if (!updated) {
       throw new ElectricAgentsError(
-        `ENTITY_PERSIST_FAILED`,
+        ErrCodeEntityPersistFailed,
         `Entity not found after tag write`,
         500
       )
@@ -1771,7 +1629,11 @@ export class ElectricAgentsManager {
     }
 
     if (!this.isValidWriteToken(entity, token)) {
-      throw new ElectricAgentsError(`UNAUTHORIZED`, `Invalid write token`, 401)
+      throw new ElectricAgentsError(
+        ErrCodeUnauthorized,
+        `Invalid write token`,
+        401
+      )
     }
     if (entity.status === `stopped`) {
       throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
@@ -1781,7 +1643,7 @@ export class ElectricAgentsManager {
     const updated = result.entity
     if (!updated) {
       throw new ElectricAgentsError(
-        `ENTITY_PERSIST_FAILED`,
+        ErrCodeEntityPersistFailed,
         `Entity not found after tag delete`,
         500
       )
@@ -1864,8 +1726,13 @@ export class ElectricAgentsManager {
     const spec = resolveCronScheduleSpec(req.expression, req.timezone)
 
     const manifestKey = `schedule:${req.id}`
-    await this.wakeRegistry.unregisterByManifestKey(entityUrl, manifestKey)
+    await this.wakeRegistry.unregisterByManifestKey(
+      entityUrl,
+      manifestKey,
+      this.tenantId
+    )
     await this.wakeRegistry.register({
+      tenantId: this.tenantId,
       subscriberUrl: entityUrl,
       sourceUrl: getCronStreamPath(spec.expression, spec.timezone),
       condition: {
@@ -1942,7 +1809,11 @@ export class ElectricAgentsManager {
     const manifestKey = `schedule:${req.id}`
     const producerId = `future-send-${randomUUID()}`
 
-    await this.wakeRegistry.unregisterByManifestKey(ownerEntityUrl, manifestKey)
+    await this.wakeRegistry.unregisterByManifestKey(
+      ownerEntityUrl,
+      manifestKey,
+      this.tenantId
+    )
     await this.scheduler.syncManifestDelayedSend(
       ownerEntityUrl,
       manifestKey,
@@ -2006,7 +1877,11 @@ export class ElectricAgentsManager {
     if (this.scheduler) {
       await this.scheduler.cancelManifestDelayedSend(entityUrl, manifestKey)
     }
-    await this.wakeRegistry.unregisterByManifestKey(entityUrl, manifestKey)
+    await this.wakeRegistry.unregisterByManifestKey(
+      entityUrl,
+      manifestKey,
+      this.tenantId
+    )
 
     const txid = randomUUID()
     await this.writeManifestEntry(entityUrl, manifestKey, `delete`, undefined, {
@@ -2033,6 +1908,7 @@ export class ElectricAgentsManager {
     manifestKey?: string
   }): Promise<void> {
     await this.wakeRegistry.register({
+      tenantId: this.tenantId,
       subscriberUrl: opts.subscriberUrl,
       sourceUrl: opts.sourceUrl,
       condition: opts.condition,
@@ -2076,7 +1952,11 @@ export class ElectricAgentsManager {
   ): Promise<void> {
     return await withSpan(`electric_agents.evaluateWakes`, async (span) => {
       span.setAttribute(ATTR.WAKE_SOURCE, sourceUrl)
-      const results = this.wakeRegistry.evaluate(sourceUrl, event)
+      const results = this.wakeRegistry.evaluate(
+        sourceUrl,
+        event,
+        this.tenantId
+      )
       span.setAttribute(`electric_agents.wake.subscriber_count`, results.length)
       const settled = await Promise.allSettled(
         results.map((result) => this.deliverWakeResult(result))
@@ -2097,6 +1977,8 @@ export class ElectricAgentsManager {
    * trigger webhook notification.
    */
   private async deliverWakeResult(result: WakeEvalResult): Promise<void> {
+    if (result.tenantId !== this.tenantId) return
+
     return await withSpan(`electric_agents.deliverWake`, async (span) => {
       span.setAttributes({
         [ATTR.WAKE_SUBSCRIBER]: result.subscriberUrl,
@@ -2272,8 +2154,8 @@ export class ElectricAgentsManager {
       throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
     }
 
-    await this.wakeRegistry.unregisterBySubscriber(entityUrl)
-    await this.wakeRegistry.unregisterBySource(entityUrl)
+    await this.wakeRegistry.unregisterBySubscriber(entityUrl, this.tenantId)
+    await this.wakeRegistry.unregisterBySource(entityUrl, this.tenantId)
 
     const txid = await this.registry.updateStatusWithTxid(entityUrl, `stopped`)
     if (this.entityBridgeManager) {
@@ -2630,7 +2512,9 @@ export class ElectricAgentsManager {
   }
 
   async shutdown(): Promise<void> {
-    await this.wakeRegistry.stopSync()
+    if (this.stopWakeRegistryOnShutdown) {
+      await this.wakeRegistry.stopSync()
+    }
     this.registry.close()
   }
 }

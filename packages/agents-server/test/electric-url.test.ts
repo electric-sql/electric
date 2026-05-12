@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyElectricUrlQueryParams,
   electricUrlWithPath,
-} from '../src/electric-url'
+} from '../src/utils/electric-url'
 
 describe(`Electric URL helpers`, () => {
   it(`carries configured query params onto derived Electric paths`, () => {

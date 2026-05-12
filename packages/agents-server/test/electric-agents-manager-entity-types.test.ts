@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ElectricAgentsManager } from '../src/electric-agents-manager'
+import { EntityManager } from '../src/entity-manager'
 
 function createManager() {
   const registry = {
@@ -21,7 +21,7 @@ function createManager() {
     setDebounceCallback: vi.fn(),
   }
 
-  const manager = new ElectricAgentsManager({
+  const manager = new EntityManager({
     registry: registry as any,
     streamClient: streamClient as any,
     validator: validator as any,

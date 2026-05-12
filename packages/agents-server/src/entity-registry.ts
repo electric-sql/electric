@@ -8,6 +8,7 @@ import {
   tagStreamOutbox,
 } from './db/schema.js'
 import { assertEntityStatus } from './electric-agents-types.js'
+import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import type {
   ElectricAgentsEntity,
@@ -30,6 +31,7 @@ function isDuplicateUrlError(err: unknown): boolean {
 }
 
 export interface EntityBridgeRow {
+  tenantId: string
   sourceRef: string
   tags: EntityTags
   streamUrl: string
@@ -42,6 +44,7 @@ export interface EntityBridgeRow {
 
 export interface TagStreamOutboxRow {
   id: number
+  tenantId: string
   entityUrl: string
   collection: string
   op: `insert` | `update` | `delete`
@@ -56,16 +59,38 @@ export interface TagStreamOutboxRow {
 }
 
 export class PostgresRegistry {
-  constructor(private db: DrizzleDB) {}
+  constructor(
+    private db: DrizzleDB,
+    readonly tenantId: string = DEFAULT_TENANT_ID
+  ) {}
 
   async initialize(): Promise<void> {}
 
   close(): void {}
 
+  private entityTypeWhere(name: string) {
+    return and(
+      eq(entityTypes.tenantId, this.tenantId),
+      eq(entityTypes.name, name)
+    )
+  }
+
+  private entityWhere(url: string) {
+    return and(eq(entities.tenantId, this.tenantId), eq(entities.url, url))
+  }
+
+  private entityBridgeWhere(sourceRef: string) {
+    return and(
+      eq(entityBridges.tenantId, this.tenantId),
+      eq(entityBridges.sourceRef, sourceRef)
+    )
+  }
+
   async createEntityType(et: ElectricAgentsEntityType): Promise<void> {
     await this.db
       .insert(entityTypes)
       .values({
+        tenantId: this.tenantId,
         name: et.name,
         description: et.description,
         creationSchema: et.creation_schema ?? null,
@@ -77,7 +102,7 @@ export class PostgresRegistry {
         updatedAt: et.updated_at,
       })
       .onConflictDoUpdate({
-        target: entityTypes.name,
+        target: [entityTypes.tenantId, entityTypes.name],
         set: {
           description: et.description,
           creationSchema: et.creation_schema ?? null,
@@ -94,7 +119,7 @@ export class PostgresRegistry {
     const rows = await this.db
       .select()
       .from(entityTypes)
-      .where(eq(entityTypes.name, name))
+      .where(this.entityTypeWhere(name))
       .limit(1)
     if (rows.length === 0) return null
     return this.rowToEntityType(rows[0]!)
@@ -104,12 +129,13 @@ export class PostgresRegistry {
     const rows = await this.db
       .select()
       .from(entityTypes)
+      .where(eq(entityTypes.tenantId, this.tenantId))
       .orderBy(entityTypes.name)
     return rows.map((row) => this.rowToEntityType(row))
   }
 
   async deleteEntityType(name: string): Promise<void> {
-    await this.db.delete(entityTypes).where(eq(entityTypes.name, name))
+    await this.db.delete(entityTypes).where(this.entityTypeWhere(name))
   }
 
   async updateEntityTypeInPlace(et: ElectricAgentsEntityType): Promise<void> {
@@ -124,7 +150,7 @@ export class PostgresRegistry {
         revision: et.revision,
         updatedAt: et.updated_at,
       })
-      .where(eq(entityTypes.name, et.name))
+      .where(this.entityTypeWhere(et.name))
   }
 
   async createEntity(entity: ElectricAgentsEntity): Promise<number> {
@@ -132,6 +158,7 @@ export class PostgresRegistry {
       const result = await this.db
         .insert(entities)
         .values({
+          tenantId: this.tenantId,
           url: entity.url,
           type: entity.type,
           status: entity.status,
@@ -163,7 +190,7 @@ export class PostgresRegistry {
     const rows = await this.db
       .select()
       .from(entities)
-      .where(eq(entities.url, url))
+      .where(this.entityWhere(url))
       .limit(1)
     if (rows.length === 0) return null
     return this.rowToEntity(rows[0]!)
@@ -191,12 +218,12 @@ export class PostgresRegistry {
     limit?: number
     offset?: number
   }): Promise<{ entities: Array<ElectricAgentsEntity>; total: number }> {
-    const conditions = []
+    const conditions = [eq(entities.tenantId, this.tenantId)]
     if (filter?.type) conditions.push(eq(entities.type, filter.type))
     if (filter?.status) conditions.push(eq(entities.status, filter.status))
     if (filter?.parent) conditions.push(eq(entities.parent, filter.parent))
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+    const whereClause = and(...conditions)
 
     const countResult = await this.db
       .select({ count: sql<number>`count(*)` })
@@ -228,8 +255,8 @@ export class PostgresRegistry {
   async updateStatus(entityUrl: string, status: EntityStatus): Promise<void> {
     const whereClause =
       status === `stopped`
-        ? eq(entities.url, entityUrl)
-        : and(eq(entities.url, entityUrl), ne(entities.status, `stopped`))
+        ? this.entityWhere(entityUrl)
+        : and(this.entityWhere(entityUrl), ne(entities.status, `stopped`))
 
     await this.db
       .update(entities)
@@ -244,8 +271,8 @@ export class PostgresRegistry {
     return await this.db.transaction(async (tx) => {
       const whereClause =
         status === `stopped`
-          ? eq(entities.url, entityUrl)
-          : and(eq(entities.url, entityUrl), ne(entities.status, `stopped`))
+          ? this.entityWhere(entityUrl)
+          : and(this.entityWhere(entityUrl), ne(entities.status, `stopped`))
 
       await tx
         .update(entities)
@@ -314,7 +341,7 @@ export class PostgresRegistry {
       const [row] = await tx
         .select()
         .from(entities)
-        .where(eq(entities.url, url))
+        .where(this.entityWhere(url))
         .limit(1)
         .for(`update`)
       if (!row) {
@@ -336,9 +363,10 @@ export class PostgresRegistry {
           tagsIndex: buildTagsIndex(nextTags),
           updatedAt,
         })
-        .where(eq(entities.url, url))
+        .where(this.entityWhere(url))
 
       await tx.insert(tagStreamOutbox).values({
+        tenantId: this.tenantId,
         entityUrl: url,
         collection: `tags`,
         op: mutation.outbox.op,
@@ -368,6 +396,7 @@ export class PostgresRegistry {
     await this.db
       .insert(entityBridges)
       .values({
+        tenantId: this.tenantId,
         sourceRef: row.sourceRef,
         tags: normalizeTags(row.tags),
         streamUrl: row.streamUrl,
@@ -385,13 +414,21 @@ export class PostgresRegistry {
     const rows = await this.db
       .select()
       .from(entityBridges)
-      .where(eq(entityBridges.sourceRef, sourceRef))
+      .where(this.entityBridgeWhere(sourceRef))
       .limit(1)
     return rows[0] ? this.rowToEntityBridge(rows[0]) : null
   }
 
-  async listEntityBridges(): Promise<Array<EntityBridgeRow>> {
-    const rows = await this.db.select().from(entityBridges)
+  async listEntityBridges(
+    tenantId: string | null = this.tenantId
+  ): Promise<Array<EntityBridgeRow>> {
+    const rows =
+      tenantId === null
+        ? await this.db.select().from(entityBridges)
+        : await this.db
+            .select()
+            .from(entityBridges)
+            .where(eq(entityBridges.tenantId, tenantId))
     return rows.map((row) => this.rowToEntityBridge(row))
   }
 
@@ -399,7 +436,12 @@ export class PostgresRegistry {
     const rows = await this.db
       .select()
       .from(entityBridges)
-      .where(lt(entityBridges.lastObserverActivityAt, before))
+      .where(
+        and(
+          eq(entityBridges.tenantId, this.tenantId),
+          lt(entityBridges.lastObserverActivityAt, before)
+        )
+      )
     return rows.map((row) => this.rowToEntityBridge(row))
   }
 
@@ -412,6 +454,7 @@ export class PostgresRegistry {
       .delete(entityManifestSources)
       .where(
         and(
+          eq(entityManifestSources.tenantId, this.tenantId),
           eq(entityManifestSources.ownerEntityUrl, ownerEntityUrl),
           eq(entityManifestSources.manifestKey, manifestKey)
         )
@@ -424,12 +467,14 @@ export class PostgresRegistry {
     await this.db
       .insert(entityManifestSources)
       .values({
+        tenantId: this.tenantId,
         ownerEntityUrl,
         manifestKey,
         sourceRef,
       })
       .onConflictDoUpdate({
         target: [
+          entityManifestSources.tenantId,
           entityManifestSources.ownerEntityUrl,
           entityManifestSources.manifestKey,
         ],
@@ -441,13 +486,16 @@ export class PostgresRegistry {
   }
 
   async clearEntityManifestSources(): Promise<void> {
-    await this.db.delete(entityManifestSources)
+    await this.db
+      .delete(entityManifestSources)
+      .where(eq(entityManifestSources.tenantId, this.tenantId))
   }
 
   async listReferencedEntitySourceRefs(): Promise<Array<string>> {
     const rows = await this.db
       .selectDistinct({ sourceRef: entityManifestSources.sourceRef })
       .from(entityManifestSources)
+      .where(eq(entityManifestSources.tenantId, this.tenantId))
       .orderBy(entityManifestSources.sourceRef)
     return rows.map((row) => row.sourceRef)
   }
@@ -459,7 +507,7 @@ export class PostgresRegistry {
         lastObserverActivityAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(entityBridges.sourceRef, sourceRef))
+      .where(this.entityBridgeWhere(sourceRef))
   }
 
   async updateEntityBridgeCursor(
@@ -474,7 +522,7 @@ export class PostgresRegistry {
         shapeOffset,
         updatedAt: new Date(),
       })
-      .where(eq(entityBridges.sourceRef, sourceRef))
+      .where(this.entityBridgeWhere(sourceRef))
   }
 
   async clearEntityBridgeCursor(sourceRef: string): Promise<void> {
@@ -485,13 +533,11 @@ export class PostgresRegistry {
         shapeOffset: null,
         updatedAt: new Date(),
       })
-      .where(eq(entityBridges.sourceRef, sourceRef))
+      .where(this.entityBridgeWhere(sourceRef))
   }
 
   async deleteEntityBridge(sourceRef: string): Promise<void> {
-    await this.db
-      .delete(entityBridges)
-      .where(eq(entityBridges.sourceRef, sourceRef))
+    await this.db.delete(entityBridges).where(this.entityBridgeWhere(sourceRef))
   }
 
   // The 30-second window is the claim lease TTL: if a worker crashes mid-
@@ -500,13 +546,19 @@ export class PostgresRegistry {
   // enough that a healthy in-flight publish won't be stolen.
   async claimTagOutboxRows(
     workerId: string,
-    limit = 25
+    limit = 25,
+    tenantId: string | null = this.tenantId
   ): Promise<Array<TagStreamOutboxRow>> {
+    const tenantFilter =
+      tenantId === null
+        ? sql``
+        : sql`AND ${tagStreamOutbox.tenantId} = ${tenantId}`
     const claimed = await this.db.execute(sql`
       WITH candidates AS (
         SELECT id
           FROM ${tagStreamOutbox}
          WHERE ${tagStreamOutbox.deadLetteredAt} IS NULL
+           ${tenantFilter}
            AND (
              ${tagStreamOutbox.claimedAt} IS NULL
              OR ${tagStreamOutbox.claimedAt} < now() - interval '30 seconds'
@@ -521,6 +573,7 @@ export class PostgresRegistry {
        WHERE ${tagStreamOutbox.id} IN (SELECT id FROM candidates)
       RETURNING
         id,
+        tenant_id AS "tenantId",
         entity_url AS "entityUrl",
         collection,
         op,
@@ -537,6 +590,7 @@ export class PostgresRegistry {
     return (
       claimed as unknown as Array<{
         id: number
+        tenantId: string
         entityUrl: string
         collection: string
         op: `insert` | `update` | `delete`
@@ -556,20 +610,26 @@ export class PostgresRegistry {
     id: number,
     workerId: string,
     errorMessage: string,
-    maxAttempts: number
+    maxAttempts: number,
+    tenantId: string | null = this.tenantId
   ): Promise<{ attemptCount: number; deadLettered: boolean }> {
+    const tenantFilter =
+      tenantId === null
+        ? sql``
+        : sql`AND ${tagStreamOutbox.tenantId} = ${tenantId}`
     const [row] = await this.db.execute(sql`
       UPDATE ${tagStreamOutbox}
          SET attempt_count = ${tagStreamOutbox.attemptCount} + 1,
              last_error = ${errorMessage},
              claimed_by = null,
              claimed_at = null,
-             dead_lettered_at = CASE
+         dead_lettered_at = CASE
                WHEN ${tagStreamOutbox.attemptCount} + 1 >= ${maxAttempts}
                  THEN now()
                ELSE ${tagStreamOutbox.deadLetteredAt}
              END
        WHERE ${tagStreamOutbox.id} = ${id}
+         ${tenantFilter}
          AND ${tagStreamOutbox.claimedBy} = ${workerId}
       RETURNING
         attempt_count AS "attemptCount",
@@ -590,27 +650,39 @@ export class PostgresRegistry {
     }
   }
 
-  async deleteTagOutboxRow(id: number): Promise<void> {
-    await this.db.delete(tagStreamOutbox).where(eq(tagStreamOutbox.id, id))
+  async deleteTagOutboxRow(
+    id: number,
+    tenantId: string | null = this.tenantId
+  ): Promise<void> {
+    const conditions = [eq(tagStreamOutbox.id, id)]
+    if (tenantId !== null) {
+      conditions.unshift(eq(tagStreamOutbox.tenantId, tenantId))
+    }
+    await this.db.delete(tagStreamOutbox).where(and(...conditions))
   }
 
-  async releaseTagOutboxClaims(workerId: string): Promise<void> {
+  async releaseTagOutboxClaims(
+    workerId: string,
+    tenantId: string | null = this.tenantId
+  ): Promise<void> {
+    const conditions = [
+      eq(tagStreamOutbox.claimedBy, workerId),
+      sql`${tagStreamOutbox.deadLetteredAt} IS NULL`,
+    ]
+    if (tenantId !== null) {
+      conditions.unshift(eq(tagStreamOutbox.tenantId, tenantId))
+    }
     await this.db
       .update(tagStreamOutbox)
       .set({
         claimedBy: null,
         claimedAt: null,
       })
-      .where(
-        and(
-          eq(tagStreamOutbox.claimedBy, workerId),
-          sql`${tagStreamOutbox.deadLetteredAt} IS NULL`
-        )
-      )
+      .where(and(...conditions))
   }
 
   async deleteEntity(url: string): Promise<void> {
-    await this.db.delete(entities).where(eq(entities.url, url))
+    await this.db.delete(entities).where(this.entityWhere(url))
   }
 
   private rowToEntityType(
@@ -665,6 +737,7 @@ export class PostgresRegistry {
     row: typeof entityBridges.$inferSelect
   ): EntityBridgeRow {
     return {
+      tenantId: row.tenantId,
       sourceRef: row.sourceRef,
       tags: (row.tags as EntityTags | null | undefined) ?? {},
       streamUrl: row.streamUrl,
@@ -678,6 +751,7 @@ export class PostgresRegistry {
 
   private rowToTagStreamOutbox(row: {
     id: number
+    tenantId: string
     entityUrl: string
     collection: string
     op: string
@@ -692,6 +766,7 @@ export class PostgresRegistry {
   }): TagStreamOutboxRow {
     return {
       id: row.id,
+      tenantId: row.tenantId,
       entityUrl: row.entityUrl,
       collection: row.collection,
       op: row.op as `insert` | `update` | `delete`,

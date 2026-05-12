@@ -1,4 +1,8 @@
 import Ajv from 'ajv'
+import {
+  ErrCodeInvalidRequest,
+  ErrCodeSchemaValidationFailed,
+} from '../electric-agents-types.js'
 
 export class SchemaValidator {
   private ajv: Ajv
@@ -23,7 +27,7 @@ export class SchemaValidator {
     if (validate(data)) return null
 
     return {
-      code: `SCHEMA_VALIDATION_FAILED`,
+      code: ErrCodeSchemaValidationFailed,
       message: `Validation failed`,
       details: (validate.errors ?? []).map((err) => ({
         path: err.instancePath || `/`,
@@ -46,7 +50,7 @@ export class SchemaValidator {
     if (disallowed.length === 0) return null
 
     return {
-      code: `INVALID_REQUEST`,
+      code: ErrCodeInvalidRequest,
       message: `Schema uses disallowed keywords`,
       details: disallowed,
     }

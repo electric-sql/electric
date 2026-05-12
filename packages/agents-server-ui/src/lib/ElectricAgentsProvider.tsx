@@ -130,7 +130,7 @@ function createSpawnAction(
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
 
-      const res = await fetch(`${baseUrl}/${type}/${name}`, {
+      const res = await fetch(`${baseUrl}/_electric/entities/${type}/${name}`, {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify(body),
@@ -163,7 +163,7 @@ function createKillAction(
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await fetch(`${baseUrl}${entityUrl}`, {
+      const res = await fetch(`${baseUrl}/_electric/entities${entityUrl}`, {
         method: `DELETE`,
       })
       if (!res.ok) {
@@ -178,7 +178,7 @@ function createKillAction(
 
 function createForkEntity(baseUrl: string) {
   return async (entityUrl: string): Promise<{ url: string }> => {
-    const res = await fetch(`${baseUrl}${entityUrl}/fork`, {
+    const res = await fetch(`${baseUrl}/_electric/entities${entityUrl}/fork`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({}),

@@ -5,6 +5,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  appendPathToUrl,
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
@@ -72,7 +73,10 @@ export async function createBuiltinAgentHandler(
 ): Promise<AgentHandlerResult | null> {
   const {
     agentServerUrl,
-    serveEndpoint = `${agentServerUrl}${DEFAULT_BUILTIN_AGENT_HANDLER_PATH}`,
+    serveEndpoint = appendPathToUrl(
+      agentServerUrl,
+      DEFAULT_BUILTIN_AGENT_HANDLER_PATH
+    ),
     workingDirectory,
     streamFn,
     createElectricTools,

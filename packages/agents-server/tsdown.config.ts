@@ -5,7 +5,8 @@ export default defineConfig([
     entry: [`src/index.ts`],
     format: [`esm`, `cjs`],
     platform: `node`,
-    dts: false,
+    dts: true,
+    external: [/^@electric-ax\/agents-runtime(\/.*)?$/],
     clean: true,
   },
   {

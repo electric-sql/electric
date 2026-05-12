@@ -29,6 +29,13 @@
       "when": 1776240000000,
       "tag": "0003_entity_manifest_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776261600000,
+      "tag": "0004_tenant_scoping",
+      "breakpoints": true
     }
   ]
 }

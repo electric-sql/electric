@@ -9,6 +9,7 @@ import { getEntityType, listEntityTypes } from './define-entity'
 import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 import { passthrough } from './entity-schema'
 import { runtimeLog } from './log'
+import { appendPathToUrl } from './url'
 import type { EntityRegistry } from './define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
@@ -419,11 +420,14 @@ export function createRuntimeRouter(
       }
       body.runtime_name = runtimeName ?? `default`
 
-      const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
-        method: `POST`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify(body),
-      })
+      const typeRes = await fetch(
+        appendPathToUrl(baseUrl, `/_electric/entity-types`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        }
+      )
 
       if (!typeRes.ok) {
         const err = await typeRes.text()
@@ -439,16 +443,36 @@ export function createRuntimeRouter(
         const subPath = subscriptionPathForType
           ? subscriptionPathForType(name)
           : `/${name}/**`
-        const subRes = await fetch(
-          `${baseUrl}${subPath}?subscription=${name}-handler`,
-          {
-            method: `PUT`,
-            headers: { 'content-type': `application/json` },
-            body: JSON.stringify({
-              webhook: serveEndpoint,
-            }),
-          }
+        const subscriptionId = `${name}-handler`
+        const subscriptionUrl = appendPathToUrl(
+          baseUrl,
+          `/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
         )
+        const subscriptionInit = (): RequestInit => ({
+          method: `PUT`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            type: `webhook`,
+            pattern: streamPatternFromPath(subPath),
+            webhook: { url: serveEndpoint },
+          }),
+        })
+        let subRes = await fetch(subscriptionUrl, subscriptionInit())
+
+        if (subRes.status === 409) {
+          const err = await subRes.text()
+          if (err.includes(`SUBSCRIPTION_ALREADY_EXISTS`)) {
+            const deleteRes = await fetch(subscriptionUrl, { method: `DELETE` })
+            if (deleteRes.ok || deleteRes.status === 404) {
+              subRes = await fetch(subscriptionUrl, subscriptionInit())
+            } else {
+              const deleteErr = await deleteRes.text()
+              subRes = new Response(deleteErr, { status: deleteRes.status })
+            }
+          } else {
+            subRes = new Response(err, { status: 409 })
+          }
+        }
 
         if (!subRes.ok) {
           const err = await subRes.text()
@@ -502,6 +526,10 @@ export function createRuntimeRouter(
     },
     registerTypes,
   }
+}
+
+function streamPatternFromPath(path: string): string {
+  return path.replace(/^\/+/, ``)
 }
 
 export function createRuntimeHandler(
