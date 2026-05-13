@@ -69,10 +69,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       register_node_shape(filter, table, condition_id, "s3")
 
       assert [
-               {{:node_shape, {^condition_id, @field}}, {"s1", 0, :positive, _, []}},
-               {{:node_shape, {^condition_id, @field}}, {"s2", 0, :positive, _, []}},
-               {{:node_shape, {^condition_id, @field}}, {"s3", 0, :positive, _, []}}
-             ] = Enum.sort(:ets.lookup(table, {:node_shape, {condition_id, @field}}))
+               {{^condition_id, @field}, "s1", 0, :positive, _, [], _, _},
+               {{^condition_id, @field}, "s2", 0, :positive, _, [], _, _},
+               {{^condition_id, @field}, "s3", 0, :positive, _, [], _, _}
+             ] = Enum.sort(:ets.lookup(table.node_shape, {condition_id, @field}))
 
       assert :ok =
                SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation(), [])
@@ -85,8 +85,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       assert :deleted =
                SubqueryIndex.remove_shape(filter, condition_id, "s3", subquery_optimisation(), [])
 
-      assert [] == :ets.lookup(table, {:node_shape, {condition_id, @field}})
-      assert [] == :ets.lookup(table, {:node_meta, {condition_id, @field}})
+      assert [] == :ets.lookup(table.node_shape, {condition_id, @field})
+      assert [] == :ets.lookup(table.node_meta, {condition_id, @field})
     end
 
     test "seed_membership updates node-local routing and exact membership", %{
@@ -107,6 +107,104 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
                  condition_id,
                  @field,
                  %{"par_id" => "5"}
+               )
+    end
+
+    test "participants with the same dependency handle share one cohort", %{
+      filter: filter,
+      table: table,
+      condition_id: condition_id
+    } do
+      register_node_shape(filter, table, condition_id, "s1", dep_handles: ["dep-1"])
+      register_node_shape(filter, table, condition_id, "s2", dep_handles: ["dep-1"])
+
+      assert :ets.info(table.cohort_meta, :size) == 1
+
+      SubqueryIndex.seed_membership(table, "s1", @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.seed_membership(table, "s2", @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.mark_ready(table, "s1")
+      SubqueryIndex.mark_ready(table, "s2")
+
+      assert :ets.info(table.cohort_value, :size) == 1
+
+      assert MapSet.new(["s1", "s2"]) ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 @field,
+                 %{"par_id" => "5"}
+               )
+    end
+
+    test "shared cohorts keep exact per-participant divergence", %{
+      filter: filter,
+      table: table,
+      condition_id: condition_id
+    } do
+      register_node_shape(filter, table, condition_id, "s1", dep_handles: ["dep-1"])
+      register_node_shape(filter, table, condition_id, "s2", dep_handles: ["dep-1"])
+
+      SubqueryIndex.seed_membership(table, "s1", @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.seed_membership(table, "s2", @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.mark_ready(table, "s1")
+      SubqueryIndex.mark_ready(table, "s2")
+
+      SubqueryIndex.remove_value(table, "s1", @subquery_ref, 0, 5)
+
+      refute SubqueryIndex.member?(table, "s1", @subquery_ref, 5)
+      assert SubqueryIndex.member?(table, "s2", @subquery_ref, 5)
+
+      assert MapSet.new(["s2"]) ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 @field,
+                 %{"par_id" => "5"}
+               )
+    end
+
+    test "repeated positions share membership participant and keep separate routing edges", %{
+      filter: filter,
+      table: table,
+      condition_id: condition_id
+    } do
+      SubqueryIndex.register_shape(
+        table,
+        "s1",
+        make_plan(positions: [{@field, 0}, {"other_id", 0}])
+      )
+
+      :ok = SubqueryIndex.add_shape(filter, condition_id, "s1", subquery_optimisation(), [:left])
+
+      :ok =
+        SubqueryIndex.add_shape(
+          filter,
+          condition_id,
+          "s1",
+          subquery_optimisation(field: "other_id"),
+          [:right]
+        )
+
+      assert :ets.info(table.participant_meta, :size) == 1
+      assert :ets.info(table.edges_by_participant, :size) == 2
+
+      SubqueryIndex.seed_membership(table, "s1", @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.mark_ready(table, "s1")
+
+      assert MapSet.new(["s1"]) ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 @field,
+                 %{"par_id" => "5", "other_id" => "99"}
+               )
+
+      assert MapSet.new(["s1"]) ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 "other_id",
+                 %{"par_id" => "99", "other_id" => "5"}
                )
     end
 
@@ -172,7 +270,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
   end
 
   defp register_node_shape(filter, table, condition_id, shape_id, opts \\ []) do
-    SubqueryIndex.register_shape(table, shape_id, make_plan(opts))
+    case Keyword.fetch(opts, :dep_handles) do
+      {:ok, dep_handles} ->
+        SubqueryIndex.register_shape(table, shape_id, make_plan(opts), dep_handles)
+
+      :error ->
+        SubqueryIndex.register_shape(table, shape_id, make_plan(opts))
+    end
+
     :ok = SubqueryIndex.add_shape(filter, condition_id, shape_id, subquery_optimisation(opts), [])
   end
 
@@ -193,36 +298,54 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
   defp make_plan(opts \\ []) do
     polarity = Keyword.get(opts, :polarity, :positive)
     dep_index = Keyword.get(opts, :dep_index, 0)
-    subquery_ref = Keyword.get(opts, :subquery_ref, @subquery_ref)
     field = Keyword.get(opts, :field, @field)
 
-    testexpr = %Ref{path: [field], type: :int8}
-    ref = %Ref{path: subquery_ref, type: {:array, :int8}}
+    positions =
+      opts
+      |> Keyword.get(:positions, [{field, dep_index}])
+      |> Enum.with_index()
+      |> Map.new(fn {{position_field, position_dep_index}, position} ->
+        position_ref = ["$sublink", Integer.to_string(position_dep_index)]
+        position_testexpr = %Ref{path: [position_field], type: :int8}
+        position_ref_expr = %Ref{path: position_ref, type: {:array, :int8}}
 
-    ast = %Func{
-      name: "sublink_membership_check",
-      args: [testexpr, ref],
-      type: :bool
-    }
+        position_ast = %Func{
+          name: "sublink_membership_check",
+          args: [position_testexpr, position_ref_expr],
+          type: :bool
+        }
+
+        {position,
+         %{
+           ast: position_ast,
+           sql: "fake",
+           is_subquery: true,
+           negated: polarity == :negated,
+           dependency_index: position_dep_index,
+           subquery_ref: position_ref,
+           tag_columns: [position_field]
+         }}
+      end)
+
+    dependency_positions =
+      positions
+      |> Enum.group_by(fn {_position, info} -> info.dependency_index end, fn {position, _info} ->
+        position
+      end)
+
+    dependency_polarities =
+      Map.new(dependency_positions, fn {position_dep_index, _positions} ->
+        {position_dep_index, polarity}
+      end)
 
     %DnfPlan{
       disjuncts: [],
       disjuncts_positions: [],
-      position_count: 1,
-      positions: %{
-        0 => %{
-          ast: ast,
-          sql: "fake",
-          is_subquery: true,
-          negated: polarity == :negated,
-          dependency_index: dep_index,
-          subquery_ref: subquery_ref,
-          tag_columns: [field]
-        }
-      },
-      dependency_positions: %{dep_index => [0]},
+      position_count: map_size(positions),
+      positions: positions,
+      dependency_positions: dependency_positions,
       dependency_disjuncts: %{},
-      dependency_polarities: %{dep_index => polarity}
+      dependency_polarities: dependency_polarities
     }
   end
 end

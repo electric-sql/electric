@@ -665,8 +665,15 @@ defmodule Electric.Shapes.FilterTest do
       where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
       eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
       incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort(),
-      subquery_index: :ets.tab2list(filter.subquery_index) |> Enum.sort()
+      subquery_index: snapshot_subquery_index(filter.subquery_index)
     }
+  end
+
+  defp snapshot_subquery_index(index) do
+    index
+    |> Map.from_struct()
+    |> Map.drop([:cohort_value])
+    |> Map.new(fn {name, table} -> {name, :ets.tab2list(table) |> Enum.sort()} end)
   end
 
   describe "optimisations" do
@@ -1343,11 +1350,13 @@ defmodule Electric.Shapes.FilterTest do
       SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, 1)
       SubqueryIndex.mark_ready(index, "shape1")
 
-      assert :ets.tab2list(index) != []
+      assert SubqueryIndex.has_positions?(index, "shape1")
+      assert SubqueryIndex.member?(index, "shape1", subquery_ref, 1)
 
       Filter.remove_shape(filter, "shape1")
 
-      assert :ets.tab2list(index) == []
+      refute SubqueryIndex.has_positions?(index, "shape1")
+      refute SubqueryIndex.member?(index, "shape1", subquery_ref, 1)
     end
 
     @tag with_sql: [

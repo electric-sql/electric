@@ -109,7 +109,7 @@ At a high level:
 - Do not deduplicate every identical subquery view across the whole service in the first implementation. The first implementation may use a conservative cohort boundary.
 - Do not guarantee strict mathematical O(1) removal if a shape has a very large number of outstanding exceptions. The target is O(P + R + E), where `P` is the number of subquery participants for the shape, `R` is their routing edges, and `E` is their outstanding sparse exceptions.
 - Do not guarantee O(1) removal of a whole subquery if many shapes genuinely participate in that subquery. The target is O(C + P_s + R_s + E_s) on the critical path, where `C` is affected cohorts, `P_s` is affected participants, `R_s` is their routing edges, and `E_s` is their outstanding sparse exceptions.
-- Do not introduce lazy-cleanup mechanisms unless measurements show they are needed.
+- Do not introduce tombstones, generations, or lazy exception clearing unless measurements show they are needed. Empty cohort base cleanup is allowed to run off the replication-critical path.
 
 ## Proposal
 
@@ -751,8 +751,19 @@ positive_edges
 negated_edges
 edges_by_participant
 participants_by_cohort
+participants_by_shape
 cohorts_by_subquery
+shape_ref_participant
+shape_dep_participant
+participant_count
+cohort_value
+exception_by_value
+exception_by_participant
+shape_fallback
 node_fallback
+node_shape
+shape_node
+shape_dep_node
 ```
 
 The practical read is simple:
@@ -765,14 +776,14 @@ The practical read is simple:
 
 | Scenario | Current | Compact proposed | Savings |
 |----------|---------|------------------|---------|
-| 1 participant, 1k values, steady state | 302.3 KiB | 146.9 KiB | 51.4% |
-| 10 participants, 1k values, steady state | 2.91 MiB | 152.7 KiB | 94.9% |
-| 100 participants, 1k values, steady state | 29.05 MiB | 211.1 KiB | 99.3% |
-| 100 participants, 10k values, steady state | 290.01 MiB | 1.02 MiB | 99.6% |
-| 100 participants, 1k values, 100 moved x 1 lagging | 29.05 MiB | 225.1 KiB | 99.2% |
-| 100 participants, 1k values, 100 moved x 10 lagging | 29.05 MiB | 387.8 KiB | 98.7% |
-| 100 participants, 1k values, 100 moved x 99 lagging | 29.05 MiB | 1.73 MiB | 94.1% |
-| 100 participants, 1k values, 1k moved x 99 lagging | 29.05 MiB | 15.34 MiB | 47.2% |
+| 1 participant, 1k values, steady state | 349.3 KiB | 159.6 KiB | 54.3% |
+| 10 participants, 1k values, steady state | 3.37 MiB | 171.1 KiB | 95.0% |
+| 100 participants, 1k values, steady state | 33.65 MiB | 285.7 KiB | 99.2% |
+| 100 participants, 10k values, steady state | 335.8 MiB | 1.1 MiB | 99.7% |
+| 100 participants, 1k values, 100 moved x 1 lagging | 33.65 MiB | 299.7 KiB | 99.1% |
+| 100 participants, 1k values, 100 moved x 10 lagging | 33.65 MiB | 462.4 KiB | 98.7% |
+| 100 participants, 1k values, 100 moved x 99 lagging | 33.65 MiB | 1.8 MiB | 94.7% |
+| 100 participants, 1k values, 1k moved x 99 lagging | 33.65 MiB | 15.41 MiB | 54.2% |
 
 Interpretation:
 
@@ -784,11 +795,11 @@ Interpretation:
 
 | Scenario | Tagged RFC layout | Compact proposed | Savings |
 |----------|-------------------|------------------|---------|
-| 10 participants, 1k values, steady state | 200.3 KiB | 152.7 KiB | 23.8% |
-| 100 participants, 1k values, steady state | 282.4 KiB | 211.1 KiB | 25.3% |
-| 100 participants, 1k values, 100 moved x 10 lagging | 579.6 KiB | 387.8 KiB | 33.1% |
+| 10 participants, 1k values, steady state | 200.6 KiB | 171.1 KiB | 14.7% |
+| 100 participants, 1k values, steady state | 286.9 KiB | 285.7 KiB | 0.4% |
+| 100 participants, 1k values, 100 moved x 10 lagging | 584.2 KiB | 462.4 KiB | 20.8% |
 
-This is why the RFC now specifies compact `cohort_id` and `participant_id` values plus dedicated ETS tables rather than storing full participant tuples in hot rows.
+The lifecycle indexes make the steady-state tagged-vs-compact comparison close for some small synthetic cases, but the compact layout is still better under divergence and gives the implementation direct lifecycle lookup tables instead of tag-heavy rows in one shared table. This is why the RFC specifies compact `cohort_id` and `participant_id` values plus dedicated ETS tables.
 
 #### 100k-shape customer workload estimates
 
@@ -801,12 +812,12 @@ For HumanLayer and AutoArc, the shape basis is distinct `WHERE` clauses because 
 
 | Customer | Observed basis | Observed subquery occurrences -> literal cohorts | Shared occurrences | Subquery participants @100k shapes | Cohorts @100k shapes | Rows/cohort | Current | Compact proposed | Savings |
 |----------|----------------|--------------------------------------------------|--------------------|------------------------------------|----------------------|-------------|---------|------------------|---------|
-| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 1,000 | 50.66 GiB | 1.71 GiB | 96.6% |
-| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 10,000 | 505.76 GiB | 15.71 GiB | 96.9% |
-| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 1,000 | 13.51 GiB | 3.14 GiB | 76.8% |
-| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 10,000 | 134.82 GiB | 30.78 GiB | 77.2% |
-| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 1,000 | 8.73 GiB | 2.81 GiB | 67.8% |
-| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 10,000 | 87.1 GiB | 27.68 GiB | 68.2% |
+| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 1,000 | 58.68 GiB | 1.8 GiB | 96.9% |
+| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 10,000 | 585.66 GiB | 15.8 GiB | 97.3% |
+| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 1,000 | 15.64 GiB | 3.16 GiB | 79.8% |
+| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 10,000 | 156.12 GiB | 30.8 GiB | 80.3% |
+| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 1,000 | 10.1 GiB | 2.82 GiB | 72.1% |
+| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 10,000 | 100.86 GiB | 27.69 GiB | 72.5% |
 
 Interpretation:
 

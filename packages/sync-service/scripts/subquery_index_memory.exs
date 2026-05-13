@@ -2,9 +2,10 @@ defmodule SubqueryIndexMemoryBench do
   @moduledoc false
 
   @cohort 1
-  @node 1
+  @node {:condition, "par_id"}
   @ref ["$sublink", "0"]
-  @subquery_key {:dependency, "dep_handle_0", @ref}
+  @dep_index 0
+  @subquery_key {:dependency_shape, "dep_handle_0"}
 
   def run do
     IO.puts("# SubqueryIndex memory benchmark")
@@ -171,17 +172,22 @@ defmodule SubqueryIndexMemoryBench do
     by_shape = :ets.new(:compact_workload_participants_by_shape, [:bag, :public])
     by_cohort = :ets.new(:compact_workload_participants_by_cohort, [:bag, :public])
     cohorts_by_subquery = :ets.new(:compact_workload_cohorts_by_subquery, [:bag, :public])
-    shape_ref = :ets.new(:compact_workload_shape_ref_participant, [:bag, :public])
+    shape_ref = :ets.new(:compact_workload_shape_ref_participant, [:set, :public])
+    shape_dep = :ets.new(:compact_workload_shape_dep_participant, [:set, :public])
     participant_count = :ets.new(:compact_workload_participant_count, [:set, :public])
     cohort_value = :ets.new(:compact_workload_cohort_value, [:set, :public])
     exceptions = :ets.new(:compact_workload_exception_by_value, [:bag, :public])
+    shape_fallback = :ets.new(:compact_workload_shape_fallback, [:set, :public])
     node_fallback = :ets.new(:compact_workload_node_fallback, [:bag, :public])
+    node_shape = :ets.new(:compact_workload_node_shape, [:bag, :public])
+    shape_node = :ets.new(:compact_workload_shape_node, [:bag, :public])
+    shape_dep_node = :ets.new(:compact_workload_shape_dep_node, [:bag, :public])
 
     exceptions_by_participant =
       :ets.new(:compact_workload_exception_by_participant, [:bag, :public])
 
     for cohort <- ints(cohorts) do
-      subquery_key = {:dependency, "dep_handle_#{cohort}", @ref}
+      subquery_key = {:dependency_shape, "dep_handle_#{cohort}"}
       node = {:node, cohort}
       cohort_key = {:dependency_shape, "dep_handle_#{cohort}"}
       :ets.insert(cohort_meta, {cohort, cohort_key, subquery_key, :active})
@@ -205,10 +211,8 @@ defmodule SubqueryIndexMemoryBench do
         participant,
         cohort,
         @ref,
-        @node,
+        @dep_index,
         :positive,
-        participant,
-        [],
         :indexed
       })
 
@@ -217,6 +221,22 @@ defmodule SubqueryIndexMemoryBench do
       :ets.insert(by_shape, {participant, participant, cohort, :positive})
       :ets.insert(by_cohort, {cohort, participant})
       :ets.insert(shape_ref, {{participant, @ref}, participant, cohort})
+      :ets.insert(shape_dep, {{participant, @dep_index}, participant, cohort})
+
+      :ets.insert(
+        node_shape,
+        {node, participant, @dep_index, :positive, participant, [], participant, cohort}
+      )
+
+      :ets.insert(
+        shape_node,
+        {participant, node, @dep_index, :positive, participant, [], participant, cohort}
+      )
+
+      :ets.insert(
+        shape_dep_node,
+        {{participant, @dep_index}, node, :positive, participant, [], participant, cohort}
+      )
     end
 
     %{
@@ -232,9 +252,14 @@ defmodule SubqueryIndexMemoryBench do
       by_cohort: by_cohort,
       cohorts_by_subquery: cohorts_by_subquery,
       shape_ref: shape_ref,
+      shape_dep: shape_dep,
       participant_count: participant_count,
       cohort_value: cohort_value,
+      shape_fallback: shape_fallback,
       node_fallback: node_fallback,
+      node_shape: node_shape,
+      shape_node: shape_node,
+      shape_dep_node: shape_dep_node,
       exceptions: exceptions,
       exceptions_by_participant: exceptions_by_participant
     }
@@ -252,11 +277,16 @@ defmodule SubqueryIndexMemoryBench do
     by_shape = :ets.new(:compact_participants_by_shape, [:bag, :public])
     by_cohort = :ets.new(:compact_participants_by_cohort, [:bag, :public])
     cohorts_by_subquery = :ets.new(:compact_cohorts_by_subquery, [:bag, :public])
-    shape_ref = :ets.new(:compact_shape_ref_participant, [:bag, :public])
+    shape_ref = :ets.new(:compact_shape_ref_participant, [:set, :public])
+    shape_dep = :ets.new(:compact_shape_dep_participant, [:set, :public])
     participant_count = :ets.new(:compact_participant_count, [:set, :public])
     cohort_value = :ets.new(:compact_cohort_value, [:set, :public])
     exceptions = :ets.new(:compact_exception_by_value, [:bag, :public])
+    shape_fallback = :ets.new(:compact_shape_fallback, [:set, :public])
     node_fallback = :ets.new(:compact_node_fallback, [:bag, :public])
+    node_shape = :ets.new(:compact_node_shape, [:bag, :public])
+    shape_node = :ets.new(:compact_shape_node, [:bag, :public])
+    shape_dep_node = :ets.new(:compact_shape_dep_node, [:bag, :public])
     exceptions_by_participant = :ets.new(:compact_exception_by_participant, [:bag, :public])
     moved_values = MapSet.new(ints(moved))
 
@@ -275,10 +305,8 @@ defmodule SubqueryIndexMemoryBench do
         participant,
         @cohort,
         @ref,
-        @node,
+        @dep_index,
         :positive,
-        participant,
-        [],
         :indexed
       })
 
@@ -287,6 +315,22 @@ defmodule SubqueryIndexMemoryBench do
       :ets.insert(by_shape, {participant, participant, @cohort, :positive})
       :ets.insert(by_cohort, {@cohort, participant})
       :ets.insert(shape_ref, {{participant, @ref}, participant, @cohort})
+      :ets.insert(shape_dep, {{participant, @dep_index}, participant, @cohort})
+
+      :ets.insert(
+        node_shape,
+        {@node, participant, @dep_index, :positive, participant, [], participant, @cohort}
+      )
+
+      :ets.insert(
+        shape_node,
+        {participant, @node, @dep_index, :positive, participant, [], participant, @cohort}
+      )
+
+      :ets.insert(
+        shape_dep_node,
+        {{participant, @dep_index}, @node, :positive, participant, [], participant, @cohort}
+      )
     end
 
     for value <- ints(values) do
@@ -315,9 +359,14 @@ defmodule SubqueryIndexMemoryBench do
       by_cohort: by_cohort,
       cohorts_by_subquery: cohorts_by_subquery,
       shape_ref: shape_ref,
+      shape_dep: shape_dep,
       participant_count: participant_count,
       cohort_value: cohort_value,
+      shape_fallback: shape_fallback,
       node_fallback: node_fallback,
+      node_shape: node_shape,
+      shape_node: shape_node,
+      shape_dep_node: shape_dep_node,
       exceptions: exceptions,
       exceptions_by_participant: exceptions_by_participant
     }

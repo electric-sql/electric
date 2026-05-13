@@ -84,8 +84,8 @@ defmodule Electric.Shapes.Filter do
 
     where_cond_id = get_or_create_table_condition(filter, shape.root_table)
 
-    WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
     maybe_register_subquery_shape(filter, shape_id, shape)
+    WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
 
     filter
   end
@@ -96,7 +96,7 @@ defmodule Electric.Shapes.Filter do
          %Shape{shape_dependencies: [_ | _]} = shape
        ) do
     {:ok, plan} = DnfPlan.compile(shape)
-    SubqueryIndex.register_shape(index, shape_id, plan)
+    SubqueryIndex.register_shape(index, shape_id, shape, plan)
   end
 
   defp maybe_register_subquery_shape(_filter, _shape_id, _shape), do: :ok
