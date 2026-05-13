@@ -5,6 +5,7 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
+import { getCachedDesktopFormattedAssertedIdentity } from '../lib/assertedIdentity'
 import {
   bucketEntities,
   groupByStatus,
@@ -153,6 +154,7 @@ export function Sidebar({
   // content without an extra dismiss tap.
   const narrow = useNarrowViewport()
   const { collapsed, setCollapsed } = useSidebarCollapsed()
+  const assertedIdentity = getCachedDesktopFormattedAssertedIdentity()
   // `data-state` drives both the narrow overlay slide/fade and the
   // wide-mode width collapse animation.
   const sidebarState: `open` | `closed` = collapsed ? `closed` : `open`
@@ -223,14 +225,23 @@ export function Sidebar({
     [entitiesCollection, view.hiddenTypes, view.hiddenStatuses]
   )
 
+  const identityFilteredEntities = useMemo(() => {
+    if (!assertedIdentity) return visibleEntities
+    return visibleEntities.filter(
+      (e) => e.tags?.created_by === assertedIdentity
+    )
+  }, [visibleEntities, assertedIdentity])
+
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
-  const pinnedEntities = visibleEntities.filter((e) => pinnedSet.has(e.url))
+  const pinnedEntities = identityFilteredEntities.filter((e) =>
+    pinnedSet.has(e.url)
+  )
   const filtersActive =
     view.hiddenTypes.size > 0 || view.hiddenStatuses.size > 0
 
   const { roots, childrenByParent } = useMemo(
-    () => buildEntityTree(visibleEntities),
-    [visibleEntities]
+    () => buildEntityTree(identityFilteredEntities),
+    [identityFilteredEntities]
   )
 
   const unpinnedRoots = useMemo(
@@ -397,7 +408,7 @@ export function Sidebar({
               </div>
             ))}
 
-            {visibleEntities.length === 0 && (
+            {identityFilteredEntities.length === 0 && (
               <Text
                 size={1}
                 tone="muted"

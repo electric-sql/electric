@@ -68,6 +68,14 @@ type InspectTarget = {
   value: unknown
 }
 
+function stableEntityUrlKey(urls: Iterable<string>): string {
+  return Array.from(new Set(urls)).sort().join(`\0`)
+}
+
+function entityUrlsFromKey(key: string): Array<string> {
+  return key.length === 0 ? [] : key.split(`\0`)
+}
+
 /**
  * Drawer that docks ABOVE the chat composer at the bottom of an entity
  * session, surfacing context about related entities (and, in time,
@@ -136,7 +144,7 @@ export function EntityContextDrawer({
         urls.add(manifest.sourceRef)
       }
     }
-    return entityUrlKey(Array.from(urls))
+    return stableEntityUrlKey(urls)
   }, [manifests, parentUrl])
   const referencedEntityUrls = useMemo(
     () => entityUrlsFromKey(referencedEntityUrlKey),
@@ -159,7 +167,7 @@ export function EntityContextDrawer({
           spawn_args: e.spawn_args,
         }))
     },
-    [entitiesCollection, referencedEntityUrlKey, referencedEntityUrls]
+    [entitiesCollection, referencedEntityUrlKey]
   )
 
   const entitiesByUrl = useMemo(() => {
@@ -684,14 +692,6 @@ function titleCase(value: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(` `)
-}
-
-function entityUrlKey(urls: Array<string>): string {
-  return Array.from(new Set(urls)).sort().join(`\n`)
-}
-
-function entityUrlsFromKey(key: string): Array<string> {
-  return key ? key.split(`\n`) : []
 }
 
 function ManifestSection({

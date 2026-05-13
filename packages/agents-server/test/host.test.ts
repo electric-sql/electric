@@ -25,6 +25,16 @@ function createMockDb(): any {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe(`AgentsHost`, () => {
   it(`builds tenant runtimes with shared registries and tenant stream clients`, async () => {
     const host = new AgentsHost({
@@ -105,5 +115,39 @@ describe(`AgentsHost`, () => {
     expect(() => host.requireTenant(`svc-missing`)).toThrow(
       `AgentsHost tenant "svc-missing" is not registered`
     )
+  })
+
+  it(`waits for in-flight tenant registration before unregistering`, async () => {
+    const host = new AgentsHost({
+      db: createMockDb(),
+      pgClient: vi.fn() as any,
+    })
+    const runtime = {
+      serviceId: `svc-race`,
+      stop: vi.fn(async () => undefined),
+    }
+    const createRuntime = deferred<typeof runtime>()
+    vi.spyOn(host as any, `createTenantRuntime`).mockReturnValue(
+      createRuntime.promise
+    )
+
+    const registration = host.registerTenant({
+      serviceId: `svc-race`,
+      durableStreamsUrl: `https://api.electric-sql.cloud/v1/stream/svc-race`,
+    })
+    await Promise.resolve()
+
+    const unregistration = host.unregisterTenant(`svc-race`)
+    await Promise.resolve()
+
+    expect(runtime.stop).not.toHaveBeenCalled()
+    expect(host.getTenant(`svc-race`)).toBeUndefined()
+
+    createRuntime.resolve(runtime)
+    await expect(registration).resolves.toBe(runtime)
+    await unregistration
+
+    expect(runtime.stop).toHaveBeenCalledOnce()
+    expect(host.getTenant(`svc-race`)).toBeUndefined()
   })
 })

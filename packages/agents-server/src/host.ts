@@ -8,10 +8,12 @@ import { TagStreamOutboxDrainer } from './tag-stream-outbox-drainer.js'
 import { DEFAULT_TENANT_ID, UnregisteredTenantError } from './tenant.js'
 import { WakeRegistry } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
+import type { DurableStreamsBearerProvider } from './stream-client.js'
 
 export interface AgentsHostTenantConfig {
   serviceId: string
   durableStreamsUrl?: string
+  durableStreamsBearer?: DurableStreamsBearerProvider
   streamClient?: StreamClient
 }
 
@@ -49,6 +51,7 @@ export class AgentsHost {
     Promise<AgentsHostTenantRuntime>
   >()
   private readonly tenantRuntimes = new Map<string, AgentsHostTenantRuntime>()
+  private readonly tenantOperations = new Map<string, Promise<void>>()
   private running = false
 
   constructor(options: AgentsHostOptions) {
@@ -158,32 +161,34 @@ export class AgentsHost {
     config: AgentsHostTenantConfig
   ): Promise<AgentsHostTenantRuntime> {
     const serviceId = config.serviceId
-    const runtime = this.tenantRuntimes.get(serviceId)
-    if (runtime) return runtime
+    return await this.withTenantOperation(serviceId, async () => {
+      const runtime = this.tenantRuntimes.get(serviceId)
+      if (runtime) return runtime
 
-    const existing = this.tenantRegistrations.get(serviceId)
-    if (existing) return existing
+      const existing = this.tenantRegistrations.get(serviceId)
+      if (existing) return existing
 
-    const runtimePromise = this.createTenantRuntime(config)
-    this.tenantRegistrations.set(serviceId, runtimePromise)
+      const runtimePromise = this.createTenantRuntime(config)
+      this.tenantRegistrations.set(serviceId, runtimePromise)
 
-    try {
-      const registeredRuntime = await runtimePromise
-      this.tenantRuntimes.set(serviceId, registeredRuntime)
-      if (this.running) {
-        await this.startTenantRuntime(registeredRuntime)
-        this.scheduler.wake()
+      try {
+        const registeredRuntime = await runtimePromise
+        this.tenantRuntimes.set(serviceId, registeredRuntime)
+        if (this.running) {
+          await this.startTenantRuntime(registeredRuntime)
+          this.scheduler.wake()
+        }
+        return registeredRuntime
+      } catch (error) {
+        if (this.tenantRegistrations.get(serviceId) === runtimePromise) {
+          this.tenantRegistrations.delete(serviceId)
+        }
+        if (this.tenantRuntimes.get(serviceId)) {
+          this.tenantRuntimes.delete(serviceId)
+        }
+        throw error
       }
-      return registeredRuntime
-    } catch (error) {
-      if (this.tenantRegistrations.get(serviceId) === runtimePromise) {
-        this.tenantRegistrations.delete(serviceId)
-      }
-      if (this.tenantRuntimes.get(serviceId)) {
-        this.tenantRuntimes.delete(serviceId)
-      }
-      throw error
-    }
+    })
   }
 
   getTenant(
@@ -198,6 +203,47 @@ export class AgentsHost {
       throw new Error(`AgentsHost tenant "${serviceId}" is not registered`)
     }
     return runtime
+  }
+
+  async unregisterTenant(serviceId = DEFAULT_TENANT_ID): Promise<void> {
+    await this.withTenantOperation(serviceId, async () => {
+      const registration = this.tenantRegistrations.get(serviceId)
+      const runtime = this.tenantRuntimes.get(serviceId)
+
+      this.tenantRegistrations.delete(serviceId)
+      this.tenantRuntimes.delete(serviceId)
+
+      const resolvedRuntime =
+        runtime ??
+        (registration ? await registration.catch(() => undefined) : undefined)
+      if (!resolvedRuntime) return
+
+      await resolvedRuntime.stop()
+      if (this.running) {
+        this.scheduler.wake()
+      }
+    })
+  }
+
+  private async withTenantOperation<T>(
+    serviceId: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const previous = this.tenantOperations.get(serviceId) ?? Promise.resolve()
+    const result = previous.catch(() => {}).then(operation)
+    const current = result.then(
+      () => undefined,
+      () => undefined
+    )
+    this.tenantOperations.set(serviceId, current)
+
+    try {
+      return await result
+    } finally {
+      if (this.tenantOperations.get(serviceId) === current) {
+        this.tenantOperations.delete(serviceId)
+      }
+    }
   }
 
   private registeredTenantIds(): Array<string> {
@@ -264,7 +310,8 @@ export class AgentsHost {
     if (config.streamClient) return config.streamClient
     if (config.durableStreamsUrl) {
       return new StreamClient(
-        durableStreamsServiceUrl(config.durableStreamsUrl, config.serviceId)
+        durableStreamsServiceUrl(config.durableStreamsUrl, config.serviceId),
+        { bearer: config.durableStreamsBearer }
       )
     }
     throw new Error(

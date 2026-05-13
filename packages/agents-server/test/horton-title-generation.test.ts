@@ -33,7 +33,11 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       baseUrl = await electricAgentsServer.start()
       builtinAgentsServer = new BuiltinAgentsServer({
         agentServerUrl: baseUrl,
-        port: 0,
+        pullWake: {
+          runnerId: `horton-title-generation-test`,
+          registerRunner: true,
+          ownerUserId: `test-user`,
+        },
       })
       await builtinAgentsServer.start()
     }, 60_000)
@@ -50,35 +54,27 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       const id = `title-test-${Date.now()}`
       const entityUrl = `/horton/${id}`
 
-      const spawnRes = await fetch(
-        `${baseUrl}/_electric/entities${entityUrl}`,
-        {
-          method: `PUT`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({}),
-        }
-      )
+      const spawnRes = await fetch(`${baseUrl}${entityUrl}`, {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      })
       expect(spawnRes.status).toBe(201)
 
-      const sendRes = await fetch(
-        `${baseUrl}/_electric/entities${entityUrl}/send`,
-        {
-          method: `POST`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({
-            from: `user`,
-            payload: `Help me refactor the auth middleware in ./auth.ts`,
-          }),
-        }
-      )
+      const sendRes = await fetch(`${baseUrl}${entityUrl}/send`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          from: `user`,
+          payload: `Help me refactor the auth middleware in ./auth.ts`,
+        }),
+      })
       expect(sendRes.status).toBe(204)
 
       let title: unknown
       await waitFor(
         async () => {
-          const res = await fetch(`${baseUrl}/_electric/entities${entityUrl}`, {
-            method: `GET`,
-          })
+          const res = await fetch(`${baseUrl}${entityUrl}`, { method: `GET` })
           if (res.status === 200) {
             const body = (await res.json()) as {
               tags?: { title?: unknown } | null

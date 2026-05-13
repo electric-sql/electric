@@ -38,6 +38,7 @@ export interface DesktopState {
   workingDirectory: string | null
   error: string | null
   discoveredServers: Array<DiscoveredServer>
+  pullWakeRunnerId: string | null
 }
 
 export interface ServerConnectionState {
@@ -145,6 +146,7 @@ declare global {
       stopServerRuntime?: (serverId: string) => Promise<void>
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
+      getAssertedAuthHeaders?: () => Promise<Record<string, string>>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>

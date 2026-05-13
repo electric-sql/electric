@@ -33,7 +33,11 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       baseUrl = await electricAgentsServer.start()
       builtinAgentsServer = new BuiltinAgentsServer({
         agentServerUrl: baseUrl,
-        port: 0,
+        pullWake: {
+          runnerId: `horton-spawn-worker-test`,
+          registerRunner: true,
+          ownerUserId: `test-user`,
+        },
       })
       await builtinAgentsServer.start()
     }, 60_000)
@@ -50,34 +54,28 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       const id = `spawn-test-${Date.now()}`
       const hortonUrl = `/horton/${id}`
 
-      const spawnRes = await fetch(
-        `${baseUrl}/_electric/entities${hortonUrl}`,
-        {
-          method: `PUT`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({}),
-        }
-      )
+      const spawnRes = await fetch(`${baseUrl}${hortonUrl}`, {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      })
       expect(spawnRes.status).toBe(201)
       const horton = (await spawnRes.json()) as {
         streams: { main: string }
       }
 
-      const sendRes = await fetch(
-        `${baseUrl}/_electric/entities${hortonUrl}/send`,
-        {
-          method: `POST`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({
-            from: `user`,
-            payload:
-              `Please use the spawn_worker tool RIGHT NOW to dispatch a worker ` +
-              `with tools=["bash"] and a system prompt asking it to run ` +
-              `\`echo $((2+2))\` and report the numeric result. End your turn ` +
-              `after dispatching.`,
-          }),
-        }
-      )
+      const sendRes = await fetch(`${baseUrl}${hortonUrl}/send`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          from: `user`,
+          payload:
+            `Please use the spawn_worker tool RIGHT NOW to dispatch a worker ` +
+            `with tools=["bash"] and a system prompt asking it to run ` +
+            `\`echo $((2+2))\` and report the numeric result. End your turn ` +
+            `after dispatching.`,
+        }),
+      })
       expect(sendRes.status).toBe(204)
 
       const events = await waitForStreamEvents(

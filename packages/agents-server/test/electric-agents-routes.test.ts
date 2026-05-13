@@ -303,6 +303,68 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
     }
   })
 
+  it(`uses configured durable streams bearer auth for service-scoped subscription traffic`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 202 }))
+
+    try {
+      const result = await globalRouter.fetch(
+        new Request(`http://localhost/v1/stream-meta/subscriptions/sub-1`, {
+          method: `GET`,
+          headers: { authorization: `Bearer caller-token` },
+        }),
+        {
+          service: `test`,
+          durableStreamsUrl: `http://durable.local`,
+          durableStreamsBearer: `service-token`,
+          isShuttingDown: () => false,
+        } as unknown as TenantContext
+      )
+
+      expect(result.status).toBe(202)
+      const [, init] = fetchSpy.mock.calls[0]!
+      expect(new Headers(init?.headers).get(`authorization`)).toBe(
+        `Bearer service-token`
+      )
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`preserves subscription-scoped bearer auth for ack proxy traffic`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true })))
+
+    try {
+      const result = await globalRouter.fetch(
+        new Request(`http://localhost/v1/stream-meta/subscriptions/sub-1/ack`, {
+          method: `POST`,
+          headers: {
+            authorization: `Bearer claim-token`,
+            'content-type': `application/json`,
+          },
+          body: JSON.stringify({ wake_id: `wake-1`, generation: 1 }),
+        }),
+        {
+          service: `test`,
+          durableStreamsUrl: `http://durable.local`,
+          durableStreamsBearer: `service-token`,
+          isShuttingDown: () => false,
+        } as unknown as TenantContext
+      )
+
+      expect(result.status).toBe(200)
+      const [, init] = fetchSpy.mock.calls[0]!
+      expect(new Headers(init?.headers).get(`authorization`)).toBe(
+        `Bearer claim-token`
+      )
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it(`rewrites webhook subscription targets and keeps the original target locally`, async () => {
     const fetchSpy = vi
       .spyOn(globalThis, `fetch`)

@@ -8,7 +8,8 @@
  */
 
 import { createStreamDB } from '@durable-streams/state'
-import { entityStateSchema } from '@electric-ax/agents-runtime'
+import { appendPathToUrl, entityStateSchema } from '@electric-ax/agents-runtime'
+import { assertedIdentityHeaders, entityApiUrl } from './entity-api.js'
 import type { EntityStreamDB } from '@electric-ax/agents-runtime'
 
 export type { EntityStreamDB } from '@electric-ax/agents-runtime'
@@ -28,17 +29,36 @@ export async function createEntityStreamDB(opts: {
   baseUrl: string
   entityUrl: string
   initialOffset?: string
+  assertedAuthEmail?: string
+  assertedAuthName?: string
+  headers?: Record<string, string>
 }): Promise<{ db: EntityStreamDB; close: () => void }> {
-  const { baseUrl, entityUrl, initialOffset } = opts
+  const {
+    baseUrl,
+    entityUrl,
+    initialOffset,
+    assertedAuthEmail,
+    assertedAuthName,
+    headers: serverHeaders,
+  } = opts
 
   console.log(
     `[createEntityStreamDB] Creating entity stream DB for ${baseUrl}${entityUrl}`
   )
 
+  const requestHeaders = {
+    'content-type': `application/json`,
+    ...assertedIdentityHeaders(assertedAuthEmail),
+    ...(assertedAuthName
+      ? { 'x-electric-asserted-name': assertedAuthName }
+      : {}),
+    ...serverHeaders,
+  }
+
   let res: Response
   try {
-    res = await fetch(`${baseUrl}${entityUrl}`, {
-      headers: { 'content-type': `application/json` },
+    res = await fetch(entityApiUrl(baseUrl, entityUrl), {
+      headers: requestHeaders,
     })
   } catch (err) {
     throw new Error(
@@ -52,11 +72,12 @@ export async function createEntityStreamDB(opts: {
     streams?: { main: string; error: string }
   }
   const streamPath = getMainStreamPath(entityUrl, entity)
-  const streamUrl = `${baseUrl}${streamPath}`
+  const streamUrl = appendPathToUrl(baseUrl, streamPath)
 
   const db = createStreamDB({
     streamOptions: {
       url: streamUrl,
+      headers: requestHeaders,
       contentType: `application/json`,
       ...(initialOffset ? { offset: initialOffset } : {}),
     },

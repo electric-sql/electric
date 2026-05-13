@@ -2,19 +2,15 @@
  * Shared JSON body schema middleware for itty-router handlers.
  */
 
-import Ajv from 'ajv'
 import { apiError } from '../electric-agents-http'
 import { ErrCodeInvalidRequest } from '../electric-agents-types'
+import { schemaValidator } from '../schema-validation.js'
 import type { TSchema as TypeBoxSchema } from '@sinclair/typebox'
-import type { ValidateFunction } from 'ajv'
 import type { IRequest, RequestHandler } from 'itty-router'
 
 export interface JsonRouteRequest extends IRequest {
   content?: unknown
 }
-
-const jsonBodyAjv = new Ajv({ allErrors: true })
-const schemaValidators = new WeakMap<TypeBoxSchema, ValidateFunction>()
 
 export function routeBody<T>(request: JsonRouteRequest): T {
   return request.content as T
@@ -142,13 +138,4 @@ function validateParsedBody<TSchema extends TypeBoxSchema>(
       }))
     ),
   }
-}
-
-function schemaValidator(schema: TypeBoxSchema): ValidateFunction {
-  let validate = schemaValidators.get(schema)
-  if (!validate) {
-    validate = jsonBodyAjv.compile(schema)
-    schemaValidators.set(schema, validate)
-  }
-  return validate
 }

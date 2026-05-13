@@ -8,10 +8,17 @@ fs.mkdirSync(LOG_DIR, { recursive: true })
 
 const LOG_FILE = path.join(LOG_DIR, `builtin-agents-${Date.now()}.jsonl`)
 const LOG_LEVEL = process.env.ELECTRIC_AGENTS_LOG_LEVEL ?? `info`
-const USE_PRETTY_LOGS = LOG_LEVEL !== `silent` && !process.env.VITEST
+const IS_ELECTRON_MAIN = Boolean(process.versions.electron)
+const USE_PRETTY_LOGS =
+  LOG_LEVEL !== `silent` && !process.env.VITEST && !IS_ELECTRON_MAIN
 
 const streams: Array<pino.StreamEntry> = [
-  { stream: pino.destination(LOG_FILE) },
+  {
+    stream: pino.destination({
+      dest: LOG_FILE,
+      sync: IS_ELECTRON_MAIN,
+    }),
+  },
 ]
 if (USE_PRETTY_LOGS) {
   streams.push({

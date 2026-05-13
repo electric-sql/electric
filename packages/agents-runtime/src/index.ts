@@ -40,6 +40,10 @@ export type {
   Wake,
   WakeMessage,
   WakeEvent,
+  WakeNotification,
+  WebhookNotification,
+  ClaimTokenHeader,
+  HeadersProvider,
   HandlerContext,
   AgentRunResult,
   AgentHandle,
@@ -175,6 +179,7 @@ export {
 export type {
   RuntimeServerClientConfig,
   RuntimeEntityInfo,
+  DispatchPolicy,
   SpawnEntityOptions,
   SendEntityMessageOptions,
 } from './runtime-server-client'
@@ -201,7 +206,7 @@ export type {
 } from './observation-sources'
 
 export { processWake, processWebhookWake } from './process-wake'
-export type { WebhookNotification, ProcessWakeConfig } from './types'
+export type { ProcessWakeConfig } from './types'
 
 export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 export { createContextEntriesApi } from './context-entries'
@@ -222,6 +227,7 @@ export type {
 } from './model-runner'
 
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
+export { createPullWakeRunner } from './pull-wake-runner'
 export type {
   RuntimeRouter,
   RuntimeRouterConfig,
@@ -229,6 +235,12 @@ export type {
   RuntimeHandlerConfig,
   RuntimeHandlerResult,
 } from './create-handler'
+export type {
+  PullWakeEvent,
+  PullWakeRunner,
+  PullWakeRunnerConfig,
+  PullWakeStreamResponse,
+} from './pull-wake-runner'
 
 export { registerToolProvider, unregisterToolProvider } from './tool-providers'
 export type { ToolProviderEntry } from './tool-providers'

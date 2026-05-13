@@ -5,11 +5,19 @@
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json, status } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
+import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import {
   ErrCodeNotFound,
   ErrCodeUnknownEntityType,
   toPublicEntity,
 } from '../electric-agents-types.js'
+import {
+  assertDispatchPolicyAllowed,
+  backfillEntityDispatchPolicy,
+  linkEntityDispatchSubscription,
+  resolveEffectiveDispatchPolicyForSpawn,
+  unlinkEntityDispatchSubscription,
+} from './dispatch-policy.js'
 import { routeBody, withSchema } from './schema.js'
 import type { ElectricAgentsEntity } from '../electric-agents-types.js'
 import type { JsonRouteRequest } from './schema.js'
@@ -32,6 +40,17 @@ export type EntitiesRoutes = RouterType<
 
 const stringRecordSchema = Type.Record(Type.String(), Type.String())
 
+function writeTokenFromRequest(request: AgentsRouteRequest): string {
+  const electricClaimToken = request.headers.get(`electric-claim-token`)?.trim()
+  if (electricClaimToken) return electricClaimToken
+  return (
+    request.headers
+      .get(`authorization`)
+      ?.replace(/^Bearer\s+/i, ``)
+      .trim() ?? ``
+  )
+}
+
 const wakeConditionSchema = Type.Union([
   Type.Literal(`runFinished`),
   Type.Object({
@@ -53,6 +72,7 @@ const spawnBodySchema = Type.Object({
   args: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   tags: Type.Optional(stringRecordSchema),
   parent: Type.Optional(Type.String()),
+  dispatch_policy: Type.Optional(dispatchPolicySchema),
   initialMessage: Type.Optional(Type.Unknown()),
   wake: Type.Optional(
     Type.Object({
@@ -363,8 +383,7 @@ async function setTag(
 ): Promise<Response> {
   const parsed = routeBody<SetTagBody>(request)
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token =
-    request.headers.get(`authorization`)?.replace(/^Bearer\s+/i, ``) ?? ``
+  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.setTag(
     entityUrl,
     decodeURIComponent(request.params.tagKey),
@@ -379,8 +398,7 @@ async function removeTag(
   ctx: TenantContext
 ): Promise<Response> {
   const { entityUrl } = requireExistingEntityRoute(request)
-  const token =
-    request.headers.get(`authorization`)?.replace(/^Bearer\s+/i, ``) ?? ``
+  const token = writeTokenFromRequest(request)
   const updated = await ctx.entityManager.removeTag(
     entityUrl,
     decodeURIComponent(request.params.tagKey),
@@ -394,11 +412,15 @@ async function forkEntity(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<ForkBody>(request)
-  const { entityUrl } = requireExistingEntityRoute(request)
+  const { entityUrl, entity } = requireExistingEntityRoute(request)
+  await assertDispatchPolicyAllowed(ctx, entity.dispatch_policy)
   const result = await ctx.entityManager.forkSubtree(entityUrl, {
     rootInstanceId: parsed.instance_id,
     waitTimeoutMs: parsed.waitTimeoutMs,
   })
+  for (const forkedEntity of result.entities) {
+    await linkEntityDispatchSubscription(ctx, forkedEntity)
+  }
   return json(
     {
       root: toPublicEntity(result.root),
@@ -413,7 +435,12 @@ async function sendEntity(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<SendBody>(request)
-  const { entityUrl } = requireExistingEntityRoute(request)
+  const { entityUrl, entity } = requireExistingEntityRoute(request)
+
+  if (!entity.dispatch_policy) {
+    const updatedEntity = await backfillEntityDispatchPolicy(ctx, entity)
+    await linkEntityDispatchSubscription(ctx, updatedEntity)
+  }
 
   if (parsed.afterMs && parsed.afterMs > 0) {
     await ctx.entityManager.enqueueDelayedSend(
@@ -473,14 +500,31 @@ async function spawnEntity(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<SpawnBody>(request)
+  const dispatchPolicy = await resolveEffectiveDispatchPolicyForSpawn(
+    ctx,
+    request.params.type,
+    {
+      dispatchPolicy: parsed.dispatch_policy,
+      parent: parsed.parent,
+    }
+  )
+  await assertDispatchPolicyAllowed(ctx, dispatchPolicy)
   const entity = await ctx.entityManager.spawn(request.params.type, {
     instance_id: request.params.instanceId,
     args: parsed.args,
     tags: parsed.tags,
     parent: parsed.parent,
-    initialMessage: parsed.initialMessage,
+    dispatch_policy: dispatchPolicy,
+    initialMessage: undefined,
     wake: parsed.wake,
   })
+  await linkEntityDispatchSubscription(ctx, entity)
+  if (parsed.initialMessage !== undefined) {
+    await ctx.entityManager.send(entity.url, {
+      from: parsed.parent ?? `spawn`,
+      payload: parsed.initialMessage,
+    })
+  }
 
   return json(
     { ...toPublicEntity(entity), txid: entity.txid },
@@ -504,6 +548,7 @@ async function killEntity(
   ctx: TenantContext
 ): Promise<Response> {
   const { entityUrl, entity } = requireExistingEntityRoute(request)
+  await unlinkEntityDispatchSubscription(ctx, entity)
   const result = await ctx.entityManager.kill(entityUrl)
   ctx.runtime.claimWriteTokens.clearStream(ctx.service, entity.streams.main)
   return json(result)

@@ -12,6 +12,8 @@ import {
 } from '@tanstack/react-router'
 import { z } from 'zod'
 import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
+import { preloadAppCollections } from './lib/ElectricAgentsProvider'
+import { preloadDesktopFormattedAssertedIdentity } from './lib/assertedIdentity'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import {
   SidebarCollapsedProvider,
@@ -360,6 +362,14 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: `/`,
+  loader: async (): Promise<null> => {
+    const baseUrl = getActiveBaseUrl()
+    await Promise.all([
+      baseUrl ? preloadAppCollections(baseUrl) : Promise.resolve(),
+      preloadDesktopFormattedAssertedIdentity(),
+    ])
+    return null
+  },
   component: WorkspacePage,
   validateSearch: workspaceSearchSchema,
 })
@@ -370,11 +380,15 @@ const entityRoute = createRoute({
   loader: async ({ abortController, params }): Promise<null> => {
     const baseUrl = getActiveBaseUrl()
     if (!baseUrl) return null
-    await preloadEntityStream({
-      baseUrl,
-      entityUrl: `/${params._splat}`,
-      signal: abortController.signal,
-    })
+    await Promise.all([
+      preloadAppCollections(baseUrl),
+      preloadDesktopFormattedAssertedIdentity(),
+      preloadEntityStream({
+        baseUrl,
+        entityUrl: `/${params._splat}`,
+        signal: abortController.signal,
+      }),
+    ])
     return null
   },
   component: WorkspacePage,

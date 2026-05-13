@@ -6,7 +6,9 @@ import { basename, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
+import { assertedIdentityHeaders, entityApiPath } from './entity-api.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,
@@ -25,6 +27,9 @@ import type {
 export interface ElectricCliEnv {
   electricAgentsUrl: string
   electricAgentsIdentity: string
+  electricAssertedAuthEmail?: string
+  electricAssertedAuthName?: string
+  electricAgentsHeaders?: Record<string, string>
 }
 
 export interface SpawnCommandOptions {
@@ -97,13 +102,49 @@ function getDefaultElectricAgentsIdentity(): string {
   return `${userInfo().username}@${hostname()}`
 }
 
+function parseElectricAgentsHeaders(
+  raw: string | undefined
+): Record<string, string> | undefined {
+  const trimmed = raw?.trim()
+  if (!trimmed) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    fail(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected JSON`)
+  }
+  if (!parsed || typeof parsed !== `object` || Array.isArray(parsed)) {
+    fail(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected a JSON object`)
+  }
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(
+    parsed as Record<string, unknown>
+  )) {
+    if (typeof value !== `string`) {
+      fail(
+        `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: header "${name}" must be a string`
+      )
+    }
+    headers.set(name, value)
+  }
+  const normalized = Object.fromEntries(headers.entries())
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
 export function getElectricCliEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ElectricCliEnv {
+  const explicitIdentity = env.ELECTRIC_AGENTS_IDENTITY?.trim()
   return {
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
     electricAgentsIdentity:
-      env.ELECTRIC_AGENTS_IDENTITY || getDefaultElectricAgentsIdentity(),
+      explicitIdentity || getDefaultElectricAgentsIdentity(),
+    electricAssertedAuthEmail:
+      env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || explicitIdentity || undefined,
+    electricAssertedAuthName: env.ELECTRIC_ASSERTED_AUTH_NAME?.trim(),
+    electricAgentsHeaders: parseElectricAgentsHeaders(
+      env.ELECTRIC_AGENTS_SERVER_HEADERS
+    ),
   }
 }
 
@@ -292,10 +333,15 @@ async function electricAgentsFetch(
   opts: RequestInit = {}
 ): Promise<Response> {
   try {
-    return await fetch(`${env.electricAgentsUrl}${path}`, {
+    return await fetch(appendPathToUrl(env.electricAgentsUrl, path), {
       ...opts,
       headers: {
         'content-type': `application/json`,
+        ...assertedIdentityHeaders(env.electricAssertedAuthEmail),
+        ...(env.electricAssertedAuthName
+          ? { 'x-electric-asserted-name': env.electricAssertedAuthName }
+          : {}),
+        ...env.electricAgentsHeaders,
         ...opts.headers,
       },
     })
@@ -432,7 +478,7 @@ async function spawnEntity(
     }
   }
 
-  const res = await electricAgentsFetch(env, urlPath, {
+  const res = await electricAgentsFetch(env, entityApiPath(urlPath), {
     method: `PUT`,
     body: JSON.stringify({ args: spawnArgs }),
   })
@@ -468,7 +514,7 @@ async function sendMessage(
     body.type = options.type
   }
 
-  const res = await electricAgentsFetch(env, `${url}/send`, {
+  const res = await electricAgentsFetch(env, entityApiPath(url, `/send`), {
     method: `POST`,
     body: JSON.stringify(body),
   })
@@ -495,12 +541,15 @@ async function observeEntity(
     entityUrl: url,
     baseUrl: env.electricAgentsUrl,
     identity: env.electricAgentsIdentity,
+    assertedAuthEmail: env.electricAssertedAuthEmail,
+    assertedAuthName: env.electricAssertedAuthName,
+    headers: env.electricAgentsHeaders,
     initialOffset: options.from,
   })
 }
 
 async function inspectEntity(env: ElectricCliEnv, url: string): Promise<void> {
-  const res = await electricAgentsFetch(env, url)
+  const res = await electricAgentsFetch(env, entityApiPath(url))
   const data = await parseJsonResponse(res)
   if (!res.ok) {
     failFromResponse(data, res)
@@ -548,7 +597,7 @@ async function listEntities(
 }
 
 async function killEntity(env: ElectricCliEnv, url: string): Promise<void> {
-  const res = await electricAgentsFetch(env, url, {
+  const res = await electricAgentsFetch(env, entityApiPath(url), {
     method: `DELETE`,
   })
 

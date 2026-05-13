@@ -592,12 +592,12 @@ function titleCase(value: string): string {
     .join(` `)
 }
 
-function entityUrlKey(urls: Array<string>): string {
-  return Array.from(new Set(urls)).sort().join(`\n`)
+function stableEntityUrlKey(urls: Iterable<string>): string {
+  return Array.from(new Set(urls)).sort().join(`\0`)
 }
 
 function entityUrlsFromKey(key: string): Array<string> {
-  return key ? key.split(`\n`) : []
+  return key.length === 0 ? [] : key.split(`\0`)
 }
 
 // `section` and `responseTimestamp` are pulled out of the parent
@@ -684,7 +684,7 @@ export function EntityTimeline({
   const rows = useMemo(() => entries, [entries])
   const { entitiesCollection } = useElectricAgents()
   const referencedEntityUrlKey = useMemo(
-    () => entityUrlKey(entities.map((entity) => entity.url)),
+    () => stableEntityUrlKey(entities.map((entity) => entity.url)),
     [entities]
   )
   const referencedEntityUrls = useMemo(
@@ -704,7 +704,7 @@ export function EntityTimeline({
           status: e.status,
         }))
     },
-    [entitiesCollection, referencedEntityUrlKey, referencedEntityUrls]
+    [entitiesCollection, referencedEntityUrlKey]
   )
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, IncludesEntity[`status`]>()

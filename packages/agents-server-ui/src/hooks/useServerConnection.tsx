@@ -16,7 +16,9 @@ import {
   saveServers,
   type ServerConnectionState as RuntimeConnectionState,
 } from '../lib/server-connection'
+import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { registerActiveBaseUrl } from '../lib/entity-connection'
+import { registerActiveServerHeaders, serverFetch } from '../lib/auth-fetch'
 import type { ReactNode } from 'react'
 import type { ServerConfig } from '../lib/types'
 
@@ -52,6 +54,32 @@ function browserConnection(
     lastError,
     reconnectAttempt: 0,
     lastConnectedAt: status === `connected` ? Date.now() : null,
+  }
+}
+
+function normalizeServerConfig(server: ServerConfig): ServerConfig {
+  const headers = new Headers()
+  for (const [rawName, rawValue] of Object.entries(server.headers ?? {})) {
+    const name = rawName.trim()
+    const value = rawValue.trim()
+    if (!name || !value) continue
+    try {
+      headers.set(name, value)
+    } catch {
+      // Ignore invalid header rows from old localStorage/settings payloads.
+    }
+  }
+  const normalizedHeaders = Object.fromEntries(headers.entries())
+  return {
+    id: server.id || createServerId(server.url),
+    name: server.name.trim(),
+    url: server.url.trim(),
+    source: server.source ?? `manual`,
+    desiredState: server.desiredState ?? `connected`,
+    localRuntimeEnabled: server.localRuntimeEnabled ?? true,
+    ...(Object.keys(normalizedHeaders).length > 0
+      ? { headers: normalizedHeaders }
+      : {}),
   }
 }
 
@@ -112,6 +140,8 @@ export function ServerConnectionProvider({
               )
             ? desktopState.activeServer
             : (next[0] ?? null)
+        registerActiveBaseUrl(active?.url ?? null)
+        registerActiveServerHeaders(active)
         setServers(next)
         setActiveServerState(active)
         const activeConnection =
@@ -130,6 +160,8 @@ export function ServerConnectionProvider({
       .catch((err) => {
         console.error(`Failed to load saved servers:`, err)
         const next = window.electronAPI ? [] : [currentServer()]
+        registerActiveBaseUrl(next[0]?.url ?? null)
+        registerActiveServerHeaders(next[0] ?? null)
         setServers(next)
         setActiveServerState(next[0] ?? null)
       })
@@ -143,6 +175,8 @@ export function ServerConnectionProvider({
         nextServers.find((server) => server.id === state.selectedServerId) ??
         state.activeServer ??
         null
+      registerActiveBaseUrl(active?.url ?? null)
+      registerActiveServerHeaders(active)
       setActiveServerState(active)
       const activeConnection =
         state.connections?.find((c) => c.serverId === active?.id) ?? null
@@ -156,8 +190,9 @@ export function ServerConnectionProvider({
   }, [servers])
 
   useEffect(() => {
-    registerActiveBaseUrl(connected ? (activeServer?.url ?? null) : null)
-  }, [activeServer, connected])
+    registerActiveBaseUrl(activeServer?.url ?? null)
+    registerActiveServerHeaders(activeServer)
+  }, [activeServer])
 
   useEffect(() => {
     if (isDesktop) return
@@ -176,9 +211,12 @@ export function ServerConnectionProvider({
         setConnections([nextConnecting])
       }
       try {
-        const res = await fetch(`${activeServer.url}/_electric/health`, {
-          signal: AbortSignal.timeout(3000),
-        })
+        const res = await serverFetch(
+          appendPathToUrl(activeServer.url, `/_electric/health`),
+          {
+            signal: AbortSignal.timeout(3000),
+          }
+        )
         if (!cancelled) {
           checked = true
           const nextConnection = browserConnection(
@@ -216,6 +254,8 @@ export function ServerConnectionProvider({
   }, [activeServer, browserRetry, isDesktop])
 
   const setActiveServer = useCallback((server: ServerConfig | null) => {
+    registerActiveBaseUrl(server?.url ?? null)
+    registerActiveServerHeaders(server)
     setActiveServerState(server)
     if (window.electronAPI) {
       void saveSelectedServer(server?.id ?? null)
@@ -227,16 +267,12 @@ export function ServerConnectionProvider({
   const addServer = useCallback(
     (server: ServerInput) => {
       if (servers.some((s) => s.url === server.url)) return
-      const normalized = {
-        ...server,
-        id: server.id || createServerId(server.url),
-        source: server.source ?? `manual`,
-        desiredState: server.desiredState ?? `connected`,
-        localRuntimeEnabled: server.localRuntimeEnabled ?? true,
-      } satisfies ServerConfig
+      const normalized = normalizeServerConfig(server as ServerConfig)
       const next = [...servers, normalized]
       setServers(next)
       setActiveServerState(normalized)
+      registerActiveBaseUrl(normalized.url)
+      registerActiveServerHeaders(normalized)
       void saveServers(next).then(async () => {
         if (window.electronAPI) {
           await saveSelectedServer(normalized.id)

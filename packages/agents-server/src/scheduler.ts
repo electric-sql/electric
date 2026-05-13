@@ -25,6 +25,7 @@ export interface CronTickPayload {
 
 type SchedulerTaskKind = `delayed_send` | `cron_tick`
 type TenantIdsProvider = () => Iterable<string>
+const POSTGRES_TEXT_OID = 25
 
 interface ScheduledTaskRow {
   id: number | string
@@ -462,7 +463,7 @@ export class Scheduler implements SchedulerClient {
         await this.pgClient`
           update scheduled_tasks
           set claimed_by = null, claimed_at = null
-          where tenant_id = any(${tenantIds}::text[])
+          where tenant_id = any(${this.sharedTenantIdsParameter(tenantIds)})
             and completed_at is null
             and claimed_at < now() - (${this.claimExpiryMs} * interval '1 millisecond')
         `
@@ -511,7 +512,7 @@ export class Scheduler implements SchedulerClient {
           where id in (
             select id
             from scheduled_tasks
-            where tenant_id = any(${tenantIds}::text[])
+            where tenant_id = any(${this.sharedTenantIdsParameter(tenantIds)})
               and completed_at is null
               and claimed_at is null
               and fire_at <= now()
@@ -709,7 +710,7 @@ export class Scheduler implements SchedulerClient {
         const rows = await this.pgClient<Array<{ fire_at: Date | string }>>`
           select fire_at
           from scheduled_tasks
-          where tenant_id = any(${tenantIds}::text[])
+          where tenant_id = any(${this.sharedTenantIdsParameter(tenantIds)})
             and completed_at is null
             and claimed_at is null
           order by fire_at, id
@@ -781,5 +782,9 @@ export class Scheduler implements SchedulerClient {
   private sharedTenantIds(): Array<string> | null {
     if (this.tenantId !== null || !this.tenantIds) return null
     return [...new Set(this.tenantIds())]
+  }
+
+  private sharedTenantIdsParameter(tenantIds: Array<string>) {
+    return this.pgClient.array(tenantIds, POSTGRES_TEXT_OID)
   }
 }
