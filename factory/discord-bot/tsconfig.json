@@ -12,7 +12,15 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "outDir": "./dist",
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@electric-ax/agents-runtime": [
+        "./node_modules/@electric-ax/agents-runtime/src/index.ts"
+      ],
+      "@electric-ax/agents-runtime/*": [
+        "./node_modules/@electric-ax/agents-runtime/src/*"
+      ]
+    }
   },
   "include": ["src/**/*", "test/**/*", "*.ts"],
   "exclude": ["node_modules", "dist"]
