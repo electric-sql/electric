@@ -302,50 +302,6 @@ function runnerOwnerUserIdFromHeaders(
   )
 }
 
-function summarizeBearerTokenForLog(value: string): Record<string, unknown> {
-  const token = value.replace(/^Bearer\s+/i, ``).trim()
-  const parts = token.split(`.`)
-  const summary: Record<string, unknown> = {
-    present: token.length > 0,
-    authorizationHeader: value,
-    token,
-    kind: parts.length === 3 ? `jwt` : `opaque`,
-  }
-  if (parts.length !== 3) return summary
-  try {
-    const payload = JSON.parse(base64UrlDecode(parts[1] ?? ``)) as Record<
-      string,
-      unknown
-    >
-    for (const key of [
-      `iss`,
-      `sub`,
-      `aud`,
-      `exp`,
-      `iat`,
-      `nbf`,
-      `serviceId`,
-      `service_id`,
-      `tenantId`,
-      `tenant_id`,
-      `userId`,
-      `user_id`,
-      `email`,
-    ]) {
-      if (payload[key] !== undefined) summary[key] = payload[key]
-    }
-  } catch (err) {
-    summary.decodeError = err instanceof Error ? err.message : String(err)
-  }
-  return summary
-}
-
-function base64UrlDecode(value: string): string {
-  const padded = `${value}${`=`.repeat((4 - (value.length % 4)) % 4)}`
-  const base64 = padded.replace(/-/g, `+`).replace(/_/g, `/`)
-  return Buffer.from(base64, `base64`).toString(`utf8`)
-}
-
 /**
  * Commands sent from the menu / tray (main process) to the focused
  * renderer over the `desktop:command` IPC channel. The renderer
@@ -653,42 +609,7 @@ function installCloudAuthUndiciInterceptor(): void {
       (opts, handler) => {
         const fullUrl = composeRequestUrl(opts.origin, opts.path)
         const extra = fullUrl ? buildCloudAuthHeaders(fullUrl) : null
-        const method = String(opts.method ?? `GET`).toUpperCase()
-        const isRunnerRegistration = Boolean(
-          fullUrl && isRunnerRegistrationRequest(fullUrl, method)
-        )
-        let dispatchOpts = opts
-        if (fullUrl && isRunnerRegistration) {
-          const originalBody = (opts as { body?: unknown }).body
-          const loggedBody = wrapUndiciBodyForLogging(originalBody, (body) => {
-            console.info(
-              `[agents-desktop] cloud runner registration request body`,
-              { method, url: fullUrl, body }
-            )
-          })
-          if (loggedBody !== originalBody) {
-            dispatchOpts = {
-              ...opts,
-              body: loggedBody as Dispatcher.DispatchOptions[`body`],
-            }
-          }
-          const matchedServer = findCloudServerForUrl(fullUrl)
-          console.info(
-            `[agents-desktop] cloud runner registration request auth context`,
-            {
-              method,
-              url: fullUrl,
-              matchedCloudServer: Boolean(matchedServer),
-              serverId: matchedServer?.id ?? null,
-              tenantId: matchedServer?.tenantId ?? null,
-              body: summarizeUndiciBodyForLog(originalBody),
-              injectedHeaders: extra
-                ? summarizeInjectedCloudHeadersForLog(extra)
-                : null,
-            }
-          )
-        }
-        if (!extra) return dispatch(dispatchOpts, handler)
+        if (!extra) return dispatch(opts, handler)
         // undici treats `Authorization` (capitalized) and `authorization`
         // as the same header but our `mergeUndiciHeaders` keys is
         // case-sensitive — lower-case the keys we add so a previously
@@ -698,126 +619,12 @@ function installCloudAuthUndiciInterceptor(): void {
           lowered[key.toLowerCase()] = value
         }
         return dispatch(
-          {
-            ...dispatchOpts,
-            headers: mergeUndiciHeaders(dispatchOpts.headers, lowered),
-          },
+          { ...opts, headers: mergeUndiciHeaders(opts.headers, lowered) },
           handler
         )
       }
   )
   undici.setGlobalDispatcher(composed)
-}
-
-function isRunnerRegistrationRequest(url: string, method: string): boolean {
-  if (method !== `POST`) return false
-  try {
-    const parsed = new URL(url)
-    return parsed.pathname.replace(/\/+$/, ``).endsWith(`/_electric/runners`)
-  } catch {
-    return false
-  }
-}
-
-function summarizeInjectedCloudHeadersForLog(
-  headers: Record<string, string>
-): Record<string, unknown> {
-  const auth = headers.Authorization ?? headers.authorization
-  return {
-    hasAuthorization: Boolean(auth),
-    authorization: auth ? summarizeBearerTokenForLog(auth) : null,
-    service: headers[`x-electric-service`] ?? null,
-    assertedUserId: headers[`x-electric-asserted-user-id`] ?? null,
-    assertedEmail: headers[`x-electric-asserted-email`] ?? null,
-    assertedNamePresent: Boolean(headers[`x-electric-asserted-name`]),
-  }
-}
-
-function summarizeUndiciBodyForLog(body: unknown): unknown {
-  if (body === null || body === undefined) return null
-  if (typeof body === `string`) return body
-  if (Buffer.isBuffer(body)) return body.toString(`utf8`)
-  if (body instanceof Uint8Array) return Buffer.from(body).toString(`utf8`)
-  if (body instanceof ArrayBuffer) return Buffer.from(body).toString(`utf8`)
-  if (body instanceof URLSearchParams) return body.toString()
-  if (isAsyncIterable(body) || isIterable(body)) {
-    return {
-      kind: Object.prototype.toString.call(body),
-      logged: `streaming`,
-      followUpLog: `cloud runner registration request body`,
-    }
-  }
-  return {
-    kind: Object.prototype.toString.call(body),
-    logged: false,
-  }
-}
-
-function wrapUndiciBodyForLogging(
-  body: unknown,
-  onBody: (body: unknown) => void
-): unknown {
-  if (isAsyncIterable(body)) {
-    return (async function* () {
-      const chunks: Array<Buffer> = []
-      for await (const chunk of body) {
-        const buffer = bodyChunkToBuffer(chunk)
-        if (buffer) chunks.push(buffer)
-        yield chunk
-      }
-      onBody(decodeLoggedBody(chunks))
-    })()
-  }
-  if (isIterable(body) && typeof body !== `string`) {
-    return (function* () {
-      const chunks: Array<Buffer> = []
-      for (const chunk of body) {
-        const buffer = bodyChunkToBuffer(chunk)
-        if (buffer) chunks.push(buffer)
-        yield chunk
-      }
-      onBody(decodeLoggedBody(chunks))
-    })()
-  }
-  return body
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    Boolean(value) &&
-    typeof (value as { [Symbol.asyncIterator]?: unknown })[
-      Symbol.asyncIterator
-    ] === `function`
-  )
-}
-
-function isIterable(value: unknown): value is Iterable<unknown> {
-  return (
-    Boolean(value) &&
-    typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
-      `function`
-  )
-}
-
-function bodyChunkToBuffer(chunk: unknown): Buffer | null {
-  if (typeof chunk === `string`) return Buffer.from(chunk)
-  if (Buffer.isBuffer(chunk)) return chunk
-  if (chunk instanceof ArrayBuffer) return Buffer.from(chunk)
-  if (chunk instanceof Uint8Array) return Buffer.from(chunk)
-  if (ArrayBuffer.isView(chunk)) {
-    return Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
-  }
-  return null
-}
-
-function decodeLoggedBody(chunks: Array<Buffer>): unknown {
-  const text = Buffer.concat(chunks).toString(`utf8`)
-  if (!text) return ``
-  try {
-    return JSON.parse(text)
-  } catch {
-    return text
-  }
 }
 
 /**

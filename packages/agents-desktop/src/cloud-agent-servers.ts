@@ -263,13 +263,6 @@ export class CloudAgentServers {
       `/api/v1/services/streams/${encodeURIComponent(serviceId)}/getTokenForAgents`,
       getCloudBaseUrl()
     ).toString()
-    console.info(`[agents-desktop] cloud agents token request`, {
-      serviceId,
-      url,
-      method: `POST`,
-      cloudAuthBearer: `Bearer ${bearerToken}`,
-      body: {},
-    })
     const res = await fetch(url, {
       method: `POST`,
       headers: {
@@ -278,19 +271,13 @@ export class CloudAgentServers {
       },
       body: JSON.stringify({}),
     })
-    const contentType = res.headers.get(`content-type`)
     if (!res.ok) {
       const errorText = await res.text().catch(() => ``)
-      console.warn(`[agents-desktop] cloud agents token request failed`, {
-        serviceId,
-        url,
-        status: res.status,
-        statusText: res.statusText,
-        contentType,
-        body: errorText,
-      })
+      const details = errorText.trim()
       throw new Error(
-        `Failed to fetch agents token (HTTP ${res.status} ${res.statusText})`
+        `Failed to fetch agents token (HTTP ${res.status} ${res.statusText})${
+          details ? `: ${details}` : ``
+        }`
       )
     }
     const text = await res.text()
@@ -302,25 +289,8 @@ export class CloudAgentServers {
     }
     const agentsToken = extractAgentsToken(body)
     if (!agentsToken) {
-      console.warn(`[agents-desktop] cloud agents token response malformed`, {
-        serviceId,
-        url,
-        status: res.status,
-        contentType,
-        responseShape: describeResponseShape(body),
-        body: text,
-      })
       throw new Error(`Agents token response was malformed`)
     }
-    console.info(`[agents-desktop] cloud agents token received`, {
-      serviceId,
-      status: res.status,
-      contentType,
-      responseShape: describeResponseShape(body),
-      body: text,
-      token: summarizeJwtForLog(agentsToken),
-      agentsBearer: `Bearer ${agentsToken}`,
-    })
     return agentsToken
   }
 
@@ -498,53 +468,6 @@ function extractAgentsToken(body: unknown): string | null {
     }
   }
   return null
-}
-
-function describeResponseShape(body: unknown): string {
-  if (typeof body === `string`) return `string`
-  if (!body || typeof body !== `object`) return String(body)
-  if (Array.isArray(body)) return `array(${body.length})`
-  return `object(${Object.keys(body as Record<string, unknown>).join(`,`)})`
-}
-
-function summarizeJwtForLog(token: string): Record<string, unknown> {
-  const parts = token.split(`.`)
-  const summary: Record<string, unknown> = {
-    kind: parts.length === 3 ? `jwt` : `opaque`,
-  }
-  if (parts.length !== 3) return summary
-  try {
-    const payload = JSON.parse(base64UrlDecode(parts[1] ?? ``)) as Record<
-      string,
-      unknown
-    >
-    for (const key of [
-      `iss`,
-      `sub`,
-      `aud`,
-      `exp`,
-      `iat`,
-      `nbf`,
-      `serviceId`,
-      `service_id`,
-      `tenantId`,
-      `tenant_id`,
-      `userId`,
-      `user_id`,
-      `email`,
-    ]) {
-      if (payload[key] !== undefined) summary[key] = payload[key]
-    }
-  } catch (err) {
-    summary.decodeError = err instanceof Error ? err.message : String(err)
-  }
-  return summary
-}
-
-function base64UrlDecode(value: string): string {
-  const padded = `${value}${`=`.repeat((4 - (value.length % 4)) % 4)}`
-  const base64 = padded.replace(/-/g, `+`).replace(/_/g, `/`)
-  return Buffer.from(base64, `base64`).toString(`utf8`)
 }
 
 function collect<T>(rows: Map<string, Row> | undefined): Array<T> {
