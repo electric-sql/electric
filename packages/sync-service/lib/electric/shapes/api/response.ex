@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Api.Response do
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
-  alias Electric.Telemetry.Sampler
 
   require Logger
 
