@@ -171,7 +171,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
   `memory.start.binary_bytes`. With `phase = nil` (the default) the keys are
   just `memory.process_bytes` and `memory.binary_bytes`.
   """
-  @spec process_memory_attributes(String.t() | nil) :: %{optional(String.t()) => non_neg_integer()}
+  @spec process_memory_attributes(String.t() | nil) :: %{
+          optional(String.t()) => non_neg_integer()
+        }
   def process_memory_attributes(phase \\ nil) do
     {:memory, process_bytes} = Process.info(self(), :memory)
     {:binary, binaries} = Process.info(self(), :binary)
