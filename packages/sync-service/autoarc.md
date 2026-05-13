@@ -1,0 +1,639 @@
+ Distinct subqueries across the 611 WHEREs (Mon 08:00 → now)
+
+  - Total subquery occurrences (counting every (SELECT …) including nested ones): 291
+  - Distinct subquery strings (literal, with UUIDs intact): 209
+  - Distinct subquery templates (after collapsing UUIDs to <uuid>): 8
+
+  The 8 structural templates:
+
+  1. (SELECT id FROM public.projects WHERE company_id = '<uuid>' AND deleted_at IS NULL) — the bare tenant projects view
+  2. (SELECT id FROM public.projects WHERE company_id = '<uuid>' AND deleted_at IS NULL AND (created_by_profile_id = '<uuid>' OR responsible_profile_id = '<uuid>')) — per-user variant
+  3. (SELECT id FROM public.projects WHERE company_id = '<uuid>' AND deleted_at IS NULL AND id IN (SELECT project_id FROM public.profiles_projects …)) — projects scoped to a profile's joined memberships
+  4. (SELECT project_id FROM public.profiles_projects WHERE profile_id = '<uuid>' AND deleted_at IS NULL) — profile→project join used by #3
+  5. (SELECT id FROM public.offers WHERE company_id = '<uuid>' AND deleted_at IS NULL AND is_template = true) — templates only
+  6. (SELECT id FROM public.offers WHERE company_id = '<uuid>' AND deleted_at IS NULL AND (is_template = true OR project_id IN (… projects …))) — offers (embeds template #1)
+  7. (SELECT id FROM public.offers … project_id IN (… per-user projects …)) — offers (embeds #2)
+  8. (SELECT customer_id FROM public.projects WHERE id IN (… per-user projects …) AND customer_id IS NOT NULL) — distinct customers via projects
+
+  So at the cohort level (which is what the SubqueryIndex RFC cares about), there are only 8 structural patterns, but they instantiate as 209 tenant-and-user-specific cohorts in this 75h window. The bare
+  projects WHERE company_id=X AND deleted_at IS NULL template alone accounts for most of the 209.
+
+# autoarc shape WHERE clauses
+
+stack_id: `2a649dc5-b661-4918-b283-06999429a156`  
+dataset: `production / electric-region`  
+time range: 2026-05-04 08:00 UTC → 2026-05-07 11:20 UTC (~75h)  
+distinct WHERE clauses: 611
+
+- `company_id = '01347d73-71ba-4d56-85ff-99f9da7ec29b' AND deleted_at IS NULL`
+- `company_id = '01347d73-71ba-4d56-85ff-99f9da7ec29b' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '01347d73-71ba-4d56-85ff-99f9da7ec29b' AND deleted_at IS NULL)`
+- `company_id = '014b6b79-3a88-4193-ba1f-759346d16400' AND deleted_at IS NULL`
+- `company_id = '02281266-7582-4650-9a5c-0cdbe0bf67c1' AND deleted_at IS NULL`
+- `company_id = '02316a38-d884-4cf1-8922-24931b387f18' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '02316a38-d884-4cf1-8922-24931b387f18' AND deleted_at IS NULL))`
+- `company_id = '02a0ff1a-e8aa-4e67-835e-dc564ccda54e' AND deleted_at IS NULL`
+- `company_id = '0341e420-7cae-46a0-b0c4-7758e2f6f8ee' AND deleted_at IS NULL`
+- `company_id = '0341e420-7cae-46a0-b0c4-7758e2f6f8ee' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '0341e420-7cae-46a0-b0c4-7758e2f6f8ee' AND deleted_at IS NULL)`
+- `company_id = '038ce389-5f77-4ec6-bda2-65278f6f460e' AND deleted_at IS NULL`
+- `company_id = '04425bdf-1960-4988-b156-7b0297e6fc3b' AND deleted_at IS NULL`
+- `company_id = '04425bdf-1960-4988-b156-7b0297e6fc3b' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '04425bdf-1960-4988-b156-7b0297e6fc3b' AND deleted_at IS NULL)`
+- `company_id = '04c9be40-7e3d-42ee-95da-db11528441f9' AND deleted_at IS NULL`
+- `company_id = '05728af8-16c4-433f-89a2-e36b868a9f70' AND deleted_at IS NULL`
+- `company_id = '0574ebff-4bbe-4781-a65a-16aaea7ccf3f' AND deleted_at IS NULL`
+- `company_id = '0574ebff-4bbe-4781-a65a-16aaea7ccf3f' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '0574ebff-4bbe-4781-a65a-16aaea7ccf3f' AND deleted_at IS NULL)`
+- `company_id = '058bf204-204f-4078-a98d-bd25b5f8bfa8' AND deleted_at IS NULL`
+- `company_id = '06c6d68a-c087-4350-9a29-e5330e0645a1' AND deleted_at IS NULL`
+- `company_id = '06de4c8e-130a-4638-b297-0ee92c109347' AND deleted_at IS NULL`
+- `company_id = '06de4c8e-130a-4638-b297-0ee92c109347' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '06de4c8e-130a-4638-b297-0ee92c109347' AND deleted_at IS NULL)`
+- `company_id = '06fb798e-4618-4114-be27-ecbddb1b1ac4' AND deleted_at IS NULL`
+- `company_id = '06fb798e-4618-4114-be27-ecbddb1b1ac4' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '06fb798e-4618-4114-be27-ecbddb1b1ac4' AND deleted_at IS NULL)`
+- `company_id = '07472eef-fc40-42e7-9282-ef5a062566dd' AND deleted_at IS NULL`
+- `company_id = '07472eef-fc40-42e7-9282-ef5a062566dd' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '07472eef-fc40-42e7-9282-ef5a062566dd' AND deleted_at IS NULL)`
+- `company_id = '082c3027-9673-4223-bf68-f620a18a6b34' AND deleted_at IS NULL`
+- `company_id = '085d3bbe-a12e-4834-9a08-20aa1467acad' AND deleted_at IS NULL`
+- `company_id = '085d3bbe-a12e-4834-9a08-20aa1467acad' AND deleted_at IS NULL AND (created_by_profile_id = 'f897267d-d790-451f-8b5b-f370e1fe092e' OR responsible_profile_id = 'f897267d-d790-451f-8b5b-f370e1fe092e')`
+- `company_id = '092d1a4a-393f-4346-9dca-a7a00a3f7bd2' AND deleted_at IS NULL`
+- `company_id = '092d1a4a-393f-4346-9dca-a7a00a3f7bd2' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '092d1a4a-393f-4346-9dca-a7a00a3f7bd2' AND deleted_at IS NULL))`
+- `company_id = '099121e5-896b-4138-8aa4-7a3f614b4525' AND deleted_at IS NULL`
+- `company_id = '09957aff-d678-4190-aef3-d995bc5bb5b4' AND deleted_at IS NULL`
+- `company_id = '09f84c7a-ec6b-4002-8af5-9f9fb3ffad08' AND deleted_at IS NULL`
+- `company_id = '0a097ba6-1638-4e2f-b1d0-3bf78ff37469' AND deleted_at IS NULL`
+- `company_id = '0a35357d-2cb2-40ed-9971-f01f7f31e01a' AND deleted_at IS NULL`
+- `company_id = '0a35357d-2cb2-40ed-9971-f01f7f31e01a' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '0a35357d-2cb2-40ed-9971-f01f7f31e01a' AND deleted_at IS NULL)`
+- `company_id = '0c984115-832c-4225-b877-e9a583d444b4' AND deleted_at IS NULL`
+- `company_id = '0c984115-832c-4225-b877-e9a583d444b4' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '0c984115-832c-4225-b877-e9a583d444b4' AND deleted_at IS NULL)`
+- `company_id = '0c9ed911-467e-482a-9de6-9d0846e5f699' AND deleted_at IS NULL`
+- `company_id = '0cd2e1e1-f1b7-4c72-8e5a-9aff3c8f7349' AND deleted_at IS NULL`
+- `company_id = '0ce774b0-89de-46f3-ac0f-ad9a29d7eb44' AND deleted_at IS NULL`
+- `company_id = '0db3396f-2adf-41df-acad-c2f8598bf3ff' AND deleted_at IS NULL`
+- `company_id = '0db3396f-2adf-41df-acad-c2f8598bf3ff' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '0db3396f-2adf-41df-acad-c2f8598bf3ff' AND deleted_at IS NULL)`
+- `company_id = '0e26ceac-dd58-49b5-aa76-6edec1248a79' AND deleted_at IS NULL`
+- `company_id = '0e3c924a-140c-40b4-88f5-ff424e7f0246' AND deleted_at IS NULL`
+- `company_id = '0e6931e6-18c1-4d55-b81c-3c71ff850b9c' AND deleted_at IS NULL`
+- `company_id = '0e7eb779-61bf-4179-8e6b-ad7b1297b2d6' AND deleted_at IS NULL`
+- `company_id = '0e831920-4424-4277-9ed2-6aca2abd26e2' AND deleted_at IS NULL`
+- `company_id = '0e831920-4424-4277-9ed2-6aca2abd26e2' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '0e831920-4424-4277-9ed2-6aca2abd26e2' AND deleted_at IS NULL)`
+- `company_id = '103df037-c62b-4910-9f24-5343eb796b12' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '103df037-c62b-4910-9f24-5343eb796b12' AND deleted_at IS NULL))`
+- `company_id = '104fbceb-65c3-4ea8-97c7-d1a6d68d52f2' AND deleted_at IS NULL`
+- `company_id = '118d8796-c386-4ff0-a613-0a06507697f2' AND deleted_at IS NULL`
+- `company_id = '1387e08f-c277-4de5-a96a-5435a79e30da' AND deleted_at IS NULL`
+- `company_id = '1387e08f-c277-4de5-a96a-5435a79e30da' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '1387e08f-c277-4de5-a96a-5435a79e30da' AND deleted_at IS NULL)`
+- `company_id = '150e9995-e60e-46df-b864-dbc22ba4ecd4' AND deleted_at IS NULL`
+- `company_id = '153d04c6-a2a5-48f7-ac6b-2c0087debf7a' AND deleted_at IS NULL`
+- `company_id = '153d04c6-a2a5-48f7-ac6b-2c0087debf7a' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '153d04c6-a2a5-48f7-ac6b-2c0087debf7a' AND deleted_at IS NULL)`
+- `company_id = '1653170a-1b8b-4c68-ad40-f4129085610a' AND deleted_at IS NULL`
+- `company_id = '1653170a-1b8b-4c68-ad40-f4129085610a' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '1653170a-1b8b-4c68-ad40-f4129085610a' AND deleted_at IS NULL)`
+- `company_id = '1670a020-5e23-463f-a77c-026003b9db20' AND deleted_at IS NULL`
+- `company_id = '1670a020-5e23-463f-a77c-026003b9db20' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '1670a020-5e23-463f-a77c-026003b9db20' AND deleted_at IS NULL))`
+- `company_id = '169ead30-9517-4c3a-b92f-ca0329e40cb2' AND deleted_at IS NULL`
+- `company_id = '169ead30-9517-4c3a-b92f-ca0329e40cb2' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '169ead30-9517-4c3a-b92f-ca0329e40cb2' AND deleted_at IS NULL)`
+- `company_id = '1730cde2-9728-4802-abe4-69404922e4aa' AND deleted_at IS NULL`
+- `company_id = '1890e0bd-eb12-418c-9b29-be30be10e864' AND deleted_at IS NULL`
+- `company_id = '18e6b1ec-0a51-4585-8dd0-93a7411b3cd3' AND deleted_at IS NULL`
+- `company_id = '18f2d809-1647-4e7c-acef-9b6954d15c96' AND deleted_at IS NULL`
+- `company_id = '1939e248-294c-4aa0-bd4c-3bfc015fee25' AND deleted_at IS NULL`
+- `company_id = '1939e248-294c-4aa0-bd4c-3bfc015fee25' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '1939e248-294c-4aa0-bd4c-3bfc015fee25' AND deleted_at IS NULL)`
+- `company_id = '1a05063a-b649-4b17-98e8-07c7e85fb6ea' AND deleted_at IS NULL`
+- `company_id = '1a8c5d70-3052-4818-95b9-384b98117d91' AND deleted_at IS NULL`
+- `company_id = '1ae94adf-ba39-48b3-a9c8-6cccdcb85ec0' AND deleted_at IS NULL`
+- `company_id = '1b366262-758c-4ee8-b0dc-52d92a93cadf' AND deleted_at IS NULL`
+- `company_id = '1b40f372-2f20-47cc-95f7-c6e545d2e5a9' AND deleted_at IS NULL`
+- `company_id = '1b40f372-2f20-47cc-95f7-c6e545d2e5a9' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '1b40f372-2f20-47cc-95f7-c6e545d2e5a9' AND deleted_at IS NULL)`
+- `company_id = '1b927f9f-2d1f-498b-80c6-c39a3fedf281' AND deleted_at IS NULL`
+- `company_id = '1ba9bb8a-cae2-435a-904e-0ed1cd2bf202' AND deleted_at IS NULL`
+- `company_id = '1bc40821-5953-4051-9bbf-1a61224e19d0' AND deleted_at IS NULL`
+- `company_id = '1bc40821-5953-4051-9bbf-1a61224e19d0' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '1bc40821-5953-4051-9bbf-1a61224e19d0' AND deleted_at IS NULL))`
+- `company_id = '1bc40821-5953-4051-9bbf-1a61224e19d0' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '1bc40821-5953-4051-9bbf-1a61224e19d0' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '1bc40821-5953-4051-9bbf-1a61224e19d0' AND deleted_at IS NULL)))`
+- `company_id = '1bcd3757-319e-4e8c-b2f6-e8fc52da012c' AND deleted_at IS NULL`
+- `company_id = '1c7ede49-fa76-49fa-ad54-47d01bccf9eb' AND deleted_at IS NULL`
+- `company_id = '1dbffe8c-086c-45dc-900e-ae69e4f5f5ec' AND deleted_at IS NULL`
+- `company_id = '1eb10a27-1cda-4e29-8d0c-196c3f3b767e' AND deleted_at IS NULL`
+- `company_id = '1eb10a27-1cda-4e29-8d0c-196c3f3b767e' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '1eb10a27-1cda-4e29-8d0c-196c3f3b767e' AND deleted_at IS NULL))`
+- `company_id = '1eb10a27-1cda-4e29-8d0c-196c3f3b767e' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '1eb10a27-1cda-4e29-8d0c-196c3f3b767e' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '1eb10a27-1cda-4e29-8d0c-196c3f3b767e' AND deleted_at IS NULL)))`
+- `company_id = '1f133560-6a01-43b9-90fe-8aa49b5c0aa8' AND deleted_at IS NULL`
+- `company_id = '1f56eccb-7ee3-4f11-a749-6e3d732c12ee' AND deleted_at IS NULL`
+- `company_id = '1f7ede97-6aef-475d-a348-610043fdf3c7' AND deleted_at IS NULL`
+- `company_id = '1fd7e529-8fe3-4584-86f8-a1cfe238727d' AND deleted_at IS NULL`
+- `company_id = '209a1d65-a739-4dd2-9270-84857233e95d' AND deleted_at IS NULL`
+- `company_id = '22bcfd6e-6a22-4a30-86ac-f84a1058dac8' AND deleted_at IS NULL`
+- `company_id = '22c7ffbb-09d2-40e5-b45d-d3abe9e8c260' AND deleted_at IS NULL`
+- `company_id = '22c7ffbb-09d2-40e5-b45d-d3abe9e8c260' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '22c7ffbb-09d2-40e5-b45d-d3abe9e8c260' AND deleted_at IS NULL)`
+- `company_id = '2335674c-7f36-4feb-b58f-0d4bad36e203' AND deleted_at IS NULL`
+- `company_id = '23e8965c-8a72-44b0-8198-f8ecd66848da' AND deleted_at IS NULL`
+- `company_id = '23e8965c-8a72-44b0-8198-f8ecd66848da' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '23e8965c-8a72-44b0-8198-f8ecd66848da' AND deleted_at IS NULL)`
+- `company_id = '23fb844f-726b-4fb6-9acd-384db202d325' AND deleted_at IS NULL`
+- `company_id = '23fb844f-726b-4fb6-9acd-384db202d325' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '23fb844f-726b-4fb6-9acd-384db202d325' AND deleted_at IS NULL)`
+- `company_id = '24011803-0e6e-4bd9-b607-0e2f9a1248dc' AND deleted_at IS NULL`
+- `company_id = '2534f581-ce83-4beb-b4e1-d17d40d31ce7' AND deleted_at IS NULL`
+- `company_id = '2534f581-ce83-4beb-b4e1-d17d40d31ce7' AND deleted_at IS NULL AND (created_by_profile_id = '7059881b-0dfc-434a-ac55-63b2bba1b9a4' OR responsible_profile_id = '7059881b-0dfc-434a-ac55-63b2bba1b9a4')`
+- `company_id = '25734388-3f67-42c0-874c-3fe5c351f69c' AND deleted_at IS NULL`
+- `company_id = '25734388-3f67-42c0-874c-3fe5c351f69c' AND deleted_at IS NULL AND (created_by_profile_id = '45e8ffec-07d2-491f-bb3d-8dea51380bfb' OR responsible_profile_id = '45e8ffec-07d2-491f-bb3d-8dea51380bfb')`
+- `company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL`
+- `company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND (created_by_profile_id = '4507bff6-e7f1-4fc9-9515-f24e22425061' OR responsible_profile_id = '4507bff6-e7f1-4fc9-9515-f24e22425061')))`
+- `company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL))`
+- `company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND (created_by_profile_id = '4507bff6-e7f1-4fc9-9515-f24e22425061' OR responsible_profile_id = '4507bff6-e7f1-4fc9-9515-f24e22425061'))))`
+- `company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '27a2439d-a99c-4858-83f6-da4d033c4e40' AND deleted_at IS NULL)))`
+- `company_id = '28fe7677-ab62-4ad1-89ee-f208fcf69685' AND deleted_at IS NULL`
+- `company_id = '28fe7677-ab62-4ad1-89ee-f208fcf69685' AND deleted_at IS NULL AND (created_by_profile_id = '53961150-524c-4fb8-aea6-24b4279255e6' OR responsible_profile_id = '53961150-524c-4fb8-aea6-24b4279255e6')`
+- `company_id = '2aaaedc1-0500-4132-8a02-9fbcf5cd7036' AND deleted_at IS NULL`
+- `company_id = '2b8656bf-f926-4aa3-bfb3-b8a154499e1b' AND deleted_at IS NULL`
+- `company_id = '2b8656bf-f926-4aa3-bfb3-b8a154499e1b' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '2b8656bf-f926-4aa3-bfb3-b8a154499e1b' AND deleted_at IS NULL)`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (created_by_profile_id = 'e4cb9680-0218-46ef-8783-c896360808dd' OR responsible_profile_id = 'e4cb9680-0218-46ef-8783-c896360808dd')`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (created_by_profile_id = 'f5b9c27f-8604-4423-a15d-2b3e25d7a0b5' OR responsible_profile_id = 'f5b9c27f-8604-4423-a15d-2b3e25d7a0b5')`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (created_by_profile_id = '0633df39-f3e2-4792-974b-937b3f50faf2' OR responsible_profile_id = '0633df39-f3e2-4792-974b-937b3f50faf2')))`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (created_by_profile_id = 'e4cb9680-0218-46ef-8783-c896360808dd' OR responsible_profile_id = 'e4cb9680-0218-46ef-8783-c896360808dd')))`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL))`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (created_by_profile_id = '0633df39-f3e2-4792-974b-937b3f50faf2' OR responsible_profile_id = '0633df39-f3e2-4792-974b-937b3f50faf2'))))`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (created_by_profile_id = 'cbe66b3d-7172-48f1-8d09-c4e178a3cb47' OR responsible_profile_id = 'cbe66b3d-7172-48f1-8d09-c4e178a3cb47'))))`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (created_by_profile_id = 'e4cb9680-0218-46ef-8783-c896360808dd' OR responsible_profile_id = 'e4cb9680-0218-46ef-8783-c896360808dd'))))`
+- `company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL)))`
+- `company_id = '2c0a0ce0-79d0-48ba-8f78-922dd35dea96' AND deleted_at IS NULL`
+- `company_id = '2c13fa20-8879-48f4-9b25-24fd66d55bd7' AND deleted_at IS NULL`
+- `company_id = '2c13fa20-8879-48f4-9b25-24fd66d55bd7' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '2c13fa20-8879-48f4-9b25-24fd66d55bd7' AND deleted_at IS NULL)`
+- `company_id = '2c1c79be-ff9b-456c-b66b-daac3f0b1fdd' AND deleted_at IS NULL`
+- `company_id = '2c1c79be-ff9b-456c-b66b-daac3f0b1fdd' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '2c1c79be-ff9b-456c-b66b-daac3f0b1fdd' AND deleted_at IS NULL)`
+- `company_id = '2c1e781f-1e37-4bea-a05f-571c2ce9c9d8' AND deleted_at IS NULL`
+- `company_id = '2c1e781f-1e37-4bea-a05f-571c2ce9c9d8' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '2c1e781f-1e37-4bea-a05f-571c2ce9c9d8' AND deleted_at IS NULL)`
+- `company_id = '2d31a771-78dc-4c8e-94ec-74e944ea29af' AND deleted_at IS NULL`
+- `company_id = '2dea49a6-d970-430c-a04a-c685da929c9a' AND deleted_at IS NULL`
+- `company_id = '2e7d3fab-880f-48bf-a58f-d65af0bfd6ae' AND deleted_at IS NULL`
+- `company_id = '2e7d3fab-880f-48bf-a58f-d65af0bfd6ae' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '2e7d3fab-880f-48bf-a58f-d65af0bfd6ae' AND deleted_at IS NULL)`
+- `company_id = '2e9207a0-dabc-48bd-891c-3c28ac34aa1b' AND deleted_at IS NULL`
+- `company_id = '2f2f7f14-fc70-4a03-984a-ed1059c7a521' AND deleted_at IS NULL`
+- `company_id = '2f9967a4-51b2-4622-ae2c-13bc9cd5e39f' AND deleted_at IS NULL`
+- `company_id = '2f9967a4-51b2-4622-ae2c-13bc9cd5e39f' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '2f9967a4-51b2-4622-ae2c-13bc9cd5e39f' AND deleted_at IS NULL)`
+- `company_id = '2fa8c267-6102-4e4e-b8de-3a140b09abf5' AND deleted_at IS NULL`
+- `company_id = '2fe59522-b9de-4a2a-9110-dae0d9efd6de' AND deleted_at IS NULL`
+- `company_id = '303e4c77-4189-45f5-aaf3-99f580b050b1' AND deleted_at IS NULL`
+- `company_id = '303e4c77-4189-45f5-aaf3-99f580b050b1' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '303e4c77-4189-45f5-aaf3-99f580b050b1' AND deleted_at IS NULL))`
+- `company_id = '3090e170-a930-488a-b5d8-250bf2a049a7' AND deleted_at IS NULL`
+- `company_id = '3122c7a9-18ec-4952-86a6-f22885ec4c59' AND deleted_at IS NULL`
+- `company_id = '3122c7a9-18ec-4952-86a6-f22885ec4c59' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '3122c7a9-18ec-4952-86a6-f22885ec4c59' AND deleted_at IS NULL)`
+- `company_id = '3180ccda-769e-4274-950f-76f0736601c4' AND deleted_at IS NULL`
+- `company_id = '3180ccda-769e-4274-950f-76f0736601c4' AND deleted_at IS NULL AND (created_by_profile_id = '58c8a7bc-4151-4e64-910a-a1597db261b1' OR responsible_profile_id = '58c8a7bc-4151-4e64-910a-a1597db261b1')`
+- `company_id = '32ac90ad-d5ad-416b-bc49-dc9d8154e94a' AND deleted_at IS NULL`
+- `company_id = '32ac90ad-d5ad-416b-bc49-dc9d8154e94a' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '32ac90ad-d5ad-416b-bc49-dc9d8154e94a' AND deleted_at IS NULL)`
+- `company_id = '32b01c37-306c-431a-92b5-cbb61e1f4c2e' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '32b01c37-306c-431a-92b5-cbb61e1f4c2e' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '32b01c37-306c-431a-92b5-cbb61e1f4c2e' AND deleted_at IS NULL)))`
+- `company_id = '32b7cbe7-f624-4b0d-866a-d644868f2888' AND deleted_at IS NULL`
+- `company_id = '32b7cbe7-f624-4b0d-866a-d644868f2888' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '32b7cbe7-f624-4b0d-866a-d644868f2888' AND deleted_at IS NULL)`
+- `company_id = '33e83c20-e5c8-45b0-b088-b403a534988e' AND deleted_at IS NULL`
+- `company_id = '340d82c6-a699-4dfa-81b2-c25911c7ab29' AND deleted_at IS NULL`
+- `company_id = '340d82c6-a699-4dfa-81b2-c25911c7ab29' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '340d82c6-a699-4dfa-81b2-c25911c7ab29' AND deleted_at IS NULL)`
+- `company_id = '3439f58f-c0bd-47c8-ae7d-6fc9d288fb29' AND deleted_at IS NULL`
+- `company_id = '34f436cc-0589-4836-a3aa-5d862bdd9089' AND deleted_at IS NULL`
+- `company_id = '359d2825-8e15-423c-b75b-7bcbf9170044' AND deleted_at IS NULL`
+- `company_id = '362619c9-0a68-4ec6-b1db-aadecdd095a0' AND deleted_at IS NULL`
+- `company_id = '3641c42c-0b6f-4661-89bc-1d028fd3b433' AND deleted_at IS NULL`
+- `company_id = '3641c42c-0b6f-4661-89bc-1d028fd3b433' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '3641c42c-0b6f-4661-89bc-1d028fd3b433' AND deleted_at IS NULL)`
+- `company_id = '36581d5a-5d86-42ae-9666-c5c4390792f5' AND deleted_at IS NULL`
+- `company_id = '376c62c9-c6f5-491b-a63a-7a12379647d4' AND deleted_at IS NULL`
+- `company_id = '38e42de9-2773-49cc-b815-cae3aa98eb61' AND deleted_at IS NULL`
+- `company_id = '38e42de9-2773-49cc-b815-cae3aa98eb61' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '38e42de9-2773-49cc-b815-cae3aa98eb61' AND deleted_at IS NULL)`
+- `company_id = '391d21be-16cb-4306-a0ff-6bb6fa483e96' AND deleted_at IS NULL`
+- `company_id = '39eaa935-7bd4-4acf-a8ea-5b7369b6bc06' AND deleted_at IS NULL`
+- `company_id = '3b6eb35d-5913-428e-a59c-a57c73f9aaa6' AND deleted_at IS NULL`
+- `company_id = '3c1c007d-0017-4563-84be-f1a1cce291df' AND deleted_at IS NULL`
+- `company_id = '3ce23fcc-c2a6-4fd1-a0ce-aedfde5a624d' AND deleted_at IS NULL`
+- `company_id = '3e01ee83-f15e-4910-8dd4-bc92c47546bd' AND deleted_at IS NULL`
+- `company_id = '3f0dbe08-f17a-455c-8177-399f486272f3' AND deleted_at IS NULL`
+- `company_id = '4091c025-61f4-424b-8535-fd0c8724eaa2' AND deleted_at IS NULL`
+- `company_id = '4091c025-61f4-424b-8535-fd0c8724eaa2' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '4091c025-61f4-424b-8535-fd0c8724eaa2' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '4091c025-61f4-424b-8535-fd0c8724eaa2' AND deleted_at IS NULL)))`
+- `company_id = '40d2c368-2acd-4600-beed-084de144c05e' AND deleted_at IS NULL`
+- `company_id = '41a1e4fb-86ec-4df8-8dcf-a0a6b7f52302' AND deleted_at IS NULL`
+- `company_id = '41a1e4fb-86ec-4df8-8dcf-a0a6b7f52302' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '41a1e4fb-86ec-4df8-8dcf-a0a6b7f52302' AND deleted_at IS NULL)`
+- `company_id = '42403438-011e-48c8-80e7-452e337076b1' AND deleted_at IS NULL`
+- `company_id = '42732584-d4cd-4957-bbdf-c452ca6751c6' AND deleted_at IS NULL`
+- `company_id = '4436a70b-8d69-4607-a23d-51659ae60414' AND deleted_at IS NULL`
+- `company_id = '44990010-41e8-4f76-9230-0abdab308a2d' AND deleted_at IS NULL`
+- `company_id = '45574108-9f4d-471b-b9af-1f9d731a52f5' AND deleted_at IS NULL`
+- `company_id = '45574108-9f4d-471b-b9af-1f9d731a52f5' AND deleted_at IS NULL AND (created_by_profile_id = 'af7eb6d8-4904-45ac-922e-c787bb77c9f0' OR responsible_profile_id = 'af7eb6d8-4904-45ac-922e-c787bb77c9f0')`
+- `company_id = '45d8c3f3-83f0-4184-a85f-04f17bf249c9' AND deleted_at IS NULL`
+- `company_id = '4604fc82-2a37-48bb-9d98-a961113b9f84' AND deleted_at IS NULL`
+- `company_id = '4604fc82-2a37-48bb-9d98-a961113b9f84' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '4604fc82-2a37-48bb-9d98-a961113b9f84' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '4604fc82-2a37-48bb-9d98-a961113b9f84' AND deleted_at IS NULL AND (created_by_profile_id = 'bb217df3-19be-4296-aa1f-fb6bf28c3998' OR responsible_profile_id = 'bb217df3-19be-4296-aa1f-fb6bf28c3998'))))`
+- `company_id = '4604fc82-2a37-48bb-9d98-a961113b9f84' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '4604fc82-2a37-48bb-9d98-a961113b9f84' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '4604fc82-2a37-48bb-9d98-a961113b9f84' AND deleted_at IS NULL)))`
+- `company_id = '46241483-3f04-4d78-859d-c3c24463e1b3' AND deleted_at IS NULL`
+- `company_id = '46241483-3f04-4d78-859d-c3c24463e1b3' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '46241483-3f04-4d78-859d-c3c24463e1b3' AND deleted_at IS NULL)`
+- `company_id = '4654d0ea-ab3b-495c-8206-e6bd9f5c7e28' AND deleted_at IS NULL`
+- `company_id = '46aceee2-3f93-4005-95c2-7ed399a98709' AND deleted_at IS NULL`
+- `company_id = '46aceee2-3f93-4005-95c2-7ed399a98709' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '46aceee2-3f93-4005-95c2-7ed399a98709' AND deleted_at IS NULL)`
+- `company_id = '46ae8e24-3a71-4437-b1ab-e5c28ae62712' AND deleted_at IS NULL`
+- `company_id = '4724b7ad-45cb-4a1e-b083-8c25ff9d1d7a' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '4724b7ad-45cb-4a1e-b083-8c25ff9d1d7a' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '4724b7ad-45cb-4a1e-b083-8c25ff9d1d7a' AND deleted_at IS NULL)))`
+- `company_id = '480ecbd0-6597-4dbb-bb3c-1ee6146db700' AND deleted_at IS NULL`
+- `company_id = '48ebd1df-7a51-4228-9adb-84692c3b76df' AND deleted_at IS NULL`
+- `company_id = '48ebd1df-7a51-4228-9adb-84692c3b76df' AND deleted_at IS NULL AND (created_by_profile_id = 'd14326df-e0d8-460c-a471-199410795909' OR responsible_profile_id = 'd14326df-e0d8-460c-a471-199410795909')`
+- `company_id = '48ebd1df-7a51-4228-9adb-84692c3b76df' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '48ebd1df-7a51-4228-9adb-84692c3b76df' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '48ebd1df-7a51-4228-9adb-84692c3b76df' AND deleted_at IS NULL AND (created_by_profile_id = 'ad7045e2-7fe4-4ac9-a883-c64206bd1c3c' OR responsible_profile_id = 'ad7045e2-7fe4-4ac9-a883-c64206bd1c3c'))))`
+- `company_id = '4a540658-db1a-4781-9126-da0b7397df48' AND deleted_at IS NULL`
+- `company_id = '4db04f38-a40d-4c99-9db8-41fbc5a6b2eb' AND deleted_at IS NULL`
+- `company_id = '4dea604c-8779-4488-a56d-de1279ec0db8' AND deleted_at IS NULL`
+- `company_id = '4e9ee6a5-97f0-42b5-8de0-75abc8b7dce0' AND deleted_at IS NULL`
+- `company_id = '4ec91da4-a8bc-4f81-93a0-0241de44a251' AND deleted_at IS NULL`
+- `company_id = '4f1a9bef-95f3-4779-a0c4-d870a4adbe7f' AND deleted_at IS NULL`
+- `company_id = '502ddee5-22f9-42b0-8d97-f832da3f3637' AND deleted_at IS NULL`
+- `company_id = '518045ff-67a3-4dc2-8c1f-0daf1a253557' AND deleted_at IS NULL`
+- `company_id = '518045ff-67a3-4dc2-8c1f-0daf1a253557' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '518045ff-67a3-4dc2-8c1f-0daf1a253557' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '518045ff-67a3-4dc2-8c1f-0daf1a253557' AND deleted_at IS NULL)))`
+- `company_id = '51f5965a-adf0-48ad-9539-1d932f5a64cf' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '51f5965a-adf0-48ad-9539-1d932f5a64cf' AND deleted_at IS NULL AND (created_by_profile_id = '015c1423-9b5d-4369-87df-c6d4c2595add' OR responsible_profile_id = '015c1423-9b5d-4369-87df-c6d4c2595add')))`
+- `company_id = '51f5965a-adf0-48ad-9539-1d932f5a64cf' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '51f5965a-adf0-48ad-9539-1d932f5a64cf' AND deleted_at IS NULL))`
+- `company_id = '51f5965a-adf0-48ad-9539-1d932f5a64cf' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '51f5965a-adf0-48ad-9539-1d932f5a64cf' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '51f5965a-adf0-48ad-9539-1d932f5a64cf' AND deleted_at IS NULL)))`
+- `company_id = '52d1cc17-0bca-4d40-8b3f-178ac45b5079' AND deleted_at IS NULL`
+- `company_id = '52d57896-a8b4-43ac-9c5c-b1b41e4539db' AND deleted_at IS NULL`
+- `company_id = '52d57896-a8b4-43ac-9c5c-b1b41e4539db' AND deleted_at IS NULL AND (created_by_profile_id = '3a01d8ec-006b-4297-b392-2bf792dd6bfb' OR responsible_profile_id = '3a01d8ec-006b-4297-b392-2bf792dd6bfb')`
+- `company_id = '52d57896-a8b4-43ac-9c5c-b1b41e4539db' AND deleted_at IS NULL AND (created_by_profile_id = 'ec2754b3-a3ac-49c4-a232-8898612adfa0' OR responsible_profile_id = 'ec2754b3-a3ac-49c4-a232-8898612adfa0')`
+- `company_id = '52eb8225-2308-46d5-9af7-eccc49e3559d' AND deleted_at IS NULL`
+- `company_id = '53a10a16-03f9-491f-8a3f-9d853673c1d0' AND deleted_at IS NULL`
+- `company_id = '53a10a16-03f9-491f-8a3f-9d853673c1d0' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '53a10a16-03f9-491f-8a3f-9d853673c1d0' AND deleted_at IS NULL))`
+- `company_id = '53fc4baa-f9b8-4bc5-a7f1-325632eb4f0e' AND deleted_at IS NULL`
+- `company_id = '54b9a21b-d1d2-469c-b421-470c4dbfcc20' AND deleted_at IS NULL`
+- `company_id = '553da3cc-8345-42e9-b10f-c7dbecce94b6' AND deleted_at IS NULL`
+- `company_id = '553da3cc-8345-42e9-b10f-c7dbecce94b6' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '553da3cc-8345-42e9-b10f-c7dbecce94b6' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '553da3cc-8345-42e9-b10f-c7dbecce94b6' AND deleted_at IS NULL)))`
+- `company_id = '55c8b6e5-ca7a-45cc-8f9d-acca86d01fb1' AND deleted_at IS NULL`
+- `company_id = '55d3a822-77df-4444-b07e-89f3b3ae12f9' AND deleted_at IS NULL`
+- `company_id = '55ea68e1-af71-4670-ac53-b8c04a34b249' AND deleted_at IS NULL`
+- `company_id = '5629229f-2cef-4f7a-bbf2-28fb49e8f166' AND deleted_at IS NULL`
+- `company_id = '5629229f-2cef-4f7a-bbf2-28fb49e8f166' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '5629229f-2cef-4f7a-bbf2-28fb49e8f166' AND deleted_at IS NULL))`
+- `company_id = '5629229f-2cef-4f7a-bbf2-28fb49e8f166' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '5629229f-2cef-4f7a-bbf2-28fb49e8f166' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '5629229f-2cef-4f7a-bbf2-28fb49e8f166' AND deleted_at IS NULL)))`
+- `company_id = '57351ee0-6106-4d16-99a5-a773c1ce061d' AND deleted_at IS NULL`
+- `company_id = '57351ee0-6106-4d16-99a5-a773c1ce061d' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '57351ee0-6106-4d16-99a5-a773c1ce061d' AND deleted_at IS NULL))`
+- `company_id = '57351ee0-6106-4d16-99a5-a773c1ce061d' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '57351ee0-6106-4d16-99a5-a773c1ce061d' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '57351ee0-6106-4d16-99a5-a773c1ce061d' AND deleted_at IS NULL)))`
+- `company_id = '57684ff6-1814-4db2-a1a8-75d1bfe87134' AND deleted_at IS NULL`
+- `company_id = '57684ff6-1814-4db2-a1a8-75d1bfe87134' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '57684ff6-1814-4db2-a1a8-75d1bfe87134' AND deleted_at IS NULL)`
+- `company_id = '57e3f63f-70d3-49d2-b630-523a0e621cb4' AND deleted_at IS NULL`
+- `company_id = '5a6a94f0-5b8f-436d-b2be-55f34a6b3271' AND deleted_at IS NULL`
+- `company_id = '5a8d08d4-4e93-4269-bb87-df636ccf652b' AND deleted_at IS NULL`
+- `company_id = '5c047bf7-bf73-491c-ac4e-fda1202baeea' AND deleted_at IS NULL`
+- `company_id = '5c784293-4831-4ee2-b504-b2fdad8b09c7' AND deleted_at IS NULL`
+- `company_id = '5c806101-66ad-4444-a3ac-4a8b030d8306' AND deleted_at IS NULL`
+- `company_id = '5cbf9ce0-fdc4-430b-a9ff-05c7bfed973a' AND deleted_at IS NULL`
+- `company_id = '5cbf9ce0-fdc4-430b-a9ff-05c7bfed973a' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '5cbf9ce0-fdc4-430b-a9ff-05c7bfed973a' AND deleted_at IS NULL))`
+- `company_id = '5cbf9ce0-fdc4-430b-a9ff-05c7bfed973a' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '5cbf9ce0-fdc4-430b-a9ff-05c7bfed973a' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '5cbf9ce0-fdc4-430b-a9ff-05c7bfed973a' AND deleted_at IS NULL)))`
+- `company_id = '5d8d9abf-a0d7-46f1-bda0-61f11e1d4a9f' AND deleted_at IS NULL`
+- `company_id = '5f490a8e-5d45-4129-a645-8d99a87696d5' AND deleted_at IS NULL`
+- `company_id = '60c7761d-b40c-4b0e-b05c-f003892752b0' AND deleted_at IS NULL`
+- `company_id = '60c7761d-b40c-4b0e-b05c-f003892752b0' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '60c7761d-b40c-4b0e-b05c-f003892752b0' AND deleted_at IS NULL))`
+- `company_id = '60c7761d-b40c-4b0e-b05c-f003892752b0' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '60c7761d-b40c-4b0e-b05c-f003892752b0' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '60c7761d-b40c-4b0e-b05c-f003892752b0' AND deleted_at IS NULL)))`
+- `company_id = '60db026a-403e-44ff-9bf2-114af3c1b50e' AND deleted_at IS NULL`
+- `company_id = '6189fa88-843a-4734-9b67-c73282dca2e2' AND deleted_at IS NULL`
+- `company_id = '61dbf84b-59db-4105-87c3-05ca7a2a1422' AND deleted_at IS NULL`
+- `company_id = '62909fdd-5e26-48b0-a1b4-a5db4921b8a0' AND deleted_at IS NULL`
+- `company_id = '62909fdd-5e26-48b0-a1b4-a5db4921b8a0' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '62909fdd-5e26-48b0-a1b4-a5db4921b8a0' AND deleted_at IS NULL))`
+- `company_id = '62b95b05-c6c0-420c-ab0d-420e17d14ee5' AND deleted_at IS NULL`
+- `company_id = '63413bba-f97b-4d87-bafd-32f16e65bb2b' AND deleted_at IS NULL`
+- `company_id = '63946672-b434-48bf-bf94-bf10da5f6e96' AND deleted_at IS NULL`
+- `company_id = '63edb69d-50ce-4f41-afd1-3b99e16f4b09' AND deleted_at IS NULL`
+- `company_id = '645cda13-a39c-4c54-8125-2d71225addfa' AND deleted_at IS NULL`
+- `company_id = '6542cabb-2be1-4c33-ad66-619f10530184' AND deleted_at IS NULL`
+- `company_id = '6542cabb-2be1-4c33-ad66-619f10530184' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '6542cabb-2be1-4c33-ad66-619f10530184' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '6542cabb-2be1-4c33-ad66-619f10530184' AND deleted_at IS NULL)))`
+- `company_id = '6542cabb-2be1-4c33-ad66-619f10530184' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '6542cabb-2be1-4c33-ad66-619f10530184' AND deleted_at IS NULL)`
+- `company_id = '6663e9d1-b55f-4a5c-88e8-995413b6c009' AND deleted_at IS NULL`
+- `company_id = '671835ad-8de5-4ada-ab67-cba39108b318' AND deleted_at IS NULL`
+- `company_id = '688dd2c1-4ec5-4fad-b5e7-aaacc1086159' AND deleted_at IS NULL`
+- `company_id = '68a53392-abd3-4335-b5c6-420bda946c82' AND deleted_at IS NULL`
+- `company_id = '68a53392-abd3-4335-b5c6-420bda946c82' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '68a53392-abd3-4335-b5c6-420bda946c82' AND deleted_at IS NULL))`
+- `company_id = '68a53392-abd3-4335-b5c6-420bda946c82' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '68a53392-abd3-4335-b5c6-420bda946c82' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '68a53392-abd3-4335-b5c6-420bda946c82' AND deleted_at IS NULL)))`
+- `company_id = '6b5646d6-985b-4138-a68f-ae28c3771297' AND deleted_at IS NULL`
+- `company_id = '6d53b25c-5895-4736-80c7-b101a933104f' AND deleted_at IS NULL`
+- `company_id = '6ddd32ad-d886-47e7-b232-87aa191fc62a' AND deleted_at IS NULL`
+- `company_id = '6dfa5411-a5c6-4be7-aff9-ae9ad188158e' AND deleted_at IS NULL`
+- `company_id = '6e173817-33cb-4e46-aefe-9181e5e45d7a' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '6e173817-33cb-4e46-aefe-9181e5e45d7a' AND deleted_at IS NULL))`
+- `company_id = '6e173817-33cb-4e46-aefe-9181e5e45d7a' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '6e173817-33cb-4e46-aefe-9181e5e45d7a' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '6e173817-33cb-4e46-aefe-9181e5e45d7a' AND deleted_at IS NULL)))`
+- `company_id = '6ed00796-d603-4764-ad21-3bf7efc28b97' AND deleted_at IS NULL`
+- `company_id = '706da508-a1f6-4276-b8a6-cd7429481791' AND deleted_at IS NULL AND (created_by_profile_id = 'a076aec9-f0b0-49fc-8221-d014eb9649ba' OR responsible_profile_id = 'a076aec9-f0b0-49fc-8221-d014eb9649ba')`
+- `company_id = '70d7c280-3782-48d4-a774-e0bb1ad8c677' AND deleted_at IS NULL`
+- `company_id = '717fbac5-6b59-4425-b0f7-b33c11c3a11c' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '717fbac5-6b59-4425-b0f7-b33c11c3a11c' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '717fbac5-6b59-4425-b0f7-b33c11c3a11c' AND deleted_at IS NULL)))`
+- `company_id = '71a4b2f8-93d6-4e8f-b008-97fff411de4f' AND deleted_at IS NULL`
+- `company_id = '736c2f49-c942-469b-9519-d64ec1093e4e' AND deleted_at IS NULL`
+- `company_id = '743d4d9f-56b7-4b6b-8d1d-4ff708c8ea4f' AND deleted_at IS NULL`
+- `company_id = '7474dfe0-6c74-4432-a517-189ecbd1496f' AND deleted_at IS NULL`
+- `company_id = '74a29fb8-25b4-4e1e-9d85-636a34b2849f' AND deleted_at IS NULL`
+- `company_id = '75c4edad-5e3f-4b2b-8a47-849bc45a6cd2' AND deleted_at IS NULL`
+- `company_id = '76349510-f697-4f5f-aacb-421dfa90a314' AND deleted_at IS NULL`
+- `company_id = '76bdf036-6495-4a62-83c0-ac82b3da863c' AND deleted_at IS NULL`
+- `company_id = '77ca5ab9-15d4-4a15-9519-5beabe9890b6' AND deleted_at IS NULL`
+- `company_id = '788276cf-1cd2-403d-a024-8b677803b8e5' AND deleted_at IS NULL`
+- `company_id = '79240f5b-24d6-47dc-aee9-99f38d1bea67' AND deleted_at IS NULL`
+- `company_id = '7a49e80b-bfd1-4173-a5df-f2ec05a47301' AND deleted_at IS NULL`
+- `company_id = '7a5b39b8-1bb6-4924-9507-36ef13b3cf65' AND deleted_at IS NULL`
+- `company_id = '7b0d8d39-3ca4-4f86-b801-bd2e4df528c6' AND deleted_at IS NULL`
+- `company_id = '7b503894-1c3a-4f13-a352-e9b62ab36e12' AND deleted_at IS NULL`
+- `company_id = '7bf242c7-dcf5-477f-b1bc-ce8513fe219e' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7bf242c7-dcf5-477f-b1bc-ce8513fe219e' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7bf242c7-dcf5-477f-b1bc-ce8513fe219e' AND deleted_at IS NULL)))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '16a50648-dc91-4cf5-83a8-174b74a60067' OR responsible_profile_id = '16a50648-dc91-4cf5-83a8-174b74a60067')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd' OR responsible_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '34be4437-934e-4664-ac59-50d33e335066' OR responsible_profile_id = '34be4437-934e-4664-ac59-50d33e335066')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca' OR responsible_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '383ce4b1-2225-4385-a71e-7d9176efd9a6' OR responsible_profile_id = '383ce4b1-2225-4385-a71e-7d9176efd9a6')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '492fd5cc-86c6-498d-9c9d-db46cc20e765' OR responsible_profile_id = '492fd5cc-86c6-498d-9c9d-db46cc20e765')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '62415233-5a28-4363-9881-c3cbd1039e05' OR responsible_profile_id = '62415233-5a28-4363-9881-c3cbd1039e05')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '7c566840-3bf4-4cac-9c01-0c09fa219821' OR responsible_profile_id = '7c566840-3bf4-4cac-9c01-0c09fa219821')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3' OR id IN (SELECT customer_id FROM public.projects WHERE id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3' OR responsible_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3')) AND customer_id IS NOT NULL))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3' OR responsible_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9' OR responsible_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a' OR responsible_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792' OR responsible_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'b5d1ae8f-c0bf-48eb-aeb9-4b0172351d19' OR responsible_profile_id = 'b5d1ae8f-c0bf-48eb-aeb9-4b0172351d19')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18' OR responsible_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'bceaeef9-a0b3-4ab4-91e4-2bfc31bfb4e3' OR responsible_profile_id = 'bceaeef9-a0b3-4ab4-91e4-2bfc31bfb4e3')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c21af18d-99f8-4acc-86fb-f7c6723947f1' OR responsible_profile_id = 'c21af18d-99f8-4acc-86fb-f7c6723947f1')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246' OR responsible_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c4a9e946-41e5-43a9-bda1-4122e98ebcb4' OR responsible_profile_id = 'c4a9e946-41e5-43a9-bda1-4122e98ebcb4')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9' OR responsible_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8' OR id IN (SELECT customer_id FROM public.projects WHERE id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8' OR responsible_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8')) AND customer_id IS NOT NULL))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8' OR responsible_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a' OR responsible_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd6c446ab-cf77-45ae-884e-d4e0aa49d7bc' OR responsible_profile_id = 'd6c446ab-cf77-45ae-884e-d4e0aa49d7bc')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6' OR responsible_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250' OR id IN (SELECT customer_id FROM public.projects WHERE id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250' OR responsible_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250')) AND customer_id IS NOT NULL))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250' OR responsible_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b' OR responsible_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d' OR responsible_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d')`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '16a50648-dc91-4cf5-83a8-174b74a60067' OR responsible_profile_id = '16a50648-dc91-4cf5-83a8-174b74a60067')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd' OR responsible_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '34be4437-934e-4664-ac59-50d33e335066' OR responsible_profile_id = '34be4437-934e-4664-ac59-50d33e335066')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca' OR responsible_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '492fd5cc-86c6-498d-9c9d-db46cc20e765' OR responsible_profile_id = '492fd5cc-86c6-498d-9c9d-db46cc20e765')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '62415233-5a28-4363-9881-c3cbd1039e05' OR responsible_profile_id = '62415233-5a28-4363-9881-c3cbd1039e05')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '7c566840-3bf4-4cac-9c01-0c09fa219821' OR responsible_profile_id = '7c566840-3bf4-4cac-9c01-0c09fa219821')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3' OR responsible_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9' OR responsible_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a' OR responsible_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792' OR responsible_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'bceaeef9-a0b3-4ab4-91e4-2bfc31bfb4e3' OR responsible_profile_id = 'bceaeef9-a0b3-4ab4-91e4-2bfc31bfb4e3')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246' OR responsible_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9' OR responsible_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6' OR responsible_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250' OR responsible_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b' OR responsible_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd' OR responsible_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca' OR responsible_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9' OR responsible_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'b5d1ae8f-c0bf-48eb-aeb9-4b0172351d19' OR responsible_profile_id = 'b5d1ae8f-c0bf-48eb-aeb9-4b0172351d19')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18' OR responsible_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18')) OR offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND is_template = true))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246' OR responsible_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246')) OR offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND is_template = true))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a' OR responsible_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250' OR responsible_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250')))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b' OR responsible_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b')) OR offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND is_template = true))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d' OR responsible_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d')) OR offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND is_template = true))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '16a50648-dc91-4cf5-83a8-174b74a60067' OR responsible_profile_id = '16a50648-dc91-4cf5-83a8-174b74a60067'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd' OR responsible_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '34be4437-934e-4664-ac59-50d33e335066' OR responsible_profile_id = '34be4437-934e-4664-ac59-50d33e335066'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca' OR responsible_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '383ce4b1-2225-4385-a71e-7d9176efd9a6' OR responsible_profile_id = '383ce4b1-2225-4385-a71e-7d9176efd9a6'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '492fd5cc-86c6-498d-9c9d-db46cc20e765' OR responsible_profile_id = '492fd5cc-86c6-498d-9c9d-db46cc20e765'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '62415233-5a28-4363-9881-c3cbd1039e05' OR responsible_profile_id = '62415233-5a28-4363-9881-c3cbd1039e05'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '7c566840-3bf4-4cac-9c01-0c09fa219821' OR responsible_profile_id = '7c566840-3bf4-4cac-9c01-0c09fa219821'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3' OR responsible_profile_id = '81a94585-e935-4256-b277-61cf414eb9c3'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9' OR responsible_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a' OR responsible_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792' OR responsible_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18' OR responsible_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c21af18d-99f8-4acc-86fb-f7c6723947f1' OR responsible_profile_id = 'c21af18d-99f8-4acc-86fb-f7c6723947f1'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246' OR responsible_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c4a9e946-41e5-43a9-bda1-4122e98ebcb4' OR responsible_profile_id = 'c4a9e946-41e5-43a9-bda1-4122e98ebcb4'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9' OR responsible_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8' OR responsible_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a' OR responsible_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd6c446ab-cf77-45ae-884e-d4e0aa49d7bc' OR responsible_profile_id = 'd6c446ab-cf77-45ae-884e-d4e0aa49d7bc'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6' OR responsible_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250' OR responsible_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b' OR responsible_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d' OR responsible_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d'))))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL)))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca' OR responsible_profile_id = '35044cb7-ad86-4559-95b1-3caa8cf8f3ca'))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a' OR responsible_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a'))`
+- `company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL)`
+- `company_id = '7e3b86cc-34ec-4102-858a-5ce93884dee0' AND deleted_at IS NULL`
+- `company_id = '7e6121fa-a57d-42a5-8c3a-bdd6a32ab13d' AND deleted_at IS NULL`
+- `company_id = '7e804a64-c16c-479d-a876-ddbbbddb8b21' AND deleted_at IS NULL`
+- `company_id = '7e804a64-c16c-479d-a876-ddbbbddb8b21' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7e804a64-c16c-479d-a876-ddbbbddb8b21' AND deleted_at IS NULL))`
+- `company_id = '7e804a64-c16c-479d-a876-ddbbbddb8b21' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '7e804a64-c16c-479d-a876-ddbbbddb8b21' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '7e804a64-c16c-479d-a876-ddbbbddb8b21' AND deleted_at IS NULL)))`
+- `company_id = '7ef71433-72bf-427d-b12e-79292114f466' AND deleted_at IS NULL`
+- `company_id = '82094a10-2b96-4424-9bb9-631c2e5b8d47' AND deleted_at IS NULL`
+- `company_id = '82db078e-7828-4c6d-93c5-32fd784a663e' AND deleted_at IS NULL`
+- `company_id = '85e4fbe9-924e-4ebf-9db2-4a61dc04ceb9' AND deleted_at IS NULL`
+- `company_id = '875b47aa-0f0d-4ab5-a4c3-58344999341c' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '875b47aa-0f0d-4ab5-a4c3-58344999341c' AND deleted_at IS NULL))`
+- `company_id = '875b47aa-0f0d-4ab5-a4c3-58344999341c' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '875b47aa-0f0d-4ab5-a4c3-58344999341c' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '875b47aa-0f0d-4ab5-a4c3-58344999341c' AND deleted_at IS NULL)))`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = '12534cc7-cad6-4018-b02a-8e45268022d4' OR responsible_profile_id = '12534cc7-cad6-4018-b02a-8e45268022d4')`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = '33fe1408-97b9-461d-bc4a-962795baa33d' OR responsible_profile_id = '33fe1408-97b9-461d-bc4a-962795baa33d')`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = '82114e3c-0500-485d-8eb6-5382bf519917' OR responsible_profile_id = '82114e3c-0500-485d-8eb6-5382bf519917')`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = 'e745cbbc-e385-4666-a888-d08e0896a80d' OR responsible_profile_id = 'e745cbbc-e385-4666-a888-d08e0896a80d')`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = '82114e3c-0500-485d-8eb6-5382bf519917' OR responsible_profile_id = '82114e3c-0500-485d-8eb6-5382bf519917')))`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = '8db6dc45-25eb-4a35-8a82-c6f60747fcda' OR responsible_profile_id = '8db6dc45-25eb-4a35-8a82-c6f60747fcda')))`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = 'dd1b1ae4-bfe1-4479-80f8-89db4f4eb857' OR responsible_profile_id = 'dd1b1ae4-bfe1-4479-80f8-89db4f4eb857')))`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL))`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = '7f42b188-c556-4155-9961-c67529ebcd69' OR responsible_profile_id = '7f42b188-c556-4155-9961-c67529ebcd69'))))`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (created_by_profile_id = '82114e3c-0500-485d-8eb6-5382bf519917' OR responsible_profile_id = '82114e3c-0500-485d-8eb6-5382bf519917'))))`
+- `company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '8a462b8b-1daa-4698-9bf3-92520e064eb3' AND deleted_at IS NULL)))`
+- `company_id = '8d09b07d-8052-4f02-92a8-0996e7216435' AND deleted_at IS NULL AND (created_by_profile_id = '75325c16-4407-4814-a45c-cb6bab6cb41d' OR responsible_profile_id = '75325c16-4407-4814-a45c-cb6bab6cb41d')`
+- `company_id = '8d09b07d-8052-4f02-92a8-0996e7216435' AND deleted_at IS NULL AND (created_by_profile_id = 'aaf6e41f-c0c6-4b54-9609-36983f5a7253' OR responsible_profile_id = 'aaf6e41f-c0c6-4b54-9609-36983f5a7253')`
+- `company_id = '8dbd7747-1fa1-4856-aaf0-0e92dcd98033' AND deleted_at IS NULL`
+- `company_id = '8dbd7747-1fa1-4856-aaf0-0e92dcd98033' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '8dbd7747-1fa1-4856-aaf0-0e92dcd98033' AND deleted_at IS NULL)`
+- `company_id = '8de33289-1de0-411b-856d-e01be80b4e01' AND deleted_at IS NULL`
+- `company_id = '8ecd9767-3814-460c-915f-e981678fd480' AND deleted_at IS NULL`
+- `company_id = '9005ba3e-6f6d-433a-8fc4-26239f3d04a7' AND deleted_at IS NULL`
+- `company_id = '914e2627-2542-4458-b166-102f68aa3693' AND deleted_at IS NULL`
+- `company_id = '92a490c5-66dc-48b0-bcff-1b77464dc5c2' AND deleted_at IS NULL`
+- `company_id = '92fa5cd6-de03-4014-815e-bebf900f47da' AND deleted_at IS NULL`
+- `company_id = '92fa5cd6-de03-4014-815e-bebf900f47da' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '92fa5cd6-de03-4014-815e-bebf900f47da' AND deleted_at IS NULL)`
+- `company_id = '940d5af7-089b-48c3-b417-eadac4cbf45c' AND deleted_at IS NULL`
+- `company_id = '95381af5-4723-4a96-8167-5e91cfa48c04' AND deleted_at IS NULL`
+- `company_id = '958db3b8-844e-4711-b26e-79e402148bbe' AND deleted_at IS NULL`
+- `company_id = '958db3b8-844e-4711-b26e-79e402148bbe' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '958db3b8-844e-4711-b26e-79e402148bbe' AND deleted_at IS NULL))`
+- `company_id = '9646d3a5-5470-436b-8921-a35c8861f01c' AND deleted_at IS NULL`
+- `company_id = '97149e43-72e0-4eaa-9e6e-0aaca23107d9' AND deleted_at IS NULL`
+- `company_id = '97d21c68-c4ca-443d-9698-587c73fe883f' AND deleted_at IS NULL`
+- `company_id = '9857f6ab-0f5f-4d4e-b8be-ada96c37b8bf' AND deleted_at IS NULL`
+- `company_id = '995ebf0a-56f8-4a80-ae41-b961195fcf2f' AND deleted_at IS NULL`
+- `company_id = '996ad212-1de5-4992-9bfe-940d47705b03' AND deleted_at IS NULL`
+- `company_id = '99bab64c-d9ab-4eec-bc81-972720536ebe' AND deleted_at IS NULL`
+- `company_id = '99bab64c-d9ab-4eec-bc81-972720536ebe' AND deleted_at IS NULL AND (created_by_profile_id = '475eacb3-1c64-4bbe-a4c2-d3b2368cdb43' OR responsible_profile_id = '475eacb3-1c64-4bbe-a4c2-d3b2368cdb43')`
+- `company_id = '99bab64c-d9ab-4eec-bc81-972720536ebe' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '99bab64c-d9ab-4eec-bc81-972720536ebe' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '99bab64c-d9ab-4eec-bc81-972720536ebe' AND deleted_at IS NULL AND (created_by_profile_id = '475eacb3-1c64-4bbe-a4c2-d3b2368cdb43' OR responsible_profile_id = '475eacb3-1c64-4bbe-a4c2-d3b2368cdb43'))))`
+- `company_id = '9a2e27b5-cbdf-40b8-a2b5-ed0deef7aef3' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = '9a2e27b5-cbdf-40b8-a2b5-ed0deef7aef3' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = '9a2e27b5-cbdf-40b8-a2b5-ed0deef7aef3' AND deleted_at IS NULL)))`
+- `company_id = '9a420014-7bc3-4002-9129-cc759bf912c9' AND deleted_at IS NULL`
+- `company_id = '9a420014-7bc3-4002-9129-cc759bf912c9' AND deleted_at IS NULL AND (created_by_profile_id = '282ac045-e435-4931-a46f-83df08c4043c' OR responsible_profile_id = '282ac045-e435-4931-a46f-83df08c4043c')`
+- `company_id = '9a420014-7bc3-4002-9129-cc759bf912c9' AND deleted_at IS NULL AND (created_by_profile_id = 'e586c931-a013-40e7-87b5-1192a8797057' OR responsible_profile_id = 'e586c931-a013-40e7-87b5-1192a8797057')`
+- `company_id = '9a538e93-bda4-4888-a84a-b7a5fc795b1e' AND deleted_at IS NULL`
+- `company_id = '9a538e93-bda4-4888-a84a-b7a5fc795b1e' AND deleted_at IS NULL AND (created_by_profile_id = '9cf2100f-17ce-4955-ae50-3bbea2aaca39' OR responsible_profile_id = '9cf2100f-17ce-4955-ae50-3bbea2aaca39')`
+- `company_id = '9a538e93-bda4-4888-a84a-b7a5fc795b1e' AND deleted_at IS NULL AND (created_by_profile_id = 'a16516d0-f129-4643-a20e-9d15af7e3436' OR responsible_profile_id = 'a16516d0-f129-4643-a20e-9d15af7e3436')`
+- `company_id = '9a538e93-bda4-4888-a84a-b7a5fc795b1e' AND deleted_at IS NULL AND (created_by_profile_id = 'e96f149f-8af8-4b3b-8b2a-403a8515836a' OR responsible_profile_id = 'e96f149f-8af8-4b3b-8b2a-403a8515836a')`
+- `company_id = '9ac8ff78-b721-4025-9b68-890e4c8d4a81' AND deleted_at IS NULL`
+- `company_id = '9b60fa49-13ce-4d5b-8538-25098c76b3fe' AND deleted_at IS NULL`
+- `company_id = '9ba2e3d4-ab72-4e67-8b35-e24141a0d525' AND deleted_at IS NULL`
+- `company_id = '9ba41a26-03c0-465c-8b80-3dbefe2d53b9' AND deleted_at IS NULL`
+- `company_id = '9be39c22-a24f-42c5-bc0b-1de213450178' AND deleted_at IS NULL`
+- `company_id = '9be39c22-a24f-42c5-bc0b-1de213450178' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = '9be39c22-a24f-42c5-bc0b-1de213450178' AND deleted_at IS NULL)`
+- `company_id = '9c773b61-7da5-4d5d-b728-1d58fd852e72' AND deleted_at IS NULL`
+- `company_id = '9c7d29c8-d845-4901-8014-59d4fc231725' AND deleted_at IS NULL`
+- `company_id = '9c9718d7-3703-4797-95af-6acf31576b7d' AND deleted_at IS NULL`
+- `company_id = '9d1a3c45-f54a-4db0-992a-a57a85475342' AND deleted_at IS NULL`
+- `company_id = '9f6e9f07-1aa5-4043-86bc-ddd0844ffd9d' AND deleted_at IS NULL`
+- `company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL`
+- `company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL AND (created_by_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead' OR responsible_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead')`
+- `company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL AND (created_by_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead' OR responsible_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead')))`
+- `company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL AND (created_by_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead' OR responsible_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead'))`
+- `company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL)`
+- `company_id = 'a13e62f3-5e36-431f-8211-c4be9f58ef29' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'a13e62f3-5e36-431f-8211-c4be9f58ef29' AND deleted_at IS NULL))`
+- `company_id = 'a13e62f3-5e36-431f-8211-c4be9f58ef29' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'a13e62f3-5e36-431f-8211-c4be9f58ef29' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'a13e62f3-5e36-431f-8211-c4be9f58ef29' AND deleted_at IS NULL)))`
+- `company_id = 'a1b723d2-f3e2-442c-8343-4ab1663bdf54' AND deleted_at IS NULL`
+- `company_id = 'a1f6d898-66f5-4b11-bdf5-83e14f1ed8ee' AND deleted_at IS NULL`
+- `company_id = 'a2adaead-4fea-41b9-bdcd-b43a11103a2d' AND deleted_at IS NULL`
+- `company_id = 'a2dc6b0b-114d-4c86-b10a-99aae1935701' AND deleted_at IS NULL`
+- `company_id = 'a39d7da8-c8f2-4c11-ba3f-6b398e89934c' AND deleted_at IS NULL`
+- `company_id = 'a6264e6f-e639-4130-8d3d-4e6a02e47101' AND deleted_at IS NULL`
+- `company_id = 'a62969d9-9f9a-4600-9a47-5a8d2a804834' AND deleted_at IS NULL`
+- `company_id = 'a62969d9-9f9a-4600-9a47-5a8d2a804834' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'a62969d9-9f9a-4600-9a47-5a8d2a804834' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'a62969d9-9f9a-4600-9a47-5a8d2a804834' AND deleted_at IS NULL)))`
+- `company_id = 'a64647c6-d2d7-4af8-8ac0-6390dcac42cc' AND deleted_at IS NULL`
+- `company_id = 'a65d386d-0350-43cc-9116-762040800443' AND deleted_at IS NULL`
+- `company_id = 'a76dcb54-f1af-488d-a6c3-0aa06681f626' AND deleted_at IS NULL`
+- `company_id = 'a9e5a9fc-56d1-478e-8a7b-2e1a5ec012ce' AND deleted_at IS NULL`
+- `company_id = 'aac211dc-d5a8-4bb9-b163-a68fa813a317' AND deleted_at IS NULL`
+- `company_id = 'aac211dc-d5a8-4bb9-b163-a68fa813a317' AND deleted_at IS NULL AND (created_by_profile_id = '720de07d-c80d-4fe4-8446-51accfecb1cf' OR responsible_profile_id = '720de07d-c80d-4fe4-8446-51accfecb1cf')`
+- `company_id = 'aadf7b3c-bf7a-4838-8473-540f106a28c4' AND deleted_at IS NULL`
+- `company_id = 'aadf7b3c-bf7a-4838-8473-540f106a28c4' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'aadf7b3c-bf7a-4838-8473-540f106a28c4' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'aadf7b3c-bf7a-4838-8473-540f106a28c4' AND deleted_at IS NULL)))`
+- `company_id = 'aaeffa69-66d4-4aea-9f4c-64c0f566f8a5' AND deleted_at IS NULL`
+- `company_id = 'ac02105f-7125-4f6e-93a8-a8ff019daa36' AND deleted_at IS NULL`
+- `company_id = 'ac229230-5ef4-4ced-ab44-96f0a2bfbc8a' AND deleted_at IS NULL`
+- `company_id = 'ac229230-5ef4-4ced-ab44-96f0a2bfbc8a' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'ac229230-5ef4-4ced-ab44-96f0a2bfbc8a' AND deleted_at IS NULL))`
+- `company_id = 'ac8fbc57-5dd4-4cbd-a51a-1dfd90e84522' AND deleted_at IS NULL`
+- `company_id = 'ac8fbc57-5dd4-4cbd-a51a-1dfd90e84522' AND deleted_at IS NULL AND (created_by_profile_id = '0e6495ec-04ba-43c2-930a-9165ebf4851f' OR responsible_profile_id = '0e6495ec-04ba-43c2-930a-9165ebf4851f')`
+- `company_id = 'ac8fbc57-5dd4-4cbd-a51a-1dfd90e84522' AND deleted_at IS NULL AND (created_by_profile_id = '46683c5d-5090-4221-9e31-1dfbedab2ec0' OR responsible_profile_id = '46683c5d-5090-4221-9e31-1dfbedab2ec0')`
+- `company_id = 'ac8fbc57-5dd4-4cbd-a51a-1dfd90e84522' AND deleted_at IS NULL AND (created_by_profile_id = '7be22f33-e233-4cab-8afc-56c582071cff' OR responsible_profile_id = '7be22f33-e233-4cab-8afc-56c582071cff')`
+- `company_id = 'ade0fca8-48df-4353-a47f-a6d7b42eede7' AND deleted_at IS NULL`
+- `company_id = 'ae010e2d-b03f-46b3-8ef2-87658e4d6033' AND deleted_at IS NULL`
+- `company_id = 'ae29b771-f00a-4c65-a827-4dc82b36f6a6' AND deleted_at IS NULL`
+- `company_id = 'aee0004a-2cbb-40c1-99e2-7c32a134c3ca' AND deleted_at IS NULL`
+- `company_id = 'b09161e6-c081-447b-aed0-b32b5890a82b' AND deleted_at IS NULL`
+- `company_id = 'b0cb7173-137d-4ab1-8cea-230efd347eb3' AND deleted_at IS NULL`
+- `company_id = 'b291cd06-2745-448d-b403-b4354981bdbe' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'b291cd06-2745-448d-b403-b4354981bdbe' AND deleted_at IS NULL AND (created_by_profile_id = 'a2ce6e1a-dfb6-4c7f-8add-6b32594810f8' OR responsible_profile_id = 'a2ce6e1a-dfb6-4c7f-8add-6b32594810f8')))`
+- `company_id = 'b291cd06-2745-448d-b403-b4354981bdbe' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'b291cd06-2745-448d-b403-b4354981bdbe' AND deleted_at IS NULL))`
+- `company_id = 'b291cd06-2745-448d-b403-b4354981bdbe' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'b291cd06-2745-448d-b403-b4354981bdbe' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'b291cd06-2745-448d-b403-b4354981bdbe' AND deleted_at IS NULL)))`
+- `company_id = 'b3016f93-ee34-4efb-9c68-ea8161a81687' AND deleted_at IS NULL`
+- `company_id = 'b33bb136-1f96-49ee-808a-a1dc0c87fe36' AND deleted_at IS NULL`
+- `company_id = 'b3849687-9100-4401-a30a-e4f658a622ea' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'b3849687-9100-4401-a30a-e4f658a622ea' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'b3849687-9100-4401-a30a-e4f658a622ea' AND deleted_at IS NULL)))`
+- `company_id = 'b40d8b9b-d97c-4865-8ced-f5f76fcf11d3' AND deleted_at IS NULL`
+- `company_id = 'b4cfbf4e-c481-45be-b6d0-3007ebd1a453' AND deleted_at IS NULL`
+- `company_id = 'b4cfbf4e-c481-45be-b6d0-3007ebd1a453' AND deleted_at IS NULL AND project_id IN (SELECT id FROM public.projects WHERE company_id = 'b4cfbf4e-c481-45be-b6d0-3007ebd1a453' AND deleted_at IS NULL)`
+- `company_id = 'b51191ab-d54f-41de-b970-620a4f1f1408' AND deleted_at IS NULL`
+- `company_id = 'b589b5d9-4984-49a7-bc59-b35875446f97' AND deleted_at IS NULL`
+- `company_id = 'b58e7ae4-2ba0-4ed4-9eab-d133e8f01e5e' AND deleted_at IS NULL`
+- `company_id = 'b5f17d32-cdf0-492e-a617-1c40d2eeb671' AND deleted_at IS NULL`
+- `company_id = 'b6407500-4463-4ac0-a84b-2ac474a629fa' AND deleted_at IS NULL`
+- `company_id = 'b83ec68d-f85c-40d1-9d28-0f60db5d4483' AND deleted_at IS NULL`
+- `company_id = 'bb006e3f-760d-41ef-8711-911dfeee6ebe' AND deleted_at IS NULL`
+- `company_id = 'bcafdfb3-a292-4d6f-bf8a-c3bd3798331f' AND deleted_at IS NULL`
+- `company_id = 'bf85131b-f064-4cca-91f6-f5a666db92ff' AND deleted_at IS NULL`
+- `company_id = 'c0a7c99b-4f3b-450a-8807-8af285292487' AND deleted_at IS NULL`
+- `company_id = 'c14b08bf-1762-4e57-90b2-ba71ace15b67' AND deleted_at IS NULL`
+- `company_id = 'c164edd5-16e5-4c87-af80-954253ba338c' AND deleted_at IS NULL`
+- `company_id = 'c16d7bc6-a2cd-4c62-bbe7-aa2013e36479' AND deleted_at IS NULL`
+- `company_id = 'c3dad2bd-c234-404f-b3ea-f8fdcd835648' AND deleted_at IS NULL`
+- `company_id = 'c4824148-aad8-4ba9-a25f-f9459c9ae4a2' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'c4824148-aad8-4ba9-a25f-f9459c9ae4a2' AND deleted_at IS NULL))`
+- `company_id = 'c4824148-aad8-4ba9-a25f-f9459c9ae4a2' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'c4824148-aad8-4ba9-a25f-f9459c9ae4a2' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'c4824148-aad8-4ba9-a25f-f9459c9ae4a2' AND deleted_at IS NULL)))`
+- `company_id = 'c739124c-a47f-41b4-8c82-0430cf010fa4' AND deleted_at IS NULL`
+- `company_id = 'c97ad9a3-c906-455b-a8a0-8ee6648335d5' AND deleted_at IS NULL`
+- `company_id = 'c99146f5-4850-4e0f-8a9c-e8c4f8160b82' AND deleted_at IS NULL`
+- `company_id = 'c9c7fd6d-871b-4735-8af0-cd54664695a3' AND deleted_at IS NULL`
+- `company_id = 'caa20ba7-d835-44bd-ae97-673ad0a58965' AND deleted_at IS NULL`
+- `company_id = 'cb5e0750-a970-470c-a727-b4b5e7b3d2cf' AND deleted_at IS NULL`
+- `company_id = 'cbbcad1a-4617-4986-8c72-e598093157c5' AND deleted_at IS NULL`
+- `company_id = 'cd1e7082-03e9-4d52-8212-d3b291e53906' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'cd1e7082-03e9-4d52-8212-d3b291e53906' AND deleted_at IS NULL))`
+- `company_id = 'cd1e7082-03e9-4d52-8212-d3b291e53906' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'cd1e7082-03e9-4d52-8212-d3b291e53906' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'cd1e7082-03e9-4d52-8212-d3b291e53906' AND deleted_at IS NULL)))`
+- `company_id = 'cd2a0ba2-d12b-41f6-83c4-0fd67f97b65b' AND deleted_at IS NULL`
+- `company_id = 'cd6fcd8a-68ae-4c4e-8e2e-24c17507ebf2' AND deleted_at IS NULL`
+- `company_id = 'cd6fcd8a-68ae-4c4e-8e2e-24c17507ebf2' AND deleted_at IS NULL AND (project_id IS NULL OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'cd6fcd8a-68ae-4c4e-8e2e-24c17507ebf2' AND deleted_at IS NULL AND id IN (SELECT project_id FROM public.profiles_projects WHERE profile_id = '0650db7f-e4b3-4391-93b8-f2f8606fb17c' AND deleted_at IS NULL)))`
+- `company_id = 'cd730f6e-05ab-442d-82e5-1f3d5c2ac924' AND deleted_at IS NULL`
+- `company_id = 'ce41224c-5c91-42ad-8e86-9dc807b5b3d9' AND deleted_at IS NULL`
+- `company_id = 'd090c79f-93db-4ca5-a3b1-92af834b0c01' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'd090c79f-93db-4ca5-a3b1-92af834b0c01' AND deleted_at IS NULL))`
+- `company_id = 'd195abba-dad9-45e1-b9ab-104420d7c69d' AND deleted_at IS NULL`
+- `company_id = 'd1ebe03d-4e14-47ae-a288-f900675b333b' AND deleted_at IS NULL`
+- `company_id = 'd216675c-5bb9-4219-a0e2-241560e7bfcd' AND deleted_at IS NULL`
+- `company_id = 'd21c19be-0eee-4143-8226-8b16d359d6b2' AND deleted_at IS NULL`
+- `company_id = 'd5f095d0-40fe-4e38-9cfa-5fff1177525c' AND deleted_at IS NULL`
+- `company_id = 'd5fb89a5-8d87-4b73-a06e-d0e8471fc24f' AND deleted_at IS NULL`
+- `company_id = 'dadcbe44-57cb-4189-bd67-0993c697d5a0' AND deleted_at IS NULL`
+- `company_id = 'db71631f-bca5-48c7-9771-12a107e9a0c9' AND deleted_at IS NULL`
+- `company_id = 'dc168310-e86a-4b27-8387-220796cd8dae' AND deleted_at IS NULL`
+- `company_id = 'dc382faa-0219-483a-b182-f304017dc55c' AND deleted_at IS NULL`
+- `company_id = 'dc382faa-0219-483a-b182-f304017dc55c' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'dc382faa-0219-483a-b182-f304017dc55c' AND deleted_at IS NULL))`
+- `company_id = 'ddb8d3f8-c9f6-42d3-bcb4-76297a772181' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'ddb8d3f8-c9f6-42d3-bcb4-76297a772181' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'ddb8d3f8-c9f6-42d3-bcb4-76297a772181' AND deleted_at IS NULL)))`
+- `company_id = 'ddd91626-abe2-47ae-b5ab-398e551b588e' AND deleted_at IS NULL`
+- `company_id = 'e272f66b-25b5-41cd-87ef-fc7e0e5ef360' AND deleted_at IS NULL`
+- `company_id = 'e2909af0-e359-45c4-8b11-6e3dacac7b6f' AND deleted_at IS NULL`
+- `company_id = 'e362f4ca-fcd0-4537-91f0-82ef5e874b88' AND deleted_at IS NULL`
+- `company_id = 'e3e9c77b-45af-447d-901e-9f818a755082' AND deleted_at IS NULL`
+- `company_id = 'e42cac14-e696-489c-9003-2f6d3faa50f0' AND deleted_at IS NULL`
+- `company_id = 'e4a196e6-10cd-4eda-a586-5b627260478d' AND deleted_at IS NULL`
+- `company_id = 'e4a9ac60-32ab-47d1-b40d-21f6dba40e84' AND deleted_at IS NULL`
+- `company_id = 'e59e4f5e-eab3-4090-8191-c48530d958c4' AND deleted_at IS NULL`
+- `company_id = 'e8881542-f9ea-48b5-987d-e4ae5e455a4d' AND deleted_at IS NULL`
+- `company_id = 'e8ff9987-7322-48be-8aed-64940adfb57c' AND deleted_at IS NULL`
+- `company_id = 'e966c2eb-b963-4d0d-90b7-cb3fd4efacc2' AND deleted_at IS NULL`
+- `company_id = 'e993ae79-95ca-4730-af04-63697505ffaa' AND deleted_at IS NULL`
+- `company_id = 'edba8116-f486-43b2-8bc5-edad409403a1' AND deleted_at IS NULL`
+- `company_id = 'ee6abf2d-762c-4b33-bd41-4d98c9aaca64' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'ee6abf2d-762c-4b33-bd41-4d98c9aaca64' AND deleted_at IS NULL))`
+- `company_id = 'ee6abf2d-762c-4b33-bd41-4d98c9aaca64' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'ee6abf2d-762c-4b33-bd41-4d98c9aaca64' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'ee6abf2d-762c-4b33-bd41-4d98c9aaca64' AND deleted_at IS NULL)))`
+- `company_id = 'f05e7bb2-ab5d-4e81-b67f-e91b56851a7f' AND deleted_at IS NULL`
+- `company_id = 'f0b5281f-3bdc-4dc5-93e7-a48578efc8e0' AND deleted_at IS NULL`
+- `company_id = 'f14ff910-e7f5-4b15-888a-bfb5024a85cf' AND deleted_at IS NULL`
+- `company_id = 'f2823f31-4c6a-4424-95b2-0a7107d328cb' AND deleted_at IS NULL`
+- `company_id = 'f2ed03c8-1ec2-495c-8535-18ff87880d61' AND deleted_at IS NULL`
+- `company_id = 'f366908f-50ef-4e80-bb4c-8f0277d7e6bd' AND deleted_at IS NULL`
+- `company_id = 'f3e5be2c-5c1f-4360-b480-0fe4257787b4' AND deleted_at IS NULL`
+- `company_id = 'f3e5be2c-5c1f-4360-b480-0fe4257787b4' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'f3e5be2c-5c1f-4360-b480-0fe4257787b4' AND deleted_at IS NULL))`
+- `company_id = 'f3e5be2c-5c1f-4360-b480-0fe4257787b4' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'f3e5be2c-5c1f-4360-b480-0fe4257787b4' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'f3e5be2c-5c1f-4360-b480-0fe4257787b4' AND deleted_at IS NULL)))`
+- `company_id = 'f51b10db-6a89-4e61-a895-66f5394cce13' AND deleted_at IS NULL`
+- `company_id = 'f5372e8d-3e6a-4f05-92cf-af9aea272ddf' AND deleted_at IS NULL`
+- `company_id = 'f5624430-074c-4f46-a2d9-2dd5a1aa3ca3' AND deleted_at IS NULL`
+- `company_id = 'f59cdc40-fe17-49ce-8e45-2cd503fd4c63' AND deleted_at IS NULL`
+- `company_id = 'f5e66a78-ef73-452a-a43c-a99ef8a55469' AND deleted_at IS NULL`
+- `company_id = 'f606d544-0ea9-4a34-a8cb-597d71247dae' AND deleted_at IS NULL`
+- `company_id = 'f63c850c-4a59-4db9-a55b-23f2835aaf13' AND deleted_at IS NULL`
+- `company_id = 'f65671ca-616d-43d6-b463-96cd7ae2d3b2' AND deleted_at IS NULL`
+- `company_id = 'f65671ca-616d-43d6-b463-96cd7ae2d3b2' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'f65671ca-616d-43d6-b463-96cd7ae2d3b2' AND deleted_at IS NULL))`
+- `company_id = 'f65671ca-616d-43d6-b463-96cd7ae2d3b2' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'f65671ca-616d-43d6-b463-96cd7ae2d3b2' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'f65671ca-616d-43d6-b463-96cd7ae2d3b2' AND deleted_at IS NULL)))`
+- `company_id = 'f68bcb5a-b13d-44ca-8db6-ff78c348f866' AND deleted_at IS NULL`
+- `company_id = 'f6b4b344-3e9e-42fb-b7c5-50a058faaafe' AND deleted_at IS NULL`
+- `company_id = 'f6b4b344-3e9e-42fb-b7c5-50a058faaafe' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'f6b4b344-3e9e-42fb-b7c5-50a058faaafe' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'f6b4b344-3e9e-42fb-b7c5-50a058faaafe' AND deleted_at IS NULL)))`
+- `company_id = 'f7259864-e3aa-4fd9-9813-29f862a12d37' AND deleted_at IS NULL`
+- `company_id = 'f7be38e2-29cf-461a-afdf-ec09c21f9ba3' AND deleted_at IS NULL`
+- `company_id = 'f8203d1c-54d1-4682-a93e-c934090eaa43' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'f8203d1c-54d1-4682-a93e-c934090eaa43' AND deleted_at IS NULL))`
+- `company_id = 'fa9d2830-ef9e-46a8-a976-e4c31b8cd79c' AND deleted_at IS NULL`
+- `company_id = 'faf18d50-0d09-4ac0-bd70-3b0b80a311a7' AND deleted_at IS NULL`
+- `company_id = 'fafb6ad1-6e50-4c43-93da-41a4a9c99008' AND deleted_at IS NULL`
+- `company_id = 'fb914d8f-10da-4443-a8c2-a08a46b522e4' AND deleted_at IS NULL`
+- `company_id = 'fc018adf-7ff3-4f72-9637-a67b34765415' AND deleted_at IS NULL`
+- `company_id = 'fc449a3c-d345-47b9-8ad6-105860567343' AND deleted_at IS NULL`
+- `company_id = 'ff43c2c2-c344-4e5f-b341-94e3696ae705' AND deleted_at IS NULL`
+- `company_id = 'ff43c2c2-c344-4e5f-b341-94e3696ae705' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'ff43c2c2-c344-4e5f-b341-94e3696ae705' AND deleted_at IS NULL))`
+- `company_id = 'ff43c2c2-c344-4e5f-b341-94e3696ae705' AND deleted_at IS NULL AND offer_id IN (SELECT id FROM public.offers WHERE company_id = 'ff43c2c2-c344-4e5f-b341-94e3696ae705' AND deleted_at IS NULL AND (is_template = true OR project_id IN (SELECT id FROM public.projects WHERE company_id = 'ff43c2c2-c344-4e5f-b341-94e3696ae705' AND deleted_at IS NULL)))`
+- `id = '1eb10a27-1cda-4e29-8d0c-196c3f3b767e' AND deleted_at IS NULL`
+- `id = '2bf2e1c1-1879-4de6-90f1-c57ab8424889' AND deleted_at IS NULL`
+- `id = '2c1c79be-ff9b-456c-b66b-daac3f0b1fdd' AND deleted_at IS NULL`
+- `id = '34ce9e9f-ae09-4487-8bab-b1b3afb669fe' AND deleted_at IS NULL`
+- `id = '53e22a4e-3763-4c1a-a653-40668f1a4ca2' AND deleted_at IS NULL`
+- `id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL`
+- `id = '9c6614ba-b3ee-4d72-a277-11d9a5ae2f92' AND deleted_at IS NULL`
+- `id = 'b6af293e-62c2-43a8-a392-003913e4cecc' AND deleted_at IS NULL`
+- `id = 'b6eb7928-334f-4689-8e27-7a9a1c154d31' AND deleted_at IS NULL`
+- `id = 'cbbcad1a-4617-4986-8c72-e598093157c5' AND deleted_at IS NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd' OR responsible_profile_id = '1dca5676-5f70-4d95-a957-69dadc379ebd')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '34be4437-934e-4664-ac59-50d33e335066' OR responsible_profile_id = '34be4437-934e-4664-ac59-50d33e335066')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '383ce4b1-2225-4385-a71e-7d9176efd9a6' OR responsible_profile_id = '383ce4b1-2225-4385-a71e-7d9176efd9a6')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9' OR responsible_profile_id = '8e380c33-bf29-4d6e-8ab3-101ed1fcafe9')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a' OR responsible_profile_id = '9028d2a7-105f-4653-ae63-e3eca1fcd27a')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792' OR responsible_profile_id = 'af14c2be-f0c9-4520-ab83-bfbf07173792')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18' OR responsible_profile_id = 'bc0161ea-4463-499d-b79a-1d976d721c18')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c21af18d-99f8-4acc-86fb-f7c6723947f1' OR responsible_profile_id = 'c21af18d-99f8-4acc-86fb-f7c6723947f1')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246' OR responsible_profile_id = 'c3dba410-9cb4-4770-8f4a-c020ebeec246')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'c4a9e946-41e5-43a9-bda1-4122e98ebcb4' OR responsible_profile_id = 'c4a9e946-41e5-43a9-bda1-4122e98ebcb4')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9' OR responsible_profile_id = 'cb5ddbd3-7aee-4a1f-a7e6-03ce4755fbf9')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8' OR responsible_profile_id = 'ce239c95-224b-4588-b79b-d3db9be5c0e8')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a' OR responsible_profile_id = 'd2c37c15-fbf8-4835-bf01-d12a6838331a')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd6c446ab-cf77-45ae-884e-d4e0aa49d7bc' OR responsible_profile_id = 'd6c446ab-cf77-45ae-884e-d4e0aa49d7bc')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6' OR responsible_profile_id = 'd97f3547-2c74-47f1-8548-3a934a24add6')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250' OR responsible_profile_id = 'ddf8e32e-d943-4bde-b6a0-020c6a9e7250')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b' OR responsible_profile_id = 'e24e2d88-9334-4a64-b0a4-b66ec996430b')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = '7d3fae9c-7543-4227-814e-8d7745c755c9' AND deleted_at IS NULL AND (created_by_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d' OR responsible_profile_id = 'f9ca3da4-39ad-4f7f-a956-8b3bd972ca8d')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = 'a0786897-f0a1-4eb6-a103-a72e61ce98d0' AND deleted_at IS NULL AND (created_by_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead' OR responsible_profile_id = '0cc335f9-0dd0-4a5b-a97b-fe62c9a4eead')) AND customer_id IS NOT NULL`
+- `id IN (SELECT id FROM public.projects WHERE company_id = 'aac211dc-d5a8-4bb9-b163-a68fa813a317' AND deleted_at IS NULL AND (created_by_profile_id = '720de07d-c80d-4fe4-8446-51accfecb1cf' OR responsible_profile_id = '720de07d-c80d-4fe4-8446-51accfecb1cf')) AND customer_id IS NOT NULL`
+
