@@ -43,6 +43,8 @@ export interface BuiltinAgentHandlerOptions {
   streamFn?: StreamFn
   publicUrl?: string
   runtimeName?: string
+  /** Override for the built-in skills directory; required when embedders bundle this package. */
+  baseSkillsDir?: string
   serverHeaders?: HeadersProvider
   defaultDispatchPolicyForType?: (
     typeName: string
@@ -84,6 +86,7 @@ export async function createBuiltinAgentHandler(
     createElectricTools,
     publicUrl,
     runtimeName,
+    baseSkillsDir: baseSkillsDirOverride,
     serverHeaders,
     defaultDispatchPolicyForType,
   } = options
@@ -102,7 +105,7 @@ export async function createBuiltinAgentHandler(
   const cwd = workingDirectory ?? process.cwd()
 
   const here = path.dirname(fileURLToPath(import.meta.url))
-  const baseSkillsDir = path.resolve(here, `../skills`)
+  const baseSkillsDir = baseSkillsDirOverride ?? path.resolve(here, `../skills`)
 
   let skillsRegistry: SkillsRegistry | null = null
   try {

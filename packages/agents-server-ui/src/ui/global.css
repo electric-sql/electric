@@ -31,9 +31,22 @@ body {
  * sidebars, and headers are not text-selectable unless a component
  * explicitly opts back into text selection. The static browser build
  * deliberately keeps normal web selection behaviour. */
+html[data-electric-desktop='true'],
+html[data-electric-desktop='true'] body {
+  background: transparent;
+}
+
 html[data-electric-desktop='true'] body {
   user-select: none;
   -webkit-user-select: none;
+}
+
+html[data-electric-desktop='true'][data-theme='light'] {
+  --ds-chrome-bg: color-mix(in oklab, var(--ds-bg-subtle) 72%, transparent);
+}
+
+html[data-electric-desktop='true'][data-theme='dark'] {
+  --ds-chrome-bg: color-mix(in oklab, var(--ds-bg-subtle) 78%, transparent);
 }
 
 html[data-electric-desktop='true'] input,

@@ -193,12 +193,12 @@ export function runElectricAgentsConformanceTests(
         .expectWebhook()
         .respondDone()
         .readStream()
-        .expectStreamContains(`message_received`)
+        .expectStreamContains(`inbox`)
         .custom(async (ctx) => {
           const envelope = ctx.lastStreamMessages!.find(
-            (m) => m.type === `message_received`
+            (m) => m.type === `inbox`
           )!
-          expect(envelope.type).toBe(`message_received`)
+          expect(envelope.type).toBe(`inbox`)
           expect(envelope.key).toBeDefined()
           expect(envelope.value?.from).toBe(`user-1`)
           expect(envelope.value?.payload).toEqual({ task: `hello` })
@@ -264,9 +264,7 @@ export function runElectricAgentsConformanceTests(
         .respondDone()
         .readStream()
         .custom(async (ctx) => {
-          const msgs = ctx.lastStreamMessages!.filter(
-            (m) => m.type === `message_received`
-          )
+          const msgs = ctx.lastStreamMessages!.filter((m) => m.type === `inbox`)
           expect(msgs.length).toBe(3)
           for (let i = 0; i < 3; i++) {
             expect(msgs[i]!.value?.payload).toEqual({ seq: i + 1 })
@@ -411,10 +409,10 @@ export function runElectricAgentsConformanceTests(
         .respondDone()
         .kill()
         .readStream()
-        .expectStreamContains(`message_received`)
+        .expectStreamContains(`inbox`)
         .custom(async (ctx) => {
           const msgs = ctx.lastStreamMessages!
-          const msgReceived = msgs.find((m) => m.type === `message_received`)!
+          const msgReceived = msgs.find((m) => m.type === `inbox`)!
           expect((msgReceived as any).value?.payload).toEqual({
             before: `kill`,
           })
@@ -487,7 +485,7 @@ export function runElectricAgentsConformanceTests(
         .expectEntityContext({ type: `e2e-test-agent` })
         .respondDone()
         .readStream()
-        .expectStreamContains(`message_received`)
+        .expectStreamContains(`inbox`)
         .kill()
         .custom(async (ctx) => {
           const entity = await pollEntityStatus(
@@ -1951,9 +1949,9 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
-          const msgEvent = events.find((e) => e.type === `message_received`)!
+          const msgEvent = events.find((e) => e.type === `inbox`)!
           // State Protocol format — from/payload in value, headers present
-          expect(msgEvent.type).toBe(`message_received`)
+          expect(msgEvent.type).toBe(`inbox`)
           expect(msgEvent.key).toBeDefined()
           expect(msgEvent.value?.from).toBe(`user-1`)
           expect(msgEvent.value?.payload).toEqual({ text: `hello world` })
@@ -1979,9 +1977,7 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
-          const messageEvents = events.filter(
-            (ev) => ev.type === `message_received`
-          )
+          const messageEvents = events.filter((ev) => ev.type === `inbox`)
           expect(messageEvents.length).toBe(2)
           // All events are State Protocol format — verify invariants
           checkStateProtocolInvariants(events)
@@ -2010,7 +2006,7 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!.filter(
-            (e) => e.type === `message_received`
+            (e) => e.type === `inbox`
           )
           expect(events.length).toBe(3)
 
@@ -2046,7 +2042,7 @@ export function runElectricAgentsConformanceTests(
         .readStream()
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
-          const msgEvent = events.find((e) => e.type === `message_received`)!
+          const msgEvent = events.find((e) => e.type === `inbox`)!
           expect(msgEvent).toBeDefined()
           // State Protocol — payload inside value
           expect((msgEvent as any).value?.payload).toBeDefined()
@@ -2078,8 +2074,8 @@ export function runElectricAgentsConformanceTests(
         .custom(async (ctx) => {
           const events = ctx.lastStreamMessages!
           expect(events.length).toBeGreaterThanOrEqual(1)
-          // Stream should contain a message_received event
-          const hasMsg = events.some((e) => e.type === `message_received`)
+          // Stream should contain a inbox event
+          const hasMsg = events.some((e) => e.type === `inbox`)
           expect(hasMsg).toBe(true)
           // All events should be State Protocol format
           for (const ev of events) {
@@ -2857,10 +2853,8 @@ export function runCliConformanceTests(config: CliTestOptions): void {
             Record<string, unknown>
           >
           expect(events.length).toBeGreaterThanOrEqual(1)
-          // Should contain a State Protocol message_received event
-          const msgEvent = events.find(
-            (e: any) => e.type === `message_received`
-          )!
+          // Should contain a State Protocol inbox event
+          const msgEvent = events.find((e: any) => e.type === `inbox`)!
           expect(msgEvent).toBeDefined()
           const payload = (msgEvent as any).value?.payload as Record<
             string,

@@ -123,14 +123,10 @@ export async function assertDispatchPolicyAllowed(
       404
     )
   }
-  if (!ctx.authenticatedUser) {
-    throw new ElectricAgentsError(
-      ErrCodeUnauthorized,
-      `Authentication is required for runner-targeted dispatch`,
-      401
-    )
-  }
-  if (runner.owner_user_id !== ctx.authenticatedUser.userId) {
+  if (
+    ctx.authenticatedUser &&
+    runner.owner_user_id !== ctx.authenticatedUser.userId
+  ) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner dispatch requires the authenticated owner`,

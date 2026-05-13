@@ -7,7 +7,7 @@ import {
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
 } from '@electric-ax/agents-runtime'
-import { assertedIdentityHeaders, entityApiUrl } from './entity-api.js'
+import { entityApiUrl } from './entity-api.js'
 import { createEntityStreamDB } from './entity-stream-db'
 import type {
   EntityStopped,
@@ -178,8 +178,6 @@ export function MessageInput({
   baseUrl,
   entityUrl,
   identity,
-  assertedAuthEmail,
-  assertedAuthName,
   headers,
   disabled,
 }: {
@@ -187,8 +185,6 @@ export function MessageInput({
   baseUrl: string
   entityUrl: string
   identity: string
-  assertedAuthEmail?: string
-  assertedAuthName?: string
   headers?: Record<string, string>
   disabled: boolean
 }): React.ReactElement {
@@ -211,10 +207,6 @@ export function MessageInput({
             method: `POST`,
             headers: {
               'content-type': `application/json`,
-              ...assertedIdentityHeaders(assertedAuthEmail),
-              ...(assertedAuthName
-                ? { 'x-electric-asserted-name': assertedAuthName }
-                : {}),
               ...headers,
             },
             body: JSON.stringify({ from: identity, payload: { text } }),
@@ -242,15 +234,7 @@ export function MessageInput({
           }
         },
       }),
-    [
-      db,
-      baseUrl,
-      entityUrl,
-      identity,
-      assertedAuthEmail,
-      assertedAuthName,
-      headers,
-    ]
+    [db, baseUrl, entityUrl, identity, headers]
   )
 
   useInput(
@@ -385,16 +369,12 @@ function ObserveView({
   entityUrl,
   baseUrl,
   identity,
-  assertedAuthEmail,
-  assertedAuthName,
   headers,
 }: {
   db: EntityStreamDB
   entityUrl: string
   baseUrl: string
   identity: string
-  assertedAuthEmail?: string
-  assertedAuthName?: string
   headers?: Record<string, string>
 }): React.ReactElement {
   const timelineQuery = useMemo(
@@ -497,8 +477,6 @@ function ObserveView({
         baseUrl={baseUrl}
         entityUrl={entityUrl}
         identity={identity}
-        assertedAuthEmail={assertedAuthEmail}
-        assertedAuthName={assertedAuthName}
         headers={headers}
         disabled={closed}
       />
@@ -510,16 +488,12 @@ function ObserveApp({
   entityUrl,
   baseUrl,
   identity,
-  assertedAuthEmail,
-  assertedAuthName,
   headers,
   initialOffset,
 }: {
   entityUrl: string
   baseUrl: string
   identity: string
-  assertedAuthEmail?: string
-  assertedAuthName?: string
   headers?: Record<string, string>
   initialOffset?: string
 }): React.ReactElement {
@@ -534,8 +508,6 @@ function ObserveApp({
       baseUrl,
       entityUrl,
       initialOffset,
-      assertedAuthEmail,
-      assertedAuthName,
       headers,
     })
       .then((result) => {
@@ -556,14 +528,7 @@ function ObserveApp({
       cancelled = true
       closeRef.current?.()
     }
-  }, [
-    baseUrl,
-    entityUrl,
-    initialOffset,
-    assertedAuthEmail,
-    assertedAuthName,
-    headers,
-  ])
+  }, [baseUrl, entityUrl, initialOffset, headers])
 
   if (error) {
     return (
@@ -587,8 +552,6 @@ function ObserveApp({
       entityUrl={entityUrl}
       baseUrl={baseUrl}
       identity={identity}
-      assertedAuthEmail={assertedAuthEmail}
-      assertedAuthName={assertedAuthName}
       headers={headers}
     />
   )
@@ -602,28 +565,16 @@ export function renderObserve(opts: {
   entityUrl: string
   baseUrl: string
   identity: string
-  assertedAuthEmail?: string
-  assertedAuthName?: string
   headers?: Record<string, string>
   initialOffset?: string
 }): void {
-  const {
-    entityUrl,
-    baseUrl,
-    identity,
-    assertedAuthEmail,
-    assertedAuthName,
-    headers,
-    initialOffset,
-  } = opts
+  const { entityUrl, baseUrl, identity, headers, initialOffset } = opts
 
   const app = render(
     <ObserveApp
       entityUrl={entityUrl}
       baseUrl={baseUrl}
       identity={identity}
-      assertedAuthEmail={assertedAuthEmail}
-      assertedAuthName={assertedAuthName}
       headers={headers}
       initialOffset={initialOffset}
     />

@@ -13,13 +13,11 @@ import {
 import { z } from 'zod'
 import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
 import { preloadAppCollections } from './lib/ElectricAgentsProvider'
-import { preloadDesktopFormattedAssertedIdentity } from './lib/assertedIdentity'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import {
   SidebarCollapsedProvider,
   useSidebarCollapsed,
 } from './hooks/useSidebarCollapsed'
-import { useNarrowViewport } from './hooks/useNarrowViewport'
 import { useHotkey } from './hooks/useHotkey'
 import {
   SearchPaletteProvider,
@@ -38,20 +36,24 @@ import { Sidebar } from './components/Sidebar'
 import { SearchPalette } from './components/SearchPalette'
 import { Workspace } from './components/workspace/Workspace'
 import { ApiKeysModal } from './components/ApiKeysModal'
+import { DesktopTitleBar } from './components/DesktopTitleBar'
+import { TitlebarControls } from './components/TitlebarControls'
 import {
   SettingsSidebar,
   type SettingsCategoryId,
 } from './components/settings/SettingsSidebar'
 import { GeneralPage } from './components/settings/pages/GeneralPage'
 import { AppearancePage } from './components/settings/pages/AppearancePage'
-import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
+import { CredentialsPage } from './components/settings/pages/CredentialsPage'
+import { ServersPage } from './components/settings/pages/ServersPage'
 import { McpServersPage } from './components/settings/pages/McpServersPage'
 import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `general`,
+  `servers`,
+  `credentials`,
   `appearance`,
-  `local-runtime`,
   `mcp-servers`,
 ]
 
@@ -72,24 +74,34 @@ function RootLayout(): React.ReactElement {
 function RootShell(): React.ReactElement {
   const { pinnedUrls, togglePin } = usePinnedEntities()
   const navigate = useNavigate()
-  const { collapsed, toggle } = useSidebarCollapsed()
+  const {
+    collapsed,
+    animating: sidebarAnimating,
+    toggle,
+  } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
   const { openFindForTile, findNextInTile, findPreviousInTile } =
     usePaneFindCommands()
+  const nativeMenuHandlesAppHotkeys =
+    typeof window !== `undefined` && Boolean(window.electronAPI)
 
-  useHotkey(`mod+b`, toggle)
-  useHotkey(`mod+k`, (e) => {
-    e.preventDefault()
-    search.toggle()
-  })
+  useHotkey(`mod+b`, toggle, { disabled: nativeMenuHandlesAppHotkeys })
+  useHotkey(
+    `mod+k`,
+    (e) => {
+      e.preventDefault()
+      search.toggle()
+    },
+    { disabled: nativeMenuHandlesAppHotkeys }
+  )
   useHotkey(
     `mod+f`,
     (e) => {
       e.preventDefault()
       openFindForTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   useHotkey(
     `mod+g`,
@@ -97,7 +109,7 @@ function RootShell(): React.ReactElement {
       e.preventDefault()
       findNextInTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   useHotkey(
     `mod+shift+g`,
@@ -105,7 +117,7 @@ function RootShell(): React.ReactElement {
       e.preventDefault()
       findPreviousInTile(helpers.activeTileId)
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, disabled: nativeMenuHandlesAppHotkeys }
   )
   // New session: bind both ⌘N / Ctrl+N (works in Electron) and
   // ⌘⇧O / Ctrl+Shift+O (works in browsers — `⌘N` is reserved by
@@ -121,16 +133,20 @@ function RootShell(): React.ReactElement {
   const openNewSession = useCallback(() => {
     navigate({ to: `/` })
   }, [navigate])
-  useHotkey(`mod+n`, (e) => {
-    e.preventDefault()
-    openNewSession()
-  })
+  useHotkey(
+    `mod+n`,
+    (e) => {
+      e.preventDefault()
+      openNewSession()
+    },
+    { disabled: nativeMenuHandlesAppHotkeys }
+  )
   useHotkey(`mod+shift+o`, (e) => {
     e.preventDefault()
     openNewSession()
   })
 
-  useWorkspaceHotkeys()
+  useWorkspaceHotkeys({ disabled: nativeMenuHandlesAppHotkeys })
   useWorkspacePersistence()
   useDocumentTitle()
 
@@ -146,6 +162,18 @@ function RootShell(): React.ReactElement {
           break
         case `toggle-sidebar`:
           toggle()
+          break
+        case `open-settings`:
+          navigate({
+            to: `/settings/$category`,
+            params: { category: `general` },
+          })
+          break
+        case `open-servers-settings`:
+          navigate({
+            to: `/settings/$category`,
+            params: { category: `servers` },
+          })
           break
         case `open-search`:
           search.toggle()
@@ -191,6 +219,7 @@ function RootShell(): React.ReactElement {
     openNewSession,
     toggle,
     search,
+    navigate,
     helpers,
     workspace,
     openFindForTile,
@@ -243,21 +272,22 @@ function RootShell(): React.ReactElement {
   const inSettings = settingsCategory !== null
 
   // On narrow viewports the sidebar floats over content as an
-  // overlay (see Sidebar.tsx + useNarrowViewport). We keep the
-  // component mounted regardless of `collapsed` while in overlay
-  // mode so the exit transition (slide-out + backdrop fade) can
-  // run before unmount. In wide mode we keep the existing
-  // mount-on-demand behaviour — there's no animation, so unmounting
-  // immediately on collapse is the cheapest correct option.
-  const narrow = useNarrowViewport()
-  const showWorkspaceSidebar = narrow || !collapsed
+  // overlay (see Sidebar.tsx + useNarrowViewport). In wide mode we
+  // keep it mounted too so collapse/expand can animate the width
+  // instead of snapping the sidebar out of the flex row.
+  const sidebarState = inSettings || !collapsed ? `open` : `closed`
 
   return (
-    <div className={styles.appShell}>
-      {inSettings ? (
-        <SettingsSidebar activeCategory={settingsCategory} />
-      ) : (
-        showWorkspaceSidebar && (
+    <div className={styles.rootShell}>
+      <DesktopTitleBar />
+      <div
+        className={styles.appShell}
+        data-sidebar-state={sidebarState}
+        data-sidebar-animation={sidebarAnimating ? `true` : undefined}
+      >
+        {inSettings ? (
+          <SettingsSidebar activeCategory={settingsCategory} />
+        ) : (
           <Sidebar
             selectedEntityUrl={selectedEntityUrl}
             onSelectEntity={navigateToEntity}
@@ -265,11 +295,12 @@ function RootShell(): React.ReactElement {
             pinnedUrls={pinnedUrls}
             onTogglePin={togglePin}
           />
-        )
-      )}
-      <Outlet />
-      <SearchPalette />
-      <ApiKeysModal />
+        )}
+        <Outlet />
+        <SearchPalette />
+        <ApiKeysModal />
+      </div>
+      {!inSettings && <TitlebarControls />}
     </div>
   )
 }
@@ -332,10 +363,7 @@ const indexRoute = createRoute({
   path: `/`,
   loader: async (): Promise<null> => {
     const baseUrl = getActiveBaseUrl()
-    await Promise.all([
-      baseUrl ? preloadAppCollections(baseUrl) : Promise.resolve(),
-      preloadDesktopFormattedAssertedIdentity(),
-    ])
+    if (baseUrl) await preloadAppCollections(baseUrl)
     return null
   },
   component: WorkspacePage,
@@ -350,7 +378,6 @@ const entityRoute = createRoute({
     if (!baseUrl) return null
     await Promise.all([
       preloadAppCollections(baseUrl),
-      preloadDesktopFormattedAssertedIdentity(),
       preloadEntityStream({
         baseUrl,
         entityUrl: `/${params._splat}`,
@@ -395,8 +422,10 @@ function SettingsCategoryPage(): React.ReactElement {
   switch (params.category as SettingsCategoryId | undefined) {
     case `appearance`:
       return <AppearancePage />
-    case `local-runtime`:
-      return <LocalRuntimePage />
+    case `servers`:
+      return <ServersPage />
+    case `credentials`:
+      return <CredentialsPage />
     case `mcp-servers`:
       return <McpServersPage />
     case `general`:

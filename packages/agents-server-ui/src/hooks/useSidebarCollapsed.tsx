@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -17,6 +18,7 @@ function readInitial(): boolean {
 
 type SidebarCollapsedApi = {
   collapsed: boolean
+  animating: boolean
   setCollapsed: (next: boolean) => void
   toggle: () => void
 }
@@ -38,23 +40,44 @@ export function SidebarCollapsedProvider({
   children: ReactNode
 }): React.ReactElement {
   const [collapsed, setCollapsedState] = useState<boolean>(readInitial)
+  const [animating, setAnimating] = useState(false)
+  const animationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (typeof window === `undefined`) return
     window.localStorage.setItem(STORAGE_KEY, collapsed ? `1` : `0`)
   }, [collapsed])
 
-  const setCollapsed = useCallback((next: boolean) => {
-    setCollapsedState(next)
+  useEffect(() => {
+    return () => {
+      if (animationTimer.current) clearTimeout(animationTimer.current)
+    }
   }, [])
+
+  const markAnimating = useCallback(() => {
+    setAnimating(true)
+    if (animationTimer.current) clearTimeout(animationTimer.current)
+    animationTimer.current = setTimeout(() => setAnimating(false), 220)
+  }, [])
+
+  const setCollapsed = useCallback(
+    (next: boolean) => {
+      setCollapsedState((prev) => {
+        if (prev !== next) markAnimating()
+        return next
+      })
+    },
+    [markAnimating]
+  )
 
   const toggle = useCallback(() => {
+    markAnimating()
     setCollapsedState((prev) => !prev)
-  }, [])
+  }, [markAnimating])
 
   const value = useMemo(
-    () => ({ collapsed, setCollapsed, toggle }),
-    [collapsed, setCollapsed, toggle]
+    () => ({ collapsed, animating, setCollapsed, toggle }),
+    [collapsed, animating, setCollapsed, toggle]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

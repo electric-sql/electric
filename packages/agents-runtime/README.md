@@ -115,7 +115,7 @@ defineEntity(`pr-reviewer`, {
       })
     }
 
-    if (wake.type === `message_received`) {
+    if (wake.type === `inbox`) {
       ctx.useAgent({
         systemPrompt: `Review pull requests carefully and concisely.`,
         model: `claude-sonnet-4-5-20250929`,

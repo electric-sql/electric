@@ -141,7 +141,6 @@ export function createEntityStreamDB(
     collectionNameByEventType.set(def.type, name)
     rowOffsetsByCollection.set(name, new Map())
   }
-
   // Build a reverse map from TanStack DB collection id to schema key
   const collIdToSchemaKey: Record<string, string> = {}
   for (const name of Object.keys(mergedCollections)) {

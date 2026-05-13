@@ -92,10 +92,22 @@ export const braveSearchTool: AgentTool = {
   execute: async (_toolCallId, params) => {
     const { query } = params as { query: string }
     const braveKey = process.env.BRAVE_SEARCH_API_KEY
+    const anthropicKey = process.env.ANTHROPIC_API_KEY
 
     try {
       if (braveKey) {
         return await searchViaBrave(query, braveKey)
+      }
+      if (!anthropicKey) {
+        return {
+          content: [
+            {
+              type: `text` as const,
+              text: `Search unavailable: set BRAVE_SEARCH_API_KEY to enable web search, or ANTHROPIC_API_KEY to use the Anthropic web-search fallback.`,
+            },
+          ],
+          details: { resultCount: 0 },
+        }
       }
       return await searchViaAnthropic(query)
     } catch (err) {

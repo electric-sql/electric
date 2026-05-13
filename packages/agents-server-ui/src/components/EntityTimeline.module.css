@@ -9,7 +9,7 @@
   top: 0;
   left: 50%;
   z-index: 2;
-  width: min(calc(var(--chat-surface-width) + 8px), calc(100% - 72px));
+  width: min(var(--chat-surface-width), max(0px, calc(100% - 32px)));
   height: 1px;
   background: var(--ds-divider);
   box-shadow:
@@ -70,17 +70,15 @@
   );
 }
 
-/* Outer chat column: cap at the surface width plus 40px breathing on
- * each side. The actual text/surface widths live on `.entityMain` as
- * CSS variables so EntityTimeline + MessageInput can stay perfectly
- * aligned without duplicating constants. */
+/* Timeline surface: rows choose their own max width and fixed outer
+ * gutters. This lets narrow split panes use the available space instead of
+ * inheriting a large wrapper padding. */
 .content {
-  padding: 28px 40px 36px;
-  max-width: calc(var(--chat-surface-width) + 80px);
+  padding: 28px 0 36px;
   margin: 0 auto;
   overflow-anchor: none;
   box-sizing: border-box;
-  width: 100%;
+  width: min(var(--chat-surface-width), max(0px, calc(100% - 32px)));
 }
 
 /* "spawned" / "stopped" status markers — left-bordered text block
@@ -102,9 +100,8 @@
 }
 
 .manifestRow {
-  max-width: var(--chat-col-width);
   margin-inline: auto;
-  width: 100%;
+  width: max(0px, calc(100% - 24px));
 }
 
 .manifestActionButton {

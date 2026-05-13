@@ -60,6 +60,12 @@
   flex-direction: column;
 }
 
+.section + .section {
+  border-top: 1px solid var(--ds-gray-a4);
+  margin-top: 3px;
+  padding-top: 3px;
+}
+
 /* Universal row treatment used by every interactive row in the
    drawer: parent row, sub-agents toggle, and each sub-agent entry.
    Every row is full-width and clickable end to end so the hover
@@ -103,10 +109,80 @@
   display: flex;
   align-items: center;
   min-width: 0;
+  position: relative;
 }
 
 .rowShell > .row {
   flex: 1;
+}
+
+.pendingActions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: -2px;
+}
+
+.pendingActionButton {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--ds-gray-11);
+}
+
+.pendingActionButton:hover {
+  background: var(--ds-gray-a5);
+  color: var(--ds-gray-12);
+}
+
+.pendingTextRow {
+  cursor: grab;
+}
+
+.pendingTextRow:hover {
+  background: var(--ds-bg-hover);
+}
+
+.pendingTextRow:active {
+  cursor: grabbing;
+}
+
+.pendingDragging {
+  opacity: 0.48;
+}
+
+.pendingDropBefore::before,
+.pendingDropAfter::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-accent-a8);
+  pointer-events: none;
+}
+
+.pendingDropBefore::before {
+  top: 0;
+}
+
+.pendingDropAfter::after {
+  bottom: 0;
+}
+
+.pendingRowEditing {
+  background: var(--ds-accent-a2);
+  box-shadow: inset 0 0 0 1px var(--ds-accent-a5);
+}
+
+.pendingTextRow.pendingRowEditing:hover {
+  background: var(--ds-accent-a2);
+}
+
+.dragHandle {
+  color: var(--ds-text-3);
+  opacity: 0.7;
 }
 
 .sideButton {

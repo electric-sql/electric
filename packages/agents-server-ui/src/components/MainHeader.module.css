@@ -4,11 +4,9 @@
  * inside its column with the same background as the column body, so the
  * chrome reads as part of the section rather than a global frame.
  *
- * Padding-left matches the SidebarHeader gutter (10px) so when the
- * sidebar is collapsed the chrome buttons (toggle + search) land at
- * the exact same screen-x as the toggle in the open sidebar — the
- * 24x24 IconButton's glyph centers at x=22 (10 + 12), which is the
- * same column the sidebar row icons sit in.
+ * Padding-left matches the fixed titlebar control gutter (10px). When this is
+ * the leftmost tile and the sidebar is collapsed, a platform-specific inset is
+ * applied below so the title clears the fixed controls.
  *
  * No border-bottom by design — the divider effect, when wanted, comes
  * from a sibling element (e.g. the chat scroll area's own background).
@@ -23,36 +21,61 @@
   background: var(--ds-bg);
 }
 
-.chrome {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-/* Electron desktop: every tile's MainHeader strip becomes a
-   window-drag region so the user can grab anywhere along the top row
-   of the tiled area to move the window. Height stays at the web
-   default (44px) so any chrome icons (sidebar toggle / search) that
-   render here when the sidebar is collapsed flex-center on the same
-   y as the macOS traffic-light centers. */
-:global(html[data-electric-desktop='true']) .header {
+/* macOS desktop: every tile's MainHeader strip becomes a window-drag
+   region for the hiddenInset titlebar. */
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header {
   -webkit-app-region: drag;
 }
 
-/* When the chrome cluster (sidebar toggle / search) is rendered in
-   the leftmost tile because the sidebar is collapsed, push it past
-   the macOS traffic lights. Other tiles in the row keep the standard
-   gutter — they sit to the right of the lights anyway. */
-:global(html[data-electric-desktop='true']) .header:has(.chrome) {
-  padding-left: 84px;
+/* When the sidebar is collapsed, the leftmost workspace tile slides under the
+   stationary titlebar controls. Animate its header inset in sync with the
+   sidebar slide so the tile title clears those controls instead of the controls
+   jumping between headers. */
+:global(html:not([data-electric-desktop]))
+  :global([data-sidebar-state='closed'])
+  .header[data-chrome-inset-target='true'] {
+  padding-left: 68px;
 }
 
-:global(html[data-electric-desktop='true']) .header button,
-:global(html[data-electric-desktop='true']) .header a,
-:global(html[data-electric-desktop='true']) .header input,
-:global(html[data-electric-desktop='true']) .header [role='button'],
-:global(html[data-electric-desktop='true']) .header [data-no-drag] {
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  :global([data-sidebar-state='closed'])
+  .header[data-chrome-inset-target='true'] {
+  padding-left: 196px;
+}
+
+:global(
+    html[data-electric-desktop='true'][data-electric-platform='darwin'][data-electric-fullscreen='true']
+  )
+  :global([data-sidebar-state='closed'])
+  .header[data-chrome-inset-target='true'] {
+  padding-left: 122px;
+}
+
+:global(html:not([data-electric-desktop]))
+  :global([data-sidebar-animation='true'])
+  .header[data-chrome-inset-target='true'],
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  :global([data-sidebar-animation='true'])
+  .header[data-chrome-inset-target='true'] {
+  transition: padding-left 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  button,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  a,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  input,
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [role='button'],
+:global(html[data-electric-desktop='true'][data-electric-platform='darwin'])
+  .header
+  [data-no-drag] {
   -webkit-app-region: no-drag;
 }
 

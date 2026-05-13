@@ -1,4 +1,5 @@
 import { RouterProvider } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import {
   ServerConnectionProvider,
   useServerConnection,
@@ -10,10 +11,12 @@ import { ThemeProvider } from './ui'
 import { router } from './router'
 
 function AppInner(): React.ReactElement {
-  const { activeServer } = useServerConnection()
+  const { activeServer, connected } = useServerConnection()
 
   return (
-    <ElectricAgentsProvider baseUrl={activeServer?.url ?? null}>
+    <ElectricAgentsProvider
+      baseUrl={connected ? (activeServer?.url ?? null) : null}
+    >
       <PinnedEntitiesProvider>
         <RouterProvider router={router} />
       </PinnedEntitiesProvider>
@@ -22,8 +25,12 @@ function AppInner(): React.ReactElement {
 }
 
 function ThemedApp(): React.ReactElement {
-  const { darkMode } = useDarkModeContext()
+  const { darkMode, preference } = useDarkModeContext()
   const appearance = darkMode ? `dark` : `light`
+
+  useEffect(() => {
+    void window.electronAPI?.setNativeAppearance?.(preference)
+  }, [preference])
 
   return (
     <ThemeProvider appearance={appearance}>

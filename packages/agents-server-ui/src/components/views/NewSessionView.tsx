@@ -183,6 +183,7 @@ export function NewSessionView({
             })
             await sendInitialMessage({
               text: initialUserText,
+              mode: `immediate`,
             }).isPersisted.promise
           } finally {
             connection.close()
@@ -190,7 +191,7 @@ export function NewSessionView({
         }
       } catch (err) {
         setError(
-          `Could not start session: ${err instanceof Error ? err.message : String(err)}. The server may be missing ANTHROPIC_API_KEY.`
+          `Could not start session: ${err instanceof Error ? err.message : String(err)}.`
         )
       }
     },
@@ -301,7 +302,7 @@ function Picker({
   )
 
   return (
-    <Stack direction="column" gap={5}>
+    <Stack direction="column" gap={5} className={styles.pickerFlow}>
       <div className={styles.heading}>
         <Text size={7} as="h1" className={styles.headingTitle}>
           {heroTitle}

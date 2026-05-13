@@ -15,10 +15,3 @@ export function entityApiUrl(
 ): string {
   return appendPathToUrl(baseUrl, entityApiPath(entityUrl, suffix))
 }
-
-export function assertedIdentityHeaders(
-  identity: string | undefined
-): Record<string, string> {
-  const trimmed = identity?.trim()
-  return trimmed ? { 'x-electric-asserted-email': trimmed } : {}
-}
