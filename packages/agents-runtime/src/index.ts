@@ -173,6 +173,7 @@ export {
   getSharedStateStreamPath,
 } from './runtime-server-client'
 export type {
+  RuntimeServerClient,
   RuntimeServerClientConfig,
   RuntimeEntityInfo,
   SpawnEntityOptions,

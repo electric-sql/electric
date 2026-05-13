@@ -1,6 +1,8 @@
 import { Type } from '@sinclair/typebox'
-import type { AgentTool } from '@electric-ax/agents-runtime'
-import type { RuntimeServerClient } from '@electric-ax/agents-runtime/runtime-server-client'
+import type {
+  AgentTool,
+  RuntimeServerClient,
+} from '@electric-ax/agents-runtime'
 
 export interface SpawnHortonOptions {
   runtime: RuntimeServerClient

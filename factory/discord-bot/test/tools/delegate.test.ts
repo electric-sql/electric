@@ -30,6 +30,7 @@ describe(`spawn_horton`, () => {
     expect(call.args.repo).toBe(`o/r`)
     expect(call.args.branch).toBe(`electric-bot/thread-t1`)
     expect(call.wake?.condition).toBe(`runFinished`)
+    expect(call.wake?.includeResponse).toBe(true)
     expect(result.details).toMatchObject({
       childEntityUrl: `http://a/horton-xyz`,
     })
