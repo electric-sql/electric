@@ -79,7 +79,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
     assert request_attrs["http.body_param.subset.params"] == ~s(%{"1" => "%2"})
 
     assert query_attrs["subset.rows"] == 1
-    assert query_attrs["subset.bytes"] > 0
+    assert query_attrs["subset.result_bytes"] > 0
     assert query_attrs["subset.duration_µs"] >= 0
   end
 
