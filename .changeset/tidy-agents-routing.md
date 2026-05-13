@@ -1,5 +1,5 @@
 ---
-"@electric-ax/agents-server": major
+"@electric-ax/agents-server": minor
 "@electric-ax/agents-runtime": minor
 "@electric-ax/agents-server-ui": minor
 "@electric-ax/agents-server-conformance-tests": patch
