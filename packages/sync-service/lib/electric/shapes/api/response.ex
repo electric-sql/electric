@@ -423,39 +423,14 @@ defmodule Electric.Shapes.Api.Response do
     stack_id = Api.stack_id(response)
     conn = Plug.Conn.send_chunked(conn, status)
 
-    # Decide once per response whether to capture per-chunk memory
-    # attributes. The Sampler decision is config-driven, so it's stable
-    # across the loop — hoisting avoids paying `Process.info/2` for excluded
-    # chunk spans and avoids polluting the parent span when the chunk span
-    # is excluded (because `current_span_context()` inside the closure
-    # resolves to the parent in that case).
-    chunk_span_recording? = Sampler.include_span?("shape_get.plug.stream_chunk")
-
     {conn, bytes_sent} =
       response.body
       |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
-        # Snapshot current process/binary memory on each chunk span so the
-        # span viewer surfaces how memory evolves across a streamed
-        # response. Bake the memory attrs into the initial attribute map so
-        # they only land on the new OTEL span (not the parent) when the
-        # chunk span is excluded — `current_span_context()` inside the
-        # closure would otherwise resolve to the parent. Single-point
-        # capture (`:start`) keeps per-chunk attribute cardinality low.
-        chunk_attrs =
-          if chunk_span_recording? do
-            Map.merge(
-              %{chunk_size: chunk_size},
-              OpenTelemetry.process_memory_attributes(:start)
-            )
-          else
-            %{chunk_size: chunk_size}
-          end
-
         OpenTelemetry.with_span(
           "shape_get.plug.stream_chunk",
-          chunk_attrs,
+          [chunk_size: chunk_size],
           stack_id,
           fn ->
             case Plug.Conn.chunk(conn, chunk) do
