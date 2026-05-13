@@ -154,6 +154,10 @@ const entitiesRegisterBodySchema = Type.Object({
   tags: Type.Optional(stringRecordSchema),
 })
 
+const patchArgsBodySchema = Type.Object({
+  args: Type.Record(Type.String(), Type.Unknown()),
+})
+
 type SpawnBody = Static<typeof spawnBodySchema>
 type SendBody = Static<typeof sendBodySchema>
 type InboxMessageBody = Static<typeof inboxMessageBodySchema>
@@ -161,6 +165,7 @@ type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
 type EntitiesRegisterBody = Static<typeof entitiesRegisterBodySchema>
+type PatchArgsBody = Static<typeof patchArgsBodySchema>
 
 export const entitiesRouter: EntitiesRoutes = Router<
   AgentsRouteRequest,
@@ -185,6 +190,12 @@ entitiesRouter.put(
 entitiesRouter.get(`/:type/:instanceId`, withExistingEntity, getEntity)
 entitiesRouter.head(`/:type/:instanceId`, withExistingEntity, headEntity)
 entitiesRouter.delete(`/:type/:instanceId`, withExistingEntity, killEntity)
+entitiesRouter.patch(
+  `/:type/:instanceId`,
+  withExistingEntity,
+  withSchema(patchArgsBodySchema),
+  patchEntityArgs
+)
 entitiesRouter.post(
   `/:type/:instanceId/send`,
   withExistingEntity,
@@ -552,4 +563,21 @@ async function killEntity(
   const result = await ctx.entityManager.kill(entityUrl)
   ctx.runtime.claimWriteTokens.clearStream(ctx.service, entity.streams.main)
   return json(result)
+}
+
+async function patchEntityArgs(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const parsed = routeBody<PatchArgsBody>(request)
+  const { entityUrl, entity } = requireExistingEntityRoute(request)
+  const merged = {
+    ...(entity.spawn_args ?? {}),
+    ...parsed.args,
+  }
+  const txid = await ctx.entityManager.registry.updateEntitySpawnArgs(
+    entityUrl,
+    merged
+  )
+  return json({ txid })
 }
