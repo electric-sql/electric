@@ -427,21 +427,21 @@ defmodule Electric.Shapes.Api.Response do
       |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
-        # Snapshot current process/binary memory on each chunk span so the
-        # span viewer surfaces how memory evolves across a streamed response.
-        # Single-point capture (not start/end) keeps per-chunk attribute
-        # cardinality low — streamed responses can produce many chunks.
-        chunk_attrs =
-          Map.merge(
-            %{chunk_size: chunk_size},
-            OpenTelemetry.process_memory_attributes()
-          )
-
         OpenTelemetry.with_span(
           "shape_get.plug.stream_chunk",
-          chunk_attrs,
+          %{chunk_size: chunk_size},
           stack_id,
           fn ->
+            # Snapshot current process/binary memory on each chunk span so
+            # the span viewer surfaces how memory evolves across a streamed
+            # response. Captured inside the closure so the two
+            # `Process.info/2` calls only run when the chunk span is actually
+            # recorded — streamed responses can produce many chunks, and the
+            # span is often excluded by the sampler or `:exclude_spans`
+            # config. Single-point capture (not start/end) keeps per-chunk
+            # attribute cardinality low.
+            OpenTelemetry.add_process_memory_attributes()
+
             case Plug.Conn.chunk(conn, chunk) do
               {:ok, conn} ->
                 {:cont, {conn, bytes_sent + chunk_size}}

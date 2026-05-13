@@ -131,15 +131,49 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
     end
 
     test "applies the given phase as part of the attribute key prefix" do
-      attrs = OpenTelemetry.process_memory_attributes("start")
+      attrs = OpenTelemetry.process_memory_attributes(:start)
 
       assert Map.has_key?(attrs, "memory.start.process_bytes")
       assert Map.has_key?(attrs, "memory.start.binary_bytes")
     end
 
-    test "ignores nil and empty-string phases" do
-      assert OpenTelemetry.process_memory_attributes(nil) |> Map.keys() ==
-               OpenTelemetry.process_memory_attributes("") |> Map.keys()
+    test "rejects phase values other than :start, :end, or nil" do
+      assert_raise FunctionClauseError, fn ->
+        OpenTelemetry.process_memory_attributes("start")
+      end
+    end
+  end
+
+  describe "add_process_memory_attributes/1" do
+    test "forwards memory attributes through set_attributes on the current span" do
+      test_pid = self()
+
+      Repatch.patch(:otel_span, :set_attributes, fn ctx, attrs ->
+        send(test_pid, {:set_attributes, attrs})
+        Repatch.real(:otel_span, :set_attributes, [ctx, attrs])
+      end)
+
+      OpenTelemetry.with_span("test_span", %{}, @stack_id, fn ->
+        OpenTelemetry.add_process_memory_attributes(:start)
+      end)
+
+      # We expect at least one set_attributes call carrying the memory keys
+      # — confirming the helper attaches them to the surrounding span.
+      assert_received {:set_attributes,
+                       %{
+                         "memory.start.process_bytes" => process_bytes,
+                         "memory.start.binary_bytes" => binary_bytes
+                       }}
+
+      assert is_integer(process_bytes) and process_bytes > 0
+      assert is_integer(binary_bytes) and binary_bytes >= 0
+    end
+
+    test "is safe to call outside any span" do
+      # No surrounding with_span — current_span_context/0 returns the
+      # undefined sentinel; :otel_span.set_attributes/2 accepts it and
+      # the helper should not raise.
+      assert OpenTelemetry.add_process_memory_attributes() in [true, false]
     end
   end
 end

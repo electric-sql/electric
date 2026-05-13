@@ -1150,16 +1150,22 @@ defmodule Electric.Shapes.Api do
   end
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do
-    # Record process/binary memory at span entry as attributes (cheap, two
-    # `Process.info/2` calls). Capture matching `end` attributes inside the
-    # closure so memory growth across the span is queryable in Honeycomb.
-    start_memory = OpenTelemetry.process_memory_attributes("start")
-    all_attributes = Map.merge(Map.new(attributes), start_memory)
+    # Record process/binary memory at span entry and exit so memory growth
+    # across the span is queryable in Honeycomb. The captures live inside the
+    # span closure for two reasons:
+    #   * the `Process.info/2` calls only run when the span is actually
+    #     recorded (sampler/`:exclude_spans` short-circuit before the closure
+    #     is invoked);
+    #   * `try`/`after` guarantees the `end` snapshot is recorded even when
+    #     `fun.()` raises — which is exactly when memory data is most useful.
+    OpenTelemetry.with_span(name, attributes, stack_id(request), fn ->
+      OpenTelemetry.add_process_memory_attributes(:start)
 
-    OpenTelemetry.with_span(name, all_attributes, stack_id(request), fn ->
-      result = fun.()
-      OpenTelemetry.add_process_memory_attributes("end")
-      result
+      try do
+        fun.()
+      after
+        OpenTelemetry.add_process_memory_attributes(:end)
+      end
     end)
   end
 
