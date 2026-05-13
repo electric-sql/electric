@@ -238,22 +238,32 @@ export function MessageInput({
             </button>
           </div>
         )}
-        <div className={styles.composerBody}>
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === `Enter` && !e.shiftKey) {
-                e.preventDefault()
-                handleSubmit()
-              }
-            }}
-            placeholder={disabled ? `Entity stopped` : `Send a message...`}
-            disabled={disabled}
-            rows={1}
-            className={styles.textarea}
-          />
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === `Enter` && !e.shiftKey) {
+              e.preventDefault()
+              handleSubmit()
+            }
+          }}
+          placeholder={disabled ? `Entity stopped` : `Send a message...`}
+          disabled={disabled}
+          rows={1}
+          className={styles.textarea}
+        />
+        <div className={styles.composerFooter}>
+          <div className={styles.composerControls}>
+            {entity && (
+              <ComposerSettings
+                entity={entity}
+                entityType={entityType ?? null}
+                baseUrl={baseUrl}
+                disabled={disabled}
+              />
+            )}
+          </div>
           <button
             type="button"
             aria-label="Send message"
@@ -266,29 +276,6 @@ export function MessageInput({
             <Icon icon={ArrowUp} size={3} />
           </button>
         </div>
-      </div>
-      <div className={styles.composerFooter}>
-        <div className={styles.composerControls}>
-          {entity && (
-            <ComposerSettings
-              entity={entity}
-              entityType={entityType ?? null}
-              baseUrl={baseUrl}
-              disabled={disabled}
-            />
-          )}
-        </div>
-        <button
-          type="button"
-          aria-label="Send message"
-          onClick={handleSubmit}
-          disabled={!isActive}
-          className={[styles.composerSend, isActive ? styles.active : null]
-            .filter(Boolean)
-            .join(` `)}
-        >
-          <Icon icon={ArrowUp} size={3} />
-        </button>
       </div>
     </Stack>
   )

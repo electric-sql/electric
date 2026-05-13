@@ -161,14 +161,6 @@
   outline-offset: 2px;
 }
 
-.composerBody {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--ds-space-2);
-  min-width: 0;
-  width: 100%;
-}
-
 .textarea {
   flex: 1;
   min-width: 0;
