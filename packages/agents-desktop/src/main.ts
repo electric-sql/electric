@@ -216,10 +216,6 @@ app.commandLine.appendSwitch(
  * so production keeps loading the static bundle from disk.
  */
 const DEV_SERVER_URL = process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ?? null
-const CONFIGURED_ASSERTED_AUTH_EMAIL =
-  process.env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || undefined
-const CONFIGURED_ASSERTED_AUTH_NAME =
-  process.env.ELECTRIC_ASSERTED_AUTH_NAME?.trim() || undefined
 const PULL_WAKE_RUNNER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
 const PULL_WAKE_REGISTER_RUNNER =
@@ -230,20 +226,7 @@ const PULL_WAKE_REGISTER_RUNNER =
       )
 const PULL_WAKE_OWNER_USER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
-  CONFIGURED_ASSERTED_AUTH_EMAIL ||
-  CONFIGURED_ASSERTED_AUTH_NAME ||
   `local-desktop`
-const DESKTOP_ASSERTED_AUTH_EMAIL =
-  CONFIGURED_ASSERTED_AUTH_EMAIL ?? PULL_WAKE_OWNER_USER_ID
-const DESKTOP_ASSERTED_AUTH_NAME =
-  CONFIGURED_ASSERTED_AUTH_NAME ?? `Electric Agents Desktop`
-
-function buildAssertedAuthHeaders(): Record<string, string> {
-  return {
-    'X-Electric-Asserted-Email': DESKTOP_ASSERTED_AUTH_EMAIL,
-    'X-Electric-Asserted-Name': DESKTOP_ASSERTED_AUTH_NAME,
-  }
-}
 
 function mergeHeaders(
   ...sources: Array<Record<string, string> | undefined>
@@ -268,11 +251,7 @@ function runnerOwnerUserIdFromHeaders(
   headers: Record<string, string> | undefined
 ): string {
   const normalized = new Headers(headers)
-  return (
-    normalized.get(`x-electric-asserted-email`)?.trim() ||
-    normalized.get(`x-electric-asserted-name`)?.trim() ||
-    PULL_WAKE_OWNER_USER_ID
-  )
+  return normalized.get(`authorization`)?.trim() || PULL_WAKE_OWNER_USER_ID
 }
 
 /**
@@ -1533,10 +1512,7 @@ async function startRuntime(serverId: string): Promise<void> {
   }
   setState({ pullWakeRunnerId: runnerId })
 
-  const runtimeHeaders = mergeHeaders(
-    buildAssertedAuthHeaders(),
-    activeServer.headers
-  )
+  const runtimeHeaders = mergeHeaders(activeServer.headers)
   const runnerOwnerUserId = runnerOwnerUserIdFromHeaders(runtimeHeaders)
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
@@ -1897,10 +1873,6 @@ function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     return desktopStateForWindow(win)
   })
-  ipcMain.handle(
-    `desktop:get-asserted-auth-headers`,
-    () => buildAssertedAuthHeaders() ?? {}
-  )
   ipcMain.handle(
     `desktop:set-active-server`,
     async (_event, server: ServerConfig | null) => {

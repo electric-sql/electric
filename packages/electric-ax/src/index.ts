@@ -6,7 +6,7 @@ import { basename, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
-import { assertedIdentityHeaders, entityApiPath } from './entity-api.js'
+import { entityApiPath } from './entity-api.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
 import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import type {
@@ -27,8 +27,6 @@ import type {
 export interface ElectricCliEnv {
   electricAgentsUrl: string
   electricAgentsIdentity: string
-  electricAssertedAuthEmail?: string
-  electricAssertedAuthName?: string
   electricAgentsHeaders?: Record<string, string>
 }
 
@@ -139,9 +137,6 @@ export function getElectricCliEnv(
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
     electricAgentsIdentity:
       explicitIdentity || getDefaultElectricAgentsIdentity(),
-    electricAssertedAuthEmail:
-      env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || explicitIdentity || undefined,
-    electricAssertedAuthName: env.ELECTRIC_ASSERTED_AUTH_NAME?.trim(),
     electricAgentsHeaders: parseElectricAgentsHeaders(
       env.ELECTRIC_AGENTS_SERVER_HEADERS
     ),
@@ -337,10 +332,6 @@ async function electricAgentsFetch(
       ...opts,
       headers: {
         'content-type': `application/json`,
-        ...assertedIdentityHeaders(env.electricAssertedAuthEmail),
-        ...(env.electricAssertedAuthName
-          ? { 'x-electric-asserted-name': env.electricAssertedAuthName }
-          : {}),
         ...env.electricAgentsHeaders,
         ...opts.headers,
       },
@@ -541,8 +532,6 @@ async function observeEntity(
     entityUrl: url,
     baseUrl: env.electricAgentsUrl,
     identity: env.electricAgentsIdentity,
-    assertedAuthEmail: env.electricAssertedAuthEmail,
-    assertedAuthName: env.electricAssertedAuthName,
     headers: env.electricAgentsHeaders,
     initialOffset: options.from,
   })

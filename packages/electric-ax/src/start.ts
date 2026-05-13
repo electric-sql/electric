@@ -19,7 +19,6 @@ const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
 const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
 const DEFAULT_PULL_WAKE_RUNNER_ID = `builtin-agents`
 const DEFAULT_PULL_WAKE_OWNER_ID = `builtin-agents`
-const DEFAULT_PULL_WAKE_OWNER_NAME = `Built-in agents`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
 )
@@ -124,10 +123,7 @@ export function resolvePullWakeRunnerId(
       `PULL_WAKE_RUNNER_ID`,
     ]) ??
     runnerIdFromIdentity(
-      readConfigValue(env, fileEnv, [
-        `ELECTRIC_ASSERTED_AUTH_EMAIL`,
-        `ELECTRIC_AGENTS_IDENTITY`,
-      ])
+      readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`])
     )
   )
 }
@@ -137,29 +133,9 @@ export function resolvePullWakeOwnerId(
   fileEnv: Record<string, string> = readDotEnvFile()
 ): string {
   return (
-    readConfigValue(env, fileEnv, [
-      `ELECTRIC_ASSERTED_AUTH_EMAIL`,
-      `ELECTRIC_AGENTS_IDENTITY`,
-    ]) ?? DEFAULT_PULL_WAKE_OWNER_ID
+    readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`]) ??
+    DEFAULT_PULL_WAKE_OWNER_ID
   )
-}
-
-function buildAssertedAuthHeaders(
-  env: NodeJS.ProcessEnv,
-  fileEnv: Record<string, string>
-): { headers: Record<string, string>; ownerUserId: string; name: string } {
-  const email = resolvePullWakeOwnerId(env, fileEnv)
-  const name =
-    readConfigValue(env, fileEnv, [`ELECTRIC_ASSERTED_AUTH_NAME`]) ??
-    DEFAULT_PULL_WAKE_OWNER_NAME
-  const headers: Record<string, string> = {}
-  headers[`X-Electric-Asserted-Email`] = email
-  headers[`X-Electric-Asserted-Name`] = name
-  return {
-    headers,
-    ownerUserId: email,
-    name,
-  }
 }
 
 function parseAdditionalServerHeaders(
@@ -302,7 +278,6 @@ export async function startElectricAgentsDevEnvironment(
   const fileEnv = readDotEnvFile(cwd)
   const port = resolveElectricAgentsPort(env, fileEnv)
   const composeProjectName = resolveComposeProjectName(cwd, env)
-  const assertedAuth = buildAssertedAuthHeaders(env, fileEnv)
 
   await runDockerCompose([`compose`, `-f`, DOCKER_COMPOSE_FILE, `up`, `-d`], {
     ...env,
@@ -311,18 +286,6 @@ export async function startElectricAgentsDevEnvironment(
     ELECTRIC_IMAGE_TAG: env.ELECTRIC_IMAGE_TAG ?? ELECTRIC_IMAGE_TAG,
     ELECTRIC_AGENTS_SERVER_IMAGE_TAG:
       env.ELECTRIC_AGENTS_SERVER_IMAGE_TAG ?? ELECTRIC_AGENTS_SERVER_IMAGE_TAG,
-    ELECTRIC_AGENTS_DEV_ASSERTED_AUTH:
-      env.ELECTRIC_AGENTS_DEV_ASSERTED_AUTH ??
-      fileEnv.ELECTRIC_AGENTS_DEV_ASSERTED_AUTH ??
-      `1`,
-    ELECTRIC_ASSERTED_AUTH_EMAIL:
-      env.ELECTRIC_ASSERTED_AUTH_EMAIL ??
-      fileEnv.ELECTRIC_ASSERTED_AUTH_EMAIL ??
-      assertedAuth.ownerUserId,
-    ELECTRIC_ASSERTED_AUTH_NAME:
-      env.ELECTRIC_ASSERTED_AUTH_NAME ??
-      fileEnv.ELECTRIC_ASSERTED_AUTH_NAME ??
-      assertedAuth.name,
   })
 
   const uiUrl = `http://localhost:${port}`
@@ -413,11 +376,8 @@ export async function startBuiltinAgentsServer(
   const fileEnv = readDotEnvFile(cwd)
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
   const runnerId = resolvePullWakeRunnerId(env, fileEnv)
-  const assertedAuth = buildAssertedAuthHeaders(env, fileEnv)
-  const serverHeaders = mergeHeaders(
-    assertedAuth.headers,
-    parseAdditionalServerHeaders(env, fileEnv)
-  )
+  const ownerUserId = resolvePullWakeOwnerId(env, fileEnv)
+  const serverHeaders = mergeHeaders(parseAdditionalServerHeaders(env, fileEnv))
   const agentServerUrl =
     params.agentServerUrl ??
     env.ELECTRIC_AGENTS_URL?.trim() ??
@@ -432,7 +392,7 @@ export async function startBuiltinAgentsServer(
     loadProjectMcpConfig: true,
     pullWake: {
       runnerId,
-      ownerUserId: assertedAuth.ownerUserId,
+      ownerUserId,
       registerRunner: true,
       headers: serverHeaders,
       claimHeaders: serverHeaders,

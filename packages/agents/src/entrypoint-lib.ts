@@ -53,23 +53,6 @@ function validateUrl(name: string, value: string): string {
   }
 }
 
-function buildAssertedAuthHeaders(
-  env: EnvSource
-): Record<string, string> | undefined {
-  const headers: Record<string, string> = {}
-  const email = readEnv(env, [`ELECTRIC_ASSERTED_AUTH_EMAIL`])
-  const name = readEnv(env, [`ELECTRIC_ASSERTED_AUTH_NAME`])
-
-  if (email) {
-    headers[`X-Electric-Asserted-Email`] = email
-  }
-  if (name) {
-    headers[`X-Electric-Asserted-Name`] = name
-  }
-
-  return Object.keys(headers).length > 0 ? headers : undefined
-}
-
 function parseAdditionalServerHeaders(
   env: EnvSource
 ): Record<string, string> | undefined {
@@ -138,10 +121,7 @@ export function resolveBuiltinAgentsEntrypointOptions(
     `pull-wake runner id`
   )
 
-  const serverHeaders = mergeHeaders(
-    buildAssertedAuthHeaders(env),
-    parseAdditionalServerHeaders(env)
-  )
+  const serverHeaders = mergeHeaders(parseAdditionalServerHeaders(env))
 
   return {
     agentServerUrl,

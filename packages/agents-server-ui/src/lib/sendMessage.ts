@@ -2,10 +2,6 @@ import { createOptimisticAction } from '@tanstack/db'
 import { generateKeyBetween } from 'fractional-indexing'
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl } from './entity-api'
-import {
-  getCachedDesktopFormattedAssertedIdentity,
-  getDesktopFormattedAssertedIdentity,
-} from './assertedIdentity'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
 // Timeline queries sort inbox messages by `_seq`. Pending local rows do not
@@ -164,11 +160,10 @@ export function createSendMessageAction({
   const action = createOptimisticAction<SendMessageInput>({
     onMutate: ({ text, mode, key, seq, position }) => {
       const now = new Date().toISOString()
-      const effectiveFrom = getCachedDesktopFormattedAssertedIdentity() ?? from
       const message: OptimisticInboxMessage = {
         key,
         _seq: seq,
-        from: effectiveFrom,
+        from,
         payload: { text },
         timestamp: now,
         mode,
@@ -183,15 +178,11 @@ export function createSendMessageAction({
       onOptimisticMessage?.(message)
     },
     mutationFn: async ({ text, key, mode, position }) => {
-      const effectiveFrom =
-        getCachedDesktopFormattedAssertedIdentity() ??
-        (await getDesktopFormattedAssertedIdentity()) ??
-        from
       const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/send`), {
         method: `POST`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify({
-          from: effectiveFrom,
+          from,
           key,
           payload: { text },
           mode,

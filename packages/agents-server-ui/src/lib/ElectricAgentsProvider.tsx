@@ -6,10 +6,6 @@ import { z } from 'zod'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { ReactNode } from 'react'
 import { serverFetch } from './auth-fetch'
-import {
-  getCachedDesktopFormattedAssertedIdentity,
-  getDesktopFormattedAssertedIdentity,
-} from './assertedIdentity'
 import { entityApiUrl, entitySpawnApiUrl } from './entity-api'
 
 type EntityStatus = `spawning` | `running` | `idle` | `stopped`
@@ -163,20 +159,6 @@ interface SpawnInput {
   dispatch_policy?: RunnerDispatchPolicy
 }
 
-function withCreatedByTag(
-  tags: Record<string, string> | undefined,
-  createdBy = getCachedDesktopFormattedAssertedIdentity()
-): Record<string, string> | undefined {
-  if (!createdBy) return tags
-  return { ...(tags ?? {}), created_by: createdBy }
-}
-
-async function withCreatedByTagAsync(
-  tags: Record<string, string> | undefined
-): Promise<Record<string, string> | undefined> {
-  return withCreatedByTag(tags, await getDesktopFormattedAssertedIdentity())
-}
-
 function createSpawnAction(
   baseUrl: string,
   entitiesCollection: EntitiesCollection
@@ -187,7 +169,7 @@ function createSpawnAction(
         url: `/${type}/${name}`,
         type,
         status: `spawning`,
-        tags: withCreatedByTag(tags) ?? {},
+        tags: tags ?? {},
         spawn_args: args ?? {},
         parent: null,
         created_at: Date.now(),
@@ -204,9 +186,8 @@ function createSpawnAction(
       dispatch_policy,
     }) => {
       const body: Record<string, unknown> = {}
-      const stampedTags = await withCreatedByTagAsync(tags)
       if (args) body.args = args
-      if (stampedTags) body.tags = stampedTags
+      if (tags) body.tags = tags
       if (parent) body.parent = parent
       if (initialMessage) body.initialMessage = initialMessage
       if (dispatch_policy) body.dispatch_policy = dispatch_policy

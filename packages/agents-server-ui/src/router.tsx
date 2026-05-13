@@ -13,7 +13,6 @@ import {
 import { z } from 'zod'
 import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
 import { preloadAppCollections } from './lib/ElectricAgentsProvider'
-import { preloadDesktopFormattedAssertedIdentity } from './lib/assertedIdentity'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import {
   SidebarCollapsedProvider,
@@ -364,10 +363,7 @@ const indexRoute = createRoute({
   path: `/`,
   loader: async (): Promise<null> => {
     const baseUrl = getActiveBaseUrl()
-    await Promise.all([
-      baseUrl ? preloadAppCollections(baseUrl) : Promise.resolve(),
-      preloadDesktopFormattedAssertedIdentity(),
-    ])
+    if (baseUrl) await preloadAppCollections(baseUrl)
     return null
   },
   component: WorkspacePage,
@@ -382,7 +378,6 @@ const entityRoute = createRoute({
     if (!baseUrl) return null
     await Promise.all([
       preloadAppCollections(baseUrl),
-      preloadDesktopFormattedAssertedIdentity(),
       preloadEntityStream({
         baseUrl,
         entityUrl: `/${params._splat}`,

@@ -224,15 +224,11 @@ async function claimWake(
   ctx: TenantContext
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
-  if (!ctx.authenticatedUser) {
-    throw new ElectricAgentsError(
-      ErrCodeUnauthorized,
-      `Authentication is required to claim runner work`,
-      401
-    )
-  }
   const runner = await requireRunner(ctx, runnerId)
-  if (runner.owner_user_id !== ctx.authenticatedUser.userId) {
+  if (
+    ctx.authenticatedUser &&
+    runner.owner_user_id !== ctx.authenticatedUser.userId
+  ) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner claim requires the authenticated owner`,
