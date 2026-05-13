@@ -84,9 +84,9 @@ defmodule Electric.Shapes.PartialModes do
         # active shape_snapshot.query_fn child span so they become queryable
         # Honeycomb columns. Mirrors the telemetry event measurements above.
         OpenTelemetry.add_span_attributes(%{
-          "electric.subqueries.subset_result.bytes" => bytes,
-          "electric.subqueries.subset_result.rows" => rows,
-          "electric.subqueries.subset_result.duration_µs" => duration
+          "subset.bytes" => bytes,
+          "subset.rows" => rows,
+          "subset.duration_µs" => duration
         })
       end
     )
