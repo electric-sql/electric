@@ -395,21 +395,37 @@ defmodule Electric.Plug.ServeShapePlug do
   defp emit_shape_telemetry(%Conn{assigns: assigns} = conn) do
     start_time = get_in(conn.private, [:electric_telemetry_span, :start_time])
     now = System.monotonic_time()
+    bytes_sent = assigns[:streaming_bytes_sent] || 0
+    is_live = get_live_mode(assigns)
+    stack_id = get_in(conn.assigns, [:config, :stack_id])
 
     OpenTelemetry.execute(
       [:electric, :plug, :serve_shape],
       %{
         count: 1,
-        bytes: assigns[:streaming_bytes_sent] || 0,
+        bytes: bytes_sent,
         monotonic_time: now,
         duration: if(start_time, do: now - start_time, else: 0)
       },
       %{
-        live: get_live_mode(assigns),
+        live: is_live,
         shape_handle: get_handle(assigns) || conn.query_params["handle"],
         client_ip: conn.remote_ip,
         status: conn.status,
-        stack_id: get_in(conn.assigns, [:config, :stack_id])
+        stack_id: stack_id
+      }
+    )
+
+    # Per-shape response size histogram. Tagged by `root_table`, `is_live`
+    # and `stack_id` so operators can attribute payload volume to individual
+    # shapes and tell initial snapshots apart from live long-polls.
+    :telemetry.execute(
+      [:electric, :shape, :response_size],
+      %{bytes: bytes_sent},
+      %{
+        root_table: get_root_table(assigns, conn),
+        is_live: is_live,
+        stack_id: stack_id
       }
     )
 
@@ -423,6 +439,16 @@ defmodule Electric.Plug.ServeShapePlug do
   defp get_live_mode(%{response: %{params: %{live: live}}}), do: live
   defp get_live_mode(%{request: %{params: %{live: live}}}), do: live
   defp get_live_mode(_), do: false
+
+  # Used as a metric label for the response-size histogram. The goal is low
+  # cardinality (one value per configured shape root table), so we only emit
+  # the validated `table` from request params. If validation never ran (e.g.
+  # the request was rejected before parse), fall back to nil rather than
+  # echoing back attacker-controlled query string values.
+  defp get_root_table(%{request: %{params: %{table: table}}}, _conn) when is_binary(table),
+    do: table
+
+  defp get_root_table(_assigns, _conn), do: nil
 
   defp add_span_attrs_from_conn(conn) do
     conn
