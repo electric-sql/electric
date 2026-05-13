@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  assertedIdentityHeaders,
-  entityApiPath,
-  entityApiUrl,
-} from '../src/entity-api'
+import { entityApiPath, entityApiUrl } from '../src/entity-api'
 
 describe(`entity API helpers`, () => {
   it(`routes entity API calls through the control-plane router`, () => {
@@ -19,12 +15,5 @@ describe(`entity API helpers`, () => {
     expect(entityApiUrl(`http://server/`, `/horton/demo`, `/fork`)).toBe(
       `http://server/_electric/entities/horton/demo/fork`
     )
-  })
-
-  it(`builds asserted auth headers when an asserted identity is present`, () => {
-    expect(assertedIdentityHeaders(` alice@example.test `)).toEqual({
-      'x-electric-asserted-email': `alice@example.test`,
-    })
-    expect(assertedIdentityHeaders(` `)).toEqual({})
   })
 })

@@ -47,4 +47,41 @@ describe(`watchConfig`, () => {
       stop()
     }
   })
+
+  it(`watches a missing config file when it is created later`, async () => {
+    await fs.rm(file)
+    const onChange = vi.fn()
+    const onError = vi.fn()
+    const stop = await watchConfig(file, { onChange, onError, debounceMs: 50 })
+    try {
+      await fs.writeFile(
+        file,
+        `{ "servers": { "created": { "transport": "stdio", "command": "true" } } }`
+      )
+      await new Promise((r) => setTimeout(r, 200))
+      expect(onError).not.toHaveBeenCalled()
+      expect(onChange).toHaveBeenCalled()
+      const cfg = onChange.mock.calls[onChange.mock.calls.length - 1]![0]
+      expect(cfg.servers).toHaveLength(1)
+      expect(cfg.servers[0]?.name).toBe(`created`)
+    } finally {
+      stop()
+    }
+  })
+
+  it(`treats a deleted config file as an empty config`, async () => {
+    const onChange = vi.fn()
+    const onError = vi.fn()
+    const stop = await watchConfig(file, { onChange, onError, debounceMs: 50 })
+    try {
+      await fs.rm(file)
+      await new Promise((r) => setTimeout(r, 200))
+      expect(onError).not.toHaveBeenCalled()
+      expect(onChange).toHaveBeenCalled()
+      const cfg = onChange.mock.calls[onChange.mock.calls.length - 1]![0]
+      expect(cfg.servers).toEqual([])
+    } finally {
+      stop()
+    }
+  })
 })

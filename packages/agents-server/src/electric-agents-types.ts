@@ -303,6 +303,8 @@ export interface SendRequest {
   payload?: unknown
   key?: string
   type?: string
+  mode?: `immediate` | `queued` | `paused` | `steer`
+  position?: string
 }
 
 export interface SetTagRequest {

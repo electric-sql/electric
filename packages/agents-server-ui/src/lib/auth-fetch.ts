@@ -1,6 +1,8 @@
-import type { ServerConfig } from './types'
-
-export type AssertedAuthHeaders = Record<string, string>
+type ServerHeaderConfig = {
+  name?: string
+  url: string
+  headers?: Record<string, string>
+}
 
 type ActiveServerHeaders = {
   baseUrl: string
@@ -64,7 +66,9 @@ function matchesActiveServer(input: RequestInfo | URL): boolean {
   )
 }
 
-export function registerActiveServerHeaders(server: ServerConfig | null): void {
+export function registerActiveServerHeaders(
+  server: ServerHeaderConfig | null
+): void {
   const headers = normalizeHeaders(server?.headers)
   activeServerHeaders =
     server && Object.keys(headers).length > 0
@@ -78,16 +82,10 @@ export function getConfiguredServerHeaders(
   return matchesActiveServer(input) ? (activeServerHeaders?.headers ?? {}) : {}
 }
 
-export async function getDesktopAssertedAuthHeaders(): Promise<AssertedAuthHeaders> {
-  if (typeof window === `undefined`) return {}
-  return (await window.electronAPI?.getAssertedAuthHeaders?.()) ?? {}
-}
-
 export async function serverFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> {
-  const assertedHeaders = await getDesktopAssertedAuthHeaders()
   const headers = new Headers(
     input instanceof Request ? input.headers : undefined
   )
@@ -97,9 +95,6 @@ export async function serverFetch(
   for (const [key, value] of Object.entries(
     getConfiguredServerHeaders(input)
   )) {
-    if (!headers.has(key)) headers.set(key, value)
-  }
-  for (const [key, value] of Object.entries(assertedHeaders)) {
     if (!headers.has(key)) headers.set(key, value)
   }
   return fetch(input, { ...init, headers })

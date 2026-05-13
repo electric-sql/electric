@@ -1,8 +1,4 @@
 import { DurableStreamTestServer } from '@durable-streams/server'
-import {
-  createDevAssertedAuthenticateRequest,
-  devAssertedAuthOptionsFromEnv,
-} from './dev-asserted-auth.js'
 import { ElectricAgentsServer } from './server.js'
 import type { ElectricAgentsServerOptions } from './server.js'
 
@@ -144,12 +140,7 @@ export function resolveElectricAgentsEntrypointOptions(
   ])
   const electricSecret = readEnv(env, [`ELECTRIC_AGENTS_ELECTRIC_SECRET`])
   const baseUrl = readEnv(env, [`ELECTRIC_AGENTS_BASE_URL`, `BASE_URL`])
-  const authenticateRequest = createDevAssertedAuthenticateRequest(
-    devAssertedAuthOptionsFromEnv(env)
-  )
-
   return {
-    ...(authenticateRequest ? { authenticateRequest } : {}),
     service: readEnv(env, [`ELECTRIC_AGENTS_SERVICE`, `SERVICE`]),
     tenantId: readEnv(env, [`ELECTRIC_AGENTS_TENANT_ID`, `TENANT_ID`]),
     baseUrl: baseUrl ? validateUrl(`base URL`, baseUrl) : undefined,

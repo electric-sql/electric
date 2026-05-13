@@ -1,7 +1,6 @@
 {
   "name": "@electric-ax/agents-server",
-  "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Electric Agents entity runtime server",
   "author": "Durable Stream contributors",
   "bin": {
@@ -13,6 +12,9 @@
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric.git",
     "directory": "packages/agents-server"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "main": "./dist/index.cjs",
@@ -34,9 +36,8 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsdown",
-    "prepare": "pnpm build",
     "dev": "tsdown --watch",
-    "start": "cross-env-shell \"DATABASE_URL=${DATABASE_URL:-postgresql://electric_agents:electric_agents@localhost:5432/electric_agents} ELECTRIC_URL=${ELECTRIC_URL:-http://localhost:3060} tsx --watch src/entrypoint.ts\"",
+    "start": "cross-env-shell DATABASE_URL=${DATABASE_URL:-postgresql://electric_agents:electric_agents@localhost:5432/electric_agents} ELECTRIC_URL=${ELECTRIC_URL:-http://localhost:3060} \"tsx --watch src/entrypoint.ts\"",
     "test": "vitest run",
     "coverage": "ELECTRIC_AGENTS_KEEP_BACKEND=1 pnpm exec vitest run --coverage $(find test -name '*.test.ts' ! -name 'conformance.test.ts' | sort) && pnpm exec vitest run test/conformance.test.ts",
     "typecheck": "tsc --noEmit",
@@ -79,6 +80,7 @@
   },
   "files": [
     "dist",
+    "drizzle",
     "src"
   ],
   "engines": {

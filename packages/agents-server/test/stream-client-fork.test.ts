@@ -36,7 +36,7 @@ describe(`StreamClient.fork`, () => {
 
   it(`preserves source history when reading the fork`, async () => {
     const sourceEvent = {
-      type: `message_received`,
+      type: `inbox`,
       key: `msg-in-original`,
       headers: { operation: `insert` },
       value: { payload: { text: `original message` } },

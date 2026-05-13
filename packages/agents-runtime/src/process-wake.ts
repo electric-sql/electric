@@ -47,6 +47,8 @@ interface WakeDeltaWindow {
   events: Array<ChangeEvent>
 }
 
+type FreshKind = `inbox` | `wake`
+
 interface ClaimCallbackResponse {
   ok: boolean
   claimToken?: string
@@ -69,6 +71,25 @@ type ClaimHeaderConfig = Pick<
   `claimHeaders` | `claimTokenHeader`
 >
 type EntityStreamHandle = NonNullable<EntityStreamOptions[`stream`]>
+
+function isInboxEvent(event: ChangeEvent): boolean {
+  return event.type === `inbox`
+}
+
+function isInboxCancellationEvent(event: ChangeEvent): boolean {
+  if (!isInboxEvent(event)) {
+    return false
+  }
+  if (event.headers.operation === `delete`) {
+    return true
+  }
+  const value = event.value as { status?: string } | undefined
+  return value?.status === `cancelled`
+}
+
+function inboxEventKey(event: ChangeEvent): string {
+  return String(event.key)
+}
 
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
@@ -134,11 +155,17 @@ function constructWakeEvent(
     return notification.wakeEvent
   }
   if (catchUpEvents) {
+    const cancelledInboxKeys = new Set<string>()
     for (let i = catchUpEvents.length - 1; i >= 0; i--) {
-      const wakeEvent = changeEventToWakeEvent(
-        catchUpEvents[i]!,
-        fallbackSource
-      )
+      const event = catchUpEvents[i]!
+      if (isInboxCancellationEvent(event)) {
+        cancelledInboxKeys.add(inboxEventKey(event))
+        continue
+      }
+      if (isInboxEvent(event) && cancelledInboxKeys.has(inboxEventKey(event))) {
+        continue
+      }
+      const wakeEvent = changeEventToWakeEvent(event, fallbackSource)
       if (wakeEvent) {
         return wakeEvent
       }
@@ -170,13 +197,32 @@ function changeEventToWakeEvent(
     }
   }
 
-  if (event.type === `message_received`) {
+  if (isInboxEvent(event)) {
+    if (event.headers.operation === `delete`) {
+      return null
+    }
     const value = event.value as
-      | { from?: string; payload?: unknown; message_type?: string }
+      | {
+          from?: string
+          payload?: unknown
+          mode?: `immediate` | `queued` | `paused` | `steer`
+          message_type?: string
+          status?: `pending` | `processed` | `cancelled`
+        }
       | undefined
+    if (value?.status === `cancelled`) {
+      return null
+    }
+    if (
+      value?.payload === undefined &&
+      value?.mode !== `queued` &&
+      value?.mode !== `steer`
+    ) {
+      return null
+    }
     return {
       source: value?.from ?? fallbackSource,
-      type: `message_received`,
+      type: `inbox`,
       fromOffset: 0,
       toOffset: 0,
       eventCount: 0,
@@ -191,11 +237,24 @@ function changeEventToWakeEvent(
 function selectWakeFromEvents(
   events: Array<ChangeEvent>,
   fallbackSource: string,
-  preferredKind?: `message_received` | `wake`
+  preferredKind?: FreshKind
 ): { wakeEvent: WakeEvent; offset: string | null } | null {
+  const cancelledInboxKeys = new Set<string>()
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]!
-    if (preferredKind && event.type !== preferredKind) {
+    if (isInboxCancellationEvent(event)) {
+      cancelledInboxKeys.add(inboxEventKey(event))
+      continue
+    }
+    if (isInboxEvent(event) && cancelledInboxKeys.has(inboxEventKey(event))) {
+      continue
+    }
+    const eventKind = isInboxEvent(event)
+      ? `inbox`
+      : event.type === `wake`
+        ? `wake`
+        : null
+    if (preferredKind && eventKind !== preferredKind) {
       continue
     }
 
@@ -497,13 +556,34 @@ export async function processWebhookWake(
     }
   }
 
-  const getFreshKind = (
-    events: Array<ChangeEvent>
-  ): `message_received` | `wake` | null => {
+  const getFreshKind = (events: Array<ChangeEvent>): FreshKind | null => {
     let hasWake = false
-    for (const event of events) {
-      if (event.type === `message_received`) {
-        return `message_received`
+    const cancelledInboxKeys = new Set<string>()
+    for (let i = events.length - 1; i >= 0; i--) {
+      const event = events[i]!
+      if (isInboxCancellationEvent(event)) {
+        cancelledInboxKeys.add(inboxEventKey(event))
+        continue
+      }
+      if (isInboxEvent(event)) {
+        if (cancelledInboxKeys.has(inboxEventKey(event))) {
+          continue
+        }
+        const value = event.value as
+          | {
+              payload?: unknown
+              mode?: `immediate` | `queued` | `paused` | `steer`
+              status?: `pending` | `processed` | `cancelled`
+            }
+          | undefined
+        if (
+          value?.status !== `cancelled` &&
+          (value?.payload !== undefined ||
+            value?.mode === `queued` ||
+            value?.mode === `steer`)
+        ) {
+          return `inbox`
+        }
       }
       if (event.type === `wake`) {
         hasWake = true
@@ -513,7 +593,7 @@ export async function processWebhookWake(
   }
 
   const isFreshEvent = (event: ChangeEvent): boolean => {
-    return event.type === `message_received` || event.type === `wake`
+    return event.type === `inbox` || event.type === `wake`
   }
 
   const filterAcceptedLiveEvents = (
@@ -557,7 +637,7 @@ export async function processWebhookWake(
   }
 
   const waitForCurrentWakeInput = async (): Promise<void> => {
-    if (currentWakeEvent.type !== `message_received`) {
+    if (currentWakeEvent.type !== `inbox`) {
       return
     }
 
@@ -565,7 +645,7 @@ export async function processWebhookWake(
       currentWakeEvent.payload !== undefined ||
       catchUpEvents.some(
         (event) =>
-          event.type === `message_received` &&
+          event.type === `inbox` &&
           (currentWakeOffset === `-1` ||
             event.headers.offset === currentWakeOffset)
       )
@@ -615,16 +695,16 @@ export async function processWebhookWake(
 
     const batches: Array<JsonBatch<StateEvent>> = []
     const deltaEvents: Array<ChangeEvent> = []
-    let selectedKind: `message_received` | `wake` | null = null
+    let selectedKind: FreshKind | null = null
 
     while (pendingLiveBatches.length > 0) {
       const batch = pendingLiveBatches[0]!
       const changeEvents = toChangeEvents(batch)
       const freshKind = getFreshKind(changeEvents)
 
-      // Keep wake-only work together, but let a later message start its own
+      // Keep wake-only work together, but let a later inbox message start its own
       // handler pass so message-triggered runs are not hidden behind older wakes.
-      if (selectedKind === `wake` && freshKind === `message_received`) {
+      if (selectedKind === `wake` && freshKind === `inbox`) {
         break
       }
 
@@ -632,8 +712,8 @@ export async function processWebhookWake(
       batches.push(batch)
       deltaEvents.push(...changeEvents)
 
-      if (freshKind === `message_received`) {
-        selectedKind = `message_received`
+      if (freshKind === `inbox`) {
+        selectedKind = `inbox`
       } else if (freshKind === `wake` && selectedKind === null) {
         selectedKind = `wake`
       }
@@ -657,9 +737,14 @@ export async function processWebhookWake(
       selectedKind
     )
     if (!selectedWake) {
-      throw new Error(
-        `[agent-runtime] Invariant violation: selected fresh kind "${selectedKind}" but could not derive a wake event from pending batches`
+      log.warn(
+        `fresh ${selectedKind} batch did not contain runnable wake input; acking as no-op`
       )
+      for (const event of deltaEvents) {
+        handleRuntimeSideEffectEvent(event)
+      }
+      setSafeAckOffset(batches[batches.length - 1]!.offset)
+      return null
     }
 
     return {
@@ -1266,6 +1351,69 @@ export async function processWebhookWake(
         await sdb.drainPendingWrites?.()
       }
     }
+    let currentWakeIsPromotedQueueMessage = false
+    let queueHeadPaused = false
+    const promotedQueuedMessageKeys = new Set<string>()
+    const promoteNextPendingInboxMessage = async (): Promise<boolean> => {
+      queueHeadPaused = false
+      const rows = [...db.collections.inbox.toArray].filter((row) => {
+        const status = row.status ?? `processed`
+        const mode = row.mode ?? `immediate`
+        return (
+          status === `pending` &&
+          (mode === `queued` || mode === `paused`) &&
+          !promotedQueuedMessageKeys.has(String(row.key))
+        )
+      })
+      if (rows.length === 0) {
+        return false
+      }
+
+      rows.sort((left, right) => {
+        const leftPosition = left.position
+        const rightPosition = right.position
+        if (leftPosition && rightPosition && leftPosition !== rightPosition) {
+          return leftPosition < rightPosition ? -1 : 1
+        }
+        if (leftPosition && !rightPosition) return -1
+        if (!leftPosition && rightPosition) return 1
+        const leftSeq = left._seq ?? Number.MAX_SAFE_INTEGER
+        const rightSeq = right._seq ?? Number.MAX_SAFE_INTEGER
+        if (leftSeq !== rightSeq) return leftSeq - rightSeq
+        return String(left.key).localeCompare(String(right.key))
+      })
+
+      const next = rows[0]!
+      if ((next.mode ?? `immediate`) === `paused`) {
+        queueHeadPaused = true
+        log.info(`queued inbox message paused, closing wake`)
+        return false
+      }
+      promotedQueuedMessageKeys.add(String(next.key))
+      const processedAt = new Date().toISOString()
+      writeEvent(
+        entityStateSchema.inbox.update({
+          key: next.key,
+          value: {
+            status: `processed`,
+            processed_at: processedAt,
+          } as never,
+          headers: { from: entityUrl },
+        }) as ChangeEvent
+      )
+      currentWakeEvent = {
+        source: next.from ?? entityUrl,
+        type: `inbox`,
+        fromOffset: 0,
+        toOffset: 0,
+        eventCount: 0,
+        payload: next.payload,
+        summary: next.message_type,
+      }
+      currentWakeIsPromotedQueueMessage = true
+      await flushProducedWrites()
+      return true
+    }
     setSafeAckOffset(lastCatchUpOffset)
 
     let setupComplete = false
@@ -1379,6 +1527,10 @@ export async function processWebhookWake(
               }),
           })
         : []
+
+      if (!currentWakeIsPromotedQueueMessage) {
+        await promoteNextPendingInboxMessage()
+      }
 
       const { ctx: handlerCtx, getSleepRequested } = createHandlerContext({
         entityUrl,
@@ -1521,7 +1673,18 @@ export async function processWebhookWake(
         currentWakeOffset = nextWake.wakeOffset
         currentWakeAckOffset = nextWake.ackOffset
         currentWakeEvents = nextWake.events
+        currentWakeIsPromotedQueueMessage = false
         continue
+      }
+
+      currentWakeIsPromotedQueueMessage = false
+      if (await promoteNextPendingInboxMessage()) {
+        log.info(`queued inbox message pending, continuing in-process`)
+        currentWakeEvents = []
+        continue
+      }
+      if (queueHeadPaused) {
+        break
       }
 
       const resumed = await awaitIdleForFreshWork(

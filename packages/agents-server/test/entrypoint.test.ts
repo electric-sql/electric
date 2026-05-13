@@ -104,30 +104,6 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
     ).toThrow(/Invalid ELECTRIC_AGENTS port/)
   })
 
-  it(`enables dev asserted auth only when explicitly requested`, async () => {
-    const disabled = resolveElectricAgentsEntrypointOptions({
-      DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
-      ELECTRIC_ASSERTED_AUTH_EMAIL: `alice@example.com`,
-    })
-    expect(disabled.authenticateRequest).toBeUndefined()
-
-    const enabled = resolveElectricAgentsEntrypointOptions({
-      DATABASE_URL: `postgres://electric_agents:electric_agents@postgres:5432/electric_agents`,
-      ELECTRIC_AGENTS_DEV_ASSERTED_AUTH: `1`,
-      ELECTRIC_ASSERTED_AUTH_EMAIL: `alice@example.com`,
-    })
-    expect(
-      await enabled.authenticateRequest?.(
-        new Request(`http://agents.test/`, { headers: new Headers() })
-      )
-    ).toEqual({
-      kind: `user`,
-      id: `alice@example.com`,
-      key: `user:alice@example.com`,
-      url: `/principal/user%3Aalice%40example.com`,
-    })
-  })
-
   it(`reads optional dispatch recovery scheduling config`, () => {
     expect(
       resolveElectricAgentsEntrypointOptions({

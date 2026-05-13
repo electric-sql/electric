@@ -91,8 +91,37 @@ const sendBodySchema = Type.Object({
   payload: Type.Optional(Type.Unknown()),
   key: Type.Optional(Type.String()),
   type: Type.Optional(Type.String()),
+  mode: Type.Optional(
+    Type.Union([
+      Type.Literal(`immediate`),
+      Type.Literal(`queued`),
+      Type.Literal(`paused`),
+      Type.Literal(`steer`),
+    ])
+  ),
+  position: Type.Optional(Type.String()),
   afterMs: Type.Optional(Type.Number()),
   from: Type.Optional(Type.String()),
+})
+
+const inboxMessageBodySchema = Type.Object({
+  payload: Type.Optional(Type.Unknown()),
+  position: Type.Optional(Type.String()),
+  mode: Type.Optional(
+    Type.Union([
+      Type.Literal(`immediate`),
+      Type.Literal(`queued`),
+      Type.Literal(`paused`),
+      Type.Literal(`steer`),
+    ])
+  ),
+  status: Type.Optional(
+    Type.Union([
+      Type.Literal(`pending`),
+      Type.Literal(`processed`),
+      Type.Literal(`cancelled`),
+    ])
+  ),
 })
 
 const forkBodySchema = Type.Object({
@@ -129,6 +158,7 @@ const entitiesRegisterBodySchema = Type.Object({
 
 type SpawnBody = Static<typeof spawnBodySchema>
 type SendBody = Static<typeof sendBodySchema>
+type InboxMessageBody = Static<typeof inboxMessageBodySchema>
 type ForkBody = Static<typeof forkBodySchema>
 type SetTagBody = Static<typeof setTagBodySchema>
 type ScheduleBody = Static<typeof scheduleBodySchema>
@@ -162,6 +192,17 @@ entitiesRouter.post(
   withExistingEntity,
   withSchema(sendBodySchema),
   sendEntity
+)
+entitiesRouter.patch(
+  `/:type/:instanceId/inbox/:messageKey`,
+  withExistingEntity,
+  withSchema(inboxMessageBodySchema),
+  updateInboxMessage
+)
+entitiesRouter.delete(
+  `/:type/:instanceId/inbox/:messageKey`,
+  withExistingEntity,
+  deleteInboxMessage
 )
 entitiesRouter.post(
   `/:type/:instanceId/fork`,
@@ -502,6 +543,8 @@ async function sendEntity(
         payload: parsed.payload,
         key: parsed.key,
         type: parsed.type,
+        mode: parsed.mode,
+        position: parsed.position,
       },
       new Date(Date.now() + parsed.afterMs)
     )
@@ -511,9 +554,37 @@ async function sendEntity(
       payload: parsed.payload,
       key: parsed.key,
       type: parsed.type,
+      mode: parsed.mode,
+      position: parsed.position,
     })
   }
 
+  return status(204)
+}
+
+async function updateInboxMessage(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const parsed = routeBody<InboxMessageBody>(request)
+  const { entityUrl } = requireExistingEntityRoute(request)
+  await ctx.entityManager.updateInboxMessage(
+    entityUrl,
+    decodeURIComponent(request.params.messageKey),
+    parsed
+  )
+  return status(204)
+}
+
+async function deleteInboxMessage(
+  request: AgentsRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const { entityUrl } = requireExistingEntityRoute(request)
+  await ctx.entityManager.deleteInboxMessage(
+    entityUrl,
+    decodeURIComponent(request.params.messageKey)
+  )
   return status(204)
 }
 

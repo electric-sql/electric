@@ -31,6 +31,8 @@ type EntityHeaderProps = {
   menu?: ReactNode
   /** Optional leading affordance before the title, e.g. a tile drag handle. */
   leading?: ReactNode
+  /** True for the leftmost top tile that must clear fixed titlebar controls. */
+  chromeInsetTarget?: boolean
   /** Optional banner of error messages displayed below the strip. */
   errors?: Array<string>
 }
@@ -50,6 +52,7 @@ export function EntityHeader({
   onSetView,
   menu,
   leading,
+  chromeInsetTarget = false,
   errors,
 }: EntityHeaderProps): React.ReactElement | null {
   return (
@@ -57,6 +60,7 @@ export function EntityHeader({
       <MainHeader
         leading={leading}
         title={<EntityTitle entity={entity} />}
+        chromeInsetTarget={chromeInsetTarget}
         actions={
           <EntityActions
             entity={entity}

@@ -1,10 +1,7 @@
+import { createOptimisticAction } from '@tanstack/db'
+import { generateKeyBetween } from 'fractional-indexing'
 import { serverFetch } from './auth-fetch'
 import { entityApiUrl } from './entity-api'
-import {
-  getCachedDesktopFormattedAssertedIdentity,
-  getDesktopFormattedAssertedIdentity,
-} from './assertedIdentity'
-import { createOptimisticAction } from '@tanstack/db'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
 // Timeline queries sort inbox messages by `_seq`. Pending local rows do not
@@ -14,18 +11,36 @@ const OPTIMISTIC_INBOX_SEQ_START = Number.MAX_SAFE_INTEGER - 1_000_000
 
 let optimisticInboxSeq = OPTIMISTIC_INBOX_SEQ_START
 
-type OptimisticInboxMessage = {
+export type OptimisticInboxMessage = {
   key: string
   _seq: number
   from: string
   payload: { text: string }
   timestamp: string
+  mode: `immediate` | `queued` | `paused` | `steer`
+  status: `pending` | `processed` | `cancelled`
+  position?: string
+  processed_at?: string
 }
 
 type SendMessageInput = {
   text: string
+  mode: `immediate` | `queued` | `paused` | `steer`
   key: string
   seq: number
+  position?: string
+}
+
+type UpdateInboxMessageInput = {
+  key: string
+  text?: string
+  position?: string
+  mode?: `immediate` | `queued` | `paused` | `steer`
+  status?: `pending` | `processed` | `cancelled`
+}
+
+type InboxMessageKeyInput = {
+  key: string
 }
 
 function createOptimisticInboxKey(seq: number): string {
@@ -38,6 +53,74 @@ function nextOptimisticInboxSeq(): number {
     optimisticInboxSeq = OPTIMISTIC_INBOX_SEQ_START
   }
   return optimisticInboxSeq
+}
+
+const QUEUE_POSITION_TIMESTAMP_WIDTH = 16
+const QUEUE_POSITION_SEPARATOR = `:`
+
+function padQueueTimestamp(timestamp: number): string {
+  return String(Math.max(0, Math.floor(timestamp))).padStart(
+    QUEUE_POSITION_TIMESTAMP_WIDTH,
+    `0`
+  )
+}
+
+function parseQueuePosition(position: string | undefined): {
+  timestamp: string
+  index: string | null
+} | null {
+  if (!position) return null
+  const match = /^(\d{16})(?::(.+))?$/.exec(position)
+  if (!match) return null
+  return { timestamp: match[1]!, index: match[2] ?? null }
+}
+
+function formatQueuePosition(timestamp: string, index: string): string {
+  return `${timestamp}${QUEUE_POSITION_SEPARATOR}${index}`
+}
+
+export function createInitialQueuePosition(now = Date.now()): string {
+  return formatQueuePosition(
+    padQueueTimestamp(now),
+    generateKeyBetween(null, null)
+  )
+}
+
+export function createQueuePositionBetween(
+  previousPosition: string | undefined,
+  nextPosition: string | undefined
+): string {
+  const previous = parseQueuePosition(previousPosition)
+  const next = parseQueuePosition(nextPosition)
+
+  if (previous && next && previous.timestamp === next.timestamp) {
+    return formatQueuePosition(
+      previous.timestamp,
+      generateKeyBetween(previous.index, next.index)
+    )
+  }
+
+  if (previous) {
+    return formatQueuePosition(
+      previous.timestamp,
+      generateKeyBetween(previous.index, null)
+    )
+  }
+
+  if (next) {
+    if (next.index !== null) {
+      return formatQueuePosition(
+        next.timestamp,
+        generateKeyBetween(null, next.index)
+      )
+    }
+    return formatQueuePosition(
+      padQueueTimestamp(Number(next.timestamp) - 1),
+      generateKeyBetween(null, null)
+    )
+  }
+
+  return createInitialQueuePosition()
 }
 
 function readSendError(status: number, body: string): Error {
@@ -53,38 +136,58 @@ function readSendError(status: number, body: string): Error {
   return new Error(message)
 }
 
+export function readTextPayload(payload: unknown): string {
+  if (payload && typeof payload === `object`) {
+    const text = (payload as { text?: unknown }).text
+    if (typeof text === `string`) return text
+  }
+  return typeof payload === `string` ? payload : ``
+}
+
 export function createSendMessageAction({
   db,
   baseUrl,
   entityUrl,
   from = `user`,
+  onOptimisticMessage,
 }: {
   db: EntityStreamDBWithActions
   baseUrl: string
   entityUrl: string
   from?: string
+  onOptimisticMessage?: (message: OptimisticInboxMessage) => void
 }) {
   const action = createOptimisticAction<SendMessageInput>({
-    onMutate: ({ text, key, seq }) => {
-      const effectiveFrom = getCachedDesktopFormattedAssertedIdentity() ?? from
+    onMutate: ({ text, mode, key, seq, position }) => {
+      const now = new Date().toISOString()
       const message: OptimisticInboxMessage = {
         key,
         _seq: seq,
-        from: effectiveFrom,
+        from,
         payload: { text },
-        timestamp: new Date().toISOString(),
+        timestamp: now,
+        mode,
+        status:
+          mode === `queued` || mode === `paused` ? `pending` : `processed`,
+        ...(position ? { position } : {}),
+        ...(mode === `queued` || mode === `paused`
+          ? {}
+          : { processed_at: now }),
       }
       db.collections.inbox.insert(message)
+      onOptimisticMessage?.(message)
     },
-    mutationFn: async ({ text, key }) => {
-      const effectiveFrom =
-        getCachedDesktopFormattedAssertedIdentity() ??
-        (await getDesktopFormattedAssertedIdentity()) ??
-        from
+    mutationFn: async ({ text, key, mode, position }) => {
       const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/send`), {
         method: `POST`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ from: effectiveFrom, key, payload: { text } }),
+        body: JSON.stringify({
+          from,
+          key,
+          payload: { text },
+          mode,
+          position,
+        }),
       })
       if (!res.ok) {
         const body = await res.text().catch(() => ``)
@@ -93,8 +196,149 @@ export function createSendMessageAction({
     },
   })
 
-  return ({ text }: { text: string }) => {
+  return ({
+    text,
+    mode = `queued`,
+    position,
+  }: {
+    text: string
+    mode?: `immediate` | `queued` | `paused` | `steer`
+    position?: string
+  }) => {
     const seq = nextOptimisticInboxSeq()
-    return action({ text, key: createOptimisticInboxKey(seq), seq })
+    const effectivePosition =
+      position ??
+      (mode === `queued` || mode === `paused`
+        ? createInitialQueuePosition()
+        : undefined)
+    return action({
+      text,
+      mode,
+      key: createOptimisticInboxKey(seq),
+      seq,
+      position: effectivePosition,
+    })
   }
+}
+
+export function createUpdateInboxMessageAction({
+  db,
+  baseUrl,
+  entityUrl,
+}: {
+  db: EntityStreamDBWithActions
+  baseUrl: string
+  entityUrl: string
+}) {
+  return createOptimisticAction<UpdateInboxMessageInput>({
+    onMutate: ({ key, text, position, mode, status }) => {
+      db.collections.inbox.update(key, (draft) => {
+        if (text !== undefined) {
+          draft.payload = { text }
+        }
+        if (position !== undefined) {
+          draft.position = position
+        }
+        if (mode !== undefined) {
+          draft.mode = mode
+        }
+        if (status !== undefined) {
+          draft.status = status
+        }
+      })
+    },
+    mutationFn: async ({ key, text, position, mode, status }) => {
+      const body: {
+        payload?: { text: string }
+        position?: string
+        mode?: `immediate` | `queued` | `paused` | `steer`
+        status?: `pending` | `processed` | `cancelled`
+      } = {}
+      if (text !== undefined) {
+        body.payload = { text }
+      }
+      if (position !== undefined) {
+        body.position = position
+      }
+      if (mode !== undefined) {
+        body.mode = mode
+      }
+      if (status !== undefined) {
+        body.status = status
+      }
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/inbox/${encodeURIComponent(key)}`),
+        {
+          method: `PATCH`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        }
+      )
+      if (!res.ok) {
+        const body = await res.text().catch(() => ``)
+        throw readSendError(res.status, body)
+      }
+    },
+  })
+}
+
+export function createDeleteInboxMessageAction({
+  db,
+  baseUrl,
+  entityUrl,
+}: {
+  db: EntityStreamDBWithActions
+  baseUrl: string
+  entityUrl: string
+}) {
+  return createOptimisticAction<InboxMessageKeyInput>({
+    onMutate: ({ key }) => {
+      db.collections.inbox.delete(key)
+    },
+    mutationFn: async ({ key }) => {
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/inbox/${encodeURIComponent(key)}`),
+        { method: `DELETE` }
+      )
+      if (!res.ok) {
+        const body = await res.text().catch(() => ``)
+        throw readSendError(res.status, body)
+      }
+    },
+  })
+}
+
+export function createSteerInboxMessageAction({
+  db,
+  baseUrl,
+  entityUrl,
+}: {
+  db: EntityStreamDBWithActions
+  baseUrl: string
+  entityUrl: string
+}) {
+  return createOptimisticAction<InboxMessageKeyInput>({
+    onMutate: ({ key }) => {
+      const now = new Date().toISOString()
+      db.collections.inbox.update(key, (draft) => {
+        draft.mode = `steer`
+        draft.status = `processed`
+        draft.processed_at = now
+      })
+    },
+    mutationFn: async ({ key }) => {
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/inbox/${encodeURIComponent(key)}`),
+        {
+          method: `PATCH`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ mode: `steer`, status: `processed` }),
+        }
+      )
+      if (!res.ok) {
+        const body = await res.text().catch(() => ``)
+        throw readSendError(res.status, body)
+      }
+    },
+  })
 }

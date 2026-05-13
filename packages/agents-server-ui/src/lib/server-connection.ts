@@ -1,6 +1,19 @@
 import type { ServerConfig } from './types'
 
 export type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
+export type LocalRuntimeStatus =
+  | `disabled`
+  | `stopped`
+  | `starting`
+  | `running`
+  | `error`
+export type ServerConnectionStatus =
+  | `disconnected`
+  | `connecting`
+  | `connected`
+  | `reconnecting`
+  | `offline`
+  | `error`
 
 /**
  * An agents-server detected by the Electron main-process scan of
@@ -16,6 +29,9 @@ export interface DiscoveredServer {
 }
 
 export interface DesktopState {
+  servers: Array<ServerConfig>
+  selectedServerId: string | null
+  connections: Array<ServerConnectionState>
   runtimeStatus: DesktopRuntimeStatus
   runtimeUrl: string | null
   activeServer: ServerConfig | null
@@ -23,6 +39,17 @@ export interface DesktopState {
   error: string | null
   discoveredServers: Array<DiscoveredServer>
   pullWakeRunnerId: string | null
+}
+
+export interface ServerConnectionState {
+  serverId: string
+  status: ServerConnectionStatus
+  localRuntimeStatus: LocalRuntimeStatus
+  runtimeUrl: string | null
+  runtimeError: string | null
+  lastError: string | null
+  reconnectAttempt: number
+  lastConnectedAt: number | null
 }
 
 /**
@@ -69,6 +96,8 @@ export type DesktopCommand =
   | `new-chat`
   | `close-tile`
   | `toggle-sidebar`
+  | `open-settings`
+  | `open-servers-settings`
   | `open-search`
   | `open-find`
   | `find-next`
@@ -77,18 +106,46 @@ export type DesktopCommand =
   | `split-down`
   | `cycle-tile`
 
+export type DesktopMenuSection = `File` | `Edit` | `View` | `Window` | `Help`
+
+export type DesktopMenuPopupBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type DesktopMenuState = {
+  hasActiveTile: boolean
+  canCloseTile: boolean
+  canSplitTile: boolean
+  canCycleTile: boolean
+}
+
+export type DesktopNavigationState = {
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export type DesktopAppearance = `light` | `dark` | `system`
+
 declare global {
   interface Window {
     electronAPI?: {
       getServers: () => Promise<Array<ServerConfig>>
       saveServers: (servers: Array<ServerConfig>) => Promise<void>
       getDesktopState?: () => Promise<DesktopState>
+      setNativeAppearance?: (appearance: DesktopAppearance) => Promise<void>
       setActiveServer?: (server: ServerConfig | null) => Promise<void>
+      setSelectedServer?: (serverId: string | null) => Promise<void>
+      connectServer?: (serverId: string) => Promise<void>
+      disconnectServer?: (serverId: string) => Promise<void>
       restartRuntime?: () => Promise<void>
+      restartServerRuntime?: (serverId: string) => Promise<void>
       stopRuntime?: () => Promise<void>
+      stopServerRuntime?: (serverId: string) => Promise<void>
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
-      getAssertedAuthHeaders?: () => Promise<Record<string, string>>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
@@ -102,6 +159,17 @@ declare global {
       pickDirectory?: (options?: {
         defaultPath?: string
       }) => Promise<string | null>
+      showMenuSection?: (
+        section: DesktopMenuSection,
+        bounds: DesktopMenuPopupBounds,
+        state: DesktopMenuState
+      ) => Promise<void>
+      showAppMenu?: (bounds: DesktopMenuPopupBounds) => Promise<void>
+      getNavigationState?: () => Promise<DesktopNavigationState>
+      navigateHistory?: (direction: `back` | `forward`) => Promise<void>
+      onNavigationStateChanged?: (
+        callback: (state: DesktopNavigationState) => void
+      ) => () => void
       onDesktopStateChanged?: (
         callback: (state: DesktopState) => void
       ) => () => void
@@ -115,26 +183,62 @@ declare global {
        * 1:1 to the registry methods that back them.
        */
       mcp?: {
-        getSnapshot: () => Promise<{
+        getSnapshot: (serverId?: string) => Promise<{
           seq: number
           servers: ReadonlyArray<unknown>
         }>
         onState: (
-          callback: (snapshot: {
-            seq: number
-            servers: ReadonlyArray<unknown>
-          }) => void
+          callback: (
+            payload:
+              | {
+                  seq: number
+                  servers: ReadonlyArray<unknown>
+                }
+              | {
+                  serverId: string
+                  snapshot: {
+                    seq: number
+                    servers: ReadonlyArray<unknown>
+                  }
+                }
+          ) => void
         ) => () => void
-        authorize: (name: string) => Promise<void>
-        reconnect: (name: string) => Promise<void>
-        disable: (name: string) => Promise<void>
-        enable: (name: string) => Promise<void>
+        authorize: (name: string, serverId?: string) => Promise<void>
+        reconnect: (name: string, serverId?: string) => Promise<void>
+        disable: (name: string, serverId?: string) => Promise<void>
+        enable: (name: string, serverId?: string) => Promise<void>
       }
     }
   }
 }
 
 const STORAGE_KEY = `electric-agents-servers`
+
+function browserServerId(url: string): string {
+  return `web:${url}`
+}
+
+function normalizeBrowserServer(value: unknown): ServerConfig | null {
+  if (!value || typeof value !== `object`) return null
+  const maybe = value as Partial<ServerConfig>
+  if (typeof maybe.name !== `string` || typeof maybe.url !== `string`) {
+    return null
+  }
+  const name = maybe.name.trim()
+  const url = maybe.url.trim()
+  if (!name || !url) return null
+  return {
+    id:
+      typeof maybe.id === `string` && maybe.id
+        ? maybe.id
+        : browserServerId(url),
+    name,
+    url,
+    source: maybe.source ?? `manual`,
+    desiredState: maybe.desiredState ?? `connected`,
+    localRuntimeEnabled: maybe.localRuntimeEnabled !== false,
+  }
+}
 
 export async function loadServers(): Promise<Array<ServerConfig>> {
   if (window.electronAPI) {
@@ -143,7 +247,12 @@ export async function loadServers(): Promise<Array<ServerConfig>> {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored) {
     try {
-      return JSON.parse(stored)
+      const parsed = JSON.parse(stored) as unknown
+      return Array.isArray(parsed)
+        ? parsed
+            .map((entry) => normalizeBrowserServer(entry))
+            .filter((entry): entry is ServerConfig => entry !== null)
+        : []
     } catch {
       return []
     }
@@ -167,6 +276,20 @@ export async function saveActiveServer(
   server: ServerConfig | null
 ): Promise<void> {
   await window.electronAPI?.setActiveServer?.(server)
+}
+
+export async function saveSelectedServer(
+  serverId: string | null
+): Promise<void> {
+  await window.electronAPI?.setSelectedServer?.(serverId)
+}
+
+export async function connectServer(serverId: string): Promise<void> {
+  await window.electronAPI?.connectServer?.(serverId)
+}
+
+export async function disconnectServer(serverId: string): Promise<void> {
+  await window.electronAPI?.disconnectServer?.(serverId)
 }
 
 export function onDesktopStateChanged(

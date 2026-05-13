@@ -11,7 +11,7 @@ import {
 } from '@durable-streams/state'
 import type { InitialQueryBuilder, QueryBuilder } from '@tanstack/db'
 import type { EntityStreamDB } from './entity-stream-db'
-import type { ChildStatusEntry } from './entity-schema'
+import type { ChildStatusEntry, MessageReceived } from './entity-schema'
 import type { ManifestEntry, Wake, WakeMessage } from './types'
 
 export type EntityTimelineState =
@@ -103,12 +103,15 @@ export interface IncludesError {
   message: string
 }
 
-export interface IncludesInboxMessage {
-  key: string
+export type IncludesInboxMessage = Omit<
+  MessageReceived,
+  `_seq` | `from` | `timestamp` | `mode` | `status`
+> & {
   order: TimelineOrder
   from: string
-  payload: unknown
   timestamp: string
+  mode?: NonNullable<MessageReceived[`mode`]>
+  status?: NonNullable<MessageReceived[`status`]>
 }
 
 export interface IncludesWakeMessage {
@@ -654,9 +657,14 @@ function buildInboxMessages(
   return [...inbox].sort(compareTimelineOrder).map((message) => ({
     key: message.key,
     order: message.order,
-    from: message.from,
+    from: message.from ?? `unknown`,
     payload: message.payload,
-    timestamp: message.timestamp,
+    timestamp: message.timestamp ?? new Date(0).toISOString(),
+    mode: message.mode ?? `immediate`,
+    status: message.status ?? `processed`,
+    position: message.position,
+    processed_at: message.processed_at,
+    cancelled_at: message.cancelled_at,
   }))
 }
 
@@ -953,6 +961,11 @@ const getEntityInboxCollection = cachedCollectionFactory((db: EntityStreamDB) =>
         from: inbox.from,
         payload: inbox.payload,
         timestamp: inbox.timestamp,
+        mode: coalesce(inbox.mode, `immediate`),
+        status: coalesce(inbox.status, `processed`),
+        position: inbox.position,
+        processed_at: inbox.processed_at,
+        cancelled_at: inbox.cancelled_at,
       })),
   })
 )
@@ -1087,6 +1100,11 @@ export function createEntityIncludesQuery(
             from: inbox.from,
             payload: inbox.payload,
             timestamp: inbox.timestamp,
+            mode: inbox.mode,
+            status: inbox.status,
+            position: inbox.position,
+            processed_at: inbox.processed_at,
+            cancelled_at: inbox.cancelled_at,
           }))
       ),
       wakes: toArray(

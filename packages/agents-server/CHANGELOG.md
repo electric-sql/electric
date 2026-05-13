@@ -1,5 +1,44 @@
 # @electric-ax/agents-server
 
+## 0.4.0
+
+### Minor Changes
+
+- dec65ae: Add tenant-scoped Durable Streams bearer auth for agents-server library hosts.
+
+  Tenant runtimes and request contexts can now provide a static bearer token or a
+  zero-argument token provider for downstream Durable Streams requests.
+
+- dec65ae: Port pull-wake runners onto the tenant-aware agents-server routing refactor.
+
+  Agents-server now supports runner registration, runner-owned pull-wake subscriptions, dispatch policy resolution, subscription stream linking, compact Durable Streams wake claims, callback-forward claim lifecycle handling, and claim-scoped write tokens. Runtime built-ins can register pull-wake runners, tail runner wake streams, claim work through the server, heartbeat offsets, and acknowledge completed work. The CLI, desktop integration, server UI, and local full-stack compose setup now use runner-backed local sessions for the pull-wake flow.
+
+  Saved agents-server connections can include additional request headers for tenant-aware deployments, and CLI/runtime URL handling now preserves base query parameters such as `?secret=...`.
+
+- 08e85a0: Refactor agents-server HTTP routing around a single `globalRouter` entrypoint passed a flat `TenantContext`.
+
+  The `ElectricAgentsServer` class now owns lifecycle setup only and dispatches each request through an OSS-only wrapper router that layers dashboard and mock-agent routes over `globalRouter.fetch(request, tenantContext)`. This prepares the exported `globalRouter` for library-mode use by callers that build tenant context outside the OSS server class without pulling in the bundled UI or mock agent.
+
+  Breaking change: entity RPC URLs moved from `/:type/:instanceId/...` to `/_electric/entities/:type/:instanceId/...`. This affects entity spawn/get/head/delete, send, fork, tag, and schedule endpoints. The root namespace is now durable-streams pass-through, with no reserved entity control routes.
+
+  Breaking change: the `@electric-ax/agents-server` package root now only exports the library-mode routing assembly surface: DB setup helpers, `AgentsHost`, `StreamClient`, `globalRouter`, `TenantContext`, `GlobalRoutes`, `EntityBridgeCoordinator`, and tenant helpers. OSS server classes, subrouters, entity-manager internals, scheduler/wake-registry internals, schema helpers, and entity response helpers are no longer root exports.
+
+  The runtime server client, bundled agents-server UI, and conformance tests have been updated for the new route layout. Agents-server control-plane routes now use shared TypeBox/Ajv body validation.
+
+### Patch Changes
+
+- d8cb2bb: Fix Docker build by adding missing `agents-mcp` package to the Dockerfile.
+- 443482a: Prepare the agents server and server conformance test packages for public npm publication.
+
+  The agents server package now publishes its Drizzle migration files alongside the built entrypoints so installed servers can run database migrations outside the monorepo.
+
+- dec65ae: Fix shared multi-tenant scheduler queries to bind tenant id filters as typed
+  Postgres text arrays.
+- Updated dependencies [dec65ae]
+- Updated dependencies [dec65ae]
+- Updated dependencies [08e85a0]
+  - @electric-ax/agents-runtime@0.2.0
+
 ## 0.3.0
 
 ### Patch Changes

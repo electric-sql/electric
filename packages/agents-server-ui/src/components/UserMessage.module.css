@@ -3,7 +3,6 @@
  * padding so the actual *text* lines up with the agent text column —
  * only the white background extends past it. */
 .root {
-  max-width: var(--chat-surface-width);
   margin-inline: auto;
   width: 100%;
 }
@@ -25,6 +24,7 @@
   font-size: var(--ds-chat-text);
   line-height: var(--ds-chat-text-lh);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .meta {

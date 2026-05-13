@@ -73,6 +73,10 @@ type WriteTokenValidator = (
   token: string
 ) => boolean
 
+function createInitialQueuePosition(date: Date): string {
+  return `${String(date.getTime()).padStart(16, `0`)}:a0`
+}
+
 type ForkSubtreeOptions = {
   rootInstanceId?: string
   waitTimeoutMs?: number
@@ -1651,9 +1655,22 @@ export class EntityManager {
       from: req.from,
       payload: req.payload,
       timestamp: now,
+      mode: req.mode ?? `immediate`,
+      status:
+        req.mode === `queued` || req.mode === `paused`
+          ? `pending`
+          : `processed`,
     }
     if (req.type) {
       value.message_type = req.type
+    }
+    if (req.position) {
+      value.position = req.position
+    } else if (value.mode === `queued` || value.mode === `paused`) {
+      value.position = createInitialQueuePosition(new Date(now))
+    }
+    if (value.status === `processed`) {
+      value.processed_at = now
     }
 
     const envelope = entityStateSchema.inbox.insert({
@@ -1692,6 +1709,69 @@ export class EntityManager {
       }
       throw err
     }
+  }
+
+  async updateInboxMessage(
+    entityUrl: string,
+    key: string,
+    req: {
+      payload?: unknown
+      position?: string
+      mode?: `immediate` | `queued` | `paused` | `steer`
+      status?: `pending` | `processed` | `cancelled`
+    }
+  ): Promise<void> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (entity.status === `stopped`) {
+      throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
+    }
+
+    const now = new Date().toISOString()
+    const value: Record<string, unknown> = {}
+    if (`payload` in req) value.payload = req.payload
+    if (req.position !== undefined) value.position = req.position
+    if (req.mode !== undefined) value.mode = req.mode
+    if (req.status !== undefined) {
+      value.status = req.status
+      if (req.status === `processed`) value.processed_at = now
+      if (req.status === `cancelled`) value.cancelled_at = now
+    }
+
+    if (Object.keys(value).length === 0) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidRequest,
+        `No inbox fields to update`,
+        400
+      )
+    }
+
+    const envelope = entityStateSchema.inbox.update({
+      key,
+      value,
+    } as any)
+    await this.streamClient.append(
+      entity.streams.main,
+      this.encodeChangeEvent(envelope as Record<string, unknown>)
+    )
+  }
+
+  async deleteInboxMessage(entityUrl: string, key: string): Promise<void> {
+    const entity = await this.registry.getEntity(entityUrl)
+    if (!entity) {
+      throw new ElectricAgentsError(ErrCodeNotFound, `Entity not found`, 404)
+    }
+    if (entity.status === `stopped`) {
+      throw new ElectricAgentsError(ErrCodeNotRunning, `Entity is stopped`, 409)
+    }
+
+    const envelope = entityStateSchema.inbox.delete({ key } as any)
+    await this.streamClient.append(
+      entity.streams.main,
+      this.encodeChangeEvent(envelope as Record<string, unknown>)
+    )
   }
 
   // ==========================================================================
@@ -2065,6 +2145,8 @@ export class EntityManager {
         payload: req.payload,
         key: req.key,
         type: req.type,
+        mode: req.mode,
+        position: req.position,
       },
       fireAt
     )
@@ -2489,7 +2571,7 @@ export class EntityManager {
         createdBy: entity.created_by,
       },
       principal: principalFromCreatedBy(entity.created_by),
-      triggerEvent: `message_received`,
+      triggerEvent: `inbox`,
     }
   }
 

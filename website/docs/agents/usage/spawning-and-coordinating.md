@@ -129,7 +129,7 @@ async handler(ctx) {
 
   const analyst = await ctx.observe(entity("/worker/analyst"))
 
-  if (wake.type === "message_received") {
+  if (wake.type === "inbox") {
     analyst.send(wake.payload)
   }
 }

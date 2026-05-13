@@ -160,17 +160,19 @@ describe(`runner routes`, () => {
     )
   })
 
-  it(`requires authentication to claim runner work`, async () => {
+  it(`allows unauthenticated runner claims when no server auth is configured`, async () => {
+    const ctx = buildContext()
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners/runner-1/claim`, {
         subscription_id: `runner:runner-1`,
         stream: `chat/one/main`,
         generation: 7,
       }),
-      buildContext({ principal: undefined as any })
+      ctx
     )
 
-    expect(response.status).toBe(401)
+    expect(response.status).toBe(204)
+    expect(ctx.streamClient.claimSubscription).toHaveBeenCalled()
   })
 
   it(`returns DS claim conflicts as 409 responses`, async () => {

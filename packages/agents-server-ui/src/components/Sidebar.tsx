@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { ChevronRight, SquarePen } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { useNavigate } from '@tanstack/react-router'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
-import { getCachedDesktopFormattedAssertedIdentity } from '../lib/assertedIdentity'
 import {
   bucketEntities,
   groupByStatus,
@@ -153,18 +153,9 @@ export function Sidebar({
   // content without an extra dismiss tap.
   const narrow = useNarrowViewport()
   const { collapsed, setCollapsed } = useSidebarCollapsed()
-  const assertedIdentity = getCachedDesktopFormattedAssertedIdentity()
-  // `data-state` drives the slide/fade transitions in CSS.
-  // - In wide mode the sidebar is always visible (or unmounted by
-  //   the parent), so no transition state is needed.
-  // - In narrow mode the parent keeps us mounted regardless of
-  //   `collapsed` so the exit transition can run before unmount,
-  //   and we toggle between `open`/`closed` here.
-  const overlayState: `open` | `closed` | undefined = narrow
-    ? collapsed
-      ? `closed`
-      : `open`
-    : undefined
+  // `data-state` drives both the narrow overlay slide/fade and the
+  // wide-mode width collapse animation.
+  const sidebarState: `open` | `closed` = collapsed ? `closed` : `open`
   const closeIfOverlay = useCallback(() => {
     if (narrow) setCollapsed(true)
   }, [narrow, setCollapsed])
@@ -232,23 +223,14 @@ export function Sidebar({
     [entitiesCollection, view.hiddenTypes, view.hiddenStatuses]
   )
 
-  const identityFilteredEntities = useMemo(() => {
-    if (!assertedIdentity) return visibleEntities
-    return visibleEntities.filter(
-      (e) => e.tags?.created_by === assertedIdentity
-    )
-  }, [visibleEntities, assertedIdentity])
-
   const pinnedSet = useMemo(() => new Set(pinnedUrls), [pinnedUrls])
-  const pinnedEntities = identityFilteredEntities.filter((e) =>
-    pinnedSet.has(e.url)
-  )
+  const pinnedEntities = visibleEntities.filter((e) => pinnedSet.has(e.url))
   const filtersActive =
     view.hiddenTypes.size > 0 || view.hiddenStatuses.size > 0
 
   const { roots, childrenByParent } = useMemo(
-    () => buildEntityTree(identityFilteredEntities),
-    [identityFilteredEntities]
+    () => buildEntityTree(visibleEntities),
+    [visibleEntities]
   )
 
   const unpinnedRoots = useMemo(
@@ -315,14 +297,16 @@ export function Sidebar({
       {narrow && (
         <div
           className={styles.backdrop}
-          data-state={overlayState}
+          data-state={sidebarState}
           onClick={() => setCollapsed(true)}
           aria-hidden={collapsed ? `true` : undefined}
         />
       )}
       <Stack
         direction="column"
-        data-state={overlayState}
+        data-state={sidebarState}
+        data-resizing={resizing ? `true` : undefined}
+        aria-hidden={!narrow && collapsed ? `true` : undefined}
         className={`${styles.root} ${narrow ? styles.overlay : ``}`}
         style={
           narrow
@@ -337,13 +321,17 @@ export function Sidebar({
                 minWidth: 0,
                 maxWidth: `min(85vw, 320px)`,
               }
-            : { width, minWidth: SIDEBAR_MIN_WIDTH }
+            : ({
+                width,
+                minWidth: SIDEBAR_MIN_WIDTH,
+                [`--sidebar-expanded-width`]: `${width}px`,
+              } as CSSProperties)
         }
       >
         {/* Resize handle is push-mode-only — dragging an overlaid
             sidebar wider doesn't make sense when there's no flex
             sibling to take the displaced space. */}
-        {!narrow && (
+        {!narrow && !collapsed && (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -409,7 +397,7 @@ export function Sidebar({
               </div>
             ))}
 
-            {identityFilteredEntities.length === 0 && (
+            {visibleEntities.length === 0 && (
               <Text
                 size={1}
                 tone="muted"

@@ -86,7 +86,7 @@ describe(`horton model selection`, () => {
       agent: { run },
     } as any
 
-    await def!.definition.handler(fakeCtx, { type: `message_received` } as any)
+    await def!.definition.handler(fakeCtx, { type: `inbox` } as any)
 
     expect(useAgent).toHaveBeenCalledWith(
       expect.objectContaining({

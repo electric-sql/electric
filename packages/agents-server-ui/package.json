@@ -1,7 +1,7 @@
 {
   "name": "@electric-ax/agents-server-ui",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -25,6 +25,7 @@
     "@tanstack/react-router": "^1.167.4",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.23",
+    "fractional-indexing": "^3.2.0",
     "katex": "^0.16.45",
     "lucide-react": "^0.561.0",
     "mermaid": "^11.14.0",

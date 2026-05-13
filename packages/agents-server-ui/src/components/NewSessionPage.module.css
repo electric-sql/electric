@@ -109,6 +109,10 @@
   font-size: var(--ds-text-sm);
 }
 
+.pickerFlow {
+  width: 100%;
+}
+
 .selectedFlow {
   width: 100%;
 }

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronsUpDown, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Brain, ChevronsUpDown, Plug, Server, Unplug } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import { useServerConnection } from '../hooks/useServerConnection'
 import {
   loadDesktopState,
@@ -7,19 +8,7 @@ import {
   rescanDiscoveredServers,
   type DiscoveredServer,
 } from '../lib/server-connection'
-import type { ServerConfig } from '../lib/types'
-import {
-  Button,
-  Dialog,
-  Field,
-  Icon,
-  IconButton,
-  Input,
-  Menu,
-  Stack,
-  Text,
-  Tooltip,
-} from '../ui'
+import { Icon, IconButton, Menu, Text, Tooltip } from '../ui'
 import styles from './ServerPicker.module.css'
 
 /** How often to re-probe localhost while the picker menu is open. */
@@ -31,22 +20,20 @@ type ServerStatus = `ok` | `down` | `unset`
  * Footer-anchored server picker tile.
  *
  * Renders a single-line tile showing `[● status] [server name] [chevron]`
- * that opens a menu listing the saved servers + an "Add server" entry.
- * Picking "Add server" launches a centered modal dialog with the
- * connection form (instead of an absolute-positioned popover above the
- * tile) so the form has the breathing room it needs even when the
- * sidebar is narrow.
+ * that opens a menu listing saved servers, quick connect controls,
+ * discovered localhost hints, and a link to the full Servers settings.
  */
 export function ServerPicker(): React.ReactElement {
   const {
     servers,
     activeServer,
     connected,
+    connection,
     setActiveServer,
-    addServer,
-    removeServer,
+    connectServer,
+    disconnectServer,
   } = useServerConnection()
-  const [adding, setAdding] = useState(false)
+  const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [discovered, setDiscovered] = useState<Array<DiscoveredServer>>([])
   const isDesktop = typeof window !== `undefined` && Boolean(window.electronAPI)
@@ -78,13 +65,6 @@ export function ServerPicker(): React.ReactElement {
     [discovered, savedUrls]
   )
 
-  const handleAddDiscovered = useCallback(
-    (entry: DiscoveredServer) => {
-      addServer({ name: `localhost:${entry.port}`, url: entry.url })
-    },
-    [addServer]
-  )
-
   // While the menu is open, re-probe localhost on a 5-second cadence
   // so newly-started agents servers appear (and stopped ones drop)
   // without a manual refresh button. Background discovery in the
@@ -114,267 +94,134 @@ export function ServerPicker(): React.ReactElement {
 
   const status: ServerStatus = !activeServer
     ? `unset`
-    : connected
+    : connected ||
+        connection?.status === `connecting` ||
+        connection?.status === `reconnecting`
       ? `ok`
       : `down`
 
-  // Dialog is always dismissible. The picker tile already shows
-  // "No server" as a valid empty state, and the user can re-open
-  // the form any time from the Add server menu item — there's no
-  // need to trap them in the modal on first launch.
-
   return (
-    <>
-      <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
-        <Menu.Trigger
-          render={
-            <button
-              type="button"
-              className={styles.tile}
-              aria-label="Switch server"
-            >
-              <span className={styles.tileLabel}>
-                <span className={styles.tileStatusSlot}>
-                  <span className={styles.dot} data-state={status} />
-                </span>
-                <span className={styles.tileName}>
-                  {activeServer?.name ?? `No server`}
-                </span>
+    <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+      <Menu.Trigger
+        render={
+          <button
+            type="button"
+            className={styles.tile}
+            aria-label="Switch server"
+          >
+            <span className={styles.tileLabel}>
+              <span className={styles.tileStatusSlot}>
+                <span className={styles.dot} data-state={status} />
               </span>
-              <Icon icon={ChevronsUpDown} size={1} />
-            </button>
-          }
-        />
-        <Menu.Content side="top" align="start">
-          {servers.map((server, i) => {
-            const itemStatus: ServerStatus =
-              server.url === activeServer?.url ? status : `unset`
-            return (
-              <Menu.Item
-                key={`${server.url}-${i}`}
-                onSelect={() => setActiveServer(server)}
-              >
-                <span className={styles.menuRow}>
-                  <span className={styles.dot} data-state={itemStatus} />
-                  <Text size={2} className={styles.menuRowName}>
-                    {server.name}
-                  </Text>
-                  <Tooltip content={`Remove ${server.name}`} side="right">
-                    <IconButton
-                      size={1}
-                      variant="ghost"
-                      tone="neutral"
-                      className={styles.removeBtn}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeServer(server.url)
-                      }}
-                      aria-label={`Remove ${server.name}`}
+              <span className={styles.tileName}>
+                {activeServer?.name ?? `No server`}
+              </span>
+            </span>
+            <Icon icon={ChevronsUpDown} size={1} />
+          </button>
+        }
+      />
+      <Menu.Content side="top" align="start">
+        {servers.map((server, i) => {
+          const itemStatus: ServerStatus =
+            server.id === activeServer?.id
+              ? status
+              : server.desiredState === `connected`
+                ? `down`
+                : `unset`
+          const isConnected = server.desiredState === `connected`
+          return (
+            <Menu.Item
+              key={`${server.url}-${i}`}
+              onSelect={() => setActiveServer(server)}
+            >
+              <span className={styles.menuRow}>
+                <span className={styles.dot} data-state={itemStatus} />
+                <Text size={2} className={styles.menuRowName}>
+                  {server.name}
+                </Text>
+                {isDesktop && server.localRuntimeEnabled !== false && (
+                  <Tooltip
+                    content="Local runtime enabled for this server"
+                    side="right"
+                  >
+                    <span
+                      className={styles.runtimeBadge}
+                      aria-label="Local runtime enabled for this server"
                     >
-                      <Icon icon={Trash2} size={1} />
-                    </IconButton>
+                      <Icon icon={Brain} size={1} />
+                    </span>
                   </Tooltip>
-                </span>
-              </Menu.Item>
-            )
-          })}
-          {isDesktop && newDiscovered.length > 0 && (
-            <>
-              {servers.length > 0 && <Menu.Separator />}
-              {newDiscovered.map((entry) => (
-                <Menu.Item
-                  key={entry.url}
-                  onSelect={() => handleAddDiscovered(entry)}
+                )}
+                <Tooltip
+                  content={
+                    isConnected
+                      ? `Disconnect ${server.name}`
+                      : `Connect ${server.name}`
+                  }
+                  side="right"
                 >
-                  <span className={styles.menuRow}>
-                    <span className={styles.dot} data-state="unset" />
-                    <Text size={2} className={styles.menuRowName}>
-                      localhost:{entry.port}
-                    </Text>
-                  </span>
-                </Menu.Item>
-              ))}
-            </>
-          )}
-          <Menu.Separator />
-          <Menu.Item onSelect={() => setAdding(true)}>
-            <Icon icon={Plus} size={2} />
-            <Text size={2}>Add server</Text>
-          </Menu.Item>
-        </Menu.Content>
-      </Menu.Root>
-
-      <Dialog.Root open={adding} onOpenChange={setAdding}>
-        <Dialog.Content maxWidth={560}>
-          <Dialog.Title>Add server</Dialog.Title>
-          <Dialog.Description>
-            Connect to an Electric Agents server by giving it a label and its
-            base URL.
-          </Dialog.Description>
-          <AddServerForm
-            onAdd={(server) => {
-              addServer(server)
-              setAdding(false)
-            }}
-            onCancel={() => setAdding(false)}
-          />
-        </Dialog.Content>
-      </Dialog.Root>
-    </>
-  )
-}
-
-function AddServerForm({
-  onAdd,
-  onCancel,
-}: {
-  onAdd: (server: ServerConfig) => void
-  onCancel: () => void
-}): React.ReactElement {
-  const [name, setName] = useState(``)
-  const [url, setUrl] = useState(``)
-  const [headers, setHeaders] = useState<
-    Array<{ id: string; name: string; value: string }>
-  >([])
-  const trimmedName = name.trim()
-  const trimmedUrl = url.trim()
-  const nonEmptyHeaders = headers.filter(
-    (header) => header.name.trim() || header.value.trim()
-  )
-  const headerNames = nonEmptyHeaders.map((header) =>
-    header.name.trim().toLowerCase()
-  )
-  const hasDuplicateHeader = headerNames.some(
-    (headerName, index) => headerNames.indexOf(headerName) !== index
-  )
-  const headersComplete = nonEmptyHeaders.every(
-    (header) => header.name.trim() && header.value.trim()
-  )
-  const canSubmit =
-    trimmedName.length > 0 &&
-    trimmedUrl.length > 0 &&
-    headersComplete &&
-    !hasDuplicateHeader
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!canSubmit) return
-    const requestHeaders = Object.fromEntries(
-      nonEmptyHeaders.map((header) => [header.name.trim(), header.value.trim()])
-    )
-    onAdd({
-      name: trimmedName,
-      url: trimmedUrl,
-      ...(Object.keys(requestHeaders).length > 0
-        ? { headers: requestHeaders }
-        : {}),
-    })
-  }
-
-  const addHeader = () => {
-    setHeaders((current) => [
-      ...current,
-      {
-        id:
-          globalThis.crypto?.randomUUID?.() ??
-          `${Date.now()}-${current.length}`,
-        name: ``,
-        value: ``,
-      },
-    ])
-  }
-
-  const updateHeader = (
-    id: string,
-    patch: Partial<{ name: string; value: string }>
-  ) => {
-    setHeaders((current) =>
-      current.map((header) =>
-        header.id === id ? { ...header, ...patch } : header
-      )
-    )
-  }
-
-  const removeHeader = (id: string) => {
-    setHeaders((current) => current.filter((header) => header.id !== id))
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className={styles.addForm}>
-      <Stack direction="column" gap={3}>
-        <Field label="Name">
-          <Input
-            placeholder="e.g. Local Dev"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            size={2}
-            autoFocus
-          />
-        </Field>
-        <Field label="URL">
-          <Input
-            placeholder="e.g. http://localhost:4437"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            type="url"
-            size={2}
-          />
-        </Field>
-        <Field label="Headers">
-          <Stack direction="column" gap={2}>
-            {headers.map((header) => (
-              <div key={header.id} className={styles.headerRow}>
-                <Input
-                  placeholder="Authorization"
-                  value={header.name}
-                  onChange={(e) =>
-                    updateHeader(header.id, { name: e.target.value })
-                  }
-                  size={2}
-                />
-                <Input
-                  placeholder="Bearer ..."
-                  value={header.value}
-                  onChange={(e) =>
-                    updateHeader(header.id, { value: e.target.value })
-                  }
-                  size={2}
-                />
-                <Tooltip content="Remove header">
                   <IconButton
-                    type="button"
-                    size={2}
+                    size={1}
                     variant="ghost"
                     tone="neutral"
-                    onClick={() => removeHeader(header.id)}
-                    aria-label="Remove header"
+                    className={styles.connectionBtn}
+                    data-state={isConnected ? `connected` : `disconnected`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      if (isConnected) disconnectServer(server.id)
+                      else connectServer(server.id)
+                    }}
+                    aria-label={
+                      isConnected
+                        ? `Disconnect ${server.name}`
+                        : `Connect ${server.name}`
+                    }
                   >
-                    <Icon icon={Trash2} size={1} />
+                    <Icon icon={isConnected ? Plug : Unplug} size={1} />
                   </IconButton>
                 </Tooltip>
-              </div>
+              </span>
+            </Menu.Item>
+          )
+        })}
+        {isDesktop && newDiscovered.length > 0 && (
+          <>
+            {servers.length > 0 && <Menu.Separator />}
+            {newDiscovered.map((entry) => (
+              <Menu.Item
+                key={entry.url}
+                onSelect={() => {
+                  navigate({
+                    to: `/settings/$category`,
+                    params: { category: `servers` },
+                  })
+                }}
+              >
+                <span className={styles.menuRow}>
+                  <span className={styles.dot} data-state="unset" />
+                  <Text size={2} className={styles.menuRowName}>
+                    localhost:{entry.port}
+                  </Text>
+                </span>
+              </Menu.Item>
             ))}
-            <Button
-              type="button"
-              variant="soft"
-              tone="neutral"
-              onClick={addHeader}
-              className={styles.addHeaderButton}
-            >
-              <Icon icon={Plus} size={1} />
-              Add header
-            </Button>
-          </Stack>
-        </Field>
-      </Stack>
-      <Stack gap={2} justify="end" className={styles.addFormActions}>
-        <Button type="button" variant="soft" tone="neutral" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!canSubmit}>
-          Add server
-        </Button>
-      </Stack>
-    </form>
+          </>
+        )}
+        <Menu.Separator />
+        <Menu.Item
+          onSelect={() =>
+            navigate({
+              to: `/settings/$category`,
+              params: { category: `servers` },
+            })
+          }
+        >
+          <Icon icon={Server} size={2} />
+          <Text size={2}>Servers…</Text>
+        </Menu.Item>
+      </Menu.Content>
+    </Menu.Root>
   )
 }

@@ -86,10 +86,10 @@ describe(`resolvePullWakeRunnerId`, () => {
     ).toBe(`r2`)
   })
 
-  it(`derives a stable local runner id from asserted identity`, () => {
+  it(`derives a stable local runner id from the agents identity`, () => {
     expect(
       resolvePullWakeRunnerId(
-        { ELECTRIC_ASSERTED_AUTH_EMAIL: `Alice Smith@example.com` },
+        { ELECTRIC_AGENTS_IDENTITY: `Alice Smith@example.com` },
         {}
       )
     ).toBe(`builtin-alice-smith-example.com`)
@@ -101,12 +101,9 @@ describe(`resolvePullWakeRunnerId`, () => {
 })
 
 describe(`resolvePullWakeOwnerId`, () => {
-  it(`uses asserted auth email when present`, () => {
+  it(`uses the agents identity when present`, () => {
     expect(
-      resolvePullWakeOwnerId(
-        { ELECTRIC_ASSERTED_AUTH_EMAIL: `a@example.com` },
-        {}
-      )
+      resolvePullWakeOwnerId({ ELECTRIC_AGENTS_IDENTITY: `a@example.com` }, {})
     ).toBe(`a@example.com`)
   })
 
@@ -143,15 +140,6 @@ describe(`docker compose full stack config`, () => {
   it(`does not force-pull over a locally built agents-server image`, () => {
     expect(dockerComposeFull).toContain(
       `pull_policy: ${localAgentsServerPullPolicy}`
-    )
-  })
-
-  it(`enables local asserted auth by default for pull-wake runners`, () => {
-    expect(dockerComposeFull).toContain(
-      `ELECTRIC_AGENTS_DEV_ASSERTED_AUTH: \${ELECTRIC_AGENTS_DEV_ASSERTED_AUTH:-1}`
-    )
-    expect(dockerComposeFull).toContain(
-      `ELECTRIC_ASSERTED_AUTH_EMAIL: \${ELECTRIC_ASSERTED_AUTH_EMAIL:-builtin-agents}`
     )
   })
 })

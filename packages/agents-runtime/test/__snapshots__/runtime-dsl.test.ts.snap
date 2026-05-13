@@ -26,7 +26,7 @@ exports[`A: basic entity lifecycle > A2: spawn with initial message writes inbox
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "hello on create",
-    "type": "message_received",
+    "type": "inbox",
   },
 ]
 `;
@@ -43,7 +43,7 @@ exports[`A: basic entity lifecycle > A3: single message produces a full run hist
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "hello",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -108,7 +108,7 @@ exports[`A: basic entity lifecycle > A4: agent text output is reflected in the f
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -173,7 +173,7 @@ exports[`A: basic entity lifecycle > A5: multiple messages produce two completed
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "msg 1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -227,7 +227,7 @@ exports[`A: basic entity lifecycle > A5: multiple messages produce two completed
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "msg 2",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -292,7 +292,7 @@ exports[`A: basic entity lifecycle > A6: agent-less entity records only inbound 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "hello",
-    "type": "message_received",
+    "type": "inbox",
   },
 ]
 `;
@@ -309,7 +309,7 @@ exports[`A: basic entity lifecycle > A7: setup state writes appear before the ru
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "current",
@@ -383,7 +383,7 @@ exports[`A: basic entity lifecycle > A8: manifest history includes the configure
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -448,7 +448,7 @@ exports[`A: basic entity lifecycle > A9: sync tool calls appear in-order within 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "sync_echo hello tool",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -534,7 +534,7 @@ exports[`A: basic entity lifecycle > A10: async tool completion preserves a sing
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "async_lookup widget-7",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -620,7 +620,7 @@ exports[`A: basic entity lifecycle > A11: repeated tool calls keep ordering stab
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "sync_echo first && sync_echo second",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -727,7 +727,7 @@ exports[`A: basic entity lifecycle > A12: stateful note writes persist across wa
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "stateful_note write memo-1 first draft",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -815,7 +815,7 @@ exports[`A: basic entity lifecycle > A12: stateful note writes persist across wa
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "stateful_note read memo-1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -903,7 +903,7 @@ exports[`A: basic entity lifecycle > A13: failing tools close the run cleanly wi
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "fail_tool deterministic-boom",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -989,7 +989,7 @@ exports[`A: basic entity lifecycle > A14: an entity can recover from a failed to
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "fail_tool deterministic-boom",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -1064,7 +1064,7 @@ exports[`A: basic entity lifecycle > A14: an entity can recover from a failed to
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "sync_echo recovered",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -1153,7 +1153,7 @@ exports[`B: spawn mechanics > B1: spawn creates a child entity that can receive 
     "payload": {
       "text": "hello child",
     },
-    "type": "message_received",
+    "type": "inbox",
   },
 ]
 `;
@@ -1170,7 +1170,7 @@ exports[`B: spawn mechanics > B1: spawn creates a child entity that can receive 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -1248,7 +1248,7 @@ exports[`B: spawn mechanics > B2: spawn with initial message writes the child hi
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "hello child",
-    "type": "message_received",
+    "type": "inbox",
   },
 ]
 `;
@@ -1265,7 +1265,7 @@ exports[`B: spawn mechanics > B2: spawn with initial message writes the child hi
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -1342,7 +1342,7 @@ exports[`B: spawn mechanics > B3: spawn manifest history includes the resolved e
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -1419,7 +1419,7 @@ exports[`B: spawn mechanics > B4: spawn marks the child manifest row as observed
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -1496,7 +1496,7 @@ exports[`C: state collections > C1: ctx.state inserts are reflected in full stre
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "item-1",
@@ -1570,7 +1570,7 @@ exports[`C: state collections > C2: setup-initialized state remains visible in f
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "current",
@@ -1644,7 +1644,7 @@ exports[`C: state collections > C3: self-authored state writes do not trigger a 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "save",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "note-1",
@@ -1718,7 +1718,7 @@ exports[`D: shared state > D1: mkdb produces entity history with a manifest entr
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -1800,7 +1800,7 @@ exports[`D: shared state > D2: shared state stream exists even before any writes
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "go",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -1884,7 +1884,7 @@ exports[`D: shared state > D3: writes to shared state are reflected in both hist
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "write something",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2007,7 +2007,7 @@ exports[`D: shared state > D4: a second entity can connect to existing shared st
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2130,7 +2130,7 @@ exports[`D: shared state > D5: shared state update and delete events remain dura
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2268,7 +2268,7 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "summary",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2409,7 +2409,7 @@ exports[`D: shared state > D6: multi-collection shared state stays consistent ac
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "write_article art-1 Alpha|First body && write_comment c-1 art-1|Looks good",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2525,7 +2525,7 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "count",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2658,7 +2658,7 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2766,7 +2766,7 @@ exports[`D: shared state > D7: multiple entities can contribute durable rows to 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert art-2 Beta|Second body",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -2874,7 +2874,7 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3007,7 +3007,7 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3115,7 +3115,7 @@ exports[`D: shared state > D8: a later writer can overwrite a shared row and a n
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "update art-1 Beta|Second body",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3223,7 +3223,7 @@ exports[`D: shared state > D9: a setup-registered shared-state effect fires on t
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert art-1 Alpha|First body",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3327,7 +3327,7 @@ exports[`D: shared state > D9: a setup-registered shared-state effect fires on t
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "read art-1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -3409,7 +3409,7 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "summary",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3550,7 +3550,7 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "write_article art-1 Alpha|First body",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3666,7 +3666,7 @@ exports[`D: shared state > D10: separate entities can contribute to different co
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "write_comment c-1 art-1|Looks good",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3780,7 +3780,7 @@ exports[`E: observation replay > E1: observed effects do not duplicate old child
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -3843,7 +3843,7 @@ exports[`E: observation replay > E1: observed effects do not duplicate old child
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert item-2 beta",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -3938,7 +3938,7 @@ exports[`E: observation replay > E2: updating an observed row preserves a single
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4001,7 +4001,7 @@ exports[`E: observation replay > E2: updating an observed row preserves a single
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "update item-1 beta",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -4098,7 +4098,7 @@ exports[`E: observation replay > E3: an observed row update is replayed as an up
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4161,7 +4161,7 @@ exports[`E: observation replay > E3: an observed row update is replayed as an up
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "update item-1 beta",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -4259,7 +4259,7 @@ exports[`F: coordination orchestration > F1: dispatcher routes to the requested 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "hello routing",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4324,7 +4324,7 @@ exports[`F: coordination orchestration > F1: dispatcher routes to the requested 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "dispatch assistant hello routing",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4447,7 +4447,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "Should we ship the feature?",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4512,7 +4512,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "spawn_perspectives Should we ship the feature?",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "current",
@@ -4596,7 +4596,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "wait_for_all",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "args": {},
@@ -4656,7 +4656,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "Should we ship the feature?",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4725,7 +4725,7 @@ exports[`F: coordination orchestration > F2: manager-worker spawns, observes, an
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "Should we ship the feature?",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4794,7 +4794,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "summarize:alpha",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4863,7 +4863,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "summarize:beta",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4932,7 +4932,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "summarize:gamma",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -4997,7 +4997,7 @@ exports[`G: map-reduce ordering > G1: map-reduce returns results in chunk order 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "map_chunks summarize :: alpha@30|beta@0|gamma@10",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "current",
@@ -5193,7 +5193,7 @@ exports[`H: pipeline sequencing > H1: pipeline writes its state row during the f
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "run_pipeline seed :: stage-one",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "current",
@@ -5360,7 +5360,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "run_pipeline seed :: stage-one|stage-two|stage-three",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "current",
@@ -5612,7 +5612,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "seed",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -5680,7 +5680,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "stage-one::seed",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -5748,7 +5748,7 @@ exports[`H: pipeline sequencing > H2: pipeline feeds each stage the previous sta
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "stage-two::stage-one::seed",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -5819,7 +5819,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "launch checklist",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -5931,7 +5931,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "launch checklist",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6043,7 +6043,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "launch checklist",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6149,7 +6149,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "start_review launch checklist",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "current",
@@ -6349,7 +6349,7 @@ exports[`I: peer review coordination > I1: peer review aggregates three reviewer
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "summarize_reviews",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -6492,7 +6492,7 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "Should we refactor now?",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6603,7 +6603,7 @@ exports[`J: debate coordination > J1: debate parent reads both sides from shared
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "Should we refactor now?",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6740,7 +6740,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "Durable Streams",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6850,7 +6850,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "Durable Streams",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -6956,7 +6956,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "create_wiki Durable Streams :: History|Applications",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -7134,7 +7134,7 @@ exports[`K: wiki coordination > K1: wiki specialists accumulate shared articles 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "query_wiki Durable Streams",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -7247,7 +7247,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -7310,7 +7310,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "update item-1 beta",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -7373,7 +7373,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "delete item-1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-2",
@@ -7443,7 +7443,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "watch /observed-child-e1/child-l1",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -7551,7 +7551,7 @@ exports[`L: reactive observation flows > L1: explicit observe plus createEffect 
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "report",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -7616,7 +7616,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "insert item-1 alpha",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -7690,7 +7690,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "watch /observed-child-e1/child-l2",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-0",
@@ -7764,7 +7764,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "report",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-1",
@@ -7818,7 +7818,7 @@ exports[`L: reactive observation flows > L2: re-waking the watcher without new c
     "from": "/principal/system%3Aruntime-dsl-test",
     "operation": "insert",
     "payload": "report",
-    "type": "message_received",
+    "type": "inbox",
   },
   {
     "key": "run-2",

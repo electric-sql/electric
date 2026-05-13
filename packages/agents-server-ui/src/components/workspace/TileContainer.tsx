@@ -33,7 +33,13 @@ import styles from './TileContainer.module.css'
  * Click anywhere inside makes this the active tile (mouse-down-capture
  * so it fires before the body's own handlers).
  */
-export function TileContainer({ tile }: { tile: Tile }): React.ReactElement {
+export function TileContainer({
+  tile,
+  chromeInsetTarget = false,
+}: {
+  tile: Tile
+  chromeInsetTarget?: boolean
+}): React.ReactElement {
   const { workspace, helpers } = useWorkspace()
   const isActive = workspace.activeTileId === tile.id
   const tileRef = useRef<HTMLDivElement>(null)
@@ -49,9 +55,14 @@ export function TileContainer({ tile }: { tile: Tile }): React.ReactElement {
           tile={tile}
           entityUrl={tile.entityUrl}
           rootRef={tileRef}
+          chromeInsetTarget={chromeInsetTarget}
         />
       ) : (
-        <StandaloneTileBody tile={tile} rootRef={tileRef} />
+        <StandaloneTileBody
+          tile={tile}
+          rootRef={tileRef}
+          chromeInsetTarget={chromeInsetTarget}
+        />
       )}
       <DropOverlay tileId={tile.id} containerRef={tileRef} />
     </div>
@@ -62,10 +73,12 @@ function EntityTileBody({
   tile,
   entityUrl,
   rootRef,
+  chromeInsetTarget,
 }: {
   tile: Tile
   entityUrl: string
   rootRef: React.RefObject<HTMLDivElement | null>
+  chromeInsetTarget: boolean
 }): React.ReactElement {
   const { activeServer } = useServerConnection()
   const { entitiesCollection } = useElectricAgents()
@@ -127,6 +140,7 @@ function EntityTileBody({
           entity={entity}
           currentViewId={tile.viewId}
           onSetView={setView}
+          chromeInsetTarget={chromeInsetTarget}
           leading={
             canRearrange ? (
               <TileDragHandle
@@ -168,9 +182,11 @@ function EntityTileBody({
 function StandaloneTileBody({
   tile,
   rootRef,
+  chromeInsetTarget,
 }: {
   tile: Tile
   rootRef: React.RefObject<HTMLDivElement | null>
+  chromeInsetTarget: boolean
 }): React.ReactElement {
   const { activeServer } = useServerConnection()
   const { workspace } = useWorkspace()
@@ -199,6 +215,7 @@ function StandaloneTileBody({
             ) : undefined
           }
           title={toolbarTitle}
+          chromeInsetTarget={chromeInsetTarget}
           actions={<TileActions tile={tile} entity={null} />}
         />
       </div>

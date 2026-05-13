@@ -429,7 +429,7 @@
    and the table wrapper so all three feel like variants of the
    same surface. */
 .agent-ui-markdown [data-md-code-block-body] {
-  background: var(--ds-surface-raised);
+  background: color-mix(in oklab, var(--ds-bg) 72%, var(--ds-surface));
   border: 1px solid var(--ds-gray-a4);
   border-radius: var(--ds-radius-3);
   padding: 9px 11px;

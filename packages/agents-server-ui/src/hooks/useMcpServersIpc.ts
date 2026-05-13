@@ -45,7 +45,8 @@ export function useMcpServersIpc(): UseMcpServersIpcResult {
       setLoading(false)
     })
     const off = mcp.onState((snap) => {
-      setServers(snap.servers as ReadonlyArray<McpServerRow>)
+      const snapshot = `snapshot` in snap ? snap.snapshot : snap
+      setServers(snapshot.servers as ReadonlyArray<McpServerRow>)
       setLoading(false)
     })
     return () => {
