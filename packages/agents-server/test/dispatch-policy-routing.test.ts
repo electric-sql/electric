@@ -151,6 +151,48 @@ describe(`dispatch policy routing`, () => {
     expect(ctx.pgDb.insert).toHaveBeenCalled()
   })
 
+  it(`sends spawn initialMessage before linking pull-wake dispatch`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`PUT`, `/_electric/entities/chat/one`, {
+        dispatch_policy: dispatchPolicy,
+        initialMessage: `hello`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(201)
+    expect(ctx.entityManager.spawn).toHaveBeenCalledWith(
+      `chat`,
+      expect.objectContaining({
+        dispatch_policy: dispatchPolicy,
+        initialMessage: undefined,
+      })
+    )
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(`/chat/one`, {
+      from: `/principal/user:owner@example.com`,
+      payload: `hello`,
+    })
+    expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
+      `runner:runner-1`,
+      expect.objectContaining({
+        type: `pull-wake`,
+        streams: [`/chat/one/main`],
+        wake_stream: `/runners/runner-1/wake`,
+      })
+    )
+    expect(
+      (ctx.entityManager.send as any).mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      (ctx.streamClient.putSubscription as any).mock.invocationCallOrder[0]
+    )
+  })
+
   it(`links legacy entities through the type default before sending`, async () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
