@@ -1,5 +1,11 @@
 # @electric-ax/agents-mcp
 
+## 0.2.2
+
+### Patch Changes
+
+- dfc9a45: Combine the desktop app packaging setup, app settings, and agents UI improvements. Adds desktop packaging assets/configuration, multi-server desktop settings, improved chat and workspace UI behavior, and queued inbox message modes in the runtime.
+
 ## 0.2.1
 
 ### Patch Changes

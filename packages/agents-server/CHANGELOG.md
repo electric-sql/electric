@@ -1,5 +1,15 @@
 # @electric-ax/agents-server
 
+## 0.4.1
+
+### Patch Changes
+
+- dfc9a45: Combine the desktop app packaging setup, app settings, and agents UI improvements. Adds desktop packaging assets/configuration, multi-server desktop settings, improved chat and workspace UI behavior, and queued inbox message modes in the runtime.
+- 83204d9: Add principals support to the agents system. Every API request now carries a `Principal` (user, agent, service, or system) threaded through the full request lifecycle. Runner dispatch is scoped to the authenticated owner via dispatch policy authorization. The runtime exposes `ctx.principal` in handler context so agent code can implement principal-aware logic. The server UI uses asserted identity headers for dev-mode authentication.
+- Updated dependencies [dfc9a45]
+- Updated dependencies [83204d9]
+  - @electric-ax/agents-runtime@0.2.1
+
 ## 0.4.0
 
 ### Minor Changes

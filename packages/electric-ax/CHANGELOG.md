@@ -1,5 +1,15 @@
 # electric-ax
 
+## 0.2.1
+
+### Patch Changes
+
+- dfc9a45: Remove obsolete identity header plumbing from the Electric Agents CLI.
+- Updated dependencies [dfc9a45]
+- Updated dependencies [83204d9]
+  - @electric-ax/agents-runtime@0.2.1
+  - @electric-ax/agents@0.4.1
+
 ## 0.2.0
 
 ### Minor Changes
