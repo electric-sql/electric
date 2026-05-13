@@ -6,14 +6,16 @@
 
 ## 1. Summary
 
-Extend Electric Agents with a Discord-facing entity that lets users interact with the agents subsystem from Discord channels. The bot is a first-class conversational agent: it answers questions about Electric, GitHub issues, and (eventually) Cloud deployments using its own tools, skills, and MCP servers. For coding tasks (`fix issue #N`) it delegates to a Horton entity running in a separate runtime host.
+Extend Electric Agents with a Discord-facing entity that lets users interact with the agents subsystem from Discord channels. The bot is a first-class conversational agent: it answers questions about Electric, GitHub issues, Cloud deployments and other things using its own tools, skills, and MCP servers. For coding tasks (`fix issue #N`) it delegates to a Horton entity running on its runtime host.
 
 The deliverable is a new workspace package, `factory/discord-bot/` (npm name `@electric-ax/discord-bot`), comprising:
 
-- a **Discord ingress adapter** (Discord Gateway WebSocket + HTTP Interactions endpoint), shipped as a Node process with a Cloudflare Worker entrypoint for interactions-only deployments; and
+- a **Discord ingress adapter** (Discord Gateway WebSocket + HTTP Interactions endpoint), shipped as a Node process; and
 - a **`discord-bot` entity** registered into any agents runtime via `registerDiscordBot(registry, opts)`.
 
 The adapter is the only component with long-lived state (the Gateway WebSocket); the entity is webhook-driven and lives in the operator's existing `agents-server` alongside Horton.
+
+v1 targets a Node deploy. The entity's tool surface is intentionally restricted to runtime-portable APIs (`fetch`, raw Discord REST + Ed25519 verify, HTTP-based MCP, HTTP-based runtime-server client) so a follow-up Cloudflare Durable Object deploy can reuse the entity code as-is. The adapter is *not* portable in v1 — see §10 for the planned DO follow-up.
 
 ## 2. Goals & non-goals
 
@@ -24,7 +26,7 @@ The adapter is the only component with long-lived state (the Gateway WebSocket);
 3. The bot asks clarifying questions in-thread when the task is under-specified, using the agent loop (no special clarification machinery).
 4. The bot is primed on first wake with the last *N* messages from the parent channel. It can pull more channel context on demand around any referenced message.
 5. The bot is extensible: operators can pass additional tools, MCP servers, and skills at register time.
-6. The ingress adapter has a documented Cloudflare Worker entrypoint for interactions-only deployments.
+6. The entity is implemented using runtime-portable APIs only (no `node:fs`, no `node:child_process`, no Node-only npm modules in its tools), so a Cloudflare Durable Object deploy can reuse it without rewrites.
 7. Self-host: operators run their own Discord application, run the adapter as their own process, and register the entity into their own `agents-server`. README covers setup end-to-end.
 
 ### Non-goals (v1)
@@ -33,7 +35,7 @@ The adapter is the only component with long-lived state (the Gateway WebSocket);
 - Multi-repo coding agents / GitHub App auth — single repo is configured at install time. Options object is shaped to accept a GitHub App config later without breaking changes.
 - Per-user GitHub OAuth attribution (PRs come from the configured token).
 - Voice channels, button/modal UIs beyond `/end`.
-- Cloudflare Durable Object Gateway via the WebSocket Hibernation API. Gateway requires Node in v1; CF deploys are interactions-only.
+- Cloudflare deploy of any kind. No interactions-only CF Worker entrypoint, no full DO deploy with Gateway via the WebSocket Hibernation API. v1 is Node-only; CF DO is the planned next milestone (see §10) and informs the runtime-portability goal above.
 - Bot-initiated DMs, cron / scheduled posts.
 
 ## 3. Architecture
@@ -47,7 +49,7 @@ The adapter is the only component with long-lived state (the Gateway WebSocket);
                │  WebSocket (Gateway)   │  HTTPS POST (Interactions)
                ▼                        ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  factory/discord-bot — ADAPTER  (Node process | CF Worker)     │
+│  factory/discord-bot — ADAPTER  (Node process; v1)             │
 │  • discord.js gateway client (Node only in v1)                 │
 │  • Interactions endpoint (Ed25519 verify, dispatch)            │
 │  • Creates Discord thread when a bare @mention lands           │
@@ -122,15 +124,14 @@ factory/discord-bot/
 │   │   ├── interactions.ts     Ed25519 verify + dispatch
 │   │   ├── webhook.ts          POST to agents-server webhook
 │   │   ├── thread.ts           "create thread for bare mention" helper
-│   │   ├── host-node.ts        Node entrypoint
-│   │   └── host-cf.ts          Cloudflare Worker fetch handler
+│   │   └── host-node.ts        Node entrypoint (Gateway + Interactions)
 │   ├── skills/                 (optional) discord-flavored skills
 │   └── system-prompt.ts        composed prompt + onboarding guidance
 ├── bin/
 │   ├── discord-bot             → host-node
 │   └── discord-bot-register    one-shot slash-command registration
 ├── test/
-│   ├── tools/                  unit tests (mock @discordjs/rest)
+│   ├── tools/                  unit tests (mock fetch / Discord REST)
 │   ├── adapter/                gateway-mapping + interactions tests
 │   └── integration/            end-to-end with stubbed Horton + fake Discord
 └── tsdown.config.ts
@@ -197,7 +198,7 @@ Wake payloads carry the Discord `message_id` / `interaction_id` as an idempotenc
 
 ### 5.3 Tools
 
-**`discord.*`** — `create_thread`, `post_message`, `edit_message`, `read_thread_history`, `add_reaction`, `read_channel_around_message(messageId, before=20, after=5)`. All implemented over `@discordjs/rest`.
+**`discord.*`** — `create_thread`, `post_message`, `edit_message`, `read_thread_history`, `add_reaction`, `read_channel_around_message(messageId, before=20, after=5)`. Implemented over raw `fetch` against the Discord REST API (not `@discordjs/rest`) so the entity stays portable to a Cloudflare DO host in the planned follow-up. `@discordjs/rest` and `discord.js` are *adapter-only* dependencies.
 
 **`delegate.spawn_horton`** — calls `runtimeServerClient.spawnEntity` with the configured Horton entity type and target server URL. Returns `{ childEntityUrl, childEntityId }`. Does not await completion.
 
@@ -296,19 +297,18 @@ GitHub MCP is configured via the operator's existing `mcp.json` or `extraMcpServ
 - Binaries:
   - `bin/discord-bot` → Node adapter host (Gateway + Interactions).
   - `bin/discord-bot-register` → one-shot, registers the `/end` slash command with Discord. Re-runnable.
-- Cloudflare deploy: `src/adapter/host-cf.ts` exports a Worker `fetch` handler for Interactions only. Documented; not the canonical deploy.
 - README covers:
   - Discord application setup (bot user, intents `Guilds`/`GuildMessages`/`MessageContent`/`GuildMessageReactions`, OAuth scopes `bot`/`applications.commands`, invite link generation).
   - Environment configuration.
   - Registering slash commands.
   - Running the Node adapter; running alongside `agents-server`; pointing the entity at Horton's runtime.
-  - Cloudflare Worker deploy for interactions-only.
   - Extension points: `extraTools`, `extraMcpServers`, `skills`.
   - Troubleshooting (intent denial, signature failures, gateway disconnects).
+  - A "Future: Cloudflare DO deploy" note pointing at §10 so operators know it's planned.
 
 ## 9. Testing
 
-- **Unit (tools):** Discord tools tested against a mocked `@discordjs/rest`. `spawn_horton` tested against a mocked runtime-server client.
+- **Unit (tools):** Discord tools tested against a mocked `fetch`. `spawn_horton` tested against a mocked runtime-server client.
 - **Unit (entity):** entity handler tested with the existing agents-runtime harness (`mockStreamFn`, in-memory entity stream DB) — same pattern Horton uses.
 - **Adapter:** Gateway event-mapping tested with a fake discord.js client emitting fixture events. Interactions handler tested with crafted Ed25519-signed payloads (including failure cases).
 - **Integration:** one end-to-end test that boots an agents-server + adapter + a stubbed Horton entity registered in the same registry, drives a fixture `MESSAGE_CREATE` through the gateway mapper, and asserts the bot posts a Discord message (via mocked REST) and spawns the stub Horton.
@@ -320,7 +320,7 @@ GitHub MCP is configured via the operator's existing `mcp.json` or `extraMcpServ
 - **Multi-repo / GitHub App** (path B of the auth question). The options object already allows `github: { app: { ... } }` shape; implementation deferred.
 - **More slash commands** (`/fix issue:#N`, `/ask`, `/cloud-status`) as keyboard shortcuts for the same intents the agent already handles via `@mention`.
 - **Per-user GitHub OAuth attribution**, so PRs come from the actual user.
-- **CF Durable Object Gateway** via the WebSocket Hibernation API for fully-serverless Gateway support.
+- **Cloudflare Durable Object deploy** holding the Discord Gateway via the WebSocket Hibernation API, the Interactions endpoint, and the `discord-bot` entity inside the DO (via `agents-runtime` as a library, not via webhook to `agents-server`). Horton remains on a Node host, reached via HTTP. This is the planned next milestone; the v1 entity is designed to drop into this host without changes (no Node-only APIs in entity code).
 - **Scheduled posts** (cron observation sources): daily issue triage report, weekly Cloud status.
 - **Voice / embeds-as-UI** for richer interactions.
 
