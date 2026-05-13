@@ -16,6 +16,8 @@ import { useCallback, useMemo } from 'react'
 import { Select } from '../ui'
 import { WorkingDirectoryPicker } from './WorkingDirectoryPicker'
 import { useRecentWorkingDirectories } from '../hooks/useRecentWorkingDirectories'
+import { serverFetch } from '../lib/auth-fetch'
+import { entityApiUrl } from '../lib/entity-api'
 import newSessionStyles from './NewSessionPage.module.css'
 import type {
   ElectricEntity,
@@ -198,7 +200,7 @@ export function ComposerSettings({
   const patch = useCallback(
     async (updated: Record<string, unknown>) => {
       try {
-        await fetch(`${baseUrl}${entity.url}`, {
+        await serverFetch(entityApiUrl(baseUrl, entity.url), {
           method: `PATCH`,
           headers: { 'content-type': `application/json` },
           body: JSON.stringify({ args: updated }),
