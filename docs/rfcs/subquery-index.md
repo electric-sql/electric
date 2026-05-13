@@ -1,6 +1,6 @@
 ---
 title: Shared SubqueryIndex Base View with Sparse XOR Exceptions
-version: "0.4"
+version: "0.5"
 status: draft
 owner: robacourt
 contributors: []
@@ -22,9 +22,9 @@ This RFC proposes replacing full per-shape subquery membership with one shared b
 
 The target outcome is:
 
-- removal cost proportional to a shape's subquery participants and outstanding exceptions, not to total shapes or the shape's full dependency view;
-- whole-subquery/cohort teardown cost proportional to affected cohorts and participants, not to total shapes;
-- steady-state memory closer to `O(V + P)` than `O(P * V)`;
+- removal cost proportional to a shape's subquery participants, routing edges, and outstanding exceptions, not to total shapes or the shape's full dependency view;
+- whole-subquery/cohort teardown cost proportional to affected cohorts, participants, routing edges, and exceptions, not to total shapes;
+- steady-state memory closer to `O(V + P + R + C)` than `O(P * V)`;
 - the same correctness guarantees for positive and negated subqueries during dependency moves.
 
 ## Background
@@ -80,7 +80,7 @@ At a high level:
 | Shared dependency view | Stored once per shape | Stored once per cohort |
 | Temporary divergence | Full per-shape view | Sparse exceptions only |
 | Shape removal | Scan value-keyed membership rows | Follow participant reverse index plus sparse exceptions |
-| Steady-state memory | `O(P * V)` | `O(V + P)` |
+| Steady-state memory | `O(P * V)` | `O(V + P + R + C)` |
 | Move handling correctness | Exact | Exact |
 
 **Link to PRD hypothesis:** There is no PRD for this RFC. The working hypothesis comes from issue #4279:
@@ -107,8 +107,8 @@ At a high level:
 - Do not redesign DNF planning, `active_conditions`, move broadcasts, or materializer semantics.
 - Do not solve the separate invalidation trigger that causes shapes to be removed.
 - Do not deduplicate every identical subquery view across the whole service in the first implementation. The first implementation may use a conservative cohort boundary.
-- Do not guarantee strict mathematical O(1) removal if a shape has a very large number of outstanding exceptions. The target is O(P + E), where `P` is the number of subquery participants for the shape and `E` is the number of outstanding sparse exceptions owned by those participants.
-- Do not guarantee O(1) removal of a whole subquery if many shapes genuinely participate in that subquery. The target is O(C + P_s + E_s) on the critical path, where `C` is affected cohorts, `P_s` is affected participants, and `E_s` is their outstanding sparse exceptions.
+- Do not guarantee strict mathematical O(1) removal if a shape has a very large number of outstanding exceptions. The target is O(P + R + E), where `P` is the number of subquery participants for the shape, `R` is their routing edges, and `E` is their outstanding sparse exceptions.
+- Do not guarantee O(1) removal of a whole subquery if many shapes genuinely participate in that subquery. The target is O(C + P_s + R_s + E_s) on the critical path, where `C` is affected cohorts, `P_s` is affected participants, `R_s` is their routing edges, and `E_s` is their outstanding sparse exceptions.
 - Do not introduce lazy-cleanup mechanisms unless measurements show they are needed.
 
 ## Proposal
@@ -157,25 +157,39 @@ set_membership(participant, cohort, value, desired_local_member?)
 
 A cohort is the unit that shares a base dependency view.
 
-For the first implementation, a cohort should be conservative: it should include only participants whose dependency membership can safely be represented by the same base. A practical first version can define a cohort around the existing subquery filter node plus the dependency identity needed to avoid merging unlike views, for example:
+For the first implementation, a cohort should include only participants whose
+steady-state dependency membership is represented by the same dependency shape.
+In the current architecture, the dependency shape handle is the best runtime
+identity for that:
 
 ```text
-cohort_id = {node_id, subquery_ref, dep_index}
+cohort_key = {:dependency_shape, dependency_shape_handle}
 ```
 
-The exact tuple should be decided during implementation. The important rule is:
+When a dependency handle is unavailable, such as in narrow unit tests, use a
+shape-local fallback key:
+
+```text
+cohort_key = {:shape_local_dependency, shape_handle, dep_index}
+```
+
+The important rule is:
 
 ```text
 if two participants can have different steady-state dependency views for reasons other than temporary move ordering, they must not share a cohort
 ```
 
-Later versions can intern cohorts more aggressively across equivalent nodes or equivalent subquery dependency plans, but that is not required for this RFC.
+Later versions can intern cohorts more aggressively across equivalent dependency
+plans that have different handles, but that is not required for this RFC.
 
-The important implementation detail is that the logical cohort identity should be interned to a compact runtime identifier. Hot ETS rows should store a small integer `cohort_id`, not the full `{node_id, subquery_ref, dep_index}` tuple.
+The important implementation detail is that the logical cohort identity should be
+interned to a compact runtime identifier. Hot ETS rows should store a small
+integer `cohort_id`, not the full cohort key.
 
-#### Participant
+#### Participant and routing edge
 
-A participant is a shape's position in a subquery filter node, not just the shape handle.
+A participant is a shape's local view of one subquery dependency. A routing
+edge is a shape's position in a concrete subquery filter node.
 
 The current index stores rows involving:
 
@@ -188,7 +202,17 @@ next_condition_id
 branch_key
 ```
 
-The new design should keep that distinction. A participant can be represented as a small stable identifier that maps to the routing metadata needed to continue evaluation through `WhereCondition`.
+The new design should keep those concerns separate. Sparse exceptions belong to
+the participant because exact dependency membership is per shape/dependency.
+Routing metadata belongs to the edge because one participant can be used by
+multiple filter-node positions, for example:
+
+```sql
+id IN (SELECT id FROM parent) OR par_id IN (SELECT id FROM parent)
+```
+
+In that case the shape should not duplicate exception rows for the same
+dependency view. It should have one participant and two routing edges.
 
 Conceptually:
 
@@ -196,13 +220,23 @@ Conceptually:
 participant = {
   shape_handle,
   cohort_id,
+  subquery_ref,
+  dep_index,
+  polarity
+}
+
+routing_edge = {
+  participant_id,
+  node_id,
+  cohort_id,
   polarity,
   next_condition_id,
   branch_key
 }
 ```
 
-As with cohorts, the hot ETS rows should not store that full tuple repeatedly. They should store a compact small integer `participant_id` and keep the larger routing metadata only once.
+As with cohorts, hot ETS rows should store compact small integer
+`participant_id` and `cohort_id` values rather than the full logical tuples.
 
 ### Data model
 
@@ -220,24 +254,45 @@ Recommended hot-path ETS layout:
 ```text
 # Participant metadata, stored once per participant.
 # Exact fields can vary, but lifecycle teardown needs at least the shape,
-# cohort, local subquery ref, polarity, routing metadata, and whether the
+# cohort, local subquery ref, dependency index, polarity, and whether the
 # participant is indexed or still in fallback.
 participant_meta:
-  {participant_id, shape_handle, cohort_id, subquery_ref, node_id,
-   polarity, next_condition_id, branch_key, readiness}
+  {participant_id, shape_handle, cohort_id, subquery_ref, dep_index,
+   polarity, readiness}
 
 # Cohort metadata, stored once per cohort.
 cohort_meta:
-  {cohort_id, subquery_key, node_id, lifecycle_state}
+  {cohort_id, cohort_key, subquery_key, lifecycle_state}
 
-# Positive routing candidates.
+# Interning lookup for the logical cohort key.
+# This should be keyed by dependency shape handle when available, falling back
+# to a shape-local dependency key only when no dependency handle exists.
+cohort_by_key:
+  {cohort_key, cohort_id}
+
+# Route from a filter node to the cohorts that can affect that node.
+# This is required because routing starts with {condition_id, field_key}, not
+# with a cohort id.
+cohorts_by_node:
+  {node_id, cohort_id}
+
+# Node metadata used to evaluate the root-table value at a subquery node.
+node_meta:
+  {node_id, testexpr}
+
+# Positive routing edges.
 # `next_condition_id` is inlined so routing does not need an extra lookup.
-positive_participants:
-  {cohort_id, participant_id, next_condition_id}
+positive_edges:
+  {{node_id, cohort_id}, participant_id, next_condition_id}
 
-# Negated routing candidates.
-negated_participants:
-  {cohort_id, participant_id, next_condition_id}
+# Negated routing edges.
+negated_edges:
+  {{node_id, cohort_id}, participant_id, next_condition_id}
+
+# Reverse lookup for removing a participant's routing edges without scanning
+# edge tables by non-key fields.
+edges_by_participant:
+  {participant_id, node_id, cohort_id, polarity, next_condition_id, branch_key}
 
 # Reverse lookup for removal.
 # `polarity` tells removal which participant table to touch.
@@ -259,6 +314,7 @@ cohorts_by_subquery:
   {subquery_key, cohort_id}
 
 # Exact membership lookup for `member?(shape_handle, subquery_ref, value)`.
+# This points to the membership participant, not to every routing edge.
 shape_ref_participant:
   {{shape_handle, subquery_ref}, participant_id, cohort_id}
 
@@ -304,7 +360,7 @@ It is not the rejected memory-heavy reverse index:
 shape_handle -> all values in the full dependency view
 ```
 
-It also removes an avoidable constant factor from the proposed design itself. On the local benchmark described below, the compact layout above used 32-38% less ETS memory than the earlier tagged layout while preserving the same `O(V + P + C + E)` asymptotic shape.
+It also removes an avoidable constant factor from the proposed design itself. On the local benchmark described below, the compact layout above used 23-33% less ETS memory than the earlier tagged layout while preserving the same `O(V + P + R + C + E)` asymptotic shape.
 
 The pseudocode below continues to use logical operations like `base_member?(cohort, value)` and `exception_count(cohort, value)`. In the compact layout those can be implemented from the `cohort_value` row rather than from separate ETS objects.
 
@@ -371,27 +427,32 @@ A later optimization may add versioned lazy clearing if promotion-time clearing 
 
 ### Routing
 
-Routing uses the same `local_member = base XOR exception` idea, but it computes candidate participants in bulk.
+Routing starts from the current filter node, evaluates the root-table value,
+then enumerates `cohorts_by_node(node_id)`. For each cohort it uses the same
+`local_member = base XOR exception` idea, but computes matching routing edges in
+bulk.
 
-For positive subquery participants:
-
-```text
-if base_member?(cohort, value):
-  matching_positive = positive_participants(cohort) - exceptions(cohort, value, :positive)
-else:
-  matching_positive = exceptions(cohort, value, :positive)
-```
-
-For negated subquery participants:
+For positive subquery edges at a node:
 
 ```text
 if base_member?(cohort, value):
-  matching_negated = exceptions(cohort, value, :negated)
+  matching_positive = positive_edges(node_id, cohort)
+                    - edges_for_exceptions(node_id, cohort, value, :positive)
 else:
-  matching_negated = negated_participants(cohort) - exceptions(cohort, value, :negated)
+  matching_positive = edges_for_exceptions(node_id, cohort, value, :positive)
 ```
 
-Then fallback participants are unioned in, as today:
+For negated subquery edges at a node:
+
+```text
+if base_member?(cohort, value):
+  matching_negated = edges_for_exceptions(node_id, cohort, value, :negated)
+else:
+  matching_negated = negated_edges(node_id, cohort)
+                   - edges_for_exceptions(node_id, cohort, value, :negated)
+```
+
+Then fallback routing edges are unioned in, as today:
 
 ```text
 candidates = matching_positive
@@ -427,15 +488,34 @@ A newly registered participant should not be counted as an indexed participant u
 
 Before that point, it remains in fallback routing, as today.
 
-The common-case registration path should be:
+Registration has two layers:
+
+1. `register_shape` creates one membership participant per canonical subquery
+   dependency and records `shape_ref_participant` for exact evaluation.
+2. `add_shape` creates routing edges for concrete optimized subquery nodes.
+
+The common-case readiness path should be:
 
 1. Register participant metadata.
 2. Add participant reverse rows for shape, cohort, and subquery lifecycle lookup.
-3. Attach the participant to the existing cohort base with no exceptions.
-4. Increment `participant_count`.
-5. Remove the participant from fallback once ready.
+3. Add routing edge reverse rows for any optimized subquery node positions.
+4. Seed the participant's exact local view.
+5. Attach it to the cohort base either by initializing the base, adopting an
+   equivalent base, or storing the sparse diff from the base.
+6. Increment `participant_count`.
+7. Remove the participant from fallback once all participants for the shape are
+   ready.
 
-That path is O(number of participants in the shape), not O(number of values in the dependency view), provided the participant can safely adopt the cohort base.
+Seeding can be O(number of values in the dependency view), as it is today. The
+important bounded path is shape removal: once seeded, the participant does not
+own a full copy of the dependency view, only sparse exceptions.
+
+An O(number of participants) readiness path is only valid when the
+implementation can prove that the participant's local view equals the cohort
+base without comparing value sets. In the current architecture, dependency shape
+handle equality gives a safe cohort key, but it does not by itself prove that a
+consumer starting during an active move can adopt the current base with no
+exceptions.
 
 If a participant starts while a move is in progress, or if it cannot prove that its local dependency view equals the cohort base, it must stay in fallback until one of these is true:
 
@@ -462,8 +542,12 @@ remove_participant(participant):
   {shape_handle, cohort, subquery_ref, polarity} =
     {meta.shape_handle, meta.cohort, meta.subquery_ref, meta.polarity}
 
+  for edge in edges_by_participant(participant):
+    remove edge from positive_edges/negated_edges
+    remove node fallback row for edge if present
+    delete edge reverse row
+
   if meta.readiness == :indexed:
-    remove participant from participants(cohort, polarity)
     decrement participant_count(cohort)
 
   remove participant from participants_by_shape(shape_handle)
@@ -483,17 +567,21 @@ remove_participant(participant):
 Complexity:
 
 ```text
-O(P + E)
+O(P + R + E)
 ```
 
 where:
 
 ```text
 P = number of indexed or fallback subquery participants owned by the shape
+R = number of routing edges owned by those participants
 E = number of outstanding exception rows owned by those participants
 ```
 
-In the common case, `E = 0`, so removal is proportional only to the number of subquery positions in the shape.
+More precisely the removal path is `O(P + R + E)`. In the common case, `E = 0`,
+so removal is proportional only to the number of subquery dependencies and
+filter-node positions in the shape, not to the number of values in the
+dependency view.
 
 ### Subquery/cohort removal
 
@@ -522,7 +610,7 @@ remove_cohort(cohort):
 Complexity on the replication-critical path:
 
 ```text
-O(C + P_s + E_s)
+O(C + P_s + R_s + E_s)
 ```
 
 where:
@@ -530,6 +618,7 @@ where:
 ```text
 C = number of cohorts for the subquery lifecycle key
 P_s = number of indexed or fallback participants in those cohorts
+R_s = number of routing edges owned by those participants
 E_s = number of outstanding exception rows owned by those participants
 ```
 
@@ -608,6 +697,7 @@ Fallback participants are conservatively routed as affected candidates. They sho
 Definitions:
 
 - `P`: number of subquery participants
+- `R`: number of routing edges
 - `C`: number of subquery cohorts
 - `V`: number of values in the shared dependency view
 - `E`: number of outstanding sparse exceptions
@@ -621,7 +711,7 @@ O(P * V)
 Proposed approximate memory shape:
 
 ```text
-O(V + P + C + E)
+O(V + P + R + C + E)
 ```
 
 In steady state, where consumers share the same view:
@@ -654,8 +744,15 @@ The compact proposed figures include the lifecycle reverse indexes needed for bo
 ```text
 participant_meta
 cohort_meta
+cohort_by_key
+cohorts_by_node
+node_meta
+positive_edges
+negated_edges
+edges_by_participant
 participants_by_cohort
 cohorts_by_subquery
+node_fallback
 ```
 
 The practical read is simple:
@@ -668,14 +765,14 @@ The practical read is simple:
 
 | Scenario | Current | Compact proposed | Savings |
 |----------|---------|------------------|---------|
-| 1 participant, 1k values, steady state | 302.3 KiB | 131.8 KiB | 56.4% |
-| 10 participants, 1k values, steady state | 2.91 MiB | 136.7 KiB | 95.4% |
-| 100 participants, 1k values, steady state | 29.05 MiB | 185.2 KiB | 99.4% |
-| 100 participants, 10k values, steady state | 290.01 MiB | 1022.6 KiB | 99.7% |
-| 100 participants, 1k values, 100 moved x 1 lagging | 29.05 MiB | 199.2 KiB | 99.3% |
-| 100 participants, 1k values, 100 moved x 10 lagging | 29.05 MiB | 361.9 KiB | 98.8% |
-| 100 participants, 1k values, 100 moved x 99 lagging | 29.05 MiB | 1.7 MiB | 94.1% |
-| 100 participants, 1k values, 1k moved x 99 lagging | 29.05 MiB | 15.31 MiB | 47.3% |
+| 1 participant, 1k values, steady state | 302.3 KiB | 146.9 KiB | 51.4% |
+| 10 participants, 1k values, steady state | 2.91 MiB | 152.7 KiB | 94.9% |
+| 100 participants, 1k values, steady state | 29.05 MiB | 211.1 KiB | 99.3% |
+| 100 participants, 10k values, steady state | 290.01 MiB | 1.02 MiB | 99.6% |
+| 100 participants, 1k values, 100 moved x 1 lagging | 29.05 MiB | 225.1 KiB | 99.2% |
+| 100 participants, 1k values, 100 moved x 10 lagging | 29.05 MiB | 387.8 KiB | 98.7% |
+| 100 participants, 1k values, 100 moved x 99 lagging | 29.05 MiB | 1.73 MiB | 94.1% |
+| 100 participants, 1k values, 1k moved x 99 lagging | 29.05 MiB | 15.34 MiB | 47.2% |
 
 Interpretation:
 
@@ -687,9 +784,9 @@ Interpretation:
 
 | Scenario | Tagged RFC layout | Compact proposed | Savings |
 |----------|-------------------|------------------|---------|
-| 10 participants, 1k values, steady state | 200.3 KiB | 136.7 KiB | 31.8% |
-| 100 participants, 1k values, steady state | 282.4 KiB | 185.2 KiB | 34.4% |
-| 100 participants, 1k values, 100 moved x 10 lagging | 579.6 KiB | 361.9 KiB | 37.6% |
+| 10 participants, 1k values, steady state | 200.3 KiB | 152.7 KiB | 23.8% |
+| 100 participants, 1k values, steady state | 282.4 KiB | 211.1 KiB | 25.3% |
+| 100 participants, 1k values, 100 moved x 10 lagging | 579.6 KiB | 387.8 KiB | 33.1% |
 
 This is why the RFC now specifies compact `cohort_id` and `participant_id` values plus dedicated ETS tables rather than storing full participant tuples in hot rows.
 
@@ -704,12 +801,12 @@ For HumanLayer and AutoArc, the shape basis is distinct `WHERE` clauses because 
 
 | Customer | Observed basis | Observed subquery occurrences -> literal cohorts | Shared occurrences | Subquery participants @100k shapes | Cohorts @100k shapes | Rows/cohort | Current | Compact proposed | Savings |
 |----------|----------------|--------------------------------------------------|--------------------|------------------------------------|----------------------|-------------|---------|------------------|---------|
-| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 1,000 | 50.66 GiB | 1.67 GiB | 96.7% |
-| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 10,000 | 505.76 GiB | 15.68 GiB | 96.9% |
-| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 1,000 | 13.51 GiB | 3.12 GiB | 76.9% |
-| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 10,000 | 134.82 GiB | 30.76 GiB | 77.2% |
-| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 1,000 | 8.73 GiB | 2.8 GiB | 68.0% |
-| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 10,000 | 87.1 GiB | 27.66 GiB | 68.2% |
+| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 1,000 | 50.66 GiB | 1.71 GiB | 96.6% |
+| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 10,000 | 505.76 GiB | 15.71 GiB | 96.9% |
+| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 1,000 | 13.51 GiB | 3.14 GiB | 76.8% |
+| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 10,000 | 134.82 GiB | 30.78 GiB | 77.2% |
+| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 1,000 | 8.73 GiB | 2.81 GiB | 67.8% |
+| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 10,000 | 87.1 GiB | 27.68 GiB | 68.2% |
 
 Interpretation:
 
@@ -719,16 +816,46 @@ Interpretation:
 
 ### Complexity Check
 
-- **Is this the simplest approach?** No. The simplest approach is adding `shape_handle -> values` or tombstoning stale rows. Those approaches reduce removal latency but do not address the structural memory duplication. This proposal is the simplest approach that addresses both memory and removal latency while preserving per-consumer move correctness.
-- **What could we cut?** We can defer cross-node cohort interning, versioned lazy promotion, strict O(1) removal under pathological exception counts, and any major refactor outside the SubqueryIndex/consumer indexing boundary.
-- **What's the 90/10 solution?** Implement node-local cohorts with shared base membership and sparse XOR exceptions. Keep fallback for uncertain cases. Physically clear exceptions on promotion. Do not add tombstones, generations, or lazy invalidation until measurements justify them.
+- **Is this the simplest approach?** No. The simplest approach is adding `shape_handle -> values` or tombstoning stale rows. Those approaches reduce removal latency but do not address the structural memory duplication. This proposal is the simplest index-only approach that addresses both memory and removal latency while preserving per-consumer move correctness.
+- **Is this the most elegant end-state?** Probably not. A shared logical-time view, as explored in `docs/rfcs/subquery-logical-time-index.md`, models divergence directly as "participants are reading different times" and can also reduce duplicated consumer/materializer views. It is the cleaner long-term model, but it is a larger change because it crosses the SubqueryIndex, consumer state, move buffering, and query-generation boundaries.
+- **What could we cut?** We can defer versioned lazy promotion, strict O(1) removal under pathological exception counts, per-cohort ETS tables, and any major refactor outside the SubqueryIndex/consumer indexing boundary.
+- **What's the 90/10 solution?** Implement dependency-handle cohorts with shared base membership and sparse XOR exceptions. Separate membership participants from routing edges. Keep fallback for uncertain cases. Physically clear exceptions on promotion. Do not add tombstones, generations, or lazy invalidation until measurements justify them.
+
+### Recommendation Check
+
+The current recommendation is to treat this RFC as the best near-term production
+fix for issue #4279, not as the final architecture for all subquery state.
+
+Why this remains a good next step:
+
+- It fixes the observed shape-removal failure mode without adding a full-value
+  reverse index per shape.
+- It keeps changes mostly inside `SubqueryIndex` and the consumer seed/update
+  boundary.
+- The corrected memory model still shows large wins for shared cohorts, even
+  after including routing-edge and node-lookup tables.
+
+Why this may not be the final design:
+
+- Consumer/materializer processes can still hold their own dependency views,
+  including before/after views during active move-in buffering.
+- Exception memory can grow with `moved_values * divergent_participants` during
+  large, slow moves.
+- Readiness is less elegant than logical time because a new participant must
+  either seed a sparse diff or prove that it can adopt the current base.
+
+If the implementation budget allows a broader refactor, evaluate the
+logical-time RFC before starting this work. If the immediate goal is to remove
+the WAL-lag risk from shape cleanup while reducing index memory, implement this
+RFC first and collect the telemetry needed to decide whether logical time is
+worth the larger migration.
 
 ## Open Questions
 
 | Question | Options | Resolution Path |
 |----------|---------|-----------------|
-| **What exactly defines a cohort?** | Existing `node_id`; `{node_id, subquery_ref, dep_index}`; canonicalized dependency-query identity | Start conservative with a cohort key that cannot merge unlike views. Instrument duplicate-view/cohort-sharing opportunities before broader interning. |
-| **What exactly defines `subquery_key` for teardown?** | Dependency shape handle; canonical subquery occurrence; dependency handle plus occurrence | Use the lifecycle identity that invalidation receives. It must map directly to affected cohorts without scanning all shapes. |
+| **What exactly defines a cohort?** | Existing `node_id`; `{node_id, subquery_ref, dep_index}`; dependency shape handle; canonicalized dependency-query identity | Use dependency shape handle when available. It is the current runtime identity for a shared dependency view. Fall back to `{shape_handle, dep_index}` only when tests or restored state do not have dependency handles. Keep `cohorts_by_node` for routing from filter nodes to shared cohorts. |
+| **What exactly defines `subquery_key` for teardown?** | Dependency shape handle; canonical subquery occurrence; dependency handle plus occurrence | Use dependency shape handle when available because it maps directly to all cohorts for a dependency lifecycle event. It must not be a merely shape-local `$sublink` ref. |
 | **How can a new participant safely adopt the base?** | Adopt directly; remain fallback until quiescent; seed sparse diff; separate cohort | Define the readiness contract during implementation and add tests for registration during active moves. |
 | **Where should base membership be stored?** | Shared ETS table; per-cohort ETS table; cohort owner process | Choose based on cleanup behavior and ETS key locality. Avoid synchronous O(V) cleanup when the last participant leaves a cohort. |
 | **Should promotion happen during removal?** | Only for values touched by removed exceptions; never on removal; background compactor | Correctness does not require promotion on removal. Start with promotion only when values are touched by updates/removal of exceptions. Add compaction if needed. |
@@ -742,7 +869,7 @@ Interpretation:
 
 > We believe that implementing **shared SubqueryIndex base views with sparse XOR exceptions** will make subquery-indexed shape removal scalable and reduce memory consumption, while preserving the v1.6 behavior that keeps boolean subquery shapes live across dependency moves.
 >
-> We'll know we're right if shape removal latency is independent of total indexed shape count and normal dependency view size, whole-subquery/cohort teardown does not scan unrelated shapes, SubqueryIndex memory scales approximately with shared values plus participants rather than participants times values, and the existing subquery move correctness tests continue to pass.
+> We'll know we're right if shape removal latency is independent of total indexed shape count and normal dependency view size, whole-subquery/cohort teardown does not scan unrelated shapes, SubqueryIndex memory scales approximately with shared values plus participants and routing edges rather than participants times values, and the existing subquery move correctness tests continue to pass.
 >
 > We'll know we're wrong if exception sets remain large or long-lived in normal traffic, fallback routing causes unacceptable write amplification, or registration/readiness around active moves requires so much complexity that the design is not safer than the current per-shape model.
 
@@ -751,12 +878,12 @@ Interpretation:
 | Requirement | Acceptance Criteria |
 |-------------|---------------------|
 | Shape removal avoids full index scans | Removing a shape does not call broad `match_delete` or equivalent scans over value-keyed membership rows to find the shape. |
-| Removal cost depends on sparse state | Removal is O(P + E), where P is subquery participants for the shape and E is outstanding sparse exceptions for those participants. |
+| Removal cost depends on sparse state | Removal is O(P + R + E), where P is subquery participants for the shape, R is routing edges for those participants, and E is outstanding sparse exceptions. |
 | Whole-subquery teardown avoids global shape scans | Removing a subquery or cohort uses `cohorts_by_subquery` and `participants_by_cohort`, not enumeration of all shapes. |
-| Whole-subquery teardown cost depends on affected state | Critical-path teardown is O(C + P_s + E_s), plus off-path base cleanup. |
+| Whole-subquery teardown cost depends on affected state | Critical-path teardown is O(C + P_s + R_s + E_s), plus off-path base cleanup. |
 | Common dependency view is shared | N participants with the same cohort view store one base membership set plus participant rows, not N full membership sets. |
-| Positive routing remains exact | For positive subquery participants, candidate routing matches `base XOR exception`. |
-| Negated routing remains exact | For negated subquery participants, candidate routing matches `NOT (base XOR exception)`. |
+| Positive routing remains exact | For positive subquery routing edges, candidate routing matches `base XOR exception`. |
+| Negated routing remains exact | For negated subquery routing edges, candidate routing matches `NOT (base XOR exception)`. |
 | DNF branch behavior is preserved | Candidates continue through the existing `WhereCondition` branch using `next_condition_id` and branch metadata. |
 | Fallback is preserved | Participants that are not safely represented by base + exceptions are routed conservatively. |
 | No tombstones in v1 | Removed participants are deleted from participant and exception indexes rather than marked dead. |
@@ -770,7 +897,7 @@ Interpretation:
 2. How large and long-lived do exception sets become during realistic move workloads?
 3. Does fallback routing remain rare enough that conservative routing is not a throughput problem?
 4. Are promotions frequent or large enough to justify versioned lazy clearing later?
-5. Is node-local cohorting enough, or do we need cross-node/cross-shape cohort interning to get the expected memory savings?
+5. Is dependency-handle cohorting enough, or do we need broader canonical dependency-plan interning to get the expected memory savings?
 
 ## Alternatives Considered
 
@@ -804,6 +931,17 @@ Interpretation:
 
 **Why not:** This can make promotion O(1), but it adds versioning complexity and cleanup debt. It is not needed for correctness. Defer until promotion cost is measured.
 
+### Alternative 6: Shared logical-time views
+
+**Description:** Replace per-participant exceptions with one versioned cohort view
+and pin each participant to the logical time that matches its local state.
+
+**Why not first:** This is the cleaner long-term design and can also reduce
+consumer/materializer view duplication, but it crosses more subsystem
+boundaries. It should be evaluated before implementation if the team is ready
+for a broader refactor. For the narrower shape-removal and SubqueryIndex memory
+problem, the XOR design is the lower-risk first step.
+
 ## Implementation Plan
 
 This change ships as a single cutover release, not a staged rollout behind a feature flag. The development work can still happen in sequence:
@@ -822,12 +960,12 @@ This change ships as a single cutover release, not a staged rollout behind a fea
 
 ### 2. Implement the new index
 
-- Add cohort and participant registration structures.
+- Add cohort, participant, and routing-edge registration structures.
 - Add shape, cohort, and subquery lifecycle reverse indexes.
 - Add base membership and sparse exception indexes.
 - Implement `remove_participant`, `remove_cohort`, and `remove_subquery` helpers that share cleanup logic.
 - Implement `set_membership/4`, `add_value`, and `remove_value` wrappers.
-- Implement affected-shape routing for positive and negated participants.
+- Implement affected-shape routing for positive and negated routing edges.
 - Keep existing fallback behavior for unready participants.
 - Compare candidate routing and shape logs against the old implementation in tests where practical.
 
@@ -918,17 +1056,17 @@ Expected shape:
 
 ```text
 current memory:             O(S * V)
-proposed memory:            O(V + S + C + E)
+proposed memory:            O(V + P + R + C + E)
 current shape removal:      O(index scan / value rows)
-proposed shape removal:     O(P + E)
-proposed subquery removal:  O(C + P_s + E_s) plus off-path base cleanup
+proposed shape removal:     O(P + R + E)
+proposed subquery removal:  O(C + P_s + R_s + E_s) plus off-path base cleanup
 ```
 
 ## Risks and Mitigations
 
 | Risk | Mitigation |
 |------|------------|
-| Cohort key accidentally merges participants with different steady-state views | Start with conservative cohort keys and add tests that prove views are shareable before interning more aggressively. |
+| Cohort key accidentally merges participants with different steady-state views | Use dependency shape handle as the default cohort key and add tests that prove views are shareable before interning more aggressively. |
 | Participant joins base while its local view is not equal to base | Keep participant in fallback until readiness is proven. Make `mark_ready` assert or validate alignment. |
 | Exceptions become large and long-lived | Add telemetry for exception count and age. Consider cohort rebuild, global compaction, or versioned lazy promotion if needed. |
 | Promotion clearing becomes expensive | Defer initially; add base/exception versions only if measurements show promotion cost is material. |
@@ -941,6 +1079,7 @@ proposed subquery removal:  O(C + P_s + E_s) plus off-path base cleanup
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.5 | 2026-05-13 | robacourt | Re-evaluated the design against the current implementation, switched the recommended cohort key to dependency shape handle, split membership participants from routing edges, added the required node-to-cohort routing indexes, compared the XOR design with logical-time views, and regenerated memory figures. |
 | 0.4 | 2026-05-13 | robacourt | Added explicit whole-subquery/cohort teardown requirements, reverse indexes, complexity bounds, regenerated memory figures, 100k-shape customer workload estimates, and tests to prevent O(total shapes) lifecycle scans. |
 | 0.3 | 2026-05-06 | robacourt | Readability pass: tightened the opening sections, added a current-vs-proposed summary table, and converted pseudo-list code blocks into normal prose/lists. |
 | 0.2 | 2026-05-06 | robacourt | Added measured ETS memory tables, switched the proposed layout to compact interned ids plus dedicated tables, and clarified the single-release cutover plan. |
@@ -962,7 +1101,7 @@ Before submitting for review, verify:
 **Calibration for Level 1-2 PMF**
 
 - [x] This is the simplest approach that addresses both removal latency and memory duplication
-- [x] Non-goals explicitly defer cross-node interning, lazy versions, and strict pathological O(1) removal
+- [x] Non-goals explicitly defer broader dependency-plan interning, lazy versions, and strict pathological O(1) removal
 - [x] Complexity Check section is filled out honestly
 - [x] An engineer could start by implementing the pure model and telemetry
 

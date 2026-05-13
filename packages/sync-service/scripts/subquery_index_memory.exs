@@ -162,7 +162,12 @@ defmodule SubqueryIndexMemoryBench do
   defp compact_workload_tables(participants, cohorts, values_per_cohort) do
     participant_meta = :ets.new(:compact_workload_participant_meta, [:set, :public])
     cohort_meta = :ets.new(:compact_workload_cohort_meta, [:set, :public])
+    cohort_by_key = :ets.new(:compact_workload_cohort_by_key, [:set, :public])
+    cohorts_by_node = :ets.new(:compact_workload_cohorts_by_node, [:bag, :public])
+    node_meta = :ets.new(:compact_workload_node_meta, [:set, :public])
     positive = :ets.new(:compact_workload_positive_participants, [:bag, :public])
+    negated = :ets.new(:compact_workload_negated_participants, [:bag, :public])
+    edges_by_participant = :ets.new(:compact_workload_edges_by_participant, [:bag, :public])
     by_shape = :ets.new(:compact_workload_participants_by_shape, [:bag, :public])
     by_cohort = :ets.new(:compact_workload_participants_by_cohort, [:bag, :public])
     cohorts_by_subquery = :ets.new(:compact_workload_cohorts_by_subquery, [:bag, :public])
@@ -170,13 +175,19 @@ defmodule SubqueryIndexMemoryBench do
     participant_count = :ets.new(:compact_workload_participant_count, [:set, :public])
     cohort_value = :ets.new(:compact_workload_cohort_value, [:set, :public])
     exceptions = :ets.new(:compact_workload_exception_by_value, [:bag, :public])
+    node_fallback = :ets.new(:compact_workload_node_fallback, [:bag, :public])
 
     exceptions_by_participant =
       :ets.new(:compact_workload_exception_by_participant, [:bag, :public])
 
     for cohort <- ints(cohorts) do
       subquery_key = {:dependency, "dep_handle_#{cohort}", @ref}
-      :ets.insert(cohort_meta, {cohort, subquery_key, @node, :active})
+      node = {:node, cohort}
+      cohort_key = {:dependency_shape, "dep_handle_#{cohort}"}
+      :ets.insert(cohort_meta, {cohort, cohort_key, subquery_key, :active})
+      :ets.insert(cohort_by_key, {cohort_key, cohort})
+      :ets.insert(cohorts_by_node, {node, cohort})
+      :ets.insert(node_meta, {node, %{testexpr: :testexpr}})
       :ets.insert(cohorts_by_subquery, {subquery_key, cohort})
       :ets.insert(participant_count, {cohort, 0})
 
@@ -187,6 +198,7 @@ defmodule SubqueryIndexMemoryBench do
 
     for participant <- ints(participants) do
       cohort = rem(participant - 1, max(cohorts, 1)) + 1
+      node = {:node, cohort}
 
       :ets.insert(participant_meta, {
         participant,
@@ -200,7 +212,8 @@ defmodule SubqueryIndexMemoryBench do
         :indexed
       })
 
-      :ets.insert(positive, {cohort, participant, participant})
+      :ets.insert(positive, {{node, cohort}, participant, participant})
+      :ets.insert(edges_by_participant, {participant, node, cohort, :positive, participant, []})
       :ets.insert(by_shape, {participant, participant, cohort, :positive})
       :ets.insert(by_cohort, {cohort, participant})
       :ets.insert(shape_ref, {{participant, @ref}, participant, cohort})
@@ -209,13 +222,19 @@ defmodule SubqueryIndexMemoryBench do
     %{
       participant_meta: participant_meta,
       cohort_meta: cohort_meta,
+      cohort_by_key: cohort_by_key,
+      cohorts_by_node: cohorts_by_node,
+      node_meta: node_meta,
       positive: positive,
+      negated: negated,
+      edges_by_participant: edges_by_participant,
       by_shape: by_shape,
       by_cohort: by_cohort,
       cohorts_by_subquery: cohorts_by_subquery,
       shape_ref: shape_ref,
       participant_count: participant_count,
       cohort_value: cohort_value,
+      node_fallback: node_fallback,
       exceptions: exceptions,
       exceptions_by_participant: exceptions_by_participant
     }
@@ -224,7 +243,12 @@ defmodule SubqueryIndexMemoryBench do
   defp compact_tables(participants, values, moved, lagging) do
     participant_meta = :ets.new(:compact_participant_meta, [:set, :public])
     cohort_meta = :ets.new(:compact_cohort_meta, [:set, :public])
+    cohort_by_key = :ets.new(:compact_cohort_by_key, [:set, :public])
+    cohorts_by_node = :ets.new(:compact_cohorts_by_node, [:bag, :public])
+    node_meta = :ets.new(:compact_node_meta, [:set, :public])
     positive = :ets.new(:compact_positive_participants, [:bag, :public])
+    negated = :ets.new(:compact_negated_participants, [:bag, :public])
+    edges_by_participant = :ets.new(:compact_edges_by_participant, [:bag, :public])
     by_shape = :ets.new(:compact_participants_by_shape, [:bag, :public])
     by_cohort = :ets.new(:compact_participants_by_cohort, [:bag, :public])
     cohorts_by_subquery = :ets.new(:compact_cohorts_by_subquery, [:bag, :public])
@@ -232,10 +256,16 @@ defmodule SubqueryIndexMemoryBench do
     participant_count = :ets.new(:compact_participant_count, [:set, :public])
     cohort_value = :ets.new(:compact_cohort_value, [:set, :public])
     exceptions = :ets.new(:compact_exception_by_value, [:bag, :public])
+    node_fallback = :ets.new(:compact_node_fallback, [:bag, :public])
     exceptions_by_participant = :ets.new(:compact_exception_by_participant, [:bag, :public])
     moved_values = MapSet.new(ints(moved))
 
-    :ets.insert(cohort_meta, {@cohort, @subquery_key, @node, :active})
+    cohort_key = {:dependency_shape, "dep_handle_0"}
+
+    :ets.insert(cohort_meta, {@cohort, cohort_key, @subquery_key, :active})
+    :ets.insert(cohort_by_key, {cohort_key, @cohort})
+    :ets.insert(cohorts_by_node, {@node, @cohort})
+    :ets.insert(node_meta, {@node, %{testexpr: :testexpr}})
     :ets.insert(cohorts_by_subquery, {@subquery_key, @cohort})
     :ets.insert(participant_count, {@cohort, participants})
 
@@ -252,7 +282,8 @@ defmodule SubqueryIndexMemoryBench do
         :indexed
       })
 
-      :ets.insert(positive, {@cohort, participant, participant})
+      :ets.insert(positive, {{@node, @cohort}, participant, participant})
+      :ets.insert(edges_by_participant, {participant, @node, @cohort, :positive, participant, []})
       :ets.insert(by_shape, {participant, participant, @cohort, :positive})
       :ets.insert(by_cohort, {@cohort, participant})
       :ets.insert(shape_ref, {{participant, @ref}, participant, @cohort})
@@ -274,13 +305,19 @@ defmodule SubqueryIndexMemoryBench do
     %{
       participant_meta: participant_meta,
       cohort_meta: cohort_meta,
+      cohort_by_key: cohort_by_key,
+      cohorts_by_node: cohorts_by_node,
+      node_meta: node_meta,
       positive: positive,
+      negated: negated,
+      edges_by_participant: edges_by_participant,
       by_shape: by_shape,
       by_cohort: by_cohort,
       cohorts_by_subquery: cohorts_by_subquery,
       shape_ref: shape_ref,
       participant_count: participant_count,
       cohort_value: cohort_value,
+      node_fallback: node_fallback,
       exceptions: exceptions,
       exceptions_by_participant: exceptions_by_participant
     }
