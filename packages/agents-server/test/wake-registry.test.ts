@@ -44,7 +44,14 @@ function createMockDb(): any {
       }),
     }),
     select: () => ({
-      from: () => Promise.resolve([]),
+      from: () =>
+        Object.assign(Promise.resolve([]), {
+          where: () =>
+            Object.assign(Promise.resolve([]), {
+              limit: () => Promise.resolve([]),
+              orderBy: () => Promise.resolve([]),
+            }),
+        }),
     }),
   }
 }
@@ -928,7 +935,7 @@ describe(`Wake Registry Integration`, () => {
     await fetch(`${baseUrl}/_electric/entities${parent.url}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ from: `test`, payload: `init` }),
+      body: JSON.stringify({ payload: `init` }),
     })
 
     // Wait for the parent's webhook
@@ -1448,7 +1455,7 @@ describe(`Wake Registry Integration`, () => {
     await fetch(`${baseUrl}/_electric/entities${watcher.url}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ from: `test`, payload: `init` }),
+      body: JSON.stringify({ payload: `init` }),
     })
     const afterSendTarget = wakeCount + 1
     await waitForWakes(afterSendTarget)
@@ -1525,7 +1532,7 @@ describe(`Wake Registry Integration`, () => {
     await fetch(`${baseUrl}/_electric/entities${subscriber.url}/send`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ from: `test`, payload: `init` }),
+      body: JSON.stringify({ payload: `init` }),
     })
     const afterSendTarget = wakeCount + 1
     await waitForWakes(afterSendTarget)

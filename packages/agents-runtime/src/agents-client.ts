@@ -16,6 +16,7 @@ import type {
 export interface AgentsClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
+  principalKey?: string
 }
 
 export interface AgentsClient {

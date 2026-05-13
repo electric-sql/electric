@@ -665,7 +665,15 @@ describe(`processWake`, () => {
       },
     })
 
-    await processWake(makeNotification(), BASE_CONFIG)
+    await processWake(
+      makeNotification({
+        principal: {
+          url: `http://localhost:3000/test-agent/agent-1`,
+          key: `entity:test-agent/agent-1`,
+        },
+      }),
+      BASE_CONFIG
+    )
 
     const sendCalls = fetchMock.mock.calls.filter(([url]) =>
       String(url).includes(`/send`)
@@ -674,7 +682,10 @@ describe(`processWake`, () => {
     const [sendUrl, sendOpts] = sendCalls[0]!
     expect(String(sendUrl)).toContain(`target-entity-2/send`)
     const body = JSON.parse(sendOpts!.body as string) as Record<string, unknown>
-    expect(body.from).toBe(`http://localhost:3000/test-agent/agent-1`)
+    expect(body.from).toBeUndefined()
+    expect((sendOpts!.headers as Headers).get(`electric-principal`)).toBe(
+      `entity:test-agent/agent-1`
+    )
     expect((body.payload as Record<string, unknown>).action).toBe(`ping`)
   })
 

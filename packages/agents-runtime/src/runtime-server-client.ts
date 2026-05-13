@@ -2,12 +2,15 @@ import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import type { ClaimTokenHeader, HeadersProvider } from './types'
 
+const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
+
 export interface RuntimeServerClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
   headers?: HeadersProvider
   writeTokenHeader?: ClaimTokenHeader
   track?: <T>(promise: Promise<T>) => Promise<T>
+  principalKey?: string
 }
 
 export interface RuntimeEntityInfo {
@@ -52,7 +55,6 @@ export interface SpawnEntityOptions {
 export interface SendEntityMessageOptions {
   targetUrl: string
   payload: unknown
-  from?: string
   type?: string
   afterMs?: number
   mode?: `immediate` | `queued` | `paused` | `steer`
@@ -103,7 +105,6 @@ export interface RuntimeServerClient {
     payload: unknown
     targetUrl?: string
     fireAt: string
-    from?: string
     messageType?: string
   }) => Promise<{ txid: string }>
   deleteSchedule: (options: {
@@ -189,6 +190,9 @@ export function createRuntimeServerClient(
     init?: RequestInit
   ): Promise<Response> => {
     const headers = await resolveHeaders(init?.headers)
+    if (config.principalKey) {
+      headers.set(ELECTRIC_PRINCIPAL_HEADER, config.principalKey)
+    }
     return track(
       fetchImpl(appendPathToUrl(config.baseUrl, path), {
         ...init,
@@ -226,14 +230,12 @@ export function createRuntimeServerClient(
   const sendEntityMessage = async ({
     targetUrl,
     payload,
-    from,
     type,
     afterMs,
     mode,
     position,
   }: SendEntityMessageOptions): Promise<void> => {
     const body: Record<string, unknown> = { payload }
-    if (from !== undefined) body.from = from
     if (type !== undefined) body.type = type
     if (afterMs !== undefined) body.afterMs = afterMs
     if (mode !== undefined) body.mode = mode
@@ -436,7 +438,6 @@ export function createRuntimeServerClient(
     payload: unknown
     targetUrl?: string
     fireAt: string
-    from?: string
     messageType?: string
   }): Promise<{ txid: string }> => {
     const response = await request(
@@ -449,7 +450,6 @@ export function createRuntimeServerClient(
           payload: options.payload,
           targetUrl: options.targetUrl,
           fireAt: options.fireAt,
-          from: options.from,
           messageType: options.messageType,
         }),
       }

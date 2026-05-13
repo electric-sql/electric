@@ -104,7 +104,6 @@ describe(`Scheduler Integration`, () => {
         method: `POST`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify({
-          from: `tester`,
           payload: `hello later`,
           afterMs: 750,
         }),
@@ -132,7 +131,7 @@ describe(`Scheduler Integration`, () => {
     expect(inboxEvents, JSON.stringify(events, null, 2)).toHaveLength(1)
     expect(inboxEvents[0]!.key).toMatch(/^scheduled-task-\d+$/)
     expect((inboxEvents[0]!.value as Record<string, unknown>).from).toBe(
-      `tester`
+      `/principal/system%3Adev-local`
     )
     expect((inboxEvents[0]!.value as Record<string, unknown>).payload).toBe(
       `hello later`

@@ -3,18 +3,14 @@
  */
 
 import type { WebhookNotification } from '@electric-ax/agents-runtime'
+import type { Principal } from './principal.js'
 
 type WakeNotification = WebhookNotification
 
-export interface AuthenticatedRequestUser {
-  userId: string
-  email?: string
-  name?: string
-}
-
+export type RequestPrincipal = Principal
 export type AuthenticateRequest = (
   request: Request
-) => Promise<AuthenticatedRequestUser | null> | AuthenticatedRequestUser | null
+) => Promise<Principal | null> | Principal | null
 
 export type EntityStatus = `spawning` | `running` | `idle` | `stopped`
 
@@ -211,6 +207,7 @@ export interface ElectricAgentsEntity {
   type_revision?: number
   inbox_schemas?: Record<string, Record<string, unknown>>
   state_schemas?: Record<string, Record<string, unknown>>
+  created_by?: string
   created_at: number
   updated_at: number
 }
@@ -225,6 +222,7 @@ export interface PublicElectricAgentsEntity {
   tags: Record<string, string>
   spawn_args?: Record<string, unknown>
   parent?: string
+  created_by?: string
   created_at: number
   updated_at: number
 }
@@ -248,6 +246,7 @@ export function toPublicEntity(
     tags: entity.tags,
     spawn_args: entity.spawn_args,
     parent: entity.parent,
+    created_by: entity.created_by,
     created_at: entity.created_at,
     updated_at: entity.updated_at,
   }
@@ -283,6 +282,7 @@ export interface TypedSpawnRequest {
   parent?: string
   dispatch_policy?: DispatchPolicy
   initialMessage?: unknown
+  created_by?: string
   wake?: {
     subscriberUrl: string
     condition:
@@ -314,6 +314,7 @@ export interface SetTagRequest {
 export interface EntityListFilter {
   type?: string
   status?: EntityStatus
+  created_by?: string
 }
 
 export const ErrCodeDuplicateURL = `DUPLICATE_URL`

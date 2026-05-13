@@ -14,6 +14,12 @@ import type { TenantContext } from '../src/routing/context'
 function buildCtx(overrides: Partial<TenantContext> = {}): TenantContext {
   return {
     service: `tenant-test`,
+    principal: {
+      kind: `system`,
+      id: `framework`,
+      key: `system:framework`,
+      url: `/principal/system:framework`,
+    },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://ds`,
     durableStreamsDispatcher: undefined as any,

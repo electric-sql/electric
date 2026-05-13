@@ -9,6 +9,7 @@ import {
 } from '../electric-agents-types.js'
 import { runnerWakeStream } from '../entity-registry.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
+import { serverLog } from '../utils/log.js'
 import type {
   DispatchPolicy,
   DispatchTarget,
@@ -81,7 +82,7 @@ export async function backfillEntityDispatchPolicy(
   )
 }
 
-function applyTypeDefaultSubscriptionScope(
+export function applyTypeDefaultSubscriptionScope(
   policy: DispatchPolicy,
   typeDefault: DispatchPolicy | undefined
 ): DispatchPolicy {
@@ -123,10 +124,7 @@ export async function assertDispatchPolicyAllowed(
       404
     )
   }
-  if (
-    ctx.authenticatedUser &&
-    runner.owner_user_id !== ctx.authenticatedUser.userId
-  ) {
+  if (ctx.principal && runner.owner_user_id !== ctx.principal.key) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner dispatch requires the authenticated owner`,
@@ -164,7 +162,13 @@ export async function unlinkEntityDispatchSubscription(
   )
   await ctx.streamClient
     .removeSubscriptionStream(subscriptionId, entity.streams.main)
-    .catch(() => {})
+    .catch((err) => {
+      serverLog.warn(
+        `[dispatch-policy] failed to remove stream from subscription`,
+        { subscriptionId, stream: entity.streams.main },
+        err
+      )
+    })
 }
 
 async function linkStreamToTargetSubscription(

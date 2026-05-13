@@ -13,6 +13,7 @@ import {
 import { routeBody, withSchema } from './schema.js'
 import { subscriptionIdForDispatchTarget } from './dispatch-policy.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
+import { principalFromCreatedBy } from '../principal.js'
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
@@ -104,7 +105,7 @@ async function registerRunner(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<RegisterRunnerBody>(request)
-  const ownerUserId = parsed.owner_user_id ?? ctx.authenticatedUser?.userId
+  const ownerUserId = parsed.owner_user_id ?? ctx.principal?.key
   if (!ownerUserId) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
@@ -112,7 +113,7 @@ async function registerRunner(
       400
     )
   }
-  if (ctx.authenticatedUser && ownerUserId !== ctx.authenticatedUser.userId) {
+  if (ctx.principal && ownerUserId !== ctx.principal.key) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `owner_user_id must match the authenticated user`,
@@ -139,11 +140,7 @@ async function listRunners(
   ctx: TenantContext
 ): Promise<Response> {
   const requestedOwner = firstQueryValue(request.query.owner_user_id)
-  if (
-    ctx.authenticatedUser &&
-    requestedOwner &&
-    requestedOwner !== ctx.authenticatedUser.userId
-  ) {
+  if (ctx.principal && requestedOwner && requestedOwner !== ctx.principal.key) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `owner_user_id must match the authenticated user`,
@@ -151,7 +148,7 @@ async function listRunners(
     )
   }
   const runners = await ctx.entityManager.registry.listRunners({
-    ownerUserId: ctx.authenticatedUser?.userId ?? requestedOwner,
+    ownerUserId: ctx.principal?.key ?? requestedOwner,
   })
   return json(runners)
 }
@@ -225,10 +222,7 @@ async function claimWake(
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
   const runner = await requireRunner(ctx, runnerId)
-  if (
-    ctx.authenticatedUser &&
-    runner.owner_user_id !== ctx.authenticatedUser.userId
-  ) {
+  if (ctx.principal && runner.owner_user_id !== ctx.principal.key) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner claim requires the authenticated owner`,
@@ -304,8 +298,8 @@ function assertRunnerOwnerIfAuthenticated(
   ctx: TenantContext,
   ownerUserId: string
 ): void {
-  if (!ctx.authenticatedUser) return
-  if (ownerUserId === ctx.authenticatedUser.userId) return
+  if (!ctx.principal) return
+  if (ownerUserId === ctx.principal.key) return
   throw new ElectricAgentsError(
     ErrCodeUnauthorized,
     `Runner access requires the authenticated owner`,
@@ -407,6 +401,8 @@ async function notificationFromClaim(
       streams: entity.streams,
       tags: entity.tags,
       spawnArgs: entity.spawn_args,
+      createdBy: entity.created_by,
     },
+    principal: principalFromCreatedBy(entity.created_by),
   }
 }

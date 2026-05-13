@@ -189,7 +189,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`send-test-worker`, `entity-1`)
-        .send({ task: `hello` }, { from: `user-1` })
+        .send({ task: `hello` })
         .expectWebhook()
         .respondDone()
         .readStream()
@@ -200,7 +200,7 @@ export function runElectricAgentsConformanceTests(
           )!
           expect(envelope.type).toBe(`inbox`)
           expect(envelope.key).toBeDefined()
-          expect(envelope.value?.from).toBe(`user-1`)
+          expect(envelope.value?.from).toMatch(/^\/principal\//)
           expect(envelope.value?.payload).toEqual({ task: `hello` })
         })
         .run())
@@ -215,7 +215,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`webhook-ctx-agent`, `entity-1`)
-        .send({ ping: true }, { from: `test` })
+        .send({ ping: true })
         .expectWebhook()
         .expectEntityContext({
           type: `webhook-ctx-agent`,
@@ -234,7 +234,7 @@ export function runElectricAgentsConformanceTests(
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
-              body: JSON.stringify({ from: `test`, payload: {} }),
+              body: JSON.stringify({ payload: {} }),
             }
           )
           expect(res.status).toBe(404)
@@ -253,13 +253,13 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`order-test-agent-${id}`, `entity-1`)
-        .send({ seq: 1 }, { from: `test` })
+        .send({ seq: 1 })
         .expectWebhook()
         .respondDone()
-        .send({ seq: 2 }, { from: `test` })
+        .send({ seq: 2 })
         .expectWebhook()
         .respondDone()
-        .send({ seq: 3 }, { from: `test` })
+        .send({ seq: 3 })
         .expectWebhook()
         .respondDone()
         .readStream()
@@ -273,8 +273,8 @@ export function runElectricAgentsConformanceTests(
         .run()
     })
 
-    // Spec: S7, C5
-    test(`send without from is rejected`, () =>
+    // Spec: S7 — from is derived from principal, omitting it is valid
+    test(`send without from uses principal`, () =>
       electricAgents(config.baseUrl)
         .subscription(`/nofrom-test-agent/**`, `nofrom-test-sub`)
         .registerType({
@@ -292,10 +292,10 @@ export function runElectricAgentsConformanceTests(
               body: JSON.stringify({ payload: { hello: true } }),
             }
           )
-          expect(res.status).toBe(400)
-          const body = await res.json()
-          expect(body.error.code).toBe(`INVALID_REQUEST`)
+          expect(res.status).toBe(204)
         })
+        .expectWebhook()
+        .respondDone()
         .run())
   })
 
@@ -404,7 +404,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`kill-persist-agent`, `entity-1`)
-        .send({ before: `kill` }, { from: `test` })
+        .send({ before: `kill` })
         .expectWebhook()
         .respondDone()
         .kill()
@@ -480,7 +480,7 @@ export function runElectricAgentsConformanceTests(
         })
         .spawn(`e2e-test-agent`, `entity-1`)
         .expectStatus(`running`)
-        .send({ task: `do-something` }, { from: `user-1` })
+        .send({ task: `do-something` })
         .expectWebhook()
         .expectEntityContext({ type: `e2e-test-agent` })
         .respondDone()
@@ -899,7 +899,7 @@ export function runElectricAgentsConformanceTests(
           },
         })
         .spawn(typeName, `entity-1`)
-        .send({ text: `hello` }, { from: `user`, type: `query` })
+        .send({ text: `hello` }, { type: `query` })
         .expectWebhook()
         .respondDone()
         .run()
@@ -922,10 +922,7 @@ export function runElectricAgentsConformanceTests(
           },
         })
         .spawn(typeName, `entity-1`)
-        .expectSendSchemaError(
-          { invalid: true },
-          { from: `user`, type: `query` }
-        )
+        .expectSendSchemaError({ invalid: true }, { type: `query` })
         .run()
     })
 
@@ -946,10 +943,7 @@ export function runElectricAgentsConformanceTests(
           },
         })
         .spawn(typeName, `entity-1`)
-        .expectSendUnknownType(
-          { text: `hi` },
-          { from: `user`, type: `unknown_type` }
-        )
+        .expectSendUnknownType({ text: `hi` }, { type: `unknown_type` })
         .run()
     })
 
@@ -963,7 +957,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(typeName, `entity-1`)
-        .send({ anything: `goes` }, { from: `user` })
+        .send({ anything: `goes` })
         .expectWebhook()
         .respondDone()
         .run()
@@ -980,10 +974,7 @@ export function runElectricAgentsConformanceTests(
           input_schemas: {},
         })
         .spawn(typeName, `entity-1`)
-        .expectSendUnknownType(
-          { text: `anything` },
-          { from: `user`, type: `some_type` }
-        )
+        .expectSendUnknownType({ text: `anything` }, { type: `some_type` })
         .run()
     })
 
@@ -1264,7 +1255,7 @@ export function runElectricAgentsConformanceTests(
           },
         })
         .spawn(typeName, `entity-1`)
-        .send({ action: `do-it` }, { from: `user`, type: `command` })
+        .send({ action: `do-it` }, { type: `command` })
         .expectWebhook()
         .respondDone()
         .run()
@@ -1520,7 +1511,6 @@ export function runElectricAgentsConformanceTests(
                       {
                         method: `POST`,
                         body: JSON.stringify({
-                          from: `prop-test`,
                           payload: { action: `prop-send`, targetIdx },
                         }),
                       }
@@ -1530,7 +1520,6 @@ export function runElectricAgentsConformanceTests(
                       type: `message_sent`,
                       entityUrl: url,
                       payload: { action: `prop-send`, targetIdx },
-                      from: `prop-test`,
                     })
                   })
 
@@ -1943,7 +1932,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`sp-send-worker`, `entity-1`)
-        .send({ text: `hello world` }, { from: `user-1` })
+        .send({ text: `hello world` })
         .expectWebhook()
         .respondDone()
         .readStream()
@@ -1953,7 +1942,7 @@ export function runElectricAgentsConformanceTests(
           // State Protocol format — from/payload in value, headers present
           expect(msgEvent.type).toBe(`inbox`)
           expect(msgEvent.key).toBeDefined()
-          expect(msgEvent.value?.from).toBe(`user-1`)
+          expect(msgEvent.value?.from).toMatch(/^\/principal\//)
           expect(msgEvent.value?.payload).toEqual({ text: `hello world` })
           expect(msgEvent.headers).toBeDefined()
         })
@@ -1968,10 +1957,10 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`sp-inv-worker`, `entity-1`)
-        .send({ text: `first` }, { from: `tester` })
+        .send({ text: `first` })
         .expectWebhook()
         .respondDone()
-        .send({ text: `second` }, { from: `tester` })
+        .send({ text: `second` })
         .expectWebhook()
         .respondDone()
         .readStream()
@@ -1994,13 +1983,13 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`sp-keys-agent-${id}`, `entity-1`)
-        .send({ seq: 1 }, { from: `test` })
+        .send({ seq: 1 })
         .expectWebhook()
         .respondDone()
-        .send({ seq: 2 }, { from: `test` })
+        .send({ seq: 2 })
         .expectWebhook()
         .respondDone()
-        .send({ seq: 3 }, { from: `test` })
+        .send({ seq: 3 })
         .expectWebhook()
         .respondDone()
         .readStream()
@@ -2036,7 +2025,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`flum-agent-${id}`, `entity-1`)
-        .send({ text: `test message for parsing` }, { from: `tester` })
+        .send({ text: `test message for parsing` })
         .expectWebhook()
         .respondDone()
         .readStream()
@@ -2067,7 +2056,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`flum-all-agent-${id}`, `entity-1`)
-        .send({ text: `verify all SP` }, { from: `tester` })
+        .send({ text: `verify all SP` })
         .expectWebhook()
         .respondDone()
         .readStream()
@@ -2150,7 +2139,7 @@ export function runElectricAgentsConformanceTests(
             `${ctx.currentEntityUrl!}/send`,
             {
               method: `POST`,
-              body: JSON.stringify({ from: `tester` }),
+              body: JSON.stringify({}),
             }
           )
           expect(res.status).toBe(400)
@@ -2282,7 +2271,6 @@ export function runElectricAgentsConformanceTests(
             {
               method: `POST`,
               body: JSON.stringify({
-                from: `tester`,
                 payload: { reason: `bye` },
                 type: `farewell`,
               }),
@@ -2337,7 +2325,7 @@ export function runElectricAgentsConformanceTests(
           creation_schema: { type: `object` },
         })
         .spawn(`seq-meta-agent-${id}`, `entity-1`)
-        .send({ trigger: `claim` }, { from: `test` })
+        .send({ trigger: `claim` })
         .expectWebhook()
         .custom(async (ctx) => {
           const notification = ctx.notification!
@@ -2594,7 +2582,7 @@ export function runElectricAgentsConformanceTests(
             {
               method: `POST`,
               headers: { 'content-type': `application/json` },
-              body: JSON.stringify({ from: `tester`, payload: `hi` }),
+              body: JSON.stringify({ payload: `hi` }),
             }
           )
           expect(res.status).toBe(204)
@@ -3068,7 +3056,7 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
       {
         method: `POST`,
         headers: { 'content-type': `application/json` },
-        body: JSON.stringify({ payload: { text }, from: `tester` }),
+        body: JSON.stringify({ payload: { text } }),
       }
     )
     expect(

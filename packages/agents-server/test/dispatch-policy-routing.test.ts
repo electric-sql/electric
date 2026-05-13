@@ -41,7 +41,12 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
   }
   return {
     service: `tenant-test`,
-    authenticatedUser: { userId: `owner@example.com` },
+    principal: {
+      kind: `user`,
+      id: `owner@example.com`,
+      key: `user:owner@example.com`,
+      url: `/principal/user:owner@example.com`,
+    },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
     durableStreamsDispatcher: undefined as any,
@@ -63,7 +68,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
         ),
         getRunner: vi.fn(async () => ({
           id: `runner-1`,
-          owner_user_id: `owner@example.com`,
+          owner_user_id: `user:owner@example.com`,
           label: `Local runner`,
           kind: `local`,
           admin_status: `enabled`,
@@ -72,6 +77,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
           updated_at: new Date(0).toISOString(),
         })),
       },
+      ensurePrincipal: vi.fn(async () => undefined),
       spawn: vi.fn(async (_type, req) => entity(req.dispatch_policy)),
     } as any,
     streamClient: {

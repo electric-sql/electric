@@ -75,7 +75,6 @@ export interface RuntimeRouterConfig {
       payload: unknown
       targetUrl?: string
       fireAt: string
-      from?: string
       messageType?: string
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>

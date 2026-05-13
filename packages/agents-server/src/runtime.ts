@@ -435,6 +435,8 @@ export class ElectricAgentsTenantRuntime {
     const fireAtRaw = value.fireAt
     const producerId = value.producerId
     const targetUrl = value.targetUrl
+    const senderUrl =
+      typeof value.senderUrl === `string` ? value.senderUrl : ownerEntityUrl
     if (
       typeof fireAtRaw !== `string` ||
       typeof producerId !== `string` ||
@@ -459,7 +461,7 @@ export class ElectricAgentsTenantRuntime {
       manifestKey,
       {
         entityUrl: targetUrl,
-        from: typeof value.from === `string` ? value.from : ownerEntityUrl,
+        from: senderUrl,
         payload: value.payload,
         key: `scheduled-${producerId}`,
         type:
@@ -474,6 +476,7 @@ export class ElectricAgentsTenantRuntime {
             kind: `schedule`,
             scheduleType: `future_send`,
             targetUrl,
+            senderUrl,
             fireAt: fireAt.toISOString(),
             producerId,
             status: `pending`,

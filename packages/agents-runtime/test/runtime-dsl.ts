@@ -41,6 +41,7 @@ type TestBackendModule = {
 
 const agentServerModulePath = `../../agents-server/src/server`
 const agentServerTestBackendModulePath = `../../agents-server/test/test-backend`
+const TEST_PRINCIPAL_KEY = `system:runtime-dsl-test`
 
 async function loadElectricAgentsServer(): Promise<ElectricAgentsServerConstructor> {
   const module = (await import(agentServerModulePath)) as {
@@ -127,10 +128,7 @@ export class StreamHistory {
 
 export interface RuntimeEntityRef {
   entityUrl: string
-  send: (
-    payload: unknown,
-    opts?: { from?: string; type?: string }
-  ) => Promise<void>
+  send: (payload: unknown, opts?: { type?: string }) => Promise<void>
   history: () => Promise<StreamHistory>
   snapshot: () => Promise<Array<RuntimeHistorySummaryEntry>>
   waitFor: (
@@ -201,7 +199,7 @@ export interface RuntimeTestBuilder {
   send: (
     entityUrl: string,
     payload: unknown,
-    opts?: { from?: string; type?: string }
+    opts?: { type?: string }
   ) => Promise<void>
   waitForRun: (entityUrl: string, timeoutMs?: number) => Promise<void>
   waitForSettled: (timeoutMs?: number) => Promise<void>
@@ -547,7 +545,10 @@ export function runtimeTest(): RuntimeTestBuilder {
   > {
     if (!serverClient) {
       const { electricAgentsUrl } = await ensureServer()
-      serverClient = createRuntimeServerClient({ baseUrl: electricAgentsUrl })
+      serverClient = createRuntimeServerClient({
+        baseUrl: electricAgentsUrl,
+        principalKey: TEST_PRINCIPAL_KEY,
+      })
     }
     return serverClient
   }
@@ -626,7 +627,9 @@ export function runtimeTest(): RuntimeTestBuilder {
     url.searchParams.set(`offset`, `-1`)
     url.searchParams.set(`live`, `false`)
 
-    const res = await fetch(url)
+    const res = await fetch(url, {
+      headers: { 'electric-principal': TEST_PRINCIPAL_KEY },
+    })
     if (res.status === 204 || res.status === 404) return []
     if (!res.ok) {
       const text = await res.text()
@@ -690,7 +693,7 @@ export function runtimeTest(): RuntimeTestBuilder {
     return {
       entityUrl,
 
-      send(payload: unknown, opts?: { from?: string; type?: string }) {
+      send(payload: unknown, opts?: { type?: string }) {
         return builder.send(entityUrl, payload, opts)
       },
 
@@ -907,17 +910,12 @@ export function runtimeTest(): RuntimeTestBuilder {
       return buildSharedStateRef(sharedStateId)
     },
 
-    async send(
-      entityUrl: string,
-      payload: unknown,
-      opts?: { from?: string; type?: string }
-    ) {
+    async send(entityUrl: string, payload: unknown, opts?: { type?: string }) {
       const client = await ensureClient()
       await timeStep(`send ${entityUrl}`, () =>
         client.sendEntityMessage({
           targetUrl: entityUrl,
           payload,
-          from: opts?.from,
           type: opts?.type,
         })
       )

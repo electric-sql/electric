@@ -415,6 +415,30 @@ export class PostgresRegistry {
       })
   }
 
+  async ensureEntityType(
+    et: ElectricAgentsEntityType
+  ): Promise<ElectricAgentsEntityType> {
+    const existing = await this.getEntityType(et.name)
+    if (existing) return existing
+    await this.db
+      .insert(entityTypes)
+      .values({
+        tenantId: this.tenantId,
+        name: et.name,
+        description: et.description,
+        creationSchema: et.creation_schema ?? null,
+        inboxSchemas: et.inbox_schemas ?? null,
+        stateSchemas: et.state_schemas ?? null,
+        serveEndpoint: et.serve_endpoint ?? null,
+        defaultDispatchPolicy: et.default_dispatch_policy ?? null,
+        revision: et.revision,
+        createdAt: et.created_at,
+        updatedAt: et.updated_at,
+      })
+      .onConflictDoNothing()
+    return (await this.getEntityType(et.name))!
+  }
+
   async getEntityType(name: string): Promise<ElectricAgentsEntityType | null> {
     const rows = await this.db
       .select()
@@ -471,6 +495,7 @@ export class PostgresRegistry {
             tagsIndex: buildTagsIndex(entity.tags),
             spawnArgs: entity.spawn_args ?? {},
             parent: entity.parent ?? null,
+            createdBy: entity.created_by ?? null,
             typeRevision: entity.type_revision ?? null,
             inboxSchemas: entity.inbox_schemas ?? null,
             stateSchemas: entity.state_schemas ?? null,
@@ -544,11 +569,14 @@ export class PostgresRegistry {
     parent?: string
     limit?: number
     offset?: number
+    created_by?: string
   }): Promise<{ entities: Array<ElectricAgentsEntity>; total: number }> {
     const conditions = [eq(entities.tenantId, this.tenantId)]
     if (filter?.type) conditions.push(eq(entities.type, filter.type))
     if (filter?.status) conditions.push(eq(entities.status, filter.status))
     if (filter?.parent) conditions.push(eq(entities.parent, filter.parent))
+    if (filter?.created_by)
+      conditions.push(eq(entities.createdBy, filter.created_by))
 
     const whereClause = and(...conditions)
 
@@ -1054,6 +1082,7 @@ export class PostgresRegistry {
       tags: (row.tags as EntityTags | null | undefined) ?? {},
       spawn_args: row.spawnArgs as Record<string, unknown> | undefined,
       parent: row.parent ?? undefined,
+      created_by: row.createdBy ?? undefined,
       type_revision: row.typeRevision ?? undefined,
       inbox_schemas: row.inboxSchemas as
         | Record<string, Record<string, unknown>>

@@ -16,7 +16,6 @@ export type {
   SubscriptionStreamInfo,
 } from './stream-client.js'
 export type {
-  AuthenticatedRequestUser,
   AuthenticateRequest,
   ConsumerClaim,
   DispatchPolicy,
@@ -26,6 +25,7 @@ export type {
   EntityDispatchState,
   PublicWakeNotification,
   RegisterRunnerRequest,
+  RequestPrincipal,
   RunnerAdminStatus,
   RunnerHeartbeatRequest,
   RunnerKind,
@@ -33,6 +33,7 @@ export type {
   SourceStreamOffset,
   WakeNotificationRow,
 } from './electric-agents-types.js'
+export type { Principal, PrincipalKind } from './principal.js'
 export { globalRouter } from './routing/global-router.js'
 export type { GlobalRoutes } from './routing/global-router.js'
 export type { TenantContext } from './routing/context.js'

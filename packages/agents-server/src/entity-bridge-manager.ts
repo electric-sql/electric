@@ -70,7 +70,7 @@ const ENTITY_SHAPE_COLUMNS = [
 ] as const
 
 function parseElectricOffset(offset: string): Offset | null {
-  if (offset === `-1` || offset === `now`) {
+  if (offset === `-1`) {
     return offset
   }
   return /^\d+_\d+$/.test(offset) ? (offset as Offset) : null

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DurableStreamTestServer } from '@durable-streams/server'
 import { BuiltinAgentsServer } from '../../agents/src/server'
 import { ElectricAgentsServer } from '../src/server'
+import { parsePrincipalKey } from '../src/principal'
 import { readStreamEvents, waitFor } from './test-utils'
 import {
   TEST_POSTGRES_URL,
@@ -98,6 +99,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
   let streamBaseUrl = ``
   const runnerId = `horton-pull-wake-e2e-test`
   const authHeaders = { authorization: `Bearer test-token` }
+  const testPrincipal = parsePrincipalKey(`user:test-user`)
   const mockResponse = `Mock Horton response: pull-wake dispatch was consumed.`
   const mockStreamFn = createMockStreamFn(mockResponse) as StreamFn & {
     mock: { calls: Array<unknown> }
@@ -117,7 +119,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       electricUrl: undefined,
       authenticateRequest: (req) =>
         req.headers.get(`authorization`) === authHeaders.authorization
-          ? { userId: `test-user` }
+          ? testPrincipal
           : null,
     })
     baseUrl = await electricAgentsServer.start()
@@ -128,7 +130,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       pullWake: {
         runnerId,
         registerRunner: true,
-        ownerUserId: `test-user`,
+        ownerUserId: testPrincipal.key,
         headers: authHeaders,
         claimHeaders: authHeaders,
         claimTokenHeader: `electric-claim-token`,
@@ -174,7 +176,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       method: `POST`,
       headers: { 'content-type': `application/json`, ...authHeaders },
       body: JSON.stringify({
-        from: `user`,
+        from: testPrincipal.url,
         payload: `Please answer via pull-wake.`,
       }),
     })
@@ -197,7 +199,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       method: `POST`,
       headers: { 'content-type': `application/json`, ...authHeaders },
       body: JSON.stringify({
-        from: `user`,
+        from: testPrincipal.url,
         payload: `Please answer via pull-wake again after idle.`,
       }),
     })
