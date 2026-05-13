@@ -614,13 +614,20 @@ async function spawnEntity(
     wake: parsed.wake,
     created_by: principal.url,
   })
-  await linkEntityDispatchSubscription(ctx, entity)
+  // Append the initial inbox message BEFORE linking the pull-wake
+  // subscription. The previous order (spawn → link → send) opened a
+  // race: the subscription cursor advanced past the entity_created
+  // event during link, leaving the subsequent send write unannounced
+  // — the runner saw only management events in catch-up and reported
+  // "no fresh wake input". Writing the inbox event first lets the
+  // subscription's initial wake delivery include it via catch-up.
   if (parsed.initialMessage !== undefined) {
     await ctx.entityManager.send(entity.url, {
       from: principal.url,
       payload: parsed.initialMessage,
     })
   }
+  await linkEntityDispatchSubscription(ctx, entity)
 
   return json(
     { ...toPublicEntity(entity), txid: entity.txid },

@@ -48,7 +48,7 @@
     "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350",
     "@durable-streams/server": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350",
     "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350",
-    "@electric-ax/agents-runtime": "workspace:*",
+    "@electric-ax/agents-runtime": "0.2.1",
     "@electric-sql/client": "^1.5.17",
     "@mariozechner/pi-agent-core": "^0.70.2",
     "@opentelemetry/api": "^1.9.1",
