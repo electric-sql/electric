@@ -1,5 +1,11 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const localNodeModules = (...segments: Array<string>): string =>
+  path.resolve(PACKAGE_DIR, `node_modules`, ...segments)
 
 /**
  * Tags the built `<html>` element with `data-electric-desktop="true"` for
@@ -36,6 +42,15 @@ export default defineConfig(({ command, mode }) => {
     base: desktop ? (desktopServe ? `/` : `./`) : `/__agent_ui/`,
     plugins: [react(), ...(desktop ? [desktopHtmlMarker()] : [])],
     resolve: {
+      alias: {
+        react: localNodeModules(`react`),
+        'react-dom': localNodeModules(`react-dom`),
+        'react/jsx-runtime': localNodeModules(`react`, `jsx-runtime.js`),
+        'react/jsx-dev-runtime': localNodeModules(
+          `react`,
+          `jsx-dev-runtime.js`
+        ),
+      },
       dedupe: [`react`, `react-dom`],
     },
     optimizeDeps: {

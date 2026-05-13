@@ -221,7 +221,15 @@ function createSpawnAction(
         let message = `Spawn failed (${res.status})`
         try {
           const data = JSON.parse(text) as Record<string, unknown>
-          if (data.message) message = String(data.message)
+          if (data.message) {
+            message = String(data.message)
+          } else if (
+            typeof data.error === `object` &&
+            data.error !== null &&
+            `message` in data.error
+          ) {
+            message = String(data.error.message)
+          }
         } catch {
           if (text) message = text
         }

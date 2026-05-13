@@ -222,10 +222,12 @@ const CONFIGURED_ASSERTED_AUTH_NAME =
   process.env.ELECTRIC_ASSERTED_AUTH_NAME?.trim() || undefined
 const PULL_WAKE_RUNNER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
-const PULL_WAKE_REGISTER_RUNNER = [`1`, `true`].includes(
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER?.trim().toLowerCase() ??
-    ``
-)
+const PULL_WAKE_REGISTER_RUNNER =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER === undefined
+    ? true
+    : [`1`, `true`].includes(
+        process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER.trim().toLowerCase()
+      )
 const PULL_WAKE_OWNER_USER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
   CONFIGURED_ASSERTED_AUTH_EMAIL ||

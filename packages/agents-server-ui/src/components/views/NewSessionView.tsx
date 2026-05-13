@@ -191,7 +191,7 @@ export function NewSessionView({
         }
       } catch (err) {
         setError(
-          `Could not start session: ${err instanceof Error ? err.message : String(err)}. The server may be missing ANTHROPIC_API_KEY.`
+          `Could not start session: ${err instanceof Error ? err.message : String(err)}.`
         )
       }
     },

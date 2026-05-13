@@ -228,7 +228,7 @@ export function Sidebar({
   const identityFilteredEntities = useMemo(() => {
     if (!assertedIdentity) return visibleEntities
     return visibleEntities.filter(
-      (e) => e.tags?.created_by === assertedIdentity
+      (e) => !e.tags?.created_by || e.tags.created_by === assertedIdentity
     )
   }, [visibleEntities, assertedIdentity])
 
