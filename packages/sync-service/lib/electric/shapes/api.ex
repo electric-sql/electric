@@ -5,6 +5,7 @@ defmodule Electric.Shapes.Api do
   alias Electric.DbConnectionError
   alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.Sampler
 
   alias __MODULE__
   alias __MODULE__.Request
@@ -1151,22 +1152,32 @@ defmodule Electric.Shapes.Api do
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do
     # Record process/binary memory at span entry and exit so memory growth
-    # across the span is queryable in Honeycomb. The captures live inside the
-    # span closure for two reasons:
-    #   * the `Process.info/2` calls only run when the span is actually
-    #     recorded (sampler/`:exclude_spans` short-circuit before the closure
-    #     is invoked);
-    #   * `try`/`after` guarantees the `end` snapshot is recorded even when
-    #     `fun.()` raises — which is exactly when memory data is most useful.
-    OpenTelemetry.with_span(name, attributes, stack_id(request), fn ->
-      OpenTelemetry.add_process_memory_attributes(:start)
+    # across the span is queryable in Honeycomb. Two important constraints:
+    #
+    #   * The `Process.info/2` calls must be skipped entirely when the span
+    #     is excluded by the sampler (`:exclude_spans` config). Inside the
+    #     `:telemetry.span/3` closure that runs even for excluded spans,
+    #     `current_span_context()` resolves to the *parent* OTEL span — so
+    #     attaching memory attributes there would pollute the parent.
+    #     Gating on `Sampler.include_span?/1` at the call site solves both
+    #     the cost and the pollution.
+    #   * `try`/`after` guarantees the `end` snapshot lands on the span even
+    #     when `fun.()` raises — which is exactly when memory data is most
+    #     useful.
+    if Sampler.include_span?(name) do
+      start_memory = OpenTelemetry.process_memory_attributes(:start)
+      all_attributes = Map.merge(Map.new(attributes), start_memory)
 
-      try do
-        fun.()
-      after
-        OpenTelemetry.add_process_memory_attributes(:end)
-      end
-    end)
+      OpenTelemetry.with_span(name, all_attributes, stack_id(request), fn ->
+        try do
+          fun.()
+        after
+          OpenTelemetry.add_process_memory_attributes(:end)
+        end
+      end)
+    else
+      OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
+    end
   end
 
   @spec stack_id(Api.t() | Request.t() | Response.t()) :: String.t()

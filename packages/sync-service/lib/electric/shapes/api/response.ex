@@ -3,6 +3,7 @@ defmodule Electric.Shapes.Api.Response do
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.Sampler
 
   require Logger
 
@@ -422,24 +423,41 @@ defmodule Electric.Shapes.Api.Response do
     stack_id = Api.stack_id(response)
     conn = Plug.Conn.send_chunked(conn, status)
 
+    # Decide once per response whether to capture per-chunk memory
+    # attributes. The Sampler decision is config-driven, so it's stable
+    # across the loop — hoisting avoids paying `Process.info/2` for excluded
+    # chunk spans and avoids polluting the parent span when the chunk span
+    # is excluded (because `current_span_context()` inside the closure
+    # resolves to the parent in that case).
+    chunk_span_recording? = Sampler.include_span?("shape_get.plug.stream_chunk")
+
     {conn, bytes_sent} =
       response.body
       |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
+        # Snapshot current process/binary memory on each chunk span so the
+        # span viewer surfaces how memory evolves across a streamed
+        # response. Bake the memory attrs into the initial attribute map so
+        # they only land on the new OTEL span (not the parent) when the
+        # chunk span is excluded — `current_span_context()` inside the
+        # closure would otherwise resolve to the parent. Single-point
+        # capture (`:start`) keeps per-chunk attribute cardinality low.
+        chunk_attrs =
+          if chunk_span_recording? do
+            Map.merge(
+              %{chunk_size: chunk_size},
+              OpenTelemetry.process_memory_attributes(:start)
+            )
+          else
+            %{chunk_size: chunk_size}
+          end
+
         OpenTelemetry.with_span(
           "shape_get.plug.stream_chunk",
-          %{chunk_size: chunk_size},
+          chunk_attrs,
           stack_id,
           fn ->
-            # Snapshot current process/binary memory on each chunk span so
-            # the span viewer surfaces how memory evolves across a streamed
-            # response. Captured inside the closure so the `Process.info/2`
-            # call only runs when the chunk span is actually recorded —
-            # streamed responses can produce many chunks, and the span is
-            # often excluded by the sampler or `:exclude_spans` config.
-            OpenTelemetry.add_process_memory_attributes(:start)
-
             case Plug.Conn.chunk(conn, chunk) do
               {:ok, conn} ->
                 {:cont, {conn, bytes_sent + chunk_size}}
