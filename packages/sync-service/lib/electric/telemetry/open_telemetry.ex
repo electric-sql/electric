@@ -201,17 +201,16 @@ defmodule Electric.Telemetry.OpenTelemetry do
   Add current-process memory-footprint attributes (see
   `process_memory_attributes/1`) to the current span.
 
-  Caveat: this resolves "current span" via `current_span_context/0`, which
-  returns whatever OTEL span context is active in this process. In
-  particular, when called inside a `with_span/4` closure for a span that the
-  sampler excluded (no new OTEL span was started), the attributes attach to
-  the *parent* span. Either pre-check `Sampler.include_span?/1` at the call
-  site or build the attributes into the initial `with_span` attribute map if
-  you need them to land only on the new span.
+  No-op when called outside a span context, avoiding the `Process.info/2` cost
+  on unsampled requests.
   """
   @spec add_process_memory_attributes(:start | :end) :: boolean()
   def add_process_memory_attributes(phase) when phase in [:start, :end] do
-    add_span_attributes(process_memory_attributes(phase))
+    if in_span_context?() do
+      add_span_attributes(process_memory_attributes(phase))
+    else
+      false
+    end
   end
 
   @doc """

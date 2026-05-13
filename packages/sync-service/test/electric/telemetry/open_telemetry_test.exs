@@ -178,11 +178,9 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
       assert is_integer(binary_bytes) and binary_bytes >= 0
     end
 
-    test "is safe to call outside any span" do
-      # No surrounding with_span — current_span_context/0 returns the
-      # undefined sentinel; :otel_span.set_attributes/2 accepts it and
-      # the helper should not raise.
-      assert OpenTelemetry.add_process_memory_attributes(:start) in [true, false]
+    test "is a no-op outside any span context" do
+      # No surrounding with_span — should short-circuit and skip Process.info
+      assert OpenTelemetry.add_process_memory_attributes(:start) == false
     end
   end
 end
