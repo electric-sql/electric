@@ -17,7 +17,10 @@ import { Select } from '../ui'
 import { WorkingDirectoryPicker } from './WorkingDirectoryPicker'
 import { useRecentWorkingDirectories } from '../hooks/useRecentWorkingDirectories'
 import newSessionStyles from './NewSessionPage.module.css'
-import type { ElectricEntity, ElectricEntityType } from '../lib/ElectricAgentsProvider'
+import type {
+  ElectricEntity,
+  ElectricEntityType,
+} from '../lib/ElectricAgentsProvider'
 
 // ---------------------------------------------------------------
 // Shared schema-introspection helpers
@@ -242,7 +245,9 @@ export function ComposerSettings({
           <PillSelect
             key={key}
             label={prop.title ?? key}
-            value={String(currentArgs[key] ?? prop.default ?? prop.enum[0] ?? ``)}
+            value={String(
+              currentArgs[key] ?? prop.default ?? prop.enum[0] ?? ``
+            )}
             options={prop.enum.map((v) => String(v))}
             onChange={(next) => {
               const original = prop.enum!.find((v) => String(v) === next)

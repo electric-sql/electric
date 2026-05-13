@@ -49,8 +49,6 @@ const HERO_TITLES = [
   `Let’s improve`,
 ] as const
 
-
-
 /**
  * Standalone view: the new-session picker.
  *
@@ -520,5 +518,3 @@ function DefaultAgentComposer({
     </div>
   )
 }
-
-
