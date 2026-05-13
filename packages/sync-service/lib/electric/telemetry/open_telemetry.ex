@@ -165,11 +165,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
       process; this is what tends to dominate memory in shape requests that
       buffer large response bodies.
 
-  The optional `phase` argument is mixed into the attribute names so the same
-  span can record memory at multiple points in its lifecycle. With
-  `phase = :start` the keys become `memory.start.process_bytes` and
-  `memory.start.binary_bytes`. With `phase = nil` (the default) the keys are
-  just `memory.process_bytes` and `memory.binary_bytes`.
+  The `phase` argument determines the attribute key prefix: `:start` produces
+  `memory.start.process_bytes` and `memory.start.binary_bytes`, `:end` produces
+  `memory.end.process_bytes` and `memory.end.binary_bytes`.
 
   Caveat: `Process.info(self(), :binary)` lists one entry per reference, so a
   refc binary that the process references multiple times is counted multiple
@@ -179,28 +177,32 @@ defmodule Electric.Telemetry.OpenTelemetry do
   `:erlang.memory(:binary)` gives a deduplicated VM-wide figure if you need
   one.
   """
-  @spec process_memory_attributes(:start | :end | nil) :: %{
-          optional(String.t()) => non_neg_integer()
-        }
-  def process_memory_attributes(phase \\ nil) when phase in [:start, :end, nil] do
-    {:memory, process_bytes} = Process.info(self(), :memory)
-    {:binary, binaries} = Process.info(self(), :binary)
+  @spec process_memory_attributes(:start | :end) :: %{String.t() => non_neg_integer()}
+  def process_memory_attributes(phase) when phase in [:start, :end] do
+    [memory: process_bytes, binary: binaries] = Process.info(self(), [:memory, :binary])
     binary_bytes = Enum.reduce(binaries, 0, fn {_ref, size, _count}, acc -> acc + size end)
 
-    prefix = if is_nil(phase), do: "memory.", else: "memory.#{phase}."
+    case phase do
+      :start ->
+        %{
+          "memory.start.process_bytes" => process_bytes,
+          "memory.start.binary_bytes" => binary_bytes
+        }
 
-    %{
-      "#{prefix}process_bytes" => process_bytes,
-      "#{prefix}binary_bytes" => binary_bytes
-    }
+      :end ->
+        %{
+          "memory.end.process_bytes" => process_bytes,
+          "memory.end.binary_bytes" => binary_bytes
+        }
+    end
   end
 
   @doc """
   Add current-process memory-footprint attributes (see
   `process_memory_attributes/1`) to the current span.
   """
-  @spec add_process_memory_attributes(:start | :end | nil) :: boolean()
-  def add_process_memory_attributes(phase \\ nil) do
+  @spec add_process_memory_attributes(:start | :end) :: boolean()
+  def add_process_memory_attributes(phase) when phase in [:start, :end] do
     add_span_attributes(process_memory_attributes(phase))
   end
 

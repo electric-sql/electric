@@ -120,24 +120,35 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
   end
 
   describe "process_memory_attributes/1" do
-    test "returns process and binary memory under unprefixed keys by default" do
-      attrs = OpenTelemetry.process_memory_attributes()
+    test "returns process and binary memory for :start phase" do
+      attrs = OpenTelemetry.process_memory_attributes(:start)
 
-      assert %{"memory.process_bytes" => process_bytes, "memory.binary_bytes" => binary_bytes} =
-               attrs
+      assert %{
+               "memory.start.process_bytes" => process_bytes,
+               "memory.start.binary_bytes" => binary_bytes
+             } = attrs
 
       assert is_integer(process_bytes) and process_bytes > 0
       assert is_integer(binary_bytes) and binary_bytes >= 0
     end
 
-    test "applies the given phase as part of the attribute key prefix" do
-      attrs = OpenTelemetry.process_memory_attributes(:start)
+    test "returns process and binary memory for :end phase" do
+      attrs = OpenTelemetry.process_memory_attributes(:end)
 
-      assert Map.has_key?(attrs, "memory.start.process_bytes")
-      assert Map.has_key?(attrs, "memory.start.binary_bytes")
+      assert %{
+               "memory.end.process_bytes" => process_bytes,
+               "memory.end.binary_bytes" => binary_bytes
+             } = attrs
+
+      assert is_integer(process_bytes) and process_bytes > 0
+      assert is_integer(binary_bytes) and binary_bytes >= 0
     end
 
-    test "rejects phase values other than :start, :end, or nil" do
+    test "rejects phase values other than :start or :end" do
+      assert_raise FunctionClauseError, fn ->
+        OpenTelemetry.process_memory_attributes(nil)
+      end
+
       assert_raise FunctionClauseError, fn ->
         OpenTelemetry.process_memory_attributes("start")
       end
@@ -157,8 +168,6 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
         OpenTelemetry.add_process_memory_attributes(:start)
       end)
 
-      # We expect at least one set_attributes call carrying the memory keys
-      # — confirming the helper attaches them to the surrounding span.
       assert_received {:set_attributes,
                        %{
                          "memory.start.process_bytes" => process_bytes,
@@ -173,7 +182,7 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
       # No surrounding with_span — current_span_context/0 returns the
       # undefined sentinel; :otel_span.set_attributes/2 accepts it and
       # the helper should not raise.
-      assert OpenTelemetry.add_process_memory_attributes() in [true, false]
+      assert OpenTelemetry.add_process_memory_attributes(:start) in [true, false]
     end
   end
 end

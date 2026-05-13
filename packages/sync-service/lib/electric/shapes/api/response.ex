@@ -434,13 +434,11 @@ defmodule Electric.Shapes.Api.Response do
           fn ->
             # Snapshot current process/binary memory on each chunk span so
             # the span viewer surfaces how memory evolves across a streamed
-            # response. Captured inside the closure so the two
-            # `Process.info/2` calls only run when the chunk span is actually
-            # recorded — streamed responses can produce many chunks, and the
-            # span is often excluded by the sampler or `:exclude_spans`
-            # config. Single-point capture (not start/end) keeps per-chunk
-            # attribute cardinality low.
-            OpenTelemetry.add_process_memory_attributes()
+            # response. Captured inside the closure so the `Process.info/2`
+            # call only runs when the chunk span is actually recorded —
+            # streamed responses can produce many chunks, and the span is
+            # often excluded by the sampler or `:exclude_spans` config.
+            OpenTelemetry.add_process_memory_attributes(:start)
 
             case Plug.Conn.chunk(conn, chunk) do
               {:ok, conn} ->
