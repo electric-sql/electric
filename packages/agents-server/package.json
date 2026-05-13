@@ -1,6 +1,5 @@
 {
   "name": "@electric-ax/agents-server",
-  "private": true,
   "version": "0.3.0",
   "description": "Electric Agents entity runtime server",
   "author": "Durable Stream contributors",
@@ -13,6 +12,9 @@
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric.git",
     "directory": "packages/agents-server"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "main": "./dist/index.cjs",
@@ -79,6 +81,7 @@
   },
   "files": [
     "dist",
+    "drizzle",
     "src"
   ],
   "engines": {
