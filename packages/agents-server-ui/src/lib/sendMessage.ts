@@ -1,7 +1,12 @@
 import { createOptimisticAction } from '@tanstack/db'
 import { generateKeyBetween } from 'fractional-indexing'
-import { getActivePrincipal, serverFetch } from './auth-fetch'
+import {
+  getActivePrincipal,
+  getConfiguredServerHeaders,
+  serverFetch,
+} from './auth-fetch'
 import { entityApiUrl } from './entity-api'
+import { loadCloudAuthState } from './server-connection'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
 // Timeline queries sort inbox messages by `_seq`. Pending local rows do not
@@ -144,6 +149,33 @@ export function readTextPayload(payload: unknown): string {
   return typeof payload === `string` ? payload : ``
 }
 
+function principalUrl(principalKey: string): string {
+  return `/principal/${encodeURIComponent(principalKey)}`
+}
+
+function principalUrlFromConfiguredHeaders(url: string): string | null {
+  const headers = new Headers(getConfiguredServerHeaders(url))
+  const principal = headers.get(`electric-principal`)?.trim()
+  return principal ? principalUrl(principal) : null
+}
+
+async function resolveSenderPrincipalUrl(
+  url: string,
+  from: string
+): Promise<string> {
+  if (from.startsWith(`/principal/`)) return from
+
+  const headerPrincipal = principalUrlFromConfiguredHeaders(url)
+  if (headerPrincipal) return headerPrincipal
+
+  const cloudAuth = await loadCloudAuthState().catch(() => null)
+  if (cloudAuth?.status === `signed-in` && cloudAuth.userId) {
+    return principalUrl(`user:${cloudAuth.userId}`)
+  }
+
+  return principalUrl(`system:dev-local`)
+}
+
 export function createSendMessageAction({
   db,
   baseUrl,
@@ -178,10 +210,13 @@ export function createSendMessageAction({
       onOptimisticMessage?.(message)
     },
     mutationFn: async ({ text, key, mode, position }) => {
-      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/send`), {
+      const url = entityApiUrl(baseUrl, entityUrl, `/send`)
+      const sender = await resolveSenderPrincipalUrl(url, from)
+      const res = await serverFetch(url, {
         method: `POST`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify({
+          from: sender,
           key,
           payload: { text },
           mode,

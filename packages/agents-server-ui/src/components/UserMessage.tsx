@@ -14,7 +14,7 @@ export const UserMessage = memo(function UserMessage({
 }: {
   section: UserMessageSection
 }): React.ReactElement {
-  const sender = section.from ?? `user`
+  const sender = formatSender(section.from)
 
   return (
     <Stack direction="column" gap={1} className={styles.root}>
@@ -24,8 +24,8 @@ export const UserMessage = memo(function UserMessage({
         </Text>
       </Stack>
       <Stack gap={2} align="center" className={styles.meta}>
-        <Text size={1} tone="muted">
-          {sender}
+        <Text size={1} tone="muted" title={sender.title}>
+          {sender.label}
         </Text>
         {section.timestamp && (
           <>
@@ -39,3 +39,31 @@ export const UserMessage = memo(function UserMessage({
     </Stack>
   )
 })
+
+function formatSender(from: string | null | undefined): {
+  label: string
+  title?: string
+} {
+  if (!from) return { label: `user` }
+  if (!from.startsWith(`/principal/`)) return { label: from }
+  const segment = from.slice(`/principal/`.length)
+  if (!segment || segment.includes(`/`)) return { label: from }
+  try {
+    const key = decodeURIComponent(segment)
+    const colon = key.indexOf(`:`)
+    if (colon <= 0) return { label: key, title: from }
+    const kind = key.slice(0, colon)
+    const id = key.slice(colon + 1)
+    return {
+      label: `${kind}:${formatPrincipalId(id)}`,
+      title: key,
+    }
+  } catch {
+    return { label: from }
+  }
+}
+
+function formatPrincipalId(id: string): string {
+  if (id.length <= 18) return id
+  return `${id.slice(0, 8)}…${id.slice(-6)}`
+}

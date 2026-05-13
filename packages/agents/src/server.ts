@@ -406,7 +406,7 @@ export class BuiltinAgentsServer {
         headers,
         body: JSON.stringify({
           id: pullWake.runnerId,
-          owner_user_id: pullWake.ownerUserId,
+          owner_user_id: `user:${pullWake.ownerUserId}`,
           label: pullWake.label ?? `Built-in agents`,
           kind: `local`,
           admin_status: `enabled`,
