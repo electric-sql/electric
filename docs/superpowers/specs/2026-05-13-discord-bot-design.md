@@ -1,8 +1,8 @@
 # Discord Bot for Electric Agents — Design Spec
 
-**Date:** 2026-05-13 (amended 2026-05-13 after first implementation pass)
+**Date:** 2026-05-13
 **Owner:** balegas@electric-sql.com
-**Status:** Approved — describes the as-built v1 with three critical fixes required before merge. The first implementation pass surfaced three contracts that the original draft got wrong against the real `agents-runtime`/`agents-server` types; this revision realigns the spec to reality. See the changelog at §12.
+**Status:** Approved
 
 ## 1. Summary
 
@@ -95,7 +95,7 @@ v1 targets a Node deploy. The entity's tool surface is intentionally restricted 
 
 **Adapter and agents-server are always separate processes**, even in the simplest Node deployment (typically co-located on one box). The Gateway WS is genuinely long-lived state; the agents-server is HTTP-driven via the standard runtime-server entity API.
 
-**Horton runs on the same agents-server as the discord-bot entity** in v1 — `spawn_horton` is implemented via `ctx.spawn(type, id, args, { wake: { on: 'runFinished', includeResponse: true } })`, which uses the entity's own runtime server. Cross-host Horton spawning (a discord-bot in one runtime asking a different runtime to spawn the Horton) is **future work**; see §10. The `hortonRuntime` option's `agentsServerUrl` field is documented for forward-compatibility but is a no-op in v1.
+`spawn_horton` is implemented via `ctx.spawn(type, id, args, { wake: { on: 'runFinished', includeResponse: true } })`, so Horton runs on the same agents-server as the `discord-bot` entity.
 
 ## 4. Entity lifecycle
 
@@ -164,9 +164,6 @@ registerDiscordBot(registry, {
 
   hortonRuntime: {
     entityType: 'horton',
-    // agentsServerUrl is reserved for future cross-host spawn; in v1 Horton is
-    // spawned on the same agents-server via ctx.spawn — see §10.
-    agentsServerUrl?: env.AGENTS_SERVER_URL,
   },
 
   primeContext?: { messageLimit: 20 },
@@ -233,8 +230,6 @@ type DiscordWakeMessage =
 **`discord.*`** — `create_thread`, `post_message`, `edit_message`, `read_thread_history`, `add_reaction`, `read_channel_around_message(messageId, before=20, after=5)`. Implemented over raw `fetch` against the Discord REST API (not `@discordjs/rest`) so the entity stays portable to a Cloudflare DO host in the planned follow-up. `@discordjs/rest` and `discord.js` are _adapter-only_ dependencies.
 
 **`delegate.spawn_horton`** — calls `ctx.spawn(opts.hortonRuntime.entityType, childId, { task, repo, branch }, { wake: { on: 'runFinished', includeResponse: true } })`. Returns `{ childEntityUrl, childEntityId }` from the spawn result. Does not await Horton's run; the `runFinished` wake delivers Horton's report back as a regular wake event on the discord-bot entity.
-
-The tool's options are constructed from the entity's own `HandlerContext`, not from a freestanding `RuntimeServerClient`. This means v1 Horton runs on the **same** agents-server as discord-bot. Cross-host spawning is future work (§10).
 
 **Reused** — `web_search`, `fetch_url`, and `search_durable_agents_docs` (when the docs knowledge base is available in the runtime).
 
@@ -351,7 +346,6 @@ GitHub MCP is configured via the operator's existing `mcp.json` or `extraMcpServ
 ## 10. Future work (post-v1, not in scope)
 
 - **Cloud deployment-status tools.** Add a `cloud.*` tool family (`deployment_status`, `list_databases`, `recent_errors`) once the Cloud API surface is decided.
-- **Cross-host Horton spawning.** v1 spawns Horton on the same agents-server as the discord-bot entity (via `ctx.spawn`). The `hortonRuntime.agentsServerUrl` option is reserved for a follow-up where the discord-bot entity reaches out via the runtime-server-client to spawn Horton on a _different_ agents-server (e.g. a dedicated coding-agent host with more resources). This requires the entity to use `runtimeServerClient.spawnEntity` with `subscriberUrl` callbacks rather than the in-process `ctx.spawn`, and care to route the `runFinished` wake back to the discord-bot entity across hosts.
 - **Multi-repo / GitHub App** (path B of the auth question). The options object already allows `github: { app: { ... } }` shape; implementation deferred.
 - **More slash commands** (`/fix issue:#N`, `/ask`, `/cloud-status`) as keyboard shortcuts for the same intents the agent already handles via `@mention`.
 - **Per-user GitHub OAuth attribution**, so PRs come from the actual user.
@@ -364,13 +358,3 @@ GitHub MCP is configured via the operator's existing `mcp.json` or `extraMcpServ
 - Exact rate-limit handling for `read_channel_around_message` when an agent calls it many times in a turn (likely a per-wake budget; tuned during implementation).
 - Whether `primeMessages` should include thread starter messages of _other_ threads in the same channel for richer context (defer; default off).
 - Whether to surface a `verbose` toggle so the bot can post progress updates while Horton is still running (defer; would require Horton to push intermediate events into the parent entity, which the runtime supports but adds noise).
-
-## 12. Changelog
-
-**2026-05-13 (amended).** First implementation pass surfaced three contracts the original spec drafted against an imagined `agents-runtime`/`agents-server` API. The spec is updated to match reality:
-
-1. **Entity API path.** Original: adapter POSTs to `<agents-server>/webhook/discord-bot` with `{ entityType, entityId, message }`. Reality: agents-server's entity API is `PUT /_electric/entities/:type/:id` (create-or-find) plus `POST /_electric/entities/:type/:id/send` (deliver `DiscordWakeMessage` as the body). Sections updated: §3 architecture diagram, §5.2 adapter↔entity contract, §6.1/6.2 data flows. The `AGENTS_SERVER_TOKEN` shared-secret webhook auth in §7 was removed in favour of agents-server's existing auth.
-2. **Horton spawn API.** Original: `delegate.spawn_horton` calls `runtimeServerClient.spawnEntity` with `subscriberUrl`, targeting `hortonRuntime.agentsServerUrl` for cross-host spawning. Reality: in v1 the entity uses `ctx.spawn(type, id, args, { wake: { on: 'runFinished', includeResponse: true } })`, which spawns on the _same_ agents-server. Cross-host spawn is now an explicit §10 future-work item. Sections updated: §3, §5.1 (`hortonRuntime.agentsServerUrl` documented as forward-compat-only), §5.3, §6.2.
-3. **Bot user identity.** Original: spec implicitly assumed the bot's user ID equals the Application ID, with no explicit guidance on how the adapter learns it. Reality: Application ID and bot user ID are distinct snowflakes; the adapter MUST read `client.user.id` after the Gateway `ready` event (or accept an explicit `DISCORD_BOT_USER_ID` override). Sections updated: §3 (adapter notes), §6.1 step 2 (mention filter), §7 (new `DISCORD_BOT_USER_ID` env var).
-
-Smaller alignment edits (also amended in this revision): `ctx.insertContext(id, { name, content, attrs })` (not `ctx.entries.insert`) in §4; `modelCatalog: BuiltinModelCatalog` resolved with `resolveBuiltinModelConfig` (canonical helper) in §5.1; thread-archive event explicitly load-bearing on `threadUpdate` in §4; bot-vs-bot message filtering policy documented in §4; idempotency-key dedup explicitly _adapter-local_ in v1 in §5.2; testing scope clarified in §9 to reflect that "integration" is an in-process adapter↔entity test, not a live agents-server test.
