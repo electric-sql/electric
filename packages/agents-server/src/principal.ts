@@ -1,3 +1,5 @@
+import { Type } from '@sinclair/typebox'
+
 export type PrincipalKind = `user` | `agent` | `service` | `system`
 
 export interface Principal {
@@ -24,7 +26,7 @@ export function parsePrincipalKey(input: string): Principal {
   if (!PRINCIPAL_KINDS.has(kind)) throw new Error(`Invalid principal kind`)
   if (!id || id.includes(`/`)) throw new Error(`Invalid principal id`)
   const key = `${kind}:${id}`
-  return { kind, id, key, url: `/principal/${key}` }
+  return { kind, id, key, url: `/principal/${encodeURIComponent(key)}` }
 }
 
 export function principalUrl(key: string): string {
@@ -33,8 +35,13 @@ export function principalUrl(key: string): string {
 
 export function principalKeyFromUrl(url: string): string | null {
   if (!url.startsWith(`/principal/`)) return null
-  const key = url.slice(`/principal/`.length)
+  const segment = url.slice(`/principal/`.length)
+  if (!segment || segment.includes(`/`)) return null
   try {
+    const key = decodeURIComponent(segment)
+    // Principal URLs produced by parsePrincipalKey/principalUrl are canonical
+    // encoded single path segments, but accept legacy unencoded single-segment
+    // URLs here so callers can canonicalize them via parsePrincipalKey(key).url.
     return parsePrincipalKey(key).key
   } catch {
     return null
@@ -59,7 +66,9 @@ const BUILT_IN_SYSTEM_PRINCIPAL_IDS = new Set([
 export function isBuiltInSystemPrincipalUrl(url: string | undefined): boolean {
   if (!url?.startsWith(`/principal/`)) return false
   try {
-    const principal = parsePrincipalKey(url.slice(`/principal/`.length))
+    const key = principalKeyFromUrl(url)
+    if (!key) return false
+    const principal = parsePrincipalKey(key)
     return (
       principal.kind === `system` &&
       BUILT_IN_SYSTEM_PRINCIPAL_IDS.has(principal.id)
@@ -86,29 +95,30 @@ export function principalFromCreatedBy(
   }
 }
 
-export const principalIdentityStateSchema = {
-  type: `object`,
-  additionalProperties: false,
-  required: [`kind`, `id`, `key`, `url`, `updated_at`],
-  properties: {
-    kind: { enum: [`user`, `agent`, `service`, `system`] },
-    id: { type: `string` },
-    key: { type: `string` },
-    url: { type: `string` },
-    display_name: { type: `string` },
-    email: { type: `string` },
-    avatar_url: { type: `string` },
-    auth_provider: { type: `string` },
-    auth_subject: { type: `string` },
-    claims: { type: `object`, additionalProperties: true },
-    created_at: { type: `string` },
-    updated_at: { type: `string` },
+export const principalIdentityStateSchema = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal(`user`),
+      Type.Literal(`agent`),
+      Type.Literal(`service`),
+      Type.Literal(`system`),
+    ]),
+    id: Type.String(),
+    key: Type.String(),
+    url: Type.String(),
+    updated_at: Type.String(),
+    display_name: Type.Optional(Type.String()),
+    email: Type.Optional(Type.String()),
+    avatar_url: Type.Optional(Type.String()),
+    auth_provider: Type.Optional(Type.String()),
+    auth_subject: Type.Optional(Type.String()),
+    claims: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    created_at: Type.Optional(Type.String()),
   },
-}
+  { additionalProperties: false }
+)
 
-export const principalUpdateIdentityMessageSchema = {
-  type: `object`,
-  additionalProperties: false,
-  required: [`identity`],
-  properties: { identity: principalIdentityStateSchema },
-}
+export const principalUpdateIdentityMessageSchema = Type.Object(
+  { identity: principalIdentityStateSchema },
+  { additionalProperties: false }
+)

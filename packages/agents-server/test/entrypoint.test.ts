@@ -124,7 +124,7 @@ describe(`resolveElectricAgentsEntrypointOptions`, () => {
       kind: `user`,
       id: `alice@example.com`,
       key: `user:alice@example.com`,
-      url: `/principal/user:alice@example.com`,
+      url: `/principal/user%3Aalice%40example.com`,
     })
   })
 

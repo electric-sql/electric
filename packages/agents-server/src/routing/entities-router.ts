@@ -5,7 +5,7 @@
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json, status } from 'itty-router'
 import { apiError } from '../electric-agents-http.js'
-import { parsePrincipalKey } from '../principal.js'
+import { parsePrincipalKey, principalUrl } from '../principal.js'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import {
   ErrCodeNotFound,
@@ -200,6 +200,13 @@ function entityUrlFromSegments(
   if (type.startsWith(`_`) || type.includes(`*`) || instanceId.includes(`*`)) {
     return null
   }
+  if (type === `principal`) {
+    try {
+      return principalUrl(decodeURIComponent(instanceId))
+    } catch {
+      return null
+    }
+  }
   return `/${type}/${instanceId}`
 }
 
@@ -250,7 +257,7 @@ async function withExistingEntity(
     if (request.params.type === `principal`) {
       try {
         const materialized = await ctx.entityManager.ensurePrincipal(
-          parsePrincipalKey(request.params.instanceId)
+          parsePrincipalKey(decodeURIComponent(request.params.instanceId))
         )
         request.entityRoute = { entityUrl, entity: materialized }
         return undefined

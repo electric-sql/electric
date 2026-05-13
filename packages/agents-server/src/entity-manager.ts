@@ -31,6 +31,7 @@ import { applyTypeDefaultSubscriptionScope } from './routing/dispatch-policy.js'
 import {
   isBuiltInSystemPrincipalUrl,
   principalFromCreatedBy,
+  principalUrl,
   principalIdentityStateSchema,
   principalUpdateIdentityMessageSchema,
 } from './principal.js'
@@ -377,7 +378,7 @@ export class EntityManager {
   ): Promise<ElectricAgentsEntity & { txid: number }> {
     if (
       typeName === `principal` &&
-      req.created_by !== `/${typeName}/${req.instance_id}`
+      req.created_by !== principalUrl(req.instance_id)
     ) {
       throw new ElectricAgentsError(
         ErrCodeInvalidRequest,
