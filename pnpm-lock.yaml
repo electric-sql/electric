@@ -140,7 +140,7 @@ importers:
     dependencies:
       '@electric-ax/agents-runtime':
         specifier: latest
-        version: link:../../packages/agents-runtime
+        version: 0.2.0(@tanstack/react-db@0.1.83(react@19.2.5)(typescript@5.8.3))(react@19.2.5)(typescript@5.8.3)
       '@sinclair/typebox':
         specifier: ^0.34.49
         version: 0.34.49
@@ -174,7 +174,7 @@ importers:
         version: link:../../packages/agents-runtime
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
-        version: 0.70.2(zod@4.3.6)
+        version: 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@radix-ui/themes':
         specifier: ^3.3.0
         version: 3.3.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -1503,43 +1503,6 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@25.6.0)(lightningcss@1.30.1)(terser@5.46.2)
 
-  factory/discord-bot:
-    dependencies:
-      '@electric-ax/agents-runtime':
-        specifier: workspace:*
-        version: link:../../packages/agents-runtime
-      '@sinclair/typebox':
-        specifier: ^0.34.48
-        version: 0.34.49
-      discord.js:
-        specifier: ^14.16.3
-        version: 14.26.4
-      pino:
-        specifier: ^10.3.1
-        version: 10.3.1
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-    devDependencies:
-      '@types/node':
-        specifier: ^22.19.15
-        version: 22.19.17
-      '@vitest/coverage-v8':
-        specifier: ^4.1.0
-        version: 4.1.5(vitest@4.1.5)
-      tsdown:
-        specifier: ^0.9.0
-        version: 0.9.9(typescript@5.8.3)
-      tsx:
-        specifier: ^4.19.0
-        version: 4.20.3
-      typescript:
-        specifier: ^5.0.0
-        version: 5.8.3
-      vitest:
-        specifier: ^4.1.0
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.46.2)(tsx@4.20.3)(yaml@2.8.1))
-
   packages/agents:
     dependencies:
       '@durable-streams/state':
@@ -1788,7 +1751,7 @@ importers:
         version: link:../typescript-client
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
-        version: 0.70.2(zod@4.3.6)
+        version: 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -4153,34 +4116,6 @@ packages:
   '@databases/validate-unicode@1.0.0':
     resolution: {integrity: sha512-dLKqxGcymeVwEb/6c44KjOnzaAafFf0Wxa8xcfEjx/qOl3rdijsKYBAtIGhtVtOlpPf/PFKfgTuFurSPn/3B/g==}
 
-  '@discordjs/builders@1.14.1':
-    resolution: {integrity: sha512-gSKkhXLqs96TCzk66VZuHHl8z2bQMJFGwrXC0f33ngK+FLNau4hU1PYny3DNJfNdSH+gVMzE85/d5FQ2BpcNwQ==}
-    engines: {node: '>=16.11.0'}
-
-  '@discordjs/collection@1.5.3':
-    resolution: {integrity: sha512-SVb428OMd3WO1paV3rm6tSjM4wC+Kecaa1EUGX7vc6/fddvw/6lg90z4QtCqm21zvVe92vMMDt9+DkIvjXImQQ==}
-    engines: {node: '>=16.11.0'}
-
-  '@discordjs/collection@2.1.1':
-    resolution: {integrity: sha512-LiSusze9Tc7qF03sLCujF5iZp7K+vRNEDBZ86FT9aQAv3vxMLihUvKvpsCWiQ2DJq1tVckopKm1rxomgNUc9hg==}
-    engines: {node: '>=18'}
-
-  '@discordjs/formatters@0.6.2':
-    resolution: {integrity: sha512-y4UPwWhH6vChKRkGdMB4odasUbHOUwy7KL+OVwF86PvT6QVOwElx+TiI1/6kcmcEe+g5YRXJFiXSXUdabqZOvQ==}
-    engines: {node: '>=16.11.0'}
-
-  '@discordjs/rest@2.6.1':
-    resolution: {integrity: sha512-wwQdgjeaoYFiaG+atbqx6aJDpqW7JHAo0HrQkBTbYzM3/PJ3GweQIpgElNcGZ26DCUOXMyawYd0YF7vtr+fZXg==}
-    engines: {node: '>=18'}
-
-  '@discordjs/util@1.2.0':
-    resolution: {integrity: sha512-3LKP7F2+atl9vJFhaBjn4nOaSWahZ/yWjOvA4e5pnXkt2qyXRCHLxoBQy81GFtLGCq7K9lPm9R517M1U+/90Qg==}
-    engines: {node: '>=18'}
-
-  '@discordjs/ws@1.2.3':
-    resolution: {integrity: sha512-wPlQDxEmlDg5IxhJPuxXr3Vy9AjYq5xCvFWGJyD7w7Np8ZGu+Mc+97LCoEc/+AYCo2IDpKioiH0/c/mj5ZR9Uw==}
-    engines: {node: '>=16.11.0'}
-
   '@docsearch/css@3.7.0':
     resolution: {integrity: sha512-1OorbTwi1eeDmr0v5t+ckSRlt1zM5GHjm92iIl3kUu7im3GHuP+csf6E0WBg8pdXQczTWP9J9+o9n+Vg6DH5cQ==}
 
@@ -4246,8 +4181,22 @@ packages:
     peerDependencies:
       '@noble/ciphers': ^1.0.0
 
+  '@electric-ax/agents-mcp@0.2.1':
+    resolution: {integrity: sha512-BzXc3yBwoAEM/txTWqASwBqPXLHFaDbulPnnOFbJsX52RKPm8c1CxYeck83wxYEPSNNh0nBI0JPf7p5YA2nY1w==}
+
   '@electric-ax/agents-runtime@0.0.4':
     resolution: {integrity: sha512-+JvbpN3XAzT0PbTwqKBQCzYYFozC7tE1mFz8y4gpRmLFXSTw4CMkY0vjVVHv3N+Klclk+pX3oGpsEl+ZHwFaNQ==}
+    peerDependencies:
+      '@tanstack/react-db': '>=0.1.78'
+      react: '>=18'
+    peerDependenciesMeta:
+      '@tanstack/react-db':
+        optional: true
+      react:
+        optional: true
+
+  '@electric-ax/agents-runtime@0.2.0':
+    resolution: {integrity: sha512-Dh0mflqSj4lq38gPkhFsIV51xVKwMU1hmJJ5SJKCAesaa7Su8+i6CoSfuk3q5Tm+4PJilkEbc4p5FT5keSPL2A==}
     peerDependencies:
       '@tanstack/react-db': '>=0.1.78'
       react: '>=18'
@@ -8414,22 +8363,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sapphire/async-queue@1.5.5':
-    resolution: {integrity: sha512-cvGzxbba6sav2zZkH8GPf2oGk9yYoD5qrNWdu9fRehifgnFZJMV+nuy2nON2roRO4yQQ+v7MK/Pktl/HgfsUXg==}
-    engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
-
-  '@sapphire/shapeshift@4.0.0':
-    resolution: {integrity: sha512-d9dUmWVA7MMiKobL3VpLF8P2aeanRTu6ypG2OIaEv/ZHH/SUQ2iHOVyi5wAPjQ+HmnMuL0whK9ez8I/raWbtIg==}
-    engines: {node: '>=v16'}
-
-  '@sapphire/snowflake@3.5.3':
-    resolution: {integrity: sha512-jjmJywLAFoWeBi1W7994zZyiNWPIiqRRNAmSERxyg93xRGzNYvGjlZ0gR6x0F4gPRi2+0O6S71kOZYyr3cxaIQ==}
-    engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
-
-  '@sapphire/snowflake@3.5.5':
-    resolution: {integrity: sha512-xzvBr1Q1c4lCe7i6sRnrofxeO1QTP/LKQ6A6qy0iB4x5yfiSfARMEQEghojzTNALDTcv8En04qYNIco9/K9eZQ==}
-    engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
-
   '@shikijs/core@1.22.2':
     resolution: {integrity: sha512-bvIQcd8BEeR1yFvOYv6HDiyta2FFVePbzeowf5pPS1avczrPK+cjmaxxh0nx5QzbON7+Sv0sQfQVciO7bN72sg==}
 
@@ -9834,9 +9767,6 @@ packages:
   '@types/web-bluetooth@0.0.20':
     resolution: {integrity: sha512-g9gZnnXVq7gM7v3tJCWV/qw7w+KeOlSHAhgF9RytFyifW6AF61hdT2ucrYhPq9hLs5JIryeupHV3qGk95dH9ow==}
 
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
-
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
 
@@ -10334,10 +10264,6 @@ packages:
 
   '@vitest/utils@4.1.5':
     resolution: {integrity: sha512-76wdkrmfXfqGjueGgnb45ITPyUi1ycZ4IHgC2bhPDUfWHklY/q3MdLOAB+TF1e6xfl8NxNY0ZYaPCFNWSsw3Ug==}
-
-  '@vladfrangu/async_event_emitter@2.4.7':
-    resolution: {integrity: sha512-Xfe6rpCTxSxfbswi/W/Pz7zp1WWSNn4A0eW4mLkQUewCrXXtMj31lCg+iQyTkh/CkusZSq9eDflu7tjEDXUY6g==}
-    engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
 
   '@volar/language-core@2.4.15':
     resolution: {integrity: sha512-3VHw+QZU0ZG9IuQmzT68IyN4hZNd9GchGPhbD9+pa8CVv7rnoOZwo7T8weIbrRmihqy3ATpdfXFnqRrfPVK6CA==}
@@ -12015,13 +11941,6 @@ packages:
 
   discontinuous-range@1.0.0:
     resolution: {integrity: sha512-c68LpLbO+7kP/b1Hr1qs8/BJ09F5khZGTxqxZuhzxpmwJKOgRFHJWIb9/KmqnqHhLdO55aOxFH/EGBvUQbL/RQ==}
-
-  discord-api-types@0.38.47:
-    resolution: {integrity: sha512-XgXQodHQBAE6kfD7kMvVo30863iHX1LHSqNq6MGUTDwIFCCvHva13+rwxyxVXDqudyApMNAd32PGjgVETi5rjA==}
-
-  discord.js@14.26.4:
-    resolution: {integrity: sha512-4oBp8tc6Kf8IDBwAHhbsMaAqx1b5fob9SNasZT7V6yyyUydoO5i5fGuX7TmvRtR+q/WgKRnRViRoAWnG7fNyvA==}
-    engines: {node: '>=18'}
 
   dlv@1.1.3:
     resolution: {integrity: sha512-+HlytyjlPKnIG8XuRG8WvmBP8xs8P71y+SKKS6ZXWoEgLuePxtDoUEiH7WkdePWrQ5JBpE6aoVqfZfJUQkjXwA==}
@@ -14668,9 +14587,6 @@ packages:
   lodash.once@4.1.1:
     resolution: {integrity: sha512-Sb487aTOCr9drQVL8pIxOzVhafOjZN9UU54hiN8PU3uAiSV7lx1yYNpbNmex2PK6dSJoNTSJUUswT651yww3Mg==}
 
-  lodash.snakecase@4.1.1:
-    resolution: {integrity: sha512-QZ1d4xoBHYUeuouhEq3lk3Uq7ldgyFXGBhg04+oRLnIz8o9T65Eh+8YdroUwn846zchkA9yDsDl5CVVaV2nqYw==}
-
   lodash.sortby@4.7.0:
     resolution: {integrity: sha512-HDWXG8isMntAyRF5vZ7xKuEvOhT4AhlRt/3czTSjvGUxjYCBVRQY48ViDHyfYz9VIoBkW4TMGQNapx+l3RUwdA==}
 
@@ -14760,9 +14676,6 @@ packages:
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
     hasBin: true
-
-  magic-bytes.js@1.13.0:
-    resolution: {integrity: sha512-afO2mnxW7GDTXMm5/AoN1WuOcdoKhtgXjIvHmobqTD1grNplhGdv3PFOyjCVmrnOZBIT/gD/koDKpYG+0mvHcg==}
 
   magic-string@0.25.9:
     resolution: {integrity: sha512-RmF0AsMzgt25qzqqLc1+MbHmhdx0ojF2Fvs4XnOqz2ZOBXzzkEwc/dJQZCYHAn7v1jbVOjAZfK8msRn4BxO4VQ==}
@@ -18124,9 +18037,6 @@ packages:
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
 
-  ts-mixer@6.0.4:
-    resolution: {integrity: sha512-ufKpbmrugz5Aou4wcr5Wc1UUFWOLhq+Fm6qa6P0w0K5Qw2yhaUoiWszhCVuNQyNwrlGiscHOmqYoAox1PtvgjA==}
-
   ts-pattern@5.5.0:
     resolution: {integrity: sha512-jqbIpTsa/KKTJYWgPNsFNbLVpwCgzXfFJ1ukNn4I8hMwyQzHMJnk/BqWzggB0xpkILuKzaO/aMYhS0SkaJyKXg==}
 
@@ -18339,10 +18249,6 @@ packages:
 
   undici@6.20.1:
     resolution: {integrity: sha512-AjQF1QsmqfJys+LXfGTNum+qw4S88CojRInG/6t31W/1fk6G59s92bnAvGz5Cmur+kQv2SURXEvvudLmbrE8QA==}
-    engines: {node: '>=18.17'}
-
-  undici@6.24.1:
-    resolution: {integrity: sha512-sC+b0tB1whOCzbtlx20fx3WgCXwkW627p4EA9uM+/tNNPkSS+eSEld6pAs9nDv7WbY1UUljBMYPtu9BCOrCWKA==}
     engines: {node: '>=18.17'}
 
   undici@7.19.0:
@@ -22261,55 +22167,6 @@ snapshots:
 
   '@databases/validate-unicode@1.0.0': {}
 
-  '@discordjs/builders@1.14.1':
-    dependencies:
-      '@discordjs/formatters': 0.6.2
-      '@discordjs/util': 1.2.0
-      '@sapphire/shapeshift': 4.0.0
-      discord-api-types: 0.38.47
-      fast-deep-equal: 3.1.3
-      ts-mixer: 6.0.4
-      tslib: 2.8.1
-
-  '@discordjs/collection@1.5.3': {}
-
-  '@discordjs/collection@2.1.1': {}
-
-  '@discordjs/formatters@0.6.2':
-    dependencies:
-      discord-api-types: 0.38.47
-
-  '@discordjs/rest@2.6.1':
-    dependencies:
-      '@discordjs/collection': 2.1.1
-      '@discordjs/util': 1.2.0
-      '@sapphire/async-queue': 1.5.5
-      '@sapphire/snowflake': 3.5.5
-      '@vladfrangu/async_event_emitter': 2.4.7
-      discord-api-types: 0.38.47
-      magic-bytes.js: 1.13.0
-      tslib: 2.8.1
-      undici: 6.24.1
-
-  '@discordjs/util@1.2.0':
-    dependencies:
-      discord-api-types: 0.38.47
-
-  '@discordjs/ws@1.2.3':
-    dependencies:
-      '@discordjs/collection': 2.1.1
-      '@discordjs/rest': 2.6.1
-      '@discordjs/util': 1.2.0
-      '@sapphire/async-queue': 1.5.5
-      '@types/ws': 8.18.1
-      '@vladfrangu/async_event_emitter': 2.4.7
-      discord-api-types: 0.38.47
-      tslib: 2.8.1
-      ws: 8.20.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@docsearch/css@3.7.0': {}
 
   '@docsearch/js@3.7.0(@algolia/client-search@5.13.0)(@types/react@18.3.12)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(search-insights@2.17.2)':
@@ -22392,6 +22249,14 @@ snapshots:
     dependencies:
       '@noble/ciphers': 1.3.0
 
+  '@electric-ax/agents-mcp@0.2.1(zod@4.3.6)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - zod
+
   '@electric-ax/agents-runtime@0.0.4(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@tanstack/react-db@0.1.83(react@19.2.5)(typescript@5.8.3))(react@19.2.5)(typescript@5.8.3)(ws@8.20.0)':
     dependencies:
       '@durable-streams/client': '@electric-ax/durable-streams-client-beta@0.3.1'
@@ -22412,6 +22277,42 @@ snapshots:
       - '@modelcontextprotocol/sdk'
       - aws-crt
       - bufferutil
+      - supports-color
+      - typescript
+      - utf-8-validate
+      - ws
+
+  '@electric-ax/agents-runtime@0.2.0(@tanstack/react-db@0.1.83(react@19.2.5)(typescript@5.8.3))(react@19.2.5)(typescript@5.8.3)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.78.0(zod@4.3.6)
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350
+      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)
+      '@electric-ax/agents-mcp': 0.2.1(zod@4.3.6)
+      '@mariozechner/pi-agent-core': 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+      '@mariozechner/pi-ai': 0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+      '@mozilla/readability': 0.6.0
+      '@sinclair/typebox': 0.34.49
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.6.5(typescript@5.8.3)
+      cron-parser: 5.5.0
+      diff: 9.0.0
+      jsdom: 28.1.0(@noble/hashes@2.0.1)
+      pino: 10.3.1
+      pino-pretty: 13.1.3
+      turndown: 7.2.4
+      turndown-plugin-gfm: 1.0.2
+      zod: 4.3.6
+      zod-to-json-schema: 3.25.2(zod@4.3.6)
+    optionalDependencies:
+      '@tanstack/react-db': 0.1.83(react@19.2.5)(typescript@5.8.3)
+      react: 19.2.5
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - '@modelcontextprotocol/sdk'
+      - '@noble/hashes'
+      - aws-crt
+      - bufferutil
+      - canvas
       - supports-color
       - typescript
       - utf-8-validate
@@ -24070,19 +23971,6 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-agent-core@0.70.2(zod@4.3.6)':
-    dependencies:
-      '@mariozechner/pi-ai': 0.70.2(zod@4.3.6)
-      typebox: 1.1.34
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
   '@mariozechner/pi-ai@0.57.1(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
@@ -24130,28 +24018,6 @@ snapshots:
       - zod
 
   '@mariozechner/pi-ai@0.70.2(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.90.0(zod@4.3.6)
-      '@aws-sdk/client-bedrock-runtime': 3.1037.0
-      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
-      '@mistralai/mistralai': 2.2.1
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.20.0)(zod@4.3.6)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      typebox: 1.1.34
-      undici: 7.25.0
-      zod-to-json-schema: 3.25.2(zod@4.3.6)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@mariozechner/pi-ai@0.70.2(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.90.0(zod@4.3.6)
       '@aws-sdk/client-bedrock-runtime': 3.1037.0
@@ -26524,17 +26390,6 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.46.1':
     optional: true
 
-  '@sapphire/async-queue@1.5.5': {}
-
-  '@sapphire/shapeshift@4.0.0':
-    dependencies:
-      fast-deep-equal: 3.1.3
-      lodash: 4.18.1
-
-  '@sapphire/snowflake@3.5.3': {}
-
-  '@sapphire/snowflake@3.5.5': {}
-
   '@shikijs/core@1.22.2':
     dependencies:
       '@shikijs/engine-javascript': 1.22.2
@@ -28369,10 +28224,6 @@ snapshots:
 
   '@types/web-bluetooth@0.0.20': {}
 
-  '@types/ws@8.18.1':
-    dependencies:
-      '@types/node': 22.19.17
-
   '@types/yargs-parser@21.0.3': {}
 
   '@types/yargs@17.0.33':
@@ -29472,8 +29323,6 @@ snapshots:
       '@vitest/pretty-format': 4.1.5
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
-
-  '@vladfrangu/async_event_emitter@2.4.7': {}
 
   '@volar/language-core@2.4.15':
     dependencies:
@@ -31335,27 +31184,6 @@ snapshots:
       path-type: 4.0.0
 
   discontinuous-range@1.0.0: {}
-
-  discord-api-types@0.38.47: {}
-
-  discord.js@14.26.4:
-    dependencies:
-      '@discordjs/builders': 1.14.1
-      '@discordjs/collection': 1.5.3
-      '@discordjs/formatters': 0.6.2
-      '@discordjs/rest': 2.6.1
-      '@discordjs/util': 1.2.0
-      '@discordjs/ws': 1.2.3
-      '@sapphire/snowflake': 3.5.3
-      discord-api-types: 0.38.47
-      fast-deep-equal: 3.1.3
-      lodash.snakecase: 4.1.1
-      magic-bytes.js: 1.13.0
-      tslib: 2.8.1
-      undici: 6.24.1
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   dlv@1.1.3: {}
 
@@ -34660,8 +34488,6 @@ snapshots:
 
   lodash.once@4.1.1: {}
 
-  lodash.snakecase@4.1.1: {}
-
   lodash.sortby@4.7.0: {}
 
   lodash.startcase@4.4.0: {}
@@ -34737,8 +34563,6 @@ snapshots:
   luxon@3.7.2: {}
 
   lz-string@1.5.0: {}
-
-  magic-bytes.js@1.13.0: {}
 
   magic-string@0.25.9:
     dependencies:
@@ -38949,8 +38773,6 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  ts-mixer@6.0.4: {}
-
   ts-pattern@5.5.0: {}
 
   tsconfck@3.1.6(typescript@5.7.2):
@@ -39223,8 +39045,6 @@ snapshots:
   undici-types@7.25.0: {}
 
   undici@6.20.1: {}
-
-  undici@6.24.1: {}
 
   undici@7.19.0: {}
 
