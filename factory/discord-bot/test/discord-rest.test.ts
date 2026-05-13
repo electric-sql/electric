@@ -12,7 +12,10 @@ describe(`createDiscordRest`, () => {
 
     expect(result).toEqual({ id: `m1` })
     expect(fetchFn).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchFn.mock.calls[0]
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ]
     expect(url).toBe(`https://discord.com/api/v10/channels/123/messages`)
     expect((init as RequestInit).method).toBe(`POST`)
     expect((init as any).headers.Authorization).toBe(`Bot abc`)

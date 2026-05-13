@@ -15,11 +15,9 @@
     "baseUrl": ".",
     "paths": {
       "@electric-ax/agents-runtime": [
-        "./node_modules/@electric-ax/agents-runtime/src/index.ts"
+        "../../packages/agents-runtime/src/index.ts"
       ],
-      "@electric-ax/agents-runtime/*": [
-        "./node_modules/@electric-ax/agents-runtime/src/*"
-      ]
+      "@electric-ax/agents-runtime/*": ["../../packages/agents-runtime/src/*"]
     }
   },
   "include": ["src/**/*", "test/**/*", "*.ts"],

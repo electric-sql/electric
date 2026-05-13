@@ -56,7 +56,9 @@ export function createDiscordTools({
       await rest.patch(`/channels/${channelId}/messages/${messageId}`, {
         content,
       })
-      return text(`Edited message ${messageId}`)
+      const out = text(`Edited message ${messageId}`)
+      out.details = { messageId, channelId }
+      return out
     },
   }
 
@@ -110,7 +112,9 @@ export function createDiscordTools({
         .reverse()
         .map((m) => `${m.author.username}: ${m.content}`)
         .join(`\n`)
-      return text(formatted || `(no messages)`)
+      const out = text(formatted || `(no messages)`)
+      out.details = { threadId, count: msgs.length }
+      return out
     },
   }
 
@@ -185,9 +189,11 @@ export function createDiscordTools({
           : Promise.resolve([]),
       ])
       const all = [...beforeMsgs.reverse(), ...afterMsgs]
-      return text(
+      const out = text(
         all.map((m) => `${m.author.username}: ${m.content}`).join(`\n`)
       )
+      out.details = { channelId, messageId, count: all.length }
+      return out
     },
   }
 

@@ -34,7 +34,9 @@ export function createDiscordRest(opts: DiscordRestOptions): DiscordRest {
     path: string,
     body?: unknown
   ): Promise<T> {
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let attempts = 0
+    while (true) {
+      attempts++
       const res = await fetchFn(`${base}${path}`, {
         method,
         headers: {
@@ -43,7 +45,7 @@ export function createDiscordRest(opts: DiscordRestOptions): DiscordRest {
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       })
-      if (res.status === 429 && attempt === 0) {
+      if (res.status === 429 && attempts < MAX_ATTEMPTS) {
         const payload = (await res.json().catch(() => ({}))) as {
           retry_after?: number
         }
