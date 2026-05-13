@@ -434,7 +434,10 @@ export class EntityManager {
 
     const writeToken = randomUUID()
 
-    const entityURL = `/${typeName}/${instanceId}`
+    const entityURL =
+      typeName === `principal`
+        ? principalUrl(instanceId)
+        : `/${typeName}/${instanceId}`
     const mainPath = `${entityURL}/main`
     const errorPath = `${entityURL}/error`
 

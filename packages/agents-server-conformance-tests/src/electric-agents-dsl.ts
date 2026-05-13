@@ -514,8 +514,8 @@ type Step =
       type?: string
       tags?: Record<string, string>
     }
-  | { kind: `send`; payload: unknown; from: string; type?: string }
-  | { kind: `sendTo`; url: string; payload: unknown; from: string }
+  | { kind: `send`; payload: unknown; from?: string; type?: string }
+  | { kind: `sendTo`; url: string; payload: unknown; from?: string }
   | { kind: `expectWebhook`; opts?: ExpectWebhookOpts }
   | { kind: `respondDone` }
   | { kind: `expectEntityContext`; checks?: EntityContextChecks }
@@ -731,13 +731,18 @@ export class ElectricAgentsScenario {
     return this
   }
 
-  send(payload: unknown, opts: { from: string; type?: string }): this {
-    this.steps.push({ kind: `send`, payload, from: opts.from, type: opts.type })
+  send(payload: unknown, opts?: { from?: string; type?: string }): this {
+    this.steps.push({
+      kind: `send`,
+      payload,
+      from: opts?.from,
+      type: opts?.type,
+    })
     return this
   }
 
-  sendTo(url: string, payload: unknown, opts: { from: string }): this {
-    this.steps.push({ kind: `sendTo`, url, payload, from: opts.from })
+  sendTo(url: string, payload: unknown, opts?: { from?: string }): this {
+    this.steps.push({ kind: `sendTo`, url, payload, from: opts?.from })
     return this
   }
 
@@ -927,12 +932,12 @@ export class ElectricAgentsScenario {
 
   expectSendSchemaError(
     payload: unknown,
-    opts: { from: string; type?: string }
+    opts?: { from?: string; type?: string }
   ): this {
     this.steps.push({
       kind: `expectSendSchemaError`,
       payload,
-      messageType: opts.type ?? `default`,
+      messageType: opts?.type ?? `default`,
       code: `SCHEMA_VALIDATION_ERROR`,
       status: 422,
     })
@@ -952,7 +957,7 @@ export class ElectricAgentsScenario {
 
   expectSendUnknownType(
     payload: unknown,
-    opts: { from: string; type: string }
+    opts: { from?: string; type: string }
   ): this {
     this.steps.push({
       kind: `expectSendUnknownType`,
@@ -1349,7 +1354,7 @@ async function executeStep(ctx: RunContext, step: Step): Promise<void> {
         `${ctx.currentEntityUrl}/send`,
         {
           method: `POST`,
-          body: JSON.stringify({ from: `test`, payload: { should: `fail` } }),
+          body: JSON.stringify({ payload: { should: `fail` } }),
         }
       )
       expect(res.status).toBe(step.status)

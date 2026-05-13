@@ -133,7 +133,7 @@ describe(`Scheduler Integration`, () => {
     expect(inboxEvents, JSON.stringify(events, null, 2)).toHaveLength(1)
     expect(inboxEvents[0]!.key).toMatch(/^scheduled-task-\d+$/)
     expect((inboxEvents[0]!.value as Record<string, unknown>).from).toBe(
-      `/principal/system:dev-local`
+      `/principal/system%3Adev-local`
     )
     expect((inboxEvents[0]!.value as Record<string, unknown>).payload).toBe(
       `hello later`
