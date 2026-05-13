@@ -99,8 +99,7 @@ async function handleStreamAppend(
   const event = decodeStreamAppendEvent(body)
 
   if (entity) {
-    const token =
-      request.headers.get(`authorization`)?.replace(/^Bearer\s+/i, ``) ?? ``
+    const token = writeTokenFromHeaders(request.headers)
     if (!manager.isValidWriteToken(entity, token)) {
       return apiError(401, ErrCodeUnauthorized, `Invalid write token`)
     }
@@ -183,4 +182,15 @@ function decodeStreamAppendEvent(body: Uint8Array): StreamAppendEvent | null {
   } catch {
     return null
   }
+}
+
+function writeTokenFromHeaders(headers: Headers): string {
+  const electricClaimToken = headers.get(`electric-claim-token`)?.trim()
+  if (electricClaimToken) return electricClaimToken
+  return (
+    headers
+      .get(`authorization`)
+      ?.replace(/^Bearer\s+/i, ``)
+      .trim() ?? ``
+  )
 }

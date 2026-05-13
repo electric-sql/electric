@@ -80,7 +80,7 @@ export function applyCors(
   )
   headers.set(
     `access-control-allow-headers`,
-    `content-type, authorization, ngrok-skip-browser-warning`
+    `content-type, authorization, electric-claim-token, x-electric-asserted-email, x-electric-asserted-name, ngrok-skip-browser-warning`
   )
   headers.set(`access-control-expose-headers`, `*`)
   return new Response(response.body, {

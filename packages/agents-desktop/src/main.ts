@@ -14,12 +14,14 @@ import {
 } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 type ServerConfig = {
   name: string
   url: string
+  headers?: Record<string, string>
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -43,6 +45,7 @@ type DesktopState = {
    * surface these as one-click "add" suggestions.
    */
   discoveredServers: Array<DiscoveredServer>
+  pullWakeRunnerId: string | null
 }
 
 type ApiKeys = {
@@ -84,6 +87,7 @@ type DesktopSettings = {
    * `authorizationCode` servers).
    */
   mcp?: { servers: Array<McpServerConfig> }
+  pullWakeRunnerId?: string
 }
 
 /**
@@ -115,6 +119,16 @@ const TRAY_ICON_2X_PATH = path.resolve(
 const APP_ICON_PATH = path.resolve(PACKAGE_DIR, `assets/icon.png`)
 const APP_DISPLAY_NAME = `Electric Agents`
 const MAX_CONNECTIONS_PER_HOST = `256`
+const DESKTOP_USER_DATA_DIR =
+  process.env.ELECTRIC_DESKTOP_USER_DATA_DIR?.trim() || null
+const INITIAL_SERVER_URL =
+  process.env.ELECTRIC_DESKTOP_SERVER_URL?.trim() ||
+  process.env.ELECTRIC_AGENTS_SERVER_URL?.trim() ||
+  null
+
+if (DESKTOP_USER_DATA_DIR) {
+  app.setPath(`userData`, path.resolve(DESKTOP_USER_DATA_DIR))
+}
 
 // Stable OAuth redirect base for MCP DCR (RFC 7591). The runtime
 // listens on an ephemeral port but the redirect URI must be constant
@@ -141,6 +155,62 @@ app.commandLine.appendSwitch(
  * so production keeps loading the static bundle from disk.
  */
 const DEV_SERVER_URL = process.env.ELECTRIC_DESKTOP_DEV_SERVER_URL ?? null
+const CONFIGURED_ASSERTED_AUTH_EMAIL =
+  process.env.ELECTRIC_ASSERTED_AUTH_EMAIL?.trim() || undefined
+const CONFIGURED_ASSERTED_AUTH_NAME =
+  process.env.ELECTRIC_ASSERTED_AUTH_NAME?.trim() || undefined
+const PULL_WAKE_RUNNER_ID =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_RUNNER_ID?.trim() || null
+const PULL_WAKE_REGISTER_RUNNER = [`1`, `true`].includes(
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER?.trim().toLowerCase() ??
+    ``
+)
+const PULL_WAKE_OWNER_USER_ID =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
+  CONFIGURED_ASSERTED_AUTH_EMAIL ||
+  CONFIGURED_ASSERTED_AUTH_NAME ||
+  `local-desktop`
+const DESKTOP_ASSERTED_AUTH_EMAIL =
+  CONFIGURED_ASSERTED_AUTH_EMAIL ?? PULL_WAKE_OWNER_USER_ID
+const DESKTOP_ASSERTED_AUTH_NAME =
+  CONFIGURED_ASSERTED_AUTH_NAME ?? `Electric Agents Desktop`
+
+function buildAssertedAuthHeaders(): Record<string, string> {
+  return {
+    'X-Electric-Asserted-Email': DESKTOP_ASSERTED_AUTH_EMAIL,
+    'X-Electric-Asserted-Name': DESKTOP_ASSERTED_AUTH_NAME,
+  }
+}
+
+function mergeHeaders(
+  ...sources: Array<Record<string, string> | undefined>
+): Record<string, string> | undefined {
+  const headers = new Headers()
+  for (const source of sources) {
+    if (!source) continue
+    new Headers(source).forEach((value, key) => headers.set(key, value))
+  }
+  const merged = headersToRecord(headers)
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+function hasHeader(
+  headers: Record<string, string> | undefined,
+  name: string
+): boolean {
+  return headers ? new Headers(headers).has(name) : false
+}
+
+function runnerOwnerUserIdFromHeaders(
+  headers: Record<string, string> | undefined
+): string {
+  const normalized = new Headers(headers)
+  return (
+    normalized.get(`x-electric-asserted-email`)?.trim() ||
+    normalized.get(`x-electric-asserted-name`)?.trim() ||
+    PULL_WAKE_OWNER_USER_ID
+  )
+}
 
 /**
  * Commands sent from the menu / tray (main process) to the focused
@@ -203,6 +273,7 @@ let state: DesktopState = {
   workingDirectory: null,
   error: null,
   discoveredServers: [],
+  pullWakeRunnerId: null,
 }
 let runtime: BuiltinAgentsServer | null = null
 let runtimeGeneration = 0
@@ -231,7 +302,42 @@ function normalizeServer(value: unknown): ServerConfig | null {
   } catch {
     return null
   }
-  return { name, url }
+  const headers = normalizeHeaderRecord(maybe.headers)
+  return {
+    name,
+    url,
+    ...(headers ? { headers } : {}),
+  }
+}
+
+function normalizeHeaderRecord(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== `object` || Array.isArray(value)) return null
+  const headers = new Headers()
+  for (const [rawName, rawValue] of Object.entries(
+    value as Record<string, unknown>
+  )) {
+    if (typeof rawValue !== `string`) continue
+    const name = rawName.trim()
+    const headerValue = rawValue.trim()
+    if (!name || !headerValue) continue
+    try {
+      headers.set(name, headerValue)
+    } catch {
+      console.warn(
+        `[agents-desktop] settings.json: invalid server header '${rawName}' ignored`
+      )
+    }
+  }
+  const normalized = headersToRecord(headers)
+  return Object.keys(normalized).length > 0 ? normalized : null
+}
+
+function headersToRecord(headers: Headers): Record<string, string> {
+  const record: Record<string, string> = {}
+  headers.forEach((value, key) => {
+    record[key] = value
+  })
+  return record
 }
 
 function normalizeServers(value: unknown): Array<ServerConfig> {
@@ -244,11 +350,35 @@ function normalizeServers(value: unknown): Array<ServerConfig> {
   return [...byUrl.values()]
 }
 
-function serverInList(
+function findServerByUrl(
   server: ServerConfig | null,
   servers: Array<ServerConfig>
+): ServerConfig | null {
+  if (!server) return null
+  return servers.find((entry) => entry.url === server.url) ?? null
+}
+
+function sameHeaders(
+  left: Record<string, string> | undefined,
+  right: Record<string, string> | undefined
 ): boolean {
-  return Boolean(server && servers.some((entry) => entry.url === server.url))
+  const leftHeaders = normalizeHeaderRecord(left) ?? {}
+  const rightHeaders = normalizeHeaderRecord(right) ?? {}
+  const leftEntries = Object.entries(leftHeaders)
+  if (leftEntries.length !== Object.keys(rightHeaders).length) return false
+  return leftEntries.every(([key, value]) => rightHeaders[key] === value)
+}
+
+function sameServer(
+  left: ServerConfig | null,
+  right: ServerConfig | null
+): boolean {
+  if (left === null || right === null) return left === right
+  return (
+    left.url === right.url &&
+    left.name === right.name &&
+    sameHeaders(left.headers, right.headers)
+  )
 }
 
 function normalizeApiKeys(value: unknown): ApiKeys {
@@ -356,32 +486,92 @@ function applyApiKeys(): void {
   )
 }
 
+function initialServerFromEnv(): ServerConfig | null {
+  if (!INITIAL_SERVER_URL) return null
+  try {
+    const url = new URL(INITIAL_SERVER_URL)
+    if (url.protocol !== `http:` && url.protocol !== `https:`) {
+      console.warn(
+        `[agents-desktop] Ignoring ELECTRIC_DESKTOP_SERVER_URL with unsupported protocol: ${INITIAL_SERVER_URL}`
+      )
+      return null
+    }
+    url.hash = ``
+    url.search = ``
+    return {
+      name: `Environment server`,
+      url: url.toString().replace(/\/$/, ``),
+    }
+  } catch {
+    console.warn(
+      `[agents-desktop] Ignoring invalid ELECTRIC_DESKTOP_SERVER_URL: ${INITIAL_SERVER_URL}`
+    )
+    return null
+  }
+}
+
+async function applyInitialServerFromEnv(): Promise<void> {
+  const server = initialServerFromEnv()
+  if (!server) return
+
+  const existing = settings.servers.find((entry) => entry.url === server.url)
+  const next = existing ?? server
+  if (!existing) {
+    settings.servers = [...settings.servers, next]
+  }
+  settings.activeServer = next
+  state = {
+    ...state,
+    activeServer: settings.activeServer,
+  }
+  await saveSettings()
+}
+
 async function loadSettings(): Promise<void> {
+  let shouldSaveSettings = false
   try {
     const raw = await readFile(settingsPath(), `utf8`)
     const parsed = JSON.parse(raw) as Partial<DesktopSettings>
     const servers = normalizeServers(parsed.servers)
-    const activeServer = normalizeServer(parsed.activeServer)
+    const activeServer = findServerByUrl(
+      normalizeServer(parsed.activeServer),
+      servers
+    )
+    const parsedPullWakeRunnerId =
+      typeof parsed.pullWakeRunnerId === `string`
+        ? parsed.pullWakeRunnerId.trim()
+        : null
+    const pullWakeRunnerId = parsedPullWakeRunnerId || randomUUID()
+    shouldSaveSettings = !parsedPullWakeRunnerId
     settings = {
       servers,
-      activeServer: serverInList(activeServer, servers) ? activeServer : null,
+      activeServer,
       workingDirectory:
         typeof parsed.workingDirectory === `string`
           ? parsed.workingDirectory
           : null,
       apiKeys: normalizeApiKeys(parsed.apiKeys),
       mcp: normalizeMcp(parsed.mcp),
+      pullWakeRunnerId,
     }
-  } catch {
-    settings = { ...DEFAULT_SETTINGS }
+  } catch (err) {
+    console.error(`[agents-desktop] Failed to load settings:`, err)
+    settings = { ...DEFAULT_SETTINGS, pullWakeRunnerId: randomUUID() }
+    shouldSaveSettings = true
+  }
+
+  if (shouldSaveSettings) {
+    await saveSettings()
   }
 
   state = {
     ...state,
     activeServer: settings.activeServer,
     workingDirectory: settings.workingDirectory,
+    pullWakeRunnerId: PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId ?? null,
   }
 
+  await applyInitialServerFromEnv()
   applyApiKeys()
 }
 
@@ -741,22 +931,71 @@ async function restartRuntime(): Promise<void> {
 
   const activeServer = settings.activeServer
   if (!activeServer) {
-    setState({ runtimeStatus: `stopped`, runtimeUrl: null, error: null })
+    setState({
+      runtimeStatus: `stopped`,
+      runtimeUrl: null,
+      error: null,
+      pullWakeRunnerId:
+        PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId ?? null,
+    })
     return
   }
 
-  setState({ runtimeStatus: `starting`, runtimeUrl: null, error: null })
+  setState({
+    runtimeStatus: `starting`,
+    runtimeUrl: null,
+    error: null,
+    pullWakeRunnerId: PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId ?? null,
+  })
+
+  const runnerId = PULL_WAKE_RUNNER_ID ?? settings.pullWakeRunnerId
+  if (!runnerId) {
+    throw new Error(`Desktop built-in agents require a pull-wake runner id`)
+  }
+  if (!settings.pullWakeRunnerId) {
+    settings.pullWakeRunnerId = runnerId
+    await saveSettings()
+  }
+  setState({ pullWakeRunnerId: runnerId })
+
+  const runtimeHeaders = mergeHeaders(
+    buildAssertedAuthHeaders(),
+    activeServer.headers
+  )
+  const runnerOwnerUserId = runnerOwnerUserIdFromHeaders(runtimeHeaders)
+  console.info(
+    `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
+  )
+  console.info(`[agents-desktop] Pull-wake runner id: ${runnerId}`)
+  if (PULL_WAKE_REGISTER_RUNNER) {
+    console.info(
+      `[agents-desktop] Pull-wake runner registration enabled; owner user id: ${runnerOwnerUserId}`
+    )
+  } else {
+    console.info(
+      `[agents-desktop] Pull-wake runner registration skipped; runner must already be registered with the agents server.`
+    )
+  }
 
   const nextRuntime = new BuiltinAgentsServer({
     agentServerUrl: activeServer.url,
-    host: `127.0.0.1`,
-    port: 0,
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
     extraMcpServers: settings.mcp?.servers,
     loadProjectMcpConfig: true,
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
     openAuthorizeUrl: (url, server) => {
       void handleAuthorizeUrl(url, server)
+    },
+    pullWake: {
+      runnerId,
+      registerRunner: PULL_WAKE_REGISTER_RUNNER,
+      ownerUserId: PULL_WAKE_REGISTER_RUNNER ? runnerOwnerUserId : undefined,
+      label: `Electric Agents Desktop`,
+      headers: runtimeHeaders,
+      claimHeaders: runtimeHeaders,
+      claimTokenHeader: hasHeader(runtimeHeaders, `authorization`)
+        ? `electric-claim-token`
+        : undefined,
     },
   })
   runtime = nextRuntime
@@ -824,19 +1063,13 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
 
 async function setActiveServer(server: ServerConfig | null): Promise<void> {
   const normalized = normalizeServer(server)
-  const next =
-    normalized && serverInList(normalized, settings.servers) ? normalized : null
+  const next = findServerByUrl(normalized, settings.servers)
   // Renderer mount fires `saveActiveServer(active)` even when the
   // value didn't actually change (React 19 StrictMode also double-
   // fires the effect in dev). Bail early when the active server is
   // identical to what we already had so we don't tear down and
   // restart Horton on every window open.
-  const same =
-    (next === null && settings.activeServer === null) ||
-    (next !== null &&
-      settings.activeServer !== null &&
-      next.url === settings.activeServer.url &&
-      next.name === settings.activeServer.name)
+  const same = sameServer(next, settings.activeServer)
   settings.activeServer = next
   setState({ activeServer: settings.activeServer })
   await saveSettings()
@@ -951,16 +1184,27 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     `desktop:save-servers`,
     async (_event, servers: Array<ServerConfig>) => {
+      const previousActive = settings.activeServer
       settings.servers = normalizeServers(servers)
-      if (!serverInList(settings.activeServer, settings.servers)) {
-        settings.activeServer = null
-        setState({ activeServer: null })
-        await restartRuntime()
+      settings.activeServer = findServerByUrl(
+        settings.activeServer,
+        settings.servers
+      )
+      const activeChanged = !sameServer(previousActive, settings.activeServer)
+      if (activeChanged) {
+        setState({ activeServer: settings.activeServer })
       }
       await saveSettings()
+      if (activeChanged) {
+        await restartRuntime()
+      }
     }
   )
   ipcMain.handle(`desktop:get-state`, () => state)
+  ipcMain.handle(
+    `desktop:get-asserted-auth-headers`,
+    () => buildAssertedAuthHeaders() ?? {}
+  )
   ipcMain.handle(
     `desktop:set-active-server`,
     async (_event, server: ServerConfig | null) => {

@@ -32,7 +32,7 @@ COPY packages/agents-server-conformance-tests/package.json ./packages/agents-ser
 COPY packages/agents-server-ui/package.json ./packages/agents-server-ui/package.json
 COPY packages/agents-server/package.json ./packages/agents-server/package.json
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-  pnpm install --filter @electric-ax/agents-server... --filter @electric-sql/client --frozen-lockfile
+  pnpm install --filter @electric-ax/agents-server... --filter @electric-sql/client --frozen-lockfile --ignore-scripts
 
 COPY tsconfig.base.json tsconfig.build.json ./
 COPY packages/typescript-client ./packages/typescript-client

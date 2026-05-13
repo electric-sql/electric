@@ -9,6 +9,7 @@ import { createHandlerContext } from './context-factory'
 import { createSetupContext } from './setup-context'
 import { createEntityLogPrefix, runtimeLog } from './log'
 import { createRuntimeServerClient } from './runtime-server-client'
+import { appendPathToUrl } from './url'
 import type {
   CronObservationSource,
   EntitiesObservationSource,
@@ -16,6 +17,7 @@ import type {
 } from './observation-sources'
 import type {
   CollectionDefinition,
+  ClaimTokenHeader,
   EntityHandle,
   EntityStreamDBWithActions,
   ManifestEntry,
@@ -45,15 +47,82 @@ interface WakeDeltaWindow {
   events: Array<ChangeEvent>
 }
 
+interface ClaimCallbackResponse {
+  ok: boolean
+  claimToken?: string
+  token?: string
+  writeToken?: string
+  error?: { code: string }
+}
+
+interface RawClaimCallbackResponse extends Omit<ClaimCallbackResponse, `ok`> {
+  ok?: boolean
+}
+
 const DEFAULT_IDLE_TIMEOUT = 20_000
-const DEFAULT_HEARTBEAT_INTERVAL = 30_000
+const DEFAULT_HEARTBEAT_INTERVAL = 10_000
 type EntityStreamOptions = NonNullable<
   Parameters<typeof createEntityStreamDB>[3]
+>
+type ClaimHeaderConfig = Pick<
+  ProcessWakeConfig,
+  `claimHeaders` | `claimTokenHeader`
 >
 type EntityStreamHandle = NonNullable<EntityStreamOptions[`stream`]>
 
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
+}
+
+async function resolveHeadersProvider(
+  provider: ProcessWakeConfig[`claimHeaders`]
+): Promise<Record<string, string> | undefined> {
+  const init = typeof provider === `function` ? await provider() : provider
+  const headers = Object.fromEntries(new Headers(init).entries())
+  return Object.keys(headers).length > 0 ? headers : undefined
+}
+
+async function createClaimCallbackHeaders(
+  config: ClaimHeaderConfig,
+  token: string
+): Promise<Headers> {
+  const extraHeaders =
+    typeof config.claimHeaders === `function`
+      ? await config.claimHeaders()
+      : config.claimHeaders
+  const headers = new Headers(extraHeaders)
+
+  if (!headers.has(`content-type`)) {
+    headers.set(`content-type`, `application/json`)
+  }
+
+  applyClaimTokenHeader(
+    headers,
+    config.claimTokenHeader ?? `authorization`,
+    token
+  )
+
+  return headers
+}
+
+function applyClaimTokenHeader(
+  headers: Headers,
+  claimTokenHeader: ClaimTokenHeader,
+  token: string
+): void {
+  if (
+    claimTokenHeader === `authorization` ||
+    (claimTokenHeader === `both` && !headers.has(`authorization`))
+  ) {
+    headers.set(`authorization`, `Bearer ${token}`)
+  }
+
+  if (
+    claimTokenHeader === `electric-claim-token` ||
+    claimTokenHeader === `both`
+  ) {
+    headers.set(`electric-claim-token`, token)
+  }
 }
 
 function constructWakeEvent(
@@ -193,6 +262,11 @@ export async function processWebhookWake(
     error: (message: string, ...args: Array<unknown>) =>
       runtimeLog.error(logPrefix, message, ...args),
   }
+  const claimHeaderConfig: ClaimHeaderConfig = {
+    claimHeaders: config.claimHeaders,
+    claimTokenHeader: config.claimTokenHeader,
+  }
+  const serverHeaders = await resolveHeadersProvider(config.claimHeaders)
   const debugWakeTypes = process.env.ELECTRIC_AGENTS_DEBUG_WAKE_TYPES === `1`
 
   if (!typeName) {
@@ -208,7 +282,7 @@ export async function processWebhookWake(
     return null
   }
 
-  const streamUrl = `${baseUrl}${streamPath}`
+  const streamUrl = appendPathToUrl(baseUrl, streamPath)
   const notificationOffset =
     notification.streams.find((streamEntry) => streamEntry.path === streamPath)
       ?.offset ?? `-1`
@@ -217,6 +291,8 @@ export async function processWebhookWake(
   let serverHttpCount = 0
   const serverClient = createRuntimeServerClient({
     baseUrl,
+    headers: serverHeaders,
+    writeTokenHeader: config.claimTokenHeader,
     track: <T>(promise: Promise<T>) => {
       const httpT0 = performance.now()
       const tracked = io.track(promise)
@@ -256,6 +332,7 @@ export async function processWebhookWake(
   let writeToken = ``
   const stream = new DurableStream({
     url: streamUrl,
+    headers: serverHeaders,
     contentType: `application/json`,
   })
 
@@ -266,7 +343,11 @@ export async function processWebhookWake(
     fetch: (input, init) => {
       const headers = new Headers(init?.headers)
       if (writeToken) {
-        headers.set(`authorization`, `Bearer ${writeToken}`)
+        applyClaimTokenHeader(
+          headers,
+          config.claimTokenHeader ?? `authorization`,
+          writeToken
+        )
       }
       return globalThis.fetch(input, { ...init, headers })
     },
@@ -297,12 +378,7 @@ export async function processWebhookWake(
   )
 
   let activeClaimToken = claimToken
-  let claimData: {
-    ok: boolean
-    claimToken?: string
-    writeToken?: string
-    error?: { code: string }
-  } | null = null
+  let claimData: ClaimCallbackResponse | null = null
   let heartbeat: ReturnType<typeof setInterval> | null = null
   let claimedWake = false
   let result: WakeResult | null = null
@@ -640,24 +716,31 @@ export async function processWebhookWake(
     // preload() opens ONE SSE connection, reads until up-to-date, and stays connected.
     // The onEvent callback collects raw events into catchUpEvents during preload.
     const claimT0 = performance.now()
-    const claimPromise = fetch(callback, {
-      method: `POST`,
-      headers: {
-        'content-type': `application/json`,
-        authorization: `Bearer ${claimToken}`,
-      },
-      body: JSON.stringify({ epoch, wakeId }),
-    }).then(async (response) => {
-      claimData = (await response.json()) as {
-        ok: boolean
-        claimToken?: string
-        writeToken?: string
-        error?: { code: string }
-      }
-      if (claimData.claimToken) activeClaimToken = claimData.claimToken
-      claimMs = +(performance.now() - claimT0).toFixed(2)
-      return claimData
-    })
+    const claimPromise = createClaimCallbackHeaders(
+      claimHeaderConfig,
+      claimToken
+    )
+      .then((headers) =>
+        fetch(callback, {
+          method: `POST`,
+          headers,
+          body: JSON.stringify({ epoch, wakeId }),
+        })
+      )
+      .then(async (response) => {
+        const rawClaimData = (await response.json()) as RawClaimCallbackResponse
+        claimData = {
+          ...rawClaimData,
+          ok:
+            rawClaimData.ok === undefined
+              ? response.ok && rawClaimData.error === undefined
+              : rawClaimData.ok,
+        }
+        if (claimData.claimToken) activeClaimToken = claimData.claimToken
+        if (claimData.token) activeClaimToken = claimData.token
+        claimMs = +(performance.now() - claimT0).toFixed(2)
+        return claimData
+      })
 
     const preloadT0 = performance.now()
     const preloadPromise = db.preload().then(() => {
@@ -675,14 +758,14 @@ export async function processWebhookWake(
 
     // 3b. Start heartbeat once this worker owns the wake
     heartbeat = setInterval(() => {
-      fetch(callback, {
-        method: `POST`,
-        headers: {
-          'content-type': `application/json`,
-          authorization: `Bearer ${activeClaimToken}`,
-        },
-        body: JSON.stringify({ epoch }),
-      })
+      createClaimCallbackHeaders(claimHeaderConfig, activeClaimToken)
+        .then((headers) =>
+          fetch(callback, {
+            method: `POST`,
+            headers,
+            body: JSON.stringify({ epoch }),
+          })
+        )
         .then(async (r) => {
           if (!r.ok) {
             failBackgroundWake(
@@ -694,6 +777,7 @@ export async function processWebhookWake(
           const data = (await r.json()) as {
             ok: boolean
             claimToken?: string
+            token?: string
           }
           if (!data.ok) {
             failBackgroundWake(
@@ -703,6 +787,7 @@ export async function processWebhookWake(
             return
           }
           if (data.claimToken) activeClaimToken = data.claimToken
+          if (data.token) activeClaimToken = data.token
         })
         .catch((err: unknown) => {
           failBackgroundWake(err, `HEARTBEAT_FAILED`)
@@ -793,7 +878,10 @@ export async function processWebhookWake(
           childStreamUrl,
           childEntry?.definition.state,
           childEntry?.definition.actions,
-          onEvent ? { onEvent } : undefined
+          {
+            ...(onEvent ? { onEvent } : {}),
+            streamOptions: { headers: serverHeaders },
+          }
         )
         secondaryDbs.push({
           drainPendingWrites: () => childDb.utils.drainPendingWrites(),
@@ -815,6 +903,7 @@ export async function processWebhookWake(
           streamOptions: {
             url: sourceStreamUrl,
             contentType: `application/json`,
+            headers: serverHeaders,
           },
           ...(onEvent ? { onEvent } : {}),
           state: normalizeObservationSchema(sourceSchema),
@@ -837,6 +926,7 @@ export async function processWebhookWake(
         if (mode === `create`) {
           await serverClient.ensureSharedStateStream(ssId)
         }
+        const ssStreamUrl = appendPathToUrl(baseUrl, ssStreamPath)
         const ssCollections: Record<string, CollectionDefinition> = {}
         for (const [collName, collSchema] of Object.entries(ssSchema)) {
           ssCollections[collName] = {
@@ -845,7 +935,8 @@ export async function processWebhookWake(
           }
         }
         const sharedStream = new DurableStream({
-          url: `${baseUrl}${ssStreamPath}`,
+          url: ssStreamUrl,
+          headers: serverHeaders,
           contentType: `application/json`,
         })
         const sharedProducer = new IdempotentProducer(
@@ -860,7 +951,7 @@ export async function processWebhookWake(
           }
         )
         const sharedDb = createEntityStreamDB(
-          `${baseUrl}${ssStreamPath}`,
+          ssStreamUrl,
           ssCollections,
           undefined,
           {
@@ -1525,6 +1616,7 @@ export async function processWebhookWake(
           await sendDone(
             callback,
             activeClaimToken,
+            claimHeaderConfig,
             epoch,
             streamPath,
             doneOffset === `-1` ? null : doneOffset
@@ -1569,16 +1661,14 @@ export const processWake: typeof processWebhookWake = processWebhookWake
 async function sendDone(
   callback: string,
   token: string,
+  claimHeaderConfig: ClaimHeaderConfig,
   epoch: number,
   streamPath: string,
   offset: string | null
 ): Promise<void> {
   const response = await fetch(callback, {
     method: `POST`,
-    headers: {
-      'content-type': `application/json`,
-      authorization: `Bearer ${token}`,
-    },
+    headers: await createClaimCallbackHeaders(claimHeaderConfig, token),
     body: JSON.stringify({
       epoch,
       acks: offset ? [{ path: streamPath, offset }] : [],

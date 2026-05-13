@@ -21,6 +21,7 @@ try {
 type ServerConfig = {
   name: string
   url: string
+  headers?: Record<string, string>
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -38,6 +39,7 @@ type DesktopState = {
   workingDirectory: string | null
   error: string | null
   discoveredServers: Array<DiscoveredServer>
+  pullWakeRunnerId: string | null
 }
 
 type ApiKeys = {
@@ -148,6 +150,8 @@ const api = {
     ipcRenderer.invoke(`desktop:rescan-servers`),
   getApiKeysStatus: (): Promise<ApiKeysStatus> =>
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
+  getAssertedAuthHeaders: (): Promise<Record<string, string>> =>
+    ipcRenderer.invoke(`desktop:get-asserted-auth-headers`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
   getWorkingDirectory: (): Promise<string | null> =>

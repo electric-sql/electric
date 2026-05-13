@@ -586,6 +586,14 @@ function titleCase(value: string): string {
     .join(` `)
 }
 
+function stableEntityUrlKey(urls: Iterable<string>): string {
+  return Array.from(new Set(urls)).sort().join(`\0`)
+}
+
+function entityUrlsFromKey(key: string): Array<string> {
+  return key.length === 0 ? [] : key.split(`\0`)
+}
+
 // `section` and `responseTimestamp` are pulled out of the parent
 // `EntityTimelineEntry` so React.memo's shallow compare can hit on
 // the *section* identity. `buildTimelineEntries` returns a fresh
@@ -667,9 +675,13 @@ export function EntityTimeline({
 }): React.ReactElement {
   const rows = useMemo(() => entries, [entries])
   const { entitiesCollection } = useElectricAgents()
-  const referencedEntityUrls = useMemo(
-    () => Array.from(new Set(entities.map((entity) => entity.url))),
+  const referencedEntityUrlKey = useMemo(
+    () => stableEntityUrlKey(entities.map((entity) => entity.url)),
     [entities]
+  )
+  const referencedEntityUrls = useMemo(
+    () => entityUrlsFromKey(referencedEntityUrlKey),
+    [referencedEntityUrlKey]
   )
   const { data: entityStatuses = [] } = useLiveQuery(
     (q) => {
@@ -684,7 +696,7 @@ export function EntityTimeline({
           status: e.status,
         }))
     },
-    [entitiesCollection, referencedEntityUrls]
+    [entitiesCollection, referencedEntityUrlKey]
   )
   const entityStatusByUrl = useMemo(() => {
     const statusByUrl = new Map<string, IncludesEntity[`status`]>()

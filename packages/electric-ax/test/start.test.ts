@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
-  resolveBuiltinAgentsHost,
-  resolveBuiltinAgentsPort,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
+  resolvePullWakeOwnerId,
+  resolvePullWakeRunnerId,
   waitForElectricAgentsServer,
 } from '../src/start'
 
@@ -73,45 +73,45 @@ describe(`resolveElectricAgentsPort`, () => {
   })
 })
 
-describe(`resolveBuiltinAgentsPort`, () => {
+describe(`resolvePullWakeRunnerId`, () => {
   it(`uses process env when present`, () => {
     expect(
-      resolveBuiltinAgentsPort({ ELECTRIC_AGENTS_BUILTIN_PORT: `5548` }, {})
-    ).toBe(5548)
+      resolvePullWakeRunnerId({ ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID: `r1` }, {})
+    ).toBe(`r1`)
   })
 
   it(`falls back to .env`, () => {
     expect(
-      resolveBuiltinAgentsPort({}, { ELECTRIC_AGENTS_BUILTIN_PORT: `6658` })
-    ).toBe(6658)
+      resolvePullWakeRunnerId({}, { ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID: `r2` })
+    ).toBe(`r2`)
   })
 
-  it(`defaults to 4448`, () => {
-    expect(resolveBuiltinAgentsPort({}, {})).toBe(4448)
+  it(`derives a stable local runner id from asserted identity`, () => {
+    expect(
+      resolvePullWakeRunnerId(
+        { ELECTRIC_ASSERTED_AUTH_EMAIL: `Alice Smith@example.com` },
+        {}
+      )
+    ).toBe(`builtin-alice-smith-example.com`)
+  })
+
+  it(`defaults when no identity is available`, () => {
+    expect(resolvePullWakeRunnerId({}, {})).toBe(`builtin-agents`)
   })
 })
 
-describe(`resolveBuiltinAgentsHost`, () => {
-  it(`uses process env when present`, () => {
+describe(`resolvePullWakeOwnerId`, () => {
+  it(`uses asserted auth email when present`, () => {
     expect(
-      resolveBuiltinAgentsHost(
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `127.0.0.1` },
+      resolvePullWakeOwnerId(
+        { ELECTRIC_ASSERTED_AUTH_EMAIL: `a@example.com` },
         {}
       )
-    ).toBe(`127.0.0.1`)
+    ).toBe(`a@example.com`)
   })
 
-  it(`falls back to .env`, () => {
-    expect(
-      resolveBuiltinAgentsHost(
-        {},
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `localhost` }
-      )
-    ).toBe(`localhost`)
-  })
-
-  it(`defaults to all interfaces so Docker can reach the host runtime`, () => {
-    expect(resolveBuiltinAgentsHost({}, {})).toBe(`0.0.0.0`)
+  it(`falls back to the local builtin owner`, () => {
+    expect(resolvePullWakeOwnerId({}, {})).toBe(`builtin-agents`)
   })
 })
 
@@ -143,6 +143,15 @@ describe(`docker compose full stack config`, () => {
   it(`does not force-pull over a locally built agents-server image`, () => {
     expect(dockerComposeFull).toContain(
       `pull_policy: ${localAgentsServerPullPolicy}`
+    )
+  })
+
+  it(`enables local asserted auth by default for pull-wake runners`, () => {
+    expect(dockerComposeFull).toContain(
+      `ELECTRIC_AGENTS_DEV_ASSERTED_AUTH: \${ELECTRIC_AGENTS_DEV_ASSERTED_AUTH:-1}`
+    )
+    expect(dockerComposeFull).toContain(
+      `ELECTRIC_ASSERTED_AUTH_EMAIL: \${ELECTRIC_ASSERTED_AUTH_EMAIL:-builtin-agents}`
     )
   })
 })

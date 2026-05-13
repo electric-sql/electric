@@ -25,16 +25,39 @@ describe(`runtime-server-client.setTag`, () => {
       `http://test.example/_electric/entities/horton/abc/tags/title`
     )
     expect(calls[0]!.init?.method).toBe(`POST`)
-    const headers = calls[0]!.init?.headers as Record<string, string>
-    expect(headers[`authorization`] ?? headers[`Authorization`]).toBe(
-      `Bearer wt-1234`
-    )
-    expect(headers[`content-type`] ?? headers[`Content-Type`]).toBe(
-      `application/json`
-    )
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer wt-1234`)
+    expect(headers.get(`content-type`)).toBe(`application/json`)
     expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
       value: `Refactor auth`,
     })
+  })
+
+  it(`can keep server authorization while sending write token separately`, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fakeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    }) as unknown as typeof fetch
+
+    const client = createRuntimeServerClient({
+      baseUrl: `http://test.example?secret=s1`,
+      fetch: fakeFetch,
+      headers: { authorization: `Bearer tenant-token` },
+      writeTokenHeader: `electric-claim-token`,
+    })
+
+    await client.setTag(`/horton/abc`, `title`, `Refactor auth`, `wt-1234`)
+
+    expect(calls[0]!.url).toBe(
+      `http://test.example/_electric/entities/horton/abc/tags/title?secret=s1`
+    )
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get(`authorization`)).toBe(`Bearer tenant-token`)
+    expect(headers.get(`electric-claim-token`)).toBe(`wt-1234`)
   })
 
   it(`throws when the server returns a non-2xx response`, async () => {

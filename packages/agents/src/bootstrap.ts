@@ -5,7 +5,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  appendPathToUrl,
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
@@ -16,8 +15,10 @@ import { createBuiltinModelCatalog } from './model-catalog'
 import { createSkillsRegistry } from './skills/registry'
 import type {
   AgentTool,
+  DispatchPolicy,
   EntityRegistry,
   EntityStreamDBWithActions,
+  HeadersProvider,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import type { ChangeEvent } from '@durable-streams/state'
@@ -42,6 +43,10 @@ export interface BuiltinAgentHandlerOptions {
   streamFn?: StreamFn
   publicUrl?: string
   runtimeName?: string
+  serverHeaders?: HeadersProvider
+  defaultDispatchPolicyForType?: (
+    typeName: string
+  ) => DispatchPolicy | undefined
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -73,15 +78,14 @@ export async function createBuiltinAgentHandler(
 ): Promise<AgentHandlerResult | null> {
   const {
     agentServerUrl,
-    serveEndpoint = appendPathToUrl(
-      agentServerUrl,
-      DEFAULT_BUILTIN_AGENT_HANDLER_PATH
-    ),
+    serveEndpoint,
     workingDirectory,
     streamFn,
     createElectricTools,
     publicUrl,
     runtimeName,
+    serverHeaders,
+    defaultDispatchPolicyForType,
   } = options
 
   const modelCatalog = await createBuiltinModelCatalog({
@@ -134,6 +138,8 @@ export async function createBuiltinAgentHandler(
     serveEndpoint,
     registry,
     subscriptionPathForType: (name) => `/${name}/*/main`,
+    defaultDispatchPolicyForType,
+    serverHeaders,
     idleTimeout: 5_000,
     createElectricTools,
     publicUrl,

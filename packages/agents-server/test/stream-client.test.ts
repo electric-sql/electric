@@ -120,10 +120,95 @@ describe(`StreamClient`, () => {
       const [, init] = fetchMock.mock.calls[0]!
       expect(JSON.parse(init?.body as string)).toEqual({
         type: `webhook`,
-        pattern: `chat/**`,
+        pattern: `tenant-a/chat/**`,
         webhook: { url: `http://agent.local/webhook` },
         description: `test subscription`,
       })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`sends configured durable streams bearer auth on subscription requests`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(
+      `http://127.0.0.1:4545/v1/stream/tenant-a`,
+      { bearer: `service-token` }
+    )
+
+    try {
+      await client.putSubscription(`sub-1`, {
+        type: `pull-wake`,
+        streams: [`/chat/one/main`],
+        wake_stream: `/runners/runner-1/wake`,
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      const headers = new Headers(init?.headers)
+      expect(headers.get(`authorization`)).toBe(`Bearer service-token`)
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`resolves durable streams bearer functions per request`, async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+    let token = 0
+    const client = new StreamClient(
+      `http://127.0.0.1:4545/v1/stream/tenant-a`,
+      { bearer: () => `service-token-${++token}` }
+    )
+
+    try {
+      await client.getSubscription(`sub-1`)
+      await client.claimSubscription(`sub-1`, `runner-1`)
+
+      expect(
+        new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get(`authorization`)
+      ).toBe(`Bearer service-token-1`)
+      expect(
+        new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get(`authorization`)
+      ).toBe(`Bearer service-token-2`)
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`preserves claim token authorization on subscription ack`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(
+      `http://127.0.0.1:4545/v1/stream/tenant-a`,
+      { bearer: `service-token` }
+    )
+
+    try {
+      await client.ackSubscription(`sub-1`, `claim-token`, {
+        wake_id: `wake-1`,
+        generation: 1,
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      const headers = new Headers(init?.headers)
+      expect(headers.get(`authorization`)).toBe(`Bearer claim-token`)
     } finally {
       fetchMock.mockRestore()
     }

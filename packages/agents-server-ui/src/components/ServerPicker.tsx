@@ -7,6 +7,7 @@ import {
   rescanDiscoveredServers,
   type DiscoveredServer,
 } from '../lib/server-connection'
+import type { ServerConfig } from '../lib/types'
 import {
   Button,
   Dialog,
@@ -204,15 +205,15 @@ export function ServerPicker(): React.ReactElement {
       </Menu.Root>
 
       <Dialog.Root open={adding} onOpenChange={setAdding}>
-        <Dialog.Content maxWidth={440}>
+        <Dialog.Content maxWidth={560}>
           <Dialog.Title>Add server</Dialog.Title>
           <Dialog.Description>
             Connect to an Electric Agents server by giving it a label and its
             base URL.
           </Dialog.Description>
           <AddServerForm
-            onAdd={(name, url) => {
-              addServer({ name, url })
+            onAdd={(server) => {
+              addServer(server)
               setAdding(false)
             }}
             onCancel={() => setAdding(false)}
@@ -227,19 +228,75 @@ function AddServerForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (name: string, url: string) => void
+  onAdd: (server: ServerConfig) => void
   onCancel: () => void
 }): React.ReactElement {
   const [name, setName] = useState(``)
   const [url, setUrl] = useState(``)
+  const [headers, setHeaders] = useState<
+    Array<{ id: string; name: string; value: string }>
+  >([])
   const trimmedName = name.trim()
   const trimmedUrl = url.trim()
-  const canSubmit = trimmedName.length > 0 && trimmedUrl.length > 0
+  const nonEmptyHeaders = headers.filter(
+    (header) => header.name.trim() || header.value.trim()
+  )
+  const headerNames = nonEmptyHeaders.map((header) =>
+    header.name.trim().toLowerCase()
+  )
+  const hasDuplicateHeader = headerNames.some(
+    (headerName, index) => headerNames.indexOf(headerName) !== index
+  )
+  const headersComplete = nonEmptyHeaders.every(
+    (header) => header.name.trim() && header.value.trim()
+  )
+  const canSubmit =
+    trimmedName.length > 0 &&
+    trimmedUrl.length > 0 &&
+    headersComplete &&
+    !hasDuplicateHeader
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
-    onAdd(trimmedName, trimmedUrl)
+    const requestHeaders = Object.fromEntries(
+      nonEmptyHeaders.map((header) => [header.name.trim(), header.value.trim()])
+    )
+    onAdd({
+      name: trimmedName,
+      url: trimmedUrl,
+      ...(Object.keys(requestHeaders).length > 0
+        ? { headers: requestHeaders }
+        : {}),
+    })
+  }
+
+  const addHeader = () => {
+    setHeaders((current) => [
+      ...current,
+      {
+        id:
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now()}-${current.length}`,
+        name: ``,
+        value: ``,
+      },
+    ])
+  }
+
+  const updateHeader = (
+    id: string,
+    patch: Partial<{ name: string; value: string }>
+  ) => {
+    setHeaders((current) =>
+      current.map((header) =>
+        header.id === id ? { ...header, ...patch } : header
+      )
+    )
+  }
+
+  const removeHeader = (id: string) => {
+    setHeaders((current) => current.filter((header) => header.id !== id))
   }
 
   return (
@@ -262,6 +319,52 @@ function AddServerForm({
             type="url"
             size={2}
           />
+        </Field>
+        <Field label="Headers">
+          <Stack direction="column" gap={2}>
+            {headers.map((header) => (
+              <div key={header.id} className={styles.headerRow}>
+                <Input
+                  placeholder="Authorization"
+                  value={header.name}
+                  onChange={(e) =>
+                    updateHeader(header.id, { name: e.target.value })
+                  }
+                  size={2}
+                />
+                <Input
+                  placeholder="Bearer ..."
+                  value={header.value}
+                  onChange={(e) =>
+                    updateHeader(header.id, { value: e.target.value })
+                  }
+                  size={2}
+                />
+                <Tooltip content="Remove header">
+                  <IconButton
+                    type="button"
+                    size={2}
+                    variant="ghost"
+                    tone="neutral"
+                    onClick={() => removeHeader(header.id)}
+                    aria-label="Remove header"
+                  >
+                    <Icon icon={Trash2} size={1} />
+                  </IconButton>
+                </Tooltip>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="soft"
+              tone="neutral"
+              onClick={addHeader}
+              className={styles.addHeaderButton}
+            >
+              <Icon icon={Plus} size={1} />
+              Add header
+            </Button>
+          </Stack>
         </Field>
       </Stack>
       <Stack gap={2} justify="end" className={styles.addFormActions}>

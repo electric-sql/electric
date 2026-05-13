@@ -15,10 +15,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
   AgentTool,
   EntityStreamDBWithActions,
+  HeadersProvider,
   ProcessWakeConfig,
+  WakeNotification,
   WebhookNotification,
 } from './types'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { DispatchPolicy } from './runtime-server-client'
 
 export interface RuntimeRouterConfig {
   /** Base URL of the durable streams server (e.g. http://localhost:4200) */
@@ -42,9 +45,15 @@ export interface RuntimeRouterConfig {
   registry?: EntityRegistry
   /** Override the webhook subscription path used per entity type registration. */
   subscriptionPathForType?: (typeName: string) => string
+  /** Optional default dispatch policy used when registering each entity type. */
+  defaultDispatchPolicyForType?: (
+    typeName: string
+  ) => DispatchPolicy | undefined
+  /** Additional headers sent to agents-server control-plane requests. */
+  serverHeaders?: HeadersProvider
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
-  /** Heartbeat interval in ms (default: 30_000) */
+  /** Heartbeat interval in ms (default: 10_000) */
   heartbeatInterval?: number
   /** Optional tool factory invoked for each wake context before handler execution. */
   createElectricTools?: (context: {
@@ -103,6 +112,14 @@ export interface RuntimeRouter {
   handleWebhookRequest: (request: Request) => Promise<Response>
 
   /**
+   * Dispatch an already-parsed wake notification from any transport.
+   */
+  dispatchWake: (
+    notification: WakeNotification,
+    options?: Pick<ProcessWakeConfig, `claimHeaders` | `claimTokenHeader`>
+  ) => void
+
+  /**
    * Dispatch an already-parsed webhook wake notification.
    */
   dispatchWebhookWake: (notification: WebhookNotification) => void
@@ -159,13 +176,14 @@ export function createRuntimeRouter(
     serveEndpoint,
     webhookPath,
     registry,
-    subscriptionPathForType,
     idleTimeout,
     heartbeatInterval,
     createElectricTools,
     registrationConcurrency,
+    defaultDispatchPolicyForType,
     publicUrl,
     name: runtimeName,
+    serverHeaders,
   } = normalized
 
   const wakeConfig: ProcessWakeConfig = {
@@ -187,6 +205,16 @@ export function createRuntimeRouter(
   const wakeErrors: Array<Error> = []
   const debugCleanup = process.env.ELECTRIC_AGENTS_DEBUG_CLEANUP === `1`
 
+  const registrationHeaders = async (): Promise<Headers> => {
+    const init =
+      typeof serverHeaders === `function`
+        ? await serverHeaders()
+        : serverHeaders
+    const headers = new Headers(init)
+    headers.set(`content-type`, `application/json`)
+    return headers
+  }
+
   const forEachWithConcurrency = async <T>(
     items: Array<T>,
     concurrency: number,
@@ -206,12 +234,16 @@ export function createRuntimeRouter(
     await Promise.all(Array.from({ length: workerCount }, () => worker()))
   }
 
-  const dispatchWebhookWake = (notification: WebhookNotification): void => {
+  const dispatchWake: RuntimeRouter[`dispatchWake`] = (
+    notification,
+    options
+  ): void => {
     const wakeLabel = notification.entity?.url ?? notification.streamPath
     const controller = new AbortController()
     const wake: Promise<void> = Promise.resolve(
       processWebhookWake(notification, {
         ...wakeConfig,
+        ...options,
         shutdownSignal: controller.signal,
       })
     )
@@ -237,6 +269,8 @@ export function createRuntimeRouter(
     pendingWakeLabels.set(wake, wakeLabel)
     pendingWakeControllers.set(wake, controller)
   }
+
+  const dispatchWebhookWake: RuntimeRouter[`dispatchWebhookWake`] = dispatchWake
 
   const abortWakes = (): void => {
     for (const controller of pendingWakeControllers.values()) {
@@ -411,8 +445,24 @@ export function createRuntimeRouter(
         },
       }
 
+      const defaultDispatchPolicy = defaultDispatchPolicyForType?.(name)
+
       if (serveEndpoint) {
         body.serve_endpoint = serveEndpoint
+      }
+
+      if (defaultDispatchPolicy) {
+        body.default_dispatch_policy = defaultDispatchPolicy
+      } else if (serveEndpoint) {
+        body.default_dispatch_policy = {
+          targets: [
+            {
+              type: `webhook`,
+              url: serveEndpoint,
+              subscription_id: runtimeWebhookSubscriptionId(name),
+            },
+          ],
+        }
       }
 
       if (publicUrl !== undefined) {
@@ -424,7 +474,7 @@ export function createRuntimeRouter(
         appendPathToUrl(baseUrl, `/_electric/entity-types`),
         {
           method: `POST`,
-          headers: { 'content-type': `application/json` },
+          headers: await registrationHeaders(),
           body: JSON.stringify(body),
         }
       )
@@ -437,52 +487,6 @@ export function createRuntimeRouter(
         )
         failed.push(name)
         return
-      }
-
-      if (serveEndpoint) {
-        const subPath = subscriptionPathForType
-          ? subscriptionPathForType(name)
-          : `/${name}/**`
-        const subscriptionId = `${name}-handler`
-        const subscriptionUrl = appendPathToUrl(
-          baseUrl,
-          `/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
-        )
-        const subscriptionInit = (): RequestInit => ({
-          method: `PUT`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({
-            type: `webhook`,
-            pattern: streamPatternFromPath(subPath),
-            webhook: { url: serveEndpoint },
-          }),
-        })
-        let subRes = await fetch(subscriptionUrl, subscriptionInit())
-
-        if (subRes.status === 409) {
-          const err = await subRes.text()
-          if (err.includes(`SUBSCRIPTION_ALREADY_EXISTS`)) {
-            const deleteRes = await fetch(subscriptionUrl, { method: `DELETE` })
-            if (deleteRes.ok || deleteRes.status === 404) {
-              subRes = await fetch(subscriptionUrl, subscriptionInit())
-            } else {
-              const deleteErr = await deleteRes.text()
-              subRes = new Response(deleteErr, { status: deleteRes.status })
-            }
-          } else {
-            subRes = new Response(err, { status: 409 })
-          }
-        }
-
-        if (!subRes.ok) {
-          const err = await subRes.text()
-          runtimeLog.error(
-            `[agent-runtime]`,
-            `Failed to create subscription for "${name}": ${err}`
-          )
-          failed.push(name)
-          return
-        }
       }
 
       registered.push(name)
@@ -516,6 +520,7 @@ export function createRuntimeRouter(
   return {
     handleRequest,
     handleWebhookRequest,
+    dispatchWake,
     dispatchWebhookWake,
     drainWakes,
     waitForSettled,
@@ -526,10 +531,6 @@ export function createRuntimeRouter(
     },
     registerTypes,
   }
-}
-
-function streamPatternFromPath(path: string): string {
-  return path.replace(/^\/+/, ``)
 }
 
 export function createRuntimeHandler(
@@ -566,6 +567,7 @@ export function createRuntimeHandler(
     onEnter,
     handleRequest: router.handleRequest,
     handleWebhookRequest: router.handleWebhookRequest,
+    dispatchWake: router.dispatchWake,
     dispatchWebhookWake: router.dispatchWebhookWake,
     drainWakes: router.drainWakes,
     waitForSettled: router.waitForSettled,
@@ -584,6 +586,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
   webhookPath: string
   registry?: EntityRegistry
   subscriptionPathForType?: (typeName: string) => string
+  defaultDispatchPolicyForType?: RuntimeRouterConfig[`defaultDispatchPolicyForType`]
+  serverHeaders?: RuntimeRouterConfig[`serverHeaders`]
   idleTimeout?: number
   heartbeatInterval?: number
   createElectricTools?: RuntimeRouterConfig[`createElectricTools`]
@@ -601,6 +605,8 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     webhookPath,
     registry: config.registry,
     subscriptionPathForType: config.subscriptionPathForType,
+    defaultDispatchPolicyForType: config.defaultDispatchPolicyForType,
+    serverHeaders: config.serverHeaders,
     idleTimeout: config.idleTimeout,
     heartbeatInterval: config.heartbeatInterval,
     createElectricTools: config.createElectricTools,
@@ -608,6 +614,11 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     publicUrl: config.publicUrl,
     name: config.name,
   }
+}
+
+function runtimeWebhookSubscriptionId(typeName: string): string {
+  const safeTypeName = typeName.replace(/[^A-Za-z0-9_.-]/g, `_`)
+  return `webhook:${safeTypeName || `runtime`}`
 }
 
 function getPathname(url: string | undefined): string | undefined {

@@ -100,7 +100,7 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
-    "@durable-streams/server": "npm:@electric-ax/durable-streams-server-beta@^0.3.2",
+    "@durable-streams/server": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.19.15",
     "@types/turndown": "^5.0.6",
