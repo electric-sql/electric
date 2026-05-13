@@ -1,7 +1,6 @@
 {
   "name": "@electric-ax/agents-server-conformance-tests",
   "version": "0.1.2",
-  "private": true,
   "description": "Conformance test suite for Electric Agents server implementations",
   "author": "Durable Stream contributors",
   "license": "Apache-2.0",
@@ -9,6 +8,9 @@
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric.git",
     "directory": "packages/agents-server-conformance-tests"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "main": "./dist/index.cjs",
@@ -28,6 +30,9 @@
     "./package.json": "./package.json"
   },
   "sideEffects": false,
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
