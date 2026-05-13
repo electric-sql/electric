@@ -1,8 +1,8 @@
 # Discord Bot for Electric Agents — Design Spec
 
-**Date:** 2026-05-13
+**Date:** 2026-05-13 (amended 2026-05-13 after first implementation pass)
 **Owner:** balegas@electric-sql.com
-**Status:** Approved (brainstorming phase complete, pending implementation plan)
+**Status:** Approved — describes the as-built v1 with three critical fixes required before merge. The first implementation pass surfaced three contracts that the original draft got wrong against the real `agents-runtime`/`agents-server` types; this revision realigns the spec to reality. See the changelog at §12.
 
 ## 1. Summary
 
@@ -15,7 +15,7 @@ The deliverable is a new workspace package, `factory/discord-bot/` (npm name `@e
 
 The adapter is the only component with long-lived state (the Gateway WebSocket); the entity is webhook-driven and lives in the operator's existing `agents-server` alongside Horton.
 
-v1 targets a Node deploy. The entity's tool surface is intentionally restricted to runtime-portable APIs (`fetch`, raw Discord REST + Ed25519 verify, HTTP-based MCP, HTTP-based runtime-server client) so a follow-up Cloudflare Durable Object deploy can reuse the entity code as-is. The adapter is *not* portable in v1 — see §10 for the planned DO follow-up.
+v1 targets a Node deploy. The entity's tool surface is intentionally restricted to runtime-portable APIs (`fetch`, raw Discord REST + Ed25519 verify, HTTP-based MCP, HTTP-based runtime-server client) so a follow-up Cloudflare Durable Object deploy can reuse the entity code as-is. The adapter is _not_ portable in v1 — see §10 for the planned DO follow-up.
 
 ## 2. Goals & non-goals
 
@@ -24,7 +24,7 @@ v1 targets a Node deploy. The entity's tool surface is intentionally restricted 
 1. `@bot <question>` in any channel where the bot is present opens a thread and answers the question, using Discord, GitHub MCP, web search, and the existing Electric Agents docs index.
 2. `@bot fix issue #N` opens a thread, spawns a Horton entity in a separate runtime host scoped to a pre-configured repo, posts an ack into the thread, and relays Horton's final report (typically a PR link) back into the thread when it completes.
 3. The bot asks clarifying questions in-thread when the task is under-specified, using the agent loop (no special clarification machinery).
-4. The bot is primed on first wake with the last *N* messages from the parent channel. It can pull more channel context on demand around any referenced message.
+4. The bot is primed on first wake with the last _N_ messages from the parent channel. It can pull more channel context on demand around any referenced message.
 5. The bot is extensible: operators can pass additional tools, MCP servers, and skills at register time.
 6. The entity is implemented using runtime-portable APIs only (no `node:fs`, no `node:child_process`, no Node-only npm modules in its tools), so a Cloudflare Durable Object deploy can reuse it without rewrites.
 7. Self-host: operators run their own Discord application, run the adapter as their own process, and register the entity into their own `agents-server`. README covers setup end-to-end.
@@ -52,12 +52,16 @@ v1 targets a Node deploy. The entity's tool surface is intentionally restricted 
 │  factory/discord-bot — ADAPTER  (Node process; v1)             │
 │  • discord.js gateway client (Node only in v1)                 │
 │  • Interactions endpoint (Ed25519 verify, dispatch)            │
+│  • Learns its own `botUserId` from `client.user.id` after the  │
+│    Gateway `ready` event — it is NOT the Discord Application   │
+│    ID, and the two are distinct snowflakes                     │
 │  • Creates Discord thread when a bare @mention lands           │
-│  • Translates Discord event → agents-server wake webhook       │
+│  • Translates Discord event → agents-server entity API call    │
 └──────────────┬─────────────────────────────────────────────────┘
-               │  POST <agents-server>/webhook with
-               │  { entityType:'discord-bot', entityId:<threadId>,
-               │    message: DiscordWakeMessage }
+               │  PUT  /_electric/entities/discord-bot/<threadId>
+               │       (create-or-find the per-thread entity)
+               │  POST /_electric/entities/discord-bot/<threadId>/send
+               │       body: DiscordWakeMessage
                ▼
 ┌────────────────────────────────────────────────────────────────┐
 │  agents-server (existing) — runs `discord-bot` entity          │
@@ -89,21 +93,27 @@ v1 targets a Node deploy. The entity's tool surface is intentionally restricted 
 
 **Why per-thread:** thread id is the natural session boundary, replies in-thread route trivially, and a thread-archive event maps cleanly to entity stop.
 
-**Adapter and agents-server are always separate processes**, even in the simplest Node deployment (typically co-located on one box). The Gateway WS is genuinely long-lived state; the agents-server is HTTP webhook-driven.
+**Adapter and agents-server are always separate processes**, even in the simplest Node deployment (typically co-located on one box). The Gateway WS is genuinely long-lived state; the agents-server is HTTP-driven via the standard runtime-server entity API.
+
+**Horton runs on the same agents-server as the discord-bot entity** in v1 — `spawn_horton` is implemented via `ctx.spawn(type, id, args, { wake: { on: 'runFinished', includeResponse: true } })`, which uses the entity's own runtime server. Cross-host Horton spawning (a discord-bot in one runtime asking a different runtime to spawn the Horton) is **future work**; see §10. The `hortonRuntime` option's `agentsServerUrl` field is documented for forward-compatibility but is a no-op in v1.
 
 ## 4. Entity lifecycle
 
-| Trigger | Wake kind | Behaviour |
-|---|---|---|
-| `@bot …` in a parent channel | `mention` | First wake: adapter has already created the thread; entity inserts `primeMessages` as `ContextEntry` rows, runs agent loop. |
-| `@bot …` or plain message inside an existing thread | `thread_msg` | Wake existing entity (by threadId); agent loop continues with prior turn state. |
-| `/end` slash command, or thread archive event | `thread_close` | Entity posts a closing message and stops. |
-| Slash command (future: `/fix`, `/ask`) | `interaction` | Same routing as `mention`; adapter passes structured `command + options`. |
-| Horton child completes / errors | `child_completed` (runtime-native event) | Entity wakes, agent loop reads child status, posts result into the thread. |
+| Trigger                                             | Wake kind                                                                                                              | Behaviour                                                                                                                                                                |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@bot …` in a parent channel                        | `mention`                                                                                                              | First wake: adapter has already created the thread; entity calls `ctx.insertContext(id, { name, content, attrs })` for each `primeMessages` entry, then runs agent loop. |
+| `@bot …` or plain message inside an existing thread | `thread_msg`                                                                                                           | Wake existing entity (by threadId); agent loop continues with prior turn state.                                                                                          |
+| `/end` slash command, **or thread archive event**   | `thread_close`                                                                                                         | Entity posts a closing message and calls `ctx.sleep()` to stop the session.                                                                                              |
+| Slash command (future: `/fix`, `/ask`)              | `interaction`                                                                                                          | Same routing as `mention`; adapter passes structured `command + options`.                                                                                                |
+| Horton child completes / errors                     | `child_completed` (runtime-native event from `ctx.spawn(..., { wake: { on: 'runFinished', includeResponse: true } })`) | Entity wakes, agent loop reads child status from the wake payload, posts result into the thread.                                                                         |
 
 Entity ends on `thread_close` or after a configurable inactivity timeout (default 7 days).
 
-The entity does **not** await Horton runs synchronously. `spawn_horton` returns immediately with a child entity URL; Horton's completion arrives as a separate wake via the runtime's existing child-status mechanism. This keeps the entity loop free for in-thread chat while Horton works.
+**Thread-archive support is load-bearing.** Users routinely close threads by archiving them (Discord's default UX); without a `threadUpdate` listener on the Gateway adapter, archived threads leak open entity instances. The adapter MUST subscribe to `threadUpdate` and emit `thread_close` when `archived` flips to true.
+
+The entity does **not** await Horton runs synchronously. `spawn_horton` calls `ctx.spawn(...)` and returns immediately with the child entity URL; Horton's completion arrives as a separate wake via the runtime's existing child-status mechanism. This keeps the entity loop free for in-thread chat while Horton works.
+
+**Bot-vs-bot messages.** The adapter filters out the bot's _own_ messages but does **not** filter out messages from other bots in a thread — to avoid mishandling integrations that legitimately participate. If two bots can wake each other, the operator is responsible for breaking the loop (e.g. by configuring the second bot to ignore this bot's user ID). The `gateway-mapper` exposes a hook for additional filtering if needed.
 
 ## 5. Components
 
@@ -144,6 +154,7 @@ import { registerDiscordBot } from '@electric-ax/discord-bot'
 
 registerDiscordBot(registry, {
   appId: env.DISCORD_APP_ID,
+  botToken: env.DISCORD_BOT_TOKEN,            // for the entity's discord.* tools
   guildId?: env.DISCORD_GUILD_ID,
 
   github: {
@@ -152,8 +163,10 @@ registerDiscordBot(registry, {
   },
 
   hortonRuntime: {
-    agentsServerUrl: env.AGENTS_SERVER_URL,
     entityType: 'horton',
+    // agentsServerUrl is reserved for future cross-host spawn; in v1 Horton is
+    // spawned on the same agents-server via ctx.spawn — see §10.
+    agentsServerUrl?: env.AGENTS_SERVER_URL,
   },
 
   primeContext?: { messageLimit: 20 },
@@ -162,45 +175,66 @@ registerDiscordBot(registry, {
   extraMcpServers?: Array<McpServerConfig>,
   skills?: SkillsRegistry,
 
-  modelCatalog: builtinModelCatalog,
+  modelCatalog: BuiltinModelCatalog,          // same shape Horton accepts;
+                                              // resolved with the existing
+                                              // resolveBuiltinModelConfig helper
+                                              // from packages/agents/src/model-catalog.ts
 })
 ```
 
-GitHub MCP (the official `github/github-mcp-server`) is configured either via the operator's `mcp.json` or by passing it in `extraMcpServers`. The bot does not bundle GH MCP itself.
+`extraMcpServers` is forwarded to the agents-server's MCP registry alongside whatever the operator already configured for Horton — the bot does not bundle GH MCP, but it shares the same MCP registry as the rest of the agents-server, so any GH MCP servers registered there are automatically visible to the entity.
+
+GitHub MCP (the official `github/github-mcp-server`) is therefore configured either via the operator's `mcp.json` or by passing it in `extraMcpServers`.
 
 ### 5.2 Adapter ↔ entity contract
 
+The adapter calls two agents-server endpoints per Discord event:
+
+1. `PUT /_electric/entities/discord-bot/<threadId>` — idempotent create-or-find for the per-thread entity. Returns the entity URL.
+2. `POST /_electric/entities/discord-bot/<threadId>/send` — body is the `DiscordWakeMessage` below. agents-server delivers it to the entity as a `MessageReceived` event, which appears in `ctx.events` on the next handler run.
+
 ```ts
 type DiscordWakeMessage =
-  | { kind: 'mention'
+  | {
+      kind: 'mention'
       threadId: string
       channelId: string
       userId: string
       content: string
       referencedMessageId?: string
       attachments?: AttachmentSummary[]
-      primeMessages?: ChannelMessageSummary[] }
-  | { kind: 'thread_msg'
+      primeMessages?: ChannelMessageSummary[]
+      idempotencyKey?: string
+    }
+  | {
+      kind: 'thread_msg'
       threadId: string
       userId: string
       content: string
       referencedMessageId?: string
-      attachments?: AttachmentSummary[] }
-  | { kind: 'interaction'
+      attachments?: AttachmentSummary[]
+      idempotencyKey?: string
+    }
+  | {
+      kind: 'interaction'
       threadId: string
       userId: string
       command: '/end' /* future: /fix, /ask */
-      options: Record<string, string | number | boolean> }
-  | { kind: 'thread_close', threadId: string }
+      options: Record<string, string | number | boolean>
+      idempotencyKey?: string
+    }
+  | { kind: 'thread_close'; threadId: string; idempotencyKey?: string }
 ```
 
-Wake payloads carry the Discord `message_id` / `interaction_id` as an idempotency key. The adapter dedupes Discord-side retries before forwarding; agents-server dedupes the wake by event id.
+`idempotencyKey` carries the Discord `message_id` / `interaction_id`. **v1 dedup is adapter-local** — the adapter remembers recently-forwarded IDs in memory and drops Discord-side retries before they reach agents-server. Server-side dedup on `idempotencyKey` is a future enhancement; the field is reserved on the wire so the contract is stable.
 
 ### 5.3 Tools
 
-**`discord.*`** — `create_thread`, `post_message`, `edit_message`, `read_thread_history`, `add_reaction`, `read_channel_around_message(messageId, before=20, after=5)`. Implemented over raw `fetch` against the Discord REST API (not `@discordjs/rest`) so the entity stays portable to a Cloudflare DO host in the planned follow-up. `@discordjs/rest` and `discord.js` are *adapter-only* dependencies.
+**`discord.*`** — `create_thread`, `post_message`, `edit_message`, `read_thread_history`, `add_reaction`, `read_channel_around_message(messageId, before=20, after=5)`. Implemented over raw `fetch` against the Discord REST API (not `@discordjs/rest`) so the entity stays portable to a Cloudflare DO host in the planned follow-up. `@discordjs/rest` and `discord.js` are _adapter-only_ dependencies.
 
-**`delegate.spawn_horton`** — calls `runtimeServerClient.spawnEntity` with the configured Horton entity type and target server URL. Returns `{ childEntityUrl, childEntityId }`. Does not await completion.
+**`delegate.spawn_horton`** — calls `ctx.spawn(opts.hortonRuntime.entityType, childId, { task, repo, branch }, { wake: { on: 'runFinished', includeResponse: true } })`. Returns `{ childEntityUrl, childEntityId }` from the spawn result. Does not await Horton's run; the `runFinished` wake delivers Horton's report back as a regular wake event on the discord-bot entity.
+
+The tool's options are constructed from the entity's own `HandlerContext`, not from a freestanding `RuntimeServerClient`. This means v1 Horton runs on the **same** agents-server as discord-bot. Cross-host spawning is future work (§10).
 
 **Reused** — `web_search`, `fetch_url`, and `search_durable_agents_docs` (when the docs knowledge base is available in the runtime).
 
@@ -220,7 +254,7 @@ Two paths:
 Composed by `src/system-prompt.ts`. Key sections (full text drafted during implementation):
 
 - Persona: friendly Electric assistant; concise in Discord; uses code blocks; cites issue/PR numbers as links.
-- Tooling overview (Discord, GitHub MCP, delegate, docs/research) and *when* to use each.
+- Tooling overview (Discord, GitHub MCP, delegate, docs/research) and _when_ to use each.
 - Discord-specific guidance: open replies as `post_message` to the thread, never DM, never @everyone, prefer one consolidated message to many short ones.
 - Clarifying-question rule: if the task is ambiguous (missing issue number, repo conflict, unclear acceptance criteria for a code change), ask in-thread before spawning Horton.
 - Coding-task delegation rule: any task involving editing files or opening PRs goes through `spawn_horton`. The bot itself does not run shell commands or modify files.
@@ -232,10 +266,10 @@ Composed by `src/system-prompt.ts`. Key sections (full text drafted during imple
 ### 6.1 Q&A: `@bot what's the status of issue #4307?`
 
 1. User posts in `#general`.
-2. Gateway adapter receives `MESSAGE_CREATE`, sees no existing thread.
+2. Gateway adapter receives `MESSAGE_CREATE`. The adapter compares `mentions[].id` against the `botUserId` it learned from `client.user.id` after the Gateway `ready` event — match, no existing thread.
 3. Adapter calls Discord `Start Thread from Message` API → new thread id.
-4. Adapter POSTs wake to agents-server with `kind: 'mention'`, `primeMessages: [...last 20]`, `content: 'what is the status of #4307?'`.
-5. agents-server wakes the `discord-bot` entity. First wake: it inserts `primeMessages` as `ContextEntry` rows, then runs the agent loop.
+4. Adapter calls `PUT /_electric/entities/discord-bot/<new-thread-id>` to ensure the entity exists, then `POST /_electric/entities/discord-bot/<new-thread-id>/send` with `{ kind: 'mention', primeMessages: [...last 20], content: 'what is the status of #4307?', idempotencyKey: <message_id> }`.
+5. agents-server delivers the message to the `discord-bot` entity, waking it. First wake: it calls `ctx.insertContext(id, { name, content, attrs })` for each `primeMessages` entry, then runs the agent loop.
 6. Agent recognises a GH-issue lookup → calls GitHub MCP `get_issue({ owner, repo, issue_number: 4307 })`.
 7. Agent calls `discord.post_message(threadId, "<summary of #4307>")`.
 8. Wake ends. Entity stays alive for thread follow-ups.
@@ -243,14 +277,7 @@ Composed by `src/system-prompt.ts`. Key sections (full text drafted during imple
 
 ### 6.2 Coding task: `@bot fix issue #4312`
 
-1–5. Same ingress: thread created, entity woken with mention payload.
-6. Agent calls GitHub MCP `get_issue(4312)` to read the body and check repo context.
-7. Agent calls `delegate.spawn_horton({ task: "<expanded brief>", initialMessage: "<first instruction>", branch: "electric-bot/thread-<id>" })`. Returns `{ childEntityUrl }`.
-8. Agent calls `discord.post_message(threadId, "Spawned coding agent for #4312, I'll report back here when done. (Session: <url>)")`.
-9. Wake ends.
-10. Horton runs in its own runtime host: clones repo, edits, runs tests, pushes branch, calls GitHub MCP `create_pull_request`, produces final report.
-11. agents-server delivers `child_completed` event to the `discord-bot` entity → entity wakes again with Horton's final report attached.
-12. Agent calls `discord.post_message(threadId, "Done — opened PR #<n>: <title>. <summary>")`. Adds ✅ reaction to the original `@mention`.
+1–5. Same ingress: thread created, entity woken with mention payload. 6. Agent calls GitHub MCP `get_issue(4312)` to read the body and check repo context. 7. Agent calls `delegate.spawn_horton({ task: "<expanded brief>", initialMessage: "<first instruction>", branch: "electric-bot/thread-<id>" })`. The tool internally calls `ctx.spawn('horton', childId, args, { wake: { on: 'runFinished', includeResponse: true } })` and returns `{ childEntityUrl }`. 8. Agent calls `discord.post_message(threadId, "Spawned coding agent for #4312, I'll report back here when done. (Session: <url>)")`. 9. Wake ends. 10. Horton runs on the same agents-server: clones repo, edits, runs tests, pushes branch, calls GitHub MCP `create_pull_request`, produces final report. 11. Horton's `runFinished` event wakes the `discord-bot` entity. The wake payload includes Horton's final response (because `includeResponse: true`). 12. Agent calls `discord.post_message(threadId, "Done — opened PR #<n>: <title>. <summary>")`. Adds ✅ reaction to the original `@mention`.
 
 ### 6.3 Cross-cutting
 
@@ -266,15 +293,22 @@ Environment variables (mirrored in a zod-validated options object so embedders c
 # Discord
 DISCORD_BOT_TOKEN              gateway login + REST calls
 DISCORD_PUBLIC_KEY             interaction signature verify
-DISCORD_APP_ID
+DISCORD_APP_ID                 application id (NOT the bot user id)
 DISCORD_GUILD_ID               optional; scope bot to one guild
 
-# Agents server (where the entity runs)
-AGENTS_SERVER_URL              wake webhook target
-AGENTS_SERVER_TOKEN            shared secret for webhook auth
+# Bot user id — distinct from app id. Adapter normally discovers this from
+# `client.user.id` after the Gateway `ready` event; set this env var only
+# to override (e.g. for tests).
+DISCORD_BOT_USER_ID            optional override; auto-discovered by default
 
-# Horton runtime (where coding tasks land)
-HORTON_AGENTS_SERVER_URL       defaults to AGENTS_SERVER_URL
+# Agents server (where the entity runs and where it calls
+# /_electric/entities/discord-bot/:threadId)
+AGENTS_SERVER_URL              base URL of the agents-server runtime API
+# auth: the v1 adapter uses the agents-server's existing auth mechanism
+# (no bot-specific shared-secret); operators should put the agents-server
+# behind their existing access control just like Horton's spawn API
+
+# Horton (v1: same agents-server as the discord-bot entity)
 HORTON_ENTITY_TYPE             default 'horton'
 
 # GitHub (v1: single-repo)
@@ -308,15 +342,16 @@ GitHub MCP is configured via the operator's existing `mcp.json` or `extraMcpServ
 
 ## 9. Testing
 
-- **Unit (tools):** Discord tools tested against a mocked `fetch`. `spawn_horton` tested against a mocked runtime-server client.
-- **Unit (entity):** entity handler tested with the existing agents-runtime harness (`mockStreamFn`, in-memory entity stream DB) — same pattern Horton uses.
-- **Adapter:** Gateway event-mapping tested with a fake discord.js client emitting fixture events. Interactions handler tested with crafted Ed25519-signed payloads (including failure cases).
-- **Integration:** one end-to-end test that boots an agents-server + adapter + a stubbed Horton entity registered in the same registry, drives a fixture `MESSAGE_CREATE` through the gateway mapper, and asserts the bot posts a Discord message (via mocked REST) and spawns the stub Horton.
+- **Unit (tools):** Discord tools tested against a mocked `fetch`. `spawn_horton` tested with a mocked `ctx.spawn`.
+- **Unit (entity):** entity handler tested with the existing agents-runtime test harness — `ctx` is mocked (including `ctx.events`, `ctx.insertContext`, `ctx.useAgent`, `ctx.agent.run`, `ctx.spawn`). Same pattern Horton's unit tests use.
+- **Adapter:** Gateway event-mapping tested with a pure-function mapper plus a fake discord.js client emitting fixture events. Interactions handler tested with crafted Ed25519-signed payloads (including failure cases).
+- **Integration:** one in-process test that drives `processGatewayEvent` through the adapter, captures the would-be `POST /_electric/entities/discord-bot/<id>/send` payload, and hands it directly to the entity handler with a stubbed `ctx.spawn`. This is _not_ a live agents-server test — it asserts the adapter→entity contract end-to-end without booting the HTTP runtime. Live agents-server smoke is in the README runbook.
 - No live Discord/GitHub calls in CI; a smoke-test runbook lives in the README for live verification against a test guild.
 
 ## 10. Future work (post-v1, not in scope)
 
 - **Cloud deployment-status tools.** Add a `cloud.*` tool family (`deployment_status`, `list_databases`, `recent_errors`) once the Cloud API surface is decided.
+- **Cross-host Horton spawning.** v1 spawns Horton on the same agents-server as the discord-bot entity (via `ctx.spawn`). The `hortonRuntime.agentsServerUrl` option is reserved for a follow-up where the discord-bot entity reaches out via the runtime-server-client to spawn Horton on a _different_ agents-server (e.g. a dedicated coding-agent host with more resources). This requires the entity to use `runtimeServerClient.spawnEntity` with `subscriberUrl` callbacks rather than the in-process `ctx.spawn`, and care to route the `runFinished` wake back to the discord-bot entity across hosts.
 - **Multi-repo / GitHub App** (path B of the auth question). The options object already allows `github: { app: { ... } }` shape; implementation deferred.
 - **More slash commands** (`/fix issue:#N`, `/ask`, `/cloud-status`) as keyboard shortcuts for the same intents the agent already handles via `@mention`.
 - **Per-user GitHub OAuth attribution**, so PRs come from the actual user.
@@ -327,5 +362,15 @@ GitHub MCP is configured via the operator's existing `mcp.json` or `extraMcpServ
 ## 11. Open questions deferred to implementation
 
 - Exact rate-limit handling for `read_channel_around_message` when an agent calls it many times in a turn (likely a per-wake budget; tuned during implementation).
-- Whether `primeMessages` should include thread starter messages of *other* threads in the same channel for richer context (defer; default off).
+- Whether `primeMessages` should include thread starter messages of _other_ threads in the same channel for richer context (defer; default off).
 - Whether to surface a `verbose` toggle so the bot can post progress updates while Horton is still running (defer; would require Horton to push intermediate events into the parent entity, which the runtime supports but adds noise).
+
+## 12. Changelog
+
+**2026-05-13 (amended).** First implementation pass surfaced three contracts the original spec drafted against an imagined `agents-runtime`/`agents-server` API. The spec is updated to match reality:
+
+1. **Entity API path.** Original: adapter POSTs to `<agents-server>/webhook/discord-bot` with `{ entityType, entityId, message }`. Reality: agents-server's entity API is `PUT /_electric/entities/:type/:id` (create-or-find) plus `POST /_electric/entities/:type/:id/send` (deliver `DiscordWakeMessage` as the body). Sections updated: §3 architecture diagram, §5.2 adapter↔entity contract, §6.1/6.2 data flows. The `AGENTS_SERVER_TOKEN` shared-secret webhook auth in §7 was removed in favour of agents-server's existing auth.
+2. **Horton spawn API.** Original: `delegate.spawn_horton` calls `runtimeServerClient.spawnEntity` with `subscriberUrl`, targeting `hortonRuntime.agentsServerUrl` for cross-host spawning. Reality: in v1 the entity uses `ctx.spawn(type, id, args, { wake: { on: 'runFinished', includeResponse: true } })`, which spawns on the _same_ agents-server. Cross-host spawn is now an explicit §10 future-work item. Sections updated: §3, §5.1 (`hortonRuntime.agentsServerUrl` documented as forward-compat-only), §5.3, §6.2.
+3. **Bot user identity.** Original: spec implicitly assumed the bot's user ID equals the Application ID, with no explicit guidance on how the adapter learns it. Reality: Application ID and bot user ID are distinct snowflakes; the adapter MUST read `client.user.id` after the Gateway `ready` event (or accept an explicit `DISCORD_BOT_USER_ID` override). Sections updated: §3 (adapter notes), §6.1 step 2 (mention filter), §7 (new `DISCORD_BOT_USER_ID` env var).
+
+Smaller alignment edits (also amended in this revision): `ctx.insertContext(id, { name, content, attrs })` (not `ctx.entries.insert`) in §4; `modelCatalog: BuiltinModelCatalog` resolved with `resolveBuiltinModelConfig` (canonical helper) in §5.1; thread-archive event explicitly load-bearing on `threadUpdate` in §4; bot-vs-bot message filtering policy documented in §4; idempotency-key dedup explicitly _adapter-local_ in v1 in §5.2; testing scope clarified in §9 to reflect that "integration" is an in-process adapter↔entity test, not a live agents-server test.
