@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
-  resolveBuiltinAgentsHost,
-  resolveBuiltinAgentsPort,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
+  resolvePullWakeOwnerId,
+  resolvePullWakeRunnerId,
   waitForElectricAgentsServer,
 } from '../src/start'
 
@@ -73,45 +73,42 @@ describe(`resolveElectricAgentsPort`, () => {
   })
 })
 
-describe(`resolveBuiltinAgentsPort`, () => {
+describe(`resolvePullWakeRunnerId`, () => {
   it(`uses process env when present`, () => {
     expect(
-      resolveBuiltinAgentsPort({ ELECTRIC_AGENTS_BUILTIN_PORT: `5548` }, {})
-    ).toBe(5548)
+      resolvePullWakeRunnerId({ ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID: `r1` }, {})
+    ).toBe(`r1`)
   })
 
   it(`falls back to .env`, () => {
     expect(
-      resolveBuiltinAgentsPort({}, { ELECTRIC_AGENTS_BUILTIN_PORT: `6658` })
-    ).toBe(6658)
+      resolvePullWakeRunnerId({}, { ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID: `r2` })
+    ).toBe(`r2`)
   })
 
-  it(`defaults to 4448`, () => {
-    expect(resolveBuiltinAgentsPort({}, {})).toBe(4448)
+  it(`derives a stable local runner id from the agents identity`, () => {
+    expect(
+      resolvePullWakeRunnerId(
+        { ELECTRIC_AGENTS_IDENTITY: `Alice Smith@example.com` },
+        {}
+      )
+    ).toBe(`builtin-alice-smith-example.com`)
+  })
+
+  it(`defaults when no identity is available`, () => {
+    expect(resolvePullWakeRunnerId({}, {})).toBe(`builtin-agents`)
   })
 })
 
-describe(`resolveBuiltinAgentsHost`, () => {
-  it(`uses process env when present`, () => {
+describe(`resolvePullWakeOwnerId`, () => {
+  it(`uses the agents identity when present`, () => {
     expect(
-      resolveBuiltinAgentsHost(
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `127.0.0.1` },
-        {}
-      )
-    ).toBe(`127.0.0.1`)
+      resolvePullWakeOwnerId({ ELECTRIC_AGENTS_IDENTITY: `a@example.com` }, {})
+    ).toBe(`a@example.com`)
   })
 
-  it(`falls back to .env`, () => {
-    expect(
-      resolveBuiltinAgentsHost(
-        {},
-        { ELECTRIC_AGENTS_BUILTIN_HOST: `localhost` }
-      )
-    ).toBe(`localhost`)
-  })
-
-  it(`defaults to all interfaces so Docker can reach the host runtime`, () => {
-    expect(resolveBuiltinAgentsHost({}, {})).toBe(`0.0.0.0`)
+  it(`falls back to the local builtin owner`, () => {
+    expect(resolvePullWakeOwnerId({}, {})).toBe(`builtin-agents`)
   })
 })
 

@@ -12,6 +12,7 @@ import type { DrizzleDB, PgClient } from './db/index.js'
 import type { EntityManager } from './entity-manager.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
+import type { DurableStreamsBearerProvider } from './stream-client.js'
 
 export interface StandaloneAgentsRuntimeOptions {
   service?: string
@@ -19,6 +20,7 @@ export interface StandaloneAgentsRuntimeOptions {
   db: DrizzleDB
   pgClient: PgClient
   durableStreamsUrl?: string
+  durableStreamsBearer?: DurableStreamsBearerProvider
   streamClient?: StreamClient
   electricUrl?: string
   electricSecret?: string
@@ -56,7 +58,8 @@ export async function startStandaloneAgentsRuntime(
     options.streamClient ??
     (options.durableStreamsUrl
       ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, serviceId)
+          durableStreamsServiceUrl(options.durableStreamsUrl, serviceId),
+          { bearer: options.durableStreamsBearer }
         )
       : undefined)
   if (!streamClient) {

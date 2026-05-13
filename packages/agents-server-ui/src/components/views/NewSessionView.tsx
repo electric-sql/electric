@@ -153,13 +153,26 @@ export function NewSessionView({
       if (!spawnEntity) return
       setError(null)
       const name = nanoid(10)
-      const tx = spawnEntity({ type: typeName, name, args })
-      const entityUrl = `/${typeName}/${name}`
-      helpers.openEntity(entityUrl, {
-        target: { tileId, position: `replace` },
+      const desktopState = await window.electronAPI?.getDesktopState?.()
+      const runnerId = desktopState?.pullWakeRunnerId?.trim() || null
+      const tx = spawnEntity({
+        type: typeName,
+        name,
+        args,
+        ...(runnerId
+          ? {
+              dispatch_policy: {
+                targets: [{ type: `runner` as const, runnerId }],
+              },
+            }
+          : {}),
       })
+      const entityUrl = `/${typeName}/${name}`
       try {
         await tx.isPersisted.promise
+        helpers.openEntity(entityUrl, {
+          target: { tileId, position: `replace` },
+        })
         if (initialUserText && baseUrl) {
           const connection = await connectEntityStream({ baseUrl, entityUrl })
           try {
@@ -178,7 +191,7 @@ export function NewSessionView({
         }
       } catch (err) {
         setError(
-          `Could not start session: ${err instanceof Error ? err.message : String(err)}. The server may be missing ANTHROPIC_API_KEY.`
+          `Could not start session: ${err instanceof Error ? err.message : String(err)}.`
         )
       }
     },

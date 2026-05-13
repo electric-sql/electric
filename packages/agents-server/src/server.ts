@@ -22,10 +22,12 @@ import type {
   EntityRegistry,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
+import type { AuthenticateRequest } from './electric-agents-types.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
 import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import type { OssServerContext } from './routing/oss-server-router.js'
 import type { StartedStandaloneAgentsRuntime } from './standalone-runtime.js'
+import type { DurableStreamsBearerProvider } from './stream-client.js'
 
 const MOCK_AGENT_HANDLER_PATH = `/_electric/mock-agent-handler`
 
@@ -34,6 +36,7 @@ export interface ElectricAgentsServerOptions {
   tenantId?: string
   baseUrl?: string
   durableStreamsUrl?: string
+  durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   durableStreamsServer?: DurableStreamTestServer
   port: number
@@ -43,6 +46,17 @@ export interface ElectricAgentsServerOptions {
   postgresUrl: string
   electricUrl?: string
   electricSecret?: string
+  authenticateRequest?: AuthenticateRequest
+  /**
+   * Disabled by default. When set to a positive interval, periodically
+   * recovers expired dispatch claims and stale outstanding wakes.
+   */
+  dispatchRecoveryIntervalMs?: number
+  /**
+   * Age threshold for outstanding wakes recovered by the periodic loop.
+   * Defaults to dispatchRecoveryIntervalMs when periodic recovery is enabled.
+   */
+  staleOutstandingWakeAfterMs?: number
 }
 
 interface MockAgentBootstrap {
@@ -121,7 +135,8 @@ export class ElectricAgentsServer {
     this.options = options
     this.streamClient = options.durableStreamsUrl
       ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId)
+          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId),
+          { bearer: options.durableStreamsBearer }
         )
       : null!
   }
@@ -161,7 +176,8 @@ export class ElectricAgentsServer {
         )
         this.options.durableStreamsUrl = streamsUrl
         this.streamClient = new StreamClient(
-          durableStreamsServiceUrl(streamsUrl, this.tenantId)
+          durableStreamsServiceUrl(streamsUrl, this.tenantId),
+          { bearer: this.options.durableStreamsBearer }
         )
       }
 
@@ -309,11 +325,13 @@ export class ElectricAgentsServer {
 
     return await ossServerRouter.fetch(
       request as Parameters<typeof ossServerRouter.fetch>[0],
-      this.buildTenantContext()
+      await this.buildTenantContext(request)
     )
   }
 
-  private buildTenantContext(): OssServerContext {
+  private async buildTenantContext(
+    request: Request
+  ): Promise<OssServerContext> {
     if (
       !this.standaloneRuntime ||
       !this.electricAgentsManager ||
@@ -327,9 +345,12 @@ export class ElectricAgentsServer {
 
     return {
       service: this.tenantId,
+      authenticatedUser:
+        (await this.options.authenticateRequest?.(request)) ?? undefined,
       publicUrl: this.publicUrl,
       localUrl: this._url,
       durableStreamsUrl: this.options.durableStreamsUrl,
+      durableStreamsBearer: this.options.durableStreamsBearer,
       durableStreamsRouting:
         this.options.durableStreamsRouting ??
         pathPrefixedSingleTenantDurableStreamsRoutingAdapter,

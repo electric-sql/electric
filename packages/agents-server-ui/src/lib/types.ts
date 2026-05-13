@@ -5,6 +5,8 @@ export interface ServerConfig {
   source?: `manual` | `local-discovery` | `electric-cloud`
   desiredState?: `connected` | `disconnected`
   localRuntimeEnabled?: boolean
+  headers?: Record<string, string>
+  /** Legacy field from older UI builds. Kept so persisted configs still parse. */
   auth?: string
 }
 

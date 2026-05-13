@@ -38,6 +38,18 @@ export interface DesktopState {
   workingDirectory: string | null
   error: string | null
   discoveredServers: Array<DiscoveredServer>
+  pullWakeRunnerId: string | null
+}
+
+export interface ServerConnectionState {
+  serverId: string
+  status: ServerConnectionStatus
+  localRuntimeStatus: LocalRuntimeStatus
+  runtimeUrl: string | null
+  runtimeError: string | null
+  lastError: string | null
+  reconnectAttempt: number
+  lastConnectedAt: number | null
 }
 
 export interface ServerConnectionState {

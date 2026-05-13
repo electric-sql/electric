@@ -42,6 +42,7 @@ type ServerConfig = {
   source: `manual` | `local-discovery` | `electric-cloud`
   desiredState: `connected` | `disconnected`
   localRuntimeEnabled: boolean
+  headers?: Record<string, string>
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -75,6 +76,7 @@ type DesktopState = {
   workingDirectory: string | null
   error: string | null
   discoveredServers: Array<DiscoveredServer>
+  pullWakeRunnerId: string | null
 }
 
 type ServerConnectionState = {

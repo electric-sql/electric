@@ -1,9 +1,8 @@
 import { createOptimisticAction } from '@tanstack/db'
 import { generateKeyBetween } from 'fractional-indexing'
-import {
-  appendPathToUrl,
-  type EntityStreamDBWithActions,
-} from '@electric-ax/agents-runtime/client'
+import { serverFetch } from './auth-fetch'
+import { entityApiUrl } from './entity-api'
+import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
 // Timeline queries sort inbox messages by `_seq`. Pending local rows do not
 // have a server sequence yet, so put them after streamed rows until the real
@@ -179,20 +178,17 @@ export function createSendMessageAction({
       db.collections.inbox.insert(message)
     },
     mutationFn: async ({ text, key, mode, position }) => {
-      const res = await fetch(
-        appendPathToUrl(baseUrl, `/_electric/entities${entityUrl}/send`),
-        {
-          method: `POST`,
-          headers: { 'content-type': `application/json` },
-          body: JSON.stringify({
-            from,
-            key,
-            payload: { text },
-            mode,
-            position,
-          }),
-        }
-      )
+      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/send`), {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          from,
+          key,
+          payload: { text },
+          mode,
+          position,
+        }),
+      })
       if (!res.ok) {
         const body = await res.text().catch(() => ``)
         throw readSendError(res.status, body)
@@ -270,11 +266,8 @@ export function createUpdateInboxMessageAction({
       if (status !== undefined) {
         body.status = status
       }
-      const res = await fetch(
-        appendPathToUrl(
-          baseUrl,
-          `/_electric/entities${entityUrl}/inbox/${encodeURIComponent(key)}`
-        ),
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/inbox/${encodeURIComponent(key)}`),
         {
           method: `PATCH`,
           headers: { 'content-type': `application/json` },
@@ -303,11 +296,8 @@ export function createDeleteInboxMessageAction({
       db.collections.inbox.delete(key)
     },
     mutationFn: async ({ key }) => {
-      const res = await fetch(
-        appendPathToUrl(
-          baseUrl,
-          `/_electric/entities${entityUrl}/inbox/${encodeURIComponent(key)}`
-        ),
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/inbox/${encodeURIComponent(key)}`),
         { method: `DELETE` }
       )
       if (!res.ok) {
@@ -337,11 +327,8 @@ export function createSteerInboxMessageAction({
       })
     },
     mutationFn: async ({ key }) => {
-      const res = await fetch(
-        appendPathToUrl(
-          baseUrl,
-          `/_electric/entities${entityUrl}/inbox/${encodeURIComponent(key)}`
-        ),
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/inbox/${encodeURIComponent(key)}`),
         {
           method: `PATCH`,
           headers: { 'content-type': `application/json` },

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 import {
   ELECTRIC_IMAGE_TAG,
@@ -15,9 +16,9 @@ import type {
 export { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
-const DEFAULT_BUILTIN_AGENTS_PORT = 4448
-const DEFAULT_BUILTIN_AGENTS_HOST = `0.0.0.0`
 const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
+const DEFAULT_PULL_WAKE_RUNNER_ID = `builtin-agents`
+const DEFAULT_PULL_WAKE_OWNER_ID = `builtin-agents`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
 )
@@ -34,41 +35,16 @@ export interface StoppedDevEnvironment {
 }
 
 export interface StartedBuiltinAgentsEnvironment {
-  port: number
+  runnerId: string
   url: string
-  registeredBaseUrl: string
   agentServerUrl: string
 }
 
 interface WaitForServerOptions {
   fetchImpl?: typeof globalThis.fetch
+  headers?: Record<string, string>
   timeoutMs?: number
   intervalMs?: number
-}
-
-export function resolveBuiltinAgentsPort(
-  env: NodeJS.ProcessEnv = process.env,
-  fileEnv: Record<string, string> = readDotEnvFile()
-): number {
-  const raw =
-    env.ELECTRIC_AGENTS_BUILTIN_PORT?.trim() ||
-    fileEnv.ELECTRIC_AGENTS_BUILTIN_PORT?.trim()
-  const parsed = raw ? Number(raw) : DEFAULT_BUILTIN_AGENTS_PORT
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`ELECTRIC_AGENTS_BUILTIN_PORT must be a positive integer`)
-  }
-  return parsed
-}
-
-export function resolveBuiltinAgentsHost(
-  env: NodeJS.ProcessEnv = process.env,
-  fileEnv: Record<string, string> = readDotEnvFile()
-): string {
-  return (
-    env.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
-    fileEnv.ELECTRIC_AGENTS_BUILTIN_HOST?.trim() ||
-    DEFAULT_BUILTIN_AGENTS_HOST
-  )
 }
 
 export function resolveElectricAgentsPort(
@@ -108,11 +84,109 @@ export function getStartedBuiltinAgentsMessage(
   started: StartedBuiltinAgentsEnvironment
 ): string {
   return [
-    `Builtin Horton server is up.`,
-    `Webhook server: ${started.url}`,
+    `Builtin agents pull-wake runner is up.`,
+    `Runner: ${started.runnerId}`,
+    `Runtime: ${started.url}`,
     `Registers with: ${started.agentServerUrl}`,
     `Press Ctrl-C to stop.`,
   ].join(`\n`)
+}
+
+function readConfigValue(
+  env: NodeJS.ProcessEnv,
+  fileEnv: Record<string, string>,
+  names: Array<string>
+): string | undefined {
+  for (const name of names) {
+    const value = env[name]?.trim() || fileEnv[name]?.trim()
+    if (value) return value
+  }
+  return undefined
+}
+
+function runnerIdFromIdentity(identity: string | undefined): string {
+  if (!identity) return DEFAULT_PULL_WAKE_RUNNER_ID
+  const slug = identity
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, `-`)
+    .replace(/^-+|-+$/g, ``)
+  return slug ? `builtin-${slug}` : DEFAULT_PULL_WAKE_RUNNER_ID
+}
+
+export function resolvePullWakeRunnerId(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): string {
+  return (
+    readConfigValue(env, fileEnv, [
+      `ELECTRIC_AGENTS_PULL_WAKE_RUNNER_ID`,
+      `PULL_WAKE_RUNNER_ID`,
+    ]) ??
+    runnerIdFromIdentity(
+      readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`])
+    )
+  )
+}
+
+export function resolvePullWakeOwnerId(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): string {
+  return (
+    readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`]) ??
+    DEFAULT_PULL_WAKE_OWNER_ID
+  )
+}
+
+function parseAdditionalServerHeaders(
+  env: NodeJS.ProcessEnv,
+  fileEnv: Record<string, string>
+): Record<string, string> | undefined {
+  const raw = readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_SERVER_HEADERS`])
+  if (!raw) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error(`Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected JSON`)
+  }
+  if (!parsed || typeof parsed !== `object` || Array.isArray(parsed)) {
+    throw new Error(
+      `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: expected a JSON object`
+    )
+  }
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(
+    parsed as Record<string, unknown>
+  )) {
+    if (typeof value !== `string`) {
+      throw new Error(
+        `Invalid ELECTRIC_AGENTS_SERVER_HEADERS: header "${name}" must be a string`
+      )
+    }
+    headers.set(name, value)
+  }
+  const normalized = Object.fromEntries(headers.entries())
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function mergeHeaders(
+  ...sources: Array<Record<string, string> | undefined>
+): Record<string, string> | undefined {
+  const headers = new Headers()
+  for (const source of sources) {
+    if (!source) continue
+    new Headers(source).forEach((value, key) => headers.set(key, value))
+  }
+  const merged = Object.fromEntries(headers.entries())
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+function hasHeader(
+  headers: Record<string, string> | undefined,
+  name: string
+): boolean {
+  return headers ? new Headers(headers).has(name) : false
 }
 
 export function resolveComposeProjectName(
@@ -171,12 +245,13 @@ export async function waitForElectricAgentsServer(
   const timeoutMs = options.timeoutMs ?? 60_000
   const intervalMs = options.intervalMs ?? 1_000
   const deadline = Date.now() + timeoutMs
-  const healthUrl = `${baseUrl.replace(/\/$/, ``)}/_electric/health`
+  const healthUrl = appendPathToUrl(baseUrl, `/_electric/health`)
   let lastError: string | null = null
 
   while (Date.now() < deadline) {
     try {
       const response = await fetchImpl(healthUrl, {
+        headers: options.headers,
         signal: AbortSignal.timeout(5_000),
       })
       if (response.ok) {
@@ -300,30 +375,38 @@ export async function startBuiltinAgentsServer(
   const cwd = params.cwd ?? process.cwd()
   const fileEnv = readDotEnvFile(cwd)
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
-  const host = resolveBuiltinAgentsHost(env, fileEnv)
-  const port = resolveBuiltinAgentsPort(env, fileEnv)
+  const runnerId = resolvePullWakeRunnerId(env, fileEnv)
+  const ownerUserId = resolvePullWakeOwnerId(env, fileEnv)
+  const serverHeaders = mergeHeaders(parseAdditionalServerHeaders(env, fileEnv))
   const agentServerUrl =
     params.agentServerUrl ??
     env.ELECTRIC_AGENTS_URL?.trim() ??
     `http://localhost:${resolveElectricAgentsPort(env, fileEnv)}`
 
   process.env.ANTHROPIC_API_KEY = anthropicApiKey
-  await waitForElectricAgentsServer(agentServerUrl)
+  await waitForElectricAgentsServer(agentServerUrl, { headers: serverHeaders })
 
   const server = new BuiltinAgentsServer({
     agentServerUrl,
-    host,
-    port,
     workingDirectory: cwd,
     loadProjectMcpConfig: true,
+    pullWake: {
+      runnerId,
+      ownerUserId,
+      registerRunner: true,
+      headers: serverHeaders,
+      claimHeaders: serverHeaders,
+      claimTokenHeader: hasHeader(serverHeaders, `authorization`)
+        ? `electric-claim-token`
+        : undefined,
+    },
   })
 
-  await server.start()
+  const url = await server.start()
 
   const started = {
-    port,
-    url: server.url,
-    registeredBaseUrl: server.registeredBaseUrl,
+    runnerId,
+    url,
     agentServerUrl,
   }
 

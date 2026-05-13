@@ -93,6 +93,12 @@ async function forwardToDurableStreams(
     },
     body: requestBody,
     durableStreamsUrl: ctx.durableStreamsUrl,
+    durableStreamsBearer: ctx.durableStreamsBearer,
+    durableStreamsBearerMode: usesSubscriptionScopedBearer(
+      urlOverride ?? request.url
+    )
+      ? `if-missing`
+      : `overwrite`,
     durableStreamsRouting: ctx.durableStreamsRouting,
     serviceId: ctx.service,
     dispatcher: ctx.durableStreamsDispatcher,
@@ -109,6 +115,13 @@ function subscriptionIdFromPath(pathname: string): string | null {
 
 function isSubscriptionBasePath(pathname: string): boolean {
   return /^\/v1\/stream-meta\/subscriptions\/[^/]+\/?$/.test(pathname)
+}
+
+function usesSubscriptionScopedBearer(requestUrl: string): boolean {
+  const pathname = new URL(requestUrl, `http://localhost`).pathname
+  return /^\/v1\/stream-meta\/subscriptions\/[^/]+\/(?:ack|release|callback)\/?$/.test(
+    pathname
+  )
 }
 
 function rewriteSubscriptionBodyForBackend(
@@ -128,6 +141,25 @@ function rewriteSubscriptionBodyForBackend(
         ? routingAdapter.toBackendStreamPath(service, stream)
         : stream
     )
+  }
+  if (typeof payload.wake_stream === `string`) {
+    payload.wake_stream = routingAdapter.toBackendStreamPath(
+      service,
+      payload.wake_stream
+    )
+  }
+  if (Array.isArray(payload.acks)) {
+    payload.acks = payload.acks.map((ack) => {
+      if (!ack || typeof ack !== `object`) return ack
+      const next = { ...(ack as Record<string, unknown>) }
+      if (typeof next.stream === `string`) {
+        next.stream = routingAdapter.toBackendStreamPath(service, next.stream)
+      }
+      if (typeof next.path === `string`) {
+        next.path = routingAdapter.toBackendStreamPath(service, next.path)
+      }
+      return next
+    })
   }
 }
 
@@ -168,6 +200,28 @@ function rewriteSubscriptionResponseForClient(
         }
       }
       return stream
+    })
+  }
+  if (typeof payload.wake_stream === `string`) {
+    payload.wake_stream = routingAdapter.toRuntimeStreamPath(
+      service,
+      payload.wake_stream
+    )
+  }
+  if (typeof payload.stream === `string`) {
+    payload.stream = routingAdapter.toRuntimeStreamPath(service, payload.stream)
+  }
+  if (Array.isArray(payload.acks)) {
+    payload.acks = payload.acks.map((ack) => {
+      if (!ack || typeof ack !== `object`) return ack
+      const next = { ...(ack as Record<string, unknown>) }
+      if (typeof next.stream === `string`) {
+        next.stream = routingAdapter.toRuntimeStreamPath(service, next.stream)
+      }
+      if (typeof next.path === `string`) {
+        next.path = routingAdapter.toRuntimeStreamPath(service, next.path)
+      }
+      return next
     })
   }
 
@@ -321,6 +375,8 @@ async function streamAppend(
         },
         body,
         durableStreamsUrl: ctx.durableStreamsUrl,
+        durableStreamsBearer: ctx.durableStreamsBearer,
+        durableStreamsBearerMode: `overwrite`,
         durableStreamsRouting: ctx.durableStreamsRouting,
         serviceId: ctx.service,
         dispatcher: ctx.durableStreamsDispatcher,

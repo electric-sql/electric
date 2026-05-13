@@ -3,8 +3,10 @@ import fs from 'node:fs'
 import pino from 'pino'
 
 const LOG_LEVEL = process.env.ELECTRIC_AGENTS_LOG_LEVEL ?? `info`
+const IS_ELECTRON_MAIN = Boolean(process.versions.electron)
 const USE_FILE_LOGS = process.env.ELECTRIC_AGENTS_LOG_FILE !== `false`
-const USE_PRETTY_LOGS = LOG_LEVEL !== `silent` && !process.env.VITEST
+const USE_PRETTY_LOGS =
+  LOG_LEVEL !== `silent` && !process.env.VITEST && !IS_ELECTRON_MAIN
 
 const LOG_DIR = USE_FILE_LOGS
   ? (process.env.ELECTRIC_AGENTS_LOG_DIR ?? path.resolve(process.cwd(), `logs`))
@@ -21,7 +23,12 @@ export const LOG_FILE_PATH = LOG_FILE
 
 const streams: Array<pino.StreamEntry> = []
 if (LOG_FILE) {
-  streams.push({ stream: pino.destination(LOG_FILE) })
+  streams.push({
+    stream: pino.destination({
+      dest: LOG_FILE,
+      sync: IS_ELECTRON_MAIN,
+    }),
+  })
 }
 if (USE_PRETTY_LOGS) {
   streams.push({

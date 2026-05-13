@@ -1,6 +1,11 @@
-import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const localNodeModules = (...segments: Array<string>): string =>
+  path.resolve(PACKAGE_DIR, `node_modules`, ...segments)
 
 /**
  * Tags the built `<html>` element with `data-electric-desktop="true"` for
@@ -39,7 +44,26 @@ export default defineConfig(({ command, mode }) => {
       alias: [
         {
           find: /^@electric-ax\/agents-runtime\/client$/,
-          replacement: resolve(__dirname, `../agents-runtime/src/client.ts`),
+          replacement: path.resolve(
+            PACKAGE_DIR,
+            `../agents-runtime/src/client.ts`
+          ),
+        },
+        {
+          find: /^react$/,
+          replacement: localNodeModules(`react`),
+        },
+        {
+          find: /^react-dom$/,
+          replacement: localNodeModules(`react-dom`),
+        },
+        {
+          find: /^react\/jsx-runtime$/,
+          replacement: localNodeModules(`react`, `jsx-runtime.js`),
+        },
+        {
+          find: /^react\/jsx-dev-runtime$/,
+          replacement: localNodeModules(`react`, `jsx-dev-runtime.js`),
         },
       ],
       dedupe: [`react`, `react-dom`],

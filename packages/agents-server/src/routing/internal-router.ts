@@ -26,6 +26,7 @@ import { electricProxyRouter } from './electric-proxy-router.js'
 import { entitiesRouter } from './entities-router.js'
 import { entityTypesRouter } from './entity-types-router.js'
 import { getRequestSpan } from './hooks.js'
+import { runnersRouter } from './runners-router.js'
 import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
 import type { IRequest, RouterType } from 'itty-router'
@@ -91,6 +92,8 @@ type WakeRegistrationBody = Static<typeof wakeRegistrationBodySchema>
 type WebhookForwardBody = Static<typeof webhookForwardBodySchema>
 type CallbackForwardBody = Static<typeof callbackForwardBodySchema>
 
+const DS_SUBSCRIPTION_CALLBACK_PREFIX = `ds-subscription:`
+
 export type InternalRoutes = RouterType<
   IRequest,
   [TenantContext],
@@ -113,6 +116,8 @@ internalRouter.post(
 )
 internalRouter.post(`/webhook-forward/:subscriptionId`, webhookForward)
 internalRouter.post(`/callback-forward/:consumerId`, callbackForward)
+internalRouter.all(`/runners`, runnersRouter.fetch)
+internalRouter.all(`/runners/*`, runnersRouter.fetch)
 internalRouter.all(`/entities/*`, entitiesRouter.fetch)
 internalRouter.all(`/entity-types/*`, entityTypesRouter.fetch)
 internalRouter.all(`/cron/*`, cronRouter.fetch)
@@ -143,6 +148,23 @@ function forwardHeadersFromRequest(request: IRequest): Headers {
   const headers = new Headers(request.headers)
   headers.delete(`host`)
   return headers
+}
+
+function durableStreamsSubscriptionCallback(value: string): string | null {
+  return value.startsWith(DS_SUBSCRIPTION_CALLBACK_PREFIX)
+    ? value.slice(DS_SUBSCRIPTION_CALLBACK_PREFIX.length)
+    : null
+}
+
+function claimTokenFromRequest(request: IRequest): string | undefined {
+  const electricClaimToken = request.headers.get(`electric-claim-token`)?.trim()
+  if (electricClaimToken) return electricClaimToken
+  return (
+    request.headers
+      .get(`authorization`)
+      ?.replace(/^Bearer\s+/i, ``)
+      .trim() || undefined
+  )
 }
 
 function newWebhookPayload(body: WebhookForwardBody | undefined): {
@@ -511,10 +533,6 @@ async function callbackForward(
     return json(responseBody)
   }
 
-  if (!isDoneRequest && !requestBody?.acks) {
-    return json({ ok: true })
-  }
-
   const upstreamBody = encodeCallbackForwardBody(
     ctx.service,
     consumerId,
@@ -524,11 +542,32 @@ async function callbackForward(
 
   let upstream: Response
   try {
-    upstream = await fetch(target.callbackUrl, {
-      method: request.method,
-      headers,
-      body: bodyFromBytes(upstreamBody),
-    })
+    const subscriptionId = durableStreamsSubscriptionCallback(
+      target.callbackUrl
+    )
+    if (subscriptionId) {
+      const token = claimTokenFromRequest(request)
+      if (!token) {
+        return apiError(401, `UNAUTHORIZED`, `Missing claim token`)
+      }
+      const upstreamPayload = encodeCallbackForwardPayload(
+        consumerId,
+        requestBody,
+        (stream) => stream.replace(/^\/+/, ``)
+      )
+      const result = await ctx.streamClient.ackSubscription(
+        subscriptionId,
+        token,
+        upstreamPayload
+      )
+      upstream = json(result)
+    } else {
+      upstream = await fetch(target.callbackUrl, {
+        method: request.method,
+        headers,
+        body: bodyFromBytes(upstreamBody),
+      })
+    }
   } catch (err) {
     return apiError(
       502,
@@ -557,6 +596,18 @@ async function callbackForward(
   }
 
   try {
+    const epoch = requestBody?.generation ?? requestBody?.epoch
+    if (
+      upstream.ok &&
+      !isDoneRequest &&
+      epoch !== undefined &&
+      target.primaryStream
+    ) {
+      await ctx.entityManager.registry.materializeHeartbeatClaim?.({
+        consumerId,
+        epoch,
+      })
+    }
     if (upstream.ok && isDoneRequest && target.primaryStream) {
       serverLog.info(
         `[callback-forward] done received for stream=${target.primaryStream} consumer=${consumerId}`
@@ -570,6 +621,25 @@ async function callbackForward(
         target.primaryStream
       )
       if (entity && stillOwnsClaim) {
+        if (epoch !== undefined) {
+          await ctx.entityManager.registry.materializeReleasedClaim?.({
+            consumerId,
+            epoch,
+            ackedStreams: Array.isArray(requestBody?.acks)
+              ? requestBody.acks.flatMap((ack) => {
+                  const stream =
+                    typeof ack.stream === `string`
+                      ? ack.stream
+                      : typeof ack.path === `string`
+                        ? ack.path
+                        : undefined
+                  const offset =
+                    typeof ack.offset === `string` ? ack.offset : undefined
+                  return stream && offset ? [{ path: stream, offset }] : []
+                })
+              : undefined,
+          })
+        }
         await ctx.entityManager.registry.updateStatus(entity.url, `idle`)
         ctx.runtime.claimWriteTokens.clearStream(
           ctx.service,
@@ -628,7 +698,18 @@ function encodeCallbackForwardBody(
   body: CallbackForwardBody | undefined,
   routingAdapter: DurableStreamsRoutingAdapter
 ): Uint8Array {
-  if (!body) return new Uint8Array()
+  const payload = encodeCallbackForwardPayload(consumerId, body, (stream) =>
+    routingAdapter.toBackendStreamPath(service, stream)
+  )
+  return new TextEncoder().encode(JSON.stringify(payload))
+}
+
+function encodeCallbackForwardPayload(
+  consumerId: string,
+  body: CallbackForwardBody | undefined,
+  mapStream: (stream: string) => string
+): Record<string, unknown> {
+  if (!body) return {}
   const generation = body.generation ?? body.epoch
   const wakeId = body.wake_id ?? body.wakeId ?? consumerId
   const acks = Array.isArray(body.acks)
@@ -645,18 +726,16 @@ function encodeCallbackForwardBody(
               ? input.path
               : ``
         return {
-          stream: routingAdapter.toBackendStreamPath(service, stream),
+          stream: mapStream(stream),
           offset: typeof input.offset === `string` ? input.offset : ``,
         }
       })
     : []
 
-  return new TextEncoder().encode(
-    JSON.stringify({
-      wake_id: wakeId,
-      ...(generation !== undefined ? { generation } : {}),
-      acks,
-      ...(body.done !== undefined ? { done: body.done } : {}),
-    })
-  )
+  return {
+    wake_id: wakeId,
+    ...(generation !== undefined ? { generation } : {}),
+    acks,
+    ...(body.done !== undefined ? { done: body.done } : {}),
+  }
 }

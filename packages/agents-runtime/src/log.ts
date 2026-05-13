@@ -37,6 +37,20 @@ function readStdoutIsTTY(): boolean {
   return Reflect.get(stdout, `isTTY`) === true
 }
 
+function readIsElectronMain(): boolean {
+  const maybeProcess = Reflect.get(globalThis as object, `process`) as unknown
+  if (typeof maybeProcess !== `object` || maybeProcess === null) {
+    return false
+  }
+
+  const versions = Reflect.get(maybeProcess, `versions`) as unknown
+  return (
+    typeof versions === `object` &&
+    versions !== null &&
+    typeof Reflect.get(versions, `electron`) === `string`
+  )
+}
+
 function readBooleanEnv(value: string | undefined): boolean | undefined {
   if (value === undefined) {
     return undefined
@@ -53,27 +67,32 @@ function readBooleanEnv(value: string | undefined): boolean | undefined {
   return undefined
 }
 
+const IS_ELECTRON_MAIN = readIsElectronMain()
 const USE_PRETTY_LOGS =
   LOG_LEVEL !== `silent` &&
   !_env.VITEST &&
+  !IS_ELECTRON_MAIN &&
   (readBooleanEnv(_env.ELECTRIC_AGENTS_PRETTY_LOGS) ?? readStdoutIsTTY())
 
-const logger = pino({
-  base: undefined,
-  level: LOG_LEVEL,
-  ...(USE_PRETTY_LOGS
-    ? {
-        transport: {
-          target: `pino-pretty`,
-          options: {
-            colorize: true,
-            ignore: `pid,hostname,name`,
-            translateTime: `SYS:HH:MM:ss`,
+const logger = pino(
+  {
+    base: undefined,
+    level: LOG_LEVEL,
+    ...(USE_PRETTY_LOGS
+      ? {
+          transport: {
+            target: `pino-pretty`,
+            options: {
+              colorize: true,
+              ignore: `pid,hostname,name`,
+              translateTime: `SYS:HH:MM:ss`,
+            },
           },
-        },
-      }
-    : {}),
-})
+        }
+      : {}),
+  },
+  IS_ELECTRON_MAIN ? pino.destination({ fd: 1, sync: true }) : undefined
+)
 
 function formatArgs(args: Array<unknown>): { err?: Error; msg: string } {
   const errors: Array<Error> = []

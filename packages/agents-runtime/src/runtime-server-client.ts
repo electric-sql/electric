@@ -1,9 +1,12 @@
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
+import type { ClaimTokenHeader, HeadersProvider } from './types'
 
 export interface RuntimeServerClientConfig {
   baseUrl: string
   fetch?: typeof globalThis.fetch
+  headers?: HeadersProvider
+  writeTokenHeader?: ClaimTokenHeader
   track?: <T>(promise: Promise<T>) => Promise<T>
 }
 
@@ -13,6 +16,16 @@ export interface RuntimeEntityInfo {
   streamPath: string
 }
 
+export type RunnerDispatchPolicy = {
+  targets: [{ type: `runner`; runnerId: string; subscription_id?: string }]
+}
+
+export type WebhookDispatchPolicy = {
+  targets: [{ type: `webhook`; url: string; subscription_id?: string }]
+}
+
+export type DispatchPolicy = RunnerDispatchPolicy | WebhookDispatchPolicy
+
 export interface SpawnEntityOptions {
   type: string
   id: string
@@ -20,6 +33,7 @@ export interface SpawnEntityOptions {
   parentUrl?: string
   initialMessage?: unknown
   tags?: Record<string, string>
+  dispatch_policy?: DispatchPolicy
   wake?: {
     subscriberUrl: string
     condition:
@@ -138,12 +152,49 @@ export function createRuntimeServerClient(
 ): RuntimeServerClient {
   const fetchImpl = config.fetch ?? globalThis.fetch
 
+  const resolveHeaders = async (
+    initHeaders?: HeadersInit
+  ): Promise<Headers> => {
+    const baseHeaders =
+      typeof config.headers === `function`
+        ? await config.headers()
+        : config.headers
+    const headers = new Headers(baseHeaders)
+    new Headers(initHeaders).forEach((value, key) => headers.set(key, value))
+    return headers
+  }
+
+  const applyTokenHeader = (
+    headers: Headers,
+    tokenHeader: ClaimTokenHeader,
+    token: string
+  ): void => {
+    if (
+      tokenHeader === `authorization` ||
+      (tokenHeader === `both` && !headers.has(`authorization`))
+    ) {
+      headers.set(`authorization`, `Bearer ${token}`)
+    }
+    if (tokenHeader === `electric-claim-token` || tokenHeader === `both`) {
+      headers.set(`electric-claim-token`, token)
+    }
+  }
+
   const track = <T>(promise: Promise<T>): Promise<T> => {
     return config.track ? config.track(promise) : promise
   }
 
-  const request = (path: string, init?: RequestInit): Promise<Response> => {
-    return track(fetchImpl(appendPathToUrl(config.baseUrl, path), init))
+  const request = async (
+    path: string,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const headers = await resolveHeaders(init?.headers)
+    return track(
+      fetchImpl(appendPathToUrl(config.baseUrl, path), {
+        ...init,
+        headers,
+      })
+    )
   }
 
   const requireEntityInfo = (
@@ -224,6 +275,7 @@ export function createRuntimeServerClient(
     parentUrl,
     initialMessage,
     tags,
+    dispatch_policy,
     wake,
   }: SpawnEntityOptions): Promise<RuntimeEntityInfo> => {
     const body: Record<string, unknown> = {}
@@ -231,6 +283,7 @@ export function createRuntimeServerClient(
     if (parentUrl !== undefined) body.parent = parentUrl
     if (initialMessage !== undefined) body.initialMessage = initialMessage
     if (tags && Object.keys(tags).length > 0) body.tags = tags
+    if (dispatch_policy !== undefined) body.dispatch_policy = dispatch_policy
     if (wake !== undefined) body.wake = wake
 
     const response = await request(`/_electric/entities/${type}/${id}`, {
@@ -432,10 +485,12 @@ export function createRuntimeServerClient(
     init: RequestInit,
     writeToken: string
   ): Promise<Response> => {
-    const headers: Record<string, string> = {
-      ...(init.headers as Record<string, string> | undefined),
-      authorization: `Bearer ${writeToken}`,
-    }
+    const headers = new Headers(init.headers)
+    applyTokenHeader(
+      headers,
+      config.writeTokenHeader ?? `authorization`,
+      writeToken
+    )
     return request(path, { ...init, headers })
   }
 

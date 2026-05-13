@@ -560,9 +560,13 @@ export function registerHorton(
 
   if (process.env.BRAVE_SEARCH_API_KEY) {
     serverLog.info(`[horton] Web search: using Brave Search API`)
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    serverLog.warn(
+      `[horton] BRAVE_SEARCH_API_KEY not set — web search will fall back to Anthropic built-in search`
+    )
   } else {
     serverLog.warn(
-      `[horton] BRAVE_SEARCH_API_KEY not set — web search will fall back to Anthropic built-in search (uses your ANTHROPIC_API_KEY)`
+      `[horton] BRAVE_SEARCH_API_KEY and ANTHROPIC_API_KEY not set — web search tool will be unavailable`
     )
   }
 
