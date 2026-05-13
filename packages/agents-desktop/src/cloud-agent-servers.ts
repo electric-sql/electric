@@ -4,14 +4,14 @@ import { getCloudAgentsBaseUrl, getCloudBaseUrl } from './cloud-auth'
 import type { SecretStore } from './secret-store'
 
 /**
- * Per-tenant secret storage prefix. Each cloud agent server's service
- * JWT is persisted under `${SECRET_REF_PREFIX}<tenantId>` in the
- * encrypted SecretStore so the secret never lands in `settings.json`
+ * Per-tenant token storage prefix. Each cloud agent server's agents
+ * bearer token is persisted under `${TOKEN_REF_PREFIX}<tenantId>` in the
+ * encrypted SecretStore so the token never lands in `settings.json`
  * (which lives in cleartext under `app.getPath('userData')`). The
  * webRequest hook in `main.ts` reads from the same map at injection
  * time, so we don't have to read from disk on every request.
  */
-const SECRET_REF_PREFIX = `cloud-service-secret:`
+const TOKEN_REF_PREFIX = `cloud-agents-token:`
 
 /**
  * Cloud agent-servers state machine.
@@ -132,13 +132,13 @@ export class CloudAgentServers {
   }
   private currentToken: string | null = null
   /**
-   * Cache of `tenantId → service JWT` hydrated from `SecretStore` at
+   * Cache of `tenantId → agents bearer token` hydrated from `SecretStore` at
    * launch and topped up by `prepareConnection`. `main.ts` reads
    * straight from this map inside the webRequest hook so per-request
    * auth injection stays synchronous.
    */
-  private serviceSecrets = new Map<string, string>()
-  private secretsLoaded = false
+  private agentsTokens = new Map<string, string>()
+  private tokensLoaded = false
 
   constructor(
     private readonly cloudAuth: CloudAuth,
@@ -146,34 +146,34 @@ export class CloudAgentServers {
   ) {}
 
   /** Synchronous lookup used by the main-process webRequest hook. */
-  getServiceSecret(tenantId: string): string | undefined {
-    return this.serviceSecrets.get(tenantId)
+  getAgentsToken(tenantId: string): string | undefined {
+    return this.agentsTokens.get(tenantId)
   }
 
   /**
-   * Hydrate the in-memory service-secret cache from `SecretStore`.
+   * Hydrate the in-memory agents-token cache from `SecretStore`.
    * Called on app launch with the set of tenant IDs that already
    * appear in `settings.json` (i.e. cloud servers the user has
    * connected to before). Missing entries are silently skipped — the
-   * `webRequest` hook fails the request when no secret is available
+   * `webRequest` hook fails the request when no token is available
    * for a known cloud server, and the renderer surfaces a re-connect
    * prompt rather than us guessing.
    */
-  async hydrateSecrets(tenantIds: ReadonlyArray<string>): Promise<void> {
-    if (this.secretsLoaded) return
-    this.secretsLoaded = true
+  async hydrateTokens(tenantIds: ReadonlyArray<string>): Promise<void> {
+    if (this.tokensLoaded) return
+    this.tokensLoaded = true
     for (const tenantId of tenantIds) {
       const stored = await this.secretStore.get(
-        `${SECRET_REF_PREFIX}${tenantId}`
+        `${TOKEN_REF_PREFIX}${tenantId}`
       )
-      if (stored) this.serviceSecrets.set(tenantId, stored)
+      if (stored) this.agentsTokens.set(tenantId, stored)
     }
   }
 
-  /** Drop the cached + persisted secret for a tenant. */
-  async forgetServiceSecret(tenantId: string): Promise<void> {
-    this.serviceSecrets.delete(tenantId)
-    await this.secretStore.delete(`${SECRET_REF_PREFIX}${tenantId}`)
+  /** Drop the cached + persisted agents token for a tenant. */
+  async forgetAgentsToken(tenantId: string): Promise<void> {
+    this.agentsTokens.delete(tenantId)
+    await this.secretStore.delete(`${TOKEN_REF_PREFIX}${tenantId}`)
   }
 
   getState(): CloudAgentServersState {
@@ -228,13 +228,13 @@ export class CloudAgentServers {
   /**
    * Prepare a connection for a cloud agent server.
    *
-   * Fetches a service-scoped JWT via `services.getSecret` on the
+   * Fetches a per-service principal token via `getTokenForAgents` on the
    * admin-API (authenticated with the user's cloud-auth bearer),
    * stores it in `SecretStore` and the in-memory cache, and returns
-   * just the bare base URL + tenant id to the renderer. The secret
+   * just the bare base URL + tenant id to the renderer. The token
    * itself is never sent over IPC and never lands in `settings.json`
    * — `main.ts`'s `webRequest.onBeforeSendHeaders` hook reads it
-   * from `serviceSecrets` to add `Authorization: Bearer <jwt>` and
+   * from `agentsTokens` to add `Authorization: Bearer <token>` and
    * `x-electric-service: <tenantId>` headers on outbound requests
    * to this server's URL.
    *
@@ -248,38 +248,80 @@ export class CloudAgentServers {
     if (!token) {
       throw new Error(`Not signed in to Electric Cloud`)
     }
-    const secret = await this.fetchServiceSecret(serviceId, token)
-    this.serviceSecrets.set(serviceId, secret)
-    await this.secretStore.set(`${SECRET_REF_PREFIX}${serviceId}`, secret)
+    const agentsToken = await this.fetchAgentsToken(serviceId, token)
+    this.agentsTokens.set(serviceId, agentsToken)
+    await this.secretStore.set(`${TOKEN_REF_PREFIX}${serviceId}`, agentsToken)
     const url = getCloudAgentsBaseUrl().replace(/\/+$/, ``)
     return { url, tenantId: serviceId }
   }
 
-  private async fetchServiceSecret(
+  private async fetchAgentsToken(
     serviceId: string,
     bearerToken: string
   ): Promise<string> {
-    const url = `${getCloudBaseUrl()}/api/rpc/services/getSecret`
+    const url = new URL(
+      `/api/v1/services/streams/${encodeURIComponent(serviceId)}/getTokenForAgents`,
+      getCloudBaseUrl()
+    ).toString()
+    console.info(`[agents-desktop] cloud agents token request`, {
+      serviceId,
+      url,
+      method: `POST`,
+      cloudAuthBearer: `Bearer ${bearerToken}`,
+      body: {},
+    })
     const res = await fetch(url, {
       method: `POST`,
       headers: {
         'content-type': `application/json`,
         authorization: `Bearer ${bearerToken}`,
       },
-      // oRPC v1.13 wire format: `{json: <input>}` envelope.
-      body: JSON.stringify({ json: { serviceId } }),
+      body: JSON.stringify({}),
     })
+    const contentType = res.headers.get(`content-type`)
     if (!res.ok) {
+      const errorText = await res.text().catch(() => ``)
+      console.warn(`[agents-desktop] cloud agents token request failed`, {
+        serviceId,
+        url,
+        status: res.status,
+        statusText: res.statusText,
+        contentType,
+        body: errorText,
+      })
       throw new Error(
-        `Failed to fetch service secret (HTTP ${res.status} ${res.statusText})`
+        `Failed to fetch agents token (HTTP ${res.status} ${res.statusText})`
       )
     }
-    const body = (await res.json()) as unknown
-    const secret = extractRpcSecret(body)
-    if (!secret) {
-      throw new Error(`Service secret response was malformed`)
+    const text = await res.text()
+    let body: unknown = text
+    try {
+      body = text.length > 0 ? JSON.parse(text) : null
+    } catch {
+      // Plain-text token responses are accepted below.
     }
-    return secret
+    const agentsToken = extractAgentsToken(body)
+    if (!agentsToken) {
+      console.warn(`[agents-desktop] cloud agents token response malformed`, {
+        serviceId,
+        url,
+        status: res.status,
+        contentType,
+        responseShape: describeResponseShape(body),
+        body: text,
+      })
+      throw new Error(`Agents token response was malformed`)
+    }
+    console.info(`[agents-desktop] cloud agents token received`, {
+      serviceId,
+      status: res.status,
+      contentType,
+      responseShape: describeResponseShape(body),
+      body: text,
+      token: summarizeJwtForLog(agentsToken),
+      agentsBearer: `Bearer ${agentsToken}`,
+    })
+    return agentsToken
   }
 
   /** Tear down all shape streams and reset to `idle`. */
@@ -427,18 +469,82 @@ export class CloudAgentServers {
   }
 }
 
-function extractRpcSecret(body: unknown): string | null {
+function extractAgentsToken(body: unknown): string | null {
+  if (typeof body === `string`) {
+    const token = body.trim()
+    return token.length > 0 ? token : null
+  }
   if (!body || typeof body !== `object`) return null
-  // oRPC v1.13 wraps the result as `{ json: <value>, meta? }`. Some
-  // ad-hoc handlers may return the value un-wrapped, so accept both
-  // shapes — matches the unwrap convention in `cloud-auth.ts`.
   const root = body as Record<string, unknown>
-  const json =
-    `json` in root && typeof root.json === `object` && root.json !== null
-      ? (root.json as Record<string, unknown>)
-      : root
-  const secret = json.secret
-  return typeof secret === `string` && secret.length > 0 ? secret : null
+  const json = `json` in root ? root.json : root
+  if (typeof json === `string`) {
+    const token = json.trim()
+    return token.length > 0 ? token : null
+  }
+  if (!json || typeof json !== `object`) return null
+  const payload = json as Record<string, unknown>
+  for (const key of [
+    `token`,
+    `principalToken`,
+    `principal_token`,
+    `bearerToken`,
+    `bearer_token`,
+    `accessToken`,
+    `access_token`,
+  ]) {
+    const token = payload[key]
+    if (typeof token === `string` && token.trim().length > 0) {
+      return token.trim()
+    }
+  }
+  return null
+}
+
+function describeResponseShape(body: unknown): string {
+  if (typeof body === `string`) return `string`
+  if (!body || typeof body !== `object`) return String(body)
+  if (Array.isArray(body)) return `array(${body.length})`
+  return `object(${Object.keys(body as Record<string, unknown>).join(`,`)})`
+}
+
+function summarizeJwtForLog(token: string): Record<string, unknown> {
+  const parts = token.split(`.`)
+  const summary: Record<string, unknown> = {
+    kind: parts.length === 3 ? `jwt` : `opaque`,
+  }
+  if (parts.length !== 3) return summary
+  try {
+    const payload = JSON.parse(base64UrlDecode(parts[1] ?? ``)) as Record<
+      string,
+      unknown
+    >
+    for (const key of [
+      `iss`,
+      `sub`,
+      `aud`,
+      `exp`,
+      `iat`,
+      `nbf`,
+      `serviceId`,
+      `service_id`,
+      `tenantId`,
+      `tenant_id`,
+      `userId`,
+      `user_id`,
+      `email`,
+    ]) {
+      if (payload[key] !== undefined) summary[key] = payload[key]
+    }
+  } catch (err) {
+    summary.decodeError = err instanceof Error ? err.message : String(err)
+  }
+  return summary
+}
+
+function base64UrlDecode(value: string): string {
+  const padded = `${value}${`=`.repeat((4 - (value.length % 4)) % 4)}`
+  const base64 = padded.replace(/-/g, `+`).replace(/_/g, `/`)
+  return Buffer.from(base64, `base64`).toString(`utf8`)
 }
 
 function collect<T>(rows: Map<string, Row> | undefined): Array<T> {

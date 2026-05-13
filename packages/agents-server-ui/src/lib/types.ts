@@ -12,9 +12,9 @@ export interface ServerConfig {
    * For `source: 'electric-cloud'` only — the `stream_services.id`
    * the cloud-agents-server uses to identify this tenant. Persisted
    * with the rest of the server config so the desktop's main
-   * process can inject `Authorization: Bearer <jwt>` and
+   * process can inject `Authorization: Bearer <agents token>` and
    * `x-electric-service: <tenantId>` headers on every outgoing
-   * request to this server. The matching service JWT lives in the
+   * request to this server. The matching agents token lives in the
    * encrypted `SecretStore` keyed by `tenantId`, never in
    * `settings.json`.
    */

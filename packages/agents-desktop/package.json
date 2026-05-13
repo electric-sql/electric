@@ -10,7 +10,7 @@
   "main": "./dist/main.cjs",
   "scripts": {
     "build": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && vite build",
-    "dev": "pnpm --filter @electric-ax/agents build && pnpm run ensure:electron && concurrently -k -n ui,desktop -c cyan,green \"pnpm run dev:ui\" \"pnpm run dev:desktop\"",
+    "dev": "pnpm run ensure:electron && concurrently -k -n ui,desktop -c cyan,green \"pnpm run dev:ui\" \"pnpm run dev:desktop\"",
     "dev:ui": "pnpm --filter @electric-ax/agents-server-ui dev:desktop",
     "dev:desktop": "wait-on -d 200 http-get://localhost:5183 && vite",
     "build:icons": "node scripts/build-icons.mjs",

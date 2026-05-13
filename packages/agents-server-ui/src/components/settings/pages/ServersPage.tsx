@@ -449,8 +449,8 @@ function CloudAgentServerRow({
         // URL points at the cloud instead of `localhost`.
         localRuntimeEnabled: true,
         // Persisted alongside the URL so main's webRequest hook + the
-        // undici global interceptor can look up the matching JWT
-        // from SecretStore on every outbound request to this server.
+        // undici global interceptor can look up the matching agents
+        // token from SecretStore on every outbound request to this server.
         tenantId: result.tenantId,
       })
     } catch (err) {

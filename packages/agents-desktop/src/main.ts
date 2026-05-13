@@ -49,8 +49,8 @@ type ServerConfig = {
   /**
    * For `source: 'electric-cloud'` only — the `stream_services.id`
    * the cloud-agents-server uses to identify this tenant. The
-   * matching service JWT lives in `SecretStore` keyed by tenant id
-   * (`cloud-service-secret:<tenantId>`), not in `settings.json`.
+   * matching agents bearer token lives in `SecretStore` keyed by tenant id
+   * (`cloud-agents-token:<tenantId>`), not in `settings.json`.
    * The webRequest hook reads both fields to inject auth headers
    * on outgoing requests targeting this server's URL.
    */
@@ -302,6 +302,50 @@ function runnerOwnerUserIdFromHeaders(
   )
 }
 
+function summarizeBearerTokenForLog(value: string): Record<string, unknown> {
+  const token = value.replace(/^Bearer\s+/i, ``).trim()
+  const parts = token.split(`.`)
+  const summary: Record<string, unknown> = {
+    present: token.length > 0,
+    authorizationHeader: value,
+    token,
+    kind: parts.length === 3 ? `jwt` : `opaque`,
+  }
+  if (parts.length !== 3) return summary
+  try {
+    const payload = JSON.parse(base64UrlDecode(parts[1] ?? ``)) as Record<
+      string,
+      unknown
+    >
+    for (const key of [
+      `iss`,
+      `sub`,
+      `aud`,
+      `exp`,
+      `iat`,
+      `nbf`,
+      `serviceId`,
+      `service_id`,
+      `tenantId`,
+      `tenant_id`,
+      `userId`,
+      `user_id`,
+      `email`,
+    ]) {
+      if (payload[key] !== undefined) summary[key] = payload[key]
+    }
+  } catch (err) {
+    summary.decodeError = err instanceof Error ? err.message : String(err)
+  }
+  return summary
+}
+
+function base64UrlDecode(value: string): string {
+  const padded = `${value}${`=`.repeat((4 - (value.length % 4)) % 4)}`
+  const base64 = padded.replace(/-/g, `+`).replace(/_/g, `/`)
+  return Buffer.from(base64, `base64`).toString(`utf8`)
+}
+
 /**
  * Commands sent from the menu / tray (main process) to the focused
  * renderer over the `desktop:command` IPC channel. The renderer
@@ -477,7 +521,7 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
  * checks, agent spawn, inbox sends — all the same auth context).
  *
  * Host-only match isn't enough: a single cloud-agents-server host
- * can serve many tenants, so we'd risk attaching tenant A's secret
+ * can serve many tenants, so we'd risk attaching tenant A's token
  * to tenant B's request. Base-URL prefix match guards against that.
  */
 function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
@@ -507,9 +551,10 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
 
 /**
  * Decorate outgoing requests bound for a saved cloud agent server
- * with `Authorization: Bearer <jwt>` and `x-electric-service:
- * <tenantId>` headers. Two injection points, both reading from the
- * same in-memory `serviceSecrets` map (`SecretStore`-backed):
+ * with `Authorization: Bearer <agents token>` and
+ * `x-electric-service: <tenantId>` headers. Two injection points,
+ * both reading from the same in-memory agents-token map
+ * (`SecretStore`-backed):
  *
  *  1. Renderer fetches — Electron's
  *     `session.webRequest.onBeforeSendHeaders` hook catches anything
@@ -520,8 +565,8 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
  *     own `checkAgentsServerHealth` all pick up the same auth
  *     without each call-site needing to know.
  *
- * The service JWT lives only in the encrypted `SecretStore` + the
- * in-memory `serviceSecrets` map — neither the renderer nor
+ * The agents bearer token lives only in the encrypted `SecretStore` + the
+ * in-memory agents-token map — neither the renderer nor
  * `settings.json` ever sees it.
  *
  * Installed once at app launch. Requests not matching a saved cloud
@@ -545,10 +590,10 @@ function installCloudAuthHeaderInjection(): void {
 /**
  * Build the cloud-auth headers to inject on a request to `url`, or
  * `null` if the URL doesn't target a saved cloud agent server (or we
- * don't have a stored service secret for it).
+ * don't have a stored agents token for it).
  *
  * Headers emitted (only when we have the data):
- *  - `Authorization: Bearer <service JWT>` — proves the request is
+ *  - `Authorization: Bearer <agents token>` — proves the request is
  *    authorized for the tenant.
  *  - `x-electric-service: <tenantId>` — routes to the right tenant.
  *  - `x-electric-asserted-user-id` / `-email` / `-name` — the cloud
@@ -561,15 +606,15 @@ function installCloudAuthHeaderInjection(): void {
 function buildCloudAuthHeaders(url: string): Record<string, string> | null {
   const server = findCloudServerForUrl(url)
   if (!server || !server.tenantId) return null
-  const secret = cloudAgentServers?.getServiceSecret(server.tenantId)
-  if (!secret) {
-    // Tenant is known but the user has no stored JWT yet (uncommon —
+  const token = cloudAgentServers?.getAgentsToken(server.tenantId)
+  if (!token) {
+    // Tenant is known but the user has no stored token yet (uncommon —
     // a manual edit of `settings.json` or a `SecretStore` corruption).
     // Skip rather than send a half-authenticated request.
     return null
   }
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${secret}`,
+    Authorization: `Bearer ${token}`,
     'x-electric-service': server.tenantId,
   }
   const cloudAuthState = cloudAuth?.getState()
@@ -593,13 +638,13 @@ function buildCloudAuthHeaders(url: string): Record<string, string> | null {
  * from `@electric-ax/agents`) makes Node fetches to the connected
  * agent-server URL when it registers entity types and proxies
  * runtime traffic. For cloud servers those calls would 401 without
- * the service JWT, so we install a global undici interceptor that
+ * the agents token, so we install a global undici interceptor that
  * mirrors the renderer hook above and adds the same two headers.
  *
  * Matches by full request URL via `findCloudServerForUrl` — same
  * base-URL prefix logic as the renderer hook, so a single cloud-
  * agents-server host serving many tenants can't accidentally see
- * tenant A's secret on tenant B's request.
+ * tenant A's token on tenant B's request.
  */
 function installCloudAuthUndiciInterceptor(): void {
   const base = undici.getGlobalDispatcher()
@@ -608,7 +653,42 @@ function installCloudAuthUndiciInterceptor(): void {
       (opts, handler) => {
         const fullUrl = composeRequestUrl(opts.origin, opts.path)
         const extra = fullUrl ? buildCloudAuthHeaders(fullUrl) : null
-        if (!extra) return dispatch(opts, handler)
+        const method = String(opts.method ?? `GET`).toUpperCase()
+        const isRunnerRegistration = Boolean(
+          fullUrl && isRunnerRegistrationRequest(fullUrl, method)
+        )
+        let dispatchOpts = opts
+        if (fullUrl && isRunnerRegistration) {
+          const originalBody = (opts as { body?: unknown }).body
+          const loggedBody = wrapUndiciBodyForLogging(originalBody, (body) => {
+            console.info(
+              `[agents-desktop] cloud runner registration request body`,
+              { method, url: fullUrl, body }
+            )
+          })
+          if (loggedBody !== originalBody) {
+            dispatchOpts = {
+              ...opts,
+              body: loggedBody as Dispatcher.DispatchOptions[`body`],
+            }
+          }
+          const matchedServer = findCloudServerForUrl(fullUrl)
+          console.info(
+            `[agents-desktop] cloud runner registration request auth context`,
+            {
+              method,
+              url: fullUrl,
+              matchedCloudServer: Boolean(matchedServer),
+              serverId: matchedServer?.id ?? null,
+              tenantId: matchedServer?.tenantId ?? null,
+              body: summarizeUndiciBodyForLog(originalBody),
+              injectedHeaders: extra
+                ? summarizeInjectedCloudHeadersForLog(extra)
+                : null,
+            }
+          )
+        }
+        if (!extra) return dispatch(dispatchOpts, handler)
         // undici treats `Authorization` (capitalized) and `authorization`
         // as the same header but our `mergeUndiciHeaders` keys is
         // case-sensitive — lower-case the keys we add so a previously
@@ -618,12 +698,126 @@ function installCloudAuthUndiciInterceptor(): void {
           lowered[key.toLowerCase()] = value
         }
         return dispatch(
-          { ...opts, headers: mergeUndiciHeaders(opts.headers, lowered) },
+          {
+            ...dispatchOpts,
+            headers: mergeUndiciHeaders(dispatchOpts.headers, lowered),
+          },
           handler
         )
       }
   )
   undici.setGlobalDispatcher(composed)
+}
+
+function isRunnerRegistrationRequest(url: string, method: string): boolean {
+  if (method !== `POST`) return false
+  try {
+    const parsed = new URL(url)
+    return parsed.pathname.replace(/\/+$/, ``).endsWith(`/_electric/runners`)
+  } catch {
+    return false
+  }
+}
+
+function summarizeInjectedCloudHeadersForLog(
+  headers: Record<string, string>
+): Record<string, unknown> {
+  const auth = headers.Authorization ?? headers.authorization
+  return {
+    hasAuthorization: Boolean(auth),
+    authorization: auth ? summarizeBearerTokenForLog(auth) : null,
+    service: headers[`x-electric-service`] ?? null,
+    assertedUserId: headers[`x-electric-asserted-user-id`] ?? null,
+    assertedEmail: headers[`x-electric-asserted-email`] ?? null,
+    assertedNamePresent: Boolean(headers[`x-electric-asserted-name`]),
+  }
+}
+
+function summarizeUndiciBodyForLog(body: unknown): unknown {
+  if (body === null || body === undefined) return null
+  if (typeof body === `string`) return body
+  if (Buffer.isBuffer(body)) return body.toString(`utf8`)
+  if (body instanceof Uint8Array) return Buffer.from(body).toString(`utf8`)
+  if (body instanceof ArrayBuffer) return Buffer.from(body).toString(`utf8`)
+  if (body instanceof URLSearchParams) return body.toString()
+  if (isAsyncIterable(body) || isIterable(body)) {
+    return {
+      kind: Object.prototype.toString.call(body),
+      logged: `streaming`,
+      followUpLog: `cloud runner registration request body`,
+    }
+  }
+  return {
+    kind: Object.prototype.toString.call(body),
+    logged: false,
+  }
+}
+
+function wrapUndiciBodyForLogging(
+  body: unknown,
+  onBody: (body: unknown) => void
+): unknown {
+  if (isAsyncIterable(body)) {
+    return (async function* () {
+      const chunks: Array<Buffer> = []
+      for await (const chunk of body) {
+        const buffer = bodyChunkToBuffer(chunk)
+        if (buffer) chunks.push(buffer)
+        yield chunk
+      }
+      onBody(decodeLoggedBody(chunks))
+    })()
+  }
+  if (isIterable(body) && typeof body !== `string`) {
+    return (function* () {
+      const chunks: Array<Buffer> = []
+      for (const chunk of body) {
+        const buffer = bodyChunkToBuffer(chunk)
+        if (buffer) chunks.push(buffer)
+        yield chunk
+      }
+      onBody(decodeLoggedBody(chunks))
+    })()
+  }
+  return body
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    Boolean(value) &&
+    typeof (value as { [Symbol.asyncIterator]?: unknown })[
+      Symbol.asyncIterator
+    ] === `function`
+  )
+}
+
+function isIterable(value: unknown): value is Iterable<unknown> {
+  return (
+    Boolean(value) &&
+    typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
+      `function`
+  )
+}
+
+function bodyChunkToBuffer(chunk: unknown): Buffer | null {
+  if (typeof chunk === `string`) return Buffer.from(chunk)
+  if (Buffer.isBuffer(chunk)) return chunk
+  if (chunk instanceof ArrayBuffer) return Buffer.from(chunk)
+  if (chunk instanceof Uint8Array) return Buffer.from(chunk)
+  if (ArrayBuffer.isView(chunk)) {
+    return Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+  }
+  return null
+}
+
+function decodeLoggedBody(chunks: Array<Buffer>): unknown {
+  const text = Buffer.concat(chunks).toString(`utf8`)
+  if (!text) return ``
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
 }
 
 /**
@@ -1806,6 +2000,37 @@ async function startRuntime(serverId: string): Promise<void> {
   entry.lastError = null
   refreshDesktopState()
 
+  if (activeServer.source === `electric-cloud`) {
+    if (!activeServer.tenantId) {
+      entry.status = `error`
+      entry.lastError = `Cloud server ${activeServer.name} is missing a tenant id.`
+      refreshDesktopState()
+      return
+    }
+    try {
+      const prepared = await getCloudAgentServers().prepareConnection(
+        activeServer.tenantId
+      )
+      if (prepared.url !== activeServer.url) {
+        activeServer.url = prepared.url
+        await saveSettings()
+      }
+    } catch (err) {
+      const cachedToken = getCloudAgentServers().getAgentsToken(
+        activeServer.tenantId
+      )
+      if (!cachedToken) {
+        entry.status = `error`
+        entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+        refreshDesktopState()
+        return
+      }
+      console.warn(`[agents-desktop] cloud agents token refresh failed:`, err)
+    }
+  }
+
   const serverHealth = await checkAgentsServerHealth(activeServer.url, 4_000)
   if (!serverHealth.ok) {
     entry.status = `offline`
@@ -1886,7 +2111,7 @@ async function startRuntime(serverId: string): Promise<void> {
       headers: runtimeHeaders,
       claimHeaders: runtimeHeaders,
       // For `electric-cloud` source servers the global undici
-      // interceptor adds `Authorization: Bearer <service JWT>` on
+      // interceptor adds `Authorization: Bearer <agents token>` on
       // every outbound request. If the pull-wake runner default-
       // stuffed the claim token into that same `authorization`
       // header, our interceptor would overwrite it and the cloud
@@ -2424,9 +2649,10 @@ function registerIpcHandlers(): void {
     getCloudAgentServers().getState()
   )
   // Prepare a URL the renderer can hand to the normal `addServer`
-  // flow: hits `services.getSecret` on the admin-API to mint a
-  // service-scoped JWT and bakes it into a `?service=…&secret=…`
-  // URL. The renderer never sees the user's cloud-auth bearer.
+  // flow: hits the admin-API to mint a per-service agents bearer
+  // token, stores that token in SecretStore, and returns only the
+  // cloud agents base URL + tenant id. The renderer never sees the
+  // user's cloud-auth bearer or the agents token.
   ipcMain.handle(
     `desktop:cloud-agent-server-prepare-connection`,
     async (_event, serviceId: string) => {
@@ -2976,13 +3202,13 @@ async function main(): Promise<void> {
   await loadSettings()
   registerIpcHandlers()
   await getCloudAuth().initialize()
-  // Hydrate the per-tenant service-secret cache from `SecretStore`
+  // Hydrate the per-tenant agents-token cache from `SecretStore`
   // BEFORE we install the webRequest hook so a window opening
   // straight onto a saved cloud server gets the auth headers added.
   const cloudTenantIds = settings.servers
     .filter((s) => s.source === `electric-cloud` && s.tenantId)
     .map((s) => s.tenantId as string)
-  await getCloudAgentServers().hydrateSecrets(cloudTenantIds)
+  await getCloudAgentServers().hydrateTokens(cloudTenantIds)
   installCloudAuthHeaderInjection()
   // Eagerly kick the cloud-agent-servers streams once on boot — the
   // CloudAuth subscriber handles subsequent sign-in/sign-out edges.
