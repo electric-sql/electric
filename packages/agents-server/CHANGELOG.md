@@ -1,5 +1,12 @@
 # @electric-ax/agents-server
 
+## 0.4.2
+
+### Patch Changes
+
+- 0ac67fd: Fix pull-wake dispatch for spawns with an initial message by appending the inbox message before linking the dispatch subscription.
+- 28831c3: Enable Postgres type fetching so array parameters bind with the correct PostgreSQL array OIDs.
+
 ## 0.4.1
 
 ### Patch Changes

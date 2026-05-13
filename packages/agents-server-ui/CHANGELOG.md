@@ -1,5 +1,7 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.2
+
 ## 0.4.1
 
 ### Patch Changes
