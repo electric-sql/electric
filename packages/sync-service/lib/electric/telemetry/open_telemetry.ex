@@ -155,6 +155,46 @@ defmodule Electric.Telemetry.OpenTelemetry do
   end
 
   @doc """
+  Build a map of current-process memory-footprint attributes suitable for use
+  as span attributes.
+
+  Captures two values via `Process.info/2`:
+    * `process_bytes` — total memory occupied by the process (heap, stack,
+      message queue, GC overhead, etc.)
+    * `binary_bytes` — sum of the sizes of refc binaries referenced by the
+      process; this is what tends to dominate memory in shape requests that
+      buffer large response bodies.
+
+  The optional `phase` argument is mixed into the attribute names so the same
+  span can record memory at multiple points in its lifecycle. With
+  `phase = "start"` the keys become `memory.start.process_bytes` and
+  `memory.start.binary_bytes`. With `phase = nil` (the default) the keys are
+  just `memory.process_bytes` and `memory.binary_bytes`.
+  """
+  @spec process_memory_attributes(String.t() | nil) :: %{optional(String.t()) => non_neg_integer()}
+  def process_memory_attributes(phase \\ nil) do
+    {:memory, process_bytes} = Process.info(self(), :memory)
+    {:binary, binaries} = Process.info(self(), :binary)
+    binary_bytes = Enum.reduce(binaries, 0, fn {_ref, size, _count}, acc -> acc + size end)
+
+    prefix = if phase in [nil, ""], do: "memory.", else: "memory.#{phase}."
+
+    %{
+      "#{prefix}process_bytes" => process_bytes,
+      "#{prefix}binary_bytes" => binary_bytes
+    }
+  end
+
+  @doc """
+  Add current-process memory-footprint attributes (see
+  `process_memory_attributes/1`) to the current span.
+  """
+  @spec add_process_memory_attributes(String.t() | nil) :: boolean()
+  def add_process_memory_attributes(phase \\ nil) do
+    add_span_attributes(process_memory_attributes(phase))
+  end
+
+  @doc """
   Store the telemetry span attributes in the persistent term for this stack.
   """
   @spec set_stack_span_attrs(String.t(), span_attrs()) :: :ok

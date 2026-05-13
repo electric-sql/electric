@@ -380,6 +380,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp start_telemetry_span(conn) do
     OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "Plug_shape_get", %{}, %{})
+    OpenTelemetry.add_process_memory_attributes("start")
 
     conn
     |> add_span_attrs_from_conn()
@@ -413,6 +414,7 @@ defmodule Electric.Plug.ServeShapePlug do
       }
     )
 
+    OpenTelemetry.add_process_memory_attributes("end")
     add_span_attrs_from_conn(conn)
   end
 

@@ -1150,7 +1150,17 @@ defmodule Electric.Shapes.Api do
   end
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do
-    OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
+    # Record process/binary memory at span entry as attributes (cheap, two
+    # `Process.info/2` calls). Capture matching `end` attributes inside the
+    # closure so memory growth across the span is queryable in Honeycomb.
+    start_memory = OpenTelemetry.process_memory_attributes("start")
+    all_attributes = Map.merge(Map.new(attributes), start_memory)
+
+    OpenTelemetry.with_span(name, all_attributes, stack_id(request), fn ->
+      result = fun.()
+      OpenTelemetry.add_process_memory_attributes("end")
+      result
+    end)
   end
 
   @spec stack_id(Api.t() | Request.t() | Response.t()) :: String.t()

@@ -118,4 +118,28 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
       end)
     end
   end
+
+  describe "process_memory_attributes/1" do
+    test "returns process and binary memory under unprefixed keys by default" do
+      attrs = OpenTelemetry.process_memory_attributes()
+
+      assert %{"memory.process_bytes" => process_bytes, "memory.binary_bytes" => binary_bytes} =
+               attrs
+
+      assert is_integer(process_bytes) and process_bytes > 0
+      assert is_integer(binary_bytes) and binary_bytes >= 0
+    end
+
+    test "applies the given phase as part of the attribute key prefix" do
+      attrs = OpenTelemetry.process_memory_attributes("start")
+
+      assert Map.has_key?(attrs, "memory.start.process_bytes")
+      assert Map.has_key?(attrs, "memory.start.binary_bytes")
+    end
+
+    test "ignores nil and empty-string phases" do
+      assert OpenTelemetry.process_memory_attributes(nil) |> Map.keys() ==
+               OpenTelemetry.process_memory_attributes("") |> Map.keys()
+    end
+  end
 end
