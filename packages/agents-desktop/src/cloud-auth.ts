@@ -91,6 +91,37 @@ export function getCloudBaseUrl(): string {
   return fromEnv && fromEnv.length > 0 ? fromEnv : PROD_DASHBOARD_URL
 }
 
+const PROD_AGENTS_URL = `https://agents.electric-sql.cloud`
+
+/**
+ * Resolve the Electric Cloud agents server base URL.
+ *
+ * The cloud agents server is a sibling of the dashboard / admin-API
+ * with the same stage suffix — e.g. `dashboard-pr-1502.electric-sql.dev`
+ * pairs with `agents-pr-1502.electric-sql.dev`. We honor an explicit
+ * `ELECTRIC_AGENTS_URL` override first, then try to derive it by
+ * swapping `dashboard` → `agents` in the configured dashboard URL,
+ * and finally fall back to the production agents URL.
+ */
+export function getCloudAgentsBaseUrl(): string {
+  const fromEnv = process.env.ELECTRIC_AGENTS_URL?.trim()
+  if (fromEnv && fromEnv.length > 0) return fromEnv
+  const dashboardUrl = getCloudBaseUrl()
+  try {
+    const url = new URL(dashboardUrl)
+    if (url.hostname.startsWith(`dashboard`)) {
+      url.hostname = url.hostname.replace(/^dashboard/, `agents`)
+      // Strip path/query — agents server is host-only.
+      url.pathname = `/`
+      url.search = ``
+      return url.toString().replace(/\/$/, ``)
+    }
+  } catch {
+    // Fall through to prod default.
+  }
+  return PROD_AGENTS_URL
+}
+
 function loopbackPrefix(): string {
   return `http://127.0.0.1:${CLI_PORT}/callback`
 }

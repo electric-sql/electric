@@ -43,6 +43,7 @@ type ServerConfig = {
   desiredState: `connected` | `disconnected`
   localRuntimeEnabled: boolean
   headers?: Record<string, string>
+  tenantId?: string
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -167,6 +168,31 @@ type CloudAuthState = {
   name: string | null
   userId: string | null
   workspaces: ReadonlyArray<CloudAuthWorkspace> | null
+  error: string | null
+}
+
+type CloudAgentServersStatus =
+  | `idle`
+  | `loading`
+  | `ready`
+  | `unauthorized`
+  | `error`
+
+type CloudAgentServer = {
+  id: string
+  name: string
+  workspaceId: string | null
+  workspaceName: string | null
+  projectId: string | null
+  projectName: string | null
+  environmentId: string | null
+  environmentName: string | null
+  updatedAt: string | null
+}
+
+type CloudAgentServersState = {
+  status: CloudAgentServersStatus
+  servers: ReadonlyArray<CloudAgentServer>
   error: string | null
 }
 
@@ -376,6 +402,32 @@ const api = {
       return () =>
         ipcRenderer.removeListener(`desktop:cloud-auth-state-changed`, listener)
     },
+  },
+  // ── Cloud agent servers ──────────────────────────────────────────
+  cloudAgentServers: {
+    getState: (): Promise<CloudAgentServersState> =>
+      ipcRenderer.invoke(`desktop:cloud-agent-servers-state`),
+    onStateChanged: (
+      callback: (state: CloudAgentServersState) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        state: CloudAgentServersState
+      ) => callback(state)
+      ipcRenderer.on(`desktop:cloud-agent-servers-state-changed`, listener)
+      return () =>
+        ipcRenderer.removeListener(
+          `desktop:cloud-agent-servers-state-changed`,
+          listener
+        )
+    },
+    prepareConnection: (
+      serviceId: string
+    ): Promise<{ url: string; tenantId: string }> =>
+      ipcRenderer.invoke(
+        `desktop:cloud-agent-server-prepare-connection`,
+        serviceId
+      ),
   },
 }
 

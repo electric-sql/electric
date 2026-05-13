@@ -26,13 +26,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@electric-sql/client": "^1.5.15",
     "@mixmark-io/domino": "^2.2.0",
     "better-sqlite3": "^12.9.0",
     "jsdom": "^28.1.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",
     "sqlite-vec": "^0.1.9",
-    "turndown-plugin-gfm": "^1.0.2"
+    "turndown-plugin-gfm": "^1.0.2",
+    "undici": "^7.24.7"
   },
   "devDependencies": {
     "@electric-ax/agents": "workspace:*",

@@ -80,6 +80,14 @@ function normalizeServerConfig(server: ServerConfig): ServerConfig {
     ...(Object.keys(normalizedHeaders).length > 0
       ? { headers: normalizedHeaders }
       : {}),
+    // For `electric-cloud` source, the tenant ID is what the
+    // desktop's webRequest hook + main-process undici interceptor
+    // use to look up the matching service JWT in `SecretStore`.
+    // Drop it from the normalized form for non-cloud sources so
+    // we don't accidentally tag a manual server with a stale tenant.
+    ...(server.source === `electric-cloud` && server.tenantId
+      ? { tenantId: server.tenantId }
+      : {}),
   }
 }
 

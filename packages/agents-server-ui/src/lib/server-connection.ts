@@ -180,6 +180,47 @@ export interface CloudAuthState {
   error: string | null
 }
 
+/**
+ * Continuously-synced view of the user's Electric Cloud agent servers,
+ * joined client-side (in the main process) with the user's workspaces,
+ * projects, and environments so each row carries the labels the UI
+ * needs to render "Agent X — Workspace / Project / Environment".
+ *
+ * - `idle`: no auth yet (signed-out) or no streams subscribed.
+ * - `loading`: streams just started; rows still empty.
+ * - `ready`: streams have produced at least one snapshot; `servers`
+ *   reflects the latest join. Rows mutate live as the underlying
+ *   shapes change — UI should re-render off `onStateChanged`.
+ * - `unauthorized`: a 401/403 on one of the streams. Streams are
+ *   stopped; caller should expect to sign back in.
+ * - `error`: transient — previous `servers` snapshot is retained.
+ */
+export type CloudAgentServersStatus =
+  | `idle`
+  | `loading`
+  | `ready`
+  | `unauthorized`
+  | `error`
+
+export interface CloudAgentServer {
+  /** stream_services.id — also the tenant identifier in the cloud agents server. */
+  id: string
+  name: string
+  workspaceId: string | null
+  workspaceName: string | null
+  projectId: string | null
+  projectName: string | null
+  environmentId: string | null
+  environmentName: string | null
+  updatedAt: string | null
+}
+
+export interface CloudAgentServersState {
+  status: CloudAgentServersStatus
+  servers: ReadonlyArray<CloudAgentServer>
+  error: string | null
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -274,6 +315,15 @@ declare global {
         onStateChanged: (
           callback: (state: CloudAuthState) => void
         ) => () => void
+      }
+      cloudAgentServers?: {
+        getState: () => Promise<CloudAgentServersState>
+        onStateChanged: (
+          callback: (state: CloudAgentServersState) => void
+        ) => () => void
+        prepareConnection: (
+          serviceId: string
+        ) => Promise<{ url: string; tenantId: string }>
       }
     }
   }
@@ -415,4 +465,26 @@ export function onCloudAuthStateChanged(
   callback: (state: CloudAuthState) => void
 ): (() => void) | null {
   return window.electronAPI?.cloudAuth?.onStateChanged?.(callback) ?? null
+}
+
+export async function loadCloudAgentServersState(): Promise<CloudAgentServersState | null> {
+  return (await window.electronAPI?.cloudAgentServers?.getState?.()) ?? null
+}
+
+export function onCloudAgentServersStateChanged(
+  callback: (state: CloudAgentServersState) => void
+): (() => void) | null {
+  return (
+    window.electronAPI?.cloudAgentServers?.onStateChanged?.(callback) ?? null
+  )
+}
+
+export async function prepareCloudAgentServerConnection(
+  serviceId: string
+): Promise<{ url: string; tenantId: string } | null> {
+  return (
+    (await window.electronAPI?.cloudAgentServers?.prepareConnection?.(
+      serviceId
+    )) ?? null
+  )
 }
