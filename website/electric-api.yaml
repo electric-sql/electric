@@ -688,7 +688,7 @@ paths:
                   value:
                     - headers:
                         operation: insert
-                        lsn: 1234
+                        lsn: '1234'
                         op_position: 0
                       key: issue-1
                       value:
@@ -697,7 +697,7 @@ paths:
                         status: backlog
                     - headers:
                         operation: insert
-                        lsn: 1234
+                        lsn: '1234'
                         op_position: 7
                       key: issue-2
                       value:
