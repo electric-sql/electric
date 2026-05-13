@@ -60,9 +60,9 @@ describe(`entity lifecycle`, () => {
     const killResponse = await fetch(
       `${baseUrl}/_electric/entities/task/demo-1/signal`,
       {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
       }
     )
     expect(killResponse.status).toBe(200)
@@ -84,7 +84,7 @@ describe(`entity lifecycle`, () => {
     expect(headResponse.status).toBe(200)
   })
 
-  it(`rejects lifecycle DELETE and points clients to signals`, async () => {
+  it(`keeps lifecycle DELETE as a legacy kill alias`, async () => {
     await fetch(`${baseUrl}/_electric/entity-types`, {
       method: `POST`,
       headers: { 'content-type': `application/json` },
@@ -94,16 +94,22 @@ describe(`entity lifecycle`, () => {
       }),
     })
 
-    const spawnResponse = await fetch(`${baseUrl}/task/demo-delete-rejected`, {
-      method: `PUT`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({}),
-    })
+    const spawnResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-delete-rejected`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
     expect(spawnResponse.status).toBe(201)
 
-    const deleteResponse = await fetch(`${baseUrl}/task/demo-delete-rejected`, {
-      method: `DELETE`,
-    })
-    expect(deleteResponse.status).toBe(405)
+    const deleteResponse = await fetch(
+      `${baseUrl}/_electric/entities/task/demo-delete-rejected`,
+      {
+        method: `DELETE`,
+      }
+    )
+    expect(deleteResponse.status).toBe(200)
   })
 })
