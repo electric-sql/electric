@@ -63,10 +63,12 @@ defmodule Electric.Shapes.PartialModes do
         {[row], {start_time, bytes + IO.iodata_length(row), rows + 1}}
       end,
       fn {start_time, bytes, rows} ->
+        duration = System.monotonic_time(:microsecond) - start_time
+
         OpenTelemetry.execute(
           [:electric, :subqueries, :subset_result],
           %{
-            duration: System.monotonic_time(:microsecond) - start_time,
+            duration: duration,
             bytes: bytes,
             count: 1,
             rows: rows
@@ -78,9 +80,13 @@ defmodule Electric.Shapes.PartialModes do
           }
         )
 
+        # Expose subset materialisation metrics as span attributes on the
+        # active shape_snapshot.query_fn child span so they become queryable
+        # Honeycomb columns. Mirrors the telemetry event measurements above.
         OpenTelemetry.add_span_attributes(%{
-          "subset.rows" => rows,
-          "subset.result_bytes" => bytes
+          "electric.subqueries.subset_result.bytes" => bytes,
+          "electric.subqueries.subset_result.rows" => rows,
+          "electric.subqueries.subset_result.duration_µs" => duration
         })
       end
     )

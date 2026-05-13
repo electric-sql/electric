@@ -29,7 +29,7 @@ defmodule Electric.Plug.SubsetTelemetryTest do
 
     Repatch.patch(OpenTelemetry, :add_span_attributes, [mode: :shared], fn attrs ->
       if is_map(attrs) and
-           (Map.has_key?(attrs, "subset.rows") or
+           (Map.has_key?(attrs, "electric.subqueries.subset_result.rows") or
               Map.has_key?(attrs, "http.body_param.subset.where")) do
         send(test_pid, {:subset_span_attrs, attrs})
       end
@@ -78,8 +78,9 @@ defmodule Electric.Plug.SubsetTelemetryTest do
     assert request_attrs["http.body_param.subset.where"] == "value ILIKE $1"
     assert request_attrs["http.body_param.subset.params"] == ~s(%{"1" => "%2"})
 
-    assert query_attrs["subset.rows"] == 1
-    assert query_attrs["subset.result_bytes"] > 0
+    assert query_attrs["electric.subqueries.subset_result.rows"] == 1
+    assert query_attrs["electric.subqueries.subset_result.bytes"] > 0
+    assert query_attrs["electric.subqueries.subset_result.duration_µs"] >= 0
   end
 
   test "truncates large POST body strings to 2000 graphemes in telemetry attrs", ctx do
