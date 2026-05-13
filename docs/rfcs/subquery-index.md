@@ -693,6 +693,30 @@ Interpretation:
 
 This is why the RFC now specifies compact `cohort_id` and `participant_id` values plus dedicated ETS tables rather than storing full participant tuples in hot rows.
 
+#### 100k-shape customer workload estimates
+
+These estimates use the same benchmark script, but extrapolate from measured ETS row costs instead of allocating the full 100k-shape tables. They preserve each workload file's observed ratio of:
+
+- subquery occurrences per shape;
+- distinct literal subqueries per subquery occurrence.
+
+For HumanLayer and AutoArc, the shape basis is distinct `WHERE` clauses because those files do not include distinct shape-handle counts. For Hazel, the file includes distinct shape handles, so the estimate uses shape handles as the basis.
+
+| Customer | Observed basis | Observed subquery occurrences -> literal cohorts | Shared occurrences | Subquery participants @100k shapes | Cohorts @100k shapes | Rows/cohort | Current | Compact proposed | Savings |
+|----------|----------------|--------------------------------------------------|--------------------|------------------------------------|----------------------|-------------|---------|------------------|---------|
+| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 1,000 | 50.66 GiB | 1.67 GiB | 96.7% |
+| HumanLayer | 75 distinct `WHERE`s | 134 -> 13 | 90.3% | 178,667 | 17,333 | 10,000 | 505.76 GiB | 15.68 GiB | 96.9% |
+| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 1,000 | 13.51 GiB | 3.12 GiB | 76.9% |
+| AutoArc | 611 distinct `WHERE`s | 291 -> 209 | 28.2% | 47,627 | 34,206 | 10,000 | 134.82 GiB | 30.76 GiB | 77.2% |
+| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 1,000 | 8.73 GiB | 2.8 GiB | 68.0% |
+| Hazel | 13 distinct shape handles | 4 -> 4 | 0.0% | 30,769 | 30,769 | 10,000 | 87.1 GiB | 27.66 GiB | 68.2% |
+
+Interpretation:
+
+- HumanLayer has high literal subquery sharing in the captured workload, so the shared-base design gives the largest asymptotic win.
+- AutoArc still benefits substantially, but many cohorts are tenant/user-specific, so the compact design stores more base views.
+- Hazel has no literal sharing in the captured workload. The estimate still shows a constant-factor reduction because the current simulation stores both routing and exact membership value rows per participant, while the proposed layout stores one base value row per one-participant cohort. There is no many-participant amortization for Hazel.
+
 ### Complexity Check
 
 - **Is this the simplest approach?** No. The simplest approach is adding `shape_handle -> values` or tombstoning stale rows. Those approaches reduce removal latency but do not address the structural memory duplication. This proposal is the simplest approach that addresses both memory and removal latency while preserving per-consumer move correctness.
@@ -917,7 +941,7 @@ proposed subquery removal:  O(C + P_s + E_s) plus off-path base cleanup
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 0.4 | 2026-05-13 | robacourt | Added explicit whole-subquery/cohort teardown requirements, reverse indexes, complexity bounds, regenerated memory figures, and tests to prevent O(total shapes) lifecycle scans. |
+| 0.4 | 2026-05-13 | robacourt | Added explicit whole-subquery/cohort teardown requirements, reverse indexes, complexity bounds, regenerated memory figures, 100k-shape customer workload estimates, and tests to prevent O(total shapes) lifecycle scans. |
 | 0.3 | 2026-05-06 | robacourt | Readability pass: tightened the opening sections, added a current-vs-proposed summary table, and converted pseudo-list code blocks into normal prose/lists. |
 | 0.2 | 2026-05-06 | robacourt | Added measured ETS memory tables, switched the proposed layout to compact interned ids plus dedicated tables, and clarified the single-release cutover plan. |
 | 0.1 | 2026-05-06 | robacourt | Initial draft based on issue #4279 and design discussion. |
