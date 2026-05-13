@@ -16,7 +16,7 @@ export function createDb(postgresUrl: string): {
   const poolMax = Number(process.env.ELECTRIC_AGENTS_PG_POOL_MAX ?? `100`)
   const client = postgres(postgresUrl, {
     max: poolMax,
-    fetch_types: false,
+    fetch_types: true,
   })
   const db = drizzle(client, { schema })
   return { db, client }
