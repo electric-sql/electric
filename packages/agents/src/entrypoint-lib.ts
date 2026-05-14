@@ -84,6 +84,19 @@ function parseAdditionalServerHeaders(
   return Object.keys(normalized).length > 0 ? normalized : undefined
 }
 
+function mergePrincipalHeader(
+  headers: Record<string, string> | undefined,
+  principal: string | undefined
+): Record<string, string> | undefined {
+  const merged = new Headers(headers)
+  const trimmedPrincipal = principal?.trim()
+  if (trimmedPrincipal) {
+    merged.set(`electric-principal`, trimmedPrincipal)
+  }
+  const normalized = Object.fromEntries(merged.entries())
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
 function mergeHeaders(
   ...sources: Array<Record<string, string> | undefined>
 ): Record<string, string> | undefined {
@@ -121,7 +134,12 @@ export function resolveBuiltinAgentsEntrypointOptions(
     `pull-wake runner id`
   )
 
-  const serverHeaders = mergeHeaders(parseAdditionalServerHeaders(env))
+  const serverHeaders = mergeHeaders(
+    mergePrincipalHeader(
+      parseAdditionalServerHeaders(env),
+      readEnv(env, [`ELECTRIC_AGENTS_PRINCIPAL`])
+    )
+  )
 
   return {
     agentServerUrl,
