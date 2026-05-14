@@ -22,8 +22,11 @@ function normalizeHeaders(
     if (!name || !value) continue
     try {
       normalized.set(name, value)
-    } catch {
-      // Ignore persisted or hand-edited invalid header entries.
+    } catch (err) {
+      console.warn(
+        `[auth-fetch] Dropping invalid header "${name}":`,
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
   return Object.fromEntries(normalized.entries())
@@ -80,6 +83,10 @@ export function getConfiguredServerHeaders(
   input: RequestInfo | URL
 ): Record<string, string> {
   return matchesActiveServer(input) ? (activeServerHeaders?.headers ?? {}) : {}
+}
+
+export function getActivePrincipal(): string {
+  return activeServerHeaders?.headers[`electric-principal`] ?? `unknown`
 }
 
 export async function serverFetch(

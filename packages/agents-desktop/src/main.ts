@@ -227,6 +227,21 @@ const PULL_WAKE_REGISTER_RUNNER =
 const PULL_WAKE_OWNER_USER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
   `local-desktop`
+const DEV_PRINCIPAL = ((): string | null => {
+  const raw = process.env.ELECTRIC_DESKTOP_PRINCIPAL?.trim() || null
+  if (!raw) return null
+  const colon = raw.indexOf(`:`)
+  if (colon <= 0) {
+    console.error(
+      `[agents-desktop] ELECTRIC_DESKTOP_PRINCIPAL="${raw}" is invalid. ` +
+        `Expected format: "kind:id" (e.g. "system:dev-local"). Ignoring.`
+    )
+    return null
+  }
+  console.info(`[agents-desktop] Using dev principal: ${raw}`)
+  return raw
+})()
+const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
 
 function mergeHeaders(
   ...sources: Array<Record<string, string> | undefined>
@@ -251,7 +266,11 @@ function runnerOwnerUserIdFromHeaders(
   headers: Record<string, string> | undefined
 ): string {
   const normalized = new Headers(headers)
-  return normalized.get(`authorization`)?.trim() || PULL_WAKE_OWNER_USER_ID
+  return (
+    normalized.get(`authorization`)?.trim() ||
+    normalized.get(ELECTRIC_PRINCIPAL_HEADER)?.trim() ||
+    PULL_WAKE_OWNER_USER_ID
+  )
 }
 
 /**
@@ -869,6 +888,14 @@ function localRuntimeStatusLabel(status: LocalRuntimeStatus): string {
   }
 }
 
+function injectDevPrincipalHeaders(server: ServerConfig): ServerConfig {
+  if (!DEV_PRINCIPAL) return server
+  return {
+    ...server,
+    headers: { ...server.headers, [ELECTRIC_PRINCIPAL_HEADER]: DEV_PRINCIPAL },
+  }
+}
+
 function desktopStateForWindow(win: BrowserWindow | null): DesktopState {
   const selectedServerId = selectedServerIdForWindow(win)
   const activeServer = findServer(selectedServerId)
@@ -881,7 +908,7 @@ function desktopStateForWindow(win: BrowserWindow | null): DesktopState {
     ),
     runtimeStatus: runtimeStatusForConnection(entry),
     runtimeUrl: entry?.runtimeUrl ?? null,
-    activeServer,
+    activeServer: activeServer ? injectDevPrincipalHeaders(activeServer) : null,
     workingDirectory: settings.workingDirectory,
     error: entry?.lastError ?? null,
     discoveredServers: state.discoveredServers,
@@ -1512,7 +1539,8 @@ async function startRuntime(serverId: string): Promise<void> {
   }
   setState({ pullWakeRunnerId: runnerId })
 
-  const runtimeHeaders = mergeHeaders(activeServer.headers)
+  const serverWithPrincipal = injectDevPrincipalHeaders(activeServer)
+  const runtimeHeaders = mergeHeaders(serverWithPrincipal.headers)
   const runnerOwnerUserId = runnerOwnerUserIdFromHeaders(runtimeHeaders)
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
