@@ -151,7 +151,7 @@ describe(`dispatch policy routing`, () => {
     expect(ctx.pgDb.insert).toHaveBeenCalled()
   })
 
-  it(`sends spawn initialMessage before linking pull-wake dispatch`, async () => {
+  it(`links pull-wake dispatch before sending spawn initialMessage`, async () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
@@ -188,7 +188,7 @@ describe(`dispatch policy routing`, () => {
     )
     expect(
       (ctx.entityManager.send as any).mock.invocationCallOrder[0]
-    ).toBeLessThan(
+    ).toBeGreaterThan(
       (ctx.streamClient.putSubscription as any).mock.invocationCallOrder[0]
     )
   })

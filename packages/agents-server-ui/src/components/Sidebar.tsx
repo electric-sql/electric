@@ -209,7 +209,9 @@ export function Sidebar({
   const { data: visibleEntities = [] } = useLiveQuery(
     (query) => {
       if (!entitiesCollection) return undefined
-      let builder = query.from({ e: entitiesCollection })
+      let builder = query
+        .from({ e: entitiesCollection })
+        .where(({ e }) => not(eq(e.type, `principal`)))
 
       for (const type of view.hiddenTypes) {
         builder = builder.where(({ e }) => not(eq(e.type, type)))
