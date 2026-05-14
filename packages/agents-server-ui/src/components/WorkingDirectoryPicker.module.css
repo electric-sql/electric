@@ -63,8 +63,9 @@
 }
 
 .pathItem {
-  padding-top: 2px;
-  padding-bottom: 2px;
+  /* No extra vertical padding — the Combobox .item base class
+     already applies 3px top/bottom, which is the right amount
+     to keep rows on the shared 30px pitch. */
 }
 
 /* Inner row wrapper — copied verbatim from
@@ -79,10 +80,15 @@
    icon → label → trailing read at identical spacing across
    dropdowns. */
 .menuRow {
-  display: inline-flex;
+  /* flex (not inline-flex) so the row stretches to the full item
+     width and the label's text-overflow: ellipsis can actually
+     truncate. inline-flex shrinks to content, lets long paths bust
+     out of the popup, and causes the horizontal scrollbar. */
+  display: flex;
   align-items: center;
   gap: 8px;
   flex: 1;
+  min-width: 0;
   min-height: 24px;
 }
 

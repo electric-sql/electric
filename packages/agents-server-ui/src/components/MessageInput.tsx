@@ -8,10 +8,15 @@ import {
   createUpdateInboxMessageAction,
   readTextPayload,
 } from '../lib/sendMessage'
+import { ComposerSettings } from './SessionSettingsPopover'
 import { Icon, Stack, Text } from '../ui'
 import styles from './MessageInput.module.css'
 import type { EntityTimelineData } from '@electric-ax/agents-runtime/client'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
+import type {
+  ElectricEntity,
+  ElectricEntityType,
+} from '../lib/ElectricAgentsProvider'
 
 export function MessageInput({
   db,
@@ -21,6 +26,8 @@ export function MessageInput({
   pendingMessages = [],
   inlineQueuedSubmits = false,
   onOptimisticQueuedMessage,
+  entity,
+  entityType,
   drawer,
   onSend,
 }: {
@@ -31,7 +38,12 @@ export function MessageInput({
   pendingMessages?: EntityTimelineData[`inbox`]
   inlineQueuedSubmits?: boolean
   onOptimisticQueuedMessage?: (message: OptimisticInboxMessage) => void
-  onSend?: () => void
+  /** The entity whose session this composer belongs to. When provided,
+   *  inline model + CWD controls appear in the composer footer so the
+   *  user can change them at any point during the session. */
+  entity?: ElectricEntity
+  /** The entity type, used to read creation_schema for model options. */
+  entityType?: ElectricEntityType | null
   /**
    * Optional content rendered above the composer, sharing its docked
    * width and lift into the timeline above. The composer is z-indexed
@@ -47,6 +59,7 @@ export function MessageInput({
     onSteer: (key: string) => void
     onReorder: (key: string, position: string) => void
   }) => React.ReactNode
+  onSend?: () => void
 }): React.ReactElement {
   const [value, setValue] = useState(``)
   const [error, setError] = useState<string | null>(null)
@@ -225,22 +238,32 @@ export function MessageInput({
             </button>
           </div>
         )}
-        <div className={styles.composerBody}>
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === `Enter` && !e.shiftKey) {
-                e.preventDefault()
-                handleSubmit()
-              }
-            }}
-            placeholder={disabled ? `Entity stopped` : `Send a message...`}
-            disabled={disabled}
-            rows={1}
-            className={styles.textarea}
-          />
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === `Enter` && !e.shiftKey) {
+              e.preventDefault()
+              handleSubmit()
+            }
+          }}
+          placeholder={disabled ? `Entity stopped` : `Send a message...`}
+          disabled={disabled}
+          rows={1}
+          className={styles.textarea}
+        />
+        <div className={styles.composerFooter}>
+          <div className={styles.composerControls}>
+            {entity && (
+              <ComposerSettings
+                entity={entity}
+                entityType={entityType ?? null}
+                baseUrl={baseUrl}
+                disabled={disabled}
+              />
+            )}
+          </div>
           <button
             type="button"
             aria-label="Send message"

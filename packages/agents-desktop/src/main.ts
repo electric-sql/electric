@@ -15,10 +15,12 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  safeStorage,
   shell,
 } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -383,6 +385,60 @@ function configureRuntimeEnvironment(): void {
   )
 }
 configureRuntimeEnvironment()
+
+// Chromium picks safeStorage's backend on Linux from XDG_CURRENT_DESKTOP.
+// Tiling/Wayland desktops (niri, sway, hyprland, river, …) aren't in its
+// table so it falls back to `basic_text`, which makes encryptString throw
+// "Encryption is not available" even when gnome-keyring or kwallet is up.
+// Probe DBus for each known secret-service and force the matching backend
+// before app.ready. Override with ELECTRIC_DESKTOP_PASSWORD_STORE.
+const PASSWORD_STORE_PROBE = [
+  { dbusName: `org.freedesktop.secrets`, backend: `gnome-libsecret` },
+  { dbusName: `org.kde.kwalletd6`, backend: `kwallet6` },
+  { dbusName: `org.kde.kwalletd5`, backend: `kwallet5` },
+] as const
+
+function dbusNameHasOwner(name: string): boolean {
+  // dbus-send reads DBUS_SESSION_BUS_ADDRESS directly. `busctl --user`
+  // additionally needs a reachable systemd user manager, which fails in
+  // some sandboxed launch contexts even when DBus itself is fine.
+  const result = spawnSync(
+    `dbus-send`,
+    [
+      `--session`,
+      `--print-reply`,
+      `--reply-timeout=500`,
+      `--dest=org.freedesktop.DBus`,
+      `/org/freedesktop/DBus`,
+      `org.freedesktop.DBus.NameHasOwner`,
+      `string:${name}`,
+    ],
+    { encoding: `utf8`, stdio: [`ignore`, `pipe`, `ignore`] }
+  )
+  if (result.status !== 0 || !result.stdout) return false
+  return /boolean\s+true/.test(result.stdout)
+}
+
+function configurePasswordStoreBackend(): void {
+  if (process.platform !== `linux`) return
+
+  const override = process.env.ELECTRIC_DESKTOP_PASSWORD_STORE
+  if (override) {
+    app.commandLine.appendSwitch(`password-store`, override)
+    return
+  }
+  if (process.argv.some((arg) => arg.startsWith(`--password-store`))) return
+
+  for (const { dbusName, backend } of PASSWORD_STORE_PROBE) {
+    if (dbusNameHasOwner(dbusName)) {
+      app.commandLine.appendSwitch(`password-store`, backend)
+      return
+    }
+  }
+  // No backend reachable — leave the switch alone. SecretStore surfaces a
+  // descriptive error on first save instead of Chromium's terse one.
+}
+configurePasswordStoreBackend()
 
 function settingsPath(): string {
   return path.join(app.getPath(`userData`), `settings.json`)
@@ -2574,6 +2630,16 @@ async function main(): Promise<void> {
 
   await app.whenReady()
   configureRuntimeEnvironment()
+  if (process.platform === `linux`) {
+    console.log(
+      `[agents-desktop] safeStorage backend=${safeStorage.getSelectedStorageBackend()} ` +
+        `available=${safeStorage.isEncryptionAvailable()} ` +
+        `DBUS_SESSION_BUS_ADDRESS=${
+          process.env.DBUS_SESSION_BUS_ADDRESS ?? `<unset>`
+        } ` +
+        `XDG_CURRENT_DESKTOP=${process.env.XDG_CURRENT_DESKTOP ?? `<unset>`}`
+    )
+  }
   await loadSettings()
   registerIpcHandlers()
   nativeTheme.on(`updated`, refreshNativeTitleBars)

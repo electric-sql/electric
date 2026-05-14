@@ -16,9 +16,17 @@ import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
 import { connectEntityStream } from '../../lib/entity-connection'
 import { createSendMessageAction } from '../../lib/sendMessage'
-import { Icon, Select, Stack, Text } from '../../ui'
-import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
+import { Icon, Stack, Text } from '../../ui'
+import { SchemaForm, hasSchemaProperties } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
+import {
+  PillSelect,
+  PillToggle,
+  inlineSchemaProperties,
+  isModelProperty,
+  readLastPickedModel,
+  persistLastPickedModel,
+} from '../SessionSettingsPopover'
 import styles from '../NewSessionPage.module.css'
 import type { ElectricEntityType } from '../../lib/ElectricAgentsProvider'
 import type { StandaloneViewProps } from '../../lib/workspace/viewRegistry'
@@ -40,44 +48,6 @@ const HERO_TITLES = [
   `Let’s hack`,
   `Let’s improve`,
 ] as const
-
-const LAST_PICKED_MODEL_STORAGE_KEY = `electric-agents-ui.new-session.last-picked-model`
-
-function isModelProperty(key: string): boolean {
-  const normalized = key.toLowerCase()
-  return (
-    normalized === `model` ||
-    normalized === `modelid` ||
-    normalized === `model_id`
-  )
-}
-
-function readLastPickedModel(options: Array<string>): string | null {
-  if (typeof window === `undefined`) return null
-  try {
-    const value = window.localStorage.getItem(LAST_PICKED_MODEL_STORAGE_KEY)
-    return value && options.includes(value) ? value : null
-  } catch {
-    return null
-  }
-}
-
-function persistLastPickedModel(value: string): void {
-  if (typeof window === `undefined`) return
-  try {
-    window.localStorage.setItem(LAST_PICKED_MODEL_STORAGE_KEY, value)
-  } catch {
-    // Quota / private mode — silent. This is only a picker convenience.
-  }
-}
-
-interface SchemaProperty {
-  type?: string
-  enum?: Array<unknown>
-  default?: unknown
-  title?: string
-  description?: string
-}
 
 /**
  * Standalone view: the new-session picker.
@@ -407,22 +377,6 @@ function SelectedAgentForm({
   )
 }
 
-function inlineSchemaProperties(
-  schema: unknown
-): Array<{ key: string; prop: SchemaProperty }> {
-  if (!isObjectSchema(schema)) return []
-  const out: Array<{ key: string; prop: SchemaProperty }> = []
-  for (const [key, raw] of Object.entries(schema.properties)) {
-    const prop = raw as SchemaProperty
-    if (prop.enum && prop.enum.length > 0) {
-      out.push({ key, prop })
-    } else if (prop.type === `boolean`) {
-      out.push({ key, prop })
-    }
-  }
-  return out
-}
-
 function DefaultAgentComposer({
   agent,
   onSubmit,
@@ -562,68 +516,5 @@ function DefaultAgentComposer({
         </div>
       </div>
     </div>
-  )
-}
-
-function PillSelect({
-  label,
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  label: string
-  value: string
-  options: Array<string>
-  onChange: (value: string) => void
-  disabled?: boolean
-}): React.ReactElement {
-  return (
-    <Select.Root<string>
-      value={value}
-      onValueChange={(v) => {
-        if (v !== null) onChange(v)
-      }}
-      disabled={disabled}
-    >
-      <Select.Trigger size="pill" aria-label={label} title={label} />
-      <Select.Content>
-        {options.map((opt) => (
-          <Select.Item key={opt} value={opt}>
-            {opt}
-          </Select.Item>
-        ))}
-      </Select.Content>
-    </Select.Root>
-  )
-}
-
-function PillToggle({
-  label,
-  checked,
-  onChange,
-  disabled,
-}: {
-  label: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      disabled={disabled}
-      className={[
-        styles.pill,
-        styles.pillButton,
-        checked ? styles.pillButtonActive : null,
-      ]
-        .filter(Boolean)
-        .join(` `)}
-      aria-pressed={checked}
-    >
-      {label}
-    </button>
   )
 }

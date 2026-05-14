@@ -31,6 +31,9 @@ export class SecretStore {
   }
 
   async set(ref: string, value: string): Promise<void> {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error(noEncryptionMessage())
+    }
     const envelope = await this.load()
     envelope.secrets[ref] = safeStorage.encryptString(value).toString(`base64`)
     await this.persist(envelope)
@@ -70,4 +73,15 @@ export class SecretStore {
     await mkdir(path.dirname(this.filePath), { recursive: true })
     await writeFile(this.filePath, JSON.stringify(envelope, null, 2))
   }
+}
+
+function noEncryptionMessage(): string {
+  if (process.platform === `linux`) {
+    return (
+      `OS keyring not available: no secret-service is answering on the ` +
+      `session DBus. Start gnome-keyring or kwallet, or set ` +
+      `ELECTRIC_DESKTOP_PASSWORD_STORE to override the safeStorage backend.`
+    )
+  }
+  return `OS keyring not available — cannot encrypt secret.`
 }

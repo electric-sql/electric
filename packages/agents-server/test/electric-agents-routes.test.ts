@@ -700,3 +700,86 @@ describe(`ElectricAgentsRoutes fork endpoint`, () => {
     expect(payload.root).not.toHaveProperty(`subscription_id`)
   })
 })
+
+describe(`ElectricAgentsRoutes patch endpoint`, () => {
+  it(`merges existing spawn_args with body args and returns the txid`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/chat/test`,
+          spawn_args: { existing: 1, override: `old` },
+        }),
+        getEntityType: vi.fn(),
+        updateEntitySpawnArgs: vi.fn().mockResolvedValue(42),
+      },
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `PATCH`,
+      `/_electric/entities/chat/test`,
+      {
+        args: { override: `new`, added: true },
+      }
+    )
+
+    expect(manager.registry.updateEntitySpawnArgs).toHaveBeenCalledWith(
+      `/chat/test`,
+      { existing: 1, override: `new`, added: true }
+    )
+    expect(response.status).toBe(200)
+    expect(await responseJson(response)).toEqual({ txid: 42 })
+  })
+
+  it(`returns 404 from existing-entity middleware before patching`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue(null),
+        getEntityType: vi.fn().mockResolvedValue({ name: `chat` }),
+        updateEntitySpawnArgs: vi.fn(),
+      },
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `PATCH`,
+      `/_electric/entities/chat/missing`,
+      { args: { foo: 1 } }
+    )
+
+    expect(manager.registry.updateEntitySpawnArgs).not.toHaveBeenCalled()
+    expect(response.status).toBe(404)
+    expect(await responseJson(response)).toEqual({
+      error: {
+        code: `NOT_FOUND`,
+        message: `Entity not found at /chat/missing`,
+      },
+    })
+  })
+
+  it(`rejects bodies without an args object before patching`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({ url: `/chat/test` }),
+        getEntityType: vi.fn(),
+        updateEntitySpawnArgs: vi.fn(),
+      },
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `PATCH`,
+      `/_electric/entities/chat/test`,
+      {}
+    )
+
+    expect(manager.registry.updateEntitySpawnArgs).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    expect(await responseJson(response)).toMatchObject({
+      error: {
+        code: `INVALID_REQUEST`,
+        message: `Request body does not match API schema`,
+      },
+    })
+  })
+})

@@ -381,6 +381,14 @@ function createAssistantHandler(options: {
         ? ctx.args.workingDirectory
         : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
+    serverLog.info(
+      `[horton ${ctx.entityUrl}] wake: provider=${modelConfig.provider} ` +
+        `model=${String(modelConfig.model)}` +
+        (modelConfig.reasoningEffort
+          ? ` effort=${modelConfig.reasoningEffort}`
+          : ``) +
+        ` cwd=${effectiveCwd}`
+    )
     const agentsMd = readAgentsMd(effectiveCwd)
     const tools = [
       ...ctx.electricTools,

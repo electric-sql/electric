@@ -56,12 +56,40 @@
      (the existing `-20px` lift on `.root`). */
   position: relative;
   z-index: 1;
+  /* Column layout so textarea and footer row stack vertically. */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .composer:focus-within {
   border-color: var(--ds-accent-a6);
 }
 .disabled {
   opacity: 0.5;
+}
+
+/* Footer row — settings controls on the left, send button on the right.
+   Mirrors the `composerFooter` / `composerControls` pattern from
+   NewSessionView so the two composers are visually consistent. */
+.composerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-2);
+}
+
+.composerControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+  /* Pill triggers have 8px inline padding. Shift left by that amount
+     so the first pill's label aligns with the textarea text column,
+     matching the NewSessionView composer footer exactly. Drop 4px so
+     chip edges have the same 8px inset from the composer bottom. */
+  margin-left: -8px;
+  transform: translateY(4px);
 }
 
 /* Spacing for the inline error row above the composer. The Stack gap
@@ -131,14 +159,6 @@
 .editingCancel:focus-visible {
   outline: 2px solid var(--ds-accent-a6);
   outline-offset: 2px;
-}
-
-.composerBody {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--ds-space-2);
-  min-width: 0;
-  width: 100%;
 }
 
 .textarea {

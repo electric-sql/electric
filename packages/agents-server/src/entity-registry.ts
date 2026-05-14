@@ -619,6 +619,21 @@ export class PostgresRegistry {
       .where(whereClause)
   }
 
+  async updateEntitySpawnArgs(
+    entityUrl: string,
+    args: Record<string, unknown>
+  ): Promise<number> {
+    const result = await this.db
+      .update(entities)
+      .set({ spawnArgs: args, updatedAt: Date.now() })
+      .where(this.entityWhere(entityUrl))
+      .returning({
+        txid: sql<string>`pg_current_xact_id()::xid::text`,
+      })
+    if (result.length === 0) throw new Error(`Entity not found: ${entityUrl}`)
+    return parseInt(result[0]!.txid)
+  }
+
   async updateStatusWithTxid(
     entityUrl: string,
     status: EntityStatus
