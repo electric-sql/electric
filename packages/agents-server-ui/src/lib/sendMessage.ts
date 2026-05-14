@@ -1,6 +1,6 @@
 import { createOptimisticAction } from '@tanstack/db'
 import { generateKeyBetween } from 'fractional-indexing'
-import { serverFetch } from './auth-fetch'
+import { getActivePrincipal, serverFetch } from './auth-fetch'
 import { entityApiUrl } from './entity-api'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
@@ -148,7 +148,7 @@ export function createSendMessageAction({
   db,
   baseUrl,
   entityUrl,
-  from = `user`,
+  from = getActivePrincipal(),
   onOptimisticMessage,
 }: {
   db: EntityStreamDBWithActions
@@ -182,7 +182,6 @@ export function createSendMessageAction({
         method: `POST`,
         headers: { 'content-type': `application/json` },
         body: JSON.stringify({
-          from,
           key,
           payload: { text },
           mode,
