@@ -1,11 +1,11 @@
 ---
 title: Shared SubqueryIndex Base View with Sparse XOR Exceptions
-version: "0.5"
+version: "0.6"
 status: draft
 owner: robacourt
 contributors: []
 created: 2026-05-06
-last_updated: 2026-05-13
+last_updated: 2026-05-14
 prd: N/A - based on https://github.com/electric-sql/electric/issues/4279
 prd_version: N/A
 ---
@@ -141,9 +141,11 @@ local_member?(participant, cohort, value) =
 
 This makes move-in and move-out symmetrical.
 
-If the base says a value is absent and a participant sees a move-in, add an exception for that participant. If every indexed participant eventually has the exception, flip the base to present and clear the exceptions.
+If the base says a value is absent and a participant sees a move-in, add an exception for that participant. If the cohort has exactly one indexed participant, compact that exception immediately by flipping the base.
 
-If the base says a value is present and a participant sees a move-out, add an exception for that participant. If every indexed participant eventually has the exception, flip the base to absent and clear the exceptions.
+If the base says a value is present and a participant sees a move-out, add an exception for that participant. Again, immediate base promotion is safe for a one-participant cohort.
+
+For multi-participant cohorts, promotion is not part of the initial hot path. The exception rows remain the correctness representation until a later compaction path can prove that promoting the base cannot race independently processed consumer moves.
 
 The index does not need to know whether a change came from move-in, move-out, broadening, narrowing, repair, or reseeding. It only needs a state-based operation:
 
@@ -259,6 +261,10 @@ Recommended hot-path ETS layout:
 participant_meta:
   {participant_id, shape_handle, cohort_id, subquery_ref, dep_index,
    polarity, readiness}
+
+# Short-lived per-cohort writer/read coordination.
+cohort_locks:
+  {cohort_id, owner_pid}
 
 # Cohort metadata, stored once per cohort.
 cohort_meta:
@@ -401,12 +407,12 @@ This operation is idempotent. Replaying an add for a value that the participant 
 
 Promotion is compaction, not correctness.
 
-If all indexed participants in a cohort have an exception for the same value, the base is now the minority representation. Flip it and clear the exceptions:
+If one indexed participant exists in a cohort and it has an exception for a value, the base can be compacted immediately by flipping it and clearing the exception:
 
 ```text
 maybe_promote(cohort, value):
   if exception_count(cohort, value) == participant_count(cohort)
-     and participant_count(cohort) > 0:
+     and participant_count(cohort) == 1:
     if base_member?(cohort, value):
       delete base_member(cohort, value)
     else:
@@ -419,11 +425,11 @@ maybe_promote(cohort, value):
     delete exception_count(cohort, value)
 ```
 
-The initial implementation should physically clear exceptions during promotion. This avoids generations or versions in the core design.
+The initial implementation should physically clear exceptions during this one-participant promotion. This avoids generations or versions in the core design.
 
-Promotion is O(number of exceptions for that value). In the normal case this is bounded by the number of participants in the cohort and occurs only for values that actually moved.
+Promotion is O(number of exceptions for that value). In the initial implementation this is O(1), because promotion only runs when the cohort has one indexed participant.
 
-A later optimization may add versioned lazy clearing if promotion-time clearing becomes expensive. That would be a performance optimization, not a correctness requirement.
+Cross-participant promotion is intentionally deferred. It is a compaction optimization, not a correctness requirement, and promoting a shared base while consumers process moves independently can create incorrect routing if the implementation gets the synchronization boundary wrong. A later optimization may add a dedicated compactor with stronger synchronization, or versioned lazy clearing if promotion-time clearing becomes expensive.
 
 ### Routing
 
@@ -720,7 +726,7 @@ In steady state, where consumers share the same view:
 E ~= 0
 ```
 
-During a move, exception memory is proportional to the number of moved values and the number of participants that are temporarily out of sync with the base.
+During a move, exception memory is proportional to the number of moved values and the number of participants whose local view differs from the base. Because the initial implementation does not promote across active participants, exceptions for values that have moved for every participant can remain until those values move back, the cohort drops to one participant, or a future compactor rewrites the base. This keeps the correctness model simple but makes telemetry on exception growth important.
 
 The asymptotic change is the main point, but the constant factor matters because ETS rows are not free. The Erlang documentation notes that ETS table memory is measured in words, that a word is 4 or 8 bytes depending on the runtime, and that an ETS table starts with a fixed base cost plus per-element overhead. The local measurements below were taken on:
 
@@ -743,6 +749,7 @@ The compact proposed figures include the lifecycle reverse indexes needed for bo
 
 ```text
 participant_meta
+cohort_locks
 cohort_meta
 cohort_by_key
 cohorts_by_node
@@ -769,7 +776,7 @@ shape_dep_node
 The practical read is simple:
 
 - When many participants share a view and divergence is rare, the new layout is dramatically smaller.
-- During moves, memory rises with `E`, but only for the values and participants that are actually out of sync.
+- During moves and sustained dependency churn, memory rises with `E`, but only for the values and participants that differ from the cohort base.
 - Under heavy divergence, the new layout remains smaller, but the gap narrows as `E` approaches `P * V`.
 
 #### Local measurements: current vs compact proposed layout
@@ -829,8 +836,8 @@ Interpretation:
 
 - **Is this the simplest approach?** No. The simplest approach is adding `shape_handle -> values` or tombstoning stale rows. Those approaches reduce removal latency but do not address the structural memory duplication. This proposal is the simplest index-only approach that addresses both memory and removal latency while preserving per-consumer move correctness.
 - **Is this the most elegant end-state?** Probably not. A shared logical-time view, as explored in `docs/rfcs/subquery-logical-time-index.md`, models divergence directly as "participants are reading different times" and can also reduce duplicated consumer/materializer views. It is the cleaner long-term model, but it is a larger change because it crosses the SubqueryIndex, consumer state, move buffering, and query-generation boundaries.
-- **What could we cut?** We can defer versioned lazy promotion, strict O(1) removal under pathological exception counts, per-cohort ETS tables, and any major refactor outside the SubqueryIndex/consumer indexing boundary.
-- **What's the 90/10 solution?** Implement dependency-handle cohorts with shared base membership and sparse XOR exceptions. Separate membership participants from routing edges. Keep fallback for uncertain cases. Physically clear exceptions on promotion. Do not add tombstones, generations, or lazy invalidation until measurements justify them.
+- **What could we cut?** We can defer cross-participant promotion, versioned lazy promotion, strict O(1) removal under pathological exception counts, per-cohort ETS tables, and any major refactor outside the SubqueryIndex/consumer indexing boundary.
+- **What's the 90/10 solution?** Implement dependency-handle cohorts with shared base membership and sparse XOR exceptions. Separate membership participants from routing edges. Keep fallback for uncertain cases. Compact only one-participant cohorts on the hot path. Do not add tombstones, generations, or lazy invalidation until measurements justify them.
 
 ### Recommendation Check
 
@@ -851,7 +858,8 @@ Why this may not be the final design:
 - Consumer/materializer processes can still hold their own dependency views,
   including before/after views during active move-in buffering.
 - Exception memory can grow with `moved_values * divergent_participants` during
-  large, slow moves.
+  large, slow moves, and can remain high under sustained dependency churn until
+  a later compaction strategy is added.
 - Readiness is less elegant than logical time because a new participant must
   either seed a sparse diff or prove that it can adopt the current base.
 
@@ -869,9 +877,9 @@ worth the larger migration.
 | **What exactly defines `subquery_key` for teardown?** | Dependency shape handle; canonical subquery occurrence; dependency handle plus occurrence | Use dependency shape handle when available because it maps directly to all cohorts for a dependency lifecycle event. It must not be a merely shape-local `$sublink` ref. |
 | **How can a new participant safely adopt the base?** | Adopt directly; remain fallback until quiescent; seed sparse diff; separate cohort | Define the readiness contract during implementation and add tests for registration during active moves. |
 | **Where should base membership be stored?** | Shared ETS table; per-cohort ETS table; cohort owner process | Choose based on cleanup behavior and ETS key locality. Avoid synchronous O(V) cleanup when the last participant leaves a cohort. |
-| **Should promotion happen during removal?** | Only for values touched by removed exceptions; never on removal; background compactor | Correctness does not require promotion on removal. Start with promotion only when values are touched by updates/removal of exceptions. Add compaction if needed. |
+| **Should promotion happen during removal?** | Only for values touched by removed exceptions; never on removal; background compactor | Correctness does not require promotion on removal. Start with one-participant promotion only. Add cross-participant compaction if telemetry shows exception growth is material. |
 | **How do we measure false fallback amplification?** | Count fallback candidates; count fallback duration; compare old/new candidate volume | Add telemetry during implementation and validate it in test/staging. Fallback should be rare and short-lived after participants are ready. |
-| **Do we need versioned lazy promotion?** | Physical clearing; base/exception versions | Start with physical clearing. Add versions only if promotion clearing becomes a measured bottleneck. |
+| **Do we need versioned lazy promotion?** | Physical clearing; base/exception versions | Start with physical clearing for one-participant promotion only. Add versions only if a future cross-participant compactor needs them. |
 | **Do we need tombstones for strict removal latency?** | Exact exception cleanup; inactive-participant tombstone | Do not add initially. Reconsider only if `E` can be very large in production and removal latency remains problematic. |
 
 ## Definition of Success
@@ -898,7 +906,7 @@ worth the larger migration.
 | DNF branch behavior is preserved | Candidates continue through the existing `WhereCondition` branch using `next_condition_id` and branch metadata. |
 | Fallback is preserved | Participants that are not safely represented by base + exceptions are routed conservatively. |
 | No tombstones in v1 | Removed participants are deleted from participant and exception indexes rather than marked dead. |
-| No generations or move epochs in v1 | Promotion physically clears exceptions for a value. No versioned lazy clearing is required for initial correctness. |
+| No generations or move epochs in v1 | One-participant promotion physically clears exceptions for a value. No versioned lazy clearing is required for initial correctness. |
 | Empty cohort cleanup is off the critical path | Removing the last participant from a cohort does not synchronously scan/delete a large base view on the replication-critical path. |
 | Telemetry is sufficient for validation and operations | Metrics expose removal duration, base size, exception size, fallback size/duration, and promotion cost. |
 
@@ -1009,7 +1017,8 @@ This change ships as a single cutover release, not a staged rollout behind a fea
 
 - `local_member = base XOR exception` truth table.
 - `set_membership` idempotency.
-- Promotion flips base and clears exceptions.
+- One-participant promotion flips base and clears exceptions.
+- Multi-participant updates preserve exact membership without promoting the shared base.
 - Positive routing when base is absent/present.
 - Negated routing when base is absent/present.
 - Participant removal deletes only participant metadata and sparse exceptions.
@@ -1080,7 +1089,7 @@ proposed subquery removal:  O(C + P_s + R_s + E_s) plus off-path base cleanup
 | Cohort key accidentally merges participants with different steady-state views | Use dependency shape handle as the default cohort key and add tests that prove views are shareable before interning more aggressively. |
 | Participant joins base while its local view is not equal to base | Keep participant in fallback until readiness is proven. Make `mark_ready` assert or validate alignment. |
 | Exceptions become large and long-lived | Add telemetry for exception count and age. Consider cohort rebuild, global compaction, or versioned lazy promotion if needed. |
-| Promotion clearing becomes expensive | Defer initially; add base/exception versions only if measurements show promotion cost is material. |
+| Promotion clearing becomes expensive or unsafe | Keep only one-participant promotion on the hot path; add base/exception versions only if measurements and synchronization design justify cross-participant compaction. |
 | Empty cohort cleanup blocks replication | Store base members in cohort-owned storage or detach empty cohorts immediately and reclaim storage off the critical path. |
 | Whole-subquery teardown scans all shapes | Keep `cohorts_by_subquery` and `participants_by_cohort` as required lifecycle indexes and test teardown with many unrelated shapes. |
 | Routing set differences are expensive for negated conditions | Benchmark negated routing separately. Use polarity-specific participant indexes and efficient set operations. |
@@ -1090,6 +1099,7 @@ proposed subquery removal:  O(C + P_s + R_s + E_s) plus off-path base cleanup
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.6 | 2026-05-14 | robacourt | Made promotion conservative after oracle testing exposed the risk of cross-participant base flips during independently processed dependency moves. The initial implementation now promotes only one-participant cohorts and treats multi-participant promotion as a future compaction optimization. |
 | 0.5 | 2026-05-13 | robacourt | Re-evaluated the design against the current implementation, switched the recommended cohort key to dependency shape handle, split membership participants from routing edges, added the required node-to-cohort routing indexes, compared the XOR design with logical-time views, and regenerated memory figures. |
 | 0.4 | 2026-05-13 | robacourt | Added explicit whole-subquery/cohort teardown requirements, reverse indexes, complexity bounds, regenerated memory figures, 100k-shape customer workload estimates, and tests to prevent O(total shapes) lifecycle scans. |
 | 0.3 | 2026-05-06 | robacourt | Readability pass: tightened the opening sections, added a current-vs-proposed summary table, and converted pseudo-list code blocks into normal prose/lists. |

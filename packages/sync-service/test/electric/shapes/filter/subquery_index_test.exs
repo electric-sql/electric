@@ -163,6 +163,91 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
                )
     end
 
+    test "shared cohorts do not promote base membership across active participants", %{
+      filter: filter,
+      table: table,
+      condition_id: condition_id
+    } do
+      register_node_shape(filter, table, condition_id, "s1", dep_handles: ["dep-1"])
+      register_node_shape(filter, table, condition_id, "s2", dep_handles: ["dep-1"])
+
+      SubqueryIndex.seed_membership(table, "s1", @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.seed_membership(table, "s2", @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.mark_ready(table, "s1")
+      SubqueryIndex.mark_ready(table, "s2")
+
+      SubqueryIndex.remove_value(table, "s1", @subquery_ref, 0, 5)
+      SubqueryIndex.remove_value(table, "s2", @subquery_ref, 0, 5)
+
+      refute SubqueryIndex.member?(table, "s1", @subquery_ref, 5)
+      refute SubqueryIndex.member?(table, "s2", @subquery_ref, 5)
+      assert :ets.info(table.exception_by_value, :size) == 2
+
+      assert MapSet.new() ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 @field,
+                 %{"par_id" => "5"}
+               )
+
+      SubqueryIndex.add_value(table, "s1", @subquery_ref, 0, 5)
+
+      assert SubqueryIndex.member?(table, "s1", @subquery_ref, 5)
+      refute SubqueryIndex.member?(table, "s2", @subquery_ref, 5)
+
+      assert MapSet.new(["s1"]) ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 @field,
+                 %{"par_id" => "5"}
+               )
+
+      SubqueryIndex.add_value(table, "s2", @subquery_ref, 0, 5)
+
+      assert SubqueryIndex.member?(table, "s1", @subquery_ref, 5)
+      assert SubqueryIndex.member?(table, "s2", @subquery_ref, 5)
+      assert :ets.info(table.exception_by_value, :size) == 0
+
+      assert MapSet.new(["s1", "s2"]) ==
+               SubqueryIndex.affected_shapes(
+                 filter,
+                 condition_id,
+                 @field,
+                 %{"par_id" => "5"}
+               )
+    end
+
+    test "concurrent seeding preserves shared cohort invariants", %{table: table} do
+      view = MapSet.new(1..20)
+      shape_ids = Enum.map(1..100, &"s#{&1}")
+
+      Enum.each(shape_ids, fn shape_id ->
+        SubqueryIndex.register_shape(table, shape_id, make_plan(), ["dep-1"])
+      end)
+
+      shape_ids
+      |> Task.async_stream(
+        fn shape_id ->
+          SubqueryIndex.seed_membership(table, shape_id, @subquery_ref, 0, view)
+          SubqueryIndex.mark_ready(table, shape_id)
+        end,
+        max_concurrency: 100,
+        timeout: 10_000
+      )
+      |> Enum.each(fn {:ok, :ok} -> :ok end)
+
+      assert :ets.info(table.cohort_meta, :size) == 1
+      assert :ets.info(table.cohort_value, :size) == MapSet.size(view)
+      assert :ets.info(table.exception_by_value, :size) == 0
+      assert :ets.info(table.exception_by_participant, :size) == 0
+
+      for shape_id <- shape_ids, value <- view do
+        assert SubqueryIndex.member?(table, shape_id, @subquery_ref, value)
+      end
+    end
+
     test "repeated positions share membership participant and keep separate routing edges", %{
       filter: filter,
       table: table,

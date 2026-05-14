@@ -17,6 +17,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   defstruct [
     :participant_meta,
+    :cohort_locks,
     :cohort_meta,
     :cohort_by_key,
     :cohorts_by_node,
@@ -47,6 +48,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   @tables [
     {:participant_meta, :set},
+    {:cohort_locks, :set},
     {:cohort_meta, :set},
     {:cohort_by_key, :set},
     {:cohorts_by_node, :bag},
@@ -346,7 +348,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     {participant_id, cohort_id} =
       participant_for_shape_dependency(index, shape_handle, subquery_ref, dep_index, :positive)
 
-    seed_participant(index, participant_id, cohort_id, MapSet.new(view))
+    with_cohort_lock(index, cohort_id, fn ->
+      seed_participant(index, participant_id, cohort_id, MapSet.new(view))
+    end)
+
     :ok
   end
 
@@ -378,8 +383,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     {participant_id, cohort_id} =
       participant_for_shape_dependency(index, shape_handle, subquery_ref, dep_index, :positive)
 
-    ensure_indexed(index, participant_id, cohort_id)
-    set_membership(index, participant_id, cohort_id, value, true)
+    with_cohort_lock(index, cohort_id, fn ->
+      ensure_indexed(index, participant_id, cohort_id)
+      set_membership(index, participant_id, cohort_id, value, true)
+    end)
   end
 
   @doc """
@@ -390,8 +397,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     {participant_id, cohort_id} =
       participant_for_shape_dependency(index, shape_handle, subquery_ref, dep_index, :positive)
 
-    ensure_indexed(index, participant_id, cohort_id)
-    set_membership(index, participant_id, cohort_id, value, false)
+    with_cohort_lock(index, cohort_id, fn ->
+      ensure_indexed(index, participant_id, cohort_id)
+      set_membership(index, participant_id, cohort_id, value, false)
+    end)
   end
 
   @doc """
@@ -413,7 +422,12 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
             index.cohorts_by_node
             |> :ets.lookup(node_id)
             |> Enum.reduce(MapSet.new(), fn {^node_id, cohort_id}, acc ->
-              MapSet.union(acc, candidates_for_cohort(index, node_id, cohort_id, typed_value))
+              candidates =
+                with_cohort_lock(index, cohort_id, fn ->
+                  candidates_for_cohort(index, node_id, cohort_id, typed_value)
+                end)
+
+              MapSet.union(acc, candidates)
             end)
 
           fallback = values_for_key(index.node_fallback, node_id) |> MapSet.new()
@@ -454,7 +468,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def member?(%__MODULE__{} = index, shape_handle, subquery_ref, typed_value) do
     case :ets.lookup(index.shape_ref_participant, {shape_handle, subquery_ref}) do
       [{{^shape_handle, ^subquery_ref}, participant_id, cohort_id}] ->
-        local_member?(index, participant_id, cohort_id, typed_value)
+        with_cohort_lock(index, cohort_id, fn ->
+          local_member?(index, participant_id, cohort_id, typed_value)
+        end)
 
       [] ->
         false
@@ -729,7 +745,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     participant_count = participant_count(index, cohort_id)
     exception_count = exception_count(index, cohort_id, value)
 
-    if participant_count > 0 and exception_count == participant_count do
+    # Cross-participant promotion is only a compaction optimization. Keeping it
+    # to one-participant cohorts avoids moving the shared base while consumers
+    # process dependency moves independently.
+    if participant_count == 1 and exception_count == participant_count do
       base_member? = base_member?(index, cohort_id, value)
       participants = exception_participants(index, cohort_id, value)
 
@@ -822,7 +841,19 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   defp remove_participant(index, participant_id) do
     case :ets.lookup(index.participant_meta, participant_id) do
-      [{^participant_id, shape_handle, cohort_id, subquery_ref, dep_index, polarity, readiness}] ->
+      [{^participant_id, _shape_handle, cohort_id, _subquery_ref, _dep_index, _polarity, _}] ->
+        with_cohort_lock(index, cohort_id, fn ->
+          remove_participant_locked(index, participant_id, cohort_id)
+        end)
+
+      [] ->
+        :ok
+    end
+  end
+
+  defp remove_participant_locked(index, participant_id, cohort_id) do
+    case :ets.lookup(index.participant_meta, participant_id) do
+      [{^participant_id, shape_handle, ^cohort_id, subquery_ref, dep_index, polarity, readiness}] ->
         index.edges_by_participant
         |> :ets.lookup(participant_id)
         |> Enum.each(fn {^participant_id, node_id, ^cohort_id, edge_polarity, next_condition_id,
@@ -1050,6 +1081,38 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       [] ->
         raise ArgumentError,
               "missing polarity for shape #{inspect(shape_handle)} and ref #{inspect(subquery_ref)}"
+    end
+  end
+
+  defp with_cohort_lock(index, cohort_id, fun) when is_function(fun, 0) do
+    acquire_cohort_lock(index, cohort_id)
+
+    try do
+      fun.()
+    after
+      :ets.delete(index.cohort_locks, cohort_id)
+    end
+  end
+
+  defp acquire_cohort_lock(index, cohort_id) do
+    if :ets.insert_new(index.cohort_locks, {cohort_id, self()}) do
+      :ok
+    else
+      clear_stale_cohort_lock(index, cohort_id)
+      Process.sleep(1)
+      acquire_cohort_lock(index, cohort_id)
+    end
+  end
+
+  defp clear_stale_cohort_lock(index, cohort_id) do
+    case :ets.lookup(index.cohort_locks, cohort_id) do
+      [{^cohort_id, pid}] when is_pid(pid) ->
+        unless Process.alive?(pid) do
+          :ets.delete(index.cohort_locks, cohort_id)
+        end
+
+      _ ->
+        :ok
     end
   end
 
