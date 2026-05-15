@@ -686,10 +686,7 @@ export async function processWebhookWake(
     switch (value.signal) {
       case `SIGINT`:
         log.info(`SIGINT received, aborting active run`)
-        signalAbortRequested = true
         runAbortController?.abort()
-        clearIdleTimer()
-        idleController?.abort()
         markSignalHandled(event, `aborted`, notification.entity?.status)
         void flushProducedWrites().catch((err) =>
           failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
@@ -735,6 +732,8 @@ export async function processWebhookWake(
         return
       case `SIGSTOP`:
         log.info(`SIGSTOP received, pausing after current checkpoint`)
+        clearIdleTimer()
+        idleController?.abort()
         pauseRequested = true
         markSignalHandled(event, `transitioned`, `paused`)
         void flushProducedWrites().catch((err) =>
@@ -1676,6 +1675,18 @@ export async function processWebhookWake(
     for (;;) {
       if (skipInitialHandlerPass) {
         skipInitialHandlerPass = false
+        if (signalAbortRequested) {
+          signalAbortRequested = false
+          drainNonFreshPendingBatches()
+          log.info(`signal abort completed, closing wake`)
+          break
+        }
+        if (pauseRequested) {
+          pauseRequested = false
+          drainNonFreshPendingBatches()
+          log.info(`pause requested, closing wake`)
+          break
+        }
         if (resumeRequested) {
           resumeRequested = false
           if (await promoteNextPendingInboxMessage()) {

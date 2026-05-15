@@ -430,11 +430,14 @@ describe(`Claim-scoped write tokens`, () => {
       claimWriteTokens.owns(`default`, entity.streams.main, `consumer-kill`)
     ).toBe(true)
 
-    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}/signal`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
-    })
+    const killRes = await fetch(
+      `${baseUrl}/_electric/entities${entity.url}/signal`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
+      }
+    )
     expect(killRes.status).toBe(200)
 
     expect(
@@ -616,11 +619,14 @@ describe(`Claim-scoped write tokens`, () => {
     })
     expect(claim.writeToken).toBeTruthy()
 
-    const killRes = await fetch(`${baseUrl}/_electric/entities${entity.url}/signal`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
-    })
+    const killRes = await fetch(
+      `${baseUrl}/_electric/entities${entity.url}/signal`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({ signal: `SIGKILL`, reason: `test cleanup` }),
+      }
+    )
     expect(killRes.status).toBe(200)
 
     const writeRes = await appendEntityEvent({
@@ -676,6 +682,30 @@ describe(`Claim-scoped write tokens`, () => {
     })
     expect(retryDone.status).toBe(200)
     expect(await getEntityStatus(entity.url)).toBe(`idle`)
+  }, 20_000)
+
+  it(`done transitions SIGTERM stopping entities to stopped`, async () => {
+    const typeName = `done-stopping-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+    const registry = (electricAgentsServer as any).electricAgentsManager!
+      .registry
+
+    const claim = await claimEntityConsumer({
+      streamPath: entity.streams.main,
+      consumerId: `consumer-done-stopping`,
+    })
+    expect(claim.writeToken).toBeTruthy()
+
+    await registry.updateStatus(entity.url, `stopping`)
+    expect(await getEntityStatus(entity.url)).toBe(`stopping`)
+
+    const done = await sendDone({
+      consumerId: `consumer-done-stopping`,
+      epoch: 4,
+      streamPath: entity.streams.main,
+    })
+    expect(done.status).toBe(200)
+    expect(await getEntityStatus(entity.url)).toBe(`stopped`)
   }, 20_000)
 
   it(`claim-scoped tag writes reject non-string values and support merge/delete`, async () => {

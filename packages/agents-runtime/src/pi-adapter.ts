@@ -385,18 +385,35 @@ export function createPiAgentAdapter(
         bridge.onRunStart()
 
         return new Promise<void>((resolve, reject) => {
-          const abortRun = (): void => {
-            agent.abort()
+          let settled = false
+          let unsubscribe = (): void => {}
+          const finish = (finishReason: `stop` | `aborted` | `error`): void => {
+            if (settled) return
+            settled = true
+            running = false
+            abortSignal?.removeEventListener(`abort`, abortRun)
+            unsubscribe()
+            bridge.onRunEnd({ finishReason })
           }
-          const unsubscribe = processAgentEvents(
+          const abortRun = (): void => {
+            if (settled) return
+            abortedRun = true
+            agent.abort()
+            finish(`aborted`)
+            resolve()
+          }
+          unsubscribe = processAgentEvents(
             () => {
+              if (settled) return
+              settled = true
+              running = false
               abortSignal?.removeEventListener(`abort`, abortRun)
               unsubscribe()
               resolve()
             },
             (err) => {
-              abortSignal?.removeEventListener(`abort`, abortRun)
-              unsubscribe()
+              if (settled) return
+              finish(`error`)
               reject(err)
             }
           )
@@ -409,10 +426,8 @@ export function createPiAgentAdapter(
           }
 
           Promise.resolve(runPromise).catch((err: Error) => {
-            running = false
-            bridge.onRunEnd({ finishReason: `error` })
-            abortSignal?.removeEventListener(`abort`, abortRun)
-            unsubscribe()
+            if (settled) return
+            finish(`error`)
             reject(err)
           })
         })

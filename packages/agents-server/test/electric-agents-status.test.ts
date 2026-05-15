@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EntityManager } from '../src/entity-manager'
-import { assertEntityStatus } from '../src/electric-agents-types'
+import {
+  assertEntityStatus,
+  rejectsNormalWrites,
+} from '../src/electric-agents-types'
 
 describe(`assertEntityStatus`, () => {
   it(`returns valid statuses unchanged`, () => {
@@ -16,6 +19,130 @@ describe(`assertEntityStatus`, () => {
   it(`throws on invalid status strings`, () => {
     expect(() => assertEntityStatus(`active`)).toThrow(`Invalid entity status`)
     expect(() => assertEntityStatus(``)).toThrow(`Invalid entity status`)
+  })
+})
+
+describe(`signal-aware status write guards`, () => {
+  it(`allows paused writes but rejects stopping, stopped, or killed`, () => {
+    expect(rejectsNormalWrites(`spawning`)).toBe(false)
+    expect(rejectsNormalWrites(`running`)).toBe(false)
+    expect(rejectsNormalWrites(`idle`)).toBe(false)
+    expect(rejectsNormalWrites(`paused`)).toBe(false)
+    expect(rejectsNormalWrites(`stopping`)).toBe(true)
+    expect(rejectsNormalWrites(`stopped`)).toBe(true)
+    expect(rejectsNormalWrites(`killed`)).toBe(true)
+  })
+})
+
+describe(`ElectricAgentsManager.signal semantics`, () => {
+  function createSignalManager(status: `running` | `idle` | `paused`) {
+    const entity = {
+      url: `/chat/demo`,
+      type: `chat`,
+      status,
+      streams: {
+        main: `/chat/demo/main`,
+        error: `/chat/demo/error`,
+      },
+      subscription_id: `chat-handler`,
+      write_token: `token`,
+      tags: {},
+      spawn_args: {},
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    }
+    const registry = {
+      tenantId: `default`,
+      getEntity: vi.fn().mockResolvedValue(entity),
+      touchEntityWithTxid: vi.fn().mockResolvedValue(101),
+      updateStatusWithTxid: vi.fn().mockResolvedValue(202),
+      updateStatus: vi.fn().mockResolvedValue(undefined),
+    }
+    const append = vi.fn().mockResolvedValue({ offset: `1` })
+    const unregisterBySubscriber = vi.fn().mockResolvedValue(undefined)
+    const unregisterBySource = vi.fn().mockResolvedValue(undefined)
+    const manager = new EntityManager({
+      registry: registry as any,
+      streamClient: {
+        append,
+      } as any,
+      validator: {} as any,
+      wakeRegistry: {
+        evaluate: vi.fn(() => []),
+        unregisterBySubscriber,
+        unregisterBySource,
+        setTimeoutCallback: vi.fn(),
+        setDebounceCallback: vi.fn(),
+      } as any,
+    })
+    return {
+      manager,
+      registry,
+      append,
+      unregisterBySubscriber,
+      unregisterBySource,
+    }
+  }
+
+  it(`keeps SIGINT as a run-local abort without changing entity status`, async () => {
+    const { manager, registry } = createSignalManager(`running`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGINT` })
+    ).resolves.toMatchObject({
+      previous_state: `running`,
+      new_state: `running`,
+      txid: 101,
+    })
+
+    expect(registry.touchEntityWithTxid).toHaveBeenCalledWith(`/chat/demo`)
+    expect(registry.updateStatusWithTxid).not.toHaveBeenCalled()
+  })
+
+  it(`moves SIGSTOP to paused so existing pending work is skipped`, async () => {
+    const { manager, registry } = createSignalManager(`running`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGSTOP` })
+    ).resolves.toMatchObject({
+      previous_state: `running`,
+      new_state: `paused`,
+      txid: 202,
+    })
+
+    expect(registry.updateStatusWithTxid).toHaveBeenCalledWith(
+      `/chat/demo`,
+      `paused`
+    )
+  })
+
+  it(`moves running SIGTERM to stopping until runtime cleanup marks stopped`, async () => {
+    const { manager, registry } = createSignalManager(`running`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGTERM` })
+    ).resolves.toMatchObject({
+      previous_state: `running`,
+      new_state: `stopping`,
+      txid: 202,
+    })
+
+    expect(registry.updateStatusWithTxid).toHaveBeenCalledWith(
+      `/chat/demo`,
+      `stopping`
+    )
+  })
+
+  it(`wakes a paused entity by moving it to idle on a new message`, async () => {
+    const { manager, registry } = createSignalManager(`paused`)
+
+    await manager.send(`/chat/demo`, {
+      from: `user`,
+      payload: { text: `wake up` },
+    })
+
+    expect(registry.updateStatusWithTxid).not.toHaveBeenCalled()
+    expect(registry.updateStatus).toHaveBeenCalledWith(`/chat/demo`, `idle`)
   })
 })
 

@@ -578,6 +578,109 @@ describe(`processWake`, () => {
     expect(doneCalls).toHaveLength(0)
   })
 
+  it(`closes immediately for SIGSTOP when there is no handler pass to checkpoint`, async () => {
+    const handler = vi.fn()
+    defineEntity(`test-agent`, {
+      handler,
+    })
+
+    mockDbPreload.mockImplementationOnce(async () => {
+      mockEntityOnBatch.current?.({
+        items: [
+          ev(
+            `signal`,
+            `sigstop-1`,
+            `insert`,
+            { signal: `SIGSTOP`, status: `unhandled` },
+            { offset: `10_500` }
+          ),
+        ],
+        offset: `10_500`,
+      })
+    })
+
+    const notification = makeNotification()
+    notification.entity!.status = `running`
+
+    await processWake(notification, BASE_CONFIG)
+
+    expect(handler).not.toHaveBeenCalled()
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    expect(doneCalls).toHaveLength(1)
+    const body = JSON.parse(doneCalls[0]![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+      done: boolean
+    }
+    expect(body.done).toBe(true)
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_500` },
+    ])
+  })
+
+  it(`lets SIGSTOP pause at the next handler checkpoint without aborting the run`, async () => {
+    const handlerEvents: Array<string> = []
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    let releaseHandler = (): void => {
+      throw new Error(`expected handler release`)
+    }
+    const handlerBlock = new Promise<void>((resolve) => {
+      releaseHandler = resolve
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async () => {
+        handlerEvents.push(`started`)
+        handlerStartedResolve?.()
+        await handlerBlock
+        handlerEvents.push(`completed`)
+      },
+    })
+
+    const notification = makeNotification()
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG)
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigstop-1`,
+          `insert`,
+          { signal: `SIGSTOP`, status: `unhandled` },
+          { offset: `10_500` }
+        ),
+      ],
+      offset: `10_500`,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(handlerEvents).toEqual([`started`])
+
+    releaseHandler()
+    await wakePromise
+
+    expect(handlerEvents).toEqual([`started`, `completed`])
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    const body = JSON.parse(doneCalls.at(-1)![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_500` },
+    ])
+  })
+
   it(`surfaces both the primary wake error and done callback failure`, async () => {
     defineEntity(`test-agent`, {
       handler: () => {

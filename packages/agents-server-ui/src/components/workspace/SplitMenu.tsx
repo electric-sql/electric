@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   ChevronRight,
   Copy,
@@ -9,9 +9,9 @@ import {
   OctagonX,
   Pin,
   PinOff,
+  Radio,
   SplitSquareHorizontal,
   SplitSquareVertical,
-  Zap,
   X,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -40,46 +40,81 @@ import type {
 import type { Tile } from '../../lib/workspace/types'
 import styles from './SplitMenu.module.css'
 
-const SIGNAL_OPTIONS: ReadonlyArray<{
-  signal: EntitySignal
-  shortName: string
-  description: string
-}> = [
-  {
-    signal: `SIGINT`,
-    shortName: `Interrupt`,
-    description: `Stop the active generation`,
-  },
-  {
-    signal: `SIGHUP`,
-    shortName: `Reload`,
-    description: `Restart runtime after current run`,
-  },
-  {
-    signal: `SIGTERM`,
-    shortName: `Terminate`,
-    description: `Gracefully stop the entity`,
-  },
-  {
-    signal: `SIGKILL`,
-    shortName: `Kill`,
-    description: `Force-stop the entity`,
-  },
-  {
-    signal: `SIGSTOP`,
-    shortName: `Pause`,
-    description: `Pause processing after checkpoint`,
-  },
-  {
-    signal: `SIGCONT`,
-    shortName: `Resume`,
-    description: `Resume queued work`,
-  },
-  {
-    signal: `SIGUSR`,
-    shortName: `Custom`,
-    description: `Deliver a user signal`,
-  },
+const SIGNAL_OPTION_GROUPS: ReadonlyArray<
+  ReadonlyArray<{
+    id: string
+    shortName: string
+    description: string
+    signal?: EntitySignal
+    composite?: `stop-immediately`
+    shortcut?: string
+    code: string
+  }>
+> = [
+  [
+    {
+      id: `interrupt`,
+      signal: `SIGINT`,
+      shortName: `Interrupt`,
+      description: `Abort active run and continue`,
+      shortcut: `Esc`,
+      code: `SIGINT`,
+    },
+    {
+      id: `stop-immediately`,
+      composite: `stop-immediately`,
+      shortName: `Stop immediately`,
+      description: `Abort active run and pause`,
+      shortcut: `Ctrl+C`,
+      code: `SIGSTOP+SIGINT`,
+    },
+  ],
+  [
+    {
+      id: `stop`,
+      signal: `SIGSTOP`,
+      shortName: `Stop`,
+      description: `Pause after current run`,
+      code: `SIGSTOP`,
+    },
+    {
+      id: `reload`,
+      signal: `SIGHUP`,
+      shortName: `Reload`,
+      description: `Reload after current run`,
+      code: `SIGHUP`,
+    },
+    {
+      id: `resume`,
+      signal: `SIGCONT`,
+      shortName: `Resume`,
+      description: `Resume paused work`,
+      code: `SIGCONT`,
+    },
+    {
+      id: `custom`,
+      signal: `SIGUSR`,
+      shortName: `Custom`,
+      description: `Deliver to signal handler`,
+      code: `SIGUSR`,
+    },
+  ],
+  [
+    {
+      id: `terminate`,
+      signal: `SIGTERM`,
+      shortName: `Terminate`,
+      description: `Gracefully stop permanently`,
+      code: `SIGTERM`,
+    },
+    {
+      id: `kill`,
+      signal: `SIGKILL`,
+      shortName: `Kill`,
+      description: `Immediately kill permanently`,
+      code: `SIGKILL`,
+    },
+  ],
 ]
 
 /**
@@ -167,6 +202,25 @@ export function SplitMenu({
     tx.isPersisted.promise.catch(() => {})
   }
 
+  const handleStopImmediately = () => {
+    if (!signalEntity || entityUrl === null) return
+    const stopTx = signalEntity({
+      entityUrl,
+      signal: `SIGSTOP`,
+      reason: `Stopped immediately from tile menu`,
+    })
+    stopTx.isPersisted.promise
+      .then(() => {
+        const interruptTx = signalEntity({
+          entityUrl,
+          signal: `SIGINT`,
+          reason: `Interrupted current run for immediate stop`,
+        })
+        interruptTx.isPersisted.promise.catch(() => {})
+      })
+      .catch(() => {})
+  }
+
   const handleSignal = (signal: EntitySignal) => {
     if (!signalEntity || entityUrl === null) return
     const tx = signalEntity({
@@ -175,6 +229,18 @@ export function SplitMenu({
       reason: `Sent from tile menu`,
     })
     tx.isPersisted.promise.catch(() => {})
+  }
+
+  const handleSignalOption = (
+    option: (typeof SIGNAL_OPTION_GROUPS)[number][number]
+  ) => {
+    if (option.composite === `stop-immediately`) {
+      handleStopImmediately()
+      return
+    }
+    if (option.signal) {
+      handleSignal(option.signal)
+    }
   }
 
   const handleCopyLayoutLink = () => {
@@ -300,7 +366,7 @@ export function SplitMenu({
           {hasEntity && entity && !entityTerminal && signalEntity && (
             <Menu.SubmenuRoot>
               <Menu.SubmenuTrigger className={styles.submenuTrigger}>
-                <UiIcon icon={Zap} size={2} />
+                <UiIcon icon={Radio} size={2} />
                 <Text size={2}>Send signal</Text>
                 <UiIcon
                   icon={ChevronRight}
@@ -309,19 +375,33 @@ export function SplitMenu({
                 />
               </Menu.SubmenuTrigger>
               <Menu.Content side="left" align="start">
-                {SIGNAL_OPTIONS.map((option) => (
-                  <Menu.Item
-                    key={option.signal}
-                    onSelect={() => handleSignal(option.signal)}
-                  >
-                    <span className={styles.signalText}>
-                      <Text size={2}>{option.shortName}</Text>
-                      <Text size={1} tone="muted">
-                        {option.description}
-                      </Text>
-                    </span>
-                    <span className={styles.shortcut}>{option.signal}</span>
-                  </Menu.Item>
+                {SIGNAL_OPTION_GROUPS.map((group, groupIndex) => (
+                  <Fragment key={groupIndex}>
+                    {groupIndex > 0 && <Menu.Separator />}
+                    {group.map((option) => (
+                      <Menu.Item
+                        key={option.id}
+                        onSelect={() => handleSignalOption(option)}
+                      >
+                        <span className={styles.signalRow}>
+                          <span className={styles.signalName}>
+                            {option.shortName}
+                          </span>
+                          {option.shortcut && (
+                            <span className={styles.signalShortcut}>
+                              {option.shortcut}
+                            </span>
+                          )}
+                          <span className={styles.signalDescription}>
+                            {option.description}
+                          </span>
+                          <span className={styles.signalCode}>
+                            {option.code}
+                          </span>
+                        </span>
+                      </Menu.Item>
+                    ))}
+                  </Fragment>
                 ))}
               </Menu.Content>
             </Menu.SubmenuRoot>

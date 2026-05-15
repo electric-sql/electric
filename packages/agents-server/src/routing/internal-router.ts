@@ -382,7 +382,7 @@ async function webhookForward(
         enrichPromise,
       ])
 
-      if (entity?.status === `stopped`) {
+      if (entity?.status === `stopped` || entity?.status === `paused`) {
         if (upsertPromise) await upsertPromise
         return json({ done: true })
       }
@@ -644,14 +644,17 @@ async function callbackForward(
               : undefined,
           })
         }
-        await ctx.entityManager.registry.updateStatus(entity.url, `idle`)
+        await ctx.entityManager.registry.updateStatus(
+          entity.url,
+          entity.status === `stopping` ? `stopped` : `idle`
+        )
         ctx.runtime.claimWriteTokens.clearStream(
           ctx.service,
           target.primaryStream
         )
         await ctx.entityBridgeManager.onEntityChanged(entity.url)
         serverLog.info(
-          `[callback-forward] status updated to idle for ${entity.url}`
+          `[callback-forward] status updated after done for ${entity.url}`
         )
       } else if (stillOwnsClaim) {
         ctx.runtime.claimWriteTokens.clearStream(

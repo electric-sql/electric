@@ -1685,6 +1685,12 @@ export class EntityManager {
       value.processed_at = now
     }
 
+    const wakePausedEntity = entity.status === `paused` && req.mode !== `paused`
+    if (wakePausedEntity) {
+      await this.registry.updateStatus(entityUrl, `idle`)
+      await this.entityBridgeManager?.onEntityChanged(entityUrl)
+    }
+
     const envelope = entityStateSchema.inbox.insert({
       key,
       value,

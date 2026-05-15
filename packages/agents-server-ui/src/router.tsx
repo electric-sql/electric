@@ -12,7 +12,11 @@ import {
 } from '@tanstack/react-router'
 import { z } from 'zod'
 import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
-import { preloadAppCollections } from './lib/ElectricAgentsProvider'
+import {
+  preloadAppCollections,
+  useElectricAgents,
+  type EntitySignal,
+} from './lib/ElectricAgentsProvider'
 import { usePinnedEntities } from './hooks/usePinnedEntities'
 import {
   SidebarCollapsedProvider,
@@ -83,6 +87,7 @@ function RootShell(): React.ReactElement {
   } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
+  const { signalEntity } = useElectricAgents()
   const { openFindForTile, findNextInTile, findPreviousInTile } =
     usePaneFindCommands()
   const nativeMenuHandlesAppHotkeys =
@@ -147,6 +152,53 @@ function RootShell(): React.ReactElement {
     e.preventDefault()
     openNewSession()
   })
+
+  const signalActiveTile = useCallback(
+    (signal: EntitySignal, reason: string) => {
+      const entityUrl = helpers.activeTile?.entityUrl
+      if (!entityUrl || !signalEntity) return false
+      const tx = signalEntity({ entityUrl, signal, reason })
+      tx.isPersisted.promise.catch(() => {})
+      return true
+    },
+    [helpers.activeTile?.entityUrl, signalEntity]
+  )
+  const stopActiveTile = useCallback(() => {
+    const entityUrl = helpers.activeTile?.entityUrl
+    if (!entityUrl || !signalEntity) return false
+    const stopTx = signalEntity({
+      entityUrl,
+      signal: `SIGSTOP`,
+      reason: `Stopped immediately from keyboard`,
+    })
+    stopTx.isPersisted.promise
+      .then(() => {
+        const interruptTx = signalEntity({
+          entityUrl,
+          signal: `SIGINT`,
+          reason: `Interrupted current run for immediate stop`,
+        })
+        interruptTx.isPersisted.promise.catch(() => {})
+      })
+      .catch(() => {})
+    return true
+  }, [helpers.activeTile?.entityUrl, signalEntity])
+  useHotkey(
+    `escape`,
+    (e) => {
+      if (!signalActiveTile(`SIGINT`, `Interrupted from keyboard`)) return
+      e.preventDefault()
+    },
+    { ignoreInputs: false }
+  )
+  useHotkey(
+    `ctrl+c`,
+    (e) => {
+      if (!stopActiveTile()) return
+      e.preventDefault()
+    },
+    { ignoreInputs: false }
+  )
 
   useWorkspaceHotkeys({ disabled: nativeMenuHandlesAppHotkeys })
   useWorkspacePersistence()

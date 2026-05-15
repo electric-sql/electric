@@ -125,6 +125,38 @@ describe(`createPiAgentAdapter`, () => {
     expect(handle.isRunning()).toBe(false)
   })
 
+  it(`settles an aborted run even if the model stream does not emit completion`, async () => {
+    const factory = createPiAgentAdapter({
+      systemPrompt: `Test system prompt`,
+      model: `claude-sonnet-4-5-20250929`,
+      tools: [],
+      streamFn: (_model, _context, options) => {
+        const stream = createAssistantMessageEventStream()
+        options?.signal?.addEventListener(`abort`, () => {}, { once: true })
+        return stream
+      },
+    })
+
+    const handle = factory({
+      entityUrl: `test/entity-1`,
+      epoch: 1,
+      messages: [],
+      outboundIdSeed: { run: 0, step: 0, msg: 0, tc: 0 },
+      writeEvent: (_event: ChangeEvent) => {},
+    })
+    const controller = new AbortController()
+    const runPromise = handle.run(`hello`, controller.signal)
+
+    controller.abort()
+    await expect(
+      Promise.race([
+        runPromise.then(() => `resolved`),
+        new Promise((resolve) => setTimeout(() => resolve(`timed-out`), 50)),
+      ])
+    ).resolves.toBe(`resolved`)
+    expect(handle.isRunning()).toBe(false)
+  })
+
   it(`isRunning returns false initially`, () => {
     const factory = createPiAgentAdapter({
       systemPrompt: `Test system prompt`,
