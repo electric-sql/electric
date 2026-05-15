@@ -275,9 +275,7 @@ describe(`runner routes`, () => {
   })
 
   it(`releases paused entity claims without dispatching pending work`, async () => {
-    const ctx = buildContext({
-      authenticatedUser: { userId: `owner@example.com` },
-    })
+    const ctx = buildContext()
     vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({
       wake_id: `wake-paused`,
       generation: 7,

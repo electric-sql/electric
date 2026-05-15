@@ -681,7 +681,11 @@ async function signalEntity(
   try {
     signal = assertEntitySignal(parsed.signal)
   } catch {
-    return apiError(400, ErrCodeInvalidSignal, `Invalid signal: ${parsed.signal}`)
+    return apiError(
+      400,
+      ErrCodeInvalidSignal,
+      `Invalid signal: ${parsed.signal}`
+    )
   }
   const result = await ctx.entityManager.signal(entityUrl, {
     signal,

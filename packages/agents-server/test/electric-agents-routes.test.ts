@@ -737,9 +737,9 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
       `POST`,
       `/_electric/entities/chat/test/signal`,
       {
-      signal: `SIGINT`,
-      reason: `Stop from UI`,
-      payload: { source: `test` },
+        signal: `SIGINT`,
+        reason: `Stop from UI`,
+        payload: { source: `test` },
       }
     )
 

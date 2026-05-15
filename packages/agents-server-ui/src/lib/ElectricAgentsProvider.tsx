@@ -259,14 +259,17 @@ function createKillAction(
       })
     },
     mutationFn: async (entityUrl) => {
-      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/signal`), {
-        method: `POST`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify({
-          signal: `SIGKILL`,
-          reason: `Killed from agents UI`,
-        }),
-      })
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/signal`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({
+            signal: `SIGKILL`,
+            reason: `Killed from agents UI`,
+          }),
+        }
+      )
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
         throw new Error(text || `Kill failed (${res.status})`)
@@ -312,11 +315,14 @@ function createSignalAction(
       if (reason !== undefined) body.reason = reason
       if (payload !== undefined) body.payload = payload
 
-      const res = await serverFetch(entityApiUrl(baseUrl, entityUrl, `/signal`), {
-        method: `POST`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify(body),
-      })
+      const res = await serverFetch(
+        entityApiUrl(baseUrl, entityUrl, `/signal`),
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        }
+      )
       if (!res.ok) {
         const text = await res.text().catch(() => ``)
         throw new Error(text || `Signal failed (${res.status})`)
