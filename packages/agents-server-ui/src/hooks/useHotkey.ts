@@ -5,6 +5,8 @@ type HotkeyOptions = {
   ignoreInputs?: boolean
   /** Disable the hook (handler is not registered). */
   disabled?: boolean
+  /** Listen during capture so focused controls cannot consume the shortcut first. */
+  capture?: boolean
 }
 
 const isMac = (): boolean =>
@@ -38,7 +40,7 @@ export function useHotkey(
   handler: (e: KeyboardEvent) => void,
   options: HotkeyOptions = {}
 ): void {
-  const { ignoreInputs = true, disabled = false } = options
+  const { ignoreInputs = true, disabled = false, capture = false } = options
 
   useEffect(() => {
     if (disabled) return
@@ -64,9 +66,9 @@ export function useHotkey(
       handler(e)
     }
 
-    window.addEventListener(`keydown`, onKeyDown)
-    return () => window.removeEventListener(`keydown`, onKeyDown)
-  }, [combo, handler, ignoreInputs, disabled])
+    window.addEventListener(`keydown`, onKeyDown, { capture })
+    return () => window.removeEventListener(`keydown`, onKeyDown, { capture })
+  }, [combo, handler, ignoreInputs, disabled, capture])
 }
 
 export const isMacPlatform = isMac

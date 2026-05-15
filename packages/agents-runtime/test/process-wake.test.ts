@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTransaction } from '@durable-streams/state'
+import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
 import { getCronSourceRef } from '../src/cron-utils'
 import { manifestSourceKey } from '../src/manifest-helpers'
 import { db } from '../src/observation-sources'
@@ -13,6 +14,7 @@ import type { MockInstance } from 'vitest'
 import type { ProcessWakeConfig, WebhookNotification } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { ErrorEvent, Manifest } from '../src/entity-schema'
+import type { AssistantMessage } from '@mariozechner/pi-ai'
 
 // ---------------------------------------------------------------------------
 // Mock @durable-streams/client
@@ -668,6 +670,179 @@ describe(`processWake`, () => {
     await wakePromise
 
     expect(handlerEvents).toEqual([`started`, `completed`])
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    const body = JSON.parse(doneCalls.at(-1)![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_500` },
+    ])
+  })
+
+  it(`does not continue queued work after SIGSTOP is followed by SIGINT`, async () => {
+    const wakePayloads: Array<unknown> = []
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    let releaseHandler = (): void => {
+      throw new Error(`expected handler release`)
+    }
+    const handlerBlock = new Promise<void>((resolve) => {
+      releaseHandler = resolve
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async (_ctx, wake) => {
+        wakePayloads.push(wake.payload)
+        if (wakePayloads.length === 1) {
+          handlerStartedResolve?.()
+          await handlerBlock
+        }
+      },
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG)
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigstop-1`,
+          `insert`,
+          { signal: `SIGSTOP`, status: `unhandled` },
+          { offset: `10_500` }
+        ),
+      ],
+      offset: `10_500`,
+    })
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigint-1`,
+          `insert`,
+          { signal: `SIGINT`, status: `unhandled` },
+          { offset: `10_600` }
+        ),
+      ],
+      offset: `10_600`,
+    })
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `inbox`,
+          `m-queued`,
+          `insert`,
+          { payload: `should not run` },
+          { offset: `10_700` }
+        ),
+      ],
+      offset: `10_700`,
+    })
+
+    releaseHandler()
+    await wakePromise
+
+    expect(wakePayloads).toEqual([undefined])
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    const body = JSON.parse(doneCalls.at(-1)![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_600` },
+    ])
+  })
+
+  it(`applies SIGINT that arrives before the handler run controller is created`, async () => {
+    let abortSeenResolve: (() => void) | null = null
+    const abortSeen = new Promise<void>((resolve) => {
+      abortSeenResolve = resolve
+    })
+    const abortedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `aborted`,
+      timestamp: Date.now(),
+    }
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        ctx.useAgent({
+          systemPrompt: `test`,
+          model: `claude-sonnet-4-5-20250929`,
+          tools: [],
+          streamFn: (_model, _context, options) => {
+            const stream = createAssistantMessageEventStream()
+            if (options?.signal?.aborted) {
+              abortSeenResolve?.()
+              stream.end(abortedMessage)
+              return stream
+            }
+            options?.signal?.addEventListener(
+              `abort`,
+              () => {
+                abortSeenResolve?.()
+                stream.end(abortedMessage)
+              },
+              { once: true }
+            )
+            return stream
+          },
+        })
+        await ctx.agent.run()
+      },
+    })
+
+    setTimeout(() => {
+      mockEntityOnBatch.current?.({
+        items: [
+          ev(
+            `signal`,
+            `sigint-early`,
+            `insert`,
+            { signal: `SIGINT`, status: `unhandled` },
+            { offset: `10_500` }
+          ),
+        ],
+        offset: `10_500`,
+      })
+    }, 0)
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+
+    await processWake(notification, BASE_CONFIG)
+
+    await abortSeen
     const doneCalls = fetchMock.mock.calls.filter(
       ([url, opts]) =>
         String(url).includes(`/_electric/wakes/wake-abc`) &&

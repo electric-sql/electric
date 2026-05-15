@@ -457,6 +457,7 @@ export async function processWebhookWake(
         signal: Pick<Signal, `signal` | `reason` | `payload`>
       ) => void | Promise<void>)
     | null = null
+  let pendingRunAbortRequested = false
   let signalAbortRequested = false
   let pauseRequested = false
   let resumeRequested = false
@@ -686,7 +687,11 @@ export async function processWebhookWake(
     switch (value.signal) {
       case `SIGINT`:
         log.info(`SIGINT received, aborting active run`)
-        runAbortController?.abort()
+        if (runAbortController) {
+          runAbortController.abort()
+        } else {
+          pendingRunAbortRequested = true
+        }
         markSignalHandled(event, `aborted`, notification.entity?.status)
         void flushProducedWrites().catch((err) =>
           failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
@@ -1733,6 +1738,10 @@ export async function processWebhookWake(
       }
 
       runAbortController = new AbortController()
+      if (pendingRunAbortRequested) {
+        pendingRunAbortRequested = false
+        runAbortController.abort()
+      }
       const { ctx: handlerCtx, getSleepRequested } = createHandlerContext({
         entityUrl,
         entityType: typeName,
@@ -1880,6 +1889,13 @@ export async function processWebhookWake(
         break
       }
 
+      if (pauseRequested) {
+        pauseRequested = false
+        drainNonFreshPendingBatches()
+        log.info(`pause requested, closing wake`)
+        break
+      }
+
       const nextWake = dequeueNextWakeFromPending()
       if (nextWake) {
         log.info(
@@ -1902,13 +1918,6 @@ export async function processWebhookWake(
         continue
       }
       if (queueHeadPaused) {
-        break
-      }
-
-      if (pauseRequested) {
-        pauseRequested = false
-        drainNonFreshPendingBatches()
-        log.info(`pause requested, closing wake`)
         break
       }
 

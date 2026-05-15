@@ -49,7 +49,12 @@ export function TileContainer({
   }, [isActive, tile.id, helpers])
 
   return (
-    <div ref={tileRef} className={styles.tile} onMouseDownCapture={onActivate}>
+    <div
+      ref={tileRef}
+      className={styles.tile}
+      onFocusCapture={onActivate}
+      onMouseDownCapture={onActivate}
+    >
       {tile.entityUrl !== null ? (
         <EntityTileBody
           tile={tile}

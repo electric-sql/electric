@@ -10,6 +10,8 @@ import {
   useNavigate,
   useParams,
 } from '@tanstack/react-router'
+import { useLiveQuery } from '@tanstack/react-db'
+import { eq } from '@tanstack/db'
 import { z } from 'zod'
 import { getActiveBaseUrl, preloadEntityStream } from './lib/entity-connection'
 import {
@@ -87,11 +89,23 @@ function RootShell(): React.ReactElement {
   } = useSidebarCollapsed()
   const search = useSearchPalette()
   const { workspace, helpers } = useWorkspace()
-  const { signalEntity } = useElectricAgents()
+  const { entitiesCollection, signalEntity } = useElectricAgents()
   const { openFindForTile, findNextInTile, findPreviousInTile } =
     usePaneFindCommands()
   const nativeMenuHandlesAppHotkeys =
     typeof window !== `undefined` && Boolean(window.electronAPI)
+  const activeEntityUrl = helpers.activeTile?.entityUrl ?? null
+  const { data: activeEntityMatches = [] } = useLiveQuery(
+    (q) => {
+      if (!entitiesCollection || !activeEntityUrl) return undefined
+      return q
+        .from({ entity: entitiesCollection })
+        .where(({ entity }) => eq(entity.url, activeEntityUrl))
+    },
+    [entitiesCollection, activeEntityUrl]
+  )
+  const keyboardSignalEntityIsRunning =
+    activeEntityMatches.at(0)?.status === `running`
 
   useHotkey(`mod+b`, toggle, { disabled: nativeMenuHandlesAppHotkeys })
   useHotkey(
@@ -155,16 +169,18 @@ function RootShell(): React.ReactElement {
 
   const signalActiveTile = useCallback(
     (signal: EntitySignal, reason: string) => {
-      const entityUrl = helpers.activeTile?.entityUrl
+      if (!keyboardSignalEntityIsRunning) return false
+      const entityUrl = activeEntityUrl
       if (!entityUrl || !signalEntity) return false
       const tx = signalEntity({ entityUrl, signal, reason })
       tx.isPersisted.promise.catch(() => {})
       return true
     },
-    [helpers.activeTile?.entityUrl, signalEntity]
+    [activeEntityUrl, keyboardSignalEntityIsRunning, signalEntity]
   )
   const stopActiveTile = useCallback(() => {
-    const entityUrl = helpers.activeTile?.entityUrl
+    if (!keyboardSignalEntityIsRunning) return false
+    const entityUrl = activeEntityUrl
     if (!entityUrl || !signalEntity) return false
     const stopTx = signalEntity({
       entityUrl,
@@ -182,14 +198,14 @@ function RootShell(): React.ReactElement {
       })
       .catch(() => {})
     return true
-  }, [helpers.activeTile?.entityUrl, signalEntity])
+  }, [activeEntityUrl, keyboardSignalEntityIsRunning, signalEntity])
   useHotkey(
     `escape`,
     (e) => {
       if (!signalActiveTile(`SIGINT`, `Interrupted from keyboard`)) return
       e.preventDefault()
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, capture: true }
   )
   useHotkey(
     `ctrl+c`,
@@ -197,7 +213,7 @@ function RootShell(): React.ReactElement {
       if (!stopActiveTile()) return
       e.preventDefault()
     },
-    { ignoreInputs: false }
+    { ignoreInputs: false, capture: true }
   )
 
   useWorkspaceHotkeys({ disabled: nativeMenuHandlesAppHotkeys })
