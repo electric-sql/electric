@@ -89,11 +89,10 @@ member?(subquery_id, value, time: 9) = false
 member?(subquery_id, value, time: 10) = false
 member?(subquery_id, value, time: 11) = true
 
-
 rather than specifying a time you can also ask for membership across all times:
 
-member_of_union?(subquery_id, value) = true
-member_of_intersection?(subquery_id, value) = false
+member_at_some_time?(subquery_id, value) = true
+member_at_all_times?(subquery_id, value) = false
 
 These are useful for the where clause filter which needs to keep the filter broad enough so that all consumers get all the changes they need while they may be at any of the logical times. 
 
@@ -110,14 +109,34 @@ Removing a subquery should not involve a full ETS table scan as this will be too
 #### SubqueryIndex
 
 This is a complete re-write of the existing SubqueryIndex that delegates most of it's resposibility to the the MultiTimeView.
-It initialised the MultiTimeView.
 
-The Subquery index will need to know if a shapes use of a subquery is positive or negative (as it does now) and use:
-- member_of_union? for positive
-- member_of_intersection? for negative
+When a shape is added to the SubqueryIndex at a particular node in the filter tree, SubqueryIndex will need to keep something like:
+
+node_id, subquery_id, polarity -> child_node_id
+
+and add the shape to the child WhereCondition node
+
+When the SubqueryIndex is asked the affected_shapes for a given value, it will need to iterate through all {subquery_id, polarity} pairs it has and MapSet.union the affected shapes for each.
+
+For a given {subquery_id, :positive} pair the affected shaped will be:
+
+if MultiTimeView.member_at_some_time?(subquery_id, value) do
+  WhereCondition.affected_shapes(node_id)
+else
+  MapSet.new()
+end
+
+For a given {subquery_id, :negative} pair the affected shaped will be:
+
+if MultiTimeView.member_at_all_times?(subquery_id, value) do
+  MapSet.new()
+else
+  WhereCondition.affected_shapes(node_id)
+end
+
 This will ensure that the rows are included for all available times
 
-If the MultiTimeView has not been populated by the Materializer yet, the SubqueryIndex should just widen as much as possible.
+If the MultiTimeView has not been populated by the Materializer yet, the SubqueryIndex should return WhereCondition.affected_shapes(node_id)
 
 #### Materializer
 
