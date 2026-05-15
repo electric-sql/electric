@@ -3079,14 +3079,6 @@ export function runMockAgentTests(config: MockAgentTestOptions): void {
     ).toBe(true)
   }
 
-  async function killEntity(baseUrl: string, entityUrl: string): Promise<void> {
-    await fetch(`${baseUrl}${routeControlPlanePath(`${entityUrl}/signal`)}`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ signal: `SIGKILL` }),
-    })
-  }
-
   async function pollForAgentResponse(
     baseUrl: string,
     entityUrl: string,

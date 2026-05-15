@@ -856,6 +856,167 @@ describe(`processWake`, () => {
     ])
   })
 
+  it(`ignores SIGINT for idle entities without aborting the next run`, async () => {
+    let abortSeen = false
+    const completedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `ok` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `stop`,
+      timestamp: Date.now(),
+    }
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        ctx.useAgent({
+          systemPrompt: `test`,
+          model: `claude-sonnet-4-5-20250929`,
+          tools: [],
+          streamFn: (_model, _context, options) => {
+            const stream = createAssistantMessageEventStream()
+            if (options?.signal?.aborted) {
+              abortSeen = true
+            }
+            options?.signal?.addEventListener(
+              `abort`,
+              () => {
+                abortSeen = true
+              },
+              { once: true }
+            )
+            queueMicrotask(() => stream.end(completedMessage))
+            return stream
+          },
+        })
+        await ctx.agent.run()
+      },
+    })
+
+    mockDbPreload.mockImplementationOnce(async () => {
+      mockEntityOnBatch.current?.({
+        items: [
+          ev(
+            `signal`,
+            `sigint-idle`,
+            `insert`,
+            { signal: `SIGINT`, status: `unhandled` },
+            { offset: `10_500` }
+          ),
+        ],
+        offset: `10_500`,
+      })
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `idle`
+
+    await processWake(notification, BASE_CONFIG)
+
+    expect(abortSeen).toBe(false)
+    expect(mockProducerAppend).toHaveBeenCalledWith(
+      expect.stringContaining(`"outcome":"ignored"`)
+    )
+  })
+
+  it(`aborts an active run for server-handled SIGKILL without rewriting the signal`, async () => {
+    let abortSeenResolve: (() => void) | null = null
+    const abortSeen = new Promise<void>((resolve) => {
+      abortSeenResolve = resolve
+    })
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    const abortedMessage: AssistantMessage = {
+      role: `assistant`,
+      content: [{ type: `text`, text: `` }],
+      api: `anthropic-messages`,
+      provider: `anthropic`,
+      model: `claude-sonnet-4-5-20250929`,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: `aborted`,
+      timestamp: Date.now(),
+    }
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        ctx.useAgent({
+          systemPrompt: `test`,
+          model: `claude-sonnet-4-5-20250929`,
+          tools: [],
+          streamFn: (_model, _context, options) => {
+            handlerStartedResolve?.()
+            const stream = createAssistantMessageEventStream()
+            options?.signal?.addEventListener(
+              `abort`,
+              () => {
+                abortSeenResolve?.()
+                stream.end(abortedMessage)
+              },
+              { once: true }
+            )
+            return stream
+          },
+        })
+        await ctx.agent.run()
+      },
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG)
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigkill-handled`,
+          `insert`,
+          { signal: `SIGKILL`, status: `handled` },
+          { offset: `10_500` }
+        ),
+      ],
+      offset: `10_500`,
+    })
+
+    await wakePromise
+    await abortSeen
+
+    expect(mockProducerAppend).not.toHaveBeenCalledWith(
+      expect.stringContaining(`sigkill-handled`)
+    )
+  })
+
   it(`surfaces both the primary wake error and done callback failure`, async () => {
     defineEntity(`test-agent`, {
       handler: () => {

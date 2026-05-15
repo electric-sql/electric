@@ -613,10 +613,15 @@ export async function processWebhookWake(
     return event.type === `inbox` || event.type === `wake`
   }
 
-  const isUnhandledSignalEvent = (event: ChangeEvent): boolean => {
+  const shouldHandleSignalEvent = (event: ChangeEvent): boolean => {
     if (event.type !== `signal`) return false
     const value = event.value as Partial<Signal> | undefined
-    return value?.status === `unhandled`
+    if (value?.status === `unhandled`) return true
+
+    // The server handles SIGKILL because it is terminal and closes streams, but
+    // an active runtime still needs to observe the signal and abort in-flight
+    // model/tool work. Do not try to rewrite the already-closed stream.
+    return value?.signal === `SIGKILL` && value.status === `handled`
   }
 
   const markSignalHandled = (
@@ -678,19 +683,33 @@ export async function processWebhookWake(
   }
 
   const handleSignalEvent = (event: ChangeEvent): void => {
-    if (!isUnhandledSignalEvent(event)) return
+    if (!shouldHandleSignalEvent(event)) return
     const key = String(event.key)
     if (handledSignalKeys.has(key)) return
     handledSignalKeys.add(key)
 
     const value = event.value as Partial<Signal>
+    const alreadyHandled = value.status === `handled`
     switch (value.signal) {
       case `SIGINT`:
-        log.info(`SIGINT received, aborting active run`)
         if (runAbortController) {
+          log.info(`SIGINT received, aborting active run`)
           runAbortController.abort()
-        } else {
+        } else if (notification.entity?.status === `running`) {
+          // SIGINT may arrive in the small window before ctx.agent.run creates
+          // its controller. Only carry it forward for running entities; idle
+          // SIGINT is an ignored no-op and must not poison the next run.
+          log.info(
+            `SIGINT received before active run controller, queuing abort`
+          )
           pendingRunAbortRequested = true
+        } else {
+          log.info(`SIGINT received with no active run, ignoring`)
+          markSignalHandled(event, `ignored`, notification.entity?.status)
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+          return
         }
         markSignalHandled(event, `aborted`, notification.entity?.status)
         void flushProducedWrites().catch((err) =>
@@ -702,10 +721,12 @@ export async function processWebhookWake(
         signalAbortRequested = true
         runAbortController?.abort()
         requestShutdown()
-        markSignalHandled(event, `shutdown_requested`, `killed`)
-        void flushProducedWrites().catch((err) =>
-          failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
-        )
+        if (!alreadyHandled) {
+          markSignalHandled(event, `shutdown_requested`, `killed`)
+          void flushProducedWrites().catch((err) =>
+            failBackgroundWake(err, `SIGNAL_HANDLE_FAILED`)
+          )
+        }
         return
       case `SIGHUP`:
         log.info(`SIGHUP received, closing wake after current checkpoint`)

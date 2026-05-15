@@ -20,6 +20,7 @@ import {
   backfillEntityDispatchPolicy,
   linkEntityDispatchSubscription,
   resolveEffectiveDispatchPolicyForSpawn,
+  shouldLinkDispatchBeforeInitialMessage,
   unlinkEntityDispatchSubscription,
 } from './dispatch-policy.js'
 import { routeBody, withSchema } from './schema.js'
@@ -629,12 +630,20 @@ async function spawnEntity(
     wake: parsed.wake,
     created_by: principal.url,
   })
-  await linkEntityDispatchSubscription(ctx, entity)
+  const linkBeforeInitialMessage =
+    parsed.initialMessage !== undefined &&
+    shouldLinkDispatchBeforeInitialMessage(dispatchPolicy)
+  if (linkBeforeInitialMessage) {
+    await linkEntityDispatchSubscription(ctx, entity)
+  }
   if (parsed.initialMessage !== undefined) {
     await ctx.entityManager.send(entity.url, {
       from: principal.url,
       payload: parsed.initialMessage,
     })
+  }
+  if (!linkBeforeInitialMessage) {
+    await linkEntityDispatchSubscription(ctx, entity)
   }
 
   return json(
