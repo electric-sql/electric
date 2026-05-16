@@ -163,9 +163,27 @@ These should be updated so that rather than holding views of the subquery, they 
 - the move-in query needs entire views at specific times and so should call MultiTimeView.get(time) and care should be made to not keep this in memory for too long, perhaps we should GC the consumer process afterwards, or perhaps the task process that runs the query should call MultiTimeView.get(time) so that the memory is freed when the process ends
 
 
+# The Problem With The Above Design
 
-Please:
-- read the codebase to check this design would work
-- ask any clarifying questions about anything you are unsure of about my proposal
-- give me your evaluation of the design
-- make suggestions to improve the design for memory, performance or simplicity reasons
+Subqueries have different subquery_ids even if they only differ in a constant, so:
+- SELECT id FROM users WHERE company_id=7
+- SELECT id FROM users WHERE company_id=8
+are two different subqueries. If the SubqueryIndex iterates through {subquery_id, :positive} pairs that may be thousands of pairs and be too slow since it's in the replication stream hot path.
+
+Instead we should, at each node, for each {field, polarity} pair, keep a reverse index for all the subqueries for that pair. So:
+WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
+WHERE user_id IN (SELECT id FROM users WHERE company_id=8)
+
+would be in the same reverse index because they have the same field (user_id) and polarity (:positive).
+
+Perhaps the index could have the form:
+subquery_cohort_id, value -> list({child_node_id, list(times)})
+
+where:
+subquery_cohort_id is a number (whatever is smallest in memory) and represents {node_id, field, polarity} but to save memory (as it's going to be repeated lots in the ETS table) we keep it small and also store:
+subquery_cohort_id -> {node_id, field, polarity} and
+{node_id, field, polarity} -> subquery_cohort_id
+
+and there's one child_node_id per subquery_id for the cohort
+
+Shape removal can be quick because we can keep track of subquery_id -> child_node_id and remove the shape from the child node, but removing nodes becomes slow since they're scattered throughout the ETS table. I suggest the cleaning up of nodes should be done asynchronously by a process that walks through the ETS table for nodes with no shapes and removes them. Race conditions can be avoided by doing an atomic conditional replace in the ETS table.
