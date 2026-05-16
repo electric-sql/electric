@@ -86,7 +86,11 @@ export function getConfiguredServerHeaders(
 }
 
 export function getActivePrincipal(): string {
-  return activeServerHeaders?.headers[`electric-principal`] ?? `unknown`
+  const principal = activeServerHeaders?.headers[`electric-principal`]
+  if (!principal) return `unknown`
+  return principal.startsWith(`/principal/`)
+    ? principal
+    : `/principal/${encodeURIComponent(principal)}`
 }
 
 export async function serverFetch(

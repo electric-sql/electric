@@ -82,7 +82,8 @@ Helpers:
 ```ts
 export function parsePrincipalKey(input: string): Principal
 export function principalUrl(key: string): string
-export function principalKeyFromUrl(url: string): string | null
+export function parsePrincipalUrl(url: string): Principal | null
+export function isPrincipalUrl(url: string): boolean
 export function getPrincipalFromRequest(request: Request): Principal | null
 export function getDevPrincipal(): Principal
 ```
@@ -575,7 +576,7 @@ entity: {
 principal: entity.created_by
   ? {
       url: entity.created_by,
-      key: principalKeyFromUrl(entity.created_by),
+      key: parsePrincipalUrl(entity.created_by)?.key ?? null,
     }
   : undefined,
 ```

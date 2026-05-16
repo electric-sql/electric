@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parsePrincipalUrl,
   parsePrincipalKey,
-  principalKeyFromUrl,
   principalUrl,
 } from '../src/principal.js'
 
@@ -19,7 +19,7 @@ describe(`principal parser`, () => {
       const url = `/principal/${encodeURIComponent(key)}`
       expect(principal.url).toBe(url)
       expect(principalUrl(key)).toBe(url)
-      expect(principalKeyFromUrl(url)).toBe(key)
+      expect(parsePrincipalUrl(url)?.key).toBe(key)
     })
   }
 
@@ -32,8 +32,8 @@ describe(`principal parser`, () => {
   it(`encodes URL-unsafe principal ids canonically`, () => {
     const principal = parsePrincipalKey(`user:alice@example.com`)
     expect(principal.url).toBe(`/principal/user%3Aalice%40example.com`)
-    expect(principalKeyFromUrl(principal.url)).toBe(`user:alice@example.com`)
-    expect(principalKeyFromUrl(`/principal/user:alice@example.com`)).toBe(
+    expect(parsePrincipalUrl(principal.url)?.key).toBe(`user:alice@example.com`)
+    expect(parsePrincipalUrl(`/principal/user:alice@example.com`)?.key).toBe(
       `user:alice@example.com`
     )
   })

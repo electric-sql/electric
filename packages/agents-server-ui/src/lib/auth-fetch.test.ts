@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { registerActiveServerHeaders, serverFetch } from './auth-fetch'
+import {
+  getActivePrincipal,
+  registerActiveServerHeaders,
+  serverFetch,
+} from './auth-fetch'
 
 describe(`server fetch helpers`, () => {
   afterEach(() => {
@@ -80,5 +84,15 @@ describe(`server fetch helpers`, () => {
 
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers)
     expect(headers.has(`authorization`)).toBe(false)
+  })
+
+  it(`returns the active principal as a canonical principal URL`, () => {
+    registerActiveServerHeaders({
+      name: `Tenant`,
+      url: `https://agents.example.test`,
+      headers: { 'electric-principal': `system:dev-local` },
+    })
+
+    expect(getActivePrincipal()).toBe(`/principal/system%3Adev-local`)
   })
 })

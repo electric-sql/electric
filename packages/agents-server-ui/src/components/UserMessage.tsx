@@ -9,12 +9,24 @@ type UserMessageSection = Extract<
   { kind: `user_message` }
 >
 
+function formatSender(value: string | null | undefined): string {
+  if (!value) return `user`
+  if (!value.startsWith(`/principal/`)) return value
+  const segment = value.slice(`/principal/`.length)
+  if (!segment || segment.includes(`/`)) return value
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return value
+  }
+}
+
 export const UserMessage = memo(function UserMessage({
   section,
 }: {
   section: UserMessageSection
 }): React.ReactElement {
-  const sender = section.from ?? `user`
+  const sender = formatSender(section.from)
 
   return (
     <Stack direction="column" gap={1} className={styles.root}>

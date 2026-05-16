@@ -14,7 +14,7 @@ import {
 import { routeBody, withSchema } from './schema.js'
 import { subscriptionIdForDispatchTarget } from './dispatch-policy.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
-import { principalFromCreatedBy, principalKeyFromUrl } from '../principal.js'
+import { isPrincipalUrl, principalFromCreatedBy } from '../principal.js'
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
@@ -116,7 +116,7 @@ async function registerRunner(
       400
     )
   }
-  if (!principalKeyFromUrl(ownerPrincipal)) {
+  if (!isPrincipalUrl(ownerPrincipal)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
       `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
@@ -150,7 +150,7 @@ async function listRunners(
   ctx: TenantContext
 ): Promise<Response> {
   const requestedOwner = firstQueryValue(request.query.owner_principal)
-  if (requestedOwner && !principalKeyFromUrl(requestedOwner)) {
+  if (requestedOwner && !isPrincipalUrl(requestedOwner)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
       `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${requestedOwner}`,

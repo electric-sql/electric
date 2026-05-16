@@ -549,17 +549,17 @@ After the existing routes (line 90), add:
 runnersRouter.get(`/:id/health`, runnerHealth)
 ```
 
-- [x] **Step 4: Add `principalKeyFromUrl` import**
+- [x] **Step 4: Add principal URL validation import**
 
 Add to the imports at the top of `runners-router.ts`:
 
 ```ts
-import { principalKeyFromUrl } from '../principal.js'
+import { isPrincipalUrl } from '../principal.js'
 ```
 
 - [x] **Step 5: Update `registerRunner` handler to use `owner_principal` with strict URL validation**
 
-No backwards compatibility for key-form principals. If `owner_principal` is provided it must be a valid principal URL accepted by `principalKeyFromUrl()` (e.g., `/principal/user%3Aalice`); otherwise the server derives it from `ctx.principal.url`. Callers must send URLs.
+No backwards compatibility for key-form principals. If `owner_principal` is provided it must be a valid principal URL (e.g., `/principal/user%3Aalice`); otherwise the server derives it from `ctx.principal.url`. Callers must send URLs.
 
 In `registerRunner` (line 103-136):
 
@@ -613,10 +613,10 @@ async function registerRunner(
       400
     )
   }
-  if (!principalKeyFromUrl(ownerPrincipal)) {
+  if (!isPrincipalUrl(ownerPrincipal)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `owner_principal must be a valid principal URL accepted by principalKeyFromUrl() (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
+      `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
       400
     )
   }
@@ -672,7 +672,7 @@ async function listRunners(
   ctx: TenantContext
 ): Promise<Response> {
   const requestedOwner = firstQueryValue(request.query.owner_principal)
-  if (requestedOwner && !principalKeyFromUrl(requestedOwner)) {
+  if (requestedOwner && !isPrincipalUrl(requestedOwner)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
       `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${requestedOwner}`,
@@ -1277,7 +1277,7 @@ const DEFAULT_PULL_WAKE_OWNER_ID = `builtin-agents`
 const DEFAULT_PULL_WAKE_OWNER_PRINCIPAL = `/principal/system%3Abuiltin-agents`
 ```
 
-Then rename the function (line 131-139). `ELECTRIC_AGENTS_IDENTITY` is a principal key (`kind:id`), so convert it to a URL. The default is already a URL:
+Then rename the function (line 131-139). `ELECTRIC_AGENTS_IDENTITY` is a principal identifier (`kind:id`), so convert it to a URL. The default is already a URL:
 
 ```ts
 // REPLACE:
@@ -1323,20 +1323,15 @@ Update the `BuiltinAgentsServer` call (line 395):
 
 In `packages/agents-desktop/src/main.ts`:
 
-Rename the constant (line 227-229). No backwards-compat fallback — clean break. Store a principal URL directly:
+Replace the previous owner-user constant/env var. No backwards-compat fallback — clean break. Store a principal URL directly:
 
 ```ts
-// REPLACE:
-const PULL_WAKE_OWNER_USER_ID =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
-  `local-desktop`
-// WITH:
 const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
   `/principal/system%3Alocal-desktop`
 ```
 
-Rename the helper function (line 265-274). Do NOT use the `authorization` header as a principal source — that's a bearer token, not a principal key. When the request has auth headers, the server middleware extracts `ctx.principal` from them and uses `ctx.principal.url` as the owner. So when only auth is present (no explicit `electric-principal` header), return `undefined` to let the server derive the owner:
+Rename the helper function (line 265-274). Do NOT use the `authorization` header as a principal source — that's a bearer token, not a principal identifier. When the request has auth headers, the server middleware extracts `ctx.principal` from them and uses `ctx.principal.url` as the owner. So when only auth is present (no explicit `electric-principal` header), return `undefined` to let the server derive the owner:
 
 ```ts
 // REPLACE:
@@ -1347,7 +1342,7 @@ function runnerOwnerUserIdFromHeaders(
   return (
     normalized.get(`authorization`)?.trim() ||
     normalized.get(ELECTRIC_PRINCIPAL_HEADER)?.trim() ||
-    PULL_WAKE_OWNER_USER_ID
+    PULL_WAKE_OWNER_PRINCIPAL
   )
 }
 // WITH:

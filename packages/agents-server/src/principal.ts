@@ -20,7 +20,7 @@ const PRINCIPAL_KINDS = new Set<PrincipalKind>([
 
 export function parsePrincipalKey(input: string): Principal {
   const colon = input.indexOf(`:`)
-  if (colon <= 0) throw new Error(`Invalid principal key`)
+  if (colon <= 0) throw new Error(`Invalid principal identifier`)
   const kind = input.slice(0, colon) as PrincipalKind
   const id = input.slice(colon + 1)
   if (!PRINCIPAL_KINDS.has(kind)) throw new Error(`Invalid principal kind`)
@@ -33,19 +33,22 @@ export function principalUrl(key: string): string {
   return parsePrincipalKey(key).url
 }
 
-export function principalKeyFromUrl(url: string): string | null {
+export function parsePrincipalUrl(url: string): Principal | null {
   if (!url.startsWith(`/principal/`)) return null
   const segment = url.slice(`/principal/`.length)
   if (!segment || segment.includes(`/`)) return null
   try {
-    const key = decodeURIComponent(segment)
     // Principal URLs produced by parsePrincipalKey/principalUrl are canonical
     // encoded single path segments, but accept legacy unencoded single-segment
     // URLs here so callers can canonicalize them via parsePrincipalKey(key).url.
-    return parsePrincipalKey(key).key
+    return parsePrincipalKey(decodeURIComponent(segment))
   } catch {
     return null
   }
+}
+
+export function isPrincipalUrl(url: string): boolean {
+  return parsePrincipalUrl(url) !== null
 }
 
 export function getPrincipalFromRequest(request: Request): Principal | null {
@@ -66,9 +69,8 @@ const BUILT_IN_SYSTEM_PRINCIPAL_IDS = new Set([
 export function isBuiltInSystemPrincipalUrl(url: string | undefined): boolean {
   if (!url?.startsWith(`/principal/`)) return false
   try {
-    const key = principalKeyFromUrl(url)
-    if (!key) return false
-    const principal = parsePrincipalKey(key)
+    const principal = parsePrincipalUrl(url)
+    if (!principal) return false
     return (
       principal.kind === `system` &&
       BUILT_IN_SYSTEM_PRINCIPAL_IDS.has(principal.id)
@@ -84,9 +86,8 @@ export function principalFromCreatedBy(
   | { url: string; key?: string | null; kind?: string; id?: string }
   | undefined {
   if (!createdBy) return undefined
-  const key = principalKeyFromUrl(createdBy)
-  if (!key) return { url: createdBy, key: null }
-  const principal = parsePrincipalKey(key)
+  const principal = parsePrincipalUrl(createdBy)
+  if (!principal) return { url: createdBy, key: null }
   return {
     url: principal.url,
     key: principal.key,

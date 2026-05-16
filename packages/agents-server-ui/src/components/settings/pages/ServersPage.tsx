@@ -226,7 +226,7 @@ function ServerRow({
             </Text>
             {runtimeUrl && (
               <Text size={1} tone="muted" family="mono">
-                Runtime: {runtimeUrl}
+                Runtime: Pull-wake
               </Text>
             )}
             {isDesktop ? (

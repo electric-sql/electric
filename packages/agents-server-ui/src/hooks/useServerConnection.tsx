@@ -130,16 +130,13 @@ export function ServerConnectionProvider({
             : isDesktop
               ? []
               : [currentServer()]
-        const active = desktopState?.selectedServerId
-          ? (next.find(
-              (server) => server.id === desktopState.selectedServerId
-            ) ?? null)
-          : desktopState?.activeServer &&
-              next.some(
-                (server) => server.url === desktopState.activeServer?.url
-              )
-            ? desktopState.activeServer
-            : (next[0] ?? null)
+        const active =
+          desktopState?.activeServer ??
+          (desktopState?.selectedServerId
+            ? (next.find(
+                (server) => server.id === desktopState.selectedServerId
+              ) ?? null)
+            : (next[0] ?? null))
         registerActiveBaseUrl(active?.url ?? null)
         registerActiveServerHeaders(active)
         setServers(next)
@@ -172,8 +169,8 @@ export function ServerConnectionProvider({
       const nextServers = state.servers ?? servers
       setServers(nextServers)
       const active =
-        nextServers.find((server) => server.id === state.selectedServerId) ??
         state.activeServer ??
+        nextServers.find((server) => server.id === state.selectedServerId) ??
         null
       registerActiveBaseUrl(active?.url ?? null)
       registerActiveServerHeaders(active)

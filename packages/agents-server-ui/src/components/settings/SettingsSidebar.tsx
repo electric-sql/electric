@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
+  Brain,
   KeyRound,
   Palette,
   Plug,
@@ -18,6 +19,7 @@ export type SettingsCategoryId =
   | `servers`
   | `credentials`
   | `appearance`
+  | `local-runtime`
   | `mcp-servers`
 
 interface CategoryDef {
@@ -83,6 +85,12 @@ export function SettingsSidebar({
       label: `Appearance`,
       icon: <Icon icon={Palette} size={2} />,
       visible: true,
+    },
+    {
+      id: `local-runtime`,
+      label: `Local Runtime`,
+      icon: <Icon icon={Brain} size={2} />,
+      visible: isDesktop,
     },
     {
       id: `mcp-servers`,

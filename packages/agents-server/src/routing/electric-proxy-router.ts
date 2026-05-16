@@ -38,6 +38,7 @@ async function proxyElectric(
     electricUrl: ctx.electricUrl,
     electricSecret: ctx.electricSecret,
     tenantId: ctx.service,
+    principalUrl: ctx.principal.url,
   })
   const headers = new Headers(request.headers)
   headers.delete(`host`)
