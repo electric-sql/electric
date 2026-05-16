@@ -458,11 +458,13 @@ git commit -m "feat(agents-server): update entity registry for principal rename,
 
 ---
 
-### Task 4: Update runners router — principal rename, diagnostics in heartbeat, health endpoint
+### Task 4: Update runners router, dispatch policy, and shape columns — principal rename, diagnostics in heartbeat, health endpoint
 
 **Files:**
 
 - Modify: `packages/agents-server/src/routing/runners-router.ts`
+- Modify: `packages/agents-server/src/routing/dispatch-policy.ts:127`
+- Modify: `packages/agents-server/src/utils/server-utils.ts:130-134`
 
 - [ ] **Step 1: Update the registration body schema**
 
@@ -539,7 +541,26 @@ After the existing routes (line 90), add:
 runnersRouter.get(`/:id/health`, runnerHealth)
 ```
 
-- [ ] **Step 4: Update `registerRunner` handler to use `owner_principal` and `ctx.principal.url`**
+- [ ] **Step 4: Add `canonicalizePrincipal` helper**
+
+Callers (desktop, electric-ax) may pass a principal key (`user:alice`) instead of a URL (`/principal/user%3Aalice`). Add a helper at the top of `runners-router.ts` that normalizes both forms, and add the import for `parsePrincipalKey`:
+
+```ts
+// Add to imports at the top of the file:
+import { parsePrincipalKey } from '../principal.js'
+
+// Add after the schema constants (after heartbeatBodySchema):
+function canonicalizePrincipal(value: string): string {
+  if (value.startsWith(`/principal/`)) return value
+  try {
+    return parsePrincipalKey(value).url
+  } catch {
+    return value
+  }
+}
+```
+
+- [ ] **Step 5: Update `registerRunner` handler to use `owner_principal` and canonicalize**
 
 In `registerRunner` (line 103-136):
 
@@ -585,7 +606,9 @@ async function registerRunner(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<RegisterRunnerBody>(request)
-  const ownerPrincipal = parsed.owner_principal ?? ctx.principal?.url
+  const ownerPrincipal = canonicalizePrincipal(
+    parsed.owner_principal ?? ctx.principal?.url ?? ``
+  )
   if (!ownerPrincipal) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
@@ -616,7 +639,7 @@ async function registerRunner(
 }
 ```
 
-- [ ] **Step 5: Update `listRunners` handler**
+- [ ] **Step 6: Update `listRunners` handler**
 
 In `listRunners` (line 138-154):
 
@@ -659,7 +682,7 @@ async function listRunners(
 }
 ```
 
-- [ ] **Step 6: Update heartbeat handler to pass diagnostics**
+- [ ] **Step 7: Update heartbeat handler to pass diagnostics**
 
 In `heartbeat` (line 165-185), add `diagnostics` to the `heartbeatRunner` call:
 
@@ -675,7 +698,7 @@ const runner = await ctx.entityManager.registry.heartbeatRunner({
 })
 ```
 
-- [ ] **Step 7: Update `assertRunnerOwnerIfAuthenticated` to use `principal.url`**
+- [ ] **Step 8: Update `assertRunnerOwnerIfAuthenticated` to use `principal.url`**
 
 In `assertRunnerOwnerIfAuthenticated` (line 297-308):
 
@@ -708,7 +731,7 @@ function assertRunnerOwnerIfAuthenticated(
 }
 ```
 
-- [ ] **Step 8: Update all callers of `assertRunnerOwnerIfAuthenticated`**
+- [ ] **Step 9: Update all callers of `assertRunnerOwnerIfAuthenticated`**
 
 Change all calls from `runner.owner_user_id` → `runner.owner_principal`:
 
@@ -718,7 +741,7 @@ In `heartbeat` (line 171): `assertRunnerOwnerIfAuthenticated(ctx, existing.owner
 
 In `setRunnerStatus` (line 208): `assertRunnerOwnerIfAuthenticated(ctx, existing.owner_principal)`
 
-- [ ] **Step 9: Update claim auth check**
+- [ ] **Step 10: Update claim auth check**
 
 In `claimWake` (line 225):
 
@@ -729,7 +752,29 @@ In `claimWake` (line 225):
   if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
 ```
 
-- [ ] **Step 10: Implement `runnerHealth` handler**
+- [ ] **Step 11: Update `assertDispatchPolicyAllowed` in dispatch-policy.ts**
+
+In `packages/agents-server/src/routing/dispatch-policy.ts` (line 127):
+
+```ts
+// REPLACE:
+  if (ctx.principal && runner.owner_user_id !== ctx.principal.key) {
+// WITH:
+  if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
+```
+
+- [ ] **Step 12: Update runners Shape column allowlist in server-utils.ts**
+
+In `packages/agents-server/src/utils/server-utils.ts` (line 131-133):
+
+```ts
+// REPLACE:
+;`"tenant_id","id","owner_user_id","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","created_at","updated_at"`
+// WITH:
+`"tenant_id","id","owner_principal","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","diagnostics","created_at","updated_at"`
+```
+
+- [ ] **Step 13: Implement `runnerHealth` handler**
 
 Add at the bottom of the file, before `notificationFromClaim`:
 
@@ -834,11 +879,11 @@ async function runnerHealth(
 }
 ```
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
-git add packages/agents-server/src/routing/runners-router.ts
-git commit -m "feat(agents-server): update runners router for principal rename, diagnostics, and health endpoint"
+git add packages/agents-server/src/routing/runners-router.ts packages/agents-server/src/routing/dispatch-policy.ts packages/agents-server/src/utils/server-utils.ts
+git commit -m "feat(agents-server): update runners router, dispatch policy, and shape columns for principal rename, diagnostics, and health endpoint"
 ```
 
 ---
@@ -1158,11 +1203,12 @@ git commit -m "feat(agents-runtime): add diagnostics tracking and getHealth() to
 
 ---
 
-### Task 6: Update BuiltinAgentsServer and desktop app for principal rename
+### Task 6: Update BuiltinAgentsServer, electric-ax, and desktop app for principal rename
 
 **Files:**
 
 - Modify: `packages/agents/src/server.ts:40-51, 393-422`
+- Modify: `packages/electric-ax/src/start.ts:131-139, 379, 395`
 - Modify: `packages/agents-desktop/src/main.ts:219-274, 1544-1582`
 
 - [ ] **Step 1: Update `BuiltinAgentsServerOptions` in agents/server.ts**
@@ -1207,11 +1253,58 @@ In `packages/agents/src/server.ts` (line 393-422):
         }),
 ```
 
-- [ ] **Step 3: Update desktop env var and function names**
+- [ ] **Step 3: Update electric-ax/src/start.ts**
+
+In `packages/electric-ax/src/start.ts`:
+
+Rename the function (line 131-139):
+
+```ts
+// REPLACE:
+export function resolvePullWakeOwnerId(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): string {
+  return (
+    readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`]) ??
+    DEFAULT_PULL_WAKE_OWNER_ID
+  )
+}
+// WITH:
+export function resolvePullWakeOwnerPrincipal(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): string {
+  return (
+    readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`]) ??
+    DEFAULT_PULL_WAKE_OWNER_ID
+  )
+}
+```
+
+Update the usage (line 379):
+
+```ts
+// REPLACE:
+const ownerUserId = resolvePullWakeOwnerId(env, fileEnv)
+// WITH:
+const ownerPrincipal = resolvePullWakeOwnerPrincipal(env, fileEnv)
+```
+
+Update the `BuiltinAgentsServer` call (line 395):
+
+```ts
+// REPLACE:
+      ownerUserId,
+// WITH:
+      ownerPrincipal,
+```
+
+- [ ] **Step 4: Update desktop env var and function names**
 
 In `packages/agents-desktop/src/main.ts`:
 
-Rename the constant (line 227-228):
+Rename the constant (line 227-228). No backwards-compat fallback — clean break:
 
 ```ts
 // REPLACE:
@@ -1220,10 +1313,9 @@ const PULL_WAKE_OWNER_USER_ID =
 // WITH:
 const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
 ```
 
-Rename the helper function (line 265-274). The server-side `registerRunner` handler already converts the principal key to a URL when storing, so the desktop just needs to pass the principal key it already has — the server handles the rest:
+Rename the helper function (line 265-274). The server-side `canonicalizePrincipal` converts principal keys to URLs when storing, so the desktop can pass whatever form it has:
 
 ```ts
 // REPLACE:
@@ -1268,11 +1360,11 @@ const runnerOwnerPrincipal = runnerOwnerPrincipalFromHeaders(runtimeHeaders)
 
 Update log messages referencing `owner user id` → `owner principal`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add packages/agents/src/server.ts packages/agents-desktop/src/main.ts
-git commit -m "feat(agents, agents-desktop): rename ownerUserId to ownerPrincipal for runner registration"
+git add packages/agents/src/server.ts packages/electric-ax/src/start.ts packages/agents-desktop/src/main.ts
+git commit -m "feat(agents, electric-ax, agents-desktop): rename ownerUserId to ownerPrincipal for runner registration"
 ```
 
 ---
