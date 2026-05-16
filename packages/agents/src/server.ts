@@ -40,7 +40,7 @@ export interface BuiltinAgentsServerOptions {
   /** Pull-wake runner configuration for built-in agents. */
   pullWake: {
     runnerId: string
-    ownerUserId?: string
+    ownerPrincipal?: string
     label?: string
     registerRunner?: boolean
     headers?: PullWakeRunnerConfig[`headers`]
@@ -406,7 +406,7 @@ export class BuiltinAgentsServer {
         headers,
         body: JSON.stringify({
           id: pullWake.runnerId,
-          owner_user_id: pullWake.ownerUserId,
+          owner_principal: pullWake.ownerPrincipal,
           label: pullWake.label ?? `Built-in agents`,
           kind: `local`,
           admin_status: `enabled`,

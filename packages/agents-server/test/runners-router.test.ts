@@ -15,11 +15,11 @@ function request(method: string, path: string, body?: unknown): Request {
 function runner(overrides: Record<string, unknown> = {}) {
   return {
     id: `runner-1`,
-    owner_user_id: `user:owner@example.com`,
+    owner_principal: `/principal/user%3Aowner%40example.com`,
     label: `Local runner`,
-    kind: `local`,
-    admin_status: `enabled`,
-    liveness: `offline`,
+    kind: `local` as const,
+    admin_status: `enabled` as const,
+    liveness: `offline` as const,
     wake_stream: `/runners/runner-1/wake`,
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
@@ -32,7 +32,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
     createRunner: vi.fn(async (input) =>
       runner({
         id: input.id,
-        owner_user_id: input.ownerUserId,
+        owner_principal: input.ownerPrincipal,
         label: input.label,
         wake_stream: input.wakeStream ?? `/runners/${input.id}/wake`,
       })
@@ -48,6 +48,12 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
     getEntityByStream: vi.fn(),
     materializeActiveClaim: vi.fn(),
     updateStatus: vi.fn(),
+    getActiveClaimsForRunner: vi.fn(async () => []),
+    getDispatchStatsForRunner: vi.fn(async () => ({
+      entities_with_active_claim: 0,
+      entities_with_outstanding_wake: 0,
+      entities_with_pending_work: 0,
+    })),
   }
   const insertChain = {
     values: vi.fn(() => ({
@@ -60,7 +66,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       kind: `user`,
       id: `owner@example.com`,
       key: `user:owner@example.com`,
-      url: `/principal/user:owner@example.com`,
+      url: `/principal/user%3Aowner%40example.com`,
     },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
@@ -86,7 +92,7 @@ describe(`runner routes`, () => {
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners`, {
         id: `runner-1`,
-        owner_user_id: `other@example.com`,
+        owner_principal: `/principal/user%3Aother%40example.com`,
         label: `Local runner`,
       }),
       buildContext({
@@ -94,7 +100,7 @@ describe(`runner routes`, () => {
           kind: `user`,
           id: `owner@example.com`,
           key: `user:owner@example.com`,
-          url: `/principal/user:owner@example.com`,
+          url: `/principal/user%3Aowner%40example.com`,
         },
       })
     )
@@ -108,14 +114,14 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
 
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners`, {
         id: `runner-1`,
-        owner_user_id: `user:owner@example.com`,
+        owner_principal: `/principal/user%3Aowner%40example.com`,
         label: `Local runner`,
       }),
       ctx
@@ -125,7 +131,7 @@ describe(`runner routes`, () => {
     expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
         id: `runner-1`,
-        ownerUserId: `user:owner@example.com`,
+        ownerPrincipal: `/principal/user%3Aowner%40example.com`,
       })
     )
     expect(ctx.streamClient.ensure).toHaveBeenCalledWith(
@@ -140,7 +146,7 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
 
@@ -155,9 +161,59 @@ describe(`runner routes`, () => {
     expect(response.status).toBe(201)
     expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
-        ownerUserId: `user:owner@example.com`,
+        ownerPrincipal: `/principal/user%3Aowner%40example.com`,
       })
     )
+  })
+
+  it(`returns runner health with diagnostics and claim state`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+        last_seen_at: new Date().toISOString(),
+        diagnostics: {
+          stream_connected: true,
+          reconnect_count: 0,
+          last_heartbeat_ok: true,
+        },
+      })
+    )
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.runner).toMatchObject({
+      id: `runner-1`,
+      liveness_status: `online`,
+    })
+    expect(body.client).toMatchObject({ stream_connected: true })
+    expect(body.claims).toMatchObject({ active_count: 0 })
+    expect(body.health).toMatchObject({ status: `healthy`, issues: [] })
+  })
+
+  it(`returns unhealthy when runner lease is expired`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        liveness_lease_expires_at: new Date(Date.now() - 10_000).toISOString(),
+        last_seen_at: new Date(Date.now() - 15_000).toISOString(),
+      })
+    )
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.health.status).toBe(`unhealthy`)
+    expect(body.health.issues.length).toBeGreaterThan(0)
   })
 
   it(`allows unauthenticated runner claims when no server auth is configured`, async () => {
@@ -181,7 +237,7 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockRejectedValue(
@@ -224,7 +280,7 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({
@@ -280,7 +336,7 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({

@@ -239,6 +239,7 @@ export type {
   PullWakeEvent,
   PullWakeRunner,
   PullWakeRunnerConfig,
+  PullWakeRunnerHealth,
   PullWakeStreamResponse,
 } from './pull-wake-runner'
 

@@ -1,6 +1,6 @@
 # Pull-Wake Runner Health Check Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]` / `- [x]`) syntax for tracking.
 
 **Goal:** Add comprehensive diagnostics to the pull-wake runner system: client-side state tracking reported via heartbeats, server-side storage + aggregation, and a `GET /_electric/runners/:id/health` endpoint. Also rename `owner_user_id` → `owner_principal` throughout the runners system, storing principal URLs instead of keys.
 
@@ -16,7 +16,7 @@
 
 - Create: `packages/agents-server/drizzle/0007_runner_diagnostics_and_principal.sql`
 
-- [ ] **Step 1: Write the migration SQL**
+- [x] **Step 1: Write the migration SQL**
 
 Existing `owner_user_id` values are key-form strings (e.g., `local-desktop`). The new column expects principal URLs (e.g., `/principal/system%3Alocal-desktop`). Since we have no backwards compatibility, the migration deletes existing runner rows — runners are ephemeral and will re-register on next startup. Must also clean up dependent tables (`consumer_claims` and `entity_dispatch_state`) since there are no FK constraints to cascade the deletes.
 
@@ -36,7 +36,7 @@ CREATE INDEX idx_runners_owner_principal ON runners (tenant_id, owner_principal)
 ALTER TABLE runners ADD COLUMN diagnostics jsonb;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add packages/agents-server/drizzle/0007_runner_diagnostics_and_principal.sql
@@ -52,7 +52,7 @@ git commit -m "feat(agents-server): add migration for runner diagnostics and pri
 - Modify: `packages/agents-server/src/db/schema.ts:104-144`
 - Modify: `packages/agents-server/src/electric-agents-types.ts:99-136`
 
-- [ ] **Step 1: Update the `runners` table in Drizzle schema**
+- [x] **Step 1: Update the `runners` table in Drizzle schema**
 
 In `packages/agents-server/src/db/schema.ts`, change the `runners` table definition:
 
@@ -73,7 +73,7 @@ In `packages/agents-server/src/db/schema.ts`, change the `runners` table definit
     index(`idx_runners_owner_principal`).on(table.tenantId, table.ownerPrincipal),
 ```
 
-- [ ] **Step 2: Update the `ElectricAgentsRunner` type**
+- [x] **Step 2: Update the `ElectricAgentsRunner` type**
 
 In `packages/agents-server/src/electric-agents-types.ts`, update the runner types:
 
@@ -134,7 +134,7 @@ export interface RegisterRunnerRequest {
 }
 ```
 
-- [ ] **Step 3: Add `RunnerHealthResponse` and `RunnerHealthStatus` types**
+- [x] **Step 3: Add `RunnerHealthResponse` and `RunnerHealthStatus` types**
 
 Append to `packages/agents-server/src/electric-agents-types.ts`:
 
@@ -178,7 +178,7 @@ export interface RunnerHealthResponse {
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add packages/agents-server/src/db/schema.ts packages/agents-server/src/electric-agents-types.ts
@@ -193,7 +193,7 @@ git commit -m "feat(agents-server): rename owner_user_id to owner_principal in s
 
 - Modify: `packages/agents-server/src/entity-registry.ts:74-81, 132-190, 193-217, 1148-1168`
 
-- [ ] **Step 1: Rename `RegisterRunnerInput.ownerUserId` → `ownerPrincipal`**
+- [x] **Step 1: Rename `RegisterRunnerInput.ownerUserId` → `ownerPrincipal`**
 
 In `packages/agents-server/src/entity-registry.ts` (line 74-81):
 
@@ -218,7 +218,7 @@ export interface RegisterRunnerInput {
 }
 ```
 
-- [ ] **Step 2: Add `diagnostics` to `HeartbeatRunnerInput`**
+- [x] **Step 2: Add `diagnostics` to `HeartbeatRunnerInput`**
 
 In `packages/agents-server/src/entity-registry.ts` (line 83-89):
 
@@ -242,7 +242,7 @@ export interface HeartbeatRunnerInput {
 }
 ```
 
-- [ ] **Step 3: Update `createRunner` to use `ownerPrincipal`**
+- [x] **Step 3: Update `createRunner` to use `ownerPrincipal`**
 
 In the `createRunner` method (line 132-167), replace all `ownerUserId` → `ownerPrincipal` references:
 
@@ -285,7 +285,7 @@ In the `createRunner` method (line 132-167), replace all `ownerUserId` → `owne
   }
 ```
 
-- [ ] **Step 4: Update `listRunners` filter**
+- [x] **Step 4: Update `listRunners` filter**
 
 In `listRunners` (line 178-191):
 
@@ -308,7 +308,7 @@ In `listRunners` (line 178-191):
     }
 ```
 
-- [ ] **Step 5: Update `heartbeatRunner` to store diagnostics**
+- [x] **Step 5: Update `heartbeatRunner` to store diagnostics**
 
 In `heartbeatRunner` (line 193-217):
 
@@ -343,7 +343,7 @@ In `heartbeatRunner` (line 193-217):
   }
 ```
 
-- [ ] **Step 6: Add `getActiveClaimsForRunner` query**
+- [x] **Step 6: Add `getActiveClaimsForRunner` query**
 
 Add after `materializeReleasedClaim` (around line 367):
 
@@ -365,7 +365,7 @@ Add after `materializeReleasedClaim` (around line 367):
   }
 ```
 
-- [ ] **Step 7: Add `getDispatchStatsForRunner` query**
+- [x] **Step 7: Add `getDispatchStatsForRunner` query**
 
 Add right after `getActiveClaimsForRunner`:
 
@@ -405,7 +405,7 @@ Add right after `getActiveClaimsForRunner`:
   }
 ```
 
-- [ ] **Step 8: Update `rowToRunner` to include `owner_principal` and `diagnostics`**
+- [x] **Step 8: Update `rowToRunner` to include `owner_principal` and `diagnostics`**
 
 In `rowToRunner` (line 1148-1168):
 
@@ -457,7 +457,7 @@ In `rowToRunner` (line 1148-1168):
   }
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add packages/agents-server/src/entity-registry.ts
@@ -474,7 +474,7 @@ git commit -m "feat(agents-server): update entity registry for principal rename,
 - Modify: `packages/agents-server/src/routing/dispatch-policy.ts:127`
 - Modify: `packages/agents-server/src/utils/server-utils.ts:130-134`
 
-- [ ] **Step 1: Update the registration body schema**
+- [x] **Step 1: Update the registration body schema**
 
 In `packages/agents-server/src/routing/runners-router.ts` (line 36-53):
 
@@ -519,7 +519,7 @@ const registerRunnerBodySchema = Type.Object({
 })
 ```
 
-- [ ] **Step 2: Add `diagnostics` to heartbeat body schema**
+- [x] **Step 2: Add `diagnostics` to heartbeat body schema**
 
 In the `heartbeatBodySchema` (line 55-60):
 
@@ -541,7 +541,7 @@ const heartbeatBodySchema = Type.Object({
 })
 ```
 
-- [ ] **Step 3: Add the health route**
+- [x] **Step 3: Add the health route**
 
 After the existing routes (line 90), add:
 
@@ -549,7 +549,7 @@ After the existing routes (line 90), add:
 runnersRouter.get(`/:id/health`, runnerHealth)
 ```
 
-- [ ] **Step 4: Add `principalKeyFromUrl` import**
+- [x] **Step 4: Add `principalKeyFromUrl` import**
 
 Add to the imports at the top of `runners-router.ts`:
 
@@ -557,7 +557,7 @@ Add to the imports at the top of `runners-router.ts`:
 import { principalKeyFromUrl } from '../principal.js'
 ```
 
-- [ ] **Step 5: Update `registerRunner` handler to use `owner_principal` with strict URL validation**
+- [x] **Step 5: Update `registerRunner` handler to use `owner_principal` with strict URL validation**
 
 No backwards compatibility for key-form principals. If `owner_principal` is provided it must be a valid principal URL accepted by `principalKeyFromUrl()` (e.g., `/principal/user%3Aalice`); otherwise the server derives it from `ctx.principal.url`. Callers must send URLs.
 
@@ -643,7 +643,7 @@ async function registerRunner(
 }
 ```
 
-- [ ] **Step 6: Update `listRunners` handler**
+- [x] **Step 6: Update `listRunners` handler**
 
 In `listRunners` (line 138-154):
 
@@ -693,7 +693,7 @@ async function listRunners(
 }
 ```
 
-- [ ] **Step 7: Update heartbeat handler to pass diagnostics**
+- [x] **Step 7: Update heartbeat handler to pass diagnostics**
 
 In `heartbeat` (line 165-185), add `diagnostics` to the `heartbeatRunner` call:
 
@@ -709,7 +709,7 @@ const runner = await ctx.entityManager.registry.heartbeatRunner({
 })
 ```
 
-- [ ] **Step 8: Update `assertRunnerOwnerIfAuthenticated` to use `principal.url`**
+- [x] **Step 8: Update `assertRunnerOwnerIfAuthenticated` to use `principal.url`**
 
 In `assertRunnerOwnerIfAuthenticated` (line 297-308):
 
@@ -742,7 +742,7 @@ function assertRunnerOwnerIfAuthenticated(
 }
 ```
 
-- [ ] **Step 9: Update all callers of `assertRunnerOwnerIfAuthenticated`**
+- [x] **Step 9: Update all callers of `assertRunnerOwnerIfAuthenticated`**
 
 Change all calls from `runner.owner_user_id` → `runner.owner_principal`:
 
@@ -752,7 +752,7 @@ In `heartbeat` (line 171): `assertRunnerOwnerIfAuthenticated(ctx, existing.owner
 
 In `setRunnerStatus` (line 208): `assertRunnerOwnerIfAuthenticated(ctx, existing.owner_principal)`
 
-- [ ] **Step 10: Update claim auth check**
+- [x] **Step 10: Update claim auth check**
 
 In `claimWake` (line 225):
 
@@ -763,7 +763,7 @@ In `claimWake` (line 225):
   if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
 ```
 
-- [ ] **Step 11: Update `assertDispatchPolicyAllowed` in dispatch-policy.ts**
+- [x] **Step 11: Update `assertDispatchPolicyAllowed` in dispatch-policy.ts**
 
 In `packages/agents-server/src/routing/dispatch-policy.ts` (line 127):
 
@@ -774,7 +774,7 @@ In `packages/agents-server/src/routing/dispatch-policy.ts` (line 127):
   if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
 ```
 
-- [ ] **Step 12: Update runners Shape column allowlist in server-utils.ts**
+- [x] **Step 12: Update runners Shape column allowlist in server-utils.ts**
 
 In `packages/agents-server/src/utils/server-utils.ts` (line 131-133):
 
@@ -785,7 +785,7 @@ In `packages/agents-server/src/utils/server-utils.ts` (line 131-133):
 `"tenant_id","id","owner_principal","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","diagnostics","created_at","updated_at"`
 ```
 
-- [ ] **Step 13: Implement `runnerHealth` handler**
+- [x] **Step 13: Implement `runnerHealth` handler**
 
 Add at the bottom of the file, before `notificationFromClaim`:
 
@@ -890,7 +890,7 @@ async function runnerHealth(
 }
 ```
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add packages/agents-server/src/routing/runners-router.ts packages/agents-server/src/routing/dispatch-policy.ts packages/agents-server/src/utils/server-utils.ts
@@ -905,7 +905,7 @@ git commit -m "feat(agents-server): update runners router, dispatch policy, and 
 
 - Modify: `packages/agents-runtime/src/pull-wake-runner.ts`
 
-- [ ] **Step 1: Add `PullWakeRunnerHealth` interface and diagnostics tracking**
+- [x] **Step 1: Add `PullWakeRunnerHealth` interface and diagnostics tracking**
 
 In `packages/agents-runtime/src/pull-wake-runner.ts`, after the existing `PullWakeRunner` interface (line 48-54), add:
 
@@ -944,7 +944,7 @@ export interface PullWakeRunner {
 }
 ```
 
-- [ ] **Step 2: Add diagnostic state variables inside `createPullWakeRunner`**
+- [x] **Step 2: Add diagnostic state variables inside `createPullWakeRunner`**
 
 After the existing `let currentOffset = config.offset` (line 63), add:
 
@@ -966,7 +966,7 @@ let claimsSkipped = 0
 let claimsFailed = 0
 ```
 
-- [ ] **Step 3: Build the diagnostics snapshot function**
+- [x] **Step 3: Build the diagnostics snapshot function**
 
 Add after the diagnostic variables:
 
@@ -993,7 +993,7 @@ const buildDiagnostics = (): Omit<
 })
 ```
 
-- [ ] **Step 4: Update `heartbeat` to report diagnostics and track heartbeat state**
+- [x] **Step 4: Update `heartbeat` to report diagnostics and track heartbeat state**
 
 Replace the existing `heartbeat` function (line 106-131):
 
@@ -1031,7 +1031,7 @@ const heartbeat = async (signal: AbortSignal): Promise<void> => {
 }
 ```
 
-- [ ] **Step 5: Update `reportError` to track errors**
+- [x] **Step 5: Update `reportError` to track errors**
 
 Replace the existing `reportError` (line 101-104):
 
@@ -1044,7 +1044,7 @@ const reportError = (err: unknown): void => {
 }
 ```
 
-- [ ] **Step 6: Update `claimWake` to track claim results**
+- [x] **Step 6: Update `claimWake` to track claim results**
 
 Replace the existing `claimWake` (line 170-200):
 
@@ -1105,7 +1105,7 @@ const claimWake = async (
 }
 ```
 
-- [ ] **Step 7: Update the `run` function to track stream and event state**
+- [x] **Step 7: Update the `run` function to track stream and event state**
 
 Replace the existing `run` function (line 202-236):
 
@@ -1153,7 +1153,7 @@ const run = async (): Promise<void> => {
 }
 ```
 
-- [ ] **Step 8: Update `start()` to record `startedAt`**
+- [x] **Step 8: Update `start()` to record `startedAt`**
 
 In the returned object's `start()` method (line 239-244):
 
@@ -1169,7 +1169,7 @@ In the returned object's `start()` method (line 239-244):
     },
 ```
 
-- [ ] **Step 9: Add `getHealth()` to the returned object**
+- [x] **Step 9: Add `getHealth()` to the returned object**
 
 Add after the `offset` getter:
 
@@ -1183,7 +1183,7 @@ Add after the `offset` getter:
     },
 ```
 
-- [ ] **Step 10: Update the runtime index exports**
+- [x] **Step 10: Update the runtime index exports**
 
 In `packages/agents-runtime/src/index.ts`, add `PullWakeRunnerHealth` to the exports (line 238-243):
 
@@ -1205,7 +1205,7 @@ export type {
 } from './pull-wake-runner'
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add packages/agents-runtime/src/pull-wake-runner.ts packages/agents-runtime/src/index.ts
@@ -1222,7 +1222,7 @@ git commit -m "feat(agents-runtime): add diagnostics tracking and getHealth() to
 - Modify: `packages/electric-ax/src/start.ts:131-139, 379, 395`
 - Modify: `packages/agents-desktop/src/main.ts:219-274, 1544-1582`
 
-- [ ] **Step 1: Update `BuiltinAgentsServerOptions` in agents/server.ts**
+- [x] **Step 1: Update `BuiltinAgentsServerOptions` in agents/server.ts**
 
 In `packages/agents/src/server.ts` (line 40-51):
 
@@ -1241,7 +1241,7 @@ In `packages/agents/src/server.ts` (line 40-51):
     registerRunner?: boolean
 ```
 
-- [ ] **Step 2: Update `registerPullWakeRunner` to use `owner_principal`**
+- [x] **Step 2: Update `registerPullWakeRunner` to use `owner_principal`**
 
 In `packages/agents/src/server.ts` (line 393-422):
 
@@ -1264,7 +1264,7 @@ In `packages/agents/src/server.ts` (line 393-422):
         }),
 ```
 
-- [ ] **Step 3: Update electric-ax/src/start.ts**
+- [x] **Step 3: Update electric-ax/src/start.ts**
 
 In `packages/electric-ax/src/start.ts`:
 
@@ -1319,7 +1319,7 @@ Update the `BuiltinAgentsServer` call (line 395):
       ownerPrincipal,
 ```
 
-- [ ] **Step 4: Update desktop env var and function names**
+- [x] **Step 4: Update desktop env var and function names**
 
 In `packages/agents-desktop/src/main.ts`:
 
@@ -1384,7 +1384,7 @@ const runnerOwnerPrincipal = runnerOwnerPrincipalFromHeaders(runtimeHeaders)
 
 Update log messages referencing `owner user id` → `owner principal`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/agents/src/server.ts packages/electric-ax/src/start.ts packages/agents-desktop/src/main.ts
@@ -1404,7 +1404,7 @@ git commit -m "feat(agents, electric-ax, agents-desktop): rename ownerUserId to 
 - Modify: `packages/agents-server/test/horton-spawn-worker.test.ts`
 - Modify: `packages/agents-server/test/dispatch-policy-routing.test.ts`
 
-- [ ] **Step 1: Update runners-router.test.ts — principal rename and context**
+- [x] **Step 1: Update runners-router.test.ts — principal rename and context**
 
 In `packages/agents-server/test/runners-router.test.ts`:
 
@@ -1439,7 +1439,7 @@ Update all test assertions that reference `owner_user_id`:
 - Line 128-129: `ownerUserId: `user:owner@example.com`` → `ownerPrincipal: `/principal/user%3Aowner%40example.com``
 - Line 158-159: same replacement
 
-- [ ] **Step 2: Add health endpoint test to runners-router.test.ts**
+- [x] **Step 2: Add health endpoint test to runners-router.test.ts**
 
 Add to the `runner routes` describe block:
 
@@ -1523,7 +1523,7 @@ it(`returns unhealthy when runner lease is expired`, async () => {
 })
 ```
 
-- [ ] **Step 3: Add `getHealth()` test to pull-wake-runner.test.ts**
+- [x] **Step 3: Add `getHealth()` test to pull-wake-runner.test.ts**
 
 Add to the `createPullWakeRunner` describe block in `packages/agents-runtime/test/pull-wake-runner.test.ts`:
 
@@ -1594,7 +1594,7 @@ it(`exposes diagnostics via getHealth()`, async () => {
 })
 ```
 
-- [ ] **Step 4: Update horton-pull-wake-e2e.test.ts for principal rename**
+- [x] **Step 4: Update horton-pull-wake-e2e.test.ts for principal rename**
 
 In `packages/agents-server/test/horton-pull-wake-e2e.test.ts` (line 133):
 
@@ -1605,7 +1605,7 @@ In `packages/agents-server/test/horton-pull-wake-e2e.test.ts` (line 133):
         ownerPrincipal: testPrincipal.url,
 ```
 
-- [ ] **Step 5: Update horton-title-generation.test.ts and horton-spawn-worker.test.ts**
+- [x] **Step 5: Update horton-title-generation.test.ts and horton-spawn-worker.test.ts**
 
 In `packages/agents-server/test/horton-title-generation.test.ts` (line 39):
 
@@ -1625,7 +1625,7 @@ In `packages/agents-server/test/horton-spawn-worker.test.ts` (line 39):
           ownerPrincipal: `/principal/system%3Atest-user`,
 ```
 
-- [ ] **Step 6: Update dispatch-policy-routing.test.ts**
+- [x] **Step 6: Update dispatch-policy-routing.test.ts**
 
 In `packages/agents-server/test/dispatch-policy-routing.test.ts` (line 71):
 
@@ -1636,7 +1636,7 @@ In `packages/agents-server/test/dispatch-policy-routing.test.ts` (line 71):
           owner_principal: `/principal/user%3Aowner%40example.com`,
 ```
 
-- [ ] **Step 7: Run all tests**
+- [x] **Step 7: Run all tests**
 
 Run: `cd packages/agents-runtime && pnpm vitest run test/pull-wake-runner.test.ts --reporter=dot`
 
@@ -1644,7 +1644,7 @@ Run: `cd packages/agents-server && pnpm vitest run test/runners-router.test.ts -
 
 Expected: All tests PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/agents-server/test/ packages/agents-runtime/test/
@@ -1655,33 +1655,33 @@ git commit -m "test: update all tests for principal rename and add health endpoi
 
 ### Task 8: Typecheck and final verification
 
-- [ ] **Step 1: Typecheck agents-runtime**
+- [x] **Step 1: Typecheck agents-runtime**
 
 Run: `pnpm -C packages/agents-runtime build`
 Expected: No errors
 
-- [ ] **Step 2: Typecheck agents-server**
+- [x] **Step 2: Typecheck agents-server**
 
 Run: `pnpm --filter @electric-ax/agents-server typecheck`
 Expected: No errors
 
-- [ ] **Step 3: Typecheck agents**
+- [x] **Step 3: Typecheck agents**
 
 Run: `pnpm --filter @electric-ax/agents typecheck`
 Expected: No errors
 
-- [ ] **Step 4: Typecheck agents-desktop**
+- [x] **Step 4: Typecheck agents-desktop**
 
 Run: `pnpm --filter @electric-ax/agents-desktop typecheck`
 Expected: No errors
 
-- [ ] **Step 5: Run unit tests**
+- [x] **Step 5: Run unit tests**
 
 Run: `cd packages/agents-runtime && pnpm vitest run test/pull-wake-runner.test.ts --reporter=dot`
 Run: `cd packages/agents-server && pnpm vitest run test/runners-router.test.ts --reporter=dot`
 Expected: All PASS
 
-- [ ] **Step 6: Fix any issues and commit**
+- [x] **Step 6: Fix any issues and commit**
 
 If any typecheck or test failures, fix and commit:
 

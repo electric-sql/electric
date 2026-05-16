@@ -6,7 +6,7 @@ import {
   resolveAnthropicApiKey,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
-  resolvePullWakeOwnerId,
+  resolvePullWakeOwnerPrincipal,
   resolvePullWakeRunnerId,
   waitForElectricAgentsServer,
 } from '../src/start'
@@ -100,15 +100,20 @@ describe(`resolvePullWakeRunnerId`, () => {
   })
 })
 
-describe(`resolvePullWakeOwnerId`, () => {
+describe(`resolvePullWakeOwnerPrincipal`, () => {
   it(`uses the agents identity when present`, () => {
     expect(
-      resolvePullWakeOwnerId({ ELECTRIC_AGENTS_IDENTITY: `a@example.com` }, {})
-    ).toBe(`a@example.com`)
+      resolvePullWakeOwnerPrincipal(
+        { ELECTRIC_AGENTS_IDENTITY: `user:a@example.com` },
+        {}
+      )
+    ).toBe(`/principal/user%3Aa%40example.com`)
   })
 
   it(`falls back to the local builtin owner`, () => {
-    expect(resolvePullWakeOwnerId({}, {})).toBe(`builtin-agents`)
+    expect(resolvePullWakeOwnerPrincipal({}, {})).toBe(
+      `/principal/system%3Abuiltin-agents`
+    )
   })
 })
 

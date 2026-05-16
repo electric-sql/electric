@@ -36,7 +36,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
         pullWake: {
           runnerId: `horton-spawn-worker-test`,
           registerRunner: true,
-          ownerUserId: `test-user`,
+          ownerPrincipal: `/principal/system%3Atest-user`,
         },
       })
       await builtinAgentsServer.start()

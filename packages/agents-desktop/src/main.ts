@@ -224,9 +224,9 @@ const PULL_WAKE_REGISTER_RUNNER =
     : [`1`, `true`].includes(
         process.env.ELECTRIC_DESKTOP_PULL_WAKE_REGISTER_RUNNER.trim().toLowerCase()
       )
-const PULL_WAKE_OWNER_USER_ID =
-  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
-  `local-desktop`
+const PULL_WAKE_OWNER_PRINCIPAL =
+  process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
+  `/principal/system%3Alocal-desktop`
 const DEV_PRINCIPAL = ((): string | null => {
   const raw = process.env.ELECTRIC_DESKTOP_PRINCIPAL?.trim() || null
   if (!raw) return null
@@ -262,15 +262,18 @@ function hasHeader(
   return headers ? new Headers(headers).has(name) : false
 }
 
-function runnerOwnerUserIdFromHeaders(
+function runnerOwnerPrincipalFromHeaders(
   headers: Record<string, string> | undefined
-): string {
+): string | undefined {
   const normalized = new Headers(headers)
-  return (
-    normalized.get(`authorization`)?.trim() ||
-    normalized.get(ELECTRIC_PRINCIPAL_HEADER)?.trim() ||
-    PULL_WAKE_OWNER_USER_ID
-  )
+  const principalKey = normalized.get(ELECTRIC_PRINCIPAL_HEADER)?.trim()
+  if (principalKey) {
+    return principalKey.startsWith(`/principal/`)
+      ? principalKey
+      : `/principal/${encodeURIComponent(principalKey)}`
+  }
+  if (normalized.has(`authorization`)) return undefined
+  return PULL_WAKE_OWNER_PRINCIPAL
 }
 
 /**
@@ -1541,14 +1544,14 @@ async function startRuntime(serverId: string): Promise<void> {
 
   const serverWithPrincipal = injectDevPrincipalHeaders(activeServer)
   const runtimeHeaders = mergeHeaders(serverWithPrincipal.headers)
-  const runnerOwnerUserId = runnerOwnerUserIdFromHeaders(runtimeHeaders)
+  const runnerOwnerPrincipal = runnerOwnerPrincipalFromHeaders(runtimeHeaders)
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
   )
   console.info(`[agents-desktop] Pull-wake runner id: ${runnerId}`)
   if (PULL_WAKE_REGISTER_RUNNER) {
     console.info(
-      `[agents-desktop] Pull-wake runner registration enabled; owner user id: ${runnerOwnerUserId}`
+      `[agents-desktop] Pull-wake runner registration enabled; owner principal: ${runnerOwnerPrincipal ?? `(derived from auth)`}`
     )
   } else {
     console.info(
@@ -1572,7 +1575,9 @@ async function startRuntime(serverId: string): Promise<void> {
     pullWake: {
       runnerId,
       registerRunner: PULL_WAKE_REGISTER_RUNNER,
-      ownerUserId: PULL_WAKE_REGISTER_RUNNER ? runnerOwnerUserId : undefined,
+      ownerPrincipal: PULL_WAKE_REGISTER_RUNNER
+        ? runnerOwnerPrincipal
+        : undefined,
       label: `Electric Agents Desktop`,
       headers: runtimeHeaders,
       claimHeaders: runtimeHeaders,

@@ -152,6 +152,71 @@ describe(`createPullWakeRunner`, () => {
     expect(runner.offset).toBe(`42`)
   })
 
+  it(`exposes diagnostics via getHealth()`, async () => {
+    const event: PullWakeEvent = {
+      type: `wake`,
+      subscription_id: `runner:runner-1`,
+      stream: `chat/one/main`,
+      generation: 7,
+      ts: 123,
+    }
+    const notification: WakeNotification = {
+      consumerId: `wake-1`,
+      epoch: 7,
+      wakeId: `wake-1`,
+      streamPath: `/chat/one/main`,
+      streams: [{ path: `/chat/one/main`, offset: `12` }],
+      callback: `http://server/_electric/callback-forward/wake-1`,
+      claimToken: `claim-token`,
+      entity: {
+        type: `chat`,
+        status: `idle`,
+        url: `/chat/one`,
+        streams: { main: `/chat/one/main`, error: `/chat/one/error` },
+      },
+    }
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      Response.json(notification)
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield event
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: {
+        dispatchWake: vi.fn(),
+        drainWakes: vi.fn(async () => undefined),
+        abortWakes: vi.fn(),
+      },
+      heartbeatIntervalMs: 0,
+      streamFactory,
+    })
+
+    const healthBefore = runner.getHealth()
+    expect(healthBefore.running).toBe(false)
+    expect(healthBefore.started_at).toBeNull()
+    expect(healthBefore.events_received).toBe(0)
+
+    runner.start()
+    await runner.waitForStopped()
+
+    const healthAfter = runner.getHealth()
+    expect(healthAfter.running).toBe(false)
+    expect(healthAfter.started_at).not.toBeNull()
+    expect(healthAfter.events_received).toBe(1)
+    expect(healthAfter.claims_succeeded).toBe(1)
+    expect(healthAfter.last_claim_result).toBe(`claimed`)
+    expect(healthAfter.last_dispatch_at).not.toBeNull()
+    expect(healthAfter.offset).toBe(`42`)
+  })
+
   it(`preserves base URL query parameters on stream, claim, and heartbeat requests`, async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) => {
       return new Response(null, { status: 204 })

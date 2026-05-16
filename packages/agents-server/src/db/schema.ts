@@ -106,7 +106,7 @@ export const runners = pgTable(
   {
     tenantId: text(`tenant_id`).notNull().default(`default`),
     id: text(`id`).notNull(),
-    ownerUserId: text(`owner_user_id`).notNull(),
+    ownerPrincipal: text(`owner_principal`).notNull(),
     label: text(`label`).notNull(),
     kind: text(`kind`).notNull().default(`local`),
     adminStatus: text(`admin_status`).notNull().default(`enabled`),
@@ -116,6 +116,7 @@ export const runners = pgTable(
     livenessLeaseExpiresAt: timestamp(`liveness_lease_expires_at`, {
       withTimezone: true,
     }),
+    diagnostics: jsonb(`diagnostics`),
     createdAt: timestamp(`created_at`, { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -126,7 +127,10 @@ export const runners = pgTable(
   (table) => [
     primaryKey({ columns: [table.tenantId, table.id] }),
     unique(`uq_runners_wake_stream`).on(table.tenantId, table.wakeStream),
-    index(`idx_runners_owner_user_id`).on(table.tenantId, table.ownerUserId),
+    index(`idx_runners_owner_principal`).on(
+      table.tenantId,
+      table.ownerPrincipal
+    ),
     index(`idx_runners_admin_status`).on(table.tenantId, table.adminStatus),
     index(`idx_runners_liveness_lease_expires_at`).on(
       table.tenantId,

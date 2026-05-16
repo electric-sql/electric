@@ -105,7 +105,7 @@ export interface RunnerActiveClaim {
 
 export interface ElectricAgentsRunner {
   id: string
-  owner_user_id: string
+  owner_principal: string
   label: string
   kind: RunnerKind
   admin_status: RunnerAdminStatus
@@ -115,13 +115,14 @@ export interface ElectricAgentsRunner {
   active_claims?: Array<RunnerActiveClaim>
   wake_stream: string
   wake_stream_offset?: string
+  diagnostics?: Record<string, unknown>
   created_at: string
   updated_at: string
 }
 
 export interface RegisterRunnerRequest {
   id: string
-  owner_user_id: string
+  owner_principal: string
   label: string
   kind?: RunnerKind
   admin_status?: RunnerAdminStatus
@@ -133,6 +134,45 @@ export interface RunnerHeartbeatRequest {
   wake_stream_offset?: string
   wakeStreamOffset?: string
   liveness_lease_expires_at?: string
+  diagnostics?: Record<string, unknown>
+}
+
+export type RunnerHealthStatus = `healthy` | `degraded` | `unhealthy`
+
+export interface RunnerHealthResponse {
+  runner: {
+    id: string
+    admin_status: RunnerAdminStatus
+    liveness_status: RunnerLiveness | `expired`
+    lease_expires_at: string | null
+    lease_remaining_ms: number | null
+    wake_stream: string
+    wake_stream_offset: string | null
+    last_seen_at: string | null
+    created_at: string
+  }
+  client: Record<string, unknown> | null
+  claims: {
+    active_count: number
+    active: Array<{
+      consumer_id: string
+      epoch: number
+      entity_url: string
+      stream_path: string
+      claimed_at: string
+      last_heartbeat_at: string | null
+      lease_expires_at: string | null
+    }>
+  }
+  dispatch: {
+    entities_with_active_claim: number
+    entities_with_outstanding_wake: number
+    entities_with_pending_work: number
+  }
+  health: {
+    status: RunnerHealthStatus
+    issues: Array<string>
+  }
 }
 
 export interface EntityDispatchState {

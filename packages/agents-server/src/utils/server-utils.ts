@@ -130,7 +130,7 @@ export function buildElectricProxyTarget(options: {
   } else if (table === `runners`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","id","owner_user_id","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","created_at","updated_at"`
+      `"tenant_id","id","owner_principal","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","diagnostics","created_at","updated_at"`
     )
     applyTenantShapeWhere(target, options.tenantId)
   } else if (table === `entity_dispatch_state`) {

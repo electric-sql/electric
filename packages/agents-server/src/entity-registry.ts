@@ -73,7 +73,7 @@ export interface TagStreamOutboxRow {
 
 export interface RegisterRunnerInput {
   id: string
-  ownerUserId: string
+  ownerPrincipal: string
   label: string
   kind?: RunnerKind
   adminStatus?: RunnerAdminStatus
@@ -86,6 +86,7 @@ export interface HeartbeatRunnerInput {
   livenessLeaseExpiresAt?: Date
   leaseMs?: number
   wakeStreamOffset?: string
+  diagnostics?: Record<string, unknown>
 }
 
 export interface MaterializeActiveClaimInput {
@@ -140,7 +141,7 @@ export class PostgresRegistry {
       .values({
         tenantId: this.tenantId,
         id: input.id,
-        ownerUserId: input.ownerUserId,
+        ownerPrincipal: input.ownerPrincipal,
         label: input.label,
         kind: input.kind ?? `local`,
         adminStatus: input.adminStatus ?? `enabled`,
@@ -150,7 +151,7 @@ export class PostgresRegistry {
       .onConflictDoUpdate({
         target: [runners.tenantId, runners.id],
         set: {
-          ownerUserId: input.ownerUserId,
+          ownerPrincipal: input.ownerPrincipal,
           label: input.label,
           kind: input.kind ?? `local`,
           adminStatus: input.adminStatus ?? `enabled`,
@@ -176,11 +177,11 @@ export class PostgresRegistry {
   }
 
   async listRunners(filter?: {
-    ownerUserId?: string
+    ownerPrincipal?: string
   }): Promise<Array<ElectricAgentsRunner>> {
     const conditions = [eq(runners.tenantId, this.tenantId)]
-    if (filter?.ownerUserId) {
-      conditions.push(eq(runners.ownerUserId, filter.ownerUserId))
+    if (filter?.ownerPrincipal) {
+      conditions.push(eq(runners.ownerPrincipal, filter.ownerPrincipal))
     }
     const rows = await this.db
       .select()
@@ -205,6 +206,9 @@ export class PostgresRegistry {
         livenessLeaseExpiresAt: leaseExpiresAt,
         ...(input.wakeStreamOffset !== undefined
           ? { wakeStreamOffset: input.wakeStreamOffset }
+          : {}),
+        ...(input.diagnostics !== undefined
+          ? { diagnostics: input.diagnostics }
           : {}),
         updatedAt: now,
       })
@@ -364,6 +368,54 @@ export class PostgresRegistry {
         )
     }
     return claim
+  }
+
+  async getActiveClaimsForRunner(
+    runnerId: string
+  ): Promise<Array<ConsumerClaim>> {
+    const rows = await this.db
+      .select()
+      .from(consumerClaims)
+      .where(
+        and(
+          eq(consumerClaims.tenantId, this.tenantId),
+          eq(consumerClaims.runnerId, runnerId),
+          eq(consumerClaims.status, `active`)
+        )
+      )
+    return rows.map((row) => this.rowToConsumerClaim(row))
+  }
+
+  async getDispatchStatsForRunner(runnerId: string): Promise<{
+    entities_with_active_claim: number
+    entities_with_outstanding_wake: number
+    entities_with_pending_work: number
+  }> {
+    const rows = await this.db
+      .select()
+      .from(entityDispatchState)
+      .where(
+        and(
+          eq(entityDispatchState.tenantId, this.tenantId),
+          eq(entityDispatchState.activeRunnerId, runnerId)
+        )
+      )
+
+    let activeClaim = 0
+    let outstandingWake = 0
+    let pendingWork = 0
+    for (const row of rows) {
+      if (row.activeConsumerId) activeClaim++
+      if (row.outstandingWakeId && !row.activeConsumerId) outstandingWake++
+      const pending = row.pendingSourceStreams as Array<unknown> | null
+      if (pending && pending.length > 0) pendingWork++
+    }
+
+    return {
+      entities_with_active_claim: activeClaim,
+      entities_with_outstanding_wake: outstandingWake,
+      entities_with_pending_work: pendingWork,
+    }
   }
 
   private entityTypeWhere(name: string) {
@@ -1150,7 +1202,7 @@ export class PostgresRegistry {
     const livenessExpiry = row.livenessLeaseExpiresAt?.getTime()
     return {
       id: row.id,
-      owner_user_id: row.ownerUserId,
+      owner_principal: row.ownerPrincipal,
       label: row.label,
       kind: assertRunnerKind(row.kind),
       admin_status: assertRunnerAdminStatus(row.adminStatus),
@@ -1162,6 +1214,7 @@ export class PostgresRegistry {
       liveness_lease_expires_at: row.livenessLeaseExpiresAt?.toISOString(),
       wake_stream: row.wakeStream,
       wake_stream_offset: row.wakeStreamOffset ?? undefined,
+      diagnostics: (row.diagnostics as Record<string, unknown>) ?? undefined,
       created_at: row.createdAt.toISOString(),
       updated_at: row.updatedAt.toISOString(),
     }

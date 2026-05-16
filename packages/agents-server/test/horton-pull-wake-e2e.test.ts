@@ -130,7 +130,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       pullWake: {
         runnerId,
         registerRunner: true,
-        ownerUserId: testPrincipal.key,
+        ownerPrincipal: testPrincipal.url,
         headers: authHeaders,
         claimHeaders: authHeaders,
         claimTokenHeader: `electric-claim-token`,

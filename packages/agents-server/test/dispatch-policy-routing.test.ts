@@ -45,7 +45,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       kind: `user`,
       id: `owner@example.com`,
       key: `user:owner@example.com`,
-      url: `/principal/user:owner@example.com`,
+      url: `/principal/user%3Aowner%40example.com`,
     },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
@@ -68,7 +68,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
         ),
         getRunner: vi.fn(async () => ({
           id: `runner-1`,
-          owner_user_id: `user:owner@example.com`,
+          owner_principal: `/principal/user%3Aowner%40example.com`,
           label: `Local runner`,
           kind: `local`,
           admin_status: `enabled`,
@@ -175,7 +175,7 @@ describe(`dispatch policy routing`, () => {
       })
     )
     expect(ctx.entityManager.send).toHaveBeenCalledWith(`/chat/one`, {
-      from: `/principal/user:owner@example.com`,
+      from: `/principal/user%3Aowner%40example.com`,
       payload: `hello`,
     })
     expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(

@@ -18,7 +18,7 @@ export { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
 const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
 const DEFAULT_PULL_WAKE_RUNNER_ID = `builtin-agents`
-const DEFAULT_PULL_WAKE_OWNER_ID = `builtin-agents`
+const DEFAULT_PULL_WAKE_OWNER_PRINCIPAL = `/principal/system%3Abuiltin-agents`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
 )
@@ -128,14 +128,13 @@ export function resolvePullWakeRunnerId(
   )
 }
 
-export function resolvePullWakeOwnerId(
+export function resolvePullWakeOwnerPrincipal(
   env: NodeJS.ProcessEnv = process.env,
   fileEnv: Record<string, string> = readDotEnvFile()
 ): string {
-  return (
-    readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`]) ??
-    DEFAULT_PULL_WAKE_OWNER_ID
-  )
+  const identity = readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`])
+  if (identity) return `/principal/${encodeURIComponent(identity)}`
+  return DEFAULT_PULL_WAKE_OWNER_PRINCIPAL
 }
 
 function parseAdditionalServerHeaders(
@@ -376,7 +375,7 @@ export async function startBuiltinAgentsServer(
   const fileEnv = readDotEnvFile(cwd)
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
   const runnerId = resolvePullWakeRunnerId(env, fileEnv)
-  const ownerUserId = resolvePullWakeOwnerId(env, fileEnv)
+  const ownerPrincipal = resolvePullWakeOwnerPrincipal(env, fileEnv)
   const serverHeaders = mergeHeaders(parseAdditionalServerHeaders(env, fileEnv))
   const agentServerUrl =
     params.agentServerUrl ??
@@ -392,7 +391,7 @@ export async function startBuiltinAgentsServer(
     loadProjectMcpConfig: true,
     pullWake: {
       runnerId,
-      ownerUserId,
+      ownerPrincipal,
       registerRunner: true,
       headers: serverHeaders,
       claimHeaders: serverHeaders,

@@ -51,6 +51,27 @@ export interface PullWakeRunner {
   waitForStopped: () => Promise<void>
   readonly running: boolean
   readonly offset: string | undefined
+  getHealth: () => PullWakeRunnerHealth
+}
+
+export interface PullWakeRunnerHealth {
+  running: boolean
+  offset: string | undefined
+  started_at: string | null
+  stream_connected: boolean
+  stream_connected_since: string | null
+  reconnect_count: number
+  last_error: string | null
+  last_error_at: string | null
+  last_heartbeat_at: string | null
+  last_heartbeat_ok: boolean
+  last_claim_at: string | null
+  last_claim_result: `claimed` | `no_work` | `error` | null
+  last_dispatch_at: string | null
+  events_received: number
+  claims_succeeded: number
+  claims_skipped: number
+  claims_failed: number
 }
 
 export function createPullWakeRunner(
@@ -61,6 +82,21 @@ export function createPullWakeRunner(
   let response: PullWakeStreamResponse | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let currentOffset = config.offset
+  let startedAt: string | null = null
+  let streamConnected = false
+  let streamConnectedSince: string | null = null
+  let reconnectCount = 0
+  let lastError: string | null = null
+  let lastErrorAt: string | null = null
+  let lastHeartbeatAt: string | null = null
+  let lastHeartbeatOk = false
+  let lastClaimAt: string | null = null
+  let lastClaimResult: PullWakeRunnerHealth[`last_claim_result`] = null
+  let lastDispatchAt: string | null = null
+  let eventsReceived = 0
+  let claimsSucceeded = 0
+  let claimsSkipped = 0
+  let claimsFailed = 0
 
   const wakePath =
     config.wakeStreamPath ??
@@ -77,6 +113,27 @@ export function createPullWakeRunner(
     config.claimPath ??
     `/_electric/runners/${encodeURIComponent(config.runnerId)}/claim`
   const claimUrl = appendPathToUrl(config.baseUrl, claimPath)
+
+  const buildDiagnostics = (): Omit<
+    PullWakeRunnerHealth,
+    `running` | `offset`
+  > => ({
+    started_at: startedAt,
+    stream_connected: streamConnected,
+    stream_connected_since: streamConnectedSince,
+    reconnect_count: reconnectCount,
+    last_error: lastError,
+    last_error_at: lastErrorAt,
+    last_heartbeat_at: lastHeartbeatAt,
+    last_heartbeat_ok: lastHeartbeatOk,
+    last_claim_at: lastClaimAt,
+    last_claim_result: lastClaimResult,
+    last_dispatch_at: lastDispatchAt,
+    events_received: eventsReceived,
+    claims_succeeded: claimsSucceeded,
+    claims_skipped: claimsSkipped,
+    claims_failed: claimsFailed,
+  })
 
   const resolveHeaders = async (): Promise<Record<string, string>> => {
     const init =
@@ -100,6 +157,8 @@ export function createPullWakeRunner(
 
   const reportError = (err: unknown): void => {
     const error = err instanceof Error ? err : new Error(String(err))
+    lastError = error.message
+    lastErrorAt = new Date().toISOString()
     if (config.onError?.(error) !== true) throw error
   }
 
@@ -115,16 +174,21 @@ export function createPullWakeRunner(
           ...(currentOffset !== undefined
             ? { wake_stream_offset: currentOffset }
             : {}),
+          diagnostics: buildDiagnostics(),
         }),
         signal,
       })
+      lastHeartbeatAt = new Date().toISOString()
       if (!res.ok) {
+        lastHeartbeatOk = false
         throw new Error(
           `Pull-wake runner heartbeat failed for ${config.runnerId}: ${res.status} ${await res.text()}`
         )
       }
+      lastHeartbeatOk = true
     } catch (err) {
       if (!signal.aborted) {
+        lastHeartbeatOk = false
         config.onError?.(err instanceof Error ? err : new Error(String(err)))
       }
     }
@@ -171,32 +235,56 @@ export function createPullWakeRunner(
     event: PullWakeEvent,
     signal: AbortSignal
   ): Promise<WakeNotification | null> => {
+    lastClaimAt = new Date().toISOString()
+    lastClaimResult = null
     const headers = new Headers(await resolveHeaders())
     headers.set(`content-type`, `application/json`)
-    const response = await fetch(claimUrl, {
-      method: `POST`,
-      headers,
-      signal,
-      body: JSON.stringify(event),
-    })
-    if (response.status === 204) return null
-    if (!response.ok) {
-      const text = await response.text()
-      if (
-        response.status === 409 &&
-        (text.includes(`ALREADY_CLAIMED`) || text.includes(`NO_PENDING_WORK`))
-      ) {
+    try {
+      const response = await fetch(claimUrl, {
+        method: `POST`,
+        headers,
+        signal,
+        body: JSON.stringify(event),
+      })
+      if (response.status === 204) {
+        lastClaimResult = `no_work`
+        claimsSkipped++
         return null
       }
-      throw new Error(
-        `Pull-wake claim failed for ${config.runnerId}: ${response.status} ${text}`
-      )
+      if (!response.ok) {
+        const text = await response.text()
+        if (
+          response.status === 409 &&
+          (text.includes(`ALREADY_CLAIMED`) || text.includes(`NO_PENDING_WORK`))
+        ) {
+          lastClaimResult = `no_work`
+          claimsSkipped++
+          return null
+        }
+        lastClaimResult = `error`
+        claimsFailed++
+        throw new Error(
+          `Pull-wake claim failed for ${config.runnerId}: ${response.status} ${text}`
+        )
+      }
+      const notification = (await response.json()) as WakeNotification & {
+        done?: boolean
+      }
+      if (notification.done) {
+        lastClaimResult = `no_work`
+        claimsSkipped++
+        return null
+      }
+      lastClaimResult = `claimed`
+      claimsSucceeded++
+      return notification
+    } catch (err) {
+      if (lastClaimResult !== `no_work` && lastClaimResult !== `error`) {
+        lastClaimResult = `error`
+        claimsFailed++
+      }
+      throw err
     }
-    const notification = (await response.json()) as WakeNotification & {
-      done?: boolean
-    }
-    if (notification.done) return null
-    return notification
   }
 
   const run = async (): Promise<void> => {
@@ -208,15 +296,19 @@ export function createPullWakeRunner(
         offset: currentOffset,
         signal,
       })
+      streamConnected = true
+      streamConnectedSince = new Date().toISOString()
       for await (const event of response.jsonStream()) {
         if (signal.aborted) break
         if (event?.type !== `wake`) continue
+        eventsReceived++
         const notification = await claimWake(event, signal)
         if (notification) {
           config.runtime.dispatchWake(notification, {
             claimHeaders: resolveClaimHeaders,
             claimTokenHeader: config.claimTokenHeader,
           })
+          lastDispatchAt = new Date().toISOString()
           await config.runtime.drainWakes()
         }
         if (response.offset !== undefined) currentOffset = response.offset
@@ -226,9 +318,11 @@ export function createPullWakeRunner(
       })
     } catch (err) {
       if (!signal.aborted) {
+        reconnectCount++
         reportError(err)
       }
     } finally {
+      streamConnected = false
       stopHeartbeat()
       response = null
       controller = null
@@ -239,6 +333,7 @@ export function createPullWakeRunner(
     start() {
       if (loop) return
       controller = new AbortController()
+      startedAt = new Date().toISOString()
       startHeartbeat(controller.signal)
       loop = run().finally(() => {
         loop = null
@@ -262,6 +357,13 @@ export function createPullWakeRunner(
     },
     get offset() {
       return currentOffset
+    },
+    getHealth(): PullWakeRunnerHealth {
+      return {
+        running: loop !== null,
+        offset: currentOffset,
+        ...buildDiagnostics(),
+      }
     },
   }
 }

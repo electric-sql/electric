@@ -13,7 +13,7 @@ import {
 import { routeBody, withSchema } from './schema.js'
 import { subscriptionIdForDispatchTarget } from './dispatch-policy.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
-import { principalFromCreatedBy } from '../principal.js'
+import { principalFromCreatedBy, principalKeyFromUrl } from '../principal.js'
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
@@ -35,7 +35,7 @@ export type RunnersRoutes = RouterType<
 
 const registerRunnerBodySchema = Type.Object({
   id: Type.String(),
-  owner_user_id: Type.Optional(Type.String()),
+  owner_principal: Type.Optional(Type.String()),
   label: Type.String(),
   kind: Type.Optional(
     Type.Union([
@@ -57,6 +57,7 @@ const heartbeatBodySchema = Type.Object({
   wake_stream_offset: Type.Optional(Type.String()),
   wakeStreamOffset: Type.Optional(Type.String()),
   liveness_lease_expires_at: Type.Optional(Type.String()),
+  diagnostics: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 })
 
 const claimBodySchema = Type.Object(
@@ -83,6 +84,7 @@ export const runnersRouter: RunnersRoutes = Router<
 
 runnersRouter.post(`/`, withSchema(registerRunnerBodySchema), registerRunner)
 runnersRouter.get(`/`, listRunners)
+runnersRouter.get(`/:id/health`, runnerHealth)
 runnersRouter.get(`/:id`, getRunner)
 runnersRouter.post(`/:id/heartbeat`, withSchema(heartbeatBodySchema), heartbeat)
 runnersRouter.post(`/:id/enable`, setEnabled)
@@ -105,25 +107,32 @@ async function registerRunner(
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<RegisterRunnerBody>(request)
-  const ownerUserId = parsed.owner_user_id ?? ctx.principal?.key
-  if (!ownerUserId) {
+  const ownerPrincipal = parsed.owner_principal ?? ctx.principal?.url
+  if (!ownerPrincipal) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `owner_user_id is required when no authenticated user is present`,
+      `owner_principal is required when no authenticated principal is present`,
       400
     )
   }
-  if (ctx.principal && ownerUserId !== ctx.principal.key) {
+  if (!principalKeyFromUrl(ownerPrincipal)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `owner_principal must be a valid principal URL accepted by principalKeyFromUrl() (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
+      400
+    )
+  }
+  if (ctx.principal && ownerPrincipal !== ctx.principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
-      `owner_user_id must match the authenticated user`,
+      `owner_principal must match the authenticated principal`,
       403
     )
   }
 
   const runner = await ctx.entityManager.registry.createRunner({
     id: parsed.id,
-    ownerUserId,
+    ownerPrincipal,
     label: parsed.label,
     kind: parsed.kind,
     adminStatus: parsed.admin_status,
@@ -139,16 +148,23 @@ async function listRunners(
   request: RunnersRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
-  const requestedOwner = firstQueryValue(request.query.owner_user_id)
-  if (ctx.principal && requestedOwner && requestedOwner !== ctx.principal.key) {
+  const requestedOwner = firstQueryValue(request.query.owner_principal)
+  if (requestedOwner && !principalKeyFromUrl(requestedOwner)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${requestedOwner}`,
+      400
+    )
+  }
+  if (ctx.principal && requestedOwner && requestedOwner !== ctx.principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
-      `owner_user_id must match the authenticated user`,
+      `owner_principal must match the authenticated principal`,
       403
     )
   }
   const runners = await ctx.entityManager.registry.listRunners({
-    ownerUserId: ctx.principal?.key ?? requestedOwner,
+    ownerPrincipal: ctx.principal?.url ?? requestedOwner,
   })
   return json(runners)
 }
@@ -158,7 +174,7 @@ async function getRunner(
   ctx: TenantContext
 ): Promise<Response> {
   const runner = await requireRunner(ctx, routeParam(request, `id`))
-  assertRunnerOwnerIfAuthenticated(ctx, runner.owner_user_id)
+  assertRunnerOwnerIfAuthenticated(ctx, runner.owner_principal)
   return json(runner)
 }
 
@@ -168,7 +184,7 @@ async function heartbeat(
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
   const existing = await requireRunner(ctx, runnerId)
-  assertRunnerOwnerIfAuthenticated(ctx, existing.owner_user_id)
+  assertRunnerOwnerIfAuthenticated(ctx, existing.owner_principal)
   const parsed = routeBody<HeartbeatBody>(request)
   const runner = await ctx.entityManager.registry.heartbeatRunner({
     runnerId,
@@ -177,6 +193,7 @@ async function heartbeat(
     livenessLeaseExpiresAt: parsed.liveness_lease_expires_at
       ? new Date(parsed.liveness_lease_expires_at)
       : undefined,
+    diagnostics: parsed.diagnostics,
   })
   if (!runner) {
     throw new ElectricAgentsError(ErrCodeNotFound, `Runner not found`, 404)
@@ -205,7 +222,7 @@ async function setRunnerStatus(
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
   const existing = await requireRunner(ctx, runnerId)
-  assertRunnerOwnerIfAuthenticated(ctx, existing.owner_user_id)
+  assertRunnerOwnerIfAuthenticated(ctx, existing.owner_principal)
   const runner = await ctx.entityManager.registry.setRunnerAdminStatus(
     runnerId,
     adminStatus
@@ -222,7 +239,7 @@ async function claimWake(
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
   const runner = await requireRunner(ctx, runnerId)
-  if (ctx.principal && runner.owner_user_id !== ctx.principal.key) {
+  if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner claim requires the authenticated owner`,
@@ -296,15 +313,113 @@ async function requireRunner(ctx: TenantContext, runnerId: string) {
 
 function assertRunnerOwnerIfAuthenticated(
   ctx: TenantContext,
-  ownerUserId: string
+  ownerPrincipal: string
 ): void {
   if (!ctx.principal) return
-  if (ownerUserId === ctx.principal.key) return
+  if (ownerPrincipal === ctx.principal.url) return
   throw new ElectricAgentsError(
     ErrCodeUnauthorized,
     `Runner access requires the authenticated owner`,
     403
   )
+}
+
+async function runnerHealth(
+  request: RunnersRouteRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const runnerId = routeParam(request, `id`)
+  const runner = await requireRunner(ctx, runnerId)
+  assertRunnerOwnerIfAuthenticated(ctx, runner.owner_principal)
+
+  const now = Date.now()
+  const leaseExpiresAt = runner.liveness_lease_expires_at
+    ? new Date(runner.liveness_lease_expires_at).getTime()
+    : null
+
+  const livenessStatus =
+    runner.admin_status === `disabled`
+      ? `offline`
+      : leaseExpiresAt !== null && leaseExpiresAt > now
+        ? `online`
+        : leaseExpiresAt !== null
+          ? `expired`
+          : `offline`
+
+  const [activeClaims, dispatchStats] = await Promise.all([
+    ctx.entityManager.registry.getActiveClaimsForRunner(runnerId),
+    ctx.entityManager.registry.getDispatchStatsForRunner(runnerId),
+  ])
+
+  const clientDiagnostics = runner.diagnostics ?? null
+  const issues: Array<string> = []
+  let healthStatus: `healthy` | `degraded` | `unhealthy` = `healthy`
+
+  if (runner.admin_status === `disabled`) {
+    healthStatus = `unhealthy`
+    issues.push(`Runner is disabled`)
+  }
+  if (livenessStatus === `expired`) {
+    healthStatus = `unhealthy`
+    const ago = leaseExpiresAt ? Math.round((now - leaseExpiresAt) / 1000) : 0
+    issues.push(`Heartbeat lease expired ${ago}s ago`)
+  }
+  if (livenessStatus === `offline` && runner.admin_status === `enabled`) {
+    healthStatus = healthStatus === `unhealthy` ? `unhealthy` : `degraded`
+    issues.push(`Runner has never sent a heartbeat`)
+  }
+  if (clientDiagnostics) {
+    if (clientDiagnostics.stream_connected === false) {
+      if (healthStatus === `healthy`) healthStatus = `degraded`
+      issues.push(`Client reports stream disconnected`)
+    }
+    if (clientDiagnostics.last_heartbeat_ok === false) {
+      if (healthStatus === `healthy`) healthStatus = `degraded`
+      issues.push(`Client reports last heartbeat failed`)
+    }
+    if (
+      typeof clientDiagnostics.reconnect_count === `number` &&
+      clientDiagnostics.reconnect_count > 5
+    ) {
+      if (healthStatus === `healthy`) healthStatus = `degraded`
+      issues.push(
+        `Client has reconnected ${clientDiagnostics.reconnect_count} times`
+      )
+    }
+  } else if (runner.last_seen_at) {
+    if (healthStatus === `healthy`) healthStatus = `degraded`
+    issues.push(`No client diagnostics available`)
+  }
+
+  return json({
+    runner: {
+      id: runner.id,
+      admin_status: runner.admin_status,
+      liveness_status: livenessStatus,
+      lease_expires_at: runner.liveness_lease_expires_at ?? null,
+      lease_remaining_ms:
+        leaseExpiresAt !== null ? Math.max(0, leaseExpiresAt - now) : null,
+      wake_stream: runner.wake_stream,
+      wake_stream_offset: runner.wake_stream_offset ?? null,
+      last_seen_at: runner.last_seen_at ?? null,
+      created_at: runner.created_at,
+    },
+    client: clientDiagnostics,
+    claims: {
+      active_count: activeClaims.length,
+      active: activeClaims.map((c) => ({
+        consumer_id: c.consumer_id,
+        epoch: c.epoch,
+        entity_url: c.entity_url,
+        stream_path: c.stream_path,
+        claimed_at: c.claimed_at,
+        last_heartbeat_at: c.last_heartbeat_at ?? null,
+        lease_expires_at: c.lease_expires_at ?? null,
+      })),
+    },
+    dispatch: dispatchStats,
+    health: { status: healthStatus, issues },
+  })
 }
 
 async function notificationFromClaim(
