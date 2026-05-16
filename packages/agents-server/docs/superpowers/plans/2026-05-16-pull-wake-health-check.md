@@ -1268,16 +1268,16 @@ In `packages/agents/src/server.ts` (line 393-422):
 
 In `packages/electric-ax/src/start.ts`:
 
-First, rename and fix the default constant (line 21). `builtin-agents` is not a valid principal key — must be `kind:id` format:
+First, rename the default constant (line 21). Store a principal URL directly:
 
 ```ts
 // REPLACE:
 const DEFAULT_PULL_WAKE_OWNER_ID = `builtin-agents`
 // WITH:
-const DEFAULT_PULL_WAKE_OWNER_PRINCIPAL = `system:builtin-agents`
+const DEFAULT_PULL_WAKE_OWNER_PRINCIPAL = `/principal/system%3Abuiltin-agents`
 ```
 
-Then rename the function and convert the resolved identity key to a principal URL (line 131-139):
+Then rename the function (line 131-139). `ELECTRIC_AGENTS_IDENTITY` is a principal key (`kind:id`), so convert it to a URL. The default is already a URL:
 
 ```ts
 // REPLACE:
@@ -1295,10 +1295,9 @@ export function resolvePullWakeOwnerPrincipal(
   env: NodeJS.ProcessEnv = process.env,
   fileEnv: Record<string, string> = readDotEnvFile()
 ): string {
-  const key =
-    readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`]) ??
-    DEFAULT_PULL_WAKE_OWNER_PRINCIPAL
-  return `/principal/${encodeURIComponent(key)}`
+  const identity = readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`])
+  if (identity) return `/principal/${encodeURIComponent(identity)}`
+  return DEFAULT_PULL_WAKE_OWNER_PRINCIPAL
 }
 ```
 
@@ -1324,7 +1323,7 @@ Update the `BuiltinAgentsServer` call (line 395):
 
 In `packages/agents-desktop/src/main.ts`:
 
-Rename the constant (line 227-229). No backwards-compat fallback — clean break. The default must be a valid principal key (`kind:id` format):
+Rename the constant (line 227-229). No backwards-compat fallback — clean break. Store a principal URL directly:
 
 ```ts
 // REPLACE:
@@ -1334,10 +1333,10 @@ const PULL_WAKE_OWNER_USER_ID =
 // WITH:
 const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
-  `system:local-desktop`
+  `/principal/system%3Alocal-desktop`
 ```
 
-Rename the helper function (line 265-274). Do NOT use the `authorization` header as a principal source — that's a bearer token, not a principal key. When the request has auth headers, the server middleware extracts `ctx.principal` from them and uses `ctx.principal.url` as the owner. So when only auth is present (no explicit `electric-principal` header), return `undefined` to let the server derive the owner. Only produce a principal URL from an explicit `electric-principal` key or the env var fallback:
+Rename the helper function (line 265-274). Do NOT use the `authorization` header as a principal source — that's a bearer token, not a principal key. When the request has auth headers, the server middleware extracts `ctx.principal` from them and uses `ctx.principal.url` as the owner. So when only auth is present (no explicit `electric-principal` header), return `undefined` to let the server derive the owner:
 
 ```ts
 // REPLACE:
@@ -1363,7 +1362,7 @@ function runnerOwnerPrincipalFromHeaders(
       : `/principal/${encodeURIComponent(principalKey)}`
   }
   if (normalized.has(`authorization`)) return undefined
-  return `/principal/${encodeURIComponent(PULL_WAKE_OWNER_PRINCIPAL)}`
+  return PULL_WAKE_OWNER_PRINCIPAL
 }
 ```
 
