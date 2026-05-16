@@ -24,10 +24,10 @@ export function createSpawnWorkerTool(
   return {
     name: `spawn_worker`,
     label: `Spawn Worker`,
-    description: `Dispatch a subagent (worker) to perform an isolated subtask. Provide a system prompt that briefs the worker like a colleague who just walked into the room (file paths, line numbers, what specifically to do, what form of answer you want back) and pick the subset of tools the worker needs.`,
+    description: `Dispatch a subagent (worker) to perform an isolated subtask. Provide a brief system prompt to give it its role and then a detailed initialMessage which briefs the worker like a colleague who just walked into the room (file paths, line numbers, what specifically to do, what form of answer you want back) and pick the subset of tools the worker needs.`,
     parameters: Type.Object({
       systemPrompt: Type.String({
-        description: `System prompt for the worker. Be concrete: include file paths, line numbers, and the form of answer you want back.`,
+        description: `System prompt for the worker.`,
       }),
       tools: Type.Array(
         Type.Union(WORKER_TOOL_NAMES.map((n) => Type.Literal(n))),
@@ -36,7 +36,7 @@ export function createSpawnWorkerTool(
         }
       ),
       initialMessage: Type.String({
-        description: `First user message sent to the worker. This is what kicks off its run — without it the worker will idle. Describe the concrete task to perform.`,
+        description: `First user message sent to the worker. Be concrete: include file paths, line numbers, and the form of answer you want back. This is what kicks off its run — without it the worker will idle. Describe the concrete task to perform and what form of message you want back.`,
       }),
     }),
     execute: async (_toolCallId, params) => {
