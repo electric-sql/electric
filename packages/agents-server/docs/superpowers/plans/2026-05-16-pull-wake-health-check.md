@@ -21,7 +21,7 @@
 Existing `owner_user_id` values are key-form strings (e.g., `local-desktop`). The new column expects principal URLs (e.g., `/principal/system%3Alocal-desktop`). Since we have no backwards compatibility, the migration deletes existing runner rows — runners are ephemeral and will re-register on next startup. Must also clean up dependent tables (`consumer_claims` and `entity_dispatch_state`) since there are no FK constraints to cascade the deletes.
 
 ```sql
-UPDATE consumer_claims SET status = 'expired', updated_at = NOW() WHERE status = 'active';
+UPDATE consumer_claims SET status = 'expired', updated_at = NOW() WHERE status = 'active' AND runner_id IS NOT NULL;
 --> statement-breakpoint
 UPDATE entity_dispatch_state SET active_runner_id = NULL, active_consumer_id = NULL, active_epoch = NULL, active_claimed_at = NULL, active_lease_expires_at = NULL, updated_at = NOW() WHERE active_runner_id IS NOT NULL;
 --> statement-breakpoint
@@ -559,7 +559,7 @@ import { principalKeyFromUrl } from '../principal.js'
 
 - [ ] **Step 5: Update `registerRunner` handler to use `owner_principal` with strict URL validation**
 
-No backwards compatibility for key-form principals. If `owner_principal` is provided it must be a valid principal URL that `principalKeyFromUrl` can parse (i.e., `/principal/${encodeURIComponent('kind:id')}`); otherwise the server derives it from `ctx.principal.url`. Callers must send URLs.
+No backwards compatibility for key-form principals. If `owner_principal` is provided it must be a valid principal URL accepted by `principalKeyFromUrl()` (e.g., `/principal/user%3Aalice`); otherwise the server derives it from `ctx.principal.url`. Callers must send URLs.
 
 In `registerRunner` (line 103-136):
 
@@ -616,7 +616,7 @@ async function registerRunner(
   if (!principalKeyFromUrl(ownerPrincipal)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
+      `owner_principal must be a valid principal URL accepted by principalKeyFromUrl() (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
       400
     )
   }
@@ -1268,7 +1268,16 @@ In `packages/agents/src/server.ts` (line 393-422):
 
 In `packages/electric-ax/src/start.ts`:
 
-Rename the function and convert the resolved identity key to a principal URL (line 131-139):
+First, rename and fix the default constant (line 21). `builtin-agents` is not a valid principal key — must be `kind:id` format:
+
+```ts
+// REPLACE:
+const DEFAULT_PULL_WAKE_OWNER_ID = `builtin-agents`
+// WITH:
+const DEFAULT_PULL_WAKE_OWNER_PRINCIPAL = `system:builtin-agents`
+```
+
+Then rename the function and convert the resolved identity key to a principal URL (line 131-139):
 
 ```ts
 // REPLACE:
@@ -1288,7 +1297,7 @@ export function resolvePullWakeOwnerPrincipal(
 ): string {
   const key =
     readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`]) ??
-    DEFAULT_PULL_WAKE_OWNER_ID
+    DEFAULT_PULL_WAKE_OWNER_PRINCIPAL
   return `/principal/${encodeURIComponent(key)}`
 }
 ```
@@ -1315,15 +1324,17 @@ Update the `BuiltinAgentsServer` call (line 395):
 
 In `packages/agents-desktop/src/main.ts`:
 
-Rename the constant (line 227-228). No backwards-compat fallback — clean break:
+Rename the constant (line 227-229). No backwards-compat fallback — clean break. The default must be a valid principal key (`kind:id` format):
 
 ```ts
 // REPLACE:
 const PULL_WAKE_OWNER_USER_ID =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_USER_ID?.trim() ||
+  `local-desktop`
 // WITH:
 const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
+  `system:local-desktop`
 ```
 
 Rename the helper function (line 265-274). Do NOT use the `authorization` header as a principal source — that's a bearer token, not a principal key. When the request has auth headers, the server middleware extracts `ctx.principal` from them and uses `ctx.principal.url` as the owner. So when only auth is present (no explicit `electric-principal` header), return `undefined` to let the server derive the owner. Only produce a principal URL from an explicit `electric-principal` key or the env var fallback:
