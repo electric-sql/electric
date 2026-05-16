@@ -231,6 +231,17 @@ export function createPullWakeRunner(
       })) as PullWakeStreamResponse
     })
 
+  const recordClaimSkipped = (): null => {
+    lastClaimResult = `no_work`
+    claimsSkipped++
+    return null
+  }
+
+  const recordClaimError = (): void => {
+    lastClaimResult = `error`
+    claimsFailed++
+  }
+
   const claimWake = async (
     event: PullWakeEvent,
     signal: AbortSignal
@@ -246,23 +257,16 @@ export function createPullWakeRunner(
         signal,
         body: JSON.stringify(event),
       })
-      if (response.status === 204) {
-        lastClaimResult = `no_work`
-        claimsSkipped++
-        return null
-      }
+      if (response.status === 204) return recordClaimSkipped()
       if (!response.ok) {
         const text = await response.text()
         if (
           response.status === 409 &&
           (text.includes(`ALREADY_CLAIMED`) || text.includes(`NO_PENDING_WORK`))
         ) {
-          lastClaimResult = `no_work`
-          claimsSkipped++
-          return null
+          return recordClaimSkipped()
         }
-        lastClaimResult = `error`
-        claimsFailed++
+        recordClaimError()
         throw new Error(
           `Pull-wake claim failed for ${config.runnerId}: ${response.status} ${text}`
         )
@@ -270,18 +274,13 @@ export function createPullWakeRunner(
       const notification = (await response.json()) as WakeNotification & {
         done?: boolean
       }
-      if (notification.done) {
-        lastClaimResult = `no_work`
-        claimsSkipped++
-        return null
-      }
+      if (notification.done) return recordClaimSkipped()
       lastClaimResult = `claimed`
       claimsSucceeded++
       return notification
     } catch (err) {
-      if (lastClaimResult !== `no_work` && lastClaimResult !== `error`) {
-        lastClaimResult = `error`
-        claimsFailed++
+      if (lastClaimResult === null || lastClaimResult === `claimed`) {
+        recordClaimError()
       }
       throw err
     }

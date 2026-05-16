@@ -330,6 +330,73 @@ describe(`runner routes`, () => {
     )
   })
 
+  it(`rejects invalid owner_principal with 400`, async () => {
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners`, {
+        id: `runner-1`,
+        owner_principal: `/principal/not-a-valid-key`,
+        label: `Local runner`,
+      }),
+      buildContext({
+        principal: {
+          kind: `user`,
+          id: `owner@example.com`,
+          key: `user:owner@example.com`,
+          url: `/principal/user%3Aowner%40example.com`,
+        },
+      })
+    )
+
+    expect(response.status).toBe(400)
+  })
+
+  it(`returns unhealthy when runner is disabled`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        admin_status: `disabled`,
+        liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+        last_seen_at: new Date().toISOString(),
+      })
+    )
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.health.status).toBe(`unhealthy`)
+    expect(body.health.issues).toContain(`Runner is disabled`)
+    expect(body.runner.liveness_status).toBe(`offline`)
+  })
+
+  it(`returns degraded when stream is disconnected`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+        last_seen_at: new Date().toISOString(),
+        diagnostics: {
+          stream_connected: false,
+          reconnect_count: 2,
+          last_heartbeat_ok: true,
+        },
+      })
+    )
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.health.status).toBe(`degraded`)
+    expect(body.health.issues).toContain(`Client reports stream disconnected`)
+  })
+
   it(`uses the pending stream from multi-stream claim responses`, async () => {
     const ctx = buildContext({
       principal: {

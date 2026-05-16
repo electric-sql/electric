@@ -9,6 +9,7 @@ import {
   ErrCodeNotFound,
   ErrCodeNotRunning,
   ErrCodeUnauthorized,
+  type RunnerHealthResponse,
 } from '../electric-agents-types.js'
 import { routeBody, withSchema } from './schema.js'
 import { subscriptionIdForDispatchTarget } from './dispatch-policy.js'
@@ -118,7 +119,7 @@ async function registerRunner(
   if (!principalKeyFromUrl(ownerPrincipal)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `owner_principal must be a valid principal URL accepted by principalKeyFromUrl() (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
+      `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
       400
     )
   }
@@ -337,61 +338,69 @@ async function runnerHealth(
     ? new Date(runner.liveness_lease_expires_at).getTime()
     : null
 
-  const livenessStatus =
-    runner.admin_status === `disabled`
-      ? `offline`
-      : leaseExpiresAt !== null && leaseExpiresAt > now
-        ? `online`
-        : leaseExpiresAt !== null
-          ? `expired`
-          : `offline`
+  let livenessStatus: `online` | `offline` | `expired`
+  if (runner.admin_status === `disabled`) {
+    livenessStatus = `offline`
+  } else if (leaseExpiresAt !== null && leaseExpiresAt > now) {
+    livenessStatus = `online`
+  } else if (leaseExpiresAt !== null) {
+    livenessStatus = `expired`
+  } else {
+    livenessStatus = `offline`
+  }
 
   const [activeClaims, dispatchStats] = await Promise.all([
     ctx.entityManager.registry.getActiveClaimsForRunner(runnerId),
     ctx.entityManager.registry.getDispatchStatsForRunner(runnerId),
   ])
 
-  const clientDiagnostics = runner.diagnostics ?? null
+  const clientDiagnostics =
+    (runner.diagnostics as RunnerHealthResponse[`client`]) ?? null
   const issues: Array<string> = []
   let healthStatus: `healthy` | `degraded` | `unhealthy` = `healthy`
 
+  const escalate = (floor: `degraded` | `unhealthy`): void => {
+    if (floor === `unhealthy`) healthStatus = `unhealthy`
+    else if (healthStatus === `healthy`) healthStatus = `degraded`
+  }
+
   if (runner.admin_status === `disabled`) {
-    healthStatus = `unhealthy`
+    escalate(`unhealthy`)
     issues.push(`Runner is disabled`)
   }
   if (livenessStatus === `expired`) {
-    healthStatus = `unhealthy`
+    escalate(`unhealthy`)
     const ago = leaseExpiresAt ? Math.round((now - leaseExpiresAt) / 1000) : 0
     issues.push(`Heartbeat lease expired ${ago}s ago`)
   }
   if (livenessStatus === `offline` && runner.admin_status === `enabled`) {
-    healthStatus = healthStatus === `unhealthy` ? `unhealthy` : `degraded`
+    escalate(`degraded`)
     issues.push(`Runner has never sent a heartbeat`)
   }
   if (clientDiagnostics) {
     if (clientDiagnostics.stream_connected === false) {
-      if (healthStatus === `healthy`) healthStatus = `degraded`
+      escalate(`degraded`)
       issues.push(`Client reports stream disconnected`)
     }
     if (clientDiagnostics.last_heartbeat_ok === false) {
-      if (healthStatus === `healthy`) healthStatus = `degraded`
+      escalate(`degraded`)
       issues.push(`Client reports last heartbeat failed`)
     }
     if (
       typeof clientDiagnostics.reconnect_count === `number` &&
       clientDiagnostics.reconnect_count > 5
     ) {
-      if (healthStatus === `healthy`) healthStatus = `degraded`
+      escalate(`degraded`)
       issues.push(
         `Client has reconnected ${clientDiagnostics.reconnect_count} times`
       )
     }
   } else if (runner.last_seen_at) {
-    if (healthStatus === `healthy`) healthStatus = `degraded`
+    escalate(`degraded`)
     issues.push(`No client diagnostics available`)
   }
 
-  return json({
+  const body: RunnerHealthResponse = {
     runner: {
       id: runner.id,
       admin_status: runner.admin_status,
@@ -419,7 +428,8 @@ async function runnerHealth(
     },
     dispatch: dispatchStats,
     health: { status: healthStatus, issues },
-  })
+  }
+  return json(body)
 }
 
 async function notificationFromClaim(

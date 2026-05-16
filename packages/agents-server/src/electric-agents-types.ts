@@ -2,7 +2,10 @@
  * Types for the Electric Agents entity runtime.
  */
 
-import type { WebhookNotification } from '@electric-ax/agents-runtime'
+import type {
+  PullWakeRunnerHealth,
+  WebhookNotification,
+} from '@electric-ax/agents-runtime'
 import type { Principal } from './principal.js'
 
 type WakeNotification = WebhookNotification
@@ -151,7 +154,7 @@ export interface RunnerHealthResponse {
     last_seen_at: string | null
     created_at: string
   }
-  client: Record<string, unknown> | null
+  client: Omit<PullWakeRunnerHealth, `running` | `offset`> | null
   claims: {
     active_count: number
     active: Array<{
