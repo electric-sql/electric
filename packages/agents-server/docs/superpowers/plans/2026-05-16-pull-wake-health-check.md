@@ -18,9 +18,13 @@
 
 - [ ] **Step 1: Write the migration SQL**
 
-Existing `owner_user_id` values are key-form strings (e.g., `local-desktop`). The new column expects principal URLs (e.g., `/principal/local-desktop`). Since we have no backwards compatibility, the migration truncates existing runner rows — runners are ephemeral and will re-register on next startup.
+Existing `owner_user_id` values are key-form strings (e.g., `local-desktop`). The new column expects principal URLs (e.g., `/principal/system%3Alocal-desktop`). Since we have no backwards compatibility, the migration deletes existing runner rows — runners are ephemeral and will re-register on next startup. Must also clean up dependent tables (`consumer_claims` and `entity_dispatch_state`) since there are no FK constraints to cascade the deletes.
 
 ```sql
+UPDATE consumer_claims SET status = 'expired', updated_at = NOW() WHERE status = 'active';
+--> statement-breakpoint
+UPDATE entity_dispatch_state SET active_runner_id = NULL, active_consumer_id = NULL, active_epoch = NULL, active_claimed_at = NULL, active_lease_expires_at = NULL, updated_at = NOW() WHERE active_runner_id IS NOT NULL;
+--> statement-breakpoint
 DELETE FROM runners;
 --> statement-breakpoint
 ALTER TABLE runners RENAME COLUMN owner_user_id TO owner_principal;
@@ -545,9 +549,17 @@ After the existing routes (line 90), add:
 runnersRouter.get(`/:id/health`, runnerHealth)
 ```
 
-- [ ] **Step 4: Update `registerRunner` handler to use `owner_principal` with strict URL validation**
+- [ ] **Step 4: Add `principalKeyFromUrl` import**
 
-No backwards compatibility for key-form principals. If `owner_principal` is provided it must be a URL (starts with `/principal/`); otherwise the server derives it from `ctx.principal.url`. Callers must send URLs.
+Add to the imports at the top of `runners-router.ts`:
+
+```ts
+import { principalKeyFromUrl } from '../principal.js'
+```
+
+- [ ] **Step 5: Update `registerRunner` handler to use `owner_principal` with strict URL validation**
+
+No backwards compatibility for key-form principals. If `owner_principal` is provided it must be a valid principal URL that `principalKeyFromUrl` can parse (i.e., `/principal/${encodeURIComponent('kind:id')}`); otherwise the server derives it from `ctx.principal.url`. Callers must send URLs.
 
 In `registerRunner` (line 103-136):
 
@@ -601,10 +613,10 @@ async function registerRunner(
       400
     )
   }
-  if (!ownerPrincipal.startsWith(`/principal/`)) {
+  if (!principalKeyFromUrl(ownerPrincipal)) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
-      `owner_principal must be a principal URL (starting with /principal/), got: ${ownerPrincipal}`,
+      `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
       400
     )
   }
@@ -631,7 +643,7 @@ async function registerRunner(
 }
 ```
 
-- [ ] **Step 5: Update `listRunners` handler**
+- [ ] **Step 6: Update `listRunners` handler**
 
 In `listRunners` (line 138-154):
 
@@ -660,6 +672,13 @@ async function listRunners(
   ctx: TenantContext
 ): Promise<Response> {
   const requestedOwner = firstQueryValue(request.query.owner_principal)
+  if (requestedOwner && !principalKeyFromUrl(requestedOwner)) {
+    throw new ElectricAgentsError(
+      ErrCodeInvalidRequest,
+      `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${requestedOwner}`,
+      400
+    )
+  }
   if (ctx.principal && requestedOwner && requestedOwner !== ctx.principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
@@ -674,7 +693,7 @@ async function listRunners(
 }
 ```
 
-- [ ] **Step 6: Update heartbeat handler to pass diagnostics**
+- [ ] **Step 7: Update heartbeat handler to pass diagnostics**
 
 In `heartbeat` (line 165-185), add `diagnostics` to the `heartbeatRunner` call:
 
@@ -690,7 +709,7 @@ const runner = await ctx.entityManager.registry.heartbeatRunner({
 })
 ```
 
-- [ ] **Step 7: Update `assertRunnerOwnerIfAuthenticated` to use `principal.url`**
+- [ ] **Step 8: Update `assertRunnerOwnerIfAuthenticated` to use `principal.url`**
 
 In `assertRunnerOwnerIfAuthenticated` (line 297-308):
 
@@ -723,7 +742,7 @@ function assertRunnerOwnerIfAuthenticated(
 }
 ```
 
-- [ ] **Step 8: Update all callers of `assertRunnerOwnerIfAuthenticated`**
+- [ ] **Step 9: Update all callers of `assertRunnerOwnerIfAuthenticated`**
 
 Change all calls from `runner.owner_user_id` → `runner.owner_principal`:
 
@@ -733,7 +752,7 @@ In `heartbeat` (line 171): `assertRunnerOwnerIfAuthenticated(ctx, existing.owner
 
 In `setRunnerStatus` (line 208): `assertRunnerOwnerIfAuthenticated(ctx, existing.owner_principal)`
 
-- [ ] **Step 9: Update claim auth check**
+- [ ] **Step 10: Update claim auth check**
 
 In `claimWake` (line 225):
 
@@ -744,7 +763,7 @@ In `claimWake` (line 225):
   if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
 ```
 
-- [ ] **Step 10: Update `assertDispatchPolicyAllowed` in dispatch-policy.ts**
+- [ ] **Step 11: Update `assertDispatchPolicyAllowed` in dispatch-policy.ts**
 
 In `packages/agents-server/src/routing/dispatch-policy.ts` (line 127):
 
@@ -755,7 +774,7 @@ In `packages/agents-server/src/routing/dispatch-policy.ts` (line 127):
   if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
 ```
 
-- [ ] **Step 11: Update runners Shape column allowlist in server-utils.ts**
+- [ ] **Step 12: Update runners Shape column allowlist in server-utils.ts**
 
 In `packages/agents-server/src/utils/server-utils.ts` (line 131-133):
 
@@ -766,7 +785,7 @@ In `packages/agents-server/src/utils/server-utils.ts` (line 131-133):
 `"tenant_id","id","owner_principal","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","diagnostics","created_at","updated_at"`
 ```
 
-- [ ] **Step 12: Implement `runnerHealth` handler**
+- [ ] **Step 13: Implement `runnerHealth` handler**
 
 Add at the bottom of the file, before `notificationFromClaim`:
 
@@ -871,7 +890,7 @@ async function runnerHealth(
 }
 ```
 
-- [ ] **Step 13: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
 git add packages/agents-server/src/routing/runners-router.ts packages/agents-server/src/routing/dispatch-policy.ts packages/agents-server/src/utils/server-utils.ts
@@ -1307,7 +1326,7 @@ const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
 ```
 
-Rename the helper function (line 265-274). The server requires `owner_principal` to be a principal URL, so convert any key-form value to a URL before returning:
+Rename the helper function (line 265-274). Do NOT use the `authorization` header as a principal source — that's a bearer token, not a principal key. When the request has auth headers, the server middleware extracts `ctx.principal` from them and uses `ctx.principal.url` as the owner. So when only auth is present (no explicit `electric-principal` header), return `undefined` to let the server derive the owner. Only produce a principal URL from an explicit `electric-principal` key or the env var fallback:
 
 ```ts
 // REPLACE:
@@ -1324,14 +1343,16 @@ function runnerOwnerUserIdFromHeaders(
 // WITH:
 function runnerOwnerPrincipalFromHeaders(
   headers: Record<string, string> | undefined
-): string {
+): string | undefined {
   const normalized = new Headers(headers)
-  const key =
-    normalized.get(ELECTRIC_PRINCIPAL_HEADER)?.trim() ||
-    normalized.get(`authorization`)?.trim() ||
-    PULL_WAKE_OWNER_PRINCIPAL
-  if (key.startsWith(`/principal/`)) return key
-  return `/principal/${encodeURIComponent(key)}`
+  const principalKey = normalized.get(ELECTRIC_PRINCIPAL_HEADER)?.trim()
+  if (principalKey) {
+    return principalKey.startsWith(`/principal/`)
+      ? principalKey
+      : `/principal/${encodeURIComponent(principalKey)}`
+  }
+  if (normalized.has(`authorization`)) return undefined
+  return `/principal/${encodeURIComponent(PULL_WAKE_OWNER_PRINCIPAL)}`
 }
 ```
 
