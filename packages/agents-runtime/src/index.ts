@@ -205,7 +205,7 @@ export type {
   TaggedQuery,
 } from './observation-sources'
 
-export { processWake, processWebhookWake } from './process-wake'
+export { processWake } from './process-wake'
 export type { ProcessWakeConfig } from './types'
 
 export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
@@ -240,6 +240,7 @@ export type {
   PullWakeRunner,
   PullWakeRunnerConfig,
   PullWakeRunnerHealth,
+  PullWakeRunnerStatus,
   PullWakeStreamResponse,
 } from './pull-wake-runner'
 

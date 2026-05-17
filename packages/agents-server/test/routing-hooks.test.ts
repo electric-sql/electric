@@ -41,6 +41,9 @@ describe(`routing/hooks`, () => {
     expect(wrapped?.headers.get(`access-control-allow-methods`)).toContain(
       `GET`
     )
+    expect(wrapped?.headers.get(`access-control-allow-headers`)).toContain(
+      `electric-principal`
+    )
   })
 
   it(`errorMapper converts ElectricAgentsError to API error JSON`, async () => {

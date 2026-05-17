@@ -297,7 +297,7 @@ function createInFlightTracker() {
   }
 }
 
-export async function processWebhookWake(
+export async function processWake(
   notification: WebhookNotification,
   config: ProcessWakeConfig
 ): Promise<WakeResult | null> {
@@ -1819,8 +1819,6 @@ export async function processWebhookWake(
 
   return result
 }
-
-export const processWake: typeof processWebhookWake = processWebhookWake
 
 async function sendDone(
   callback: string,

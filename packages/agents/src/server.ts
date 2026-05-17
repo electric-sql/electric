@@ -47,6 +47,7 @@ export interface BuiltinAgentsServerOptions {
     claimHeaders?: PullWakeRunnerConfig[`claimHeaders`]
     claimTokenHeader?: PullWakeRunnerConfig[`claimTokenHeader`]
     heartbeatIntervalMs?: PullWakeRunnerConfig[`heartbeatIntervalMs`]
+    eventHeartbeatThrottleMs?: PullWakeRunnerConfig[`eventHeartbeatThrottleMs`]
     leaseMs?: PullWakeRunnerConfig[`leaseMs`]
   }
   /** Invoked when an `authorizationCode` server needs user consent. */
@@ -317,11 +318,11 @@ export class BuiltinAgentsServer {
         claimHeaders: pullWake.claimHeaders,
         claimTokenHeader: pullWake.claimTokenHeader,
         heartbeatIntervalMs: pullWake.heartbeatIntervalMs,
+        eventHeartbeatThrottleMs: pullWake.eventHeartbeatThrottleMs,
         leaseMs: pullWake.leaseMs,
         offset: registeredRunner?.wake_stream_offset,
         onError: (error) => {
           serverLog.error(`[builtin-agents] pull-wake runner failed`, error)
-          return true
         },
       })
       this.pullWakeRunner.start()
