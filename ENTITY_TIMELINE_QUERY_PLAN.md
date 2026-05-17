@@ -80,15 +80,16 @@ callers can choose how inbox messages participate in the timeline:
 
 ```ts
 type EntityTimelineInboxMode =
-  | `processed` // default: processed messages inline, pending returned separately
+  | `processed` // default: processed + optimistic local pending rows inline
   | `none` // no inbox messages in the timeline
   | `all` // include processed, pending, paused, steer, and cancelled inbox rows
 ```
 
 Default to `processed`. This matches the built-in chat UX: processed user
-messages appear chronologically in the timeline, while pending/queued messages
-remain separately editable in the composer/drawer and can be projected
-optimistically at the bottom of the UI.
+messages appear chronologically in the timeline, and optimistic local pending
+rows created through TanStack DB mutation APIs also appear in the same timeline
+path while they are unsynced. Non-optimistic queued rows can still remain
+separately editable in the composer/drawer.
 
 Use `none` for UIs that want a pure event/run stream without user messages.
 Use `all` for debugging/audit UIs where pending/cancelled/steer rows should be
@@ -97,6 +98,21 @@ visible inline exactly where they happened.
 `useEntityTimeline` should always be free to run a separate pending-inbox query
 when the UI needs editable queued messages, regardless of the main timeline
 inbox mode.
+
+To avoid duplicate rendering, the hook should separate timeline rendering from
+editable pending state:
+
+- `rows` follows `inboxMode`.
+- `pendingInbox` is returned for composer/drawer editing state.
+- In the default `processed` mode, `rows` includes synced processed inbox rows
+  plus local optimistic pending inbox rows created through DB mutation APIs.
+- When `inboxMode: 'all'`, all pending inbox messages may appear in `rows`;
+  callers that also render `pendingInbox` controls must key by `row.inbox.$key`
+  and avoid drawing a second message bubble for the same pending row.
+- Optimistic pending inbox inserts should go into the inbox collection with a
+  pending `_timeline_order`, so they appear through the same `rows` path. The
+  separate `pendingInbox` result is metadata/editing state for the same row, not
+  a second rendering source.
 
 ## Why this exists
 
@@ -160,7 +176,7 @@ Each source subquery should project rows into a runtime-level timeline event
 shape with a common base:
 
 ```ts
-type EntityTimelineOrder = string | number
+type EntityTimelineOrder = string
 
 type EntityTimelineRowBase = {
   order: EntityTimelineOrder
@@ -222,9 +238,18 @@ Filter to processed messages by default. The exact filter depends on
 ```ts
 const inbox = q
   .from({ inbox: db.collections.inbox })
-  .where(({ inbox }) => eq(coalesce(inbox.status, `processed`), `processed`))
+  .where(({ inbox }) =>
+    opts.inboxMode === `processed`
+      ? or(
+          eq(coalesce(inbox.status, `processed`), `processed`),
+          isOptimisticLocalRow(inbox)
+        )
+      : opts.inboxMode === `all`
+        ? true
+        : false
+  )
   .select(({ inbox }) => ({
-    order: coalesce(inbox._seq, -1),
+    order: inbox._timeline_order,
     from: coalesce(inbox.from, `unknown`),
     payload: inbox.payload,
     timestamp: coalesce(inbox.timestamp, EPOCH_ISO),
@@ -245,7 +270,7 @@ The run source is the most important for fine-grained streaming behavior:
 
 ```ts
 const run = q.from({ run: db.collections.runs }).select(({ run }) => ({
-  order: coalesce(run._seq, -1),
+  order: run._timeline_order,
   status: run.status,
   finish_reason: run.finish_reason,
   items: runItemsInclude(run.key),
@@ -362,7 +387,7 @@ Project the current wake display payload:
 
 ```ts
 const wake = q.from({ wake: db.collections.wakes }).select(({ wake }) => ({
-  order: coalesce(wake._seq, -1),
+  order: wake._timeline_order,
   payload: {
     type: `wake` as const,
     timestamp: wake.timestamp,
@@ -384,7 +409,7 @@ timeline. The new query should include them directly:
 const manifest = q
   .from({ manifest: db.collections.manifests })
   .select(({ manifest }) => ({
-    order: coalesce(manifest._seq, -1),
+    order: manifest._timeline_order,
     manifest,
   }))
 ```
@@ -406,7 +431,7 @@ timeline UIs, even if the built-in chat UI chooses not to display them yet:
 const contextInserted = q
   .from({ contextInserted: db.collections.contextInserted })
   .select(({ contextInserted }) => ({
-    order: coalesce(contextInserted._seq, -1),
+    order: contextInserted._timeline_order,
     id: contextInserted.id,
     name: contextInserted.name,
     attrs: contextInserted.attrs,
@@ -443,45 +468,70 @@ it through state/status APIs instead.
 
 ## Ordering
 
-Prefer an explicit stable event-order value written during stream writes. The
-timeline needs "when this event first happened", not "when this row was last
-updated". Run rows, step rows, text rows, and tool-call rows are often updated
-after they are inserted; using the last update offset would move old timeline
-items forward incorrectly.
+Use a stable first-event order injected by `createEntityStreamDB` at stream
+ingest time.
 
-Best target design:
+Do not use the existing `__electricRowOffsets` map for live timeline ordering.
+That map is currently updated on every change event, so it represents the last
+offset that affected a row. The timeline needs "when this event first happened",
+not "when this row was last updated". Run rows, step rows, text rows, and
+tool-call rows are often updated after they are inserted; using a last-update
+offset would move old timeline items forward incorrectly.
 
-- add or reuse a cross-collection `timeline_order`/event-order value on built-in
-  event rows;
-- assign it when the event row is first written;
-- preserve it on later updates;
-- use it as the primary order for top-level rows and nested run items.
+Decision:
 
-If Electric exposes the insert offset or stable first offset for each row in live
-queries, that can replace an explicit event-order field. If the available offset
-is the last offset that affected the row, do not use it for timeline ordering.
+- Add an internal row field, `_timeline_order`, to the built-in event row
+  types/schemas that participate in timelines.
+- In `createEntityStreamDB`'s `onBeforeBatch`, derive a stable order token for
+  each incoming change event from the Electric/Durable Streams offset and the
+  item index within the batch.
+- Store the first order token seen for each `(collection, row key)` in a map.
+- Before StreamDB applies each insert/update/upsert change, inject that first
+  order token into `item.value._timeline_order`.
+- Preserve the original first order token on later updates.
+- Use `_timeline_order` as the primary order expression in
+  `createEntityTimelineQuery`.
 
-`_seq` can remain a temporary compatibility source while the new ordering field
-or first-offset support is implemented, but the plan should not treat `_seq` as
-the final design.
+`_timeline_order` should be a lexically sortable string. Use an
+offset-plus-index token rather than raw offset alone. Some stream batches can
+contain multiple events, and not every event is guaranteed to carry a unique
+per-item offset. A token such as `${offset}:${itemIndex.padStart(...)}` gives a
+stable total order while still preserving the underlying stream order.
 
-For run rows, preserve the existing behavior where a run is anchored to the
-earliest child event rather than a later run-row update. This may require a
-derived `runOrder` subquery/field that is the minimum of:
+Because `_timeline_order` is an actual query field, it must be accepted by the
+built-in row schemas/types. Do not rely on mutating event values if validation or
+row parsing would strip the field before TanStack DB sees it.
 
-- the run row order;
-- text item order;
-- first text delta order;
-- tool call order;
-- step order.
+Reset/replay behavior:
 
-If that is too much for the first pass, document the gap and keep tests around
-the old aggregate query until the row-oriented query reaches parity.
+- On stream reset, clear the first-order map.
+- During replay, rebuild `_timeline_order` from replayed events.
+- If the first event observed for a row is an update rather than an insert, use
+  that first observed update's order. It is still stable for the local
+  materialization.
 
-If we introduce a stable event-order field, this becomes simpler: the run's
-display order should be the minimum event order across the run row, text rows,
-text chunks, tool calls, and steps. That keeps a streaming run anchored near the
-message that caused it even when the run row is completed later.
+Optimistic local rows:
+
+- Pending optimistic rows that do not yet have a stream offset should receive a
+  high pending order token so they sort after persisted rows.
+- Pending order tokens should preserve local insertion order, e.g.
+  `pending:${counter.padStart(...)}`.
+- Optimistic rows should render through the same timeline query/component path as
+  synced rows.
+- Optimistic rows should be applied through TanStack DB mutation APIs so the
+  collection sees them as normal local rows, including their pending
+  `_timeline_order`.
+- When the persisted stream event arrives, the server-backed row should replace
+  the optimistic row and use its real `_timeline_order` from the writeback.
+
+This keeps ordering local to StreamDB ingestion and avoids modifying every write
+site (`EntityManager`, `outbound-bridge`, context writes, wake writes, etc.) to
+precompute an order value they do not know yet.
+
+For run rows, use `run._timeline_order` directly. Because `_timeline_order` is
+assigned from the first event observed for the run row and preserved on later
+updates, completion updates no longer move the run later in the timeline. This
+removes the need for the current imperative run/text re-anchoring workaround.
 
 ## Runtime exports
 
@@ -565,18 +615,34 @@ Add runtime tests for the new query:
   includes.
 - Child UI components subscribe to child collections with `useLiveQuery`.
 - A tool call update updates the matching nested run item.
-- Pending inbox rows are excluded from the main timeline by default.
+- Non-optimistic pending inbox rows are excluded from the main timeline by
+  default.
+- Optimistic pending rows created through DB mutation APIs are included in the
+  main timeline by default.
 - `opts.inboxMode` can exclude inbox rows or include all inbox statuses.
 - Manifests are present in the timeline without a separate merge.
-- Run rows preserve current ordering semantics, including the "run anchored to
-  earliest child event" behavior.
+- Run rows keep their first-event `_timeline_order` when completed, so completion
+  updates do not move them later in the timeline.
+- `_timeline_order` is derived from the first stream offset/item index for a row
+  and does not change when that row is updated.
+- Multiple events in the same stream batch still receive deterministic relative
+  ordering.
+- Stream reset/replay clears and rebuilds `_timeline_order` deterministically.
+- Rows first observed through an update still get a stable first-observed
+  `_timeline_order`.
+- Optimistic rows sort after persisted rows until replaced by server-backed rows
+  with real `_timeline_order`.
+- Optimistic rows preserve local insertion order and render through the same row
+  path as synced rows.
 
 Add UI-level tests or focused hook tests:
 
 - `useEntityTimeline` no longer rebuilds the manifest merge path.
 - Streaming text updates keep prior top-level timeline row identities stable
   where TanStack DB exposes stable maintained rows.
-- Pending/optimistic inbox behavior still works in `ChatView`.
+- Optimistic inbox behavior renders through the same `rows` path in `ChatView`.
+- Pending inbox editing state still works in `ChatView` without double-rendering
+  the same optimistic row.
 - `generationActive` is returned by `useEntityTimeline` without requiring
   timeline consumers to scan every row.
 
@@ -585,8 +651,10 @@ Add UI-level tests or focused hook tests:
 - Do not add a convenience `text` string to text rows in the first pass. Leave
   text materialization to consumers until we have reviewed how the streaming
   Markdown parser should consume chunks optimally.
-- Verify whether live query rows expose an Electric first/insert offset suitable
-  for ordering. A last-updated offset is not suitable for timeline order.
+- Validate the `_timeline_order` injection point against `@durable-streams/state`
+  internals. If `onBeforeBatch` cannot safely mutate incoming event values before
+  validation and collection application, add first-event-order support in
+  StreamDB itself rather than pushing ordering logic into every writer.
 - Leave `normalizeEntityTimelineData` and related aggregate helpers in place for
   now. After the row-oriented timeline migration is complete, audit which
   aggregate helpers are still used and remove unused compatibility code then.
@@ -595,7 +663,12 @@ Add UI-level tests or focused hook tests:
 
 1. Define row types, hook return types, and source subquery helpers in
    `agents-runtime`.
-2. Decide and implement the stable event-order source.
+2. Add `_timeline_order` row support:
+   - first prove the injection point by testing that values added in
+     `onBeforeBatch` survive validation and collection application;
+   - extend built-in event row schemas/types;
+   - inject first-offset-plus-index order tokens in `createEntityStreamDB`;
+   - preserve the first token across updates.
 3. Implement `createEntityTimelineQuery` with multi-source `from` and no outer
    `select`.
 4. Add `useEntityTimeline` returning rows plus derived state
