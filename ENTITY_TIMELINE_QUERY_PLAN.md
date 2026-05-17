@@ -16,6 +16,17 @@ Keep `createEntityIncludesQuery` as the snapshot/convenience API. It is useful
 when consumers want the whole session shape at once, but it rematerializes the
 session-level data structure on every streaming chunk.
 
+Also add a public React hook for app and userland UIs:
+
+```ts
+useEntityTimeline(db, opts?)
+```
+
+The hook should be exported for users to build their own timeline UIs. It should
+wrap `createEntityTimelineQuery` and return the maintained timeline rows plus
+useful derived state such as `generationActive`, pending inbox messages, and any
+other small status values needed by the built-in UI.
+
 ## Core direction
 
 Use TanStack DB's multi-source `from` for the outer timeline query and keep the
@@ -61,6 +72,31 @@ type. The outer query should only combine and order already-shaped event rows.
 Use `caseWhen` only where it is materially useful, such as branch-dependent
 includes/joins after a union source or conditional nested projection. It should
 not be required for the top-level timeline union.
+
+## Query and hook options
+
+Add options to both `createEntityTimelineQuery` and `useEntityTimeline` so
+callers can choose how inbox messages participate in the timeline:
+
+```ts
+type EntityTimelineInboxMode =
+  | `processed` // default: processed messages inline, pending returned separately
+  | `none` // no inbox messages in the timeline
+  | `all` // include processed, pending, paused, steer, and cancelled inbox rows
+```
+
+Default to `processed`. This matches the built-in chat UX: processed user
+messages appear chronologically in the timeline, while pending/queued messages
+remain separately editable in the composer/drawer and can be projected
+optimistically at the bottom of the UI.
+
+Use `none` for UIs that want a pure event/run stream without user messages.
+Use `all` for debugging/audit UIs where pending/cancelled/steer rows should be
+visible inline exactly where they happened.
+
+`useEntityTimeline` should always be free to run a separate pending-inbox query
+when the UI needs editable queued messages, regardless of the main timeline
+inbox mode.
 
 ## Why this exists
 
@@ -155,6 +191,11 @@ This matches the TanStack DB branch implementation: union branches are wrapped
 under their source alias, no-select union queries return the namespaced row, and
 the union stream key is prefixed with the source alias.
 
+This key rule also applies to selected source subqueries and nested collections:
+the selected row should retain its `$key` virtual prop. Do not add `sourceKey`
+fields for run, inbox, text, tool call, or chunk rows unless a future API proves
+the virtual key is insufficient.
+
 Do not add a separate `kind` field just to discriminate timeline rows. The
 active source alias is the discriminant. In UI code, replace old
 `section.kind` switches with small alias-narrowing helpers:
@@ -175,7 +216,8 @@ source alias as another string field that can drift from the query shape.
 
 ### Inbox source
 
-Filter to processed messages by default:
+Filter to processed messages by default. The exact filter depends on
+`opts.inboxMode`:
 
 ```ts
 const inbox = q
@@ -234,6 +276,48 @@ type EntityTimelineRunItem =
   | { $key: string; text: EntityTimelineTextItem; toolCall?: undefined }
   | { $key: string; text?: undefined; toolCall: EntityTimelineToolCallItem }
 ```
+
+### Nested includes rendering contract
+
+Do not wrap these nested includes in `toArray` in `createEntityTimelineQuery`.
+The point of the new API is that `items`, `chunks`, `errors`, and `steps` remain
+child live collections maintained by TanStack DB.
+
+Parent timeline rows should pass child collections down to row components:
+
+```tsx
+function TimelineRunRow({ run }: { run: EntityTimelineRunRow }) {
+  return <AgentResponse items={run.items} errors={run.errors} />
+}
+```
+
+Child components then subscribe to the child collection where they render it:
+
+```tsx
+function AgentResponse({
+  items,
+}: {
+  items: Collection<EntityTimelineRunItem>
+}) {
+  const { data: runItems = [] } = useLiveQuery(items)
+  return runItems.map((item) =>
+    item.text ? (
+      <TextItem text={item.text} />
+    ) : (
+      <ToolCall item={item.toolCall} />
+    )
+  )
+}
+
+function TextItem({ text }: { text: EntityTimelineTextItem }) {
+  const { data: chunks = [] } = useLiveQuery(text.chunks)
+  // Markdown streaming strategy TBD; do not eagerly concatenate in the query.
+}
+```
+
+This is the key performance boundary. A text delta should update the text row's
+`chunks` child collection and the subscribed text component, not rematerialize
+the whole run, whole timeline, or all previous messages.
 
 Text item rows should include ordered chunks/deltas rather than an eagerly
 concatenated text string:
@@ -335,12 +419,21 @@ const contextInserted = q
 
 ### Steps, errors, and lifecycle-like rows
 
-Include rows chronologically when they are events that make sense inline in a
-timeline. For steps, that means including them if they represent meaningful
-execution milestones rather than merely run state metadata. They can be top-level
-timeline rows, nested run items, or both depending on the display contract, but
-they should not be omitted solely because the current built-in UI does not render
-them today.
+`steps` are model-generation step lifecycle rows emitted by the outbound bridge:
+
+- `onStepStart()` inserts a step with `status: 'started'`, `step_number`,
+  `run_id`, and optional `model_provider`/`model_id`.
+- `onStepEnd()` updates that step to `status: 'completed'` with
+  `finish_reason` and optional `duration_ms`.
+
+They are not user messages or tool calls. They describe LLM/model execution
+attempts within a run. Today they are used as run metadata and for ordering
+anchoring, but the built-in chat UI does not render them as visible rows.
+
+First pass: keep steps as nested run metadata. Include them in the run row so
+observability UIs can render model/step metadata, but do not make them top-level
+timeline rows unless we decide they are user-visible inline events. A later
+option can expose step rows inline for debugging/audit views.
 
 Apply the same rule to top-level errors without `run_id`, entity lifecycle rows,
 and signal rows: include them in `createEntityTimelineQuery` only when they are
@@ -350,15 +443,27 @@ it through state/status APIs instead.
 
 ## Ordering
 
-The first implementation can keep the same practical order source as the live
-query currently uses: `coalesce(_seq, -1)`.
+Prefer an explicit stable event-order value written during stream writes. The
+timeline needs "when this event first happened", not "when this row was last
+updated". Run rows, step rows, text rows, and tool-call rows are often updated
+after they are inserted; using the last update offset would move old timeline
+items forward incorrectly.
 
-Longer term, the synchronous snapshot path has stronger offset-based ordering
-via `__electricRowOffsets`. If live query rows can expose equivalent ordering
-metadata, move the shared ordering logic into reusable helpers so the snapshot
-and live timeline paths agree exactly. Before doing this, verify what the
-available live-query offset means; it is only suitable for ordering if it is the
-last Electric offset that affected the row.
+Best target design:
+
+- add or reuse a cross-collection `timeline_order`/event-order value on built-in
+  event rows;
+- assign it when the event row is first written;
+- preserve it on later updates;
+- use it as the primary order for top-level rows and nested run items.
+
+If Electric exposes the insert offset or stable first offset for each row in live
+queries, that can replace an explicit event-order field. If the available offset
+is the last offset that affected the row, do not use it for timeline ordering.
+
+`_seq` can remain a temporary compatibility source while the new ordering field
+or first-offset support is implemented, but the plan should not treat `_seq` as
+the final design.
 
 For run rows, preserve the existing behavior where a run is anchored to the
 earliest child event rather than a later run-row update. This may require a
@@ -373,12 +478,18 @@ derived `runOrder` subquery/field that is the minimum of:
 If that is too much for the first pass, document the gap and keep tests around
 the old aggregate query until the row-oriented query reaches parity.
 
+If we introduce a stable event-order field, this becomes simpler: the run's
+display order should be the minimum event order across the run row, text rows,
+text chunks, tool calls, and steps. That keeps a streaming run anchored near the
+message that caused it even when the run row is completed later.
+
 ## Runtime exports
 
 Add new exports alongside the existing aggregate API:
 
 ```ts
 export { createEntityIncludesQuery, createEntityTimelineQuery }
+export { useEntityTimeline }
 
 export type {
   EntityTimelineQueryRow,
@@ -407,18 +518,25 @@ queries.
 Migrate hot paths to the row-oriented query:
 
 1. `packages/agents-server-ui/src/hooks/useEntityTimeline.ts`
-   - Replace `createEntityIncludesQuery` with `createEntityTimelineQuery`.
+   - Replace `createEntityIncludesQuery` with the exported
+     `useEntityTimeline`/`createEntityTimelineQuery` path.
    - Remove the separate manifest query/merge once manifests are included.
-   - Keep the pending inbox query separate.
+   - Keep the pending inbox query separate inside the hook and return
+     `pendingInbox`.
+   - Return `generationActive` from the hook as derived state, preferably from a
+     small dedicated live query over active runs rather than by scanning the
+     full timeline on every change.
    - Keep global entity status enrichment separate initially.
+   - When matching processed/pending inbox messages, use `row.inbox.$key` as the
+     raw inbox key and `row.$key` only as the timeline row key.
 2. `packages/agents-server-ui/src/components/EntityTimeline.tsx`
    - Accept the new row union, or adapt it to the current `TimelineEntry`
      shape as an intermediate step.
    - Use each row's `$key` virtual prop as the React/virtualizer key.
-   - Prefer rendering run rows from nested `items` rather than from a rebuilt
-     `section.items` array.
+   - Pass nested child collections such as `run.items` to child row components
+     instead of rebuilding `section.items` arrays.
 3. `packages/agents-server-ui/src/components/AgentResponse.tsx`
-   - Render nested run items.
+   - Subscribe to nested run items with `useLiveQuery(run.items)`.
    - Update text rendering after reviewing the streaming Markdown parser; avoid
      eager timeline-query concatenation.
    - Keep markdown caching and tool display parsing in the component layer.
@@ -429,7 +547,8 @@ Migrate hot paths to the row-oriented query:
      UI example.
 
 Keep `useChat` on `createEntityIncludesQuery` initially as a stable convenience
-hook. A separate row-oriented hook can be added later.
+hook for aggregate chat data. `useEntityTimeline` is the new row-oriented hook
+for timeline UIs.
 
 ## Tests
 
@@ -442,8 +561,12 @@ Add runtime tests for the new query:
 - Insert/update/delete in each source updates only the relevant branch rows.
 - A text delta insertion updates the nested text chunks include for the active
   run item.
+- Parent timeline rows expose child collections, not arrays, for nested
+  includes.
+- Child UI components subscribe to child collections with `useLiveQuery`.
 - A tool call update updates the matching nested run item.
 - Pending inbox rows are excluded from the main timeline by default.
+- `opts.inboxMode` can exclude inbox rows or include all inbox statuses.
 - Manifests are present in the timeline without a separate merge.
 - Run rows preserve current ordering semantics, including the "run anchored to
   earliest child event" behavior.
@@ -454,27 +577,34 @@ Add UI-level tests or focused hook tests:
 - Streaming text updates keep prior top-level timeline row identities stable
   where TanStack DB exposes stable maintained rows.
 - Pending/optimistic inbox behavior still works in `ChatView`.
+- `generationActive` is returned by `useEntityTimeline` without requiring
+  timeline consumers to scan every row.
 
 ## Deferred decisions and audit notes
 
 - Do not add a convenience `text` string to text rows in the first pass. Leave
   text materialization to consumers until we have reviewed how the streaming
   Markdown parser should consume chunks optimally.
-- Verify whether live query rows expose an Electric offset suitable for ordering.
-  It must be the last offset that affected the row to replace `_seq` safely.
+- Verify whether live query rows expose an Electric first/insert offset suitable
+  for ordering. A last-updated offset is not suitable for timeline order.
 - Leave `normalizeEntityTimelineData` and related aggregate helpers in place for
   now. After the row-oriented timeline migration is complete, audit which
   aggregate helpers are still used and remove unused compatibility code then.
 
 ## Implementation phases
 
-1. Define row types and source subquery helpers in `agents-runtime`.
-2. Implement `createEntityTimelineQuery` with multi-source `from` and no outer
+1. Define row types, hook return types, and source subquery helpers in
+   `agents-runtime`.
+2. Decide and implement the stable event-order source.
+3. Implement `createEntityTimelineQuery` with multi-source `from` and no outer
    `select`.
-3. Add run nested includes for ordered text/tool-call items, errors, and steps.
-4. Add text chunk includes and remove eager text concatenation from the new API.
-5. Add parity tests against key `createEntityIncludesQuery` behaviors.
-6. Migrate `agents-server-ui` behind the same public `useEntityTimeline` hook.
-7. Migrate observe/example streaming UIs.
-8. Document when to use `createEntityIncludesQuery` versus
-   `createEntityTimelineQuery`.
+4. Add `useEntityTimeline` returning rows plus derived state
+   (`generationActive`, pending inbox, etc.).
+5. Add run nested includes for ordered text/tool-call items, errors, and nested
+   step metadata.
+6. Add text chunk includes and remove eager text concatenation from the new API.
+7. Add parity tests against key `createEntityIncludesQuery` behaviors.
+8. Migrate `agents-server-ui` behind the same public `useEntityTimeline` hook.
+9. Migrate observe/example streaming UIs.
+10. Document when to use `createEntityIncludesQuery` versus
+    `createEntityTimelineQuery`.
