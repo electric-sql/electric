@@ -162,6 +162,30 @@ describe(`StreamClient`, () => {
     }
   })
 
+  it(`uses stream-meta control endpoints for reference stream URLs`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(`http://127.0.0.1:4545/v1/stream/tenant-a`)
+
+    try {
+      await client.putSubscription(`sub-1`, {
+        type: `pull-wake`,
+        streams: [`/chat/one/main`],
+        wake_stream: `/runners/runner-1/wake`,
+      })
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `http://127.0.0.1:4545/v1/stream-meta/subscriptions/sub-1?service=tenant-a`,
+        expect.objectContaining({ method: `PUT` })
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
   it(`sends configured durable streams bearer auth on subscription requests`, async () => {
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
       new Response(JSON.stringify({ subscription_id: `sub-1` }), {
