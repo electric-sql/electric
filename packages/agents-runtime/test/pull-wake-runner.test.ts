@@ -331,6 +331,50 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`does not schedule event heartbeats for unchanged stream offsets`, async () => {
+    const heartbeatBodies: Array<Record<string, unknown>> = []
+    const yieldEvent = deferred<void>()
+    const streamClosed = deferred<void>()
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        heartbeatBodies.push(JSON.parse(String(init?.body)))
+        return Response.json({})
+      }
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        await yieldEvent.promise
+        yield { type: `noop` } as unknown as PullWakeEvent
+        await streamClosed.promise
+      },
+      cancel: () => streamClosed.resolve(),
+      closed: streamClosed.promise,
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: runtime(),
+      offset: `42`,
+      heartbeatIntervalMs: 60_000,
+      eventHeartbeatThrottleMs: 5,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(heartbeatBodies.length).toBe(2)
+    })
+
+    yieldEvent.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(heartbeatBodies.length).toBe(2)
+    await runner.stop()
+  })
+
   it(`resolves async headers before opening the durable stream`, async () => {
     durableStreamMocks.stream.mockResolvedValueOnce({
       offset: `42`,
@@ -812,6 +856,55 @@ describe(`createPullWakeRunner`, () => {
     expect(runner.running).toBe(false)
     expect(onError).toHaveBeenCalledWith(drainError)
     expect(runner.getHealth().last_error).toBe(`drain failed`)
+  })
+
+  it(`shares one shutdown sequence across concurrent stop calls`, async () => {
+    const streamClosed = deferred<void>()
+    const drainStarted = deferred<void>()
+    const drainReleased = deferred<void>()
+    const testRuntime = {
+      dispatchWake: vi.fn(),
+      abortWakes: vi.fn(),
+      drainWakes: vi.fn(async () => {
+        drainStarted.resolve()
+        await drainReleased.promise
+      }),
+    }
+    const streamFactory = vi.fn(async () => ({
+      async *jsonStream() {
+        await streamClosed.promise
+      },
+      cancel: () => streamClosed.resolve(),
+      closed: streamClosed.promise,
+    }))
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(streamFactory).toHaveBeenCalledTimes(1)
+    })
+
+    const firstStop = runner.stop()
+    const secondStop = runner.stop()
+    await drainStarted.promise
+
+    expect(testRuntime.abortWakes).toHaveBeenCalledTimes(1)
+    expect(testRuntime.drainWakes).toHaveBeenCalledTimes(1)
+
+    runner.start()
+    expect(streamFactory).toHaveBeenCalledTimes(1)
+
+    drainReleased.resolve()
+    await Promise.all([firstStop, secondStop])
+
+    expect(testRuntime.abortWakes).toHaveBeenCalledTimes(1)
+    expect(testRuntime.drainWakes).toHaveBeenCalledTimes(1)
   })
 
   it(`uses exponential reconnect backoff between failed connection attempts`, async () => {

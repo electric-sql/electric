@@ -74,6 +74,35 @@ const claimBodySchema = Type.Object(
 type RegisterRunnerBody = Static<typeof registerRunnerBodySchema>
 type HeartbeatBody = Static<typeof heartbeatBodySchema>
 type ClaimBody = Static<typeof claimBodySchema>
+type RunnerClientDiagnostics = NonNullable<RunnerHealthResponse[`client`]>
+
+const runnerClientStatuses = new Set<RunnerClientDiagnostics[`status`]>([
+  `stopped`,
+  `starting`,
+  `connecting`,
+  `streaming`,
+  `reconnecting`,
+  `stopping`,
+])
+const runnerLastClaimResults = new Set<
+  NonNullable<RunnerClientDiagnostics[`last_claim_result`]>
+>([`claimed`, `no_work`, `error`])
+const runnerStringOrNullDiagnostics = [
+  `started_at`,
+  `stream_connected_since`,
+  `last_error`,
+  `last_error_at`,
+  `last_heartbeat_at`,
+  `last_claim_at`,
+  `last_dispatch_at`,
+] as const
+const runnerNumberDiagnostics = [
+  `reconnect_count`,
+  `events_received`,
+  `claims_succeeded`,
+  `claims_skipped`,
+  `claims_failed`,
+] as const
 
 export const runnersRouter: RunnersRoutes = Router<
   RunnersRouteRequest,
@@ -116,6 +145,56 @@ function requireAuthenticatedPrincipal(
 
 function canonicalOwnerPrincipal(input: string): string | null {
   return parsePrincipalUrl(input)?.url ?? null
+}
+
+function sanitizeRunnerDiagnostics(
+  diagnostics: Record<string, unknown> | null | undefined
+): RunnerClientDiagnostics | undefined {
+  if (!diagnostics) return undefined
+  const sanitized: Record<string, unknown> = {}
+
+  if (
+    typeof diagnostics.status === `string` &&
+    runnerClientStatuses.has(
+      diagnostics.status as RunnerClientDiagnostics[`status`]
+    )
+  ) {
+    sanitized.status = diagnostics.status
+  }
+  if (typeof diagnostics.stream_connected === `boolean`) {
+    sanitized.stream_connected = diagnostics.stream_connected
+  }
+  if (typeof diagnostics.last_heartbeat_ok === `boolean`) {
+    sanitized.last_heartbeat_ok = diagnostics.last_heartbeat_ok
+  }
+  if (
+    diagnostics.last_claim_result === null ||
+    (typeof diagnostics.last_claim_result === `string` &&
+      runnerLastClaimResults.has(
+        diagnostics.last_claim_result as NonNullable<
+          RunnerClientDiagnostics[`last_claim_result`]
+        >
+      ))
+  ) {
+    sanitized.last_claim_result = diagnostics.last_claim_result
+  }
+
+  for (const key of runnerStringOrNullDiagnostics) {
+    const value = diagnostics[key]
+    if (typeof value === `string` || value === null) {
+      sanitized[key] = value
+    }
+  }
+  for (const key of runnerNumberDiagnostics) {
+    const value = diagnostics[key]
+    if (typeof value === `number` && Number.isFinite(value) && value >= 0) {
+      sanitized[key] = value
+    }
+  }
+
+  return Object.keys(sanitized).length > 0
+    ? (sanitized as RunnerClientDiagnostics)
+    : undefined
 }
 
 async function registerRunner(
@@ -217,7 +296,7 @@ async function heartbeat(
     livenessLeaseExpiresAt: parsed.liveness_lease_expires_at
       ? new Date(parsed.liveness_lease_expires_at)
       : undefined,
-    diagnostics: parsed.diagnostics,
+    diagnostics: sanitizeRunnerDiagnostics(parsed.diagnostics),
   })
   if (!runner) {
     throw new ElectricAgentsError(ErrCodeNotFound, `Runner not found`, 404)
@@ -382,7 +461,7 @@ async function runnerHealth(
   ])
 
   const clientDiagnostics =
-    (runtimeDiagnostics?.diagnostics as RunnerHealthResponse[`client`]) ?? null
+    sanitizeRunnerDiagnostics(runtimeDiagnostics?.diagnostics) ?? null
   const issues: Array<string> = []
   let healthStatus: `healthy` | `degraded` | `unhealthy` = `healthy`
 

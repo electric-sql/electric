@@ -131,6 +131,7 @@ export function createPullWakeRunner(
   let runGeneration = 0
   let nextReconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS
   let streamResetError: Error | null = null
+  let stopPromise: Promise<void> | null = null
   const claimActors = new Map<Promise<void>, number>()
 
   const wakePath =
@@ -397,24 +398,32 @@ export function createPullWakeRunner(
   const waitForClaimCapacity = async (
     signal: AbortSignal
   ): Promise<boolean> => {
+    let abortListener: (() => void) | null = null
     const abortPromise = new Promise<void>((resolve) => {
       if (signal.aborted) {
         resolve()
         return
       }
-      signal.addEventListener(`abort`, () => resolve(), { once: true })
+      abortListener = () => resolve()
+      signal.addEventListener(`abort`, abortListener, { once: true })
     })
 
-    while (
-      acceptingClaims &&
-      !signal.aborted &&
-      activeClaimCount >= maxConcurrentClaims
-    ) {
-      const inFlight = [...claimActors.keys()]
-      if (inFlight.length === 0) return true
-      await Promise.race([...inFlight, abortPromise]).catch(() => undefined)
+    try {
+      while (
+        acceptingClaims &&
+        !signal.aborted &&
+        activeClaimCount >= maxConcurrentClaims
+      ) {
+        const inFlight = [...claimActors.keys()]
+        if (inFlight.length === 0) return true
+        await Promise.race([...inFlight, abortPromise]).catch(() => undefined)
+      }
+      return acceptingClaims && !signal.aborted
+    } finally {
+      if (abortListener) {
+        signal.removeEventListener(`abort`, abortListener)
+      }
     }
-    return acceptingClaims && !signal.aborted
   }
 
   const claimAndDispatch = async (
@@ -526,7 +535,10 @@ export function createPullWakeRunner(
             notifyHeartbeatChange()
           }
         }
-        if (response.offset !== undefined) {
+        if (
+          response.offset !== undefined &&
+          response.offset !== currentOffset
+        ) {
           currentOffset = response.offset
           notifyHeartbeatChange()
         }
@@ -589,9 +601,36 @@ export function createPullWakeRunner(
     }
   }
 
+  const stopRunner = async (): Promise<void> => {
+    if (state === `stopped`) return
+    state = `stopping`
+    acceptingClaims = false
+    controller?.abort()
+    stopHeartbeat()
+    response?.cancel?.(new Error(`pull wake runner stopped`))
+    if (!(await waitForClaimActors())) {
+      claimActors.clear()
+      activeClaimCount = 0
+    }
+    config.runtime.abortWakes()
+    await loop?.catch((err) => {
+      if (!(err instanceof Error && err.name === `AbortError`)) throw err
+    })
+    let drainError: unknown
+    try {
+      await config.runtime.drainWakes()
+    } catch (err) {
+      reportError(err)
+      drainError = err
+    } finally {
+      state = `stopped`
+    }
+    if (drainError) throw drainError
+  }
+
   return {
     start() {
-      if (loop) return
+      if (loop || stopPromise) return
       state = `starting`
       controller = new AbortController()
       runGeneration++
@@ -603,30 +642,10 @@ export function createPullWakeRunner(
       })
     },
     async stop() {
-      if (state === `stopped`) return
-      state = `stopping`
-      acceptingClaims = false
-      controller?.abort()
-      stopHeartbeat()
-      response?.cancel?.(new Error(`pull wake runner stopped`))
-      if (!(await waitForClaimActors())) {
-        claimActors.clear()
-        activeClaimCount = 0
-      }
-      config.runtime.abortWakes()
-      await loop?.catch((err) => {
-        if (!(err instanceof Error && err.name === `AbortError`)) throw err
+      stopPromise ??= stopRunner().finally(() => {
+        stopPromise = null
       })
-      let drainError: unknown
-      try {
-        await config.runtime.drainWakes()
-      } catch (err) {
-        reportError(err)
-        drainError = err
-      } finally {
-        state = `stopped`
-      }
-      if (drainError) throw drainError
+      await stopPromise
     },
     async waitForStopped() {
       await loop

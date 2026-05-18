@@ -254,6 +254,88 @@ describe(`runner routes`, () => {
     expect(body.health).toMatchObject({ status: `healthy`, issues: [] })
   })
 
+  it(`sanitizes heartbeat diagnostics before storing them`, async () => {
+    const ctx = buildContext()
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners/runner-1/heartbeat`, {
+        lease_ms: 30_000,
+        wake_stream_offset: `123`,
+        diagnostics: {
+          status: `streaming`,
+          stream_connected: `yes`,
+          stream_connected_since: null,
+          reconnect_count: `2`,
+          last_heartbeat_ok: false,
+          last_claim_result: `invalid`,
+          last_error: `heartbeat failed`,
+          claims_failed: 1,
+          events_received: -1,
+          extra: { noisy: true },
+        },
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const heartbeatInput = vi.mocked(ctx.entityManager.registry.heartbeatRunner)
+      .mock.calls[0]![0]
+    expect(heartbeatInput).toMatchObject({
+      runnerId: `runner-1`,
+      wakeStreamOffset: `123`,
+      diagnostics: {
+        status: `streaming`,
+        stream_connected_since: null,
+        last_heartbeat_ok: false,
+        last_error: `heartbeat failed`,
+        claims_failed: 1,
+      },
+    })
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`stream_connected`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`reconnect_count`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`last_claim_result`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`events_received`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`extra`)
+  })
+
+  it(`sanitizes stored runner diagnostics before returning health`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        admin_status: `enabled`,
+      })
+    )
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+      last_seen_at: new Date().toISOString(),
+      diagnostics: {
+        stream_connected: `yes`,
+        reconnect_count: 6,
+        last_heartbeat_ok: false,
+        last_error: 500,
+      },
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.client).toEqual({
+      reconnect_count: 6,
+      last_heartbeat_ok: false,
+    })
+    expect(body.health.issues).toContain(`Client reports last heartbeat failed`)
+    expect(body.health.issues).toContain(`Client has reconnected 6 times`)
+  })
+
   it(`returns unhealthy when runner lease is expired`, async () => {
     const ctx = buildContext()
     vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
