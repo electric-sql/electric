@@ -122,6 +122,8 @@ interface SubscriptionProxyRoute {
   streamPath?: string
 }
 
+const subscriptionControlActions = [`callback`, `claim`, `ack`, `release`]
+
 function isReservedControlPath(pathname: string): boolean {
   return durableStreamsControlPath(pathname) !== null
 }
@@ -129,35 +131,27 @@ function isReservedControlPath(pathname: string): boolean {
 function subscriptionRouteFromPath(
   pathname: string
 ): SubscriptionProxyRoute | null {
-  const routePath = durableStreamsControlPath(pathname)
-  if (!routePath) return null
-
-  const segments = routePath.split(`/`).filter(Boolean)
-  if (segments[0] !== `__ds` || segments[1] !== `subscriptions`) return null
-
-  const subscriptionId = segments[2] ? decodeURIComponent(segments[2]) : ``
-  if (!subscriptionId) return null
-
-  const tail = segments.slice(3)
-  if (tail.length === 0) return { subscriptionId, action: `base` }
-  if (tail[0] === `streams` && tail.length === 1) {
-    return { subscriptionId, action: `streams` }
+  const [prefix, resource, encodedId, action, ...tail] = pathname
+    .split(`/`)
+    .filter(Boolean)
+  if (prefix !== `__ds` || resource !== `subscriptions` || !encodedId) {
+    return null
   }
-  if (tail[0] === `streams` && tail.length > 1) {
+
+  const subscriptionId = decodeURIComponent(encodedId)
+  if (!action) return { subscriptionId, action: `base` }
+
+  if (action === `streams`) {
+    if (tail.length === 0) return { subscriptionId, action: `streams` }
     return {
       subscriptionId,
       action: `stream`,
-      streamPath: decodeURIComponent(tail.slice(1).join(`/`)),
+      streamPath: decodeURIComponent(tail.join(`/`)),
     }
   }
-  if (
-    tail.length === 1 &&
-    [`callback`, `claim`, `ack`, `release`].includes(tail[0]!)
-  ) {
-    return {
-      subscriptionId,
-      action: tail[0] as SubscriptionProxyAction,
-    }
+
+  if (tail.length === 0 && subscriptionControlActions.includes(action)) {
+    return { subscriptionId, action: action as SubscriptionProxyAction }
   }
 
   return null
