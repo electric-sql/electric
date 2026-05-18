@@ -198,8 +198,6 @@ defmodule Electric.Plug.Utils do
     end
   end
 
-  defp scalar_attr_value(nil), do: :skip
-
   defp scalar_attr_value(value) when is_binary(value) do
     {:ok, truncate_telemetry_string(value)}
   end
