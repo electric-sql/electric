@@ -1127,6 +1127,24 @@ const getEntityWakesCollection = cachedCollectionFactory((db: EntityStreamDB) =>
 
 type EntityTimelineQueryBuilder = (q: InitialQueryBuilder) => QueryBuilder<any>
 
+/**
+ * Builds a live timeline query for an entity stream.
+ *
+ * The returned query is a multi-source timeline ordered by each row's
+ * `_timeline_order`. Each result row has TanStack DB's virtual `$key` plus one
+ * populated source property:
+ *
+ * - `{ inbox }` for user inbox messages.
+ * - `{ run }` for agent runs.
+ * - `{ wake }` for wake events.
+ * - `{ manifest }` for manifest entries.
+ *
+ * Run rows include live child collections rather than materialized arrays:
+ * `run.items`, `run.steps`, and `run.errors`. Pass those child collections to
+ * `useLiveQuery` (or another live-query consumer) in child renderers to receive
+ * fine-grained updates while text chunks stream in. Text run items expose their
+ * concatenated streamed content as `item.text.content`.
+ */
 export function createEntityTimelineQuery(
   db: EntityStreamDB,
   opts: EntityTimelineQueryOptions = {}
