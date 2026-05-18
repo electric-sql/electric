@@ -115,6 +115,13 @@ export async function assertDispatchPolicyAllowed(
 ): Promise<void> {
   const target = policy?.targets[0]
   if (!target || target.type !== `runner`) return
+  if (!ctx.principal) {
+    throw new ElectricAgentsError(
+      ErrCodeUnauthorized,
+      `Runner dispatch requires an authenticated owner`,
+      401
+    )
+  }
 
   const runner = await ctx.entityManager.registry.getRunner(target.runnerId)
   if (!runner) {
@@ -124,7 +131,7 @@ export async function assertDispatchPolicyAllowed(
       404
     )
   }
-  if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
+  if (runner.owner_principal !== ctx.principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner dispatch requires the authenticated owner`,

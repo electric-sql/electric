@@ -111,12 +111,6 @@ export const runners = pgTable(
     kind: text(`kind`).notNull().default(`local`),
     adminStatus: text(`admin_status`).notNull().default(`enabled`),
     wakeStream: text(`wake_stream`).notNull(),
-    wakeStreamOffset: text(`wake_stream_offset`),
-    lastSeenAt: timestamp(`last_seen_at`, { withTimezone: true }),
-    livenessLeaseExpiresAt: timestamp(`liveness_lease_expires_at`, {
-      withTimezone: true,
-    }),
-    diagnostics: jsonb(`diagnostics`),
     createdAt: timestamp(`created_at`, { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -132,10 +126,6 @@ export const runners = pgTable(
       table.ownerPrincipal
     ),
     index(`idx_runners_admin_status`).on(table.tenantId, table.adminStatus),
-    index(`idx_runners_liveness_lease_expires_at`).on(
-      table.tenantId,
-      table.livenessLeaseExpiresAt
-    ),
     check(
       `chk_runners_kind`,
       sql`${table.kind} IN ('local', 'cloud-worker', 'sandbox', 'ci', 'server')`
@@ -143,6 +133,35 @@ export const runners = pgTable(
     check(
       `chk_runners_admin_status`,
       sql`${table.adminStatus} IN ('enabled', 'disabled')`
+    ),
+  ]
+)
+
+export const runnerRuntimeDiagnostics = pgTable(
+  `runner_runtime_diagnostics`,
+  {
+    tenantId: text(`tenant_id`).notNull().default(`default`),
+    runnerId: text(`runner_id`).notNull(),
+    ownerPrincipal: text(`owner_principal`).notNull(),
+    wakeStreamOffset: text(`wake_stream_offset`),
+    lastSeenAt: timestamp(`last_seen_at`, { withTimezone: true }).notNull(),
+    livenessLeaseExpiresAt: timestamp(`liveness_lease_expires_at`, {
+      withTimezone: true,
+    }).notNull(),
+    diagnostics: jsonb(`diagnostics`),
+    updatedAt: timestamp(`updated_at`, { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.runnerId] }),
+    index(`idx_runner_runtime_diagnostics_owner`).on(
+      table.tenantId,
+      table.ownerPrincipal
+    ),
+    index(`idx_runner_runtime_diagnostics_liveness`).on(
+      table.tenantId,
+      table.livenessLeaseExpiresAt
     ),
   ]
 )

@@ -541,6 +541,67 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`forces the stream to reconnect after repeated heartbeat failures`, async () => {
+    vi.useFakeTimers()
+    const firstStreamOpened = deferred<void>()
+    const secondStreamOpened = deferred<void>()
+    const firstStreamClosed = deferred<void>()
+    const secondStreamClosed = deferred<void>()
+    const firstCancel = vi.fn(() => firstStreamClosed.resolve())
+    const streamFactory = vi.fn(async () => {
+      if (streamFactory.mock.calls.length === 1) {
+        firstStreamOpened.resolve()
+        return {
+          async *jsonStream() {
+            await firstStreamClosed.promise
+          },
+          cancel: firstCancel,
+          closed: firstStreamClosed.promise,
+        }
+      }
+      secondStreamOpened.resolve()
+      return {
+        async *jsonStream() {
+          await secondStreamClosed.promise
+        },
+        cancel: () => secondStreamClosed.resolve(),
+        closed: secondStreamClosed.promise,
+      }
+    })
+    let heartbeatCalls = 0
+    const fetchMock = vi.fn(async () => {
+      heartbeatCalls++
+      if (heartbeatCalls <= 2) {
+        throw new Error(`connect ECONNREFUSED 127.0.0.1:4437`)
+      }
+      return Response.json({})
+    })
+    vi.stubGlobal(`fetch`, fetchMock)
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: runtime(),
+      heartbeatIntervalMs: 10,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await firstStreamOpened.promise
+    await vi.advanceTimersByTimeAsync(20)
+
+    expect(firstCancel).toHaveBeenCalledWith(expect.any(Error))
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    await secondStreamOpened.promise
+
+    expect(streamFactory).toHaveBeenCalledTimes(2)
+    expect(runner.getHealth().reconnect_count).toBe(1)
+
+    await runner.stop()
+  })
+
   it(`marks heartbeat unhealthy before reporting heartbeat errors`, async () => {
     const observedHeartbeatOk: Array<boolean> = []
     let runner: ReturnType<typeof createPullWakeRunner>

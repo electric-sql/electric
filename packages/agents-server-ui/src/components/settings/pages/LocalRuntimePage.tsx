@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { eq, useLiveQuery } from '@tanstack/react-db'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { Play, RefreshCw, Square } from 'lucide-react'
@@ -8,8 +8,10 @@ import {
   type DesktopState,
 } from '../../../lib/server-connection'
 import {
+  createRunnerRuntimeDiagnosticsCollection,
   useElectricAgents,
   type ElectricRunner,
+  type ElectricRunnerRuntimeDiagnostics,
 } from '../../../lib/ElectricAgentsProvider'
 import { formatRelativeTime } from '../../../lib/formatTime'
 import { Badge, Button, Icon, Stack, Text } from '../../../ui'
@@ -43,6 +45,7 @@ function parseTime(value: string | null | undefined): number | null {
 
 function runnerHealth(
   runner: ElectricRunner | null,
+  runtimeDiagnostics: ElectricRunnerRuntimeDiagnostics | null,
   now: number = Date.now()
 ): { status: keyof typeof RUNNER_HEALTH_TONES; issues: Array<string> } {
   if (!runner) return { status: `unknown`, issues: [`Runner not synced`] }
@@ -58,7 +61,10 @@ function runnerHealth(
     issues.push(`Disabled`)
   }
 
-  const leaseExpiresAt = parseTime(runner.liveness_lease_expires_at)
+  const leaseExpiresAt = parseTime(
+    runtimeDiagnostics?.liveness_lease_expires_at ??
+      runner.liveness_lease_expires_at
+  )
   if (leaseExpiresAt === null) {
     escalate(`degraded`)
     issues.push(`No heartbeat`)
@@ -67,9 +73,9 @@ function runnerHealth(
     issues.push(`Lease expired`)
   }
 
-  const diagnostics = runner.diagnostics
+  const diagnostics = runtimeDiagnostics?.diagnostics ?? runner.diagnostics
   if (!diagnostics) {
-    if (runner.last_seen_at) {
+    if (runtimeDiagnostics?.last_seen_at ?? runner.last_seen_at) {
       escalate(`degraded`)
       issues.push(`No diagnostics`)
     }
@@ -99,6 +105,8 @@ function timeLabel(value: string | null | undefined): string {
 function countLabel(value: number | undefined): string {
   return String(value ?? 0)
 }
+
+type RunnerDiagnostics = NonNullable<ElectricRunner[`diagnostics`]>
 
 function runtimeConnectionLabel(value: string | null | undefined): string {
   if (!value) return `-`
@@ -142,19 +150,41 @@ export function LocalRuntimePage(): React.ReactElement {
     [runnersCollection, runnerId]
   )
   const runner = runnerRows[0] ?? null
-  const health = runnerHealth(runner, now)
-  const healthTone = RUNNER_HEALTH_TONES[health.status]
-  const diagnostics = runner?.diagnostics ?? null
   const healthEndpoint = runnerHealthEndpoint(
     state?.activeServer?.url,
     runnerId
   )
+  const diagnosticsCollection = useMemo(() => {
+    if (!state?.activeServer?.url || !runnerId) return null
+    return createRunnerRuntimeDiagnosticsCollection(
+      state.activeServer.url,
+      runnerId
+    )
+  }, [state?.activeServer?.url, runnerId])
+  const { data: runtimeDiagnosticsRows = [] } = useLiveQuery(
+    (query) => {
+      if (!diagnosticsCollection) return undefined
+      return query.from({ diagnostics: diagnosticsCollection })
+    },
+    [diagnosticsCollection]
+  )
+  const runnerTelemetry = runtimeDiagnosticsRows[0] ?? null
+  const health = runnerHealth(runner, runnerTelemetry, now)
+  const healthTone = RUNNER_HEALTH_TONES[health.status]
+  const diagnostics: RunnerDiagnostics | null =
+    runnerTelemetry?.diagnostics ?? runner?.diagnostics ?? null
 
   useEffect(() => {
     if (!isDesktop) return
     const interval = window.setInterval(() => setNow(Date.now()), 5000)
     return () => window.clearInterval(interval)
   }, [isDesktop])
+
+  useEffect(() => {
+    return () => {
+      diagnosticsCollection?.cleanup()
+    }
+  }, [diagnosticsCollection])
 
   useEffect(() => {
     if (!isDesktop) return
@@ -257,7 +287,7 @@ export function LocalRuntimePage(): React.ReactElement {
         />
         <SettingsRow
           label="Stream"
-          description={`Offset ${runner?.wake_stream_offset ?? `-`}`}
+          description={`Offset ${runnerTelemetry?.wake_stream_offset ?? runner?.wake_stream_offset ?? `-`}`}
           control={
             <Badge
               tone={
@@ -278,10 +308,10 @@ export function LocalRuntimePage(): React.ReactElement {
         />
         <SettingsRow
           label="Last heartbeat"
-          description={`Lease expires ${timeLabel(runner?.liveness_lease_expires_at)}`}
+          description={`Lease expires ${timeLabel(runnerTelemetry?.liveness_lease_expires_at ?? runner?.liveness_lease_expires_at)}`}
           control={
             <Text size={1} tone="muted">
-              {timeLabel(runner?.last_seen_at)}
+              {timeLabel(runnerTelemetry?.last_seen_at ?? runner?.last_seen_at)}
             </Text>
           }
         />

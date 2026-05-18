@@ -16,7 +16,10 @@ describe(`server utils`, () => {
 
     expect(target.pathname).toBe(`/v1/shape`)
     expect(target.searchParams.get(`table`)).toBe(`runners`)
-    expect(target.searchParams.get(`columns`)).toContain(`"owner_principal"`)
+    const columns = target.searchParams.get(`columns`)
+    expect(columns).toContain(`"owner_principal"`)
+    expect(columns).not.toContain(`"diagnostics"`)
+    expect(columns).not.toContain(`"last_seen_at"`)
     expect(target.searchParams.get(`where`)).toBe(
       `tenant_id = 'tenant-test' AND owner_principal = '/principal/user%3Aowner%40example.com'`
     )
@@ -29,6 +32,18 @@ describe(`server utils`, () => {
 
     expect(target.searchParams.get(`where`)).toBe(
       `tenant_id = 'tenant-test' AND owner_principal = '/principal/user%3Aowner%40example.com' AND (kind = 'local')`
+    )
+  })
+
+  it(`owner-scopes runner runtime diagnostics shapes and preserves runner filters`, () => {
+    const target = shapeTarget(
+      `table=runner_runtime_diagnostics&where=${encodeURIComponent(`runner_id = 'runner-1'`)}`
+    )
+
+    expect(target.searchParams.get(`table`)).toBe(`runner_runtime_diagnostics`)
+    expect(target.searchParams.get(`columns`)).toContain(`"diagnostics"`)
+    expect(target.searchParams.get(`where`)).toBe(
+      `tenant_id = 'tenant-test' AND owner_principal = '/principal/user%3Aowner%40example.com' AND (runner_id = 'runner-1')`
     )
   })
 })

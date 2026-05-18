@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getPrincipalFromRequest,
   parsePrincipalUrl,
   parsePrincipalKey,
   principalUrl,
@@ -42,5 +43,13 @@ describe(`principal parser`, () => {
     for (const key of [`userkyle`, `user:`, `user:/kyle`, `admin:kyle`]) {
       expect(() => parsePrincipalKey(key)).toThrow()
     }
+  })
+
+  it(`ignores malformed principal request headers`, () => {
+    const request = new Request(`http://server`, {
+      headers: { 'electric-principal': `not-a-principal` },
+    })
+
+    expect(getPrincipalFromRequest(request)).toBeNull()
   })
 })

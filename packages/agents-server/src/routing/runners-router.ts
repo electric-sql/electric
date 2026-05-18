@@ -14,7 +14,7 @@ import {
 import { routeBody, withSchema } from './schema.js'
 import { subscriptionIdForDispatchTarget } from './dispatch-policy.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
-import { isPrincipalUrl, principalFromCreatedBy } from '../principal.js'
+import { parsePrincipalUrl, principalFromCreatedBy } from '../principal.js'
 import type { JsonRouteRequest } from './schema.js'
 import type { RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
@@ -103,12 +103,28 @@ function firstQueryValue(
   return Array.isArray(value) ? value[0] : value
 }
 
+function requireAuthenticatedPrincipal(
+  ctx: TenantContext
+): NonNullable<TenantContext[`principal`]> {
+  if (ctx.principal) return ctx.principal
+  throw new ElectricAgentsError(
+    ErrCodeUnauthorized,
+    `Runner route requires an authenticated principal`,
+    401
+  )
+}
+
+function canonicalOwnerPrincipal(input: string): string | null {
+  return parsePrincipalUrl(input)?.url ?? null
+}
+
 async function registerRunner(
   request: RunnersRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
   const parsed = routeBody<RegisterRunnerBody>(request)
-  const ownerPrincipal = parsed.owner_principal ?? ctx.principal?.url
+  const principal = requireAuthenticatedPrincipal(ctx)
+  const ownerPrincipal = parsed.owner_principal ?? principal.url
   if (!ownerPrincipal) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
@@ -116,14 +132,15 @@ async function registerRunner(
       400
     )
   }
-  if (!isPrincipalUrl(ownerPrincipal)) {
+  const canonicalOwner = canonicalOwnerPrincipal(ownerPrincipal)
+  if (!canonicalOwner) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
       `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${ownerPrincipal}`,
       400
     )
   }
-  if (ctx.principal && ownerPrincipal !== ctx.principal.url) {
+  if (canonicalOwner !== principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `owner_principal must match the authenticated principal`,
@@ -133,7 +150,7 @@ async function registerRunner(
 
   const runner = await ctx.entityManager.registry.createRunner({
     id: parsed.id,
-    ownerPrincipal,
+    ownerPrincipal: canonicalOwner,
     label: parsed.label,
     kind: parsed.kind,
     adminStatus: parsed.admin_status,
@@ -149,15 +166,19 @@ async function listRunners(
   request: RunnersRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principal = requireAuthenticatedPrincipal(ctx)
   const requestedOwner = firstQueryValue(request.query.owner_principal)
-  if (requestedOwner && !isPrincipalUrl(requestedOwner)) {
+  const canonicalRequestedOwner = requestedOwner
+    ? canonicalOwnerPrincipal(requestedOwner)
+    : undefined
+  if (requestedOwner && !canonicalRequestedOwner) {
     throw new ElectricAgentsError(
       ErrCodeInvalidRequest,
       `owner_principal must be a valid principal URL (e.g. /principal/user%3Aalice), got: ${requestedOwner}`,
       400
     )
   }
-  if (ctx.principal && requestedOwner && requestedOwner !== ctx.principal.url) {
+  if (canonicalRequestedOwner && canonicalRequestedOwner !== principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `owner_principal must match the authenticated principal`,
@@ -165,7 +186,7 @@ async function listRunners(
     )
   }
   const runners = await ctx.entityManager.registry.listRunners({
-    ownerPrincipal: ctx.principal?.url ?? requestedOwner,
+    ownerPrincipal: principal.url,
   })
   return json(runners)
 }
@@ -184,11 +205,13 @@ async function heartbeat(
   ctx: TenantContext
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
+  requireAuthenticatedPrincipal(ctx)
   const existing = await requireRunner(ctx, runnerId)
   assertRunnerOwnerIfAuthenticated(ctx, existing.owner_principal)
   const parsed = routeBody<HeartbeatBody>(request)
   const runner = await ctx.entityManager.registry.heartbeatRunner({
     runnerId,
+    ownerPrincipal: existing.owner_principal,
     leaseMs: parsed.lease_ms,
     wakeStreamOffset: parsed.wake_stream_offset ?? parsed.wakeStreamOffset,
     livenessLeaseExpiresAt: parsed.liveness_lease_expires_at
@@ -222,6 +245,7 @@ async function setRunnerStatus(
   adminStatus: `enabled` | `disabled`
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
+  requireAuthenticatedPrincipal(ctx)
   const existing = await requireRunner(ctx, runnerId)
   assertRunnerOwnerIfAuthenticated(ctx, existing.owner_principal)
   const runner = await ctx.entityManager.registry.setRunnerAdminStatus(
@@ -239,8 +263,9 @@ async function claimWake(
   ctx: TenantContext
 ): Promise<Response> {
   const runnerId = routeParam(request, `id`)
+  const principal = requireAuthenticatedPrincipal(ctx)
   const runner = await requireRunner(ctx, runnerId)
-  if (ctx.principal && runner.owner_principal !== ctx.principal.url) {
+  if (runner.owner_principal !== principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner claim requires the authenticated owner`,
@@ -316,7 +341,7 @@ function assertRunnerOwnerIfAuthenticated(
   ctx: TenantContext,
   ownerPrincipal: string
 ): void {
-  if (!ctx.principal) return
+  requireAuthenticatedPrincipal(ctx)
   if (ownerPrincipal === ctx.principal.url) return
   throw new ElectricAgentsError(
     ErrCodeUnauthorized,
@@ -332,10 +357,12 @@ async function runnerHealth(
   const runnerId = routeParam(request, `id`)
   const runner = await requireRunner(ctx, runnerId)
   assertRunnerOwnerIfAuthenticated(ctx, runner.owner_principal)
+  const runtimeDiagnostics =
+    await ctx.entityManager.registry.getRunnerDiagnostics(runnerId)
 
   const now = Date.now()
-  const leaseExpiresAt = runner.liveness_lease_expires_at
-    ? new Date(runner.liveness_lease_expires_at).getTime()
+  const leaseExpiresAt = runtimeDiagnostics?.liveness_lease_expires_at
+    ? new Date(runtimeDiagnostics.liveness_lease_expires_at).getTime()
     : null
 
   let livenessStatus: `online` | `offline` | `expired`
@@ -355,7 +382,7 @@ async function runnerHealth(
   ])
 
   const clientDiagnostics =
-    (runner.diagnostics as RunnerHealthResponse[`client`]) ?? null
+    (runtimeDiagnostics?.diagnostics as RunnerHealthResponse[`client`]) ?? null
   const issues: Array<string> = []
   let healthStatus: `healthy` | `degraded` | `unhealthy` = `healthy`
 
@@ -395,7 +422,7 @@ async function runnerHealth(
         `Client has reconnected ${clientDiagnostics.reconnect_count} times`
       )
     }
-  } else if (runner.last_seen_at) {
+  } else if (runtimeDiagnostics?.last_seen_at) {
     escalate(`degraded`)
     issues.push(`No client diagnostics available`)
   }
@@ -405,12 +432,12 @@ async function runnerHealth(
       id: runner.id,
       admin_status: runner.admin_status,
       liveness_status: livenessStatus,
-      lease_expires_at: runner.liveness_lease_expires_at ?? null,
+      lease_expires_at: runtimeDiagnostics?.liveness_lease_expires_at ?? null,
       lease_remaining_ms:
         leaseExpiresAt !== null ? Math.max(0, leaseExpiresAt - now) : null,
       wake_stream: runner.wake_stream,
-      wake_stream_offset: runner.wake_stream_offset ?? null,
-      last_seen_at: runner.last_seen_at ?? null,
+      wake_stream_offset: runtimeDiagnostics?.wake_stream_offset ?? null,
+      last_seen_at: runtimeDiagnostics?.last_seen_at ?? null,
       created_at: runner.created_at,
     },
     client: clientDiagnostics,

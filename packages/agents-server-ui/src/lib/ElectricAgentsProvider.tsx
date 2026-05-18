@@ -80,9 +80,22 @@ const runnerSchema = z.object({
   updated_at: z.string(),
 })
 
+const runnerRuntimeDiagnosticsSchema = z.object({
+  runner_id: z.string(),
+  owner_principal: z.string(),
+  wake_stream_offset: z.string().nullable().optional(),
+  last_seen_at: z.string(),
+  liveness_lease_expires_at: z.string(),
+  diagnostics: runnerDiagnosticsSchema.nullable().optional(),
+  updated_at: z.string(),
+})
+
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
 export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricRunnerRuntimeDiagnostics = z.infer<
+  typeof runnerRuntimeDiagnosticsSchema
+>
 
 // --- Collection factories ---
 
@@ -145,6 +158,28 @@ function createRunnersCollection(baseUrl: string) {
         fetchClient: serverFetch,
       },
       getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createRunnerRuntimeDiagnosticsCollection(
+  baseUrl: string,
+  runnerId: string
+) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `runner-runtime-diagnostics:${baseUrl}:${runnerId}`,
+      schema: runnerRuntimeDiagnosticsSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: {
+          table: `runner_runtime_diagnostics`,
+          where: `runner_id = $1`,
+          params: { '1': runnerId },
+        },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.runner_id,
     })
   )
 }

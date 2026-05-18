@@ -53,7 +53,12 @@ export function isPrincipalUrl(url: string): boolean {
 
 export function getPrincipalFromRequest(request: Request): Principal | null {
   const value = request.headers.get(ELECTRIC_PRINCIPAL_HEADER)
-  return value ? parsePrincipalKey(value) : null
+  if (!value) return null
+  try {
+    return parsePrincipalKey(value)
+  } catch {
+    return null
+  }
 }
 
 export function getDevPrincipal(): Principal {

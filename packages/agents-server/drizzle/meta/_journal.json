@@ -57,6 +57,13 @@
       "when": 1778899200000,
       "tag": "0007_runner_diagnostics_and_principal",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778976000000,
+      "tag": "0008_runner_runtime_diagnostics",
+      "breakpoints": true
     }
   ]
 }

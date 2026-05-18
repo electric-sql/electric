@@ -98,6 +98,7 @@ const INITIAL_RECONNECT_BACKOFF_MS = 1_000
 const MAX_RECONNECT_BACKOFF_MS = 30_000
 const CLAIM_ACTOR_STOP_GRACE_MS = 1_000
 const DEFAULT_EVENT_HEARTBEAT_THROTTLE_MS = 2_000
+const HEARTBEAT_FAILURE_STREAM_RESET_THRESHOLD = 2
 
 export function createPullWakeRunner(
   config: PullWakeRunnerConfig
@@ -124,10 +125,12 @@ export function createPullWakeRunner(
   let claimsSucceeded = 0
   let claimsSkipped = 0
   let claimsFailed = 0
+  let consecutiveHeartbeatFailures = 0
   let acceptingClaims = false
   let activeClaimCount = 0
   let runGeneration = 0
   let nextReconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS
+  let streamResetError: Error | null = null
   const claimActors = new Map<Promise<void>, number>()
 
   const wakePath =
@@ -225,6 +228,12 @@ export function createPullWakeRunner(
     }
   }
 
+  const requestStreamReconnect = (error: Error): void => {
+    if (!streamConnected || streamResetError) return
+    streamResetError = error
+    response?.cancel?.(error)
+  }
+
   const notifyHeartbeatChange = (): void => {
     const signal = controller?.signal
     if (!signal || signal.aborted || heartbeatIntervalMs <= 0) return
@@ -259,10 +268,20 @@ export function createPullWakeRunner(
         )
       }
       lastHeartbeatOk = true
+      consecutiveHeartbeatFailures = 0
     } catch (err) {
       if (!signal.aborted) {
         lastHeartbeatOk = false
+        consecutiveHeartbeatFailures++
         reportError(err)
+        if (
+          consecutiveHeartbeatFailures >=
+          HEARTBEAT_FAILURE_STREAM_RESET_THRESHOLD
+        ) {
+          requestStreamReconnect(
+            err instanceof Error ? err : new Error(String(err))
+          )
+        }
       }
     }
   }
@@ -481,6 +500,7 @@ export function createPullWakeRunner(
     signal: AbortSignal,
     generation: number
   ): Promise<void> => {
+    streamResetError = null
     response = await streamFactory({
       url: wakeUrl,
       headers: await resolveHeaders(),
@@ -514,6 +534,9 @@ export function createPullWakeRunner(
       await response.closed?.catch((err) => {
         if (!signal.aborted) throw err
       })
+      if (streamResetError && !signal.aborted) {
+        throw streamResetError
+      }
     } finally {
       streamConnected = false
       streamConnectedSince = null
