@@ -147,7 +147,7 @@ defmodule Electric.Postgres.SnapshotQuery do
         |> record_subset_metrics(stack_id, shape_handle, shape)
         |> Enum.to_list()
       end,
-      stack_id: opts[:stack_id],
+      stack_id: stack_id,
       query_reason: "subset_query"
     )
     |> case do

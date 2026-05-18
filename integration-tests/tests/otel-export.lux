@@ -116,7 +116,7 @@
   # The initial snapshot query span is exported from the Snapshotter path."]
   [invoke grep_otel_collector_output "Span shape_snapshot\.execute_for_shape .*shape\.query_reason=initial_snapshot"]
 
-  # A direct subset snapshot query span is exported from the PartialModes path.
+  # A direct subset snapshot query span is exported from the SnapshotQuery.execute_for_subset path.
   [invoke grep_otel_collector_output "Span shape_snapshot\.execute_for_shape .*shape\.query_reason=subset_query"]
 
 ###
