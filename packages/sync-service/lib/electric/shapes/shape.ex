@@ -1108,6 +1108,23 @@ defmodule Electric.Shapes.Shape do
   defp column_info_from_json({"type_kind", kind}), do: {:type_kind, String.to_existing_atom(kind)}
   defp column_info_from_json({"type", type}), do: {:type, String.to_atom(type)}
   defp column_info_from_json({key, value}), do: {String.to_atom(key), value}
+
+  def otel_attrs(handle, shape, extra \\ []) do
+    Keyword.merge(
+      [
+        "shape.handle": handle,
+        "shape.root_table": shape.root_table,
+        "shape.where": if(where = shape.where, do: where.query)
+      ],
+      extra_attrs(extra)
+    )
+  end
+
+  # Mapping function for known attrs to avoid repeatedly concatenating OTel attribute names at runtime.
+  defp extra_attrs([{:query_reason, query_reason} | rest]),
+    do: [{:"shape.query_reason", query_reason} | extra_attrs(rest)]
+
+  defp extra_attrs([]), do: []
 end
 
 defimpl Inspect, for: Electric.Shapes.Shape do

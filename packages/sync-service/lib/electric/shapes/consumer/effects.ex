@@ -269,12 +269,7 @@ defmodule Electric.Shapes.Consumer.Effects do
     # `with_child_span` calls in the task would be silently dropped.
     trace_context = OpenTelemetry.get_current_context()
 
-    span_attrs = [
-      "shape.handle": shape_handle,
-      "shape.root_table": shape.root_table,
-      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
-      "shape.query_reason": "move_in_query"
-    ]
+    span_attrs = Shape.otel_attrs(shape_handle, shape, query_reason: "move_in_query")
 
     Task.Supervisor.start_child(supervisor, fn ->
       OpenTelemetry.set_current_context(trace_context)
