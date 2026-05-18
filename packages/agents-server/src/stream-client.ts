@@ -32,15 +32,6 @@ export interface WaitForMessagesResult {
   timedOut: boolean
 }
 
-export interface ConsumerStateResponse {
-  state: string
-  wake_id?: string | null
-  webhook?: {
-    wake_id?: string | null
-    subscription_id?: string
-  }
-}
-
 export interface SubscriptionStreamInfo {
   path: string
   tail_offset?: string
@@ -807,21 +798,5 @@ export class StreamClient {
     return this.subscriptionResponseBody(
       JSON.parse(text) as SubscriptionResponse
     )
-  }
-
-  async getConsumerState(
-    consumerId: string
-  ): Promise<ConsumerStateResponse | null> {
-    const res = await fetch(
-      `${this.baseUrl}/consumers/${encodeURIComponent(consumerId)}`,
-      { method: `GET`, headers: await this.requestHeaders() }
-    )
-    if (res.status === 404) return null
-    if (!res.ok) {
-      throw new Error(
-        `Consumer query failed: ${res.status} ${await res.text()}`
-      )
-    }
-    return res.json() as Promise<ConsumerStateResponse>
   }
 }

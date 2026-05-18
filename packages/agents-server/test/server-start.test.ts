@@ -191,10 +191,6 @@ vi.mock(`../src/stream-client`, () => ({
     readJson(): Promise<Array<Record<string, unknown>>> {
       return streamReadJsonMock()
     }
-
-    getConsumerState(): Promise<null> {
-      return Promise.resolve(null)
-    }
   },
 }))
 
