@@ -33,6 +33,20 @@ import type {
 import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 
+const PRINCIPAL_KEY_PREFIXES = new Set([`user`, `agent`, `service`, `system`])
+
+function normalizeOwnerUserId(
+  ownerUserId: string | undefined
+): string | undefined {
+  const trimmed = ownerUserId?.trim()
+  if (!trimmed) return undefined
+  const colon = trimmed.indexOf(`:`)
+  if (colon > 0 && PRINCIPAL_KEY_PREFIXES.has(trimmed.slice(0, colon))) {
+    return trimmed
+  }
+  return `user:${trimmed}`
+}
+
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string
   workingDirectory?: string
@@ -399,18 +413,20 @@ export class BuiltinAgentsServer {
         : pullWake.headers
     )
     headers.set(`content-type`, `application/json`)
+    const ownerUserId = normalizeOwnerUserId(pullWake.ownerUserId)
+    const body: Record<string, unknown> = {
+      id: pullWake.runnerId,
+      label: pullWake.label ?? `Built-in agents`,
+      kind: `local`,
+      admin_status: `enabled`,
+    }
+    if (ownerUserId) body.owner_user_id = ownerUserId
     const response = await fetch(
       appendPathToUrl(this.options.agentServerUrl, `/_electric/runners`),
       {
         method: `POST`,
         headers,
-        body: JSON.stringify({
-          id: pullWake.runnerId,
-          owner_user_id: pullWake.ownerUserId,
-          label: pullWake.label ?? `Built-in agents`,
-          kind: `local`,
-          admin_status: `enabled`,
-        }),
+        body: JSON.stringify(body),
       }
     )
     if (!response.ok) {

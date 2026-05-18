@@ -86,6 +86,23 @@ export interface ApiKeysStatus {
 }
 
 /**
+ * Snapshot consumed by the renderer's onboarding wizard.
+ *
+ * - `dismissed`: persisted "Don't show again" flag — once set the
+ *   wizard never reopens automatically (Settings remains available).
+ * - `hasAnyKey`: at least one LLM provider key already saved.
+ * - `signedIn`: Electric Cloud session restored on launch.
+ *
+ * The renderer decides whether to render the modal based on these
+ * three bits; main process doesn't make the policy call.
+ */
+export interface OnboardingState {
+  dismissed: boolean
+  hasAnyKey: boolean
+  signedIn: boolean
+}
+
+/**
  * Commands fired from the Electron application menu / tray over the
  * `desktop:command` IPC channel. The renderer's command handler (see
  * `RootShell` in `router.tsx`) maps each one to the same UI action a
@@ -129,6 +146,81 @@ export type DesktopNavigationState = {
 
 export type DesktopAppearance = `light` | `dark` | `system`
 
+/**
+ * Electric Cloud account state mirrored from the Electron main process.
+ *
+ * - `signed-out`: no stored JWT, or the stored token was expired at
+ *   launch and discarded.
+ * - `signing-in`: an OAuth BrowserWindow is open and waiting on the
+ *   user to complete the GitHub/Google flow.
+ * - `signed-in`: a non-expired JWT is held in encrypted storage; the
+ *   email/expiresAt fields are the values returned from the admin-API
+ *   callback redirect.
+ * - `error`: the most recent sign-in attempt failed; `error` carries
+ *   the message. The previous `signed-in` state is restored on next
+ *   attempt or app launch (we only flip back to `error` for the
+ *   in-progress attempt, not the persisted session).
+ */
+export type CloudAuthProvider = `github` | `google`
+export type CloudAuthStatus =
+  | `signed-out`
+  | `signing-in`
+  | `signed-in`
+  | `error`
+export interface CloudAuthWorkspace {
+  id: string
+  name: string
+}
+export interface CloudAuthState {
+  status: CloudAuthStatus
+  email: string | null
+  name: string | null
+  userId: string | null
+  workspaces: ReadonlyArray<CloudAuthWorkspace> | null
+  error: string | null
+}
+
+/**
+ * Continuously-synced view of the user's Electric Cloud agent servers,
+ * joined client-side (in the main process) with the user's workspaces,
+ * projects, and environments so each row carries the labels the UI
+ * needs to render "Agent X — Workspace / Project / Environment".
+ *
+ * - `idle`: no auth yet (signed-out) or no streams subscribed.
+ * - `loading`: streams just started; rows still empty.
+ * - `ready`: streams have produced at least one snapshot; `servers`
+ *   reflects the latest join. Rows mutate live as the underlying
+ *   shapes change — UI should re-render off `onStateChanged`.
+ * - `unauthorized`: a 401/403 on one of the streams. Streams are
+ *   stopped; caller should expect to sign back in.
+ * - `error`: transient — previous `servers` snapshot is retained.
+ */
+export type CloudAgentServersStatus =
+  | `idle`
+  | `loading`
+  | `ready`
+  | `unauthorized`
+  | `error`
+
+export interface CloudAgentServer {
+  /** stream_services.id — also the tenant identifier in the cloud agents server. */
+  id: string
+  name: string
+  workspaceId: string | null
+  workspaceName: string | null
+  projectId: string | null
+  projectName: string | null
+  environmentId: string | null
+  environmentName: string | null
+  updatedAt: string | null
+}
+
+export interface CloudAgentServersState {
+  status: CloudAgentServersStatus
+  servers: ReadonlyArray<CloudAgentServer>
+  error: string | null
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -147,6 +239,8 @@ declare global {
       rescanServers?: () => Promise<Array<DiscoveredServer>>
       getApiKeysStatus?: () => Promise<ApiKeysStatus>
       saveApiKeys?: (keys: ApiKeys) => Promise<void>
+      getOnboardingState?: () => Promise<OnboardingState>
+      setOnboardingDismissed?: (dismissed: boolean) => Promise<void>
       getWorkingDirectory?: () => Promise<string | null>
       chooseWorkingDirectory?: () => Promise<string | null>
       /**
@@ -207,6 +301,29 @@ declare global {
         reconnect: (name: string, serverId?: string) => Promise<void>
         disable: (name: string, serverId?: string) => Promise<void>
         enable: (name: string, serverId?: string) => Promise<void>
+      }
+      /**
+       * Electric Cloud sign-in surface. The Electron main process owns
+       * the OAuth BrowserWindow and the JWT storage; the renderer only
+       * observes state and triggers verbs.
+       */
+      cloudAuth?: {
+        getState: () => Promise<CloudAuthState>
+        signIn: (provider: CloudAuthProvider) => Promise<void>
+        signOut: () => Promise<void>
+        openDashboard: () => Promise<void>
+        onStateChanged: (
+          callback: (state: CloudAuthState) => void
+        ) => () => void
+      }
+      cloudAgentServers?: {
+        getState: () => Promise<CloudAgentServersState>
+        onStateChanged: (
+          callback: (state: CloudAgentServersState) => void
+        ) => () => void
+        prepareConnection: (
+          serviceId: string
+        ) => Promise<{ url: string; tenantId: string }>
       }
     }
   }
@@ -316,4 +433,58 @@ export async function loadApiKeysStatus(): Promise<ApiKeysStatus | null> {
 
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
   await window.electronAPI?.saveApiKeys?.(keys)
+}
+
+export async function loadOnboardingState(): Promise<OnboardingState | null> {
+  return (await window.electronAPI?.getOnboardingState?.()) ?? null
+}
+
+export async function setOnboardingDismissed(
+  dismissed: boolean
+): Promise<void> {
+  await window.electronAPI?.setOnboardingDismissed?.(dismissed)
+}
+
+export async function loadCloudAuthState(): Promise<CloudAuthState | null> {
+  return (await window.electronAPI?.cloudAuth?.getState?.()) ?? null
+}
+
+export async function cloudSignIn(provider: CloudAuthProvider): Promise<void> {
+  await window.electronAPI?.cloudAuth?.signIn?.(provider)
+}
+
+export async function cloudSignOut(): Promise<void> {
+  await window.electronAPI?.cloudAuth?.signOut?.()
+}
+
+export async function cloudOpenDashboard(): Promise<void> {
+  await window.electronAPI?.cloudAuth?.openDashboard?.()
+}
+
+export function onCloudAuthStateChanged(
+  callback: (state: CloudAuthState) => void
+): (() => void) | null {
+  return window.electronAPI?.cloudAuth?.onStateChanged?.(callback) ?? null
+}
+
+export async function loadCloudAgentServersState(): Promise<CloudAgentServersState | null> {
+  return (await window.electronAPI?.cloudAgentServers?.getState?.()) ?? null
+}
+
+export function onCloudAgentServersStateChanged(
+  callback: (state: CloudAgentServersState) => void
+): (() => void) | null {
+  return (
+    window.electronAPI?.cloudAgentServers?.onStateChanged?.(callback) ?? null
+  )
+}
+
+export async function prepareCloudAgentServerConnection(
+  serviceId: string
+): Promise<{ url: string; tenantId: string } | null> {
+  return (
+    (await window.electronAPI?.cloudAgentServers?.prepareConnection?.(
+      serviceId
+    )) ?? null
+  )
 }

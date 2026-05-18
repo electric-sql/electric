@@ -11,6 +11,7 @@ import {
   Tag,
 } from 'lucide-react'
 import { useLiveQuery } from '@tanstack/react-db'
+import { eq, not } from '@tanstack/db'
 import { Icon, IconButton, Menu, Text } from '../ui'
 import { useElectricAgents } from '../lib/ElectricAgentsProvider'
 import {
@@ -65,6 +66,7 @@ export function SidebarViewMenu(): React.ReactElement {
       if (!entitiesCollection) return undefined
       return q
         .from({ e: entitiesCollection })
+        .where(({ e }) => not(eq(e.type, `principal`)))
         .orderBy(({ e }) => e.updated_at, `desc`)
         .select(({ e }) => ({
           url: e.url,
@@ -85,9 +87,10 @@ export function SidebarViewMenu(): React.ReactElement {
   // purposes the cheap approximation of "every entity that is the
   // parent of at least one other entity" is good enough.
   const expandableUrls = useMemo(() => {
+    const entityUrls = new Set(entities.map((e) => e.url))
     const parents = new Set<string>()
     for (const e of entities) {
-      if (e.parent) parents.add(e.parent)
+      if (e.parent && entityUrls.has(e.parent)) parents.add(e.parent)
     }
     return Array.from(parents)
   }, [entities])

@@ -1,0 +1,80 @@
+/*
+ * Two-step onboarding wizard styling. The popup is wider than the
+ * default Dialog (520px instead of 480px) so the step indicator and
+ * the API-keys form share the same comfortable column width.
+ *
+ * The footer is wired to render below whichever step is active —
+ * it carries the "Don't show again" link so the user can opt out
+ * from either screen without scrolling.
+ */
+
+.providerButtons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2);
+}
+
+.providerActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--ds-space-3);
+}
+
+.signedInBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-2);
+  background: var(--ds-bg-subtle);
+  border: 1px solid var(--ds-border-1);
+  color: var(--ds-text-2);
+}
+
+.footer {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--ds-space-4);
+  padding-top: var(--ds-space-3);
+  border-top: 1px solid var(--ds-border-1);
+}
+
+.footerLink {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--ds-text-3);
+  font-size: var(--ds-text-xs);
+  line-height: var(--ds-text-xs-lh);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.footerLink:hover {
+  color: var(--ds-text-2);
+}
+
+.steps {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin-bottom: var(--ds-space-3);
+}
+
+.stepDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ds-border-2);
+}
+
+.stepDotActive {
+  background: var(--ds-text-1);
+}
+
+.stepBar {
+  flex: 0 1 24px;
+  height: 1px;
+  background: var(--ds-border-1);
+}

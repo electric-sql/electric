@@ -113,6 +113,7 @@ async function registerRunner(
       400
     )
   }
+
   if (ctx.principal && ownerUserId !== ctx.principal.key) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
