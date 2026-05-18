@@ -132,7 +132,7 @@ subquery:
 
 ```text
 MultiTimeView[{subquery_id, value}] -> membership_history
-consumer[{shape_handle, subquery_ref}] -> {subquery_id, filter_time}
+consumer[{shape_handle, subquery_ref}] -> {subquery_id, logical_time}
 ```
 
 Consumers no longer copy the subquery view. They register each subquery they
@@ -250,10 +250,11 @@ Consumers register at the logical time they are starting from. If a consumer
 starts from current logical time `t`, its initial `required_time` is `t`
 because it may read time `t`.
 
-`required_time` is a retention bound, not necessarily the same as the time used
-for live exact filter checks. During an active move, a consumer may need the old
-time for buffered conversion or move-in query work while live exact checks have
-already advanced to the new time. The implementation must keep those two uses
+`required_time` is a retention bound. It is separate from the consumer's current
+logical time for a specific subquery. During an active move, a consumer may need
+the old time for buffered conversion or move-in query work while its current
+logical time for that subquery has already advanced to the new time. The
+implementation must keep `required_time` and per-subquery `logical_time`
 explicit.
 
 ### MultiTimeView
@@ -369,7 +370,7 @@ Suggested logical rows:
 {:child_meta, child_node_id} -> {group_id, subquery_id, polarity, next_condition_id}
 {:child_shape, child_node_id} -> {shape_handle, branch_key}
 {:shape_child, shape_handle} -> child_node_id
-{:shape_subquery, shape_handle, subquery_ref} -> {subquery_id, filter_time}
+{:shape_subquery, shape_handle, subquery_ref} -> {subquery_id, logical_time}
 {:fallback, shape_handle} -> true
 ```
 
@@ -432,14 +433,15 @@ This is `O(number_of_affected_shapes)` for large negated groups. That is
 acceptable because a value absent from a large negated group genuinely affects
 all of those shapes.
 
-Exact filter verification uses the consumer's filter time:
+Exact filter verification uses the consumer's current logical time for the
+requested subquery:
 
 ```elixir
-MultiTimeView.member?(subquery_id, typed_value, filter_time)
+MultiTimeView.member?(subquery_id, typed_value, logical_time)
 ```
 
 `WhereClause.subquery_member_from_index/2` should therefore resolve
-`shape_handle + subquery_ref` to `{subquery_id, filter_time}` and call the
+`shape_handle + subquery_ref` to `{subquery_id, logical_time}` and call the
 shared view. The callback remains the boundary used by
 `WhereClause.includes_record?/3`.
 
@@ -533,11 +535,12 @@ After the move is spliced and the consumer no longer needs time `a`, it calls:
 SubqueryProgressMonitor.notify_processed_up_to(a, subquery_id)
 ```
 
-The consumer's exact-filter time is separate from this retention notification.
-It should advance to `b` at the same point the current implementation would
-update per-shape membership rows for subsequent routing. The important
-invariant is that live routing must not under-route, while `required_time`
-continues to pin `a` until the consumer no longer needs the old view.
+The consumer's current logical time for that subquery is separate from this
+retention notification. It should advance to `b` at the same point the current
+implementation would update per-shape membership rows for subsequent routing.
+The important invariant is that live routing must not under-route, while
+`required_time` continues to pin `a` until the consumer no longer needs the old
+view.
 
 ### Querying Changes
 
@@ -613,7 +616,7 @@ implementation:
 | Question | Options | Resolution Path |
 |----------|---------|-----------------|
 | **How should `values(subquery_id, time)` expose large views?** | Materialized `MapSet`, stream, both | Start with query-local materialization for compatibility, then prototype streaming or chunked array construction if telemetry shows spikes. |
-| **Where should exact filter times live?** | In `SubqueryIndex` participant rows, in `SubqueryProgressMonitor`, or in consumer-owned state with callbacks | Decide during implementation. The filter needs fast `shape_handle + subquery_ref -> time` lookup, so `SubqueryIndex` is the likely owner. |
+| **Where should per-subquery logical times live?** | In `SubqueryIndex` participant rows, in `SubqueryProgressMonitor`, or in consumer-owned state with callbacks | Decide during implementation. Exact membership checks need fast `shape_handle + subquery_ref -> {subquery_id, logical_time}` lookup, so `SubqueryIndex` is the likely owner. |
 | **When should positive routing rows be removed after compaction?** | Opportunistically on read/write, periodic cleanup, immediate cleanup when min time advances | Implement opportunistic plus periodic cleanup first. Add immediate cleanup only if stale positive routes are expensive. |
 | **Should long histories switch representation?** | Keep flat lists, switch to tuples/arrays after a threshold, or compact eagerly | Keep flat lists for v1 and add telemetry for max history length before adding another representation. |
 
@@ -640,7 +643,7 @@ implementation:
 | Requirement | Acceptance Criteria |
 |-------------|---------------------|
 | Shared subquery view | One `MultiTimeView` view exists per `subquery_id`, and steady-state consumers do not store full `MapSet` views. |
-| Per-consumer logical time | Each consumer can evaluate subquery membership at its own logical time. |
+| Per-consumer per-subquery logical time | Each consumer can evaluate each subquery at that subquery's own logical time. |
 | Correct registration | Consumer registration is serialized with the materializer and returns a current logical time whose view is ready. |
 | Progress notification | Consumers call `notify_processed_up_to(time, subquery_id)` after finishing moves, and compaction uses the minimum required time. |
 | Synchronous first child seed | First-time child creation seeds routing for the current view before removing fallback. |
