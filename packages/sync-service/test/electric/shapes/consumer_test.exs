@@ -1512,7 +1512,9 @@ defmodule Electric.Shapes.ConsumerTest do
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
 
-    @tag hibernate_after: 10, shape_suspend_after: 150, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10,
+         shape_suspend_after: 150,
+         with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "should hibernate first then suspend after shape_suspend_after ms", ctx do
       register_as_replication_client(ctx.stack_id)
@@ -1559,7 +1561,9 @@ defmodule Electric.Shapes.ConsumerTest do
       refute Consumer.whereis(ctx.stack_id, shape_handle)
     end
 
-    @tag hibernate_after: 10, shape_suspend_after: 200, with_pure_file_storage_opts: [flush_period: 1]
+    @tag hibernate_after: 10,
+         shape_suspend_after: 200,
+         with_pure_file_storage_opts: [flush_period: 1]
     @tag suspend: true
     test "activity during hibernation cancels pending suspend", ctx do
       register_as_replication_client(ctx.stack_id)
