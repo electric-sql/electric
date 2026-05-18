@@ -75,7 +75,7 @@ defmodule ElectricTelemetry.Poller do
 
     e ->
       Logger.warning(
-        "Telemetry collector #{inspect(m)}.#{f}/#{length(a)} crashed: " <>
+        "Periodic user metric function crash #{inspect(m)}.#{f}/#{length(a)}: " <>
           Exception.message(e)
       )
 
@@ -89,7 +89,7 @@ defmodule ElectricTelemetry.Poller do
 
     kind, reason ->
       Logger.warning(
-        "Telemetry collector #{inspect(m)}.#{f}/#{length(a)} #{kind}: " <>
+        "Periodic user metric function #{kind} #{inspect(m)}.#{f}/#{length(a)}: " <>
           inspect(reason)
       )
 

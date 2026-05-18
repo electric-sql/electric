@@ -25,12 +25,12 @@ defmodule ElectricTelemetry.PollerTest do
 
     test "swallows ArgumentError (ETS missing, etc.) silently" do
       log = capture_log(fn -> assert Poller.safe_invoke(Fixture, :raise_argument, []) == :ok end)
-      refute log =~ "crashed"
+      refute log =~ "crash"
     end
 
     test "swallows generic exceptions with a warning" do
       log = capture_log(fn -> assert Poller.safe_invoke(Fixture, :raise_runtime, []) == :ok end)
-      assert log =~ "crashed"
+      assert log =~ "crash"
       assert log =~ "kaboom"
     end
 
