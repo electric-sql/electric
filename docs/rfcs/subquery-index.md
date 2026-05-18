@@ -368,6 +368,7 @@ Suggested logical rows:
 {:group, group_key} -> group_id
 {:child, group_id, subquery_id} -> child_node_id
 {:child_meta, child_node_id} -> {group_id, subquery_id, polarity, next_condition_id}
+{:subquery_child, subquery_id} -> child_node_id
 {:child_shape, child_node_id} -> {shape_handle, branch_key}
 {:shape_child, shape_handle} -> child_node_id
 {:shape_subquery, shape_handle, subquery_ref} -> {subquery_id, logical_time}
@@ -444,6 +445,594 @@ MultiTimeView.member?(subquery_id, typed_value, logical_time)
 `shape_handle + subquery_ref` to `{subquery_id, logical_time}` and call the
 shared view. The callback remains the boundary used by
 `WhereClause.includes_record?/3`.
+
+### Operation Examples And Costs
+
+Use this concrete setup for the examples:
+
+```sql
+-- subquery_id = s7, current logical time 0
+SELECT id FROM users WHERE company_id = 7
+-- current values: 10, 20
+
+-- subquery_id = s8, current logical time 0
+SELECT id FROM users WHERE company_id = 8
+-- current values: 30
+```
+
+Outer shapes:
+
+```sql
+-- shape_a and shape_b share the same positive group and subquery.
+WHERE user_id IN (SELECT id FROM users WHERE company_id = 7)
+
+-- shape_c uses the same positive group but a different subquery.
+WHERE user_id IN (SELECT id FROM users WHERE company_id = 8)
+
+-- shape_n uses a negated group for s7.
+WHERE user_id NOT IN (SELECT id FROM users WHERE company_id = 7)
+```
+
+Symbols used below:
+
+- `V_s`: values in subquery `s` over the retained window.
+- `H_v`: transition history length for one `{subquery_id, value}` row.
+- `C_s`: child nodes attached to subquery `s`.
+- `P_c`: outer shapes attached to child node `c`.
+- `K`: changed values in one dependency move.
+- `N_g`: child nodes in a negated group.
+- `R`: root-table candidate rows returned by a move-in SQL query.
+
+#### Initial `MultiTimeView` State
+
+The initial materializer state for `s7` stores one row per dependency value,
+not one row per outer shape:
+
+```text
+{s7, 10} -> []
+{s7, 20} -> []
+{:current_time, s7} -> 0
+{:min_required_time, s7} -> 0
+{:ready, s7} -> true
+```
+
+The empty history means the value is present for the whole retained window.
+
+Memory is `O(V_s)` for the shared view. In this example, `shape_a` and
+`shape_b` do not duplicate `{10, 20}`.
+
+#### `register_subquery_consumer`
+
+Before an outer consumer can read `s7`, it registers through the materializer:
+
+```elixir
+{:ok, 0} =
+  Materializer.register_subquery_consumer(
+    s7,
+    shape_a,
+    consumer_pid_a
+  )
+```
+
+Progress monitor rows are conceptually:
+
+```text
+{s7, shape_a} -> required_time 0
+{s7, 0, shape_a} -> true
+```
+
+The shape's subquery reference is then recorded by the indexing/setup path:
+
+```text
+{:shape_subquery, shape_a, ["$sublink", "0"]} -> {s7, 0}
+```
+
+If registration is called from `add_shape`, this row is inserted once as part
+of that setup path; it is shown here to make the registration result explicit.
+
+What is evaluated:
+
+1. Wait until `s7` is ready.
+2. Read `{:current_time, s7}`.
+3. Insert progress monitor rows for `shape_a`.
+4. Return `0` to the consumer.
+
+Cost:
+
+```text
+O(wait_until_ready + progress_index_insert)
+```
+
+No dependency values are copied. Memory added is
+`O(number_of_subqueries_read_by_shape)`.
+
+#### `add_shape`: First Positive Shape For `{group, subquery}`
+
+Adding `shape_a` creates a positive group `g_user_pos` and a child `c_s7_pos`
+for `{g_user_pos, s7}`.
+
+Rows stored:
+
+```text
+{:group, {:node_1, :user_id, :positive}} -> g_user_pos
+{:child, g_user_pos, s7} -> c_s7_pos
+{:child_meta, c_s7_pos} -> {g_user_pos, s7, :positive, wc_s7_pos}
+{:subquery_child, s7} -> c_s7_pos
+
+{:child_shape, c_s7_pos} -> {shape_a, branch_a}
+{:shape_child, shape_a} -> c_s7_pos
+{:shape_subquery, shape_a, ["$sublink", "0"]} -> {s7, 0}
+
+{:positive, g_user_pos, 10} -> c_s7_pos
+{:positive, g_user_pos, 20} -> c_s7_pos
+```
+
+The child `WhereCondition` `wc_s7_pos` also stores `shape_a` with the residual
+non-subquery predicates for the branch.
+
+What is evaluated:
+
+1. Compile or reuse the DNF subquery group key.
+2. Register the consumer with the dependency materializer and get logical time
+   `0`.
+3. Create the child `WhereCondition`.
+4. Insert `shape_a` into the child condition.
+5. Synchronously seed positive routing from `MultiTimeView.values(s7, 0)`.
+6. Remove fallback for `shape_a`.
+
+Cost:
+
+```text
+O(number_of_subquery_occurrences_in_shape + V_s + child_where_insert)
+```
+
+The `V_s` term only applies because this is the first child for
+`{g_user_pos, s7}`. Memory added is `O(V_s)` positive routing rows for the
+child plus `O(number_of_subquery_occurrences_in_shape)` participant rows.
+
+#### `add_shape`: Additional Shape Sharing An Existing Child
+
+Adding `shape_b` finds the existing child `c_s7_pos`.
+
+Rows added:
+
+```text
+{:child_shape, c_s7_pos} -> {shape_b, branch_b}
+{:shape_child, shape_b} -> c_s7_pos
+{:shape_subquery, shape_b, ["$sublink", "0"]} -> {s7, 0}
+```
+
+No new rows are added for values `10` or `20`.
+
+What is evaluated:
+
+1. Resolve `{g_user_pos, s7}` to `c_s7_pos`.
+2. Register the consumer and get logical time `0`.
+3. Insert `shape_b` into the child condition.
+4. Remove fallback for `shape_b`.
+
+Cost:
+
+```text
+O(number_of_subquery_occurrences_in_shape + child_where_insert)
+```
+
+Memory added is per-shape metadata only, not `O(V_s)`.
+
+#### `add_shape`: Same Group, Different Subquery
+
+Adding `shape_c` reuses group `g_user_pos`, but creates child `c_s8_pos` for
+`{g_user_pos, s8}`.
+
+Rows added include:
+
+```text
+{:child, g_user_pos, s8} -> c_s8_pos
+{:child_meta, c_s8_pos} -> {g_user_pos, s8, :positive, wc_s8_pos}
+{:subquery_child, s8} -> c_s8_pos
+{:positive, g_user_pos, 30} -> c_s8_pos
+{:shape_subquery, shape_c, ["$sublink", "0"]} -> {s8, 0}
+```
+
+Cost is `O(V_s8)` for the first `s8` child in this group. This is expected:
+`s8` has different dependency values from `s7`.
+
+#### `add_shape`: Negated Shape
+
+Adding `shape_n` creates or reuses a negated group `g_user_neg` and child
+`c_s7_neg`.
+
+Rows stored:
+
+```text
+{:group, {:node_2, :user_id, :negated}} -> g_user_neg
+{:child, g_user_neg, s7} -> c_s7_neg
+{:child_meta, c_s7_neg} -> {g_user_neg, s7, :negated, wc_s7_neg}
+{:subquery_child, s7} -> c_s7_neg
+{:negated, g_user_neg} -> c_s7_neg
+
+{:child_shape, c_s7_neg} -> {shape_n, branch_n}
+{:shape_child, shape_n} -> c_s7_neg
+{:shape_subquery, shape_n, ["$sublink", "0"]} -> {s7, 0}
+```
+
+No per-value negated routing rows are stored.
+
+Cost:
+
+```text
+O(number_of_subquery_occurrences_in_shape + child_where_insert)
+```
+
+Memory added for negated routing is `O(1)` per child, not `O(V_s)`.
+
+#### `affected_shapes`: Positive Group
+
+For a root-table record:
+
+```text
+%{"user_id" => 10}
+```
+
+Routing does:
+
+1. Evaluate the left-hand side `user_id` to `10`.
+2. Look up `{:positive, g_user_pos, 10}` and get `[c_s7_pos]`.
+3. Evaluate child condition `wc_s7_pos`, which considers `shape_a` and
+   `shape_b`.
+4. For each candidate shape, exact subquery checks resolve:
+
+```text
+{:shape_subquery, shape_a, ["$sublink", "0"]} -> {s7, 0}
+{:shape_subquery, shape_b, ["$sublink", "0"]} -> {s7, 0}
+MultiTimeView.member?(s7, 10, 0) -> true
+```
+
+Both shapes are affected.
+
+Cost:
+
+```text
+O(children_for_value + child_where_eval + exact_subquery_checks * H_v)
+```
+
+For this example, `children_for_value = 1`. There is no scan of all shapes and
+no scan of all values in `s7`.
+
+#### `affected_shapes`: Positive Group With Divergent Consumer Times
+
+Suppose the materializer adds value `30` to `s7` at logical time `1`:
+
+```text
+{s7, 30} -> [:out, 1]
+{:current_time, s7} -> 1
+{:positive, g_user_pos, 30} -> c_s7_pos
+```
+
+Now `shape_a` has advanced to logical time `1`, but `shape_b` still reads
+logical time `0`:
+
+```text
+{:shape_subquery, shape_a, ["$sublink", "0"]} -> {s7, 1}
+{:shape_subquery, shape_b, ["$sublink", "0"]} -> {s7, 0}
+```
+
+For:
+
+```text
+%{"user_id" => 30}
+```
+
+routing finds `c_s7_pos` because `30` is a member at some retained time. Exact
+checks then split the result:
+
+```text
+MultiTimeView.member?(s7, 30, 1) -> true
+MultiTimeView.member?(s7, 30, 0) -> false
+```
+
+Only `shape_a` is affected.
+
+Cost remains:
+
+```text
+O(children_for_value + child_where_eval + exact_subquery_checks * H_v)
+```
+
+The extra memory for the move is one history row for `{s7, 30}` plus one
+positive routing row per positive child for `s7` in that group.
+
+#### `affected_shapes`: Negated Group
+
+For:
+
+```text
+%{"user_id" => 30}
+```
+
+while `{s7, 30} -> [:out, 1]` is retained, `30` is absent at time `0` and
+present at time `1`. Negated routing does:
+
+1. Look up `{:negated, g_user_neg}` and get `[c_s7_neg]`.
+2. Keep `c_s7_neg` because:
+
+```elixir
+not MultiTimeView.member_at_all_times?(s7, 30)
+```
+
+3. Evaluate `wc_s7_neg` and exact membership at each candidate shape's
+   subquery logical time.
+
+For `shape_n` at logical time `0`, `NOT IN s7` is true for `30`. If it later
+advances to logical time `1`, `NOT IN s7` is false for `30`.
+
+Cost:
+
+```text
+O(N_g * H_v + child_where_eval + exact_subquery_checks * H_v)
+```
+
+This is intentionally proportional to the number of affected negated children.
+No complement index is stored.
+
+#### Dependency Move: Add Or Remove Values
+
+For a move that adds `30` to `s7`:
+
+```text
+from_time = 0
+to_time = 1
+changed_values = [30]
+```
+
+Rows written:
+
+```text
+{s7, 30} -> [:out, 1]
+{:current_time, s7} -> 1
+{:positive, g_user_pos, 30} -> c_s7_pos
+```
+
+Rows not written:
+
+```text
+{:membership, shape_a, ["$sublink", "0"], 30}
+{:membership, shape_b, ["$sublink", "0"], 30}
+```
+
+What is evaluated:
+
+1. Update the `MultiTimeView` history for each changed value.
+2. Find children from `{:subquery_child, s7}`.
+3. For each positive child, insert a positive routing row if the value changed
+   from not routable to routable for the retained window.
+4. Emit a move event containing `from_time`, `to_time`, `subquery_id`, and
+   changed values.
+
+Cost:
+
+```text
+O(K * (history_update + C_s))
+```
+
+For a remove of `20` from `s7` at time `2`, the history becomes:
+
+```text
+{s7, 20} -> [:in, 2]
+```
+
+The positive routing row for `20` stays while any retained time still contains
+`20`. It is removed later when compaction proves `member_at_some_time?(s7, 20)`
+is false.
+
+#### Consumer Move Handling
+
+When `shape_a` receives the `s7` move from `0` to `1`, `ActiveMove` stores:
+
+```elixir
+%ActiveMove{
+  subquery_id: s7,
+  from_time: 0,
+  to_time: 1,
+  values: [{30, "30"}]
+}
+```
+
+It does not store:
+
+```text
+views_before_move: MapSet.new([10, 20])
+views_after_move: MapSet.new([10, 20, 30])
+```
+
+Buffered row conversion evaluates exact membership by calling
+`MultiTimeView.member?/3` at `from_time` or `to_time`. Move-in SQL may
+materialize `values(s7, 1)` as a query-local parameter array, but that memory
+belongs to the query task and is released after the query.
+
+Steady memory added per active move is:
+
+```text
+O(number_of_changed_values + number_of_subquery_refs)
+```
+
+not `O(V_s)`.
+
+#### `notify_processed_up_to` And Compaction
+
+After `shape_a` no longer needs time `0`, it calls:
+
+```elixir
+SubqueryProgressMonitor.notify_processed_up_to(0, s7)
+```
+
+Progress monitor rows conceptually change from:
+
+```text
+{s7, shape_a} -> required_time 0
+{s7, shape_b} -> required_time 0
+```
+
+to:
+
+```text
+{s7, shape_a} -> required_time 1
+{s7, shape_b} -> required_time 0
+```
+
+The minimum is still `0`, so `MultiTimeView` cannot compact away time `0`.
+After `shape_b` also notifies up to `0`, the minimum becomes `1`. Then:
+
+```text
+{s7, 30} -> [:out, 1]
+```
+
+can compact to:
+
+```text
+{s7, 30} -> []
+```
+
+For a removed value:
+
+```text
+{s7, 20} -> [:in, 2]
+```
+
+if the minimum required time later advances past `2`, compaction can delete the
+`MultiTimeView` row and remove stale positive routes:
+
+```text
+delete {s7, 20}
+delete {:positive, g_user_pos, 20} -> c_s7_pos
+```
+
+Cost for notification:
+
+```text
+O(progress_index_update + min_recompute_for_subquery)
+```
+
+With an index keyed by `{subquery_id, required_time, consumer_id}`, reading the
+minimum is `O(1)` or `O(log consumers_for_subquery)` depending on the ETS
+layout chosen. Compaction cost is paid separately and can be incremental. For
+one compacted value it is:
+
+```text
+O(H_v + positive_children_for_subquery)
+```
+
+If compaction is batched, total work is proportional to the histories visited
+and the stale route rows removed.
+
+#### Move-In Query Construction
+
+For the `s7` move from time `0` to `1`, existing SQL generation may still need
+arrays for the before and after views. The new design builds them from
+`MultiTimeView` inside the query task:
+
+```elixir
+values_for.(["$sublink", "0"], 0) -> [10, 20]
+values_for.(["$sublink", "0"], 1) -> [10, 20, 30]
+```
+
+What is stored persistently:
+
+```text
+nothing beyond the ActiveMove times and changed values
+```
+
+What is allocated transiently:
+
+```text
+query-local arrays for values(s7, 0) and values(s7, 1)
+move-in snapshot rows returned by Postgres
+```
+
+Cost for the compatibility implementation:
+
+```text
+O(V_s + R)
+```
+
+where `R` is the number of root-table rows returned by the move-in query.
+
+This does not yet minimize move-in query memory, but it moves full-view arrays
+out of steady consumer state and into short-lived query tasks.
+
+#### `remove_shape`
+
+Removing `shape_a` reads:
+
+```text
+{:shape_child, shape_a} -> c_s7_pos
+{:shape_subquery, shape_a, ["$sublink", "0"]} -> {s7, 1}
+```
+
+Rows removed:
+
+```text
+{:child_shape, c_s7_pos} -> {shape_a, branch_a}
+{:shape_child, shape_a} -> c_s7_pos
+{:shape_subquery, shape_a, ["$sublink", "0"]} -> {s7, 1}
+```
+
+The monitor registration for `{shape_a, s7}` is removed. `shape_a` is removed
+from the child `WhereCondition`.
+
+If `shape_b` still uses `c_s7_pos`, no value routing rows are touched. Cost is:
+
+```text
+O(children_for_shape + subqueries_for_shape + child_where_remove)
+```
+
+If this removes the last shape from `c_s7_pos`, the child is deleted too:
+
+```text
+{:child, g_user_pos, s7}
+{:child_meta, c_s7_pos}
+{:subquery_child, s7} -> c_s7_pos
+{:positive, g_user_pos, value} -> c_s7_pos for each retained value
+```
+
+The positive route cleanup iterates `MultiTimeView.values(s7)` and deletes the
+specific `{group, value, child}` route rows. That last-child case costs:
+
+```text
+O(V_s + child_metadata)
+```
+
+It does not scan unrelated subqueries or unrelated shapes.
+
+#### `remove_subquery`
+
+Removing dependency subquery `s7` reads:
+
+```text
+{:subquery_child, s7} -> c_s7_pos
+{:subquery_child, s7} -> c_s7_neg
+```
+
+Then it removes:
+
+```text
+child metadata for c_s7_pos and c_s7_neg
+participant rows for shapes attached to those children
+positive routing rows for s7 values
+negated group rows for s7 negated children
+MultiTimeView rows with key prefix s7
+progress monitor rows for s7
+```
+
+Cost:
+
+```text
+O(C_s + sum(P_c) + V_s)
+```
+
+This is proportional to the removed subquery's children, participants, and
+values. It should not scan the whole `SubqueryIndex` or all shapes in the
+stack.
 
 ### Materializer Integration
 
