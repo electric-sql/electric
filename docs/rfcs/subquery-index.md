@@ -338,8 +338,9 @@ the shape is added to the child `WhereCondition`.
 
 Creating the first child for `{group, subquery_id}` requires indexing current
 values for that subquery in the group. That is O(number of values in the
-subquery), which is acceptable and unavoidable unless the child stays in a
-fallback mode until asynchronous seeding completes.
+subquery), which is acceptable and unavoidable. First-time child creation should
+seed synchronously so the child is fully routable before the shape is considered
+indexed.
 
 #### Shape Removal
 
@@ -628,5 +629,3 @@ Keep or extend integration tests for:
 
 - Should `MultiTimeView` expose `values(subquery_id, time)` as a materialized
   `MapSet`, a stream, or both?
-- Should first-time child creation seed synchronously, or should it use fallback
-  routing while an asynchronous seeding task populates group value rows?
