@@ -41,7 +41,13 @@ defmodule Electric.Shapes.Consumer.State do
     # When a {Storage, :flushed, offset} message arrives during a pending
     # transaction, we defer the notification and store the max flushed offset
     # here. Multiple deferred notifications are collapsed into a single most recent offset.
-    pending_flush_offset: nil
+    pending_flush_offset: nil,
+    # Generation counter for suspend timers - incremented each time we schedule
+    # a new suspend timer. When a timer fires, it checks if its generation matches
+    # the current one; if not, activity occurred and the timer is stale (ignored).
+    suspend_generation: 0,
+    # How long after hibernation to suspend (in ms)
+    suspend_after: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -94,6 +100,12 @@ defmodule Electric.Shapes.Consumer.State do
           stack_id,
           :shape_hibernate_after,
           Electric.Config.default(:shape_hibernate_after)
+        ),
+      suspend_after:
+        Electric.StackConfig.lookup(
+          stack_id,
+          :shape_suspend_after,
+          Electric.Config.default(:shape_suspend_after)
         ),
       buffering?: true
     }

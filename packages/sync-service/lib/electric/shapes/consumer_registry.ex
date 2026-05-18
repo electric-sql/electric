@@ -217,33 +217,35 @@ defmodule Electric.Shapes.ConsumerRegistry do
   disabled, because the configuration message will have the side-effect of
   waking all consumers from hibernation.
 
-  The `jitter_period` value allows for spreading the suspension of existing
-  consumers over a large time period to avoid a sudden rush of consumer
-  shutdowns after `hibernate_after` ms.
+  The `jitter_period` value allows for spreading the hibernation of existing
+  consumers over a time period to avoid a sudden rush of hibernation events.
+  Each consumer picks a random timeout between `hibernate_after` and `jitter_period`,
+  then hibernates and schedules suspension for `suspend_after` ms later.
 
   To re-enable consumer suspend:
 
-      # set the hibernation timeout to 1 minute but phase the suspension of
-      # existing consumers over a 20 minute period
-      Electric.Shapes.ConsumerRegistry.enable_suspend(stack_id, 60_000, 60_000 * 20)
+      # hibernation timeout: 1 min, suspend timeout: 4 min, jitter window: 20 min
+      # Consumers will hibernate between 1-20 min, then suspend 4 min after hibernating
+      Electric.Shapes.ConsumerRegistry.enable_suspend(stack_id, 60_000, 4 * 60_000, 60_000 * 20)
 
   Disabling suspension is as easy as:
 
       Electric.StackConfig.put(stack_id, :shape_enable_suspend?, false)
 
   """
-  @spec enable_suspend(stack_id(), pos_integer(), pos_integer()) ::
+  @spec enable_suspend(stack_id(), pos_integer(), pos_integer(), pos_integer()) ::
           consumer_count :: non_neg_integer()
-  def enable_suspend(stack_id, hibernate_after, jitter_period)
-      when is_integer(hibernate_after) and is_integer(jitter_period) and
-             jitter_period > hibernate_after do
+  def enable_suspend(stack_id, hibernate_after, suspend_after, jitter_period)
+      when is_integer(hibernate_after) and is_integer(suspend_after) and
+             is_integer(jitter_period) and jitter_period > hibernate_after do
     Electric.StackConfig.put(stack_id, :shape_hibernate_after, hibernate_after)
+    Electric.StackConfig.put(stack_id, :shape_suspend_after, suspend_after)
     Electric.StackConfig.put(stack_id, :shape_enable_suspend?, true)
 
     :ets.foldl(
       fn {_shape_handle, pid}, n ->
         if Process.alive?(pid),
-          do: send(pid, {:configure_suspend, hibernate_after, jitter_period})
+          do: send(pid, {:configure_suspend, hibernate_after, suspend_after, jitter_period})
 
         n + 1
       end,
