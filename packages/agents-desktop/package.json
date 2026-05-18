@@ -2,7 +2,7 @@
   "name": "@electric-ax/agents-desktop",
   "productName": "Electric Agents",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Desktop app for Electric Agents",
   "author": "ElectricSQL <info@electric-sql.com>",
   "homepage": "https://electric-sql.com",
@@ -26,7 +26,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@electric-sql/client": "^1.5.15",
+    "@electric-sql/client": "^1.5.18",
     "@mixmark-io/domino": "^2.2.0",
     "better-sqlite3": "^12.9.0",
     "jsdom": "^28.1.0",
