@@ -128,7 +128,7 @@ describe(`pull-wake subscription stack`, () => {
         url: `/principal/user%3Aowner%40example.com`,
       },
       publicUrl: `http://agents.local`,
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: streamBaseUrl,
       entityBridgeManager: {
         beginClientRead: async () => null,
         touchByStreamPath: async () => undefined,

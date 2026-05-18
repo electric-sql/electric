@@ -81,12 +81,12 @@ function subscriptionUrl(
   const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
   if (match) {
     const [, prefix = ``, serviceId] = match
-    url.pathname = `${prefix}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
+    url.pathname = `${prefix}/v1/stream/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
     url.searchParams.set(`service`, decodeURIComponent(serviceId!))
     return url.toString()
   }
 
-  url.pathname = `${url.pathname.replace(/\/+$/, ``)}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
+  url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
   return url.toString()
 }
 

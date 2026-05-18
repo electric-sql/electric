@@ -219,16 +219,41 @@ export class StreamClient {
     return headers
   }
 
+  private subscriptionServiceId(): string | null {
+    const url = new URL(this.baseUrl)
+    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
+    return match ? decodeURIComponent(match[2]!) : null
+  }
+
   private backendSubscriptionPath(path: string): string {
-    return normalizeSubscriptionPath(path)
+    const normalized = normalizeSubscriptionPath(path)
+    const serviceId = this.subscriptionServiceId()
+    if (!serviceId) return normalized
+    if (normalized === serviceId || normalized.startsWith(`${serviceId}/`)) {
+      return normalized
+    }
+    return `${serviceId}/${normalized}`
   }
 
   private runtimeSubscriptionPath(path: string): string {
-    return normalizeSubscriptionPath(path)
+    const normalized = normalizeSubscriptionPath(path)
+    const serviceId = this.subscriptionServiceId()
+    if (!serviceId) return normalized
+    return normalized.startsWith(`${serviceId}/`)
+      ? normalized.slice(serviceId.length + 1)
+      : normalized
   }
 
   private subscriptionUrl(subscriptionId: string): string {
     const url = new URL(this.baseUrl)
+    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
+    if (match) {
+      const [, prefix = ``, serviceId] = match
+      url.pathname = `${prefix}/v1/stream/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
+      url.searchParams.set(`service`, decodeURIComponent(serviceId!))
+      return url.toString()
+    }
+
     url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
     return url.toString()
   }
