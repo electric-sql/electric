@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.18
+
+### Patch Changes
+
+- a15c7b6: Add exponential backoff with jitter to `ShapeStream` retries requested by `onError`, preventing tight retry loops for persistent non-429 4xx errors while keeping the consecutive retry guard as a final safety net.
+
 ## 1.5.17
 
 ### Patch Changes

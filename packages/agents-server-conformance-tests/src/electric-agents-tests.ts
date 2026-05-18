@@ -2642,7 +2642,7 @@ export function runElectricAgentsConformanceTests(
 
     test(`write to non-entity stream requires no auth`, async () => {
       const id = Date.now()
-      const streamPath = `/v1/stream/plain-stream-auth-test-${id}`
+      const streamPath = `/plain-stream-auth-test-${id}`
 
       // Create a regular stream
       const createRes = await fetch(`${config.baseUrl}${streamPath}`, {

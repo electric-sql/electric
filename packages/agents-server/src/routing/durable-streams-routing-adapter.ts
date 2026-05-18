@@ -1,8 +1,3 @@
-import {
-  prefixTenantStreamPath,
-  stripTenantStreamPrefix,
-} from './tenant-stream-paths.js'
-
 export interface DurableStreamsRoutingInput {
   durableStreamsUrl: string
   serviceId: string
@@ -11,7 +6,7 @@ export interface DurableStreamsRoutingInput {
 
 export interface DurableStreamsRoutingAdapter {
   streamUrl(input: DurableStreamsRoutingInput): URL
-  streamMetaUrl(input: DurableStreamsRoutingInput): URL
+  controlUrl(input: DurableStreamsRoutingInput): URL
   toBackendStreamPath(serviceId: string, streamPath: string): string
   toRuntimeStreamPath(serviceId: string, streamPath: string): string
 }
@@ -26,71 +21,44 @@ function removeServiceQuery(target: URL): URL {
   return target
 }
 
-function logicalStreamPathFromRequest(
-  requestUrl: string,
-  serviceId: string
-): { incomingUrl: URL; streamPath: string } {
-  const incomingUrl = new URL(requestUrl, `http://localhost`)
-  const segments = incomingUrl.pathname.split(`/`).filter(Boolean)
-  if (segments[0] === `v1` && segments[1] === `stream`) {
-    return {
-      incomingUrl,
-      streamPath: segments.length > 2 ? `/${segments.slice(3).join(`/`)}` : `/`,
-    }
-  }
-
-  return {
-    incomingUrl,
-    streamPath: incomingUrl.pathname || `/${serviceId}`,
-  }
+function withoutTrailingSlash(pathname: string): string {
+  return pathname.replace(/\/+$/, ``) || `/`
 }
 
-function backendStreamUrl(
-  input: DurableStreamsRoutingInput,
-  backendStreamPath: string
-): URL {
-  const path = backendStreamPath.replace(/^\/+/, ``)
-  const target = new URL(`/v1/stream/${path}`, input.durableStreamsUrl)
-  return target
-}
-
-function streamMetaUrlWithoutService(input: DurableStreamsRoutingInput): URL {
+function appendRequestPathToStreamRoot(input: DurableStreamsRoutingInput): URL {
   const incomingUrl = new URL(input.requestUrl, `http://localhost`)
-  return removeServiceQuery(
-    appendSearch(
-      new URL(incomingUrl.pathname, input.durableStreamsUrl),
-      incomingUrl
-    )
-  )
+  const path = incomingUrl.pathname.replace(/^\/+/, ``)
+  const target = new URL(input.durableStreamsUrl)
+  target.pathname = path
+    ? `${withoutTrailingSlash(target.pathname)}/${path}`
+    : withoutTrailingSlash(target.pathname)
+  return removeServiceQuery(appendSearch(target, incomingUrl))
 }
 
-export const pathPrefixedSingleTenantDurableStreamsRoutingAdapter: DurableStreamsRoutingAdapter =
+export const streamRootDurableStreamsRoutingAdapter: DurableStreamsRoutingAdapter =
   {
-    streamUrl(input) {
-      const { incomingUrl, streamPath } = logicalStreamPathFromRequest(
-        input.requestUrl,
-        input.serviceId
-      )
-      const target = backendStreamUrl(
-        input,
-        prefixTenantStreamPath(streamPath, input.serviceId)
-      )
-      return removeServiceQuery(appendSearch(target, incomingUrl))
+    streamUrl: appendRequestPathToStreamRoot,
+
+    controlUrl: appendRequestPathToStreamRoot,
+
+    toBackendStreamPath(_serviceId, streamPath) {
+      return streamPath.replace(/^\/+/, ``)
     },
 
-    streamMetaUrl: streamMetaUrlWithoutService,
-
-    toBackendStreamPath(serviceId, streamPath) {
-      return prefixTenantStreamPath(streamPath, serviceId)
-    },
-
-    toRuntimeStreamPath(serviceId, streamPath) {
-      return stripTenantStreamPrefix(streamPath, serviceId)
+    toRuntimeStreamPath(_serviceId, streamPath) {
+      return streamPath.replace(/^\/+/, ``)
     },
   }
+
+export const pathPrefixedSingleTenantDurableStreamsRoutingAdapter =
+  streamRootDurableStreamsRoutingAdapter
+
+export const tenantRootDurableStreamsRoutingAdapter =
+  streamRootDurableStreamsRoutingAdapter
 
 export function resolveDurableStreamsRoutingAdapter(
-  adapter?: DurableStreamsRoutingAdapter
+  adapter?: DurableStreamsRoutingAdapter,
+  _durableStreamsUrl?: string
 ): DurableStreamsRoutingAdapter {
-  return adapter ?? pathPrefixedSingleTenantDurableStreamsRoutingAdapter
+  return adapter ?? streamRootDurableStreamsRoutingAdapter
 }

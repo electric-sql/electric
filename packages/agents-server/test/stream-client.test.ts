@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { StreamClient } from '../src/stream-client'
+import { StreamClient, durableStreamsServiceUrl } from '../src/stream-client'
 
 const {
   appendMock,
@@ -97,7 +97,7 @@ describe(`StreamClient`, () => {
     await expect(client.exists(`/_cron/test`)).rejects.toBe(error)
   })
 
-  it(`createSubscription uses the stream-meta subscription contract`, async () => {
+  it(`createSubscription uses the reserved __ds subscription contract`, async () => {
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
       new Response(JSON.stringify({ subscription_id: `sub-1` }), {
         headers: { 'content-type': `application/json` },
@@ -114,15 +114,46 @@ describe(`StreamClient`, () => {
       )
 
       expect(fetchMock).toHaveBeenCalledWith(
-        `http://127.0.0.1:4545/v1/stream-meta/subscriptions/sub-1?service=tenant-a`,
+        `http://127.0.0.1:4545/v1/stream/tenant-a/__ds/subscriptions/sub-1`,
         expect.objectContaining({ method: `PUT` })
       )
       const [, init] = fetchMock.mock.calls[0]!
       expect(JSON.parse(init?.body as string)).toEqual({
         type: `webhook`,
-        pattern: `tenant-a/chat/**`,
+        pattern: `chat/**`,
         webhook: { url: `http://agent.local/webhook` },
         description: `test subscription`,
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`does not tenant-prefix subscription streams for tenant-root URLs`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(
+      `https://streams.test/v1/streams/svc-tenant-a`
+    )
+
+    try {
+      await client.putSubscription(`sub-1`, {
+        type: `pull-wake`,
+        streams: [`/chat/one/main`],
+        wake_stream: `/runners/runner-1/wake`,
+      })
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `https://streams.test/v1/streams/svc-tenant-a/__ds/subscriptions/sub-1`,
+        expect.objectContaining({ method: `PUT` })
+      )
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        streams: [`chat/one/main`],
+        wake_stream: `runners/runner-1/wake`,
       })
     } finally {
       fetchMock.mockRestore()
@@ -212,5 +243,31 @@ describe(`StreamClient`, () => {
     } finally {
       fetchMock.mockRestore()
     }
+  })
+})
+
+describe(`durableStreamsServiceUrl`, () => {
+  it(`derives a single-tenant stream root from a bare server origin`, () => {
+    expect(
+      durableStreamsServiceUrl(`http://127.0.0.1:4545`, `tenant-a`, {
+        scope: `stream-root`,
+      })
+    ).toBe(`http://127.0.0.1:4545/v1/stream`)
+  })
+
+  it(`derives a service-scoped stream root for host tenant registrations`, () => {
+    expect(durableStreamsServiceUrl(`http://127.0.0.1:4545`, `tenant-a`)).toBe(
+      `http://127.0.0.1:4545/v1/stream/tenant-a`
+    )
+  })
+
+  it(`preserves explicitly scoped stream roots`, () => {
+    expect(
+      durableStreamsServiceUrl(
+        `https://streams.test/v1/streams/tenant-a`,
+        `tenant-a`,
+        { scope: `stream-root` }
+      )
+    ).toBe(`https://streams.test/v1/streams/tenant-a`)
   })
 })

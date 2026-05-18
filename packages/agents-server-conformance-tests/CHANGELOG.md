@@ -1,5 +1,13 @@
 # @electric-ax/agents-server-conformance-tests
 
+## 0.1.5
+
+### Patch Changes
+
+- 47f17f1: Route Durable Streams subscription control traffic through the reserved `__ds` prefix under each stream URL. Agents-server now accepts control routes at the server-root `__ds` prefix, proxies them before normal stream operations, and forwards Durable Streams requests through the resolved tenant stream root instead of inferring cloud-specific URL shapes.
+- Updated dependencies [a15c7b6]
+  - @electric-sql/client@1.5.18
+
 ## 0.1.4
 
 ### Patch Changes

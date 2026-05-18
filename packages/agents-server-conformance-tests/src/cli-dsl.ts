@@ -56,7 +56,7 @@ export interface CliHistory {
 }
 
 function subscriptionEndpoint(baseUrl: string, id: string): string {
-  return `${baseUrl}/v1/stream-meta/subscriptions/${encodeURIComponent(id)}`
+  return `${baseUrl}/__ds/subscriptions/${encodeURIComponent(id)}`
 }
 
 function subscriptionPattern(pattern: string): string {
