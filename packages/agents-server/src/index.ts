@@ -38,6 +38,7 @@ export { globalRouter } from './routing/global-router.js'
 export type { GlobalRoutes } from './routing/global-router.js'
 export type { TenantContext } from './routing/context.js'
 export {
+  streamRootDurableStreamsRoutingAdapter,
   pathPrefixedSingleTenantDurableStreamsRoutingAdapter,
   tenantRootDurableStreamsRoutingAdapter,
 } from './routing/durable-streams-routing-adapter.js'

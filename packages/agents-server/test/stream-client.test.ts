@@ -114,13 +114,13 @@ describe(`StreamClient`, () => {
       )
 
       expect(fetchMock).toHaveBeenCalledWith(
-        `http://127.0.0.1:4545/v1/stream/__ds/subscriptions/sub-1`,
+        `http://127.0.0.1:4545/v1/stream/tenant-a/__ds/subscriptions/sub-1`,
         expect.objectContaining({ method: `PUT` })
       )
       const [, init] = fetchMock.mock.calls[0]!
       expect(JSON.parse(init?.body as string)).toEqual({
         type: `webhook`,
-        pattern: `tenant-a/chat/**`,
+        pattern: `chat/**`,
         webhook: { url: `http://agent.local/webhook` },
         description: `test subscription`,
       })
@@ -136,7 +136,7 @@ describe(`StreamClient`, () => {
       })
     )
     const client = new StreamClient(
-      `https://api.electric-sql.cloud/v1/streams/svc-tenant-a`
+      `https://streams.test/v1/streams/svc-tenant-a`
     )
 
     try {
@@ -147,7 +147,7 @@ describe(`StreamClient`, () => {
       })
 
       expect(fetchMock).toHaveBeenCalledWith(
-        `https://api.electric-sql.cloud/v1/streams/svc-tenant-a/__ds/subscriptions/sub-1`,
+        `https://streams.test/v1/streams/svc-tenant-a/__ds/subscriptions/sub-1`,
         expect.objectContaining({ method: `PUT` })
       )
       const [, init] = fetchMock.mock.calls[0]!

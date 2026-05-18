@@ -267,7 +267,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`PUT`, `/_electric/shared-state/board-1`),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/test`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
       )
@@ -294,7 +294,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`GET`, `/__ds/subscriptions/sub-1`),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/test`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
       )
@@ -303,7 +303,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(fetchSpy).toHaveBeenCalledOnce()
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream/__ds/subscriptions/sub-1`
+        `http://durable.local/v1/stream/test/__ds/subscriptions/sub-1`
       )
       expect(init).toMatchObject({ method: `GET` })
     } finally {
@@ -321,7 +321,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`POST`, `/__ds/unknown-control-route`),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/test`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
       )
@@ -330,7 +330,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(fetchSpy).toHaveBeenCalledOnce()
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream/__ds/unknown-control-route`
+        `http://durable.local/v1/stream/test/__ds/unknown-control-route`
       )
       expect(init).toMatchObject({ method: `POST` })
     } finally {
@@ -350,7 +350,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`GET`, `/v1/stream/__ds/subscriptions/sub-1`),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/test`,
           entityBridgeManager: {
             beginClientRead,
             touchByStreamPath: vi.fn(),
@@ -388,7 +388,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/test`,
           durableStreamsBearer: `service-token`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -421,7 +421,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         }),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/test`,
           durableStreamsBearer: `service-token`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -453,7 +453,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         {
           service: `tenant-a`,
           publicUrl: `http://agents.local`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           pgDb: db.db,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -462,11 +462,11 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(result.status).toBe(201)
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream/__ds/subscriptions/horton-handler`
+        `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler`
       )
       expect(JSON.parse(requestBodyText(init?.body))).toEqual({
         type: `webhook`,
-        pattern: `tenant-a/horton/**`,
+        pattern: `horton/**`,
         webhook: {
           url: `http://agents.local/_electric/webhook-forward/horton-handler`,
         },
@@ -536,15 +536,15 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
     }
   })
 
-  it(`prefixes explicit subscription streams for the tenant before proxying`, async () => {
+  it(`keeps subscription stream paths relative to the resolved stream root`, async () => {
     const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
       new Response(
         JSON.stringify({
           id: `horton-handler`,
-          pattern: `tenant-a/horton/**`,
+          pattern: `horton/**`,
           streams: [
             {
-              path: `tenant-a/horton/demo/main`,
+              path: `horton/demo/main`,
               link_type: `explicit`,
               acked_offset: `0`,
             },
@@ -560,13 +560,13 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`PUT`, `/__ds/subscriptions/horton-handler`, {
           type: `webhook`,
           pattern: `horton/**`,
-          streams: [`horton/demo/main`, `tenant-a/horton/existing/main`],
+          streams: [`horton/demo/main`, `horton/existing/main`],
           webhook: { url: `http://localhost:4448/runtime-webhook` },
         }),
         {
           service: `tenant-a`,
           publicUrl: `http://agents.local`,
-          durableStreamsUrl: `http://durable.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
           pgDb: db.db,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -575,8 +575,8 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(result.status).toBe(201)
       const [, init] = fetchSpy.mock.calls[0]!
       expect(JSON.parse(requestBodyText(init?.body))).toMatchObject({
-        pattern: `tenant-a/horton/**`,
-        streams: [`tenant-a/horton/demo/main`, `tenant-a/horton/existing/main`],
+        pattern: `horton/**`,
+        streams: [`horton/demo/main`, `horton/existing/main`],
       })
       await expect(result.json()).resolves.toMatchObject({
         pattern: `horton/**`,

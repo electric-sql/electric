@@ -20,7 +20,7 @@ function buildTenantContext(
       url: `/principal/system:framework`,
     },
     publicUrl: `http://server`,
-    durableStreamsUrl: `http://durable.local`,
+    durableStreamsUrl: `http://durable.local/v1/stream/tenant-test`,
     durableStreamsDispatcher: undefined as any,
     pgDb: undefined as any,
     entityManager: undefined as any,

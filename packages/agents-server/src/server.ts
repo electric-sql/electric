@@ -400,7 +400,7 @@ export class ElectricAgentsServer {
       principal,
       publicUrl: this.publicUrl,
       localUrl: this._url,
-      durableStreamsUrl: this.options.durableStreamsUrl,
+      durableStreamsUrl: this.streamClient.baseUrl,
       durableStreamsBearer: this.options.durableStreamsBearer,
       durableStreamsRouting: this.options.durableStreamsRouting,
       durableStreamsDispatcher: this.streamsAgent,

@@ -156,8 +156,6 @@ export function durableStreamsServiceUrl(
     url.pathname = `${path}/${encodedServiceId}`
   } else if (path.endsWith(`/v1/stream`)) {
     url.pathname = `${path}/${encodedServiceId}`
-  } else if (url.hostname === `api.electric-sql.cloud`) {
-    url.pathname = `/v1/streams/${encodedServiceId}`
   } else {
     url.pathname = `${path === `/` ? `` : path}/v1/stream/${encodedServiceId}`
   }
@@ -190,12 +188,6 @@ function normalizeSubscriptionPath(path: string): string {
   return path.replace(/^\/+/, ``).replace(/\/+$/, ``)
 }
 
-interface SubscriptionUrlInfo {
-  mode: `path-prefixed` | `tenant-root` | `plain`
-  serviceId: string | null
-  controlPath: string
-}
-
 export class StreamClient {
   constructor(
     readonly baseUrl: string,
@@ -221,60 +213,17 @@ export class StreamClient {
     return headers
   }
 
-  private subscriptionUrlInfo(): SubscriptionUrlInfo {
-    const url = new URL(this.baseUrl)
-    const pathPrefixedMatch = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(
-      url.pathname
-    )
-    if (pathPrefixedMatch) {
-      const [, prefix = ``, serviceId] = pathPrefixedMatch
-      return {
-        mode: `path-prefixed`,
-        serviceId: decodeURIComponent(serviceId!),
-        controlPath: `${prefix}/v1/stream/__ds`,
-      }
-    }
-
-    const tenantRootMatch = /^(.*)\/v1\/streams\/([^/]+)\/?$/.exec(url.pathname)
-    if (tenantRootMatch) {
-      const [, prefix = ``, serviceId] = tenantRootMatch
-      return {
-        mode: `tenant-root`,
-        serviceId: decodeURIComponent(serviceId!),
-        controlPath: `${prefix}/v1/streams/${serviceId}/__ds`,
-      }
-    }
-
-    return {
-      mode: `plain`,
-      serviceId: null,
-      controlPath: `${url.pathname.replace(/\/+$/, ``)}/__ds`,
-    }
-  }
-
   private backendSubscriptionPath(path: string): string {
-    const normalized = normalizeSubscriptionPath(path)
-    const { mode, serviceId } = this.subscriptionUrlInfo()
-    if (mode !== `path-prefixed` || !serviceId) return normalized
-    if (normalized === serviceId || normalized.startsWith(`${serviceId}/`)) {
-      return normalized
-    }
-    return `${serviceId}/${normalized}`
+    return normalizeSubscriptionPath(path)
   }
 
   private runtimeSubscriptionPath(path: string): string {
-    const normalized = normalizeSubscriptionPath(path)
-    const { mode, serviceId } = this.subscriptionUrlInfo()
-    if (mode !== `path-prefixed` || !serviceId) return normalized
-    return normalized.startsWith(`${serviceId}/`)
-      ? normalized.slice(serviceId.length + 1)
-      : normalized
+    return normalizeSubscriptionPath(path)
   }
 
   private subscriptionUrl(subscriptionId: string): string {
     const url = new URL(this.baseUrl)
-    const { controlPath } = this.subscriptionUrlInfo()
-    url.pathname = `${controlPath.replace(/\/+$/, ``)}/subscriptions/${encodeURIComponent(subscriptionId)}`
+    url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
     return url.toString()
   }
 
