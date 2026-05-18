@@ -5,7 +5,7 @@ import {
   createEntityTimelineQuery,
   normalizeTimelineEntities,
 } from '@electric-ax/agents-runtime/client'
-import { eq } from '@tanstack/db'
+import { coalesce, eq } from '@tanstack/db'
 import { connectEntityStream } from '../lib/entity-connection'
 import type {
   EntityStreamDBWithActions,
@@ -95,7 +95,10 @@ export function useEntityTimeline(
         ? q
             .from({ inbox: db.collections.inbox })
             .where(({ inbox }) => eq(inbox.status, `pending`))
-            .orderBy(({ inbox }) => inbox._seq, `asc`)
+            .orderBy(({ inbox }) => coalesce(inbox._timeline_order, `~`), `asc`)
+            .orderBy(({ inbox }) =>
+              coalesce(inbox._seq, Number.MAX_SAFE_INTEGER)
+            )
         : undefined,
     [db]
   )
