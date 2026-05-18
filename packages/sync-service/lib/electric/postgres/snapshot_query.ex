@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.SnapshotQuery do
+  alias Electric.Postgres.Lsn
   alias Electric.SnapshotError
-  alias Electric.Shapes.Shape
+  alias Electric.Shapes.{Querying, Shape}
   alias Electric.Telemetry.OpenTelemetry
 
   @type pg_snapshot() ::
@@ -126,6 +127,86 @@ defmodule Electric.Postgres.SnapshotQuery do
         query_or_queries
         |> List.wrap()
         |> Enum.map(fn query -> Postgrex.query!(conn, query, Keyword.get(opts, :params, [])) end)
+      end
+    )
+  end
+
+  def execute_for_subset(shape_handle, %Shape{} = shape, subset, opts) when is_map(opts) do
+    stack_id = Map.fetch!(opts, :stack_id)
+    pool = Electric.Connection.Manager.pool_name(stack_id, :snapshot)
+    mark = Enum.random(0..(2 ** 31 - 1))
+    headers = %{snapshot_mark: mark}
+
+    execute_for_shape(pool, shape_handle, shape,
+      snapshot_info_fn: fn _, pg_snapshot, lsn ->
+        send(self(), {:pg_snapshot_info, pg_snapshot, lsn})
+      end,
+      query_fn: fn conn, _, _ ->
+        conn
+        |> Querying.query_subset(stack_id, shape_handle, shape, subset, headers)
+        |> record_subset_metrics(stack_id, shape_handle, shape)
+        |> Enum.to_list()
+      end,
+      stack_id: opts[:stack_id],
+      query_reason: "subset_query"
+    )
+    |> case do
+      {:ok, result} ->
+        metadata =
+          receive do
+            {:pg_snapshot_info, pg_snapshot, lsn} -> make_subset_metadata(pg_snapshot, lsn, mark)
+          after
+            0 ->
+              raise "failed to execute snapshot query for shape #{shape_handle}: missing pg_snapshot_info"
+          end
+
+        {:ok, {metadata, result}}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  rescue
+    e in Querying.QueryError ->
+      {:error, {:where, e.message}}
+  end
+
+  defp make_subset_metadata({xmin, xmax, xip_list}, lsn, mark) do
+    %{
+      xmin: xmin,
+      xmax: xmax,
+      xip_list: xip_list,
+      database_lsn: to_string(Lsn.to_integer(lsn)),
+      snapshot_mark: mark
+    }
+  end
+
+  defp record_subset_metrics(stream, stack_id, shape_handle, shape) do
+    Stream.transform(
+      stream,
+      fn -> {System.monotonic_time(:microsecond), 0, 0} end,
+      fn row, {start_time, bytes, rows} ->
+        {[row], {start_time, bytes + IO.iodata_length(row), rows + 1}}
+      end,
+      fn {start_time, bytes, rows} ->
+        OpenTelemetry.execute(
+          [:electric, :subqueries, :subset_result],
+          %{
+            duration: System.monotonic_time(:microsecond) - start_time,
+            bytes: bytes,
+            count: 1,
+            rows: rows
+          },
+          %{
+            stack_id: stack_id,
+            "shape.handle": shape_handle,
+            "shape.root_table": shape.root_table
+          }
+        )
+
+        OpenTelemetry.add_span_attributes(%{
+          "subset.rows" => rows,
+          "subset.result_bytes" => bytes
+        })
       end
     )
   end
