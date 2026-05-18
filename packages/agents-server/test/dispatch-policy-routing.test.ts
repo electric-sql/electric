@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { globalRouter } from '../src/routing/global-router'
+import { DurableStreamsSubscriptionError } from '../src/stream-client'
 import type { TenantContext } from '../src/routing/context'
 import type {
   DispatchPolicy,
@@ -323,6 +324,48 @@ describe(`dispatch policy routing`, () => {
     expect(response.status).toBe(204)
     expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
     expect(ctx.streamClient.removeSubscriptionStream).not.toHaveBeenCalled()
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(
+      `/chat/one`,
+      expect.objectContaining({ payload: `hello` })
+    )
+  })
+
+  it(`treats runner subscription create conflicts as an idempotent relink`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+    ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
+      entity(dispatchPolicy)
+    )
+    ;(ctx.streamClient.getSubscription as any)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        streams: [{ path: `tenant-test/chat/one/main` }],
+      })
+    ;(ctx.streamClient.putSubscription as any).mockRejectedValueOnce(
+      new DurableStreamsSubscriptionError(
+        `Subscription creation failed`,
+        409,
+        JSON.stringify({
+          error: {
+            code: `SUBSCRIPTION_ALREADY_EXISTS`,
+            message: `Subscription already exists`,
+          },
+        })
+      )
+    )
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/entities/chat/one/send`, {
+        payload: `hello`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
     expect(ctx.entityManager.send).toHaveBeenCalledWith(
       `/chat/one`,
       expect.objectContaining({ payload: `hello` })
