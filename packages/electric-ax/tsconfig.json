@@ -15,7 +15,8 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@electric-ax/agents": ["../agents/src/index.ts"]
+      "@electric-ax/agents": ["../agents/src/index.ts"],
+      "@electric-ax/agents/server-headers": ["../agents/src/server-headers.ts"]
     }
   },
   "include": ["src/**/*", "test/**/*", "*.ts"],

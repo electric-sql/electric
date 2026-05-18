@@ -36,4 +36,20 @@ describe(`resolveBuiltinAgentsEntrypointOptions`, () => {
     expect(options.pullWake.claimHeaders).toEqual(options.pullWake.headers)
     expect(options.pullWake.claimTokenHeader).toBe(`electric-claim-token`)
   })
+
+  test(`adds an optional principal header`, () => {
+    const options = resolveBuiltinAgentsEntrypointOptions(
+      {
+        ELECTRIC_AGENTS_SERVER_URL: `http://localhost:4437`,
+        PULL_WAKE_RUNNER_ID: `runner-1`,
+        ELECTRIC_AGENTS_PRINCIPAL: `service:svc-test`,
+      },
+      `/tmp/project`
+    )
+
+    expect(options.pullWake.headers).toEqual({
+      'electric-principal': `service:svc-test`,
+    })
+    expect(options.pullWake.claimHeaders).toEqual(options.pullWake.headers)
+  })
 })

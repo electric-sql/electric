@@ -6,6 +6,7 @@ import {
   createElectricCliHandlers,
   createElectricProgram,
   formatQuickstartBackendStartedMessage,
+  getElectricCliEnv,
   resolveCommandPrefix,
   run,
 } from '../src/index'
@@ -119,6 +120,22 @@ async function parse(argv: Array<string>, handlers = createHandlers()) {
 }
 
 describe(`createElectricProgram`, () => {
+  it(`adds an optional principal header from the environment`, () => {
+    const env = getElectricCliEnv({
+      ELECTRIC_AGENTS_URL: `https://agents.example.test`,
+      ELECTRIC_AGENTS_IDENTITY: `tester@example.com`,
+      ELECTRIC_AGENTS_PRINCIPAL: `service:svc-test`,
+      ELECTRIC_AGENTS_SERVER_HEADERS: JSON.stringify({
+        Authorization: `Bearer token`,
+      }),
+    })
+
+    expect(env.electricAgentsHeaders).toEqual({
+      authorization: `Bearer token`,
+      'electric-principal': `service:svc-test`,
+    })
+  })
+
   it(`formats the quickstart backend message in an ASCII box`, () => {
     const message = formatQuickstartBackendStartedMessage({
       commandPrefix: `electric agents`,
@@ -233,6 +250,37 @@ describe(`createElectricProgram`, () => {
         parent: `/chat/root`,
       })
     )
+  })
+
+  it(`surfaces string error responses from entity listing`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ error: `Missing electric-principal` }), {
+        status: 401,
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      await expect(createElectricCliHandlers(TEST_ENV).ps({})).rejects.toThrow(
+        `Missing electric-principal`
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`falls back to HTTP status when an error response has no message`, async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(``, { status: 503 }))
+
+    try {
+      await expect(createElectricCliHandlers(TEST_ENV).ps({})).rejects.toThrow(
+        `HTTP 503`
+      )
+    } finally {
+      fetchMock.mockRestore()
+    }
   })
 
   it(`passes observe offsets through commander options`, async () => {

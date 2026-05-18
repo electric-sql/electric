@@ -13,8 +13,15 @@ export default defineConfig({
     outputFile: `./junit/test-report.junit.xml`,
   },
   resolve: {
-    alias: {
-      '@electric-ax/agents': resolve(__dirname, `../agents/src/index.ts`),
-    },
+    alias: [
+      {
+        find: `@electric-ax/agents/server-headers`,
+        replacement: resolve(__dirname, `../agents/src/server-headers.ts`),
+      },
+      {
+        find: `@electric-ax/agents`,
+        replacement: resolve(__dirname, `../agents/src/index.ts`),
+      },
+    ],
   },
 })
