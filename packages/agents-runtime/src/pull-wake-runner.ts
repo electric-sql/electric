@@ -109,7 +109,7 @@ export function createPullWakeRunner(
   let response: PullWakeStreamResponse | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let eventHeartbeatTimer: ReturnType<typeof setTimeout> | null = null
-  let currentOffset = config.offset
+  let currentOffset = config.offset ?? `-1`
   let startedAt: string | null = null
   let streamConnected = false
   let streamConnectedSince: string | null = null

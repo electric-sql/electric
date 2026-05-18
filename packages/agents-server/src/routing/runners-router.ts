@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { Router, json, status } from 'itty-router'
@@ -389,13 +390,53 @@ async function claimWake(
   }
   if (!claim) return status(204)
 
+  const effectiveClaim = isSubscriptionClaimResponse(claim)
+    ? claim
+    : fallbackClaimFromWakeEvent(parsed)
+  if (!effectiveClaim) return status(204)
+
   const notification = await notificationFromClaim(ctx, {
     runnerId,
     runnerWakeStream: runner.wake_stream,
     subscriptionId,
-    claim,
+    claim: effectiveClaim,
   })
   return json(notification)
+}
+
+function isSubscriptionClaimResponse(
+  claim: SubscriptionClaimResponse
+): boolean {
+  return (
+    typeof claim.wake_id === `string` &&
+    typeof claim.generation === `number` &&
+    typeof claim.token === `string` &&
+    Array.isArray(claim.streams)
+  )
+}
+
+function fallbackClaimFromWakeEvent(
+  event: ClaimBody
+): SubscriptionClaimResponse | null {
+  if (typeof event.stream !== `string` || event.stream.trim().length === 0) {
+    return null
+  }
+  const generation =
+    typeof event.generation === `number` && Number.isFinite(event.generation)
+      ? event.generation
+      : Date.now()
+  return {
+    wake_id: `fallback-${randomUUID()}`,
+    generation,
+    token: randomUUID(),
+    streams: [
+      {
+        path: event.stream,
+        tail_offset: `-1`,
+        has_pending: true,
+      },
+    ],
+  }
 }
 
 function isExpectedClaimConflict(

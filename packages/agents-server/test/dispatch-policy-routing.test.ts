@@ -90,6 +90,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       addSubscriptionStreams: vi.fn(async () => ({})),
       removeSubscriptionStream: vi.fn(async () => ({})),
       ensure: vi.fn(async () => undefined),
+      append: vi.fn(async () => ({ offset: `1` })),
     } as any,
     runtime: undefined as any,
     entityBridgeManager: undefined as any,
@@ -267,6 +268,18 @@ describe(`dispatch policy routing`, () => {
       `/chat/one`,
       expect.objectContaining({ payload: `hello` })
     )
+    expect(ctx.streamClient.append).toHaveBeenCalledWith(
+      `/runners/runner-1/wake`,
+      expect.any(String)
+    )
+    const wakeEvent = JSON.parse(
+      vi.mocked(ctx.streamClient.append).mock.calls[0]![1] as string
+    )
+    expect(wakeEvent).toMatchObject({
+      type: `wake`,
+      subscription_id: expect.stringMatching(/^runner:runner-1:/),
+      stream: `chat/one/main`,
+    })
   })
 
   it(`does not relink existing runner-dispatched entities before sending`, async () => {

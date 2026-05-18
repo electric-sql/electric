@@ -17,6 +17,7 @@ import {
   assertDispatchPolicyAllowed,
   backfillEntityDispatchPolicy,
   linkEntityDispatchSubscription,
+  notifyEntityDispatchWake,
   resolveEffectiveDispatchPolicyForSpawn,
   unlinkEntityDispatchSubscription,
 } from './dispatch-policy.js'
@@ -529,10 +530,12 @@ async function sendEntity(
   }
   await ctx.entityManager.ensurePrincipal(principal)
   const { entityUrl, entity } = requireExistingEntityRoute(request)
+  let dispatchEntity = entity
 
   if (!entity.dispatch_policy) {
     const updatedEntity = await backfillEntityDispatchPolicy(ctx, entity)
     await linkEntityDispatchSubscription(ctx, updatedEntity)
+    dispatchEntity = updatedEntity
   }
 
   if (parsed.afterMs && parsed.afterMs > 0) {
@@ -557,6 +560,7 @@ async function sendEntity(
       mode: parsed.mode,
       position: parsed.position,
     })
+    await notifyEntityDispatchWake(ctx, dispatchEntity)
   }
 
   return status(204)
@@ -620,6 +624,7 @@ async function spawnEntity(
       from: principal.url,
       payload: parsed.initialMessage,
     })
+    await notifyEntityDispatchWake(ctx, entity)
   }
 
   return json(

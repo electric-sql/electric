@@ -91,6 +91,31 @@ describe(`createPullWakeRunner`, () => {
     vi.unstubAllGlobals()
   })
 
+  it(`starts from the beginning when no wake stream offset is committed`, async () => {
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {},
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: runtime(),
+      heartbeatIntervalMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(streamFactory).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: `-1` })
+      )
+    })
+
+    await runner.stop()
+  })
+
   it(`claims compact DS wake events before dispatching runtime wakes`, async () => {
     const event = wakeEvent(`one`)
     const claimed = notification(`one`)

@@ -28,7 +28,7 @@ export function subscriptionIdForDispatchTarget(
   return `webhook:${digest.slice(0, 16)}`
 }
 
-function subscriptionIdForEntityDispatchTarget(
+export function subscriptionIdForEntityDispatchTarget(
   target: DispatchTarget,
   entityUrl: string
 ): string {
@@ -209,6 +209,35 @@ export async function linkEntityDispatchSubscription(
   const target = dispatchPolicy?.targets[0]
   if (!target) return
   await linkStreamToTargetSubscription(ctx, target, entity)
+}
+
+export async function notifyEntityDispatchWake(
+  ctx: TenantContext,
+  entity: ElectricAgentsEntity
+): Promise<void> {
+  const dispatchPolicy = await resolveEffectiveDispatchPolicyForEntity(
+    ctx,
+    entity
+  )
+  const target = dispatchPolicy?.targets[0]
+  if (!target || target.type !== `runner`) return
+
+  const runner = await ctx.entityManager.registry.getRunner(target.runnerId)
+  if (!runner) return
+
+  await ctx.streamClient.append(
+    runner.wake_stream || runnerWakeStream(target.runnerId),
+    JSON.stringify({
+      type: `wake`,
+      subscription_id: subscriptionIdForEntityDispatchTarget(
+        target,
+        entity.url
+      ),
+      stream: entity.streams.main.replace(/^\/+/, ``),
+      generation: Date.now(),
+      ts: Date.now(),
+    })
+  )
 }
 
 export async function unlinkEntityDispatchSubscription(
