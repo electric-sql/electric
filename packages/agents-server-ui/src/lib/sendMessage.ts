@@ -11,16 +11,14 @@ import { entityApiUrl } from './entity-api'
 import { loadCloudAuthState } from './server-connection'
 import type { EntityStreamDBWithActions } from '@electric-ax/agents-runtime/client'
 
-// Timeline queries sort inbox messages by `_seq`. Pending local rows do not
-// have a server sequence yet, so put them after streamed rows until the real
-// event with the same key arrives.
-const OPTIMISTIC_INBOX_SEQ_START = Number.MAX_SAFE_INTEGER - 1_000_000
+// Pending local rows do not have a server stream offset yet, so put them after
+// streamed rows until the real event with the same key arrives.
+const OPTIMISTIC_INBOX_ORDER_START = Number.MAX_SAFE_INTEGER - 1_000_000
 
-let optimisticInboxSeq = OPTIMISTIC_INBOX_SEQ_START
+let optimisticInboxOrderIndex = OPTIMISTIC_INBOX_ORDER_START
 
 export type OptimisticInboxMessage = {
   key: string
-  _seq: number
   _timeline_order: string
   from: string
   payload: { text: string }
@@ -35,7 +33,7 @@ type SendMessageInput = {
   text: string
   mode: `immediate` | `queued` | `paused` | `steer`
   key: string
-  seq: number
+  pendingOrderIndex: number
   position?: string
 }
 
@@ -51,16 +49,16 @@ type InboxMessageKeyInput = {
   key: string
 }
 
-function createOptimisticInboxKey(seq: number): string {
-  return `optimistic-${Date.now()}-${seq}`
+function createOptimisticInboxKey(pendingOrderIndex: number): string {
+  return `optimistic-${Date.now()}-${pendingOrderIndex}`
 }
 
-function nextOptimisticInboxSeq(): number {
-  optimisticInboxSeq += 1
-  if (optimisticInboxSeq >= Number.MAX_SAFE_INTEGER) {
-    optimisticInboxSeq = OPTIMISTIC_INBOX_SEQ_START
+function nextOptimisticInboxOrderIndex(): number {
+  optimisticInboxOrderIndex += 1
+  if (optimisticInboxOrderIndex >= Number.MAX_SAFE_INTEGER) {
+    optimisticInboxOrderIndex = OPTIMISTIC_INBOX_ORDER_START
   }
-  return optimisticInboxSeq
+  return optimisticInboxOrderIndex
 }
 
 const QUEUE_POSITION_TIMESTAMP_WIDTH = 16
@@ -193,13 +191,12 @@ export function createSendMessageAction({
   onOptimisticMessage?: (message: OptimisticInboxMessage) => void
 }) {
   const action = createOptimisticAction<SendMessageInput>({
-    onMutate: ({ text, mode, key, seq, position }) => {
+    onMutate: ({ text, mode, key, pendingOrderIndex, position }) => {
       const sender = from ?? getActivePrincipal()
       const now = new Date().toISOString()
       const message: OptimisticInboxMessage = {
         key,
-        _seq: seq,
-        _timeline_order: createPendingTimelineOrder(seq),
+        _timeline_order: createPendingTimelineOrder(pendingOrderIndex),
         from: sender,
         payload: { text },
         timestamp: now,
@@ -247,7 +244,7 @@ export function createSendMessageAction({
     mode?: `immediate` | `queued` | `paused` | `steer`
     position?: string
   }) => {
-    const seq = nextOptimisticInboxSeq()
+    const pendingOrderIndex = nextOptimisticInboxOrderIndex()
     const effectivePosition =
       position ??
       (mode === `queued` || mode === `paused`
@@ -256,8 +253,8 @@ export function createSendMessageAction({
     return action({
       text,
       mode,
-      key: createOptimisticInboxKey(seq),
-      seq,
+      key: createOptimisticInboxKey(pendingOrderIndex),
+      pendingOrderIndex,
       position: effectivePosition,
     })
   }
