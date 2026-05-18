@@ -200,17 +200,6 @@ export class StreamClient {
   }
 
   private subscriptionUrl(subscriptionId: string): string {
-    const url = new URL(this.baseUrl)
-    const match = /^(.*)\/v1\/stream(?:\/(.+))?\/?$/.exec(url.pathname)
-    if (match) {
-      const [, prefix = ``, serviceId] = match
-      url.pathname = `${prefix}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
-      if (serviceId) {
-        url.searchParams.set(`service`, decodeURIComponent(serviceId))
-      }
-      return url.toString()
-    }
-
     return appendPathToBaseUrl(
       this.baseUrl,
       `/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
