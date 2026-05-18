@@ -46,6 +46,7 @@ type EntityCollectionMeta = {
   __electricSourceDb?: EntityStreamDBWithActions
   __electricSourceId?: string
   __electricRowOffsets?: Map<string | number, string>
+  __electricTimelineOrders?: Map<string | number, string>
 }
 
 type EntityCollections = {
@@ -98,6 +99,14 @@ type EntityStreamDBOptions = {
 )
 
 const WRITE_TXID_TIMEOUT_MS = 20_000
+const TIMELINE_OFFSET_WIDTH = 24
+const TIMELINE_BATCH_INDEX_WIDTH = 8
+
+function formatStreamTimelineOrder(offset: string, index: number): string {
+  return `stream:${offset.padStart(TIMELINE_OFFSET_WIDTH, `0`)}:${index
+    .toString()
+    .padStart(TIMELINE_BATCH_INDEX_WIDTH, `0`)}`
+}
 
 /**
  * Create a StreamDB connected to a Electric Agents entity stream.
@@ -137,9 +146,14 @@ export function createEntityStreamDB(
   }
   const collectionNameByEventType = new Map<string, string>()
   const rowOffsetsByCollection = new Map<string, Map<string | number, string>>()
+  const timelineOrdersByCollection = new Map<
+    string,
+    Map<string | number, string>
+  >()
   for (const [name, def] of Object.entries(mergedCollections)) {
     collectionNameByEventType.set(def.type, name)
     rowOffsetsByCollection.set(name, new Map())
+    timelineOrdersByCollection.set(name, new Map())
   }
   // Build a reverse map from TanStack DB collection id to schema key
   const collIdToSchemaKey: Record<string, string> = {}
@@ -167,6 +181,8 @@ export function createEntityStreamDB(
   const cleanRow = (row: Record<string, unknown>): Record<string, unknown> => {
     const clone = { ...row }
     delete clone._seq
+    delete clone._timeline_order
+    delete clone._optimistic
     return clone
   }
 
@@ -270,22 +286,36 @@ export function createEntityStreamDB(
     onBeforeBatch: (batch) => {
       opts?.onBeforeBatch?.(batch)
       replayBatchOffset.current = batch.offset
-      for (const item of batch.items) {
+      batch.items.forEach((item, itemIndex) => {
         if (isControlEvent(item)) {
           if (item.headers.control === `reset`) {
             for (const offsets of rowOffsetsByCollection.values()) {
               offsets.clear()
             }
+            for (const orders of timelineOrdersByCollection.values()) {
+              orders.clear()
+            }
           }
-          continue
+          return
         }
-        if (!isChangeEvent(item)) continue
+        if (!isChangeEvent(item)) return
         const collectionName = collectionNameByEventType.get(item.type)
-        if (!collectionName) continue
-        rowOffsetsByCollection
-          .get(collectionName)
-          ?.set(item.key, item.headers.offset ?? batch.offset)
-      }
+        if (!collectionName) return
+        const offset = item.headers.offset ?? batch.offset
+        rowOffsetsByCollection.get(collectionName)?.set(item.key, offset)
+
+        if (item.headers.operation === `delete`) return
+        if (typeof item.value !== `object` || item.value === null) return
+
+        const orders = timelineOrdersByCollection.get(collectionName)
+        if (!orders) return
+        let order = orders.get(item.key)
+        if (!order) {
+          order = formatStreamTimelineOrder(offset, itemIndex)
+          orders.set(item.key, order)
+        }
+        ;(item.value as Record<string, unknown>)._timeline_order = order
+      })
     },
     onBatch: (batch) => {
       opts?.onBatch?.(batch)
@@ -634,6 +664,20 @@ export function createEntityStreamDB(
         )
       }
       const primaryKey = mergedCollections[collectionName]!.primaryKey
+      if (
+        event.headers.operation !== `delete` &&
+        typeof event.value === `object` &&
+        event.value !== null
+      ) {
+        const orders = timelineOrdersByCollection.get(collectionName)
+        const offset =
+          event.headers.offset ??
+          `local:${Date.now().toString().padStart(13, `0`)}`
+        const order =
+          orders?.get(event.key) ?? formatStreamTimelineOrder(offset, 0)
+        orders?.set(event.key, order)
+        ;(event.value as Record<string, unknown>)._timeline_order = order
+      }
       const transaction = createWriteTransaction({
         debugOrigin: `apply-event:${event.type}:${event.headers.operation}`,
       })
@@ -699,6 +743,8 @@ export function createEntityStreamDB(
     replayDb.collections
   )) {
     collection.__electricRowOffsets = rowOffsetsByCollection.get(collectionName)
+    collection.__electricTimelineOrders =
+      timelineOrdersByCollection.get(collectionName)
   }
 
   return db as EntityStreamDBWithActions

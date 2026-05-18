@@ -49,6 +49,7 @@ function isNgrokHost(input: RequestInfo | URL): boolean {
 }
 
 const originalFetch = window.fetch.bind(window)
+
 window.fetch = (
   input: RequestInfo | URL,
   init?: RequestInit

@@ -2,8 +2,10 @@ export { createEntityStreamDB } from './entity-stream-db'
 export { createAgentsClient } from './agents-client'
 export {
   compareTimelineOrders,
+  createPendingTimelineOrder,
   createEntityErrorsQuery,
   createEntityIncludesQuery,
+  createEntityTimelineQuery,
   getEntityState,
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
@@ -30,8 +32,16 @@ export type {
 export type {
   EntityTimelineContentItem,
   EntityTimelineData,
+  EntityTimelineInboxMode,
+  EntityTimelineQueryOptions,
+  EntityTimelineQueryRow,
+  EntityTimelineRunRow,
+  EntityTimelineRunItem,
   EntityTimelineSection,
   EntityTimelineState,
+  EntityTimelineTextChunk,
+  EntityTimelineTextItem,
+  EntityTimelineToolCallItem,
   IncludesEntity,
   IncludesInboxMessage,
   IncludesRun,

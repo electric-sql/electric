@@ -43,6 +43,8 @@ type SequencedPersistedRow<T extends { key?: string | undefined }> = Omit<
 > & {
   key: string
   _seq?: number
+  _timeline_order?: string
+  _optimistic?: boolean
 }
 type Schema<T> = z.ZodType<T>
 type ChildEntityStatusValue = `spawning` | `running` | `idle` | `stopped`
@@ -269,6 +271,11 @@ function createJsonObjectSchema(): Schema<Record<string, JsonValue>> {
   >
 }
 
+const timelineOrderField = {
+  _timeline_order: z.string().optional(),
+  _optimistic: z.boolean().optional(),
+}
+
 function createChildEntityStatusSchema(): Schema<ChildEntityStatusValue> {
   return z.enum([`spawning`, `running`, `idle`, `stopped`])
 }
@@ -319,6 +326,7 @@ function createWakeConfigSchema(): Schema<WakeConfigValue> {
 function createRunSchema(): Schema<RunValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     status: z.enum([`started`, `completed`, `failed`]),
     finish_reason: z.string().optional(),
   })
@@ -327,6 +335,7 @@ function createRunSchema(): Schema<RunValue> {
 function createStepSchema(): Schema<StepValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     run_id: z.string().optional(),
     step_number: z.number().int(),
     status: z.enum([`started`, `completed`]),
@@ -340,6 +349,7 @@ function createStepSchema(): Schema<StepValue> {
 function createTextSchema(): Schema<TextValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     run_id: z.string().optional(),
     status: z.enum([`streaming`, `completed`]),
   })
@@ -348,6 +358,7 @@ function createTextSchema(): Schema<TextValue> {
 function createTextDeltaSchema(): Schema<TextDeltaValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     text_id: z.string(),
     run_id: z.string(),
     delta: z.string(),
@@ -357,6 +368,7 @@ function createTextDeltaSchema(): Schema<TextDeltaValue> {
 function createToolCallSchema(): Schema<ToolCallValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     run_id: z.string().optional(),
     tool_call_id: z.string().optional(),
     tool_name: z.string(),
@@ -377,6 +389,7 @@ function createToolCallSchema(): Schema<ToolCallValue> {
 function createReasoningSchema(): Schema<ReasoningValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     status: z.enum([`streaming`, `completed`]),
   })
 }
@@ -384,6 +397,7 @@ function createReasoningSchema(): Schema<ReasoningValue> {
 function createErrorEventSchema(): Schema<ErrorEventValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     error_code: z.string(),
     message: z.string(),
     run_id: z.string().optional(),
@@ -395,6 +409,7 @@ function createErrorEventSchema(): Schema<ErrorEventValue> {
 function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     from: z.string().optional(),
     payload: z.unknown().optional(),
     timestamp: z.string().optional(),
@@ -410,6 +425,7 @@ function createMessageReceivedSchema(): Schema<MessageReceivedValue> {
 function createWakeSchema(): Schema<WakeEntryValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     timestamp: z.string(),
     source: z.string(),
     timeout: z.boolean(),
@@ -422,6 +438,7 @@ function createWakeSchema(): Schema<WakeEntryValue> {
 function createEntityCreatedSchema(): Schema<EntityCreatedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     entity_type: z.string(),
     timestamp: z.string(),
     args: createJsonObjectSchema(),
@@ -432,6 +449,7 @@ function createEntityCreatedSchema(): Schema<EntityCreatedValue> {
 function createEntityStoppedSchema(): Schema<EntityStoppedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     timestamp: z.string(),
     reason: z.string().optional(),
   })
@@ -440,6 +458,7 @@ function createEntityStoppedSchema(): Schema<EntityStoppedValue> {
 function createChildStatusSchema(): Schema<ChildStatusEntryValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     entity_url: z.string(),
     entity_type: z.string(),
     status: createChildEntityStatusSchema(),
@@ -449,12 +468,14 @@ function createChildStatusSchema(): Schema<ChildStatusEntryValue> {
 function createTagEntrySchema(): Schema<TagEntryValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     value: z.string(),
   })
 }
 function createContextInsertedSchema(): Schema<ContextInsertedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     id: z.string(),
     name: z.string(),
     attrs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
@@ -466,6 +487,7 @@ function createContextInsertedSchema(): Schema<ContextInsertedValue> {
 function createContextRemovedSchema(): Schema<ContextRemovedValue> {
   return z.object({
     key: z.string().optional(),
+    ...timelineOrderField,
     id: z.string(),
     name: z.string(),
     timestamp: z.string(),
@@ -483,6 +505,7 @@ function createManifestSchema(): Schema<
   return z.union([
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`child`),
       id: z.string(),
       entity_type: z.string(),
@@ -492,6 +515,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`source`),
       sourceType: z.string(),
       sourceRef: z.string(),
@@ -500,6 +524,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`shared-state`),
       id: z.string(),
       mode: z.enum([`create`, `connect`]),
@@ -514,6 +539,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`effect`),
       id: z.string(),
       function_ref: z.string(),
@@ -521,6 +547,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`context`),
       id: z.string(),
       name: z.string(),
@@ -533,6 +560,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`schedule`),
       id: z.string(),
       scheduleType: z.literal(`cron`),
@@ -543,6 +571,7 @@ function createManifestSchema(): Schema<
     }),
     z.object({
       key: z.string().optional(),
+      ...timelineOrderField,
       kind: z.literal(`schedule`),
       id: z.string(),
       scheduleType: z.literal(`future_send`),
