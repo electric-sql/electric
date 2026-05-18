@@ -1,5 +1,5 @@
 import { BuiltinAgentsServer } from './server.js'
-import { mergeElectricPrincipalHeader } from '@electric-ax/agents-runtime'
+import { mergeElectricPrincipalHeader } from './server-headers.js'
 import type { BuiltinAgentsServerOptions } from './server.js'
 
 type EnvSource = Record<string, string | undefined>

@@ -133,10 +133,6 @@ export type {
 export { buildSections, buildTimelineEntries } from './use-chat'
 export type { EntityTimelineEntry } from './use-chat'
 export { appendPathToUrl } from './url'
-export {
-  ELECTRIC_PRINCIPAL_HEADER,
-  mergeElectricPrincipalHeader,
-} from './headers'
 
 export {
   defaultProjection,

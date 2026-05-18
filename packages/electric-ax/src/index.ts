@@ -8,10 +8,8 @@ import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
 import { entityApiPath } from './entity-api.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
-import {
-  appendPathToUrl,
-  mergeElectricPrincipalHeader,
-} from '@electric-ax/agents-runtime'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
+import { mergeElectricPrincipalHeader } from '@electric-ax/agents/server-headers'
 import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,

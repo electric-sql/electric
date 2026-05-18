@@ -38,6 +38,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./server-headers": {
+      "import": {
+        "types": "./dist/server-headers.d.ts",
+        "default": "./dist/server-headers.js"
+      },
+      "require": {
+        "types": "./dist/server-headers.d.cts",
+        "default": "./dist/server-headers.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "dependencies": {

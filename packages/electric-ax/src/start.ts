@@ -1,10 +1,8 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
-import {
-  appendPathToUrl,
-  mergeElectricPrincipalHeader,
-} from '@electric-ax/agents-runtime'
+import { mergeElectricPrincipalHeader } from '@electric-ax/agents/server-headers'
+import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 import {
   ELECTRIC_IMAGE_TAG,
