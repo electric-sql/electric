@@ -44,7 +44,6 @@ type SequencedPersistedRow<T extends { key?: string | undefined }> = Omit<
   key: string
   _seq?: number
   _timeline_order?: string
-  _optimistic?: boolean
 }
 type Schema<T> = z.ZodType<T>
 type ChildEntityStatusValue = `spawning` | `running` | `idle` | `stopped`
@@ -273,7 +272,6 @@ function createJsonObjectSchema(): Schema<Record<string, JsonValue>> {
 
 const timelineOrderField = {
   _timeline_order: z.string().optional(),
-  _optimistic: z.boolean().optional(),
 }
 
 function createChildEntityStatusSchema(): Schema<ChildEntityStatusValue> {

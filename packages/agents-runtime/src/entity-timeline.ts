@@ -1146,7 +1146,7 @@ function buildEntityTimelineQuery(
     inbox = inbox.where(({ inbox }) =>
       or(
         eq(coalesce(inbox.status, `processed`), `processed`),
-        eq(coalesce(inbox._optimistic, false), true)
+        eq(inbox.$synced, false)
       )
     )
   }

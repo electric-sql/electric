@@ -22,7 +22,6 @@ export type OptimisticInboxMessage = {
   key: string
   _seq: number
   _timeline_order: string
-  _optimistic: true
   from: string
   payload: { text: string }
   timestamp: string
@@ -201,7 +200,6 @@ export function createSendMessageAction({
         key,
         _seq: seq,
         _timeline_order: createPendingTimelineOrder(seq),
-        _optimistic: true,
         from: sender,
         payload: { text },
         timestamp: now,
