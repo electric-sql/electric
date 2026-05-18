@@ -71,6 +71,7 @@ defmodule ElectricTelemetry.Poller do
     :ok
   rescue
     ArgumentError ->
+      # Raised by an :ets function referencing a non-existent ETS table during startup/restart.
       :ok
 
     e ->
