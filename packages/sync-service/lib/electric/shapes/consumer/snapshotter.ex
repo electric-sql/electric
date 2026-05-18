@@ -44,18 +44,20 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
     if not is_nil(state.otel_ctx), do: OpenTelemetry.set_current_context(state.otel_ctx)
 
+    span_attrs = Shapes.Shape.otel_attrs(shape_handle, shape)
+
     result =
       case Shapes.Consumer.whereis(stack_id, shape_handle) do
         consumer when is_pid(consumer) ->
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
-            telemetry_shape_attrs(shape_handle, shape),
+            span_attrs,
             stack_id,
             fn ->
               try do
                 OpenTelemetry.with_span(
                   "shape_snapshot.prepare_tables",
-                  telemetry_shape_attrs(shape_handle, shape),
+                  span_attrs,
                   stack_id,
                   fn ->
                     Electric.Replication.PublicationManager.add_shape(
@@ -297,18 +299,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             count: 1,
             operations: ops
           },
-          Map.merge(Map.new(telemetry_shape_attrs(shape_handle, shape)), %{stack_id: stack_id})
+          Map.merge(Map.new(Shapes.Shape.otel_attrs(shape_handle, shape)), %{stack_id: stack_id})
         )
       end
     )
-  end
-
-  defp telemetry_shape_attrs(shape_handle, shape) do
-    [
-      "shape.handle": shape_handle,
-      "shape.root_table": shape.root_table,
-      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil)
-    ]
   end
 
   if Mix.env() == :test do

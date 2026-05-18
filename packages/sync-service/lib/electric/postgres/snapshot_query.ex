@@ -42,12 +42,12 @@ defmodule Electric.Postgres.SnapshotQuery do
     query_fn = Access.fetch!(opts, :query_fn)
     snapshot_info_fn = Access.fetch!(opts, :snapshot_info_fn)
     query_reason = Access.get(opts, :query_reason, "initial_snapshot")
-    shape_attrs = shape_attrs(shape_handle, shape, query_reason)
+    span_attrs = Shape.otel_attrs(shape_handle, shape, query_reason: query_reason)
     stack_id = Access.fetch!(opts, :stack_id)
 
     OpenTelemetry.with_child_span(
       "shape_snapshot.execute_for_shape",
-      shape_attrs,
+      span_attrs,
       stack_id,
       fn ->
         OpenTelemetry.start_interval(:"shape_snapshot.checkout_wait.duration_µs")
@@ -60,7 +60,7 @@ defmodule Electric.Postgres.SnapshotQuery do
             ctx = %{
               conn: conn,
               stack_id: stack_id,
-              span_attrs: shape_attrs
+              span_attrs: span_attrs
             }
 
             query!(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
@@ -83,7 +83,7 @@ defmodule Electric.Postgres.SnapshotQuery do
             result =
               OpenTelemetry.with_child_span(
                 "shape_snapshot.query_fn",
-                shape_attrs,
+                span_attrs,
                 stack_id,
                 fn -> query_fn.(conn, pg_snapshot, lsn) end
               )
@@ -101,15 +101,6 @@ defmodule Electric.Postgres.SnapshotQuery do
   catch
     :exit, {_, {DBConnection.Holder, :checkout, _}} ->
       raise SnapshotError.connection_not_available()
-  end
-
-  defp shape_attrs(shape_handle, shape, query_reason) do
-    [
-      "shape.handle": shape_handle,
-      "shape.root_table": shape.root_table,
-      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
-      "shape.query_reason": query_reason
-    ]
   end
 
   @spec query!(map(), String.t() | [String.t()], Keyword.t()) :: [Postgrex.Result.t(), ...]
