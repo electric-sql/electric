@@ -124,10 +124,6 @@ describe(`dispatch policy routing`, () => {
         wake_stream: `/runners/runner-1/wake`,
       })
     )
-    expect(ctx.streamClient.removeSubscriptionStream).toHaveBeenCalledWith(
-      `runner:runner-1`,
-      `/chat/one/main`
-    )
   })
 
   it(`uses separate pull-wake subscriptions for separate runner-targeted entities`, async () => {
@@ -298,10 +294,35 @@ describe(`dispatch policy routing`, () => {
         wake_stream: `/runners/runner-1/wake`,
       })
     )
-    expect(ctx.streamClient.removeSubscriptionStream).toHaveBeenCalledWith(
-      `runner:runner-1`,
-      `/chat/one/main`
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(
+      `/chat/one`,
+      expect.objectContaining({ payload: `hello` })
     )
+  })
+
+  it(`does not re-add already linked runner streams before sending`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+    ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
+      entity(dispatchPolicy)
+    )
+    ;(ctx.streamClient.getSubscription as any).mockResolvedValue({
+      streams: [{ path: `tenant-test/chat/one/main` }],
+    })
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/entities/chat/one/send`, {
+        payload: `hello`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
+    expect(ctx.streamClient.removeSubscriptionStream).not.toHaveBeenCalled()
     expect(ctx.entityManager.send).toHaveBeenCalledWith(
       `/chat/one`,
       expect.objectContaining({ payload: `hello` })

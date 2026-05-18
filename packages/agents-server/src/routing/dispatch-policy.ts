@@ -109,6 +109,23 @@ function sameDispatchDestination(
   return false
 }
 
+function subscriptionHasStream(
+  ctx: TenantContext,
+  existing: { streams?: Array<string | { path?: string }> },
+  streamPath: string
+): boolean {
+  const normalizedStream = streamPath.replace(/^\/+/, ``)
+  const backendStream = `${ctx.service}/${normalizedStream}`
+  return (
+    existing.streams?.some((stream) => {
+      const path = typeof stream === `string` ? stream : stream.path
+      if (!path) return false
+      const normalized = path.replace(/^\/+/, ``)
+      return normalized === normalizedStream || normalized === backendStream
+    }) ?? false
+  )
+}
+
 export async function assertDispatchPolicyAllowed(
   ctx: TenantContext,
   policy: DispatchPolicy | undefined
@@ -210,21 +227,13 @@ async function linkStreamToTargetSubscription(
         wake_stream: wakeStream,
         description: `Electric Agents runner ${target.runnerId}`,
       })
-      await removeLegacyRunnerSubscriptionStream(
-        ctx,
-        target,
-        subscriptionId,
-        streamPath
-      )
       return
     }
-    await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
-    await removeLegacyRunnerSubscriptionStream(
-      ctx,
-      target,
-      subscriptionId,
-      streamPath
-    )
+    if (!subscriptionHasStream(ctx, existing, streamPath)) {
+      await ctx.streamClient.addSubscriptionStreams(subscriptionId, [
+        streamPath,
+      ])
+    }
     return
   }
 
@@ -247,7 +256,7 @@ async function linkStreamToTargetSubscription(
       webhook: { url: forwardUrl },
       description: `Electric Agents webhook ${subscriptionId}`,
     })
-  } else {
+  } else if (!subscriptionHasStream(ctx, existing, streamPath)) {
     await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
   }
   await ctx.pgDb
@@ -263,25 +272,5 @@ async function linkStreamToTargetSubscription(
         subscriptionWebhooks.subscriptionId,
       ],
       set: { webhookUrl },
-    })
-}
-
-async function removeLegacyRunnerSubscriptionStream(
-  ctx: TenantContext,
-  target: Extract<DispatchTarget, { type: `runner` }>,
-  subscriptionId: string,
-  streamPath: string
-): Promise<void> {
-  const legacySubscriptionId = subscriptionIdForDispatchTarget(target)
-  if (legacySubscriptionId === subscriptionId) return
-
-  await ctx.streamClient
-    .removeSubscriptionStream(legacySubscriptionId, streamPath)
-    .catch((err) => {
-      serverLog.warn(
-        `[dispatch-policy] failed to remove legacy runner stream from subscription`,
-        { subscriptionId: legacySubscriptionId, stream: streamPath },
-        err
-      )
     })
 }
