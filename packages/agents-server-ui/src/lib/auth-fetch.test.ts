@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getActivePrincipal,
+  getConfiguredActivePrincipal,
   registerActiveServerHeaders,
   serverFetch,
 } from './auth-fetch'
@@ -93,6 +94,17 @@ describe(`server fetch helpers`, () => {
       headers: { 'electric-principal': `system:dev-local` },
     })
 
+    expect(getActivePrincipal()).toBe(`/principal/system%3Adev-local`)
+    expect(getConfiguredActivePrincipal()).toBe(`/principal/system%3Adev-local`)
+  })
+
+  it(`uses the local dev principal when no active principal is configured`, () => {
+    registerActiveServerHeaders({
+      name: `Local`,
+      url: `http://127.0.0.1:4437`,
+    })
+
+    expect(getConfiguredActivePrincipal()).toBe(null)
     expect(getActivePrincipal()).toBe(`/principal/system%3Adev-local`)
   })
 })

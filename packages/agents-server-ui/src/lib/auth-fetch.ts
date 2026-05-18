@@ -9,7 +9,16 @@ type ActiveServerHeaders = {
   headers: Record<string, string>
 }
 
+const DEFAULT_ACTIVE_PRINCIPAL = `system:dev-local`
+
 let activeServerHeaders: ActiveServerHeaders | null = null
+
+function principalUrl(principal: string): string {
+  const trimmed = principal.trim()
+  return trimmed.startsWith(`/principal/`)
+    ? trimmed
+    : `/principal/${encodeURIComponent(trimmed)}`
+}
 
 function normalizeHeaders(
   headers: Record<string, string> | undefined
@@ -85,12 +94,15 @@ export function getConfiguredServerHeaders(
   return matchesActiveServer(input) ? (activeServerHeaders?.headers ?? {}) : {}
 }
 
-export function getActivePrincipal(): string {
+export function getConfiguredActivePrincipal(): string | null {
   const principal = activeServerHeaders?.headers[`electric-principal`]
-  if (!principal) return `unknown`
-  return principal.startsWith(`/principal/`)
-    ? principal
-    : `/principal/${encodeURIComponent(principal)}`
+  return principal ? principalUrl(principal) : null
+}
+
+export function getActivePrincipal(): string {
+  return (
+    getConfiguredActivePrincipal() ?? principalUrl(DEFAULT_ACTIVE_PRINCIPAL)
+  )
 }
 
 export async function serverFetch(

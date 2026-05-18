@@ -256,7 +256,8 @@ const PULL_WAKE_REGISTER_RUNNER =
 const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
   `/principal/system%3Adev-local`
-const DEV_PRINCIPAL = ((): string | null => {
+const DEFAULT_LOCAL_DEV_PRINCIPAL = `system:dev-local`
+const EXPLICIT_DEV_PRINCIPAL = ((): string | null => {
   const raw = process.env.ELECTRIC_DESKTOP_PRINCIPAL?.trim() || null
   if (!raw) return null
   const colon = raw.indexOf(`:`)
@@ -1216,10 +1217,17 @@ function localRuntimeStatusLabel(status: LocalRuntimeStatus): string {
 }
 
 function injectDevPrincipalHeaders(server: ServerConfig): ServerConfig {
-  if (!DEV_PRINCIPAL) return server
+  if (server.source === `electric-cloud`) return server
+  const principal =
+    EXPLICIT_DEV_PRINCIPAL ??
+    (hasHeader(server.headers, ELECTRIC_PRINCIPAL_HEADER) ||
+    hasHeader(server.headers, `authorization`)
+      ? null
+      : DEFAULT_LOCAL_DEV_PRINCIPAL)
+  if (!principal) return server
   return {
     ...server,
-    headers: { ...server.headers, [ELECTRIC_PRINCIPAL_HEADER]: DEV_PRINCIPAL },
+    headers: { ...server.headers, [ELECTRIC_PRINCIPAL_HEADER]: principal },
   }
 }
 

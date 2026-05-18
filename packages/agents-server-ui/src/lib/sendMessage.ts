@@ -2,6 +2,7 @@ import { createOptimisticAction } from '@tanstack/db'
 import { generateKeyBetween } from 'fractional-indexing'
 import {
   getActivePrincipal,
+  getConfiguredActivePrincipal,
   getConfiguredServerHeaders,
   serverFetch,
 } from './auth-fetch'
@@ -180,7 +181,7 @@ export function createSendMessageAction({
   db,
   baseUrl,
   entityUrl,
-  from = getActivePrincipal(),
+  from,
   onOptimisticMessage,
 }: {
   db: EntityStreamDBWithActions
@@ -191,11 +192,12 @@ export function createSendMessageAction({
 }) {
   const action = createOptimisticAction<SendMessageInput>({
     onMutate: ({ text, mode, key, seq, position }) => {
+      const sender = from ?? getActivePrincipal()
       const now = new Date().toISOString()
       const message: OptimisticInboxMessage = {
         key,
         _seq: seq,
-        from,
+        from: sender,
         payload: { text },
         timestamp: now,
         mode,
@@ -211,7 +213,10 @@ export function createSendMessageAction({
     },
     mutationFn: async ({ text, key, mode, position }) => {
       const url = entityApiUrl(baseUrl, entityUrl, `/send`)
-      const sender = await resolveSenderPrincipalUrl(url, from)
+      const sender = await resolveSenderPrincipalUrl(
+        url,
+        from ?? getConfiguredActivePrincipal() ?? ``
+      )
       const res = await serverFetch(url, {
         method: `POST`,
         headers: { 'content-type': `application/json` },
