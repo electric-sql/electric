@@ -1088,5 +1088,10 @@ defmodule Electric.Replication.Eval.ParserTest do
                  sublink_queries: %{0 => ~S|SELECT value FROM project WHERE value > '5'::int4|}
                )
     end
+
+    test "outer `::T[]` cast on a non-foldable ARRAY constructor reports an array return type" do
+      assert {:ok, %Expr{returns: {:array, :uuid}}} =
+               Parser.parse_and_validate_expression(~S|ARRAY[v]::uuid[]|, refs: %{["v"] => :text})
+    end
   end
 end
