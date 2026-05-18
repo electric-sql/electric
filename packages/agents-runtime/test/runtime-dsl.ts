@@ -260,7 +260,7 @@ async function startServers(registry: EntityRegistry): Promise<ServerState> {
   await timeStep(`DurableStreamTestServer.start`, () => dsServer.start())
 
   const electricAgentsServer = new ElectricAgentsServer({
-    durableStreamsUrl: dsServer.url,
+    durableStreamsUrl: `${dsServer.url}/v1/stream`,
     port: 0,
     postgresUrl: TEST_POSTGRES_URL,
     electricUrl: TEST_ELECTRIC_URL,

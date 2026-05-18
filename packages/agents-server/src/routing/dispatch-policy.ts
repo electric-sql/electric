@@ -242,6 +242,9 @@ async function linkStreamToTargetSubscription(
   entity: ElectricAgentsEntity
 ): Promise<void> {
   const streamPath = entity.streams.main
+  await ctx.streamClient.ensure(streamPath, {
+    contentType: `application/json`,
+  })
   const subscriptionId = subscriptionIdForEntityDispatchTarget(
     target,
     entity.url
