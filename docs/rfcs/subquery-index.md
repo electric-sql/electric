@@ -135,6 +135,9 @@ make comparison and compaction harder to reason about.
 
 ### Processed-Up-To Time
 
+The progress monitor's public API is expressed as a processed-up-to
+notification:
+
 Consumers call:
 
 ```elixir
@@ -142,19 +145,26 @@ SubqueryProgressMonitor.notify_processed_up_to(time, subquery_id)
 ```
 
 after they no longer need to read the subquery at `time` or earlier.
+The public function can include `self()` in the message to the monitor, so the
+consumer identity is resolved from registration rather than passed at every
+call site.
 
 For a move from logical time `a` to logical time `b`, once the consumer has
 finished processing that move and is steady at `b`, it notifies that it has
 processed up to `a`.
 
-The minimum required time for compaction is therefore:
+Internally, the progress monitor should track `required_time`: the earliest
+logical time a live consumer may still read. `notify_processed_up_to(a,
+subquery_id)` advances that consumer's `required_time` to `a + 1`.
+
+The minimum required time for compaction is:
 
 ```text
-min_processed_up_to_for_live_consumers + 1
+min(required_time_for_live_consumers)
 ```
 
-Consumers registered at current time `t` start with `processed_up_to = t - 1`,
-because they need to read time `t`.
+Consumers register with the logical time they are starting from. If a consumer
+starts from current logical time `t`, its initial `required_time` is `t`.
 
 ## Proposal
 
@@ -172,36 +182,36 @@ key is:
 Absence means the value is not a member at any retained logical time.
 
 The common case is a value that is always present for the retained window. That
-should be represented compactly, for example:
+is represented as an empty history:
 
 ```elixir
-true
+[]
 ```
 
 Values that have moved use a small transition history. The exact structure
 should be benchmarked before implementation. A simple starting point is:
 
 ```elixir
-{:out, [9]}
-{:out, [9, 11]}
-{:in, [9]}
-{:in, [9, 11]}
+[:out, 9]
+[:out, 9, 11]
+[:in, 9]
+[:in, 9, 11]
 ```
 
-The first atom is the membership state before the first transition. Each time in
-the list toggles membership from that time onwards.
+The first list item is the membership state before the first transition. Each
+time after it toggles membership from that time onwards.
 
 Examples:
 
 ```elixir
 # Out before 9, in from 9 onwards.
-{:out, [9]}
+[:out, 9]
 
 # Out before 9, in from 9 to 10, out from 11 onwards.
-{:out, [9, 11]}
+[:out, 9, 11]
 
 # In before 9, out from 9 to 10, in from 11 onwards.
-{:in, [9, 11]}
+[:in, 9, 11]
 ```
 
 The API should support:
@@ -224,20 +234,20 @@ time window for that subquery.
 #### Compaction
 
 The `SubqueryProgressMonitor` provides the minimum required logical time for
-each subquery. `MultiTimeView` can compact entries by removing transitions
-before that time.
+each subquery. `MultiTimeView` can compact entries by evaluating membership at
+that time and removing transitions at or before it.
 
 Compaction must preserve membership at all retained times. For example:
 
 ```elixir
-{:out, [9, 11]}
+[:out, 9, 11]
 ```
 
 If `min_required_time = 10`, membership at time `10` is `true`, and the compacted
 history becomes:
 
 ```elixir
-{:in, [11]}
+[:in, 11]
 ```
 
 If `min_required_time = 12`, the value is out for the whole retained window, so
@@ -423,7 +433,13 @@ SubqueryProgressMonitor.notify_processed_up_to(from_time, subquery_id)
 Move-in queries currently build SQL from whole before and after views. The new
 implementation should avoid retaining large views in the consumer process.
 
-Preferred approach - materialize them inside the task process that
+Preferred approach:
+
+- Build the triggering dependency candidate predicate from the move delta
+  values when possible.
+- Read full view values at a specific time only for positions that require
+  exclusion logic.
+- If full views are required, materialize them inside the task process that
   runs the query so the memory is released when the task exits.
 
 This is important because replacing long-lived consumer views with
@@ -434,12 +450,26 @@ short-lived task views is where much of the memory win comes from.
 `SubqueryProgressMonitor` tracks the earliest logical time still needed by live
 outer consumers.
 
-Consumers register for each subquery they read. Registration at current time
-`t` inserts:
+Registration must happen atomically with choosing the consumer's starting
+logical time. The materializer should provide a serialized registration call,
+for example:
 
-```text
-processed_up_to = t - 1
+```elixir
+{:ok, current_time} =
+  Materializer.register_subquery_consumer(
+    subquery_id,
+    outer_shape_handle,
+    self()
+  )
 ```
+
+The materializer handles the call in its GenServer, reads its current logical
+time, registers the outer consumer with the progress monitor, and returns that
+time to the consumer. This prevents a race where the materializer advances and
+compacts a time before the new consumer is registered as needing it.
+
+The monitor stores the returned time as the consumer's internal
+`required_time`.
 
 When a consumer finishes a move from `from_time` to `to_time`, it calls:
 
@@ -447,20 +477,26 @@ When a consumer finishes a move from `from_time` to `to_time`, it calls:
 SubqueryProgressMonitor.notify_processed_up_to(from_time, subquery_id)
 ```
 
+The monitor then advances that consumer's `required_time` to `from_time + 1`.
+
 The monitor maintains two ETS indexes:
 
 ```text
-{subquery_id, consumer_shape_handle} -> processed_up_to
-{subquery_id, processed_up_to, consumer_shape_handle} -> true
+{subquery_id, consumer_shape_handle} -> required_time
+{subquery_id, required_time, consumer_shape_handle} -> true
 ```
 
 The first index makes updates O(1). The second index makes the minimum
-processed time for a subquery cheap to read.
+required time for a subquery cheap to read.
+
+If `notify_processed_up_to/2` infers consumer identity from the caller process,
+the monitor also needs a lookup from registered consumer pid to
+`consumer_shape_handle`.
 
 When the minimum changes, the monitor notifies `MultiTimeView`:
 
 ```elixir
-MultiTimeView.set_min_required_time(subquery_id, min_processed_up_to + 1)
+MultiTimeView.set_min_required_time(subquery_id, min_required_time)
 ```
 
 When an outer shape is removed, the monitor removes that consumer from every
@@ -512,8 +548,10 @@ consumer still needs.
 The invariant is:
 
 ```text
-MultiTimeView may compact only times < min_required_time
-min_required_time = min(processed_up_to_by_live_consumer) + 1
+MultiTimeView may drop transitions at or before min_required_time
+after rewriting the entry to preserve membership at min_required_time.
+
+min_required_time = min(required_time_by_live_consumer)
 ```
 
 Tests should cover move-in, move-out, repeated toggles, consumer registration,
@@ -590,10 +628,5 @@ Keep or extend integration tests for:
 
 - Should `MultiTimeView` expose `values(subquery_id, time)` as a materialized
   `MapSet`, a stream, or both?
-- Should `SubqueryProgressMonitor.notify_processed_up_to/2` infer the consumer
-  identity from process state, or should callers pass the outer shape handle
-  explicitly?
 - Should first-time child creation seed synchronously, or should it use fallback
   routing while an asynchronous seeding task populates group value rows?
-- Which transition-history representation is smallest in practice for ETS:
-  list, tuple, or binary?
