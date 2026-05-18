@@ -24,6 +24,20 @@ import {
 // want to retry
 const HTTP_RETRY_STATUS_CODES = [429]
 
+/**
+ * Throws a FetchBackoffAbortError if the signal has been aborted.
+ *
+ * Used to guard against late-resolving fetches: a custom fetch client
+ * (or upstream wrapper) may resolve normally after its abort signal
+ * fires. Without this check, the late response can flow into the
+ * stream after its state machine has already moved on.
+ */
+function throwIfAborted(signal: AbortSignal | null | undefined): void {
+  if (signal?.aborted) {
+    throw new FetchBackoffAbortError()
+  }
+}
+
 export interface BackoffOptions {
   /**
    * Initial delay before retrying in milliseconds
@@ -99,6 +113,7 @@ export function createFetchWithBackoff(
     while (true) {
       try {
         const result = await fetchClient(...args)
+        throwIfAborted(options?.signal)
         if (result.ok) {
           return result
         }
@@ -172,18 +187,19 @@ const NO_BODY_STATUS_CODES = [201, 204, 205]
 export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
+    const signal = args[1]?.signal
     const res = await fetchClient(...args)
     try {
+      throwIfAborted(signal)
       if (res.status < 200 || NO_BODY_STATUS_CODES.includes(res.status)) {
         return res
       }
 
       const text = await res.text()
+      throwIfAborted(signal)
       return new Response(text, res)
     } catch (err) {
-      if (args[1]?.signal?.aborted) {
-        throw new FetchBackoffAbortError()
-      }
+      throwIfAborted(signal)
 
       throw new FetchError(
         res.status,
