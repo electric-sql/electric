@@ -51,9 +51,10 @@ export default defineConfig(({ command, mode }) => {
           `jsx-dev-runtime.js`
         ),
       },
-      dedupe: [`react`, `react-dom`],
+      dedupe: [`react`, `react-dom`, `@tanstack/db`],
     },
     optimizeDeps: {
+      exclude: [`@durable-streams/state`, `@tanstack/db`, `@tanstack/react-db`],
       include: [
         `react`,
         `react-dom`,

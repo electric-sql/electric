@@ -1,5 +1,6 @@
 import { createOptimisticAction } from '@tanstack/db'
 import { generateKeyBetween } from 'fractional-indexing'
+import { createPendingTimelineOrder } from '@electric-ax/agents-runtime/client'
 import {
   getActivePrincipal,
   getConfiguredServerHeaders,
@@ -19,6 +20,8 @@ let optimisticInboxSeq = OPTIMISTIC_INBOX_SEQ_START
 export type OptimisticInboxMessage = {
   key: string
   _seq: number
+  _timeline_order: string
+  _optimistic: true
   from: string
   payload: { text: string }
   timestamp: string
@@ -195,6 +198,8 @@ export function createSendMessageAction({
       const message: OptimisticInboxMessage = {
         key,
         _seq: seq,
+        _timeline_order: createPendingTimelineOrder(seq),
+        _optimistic: true,
         from,
         payload: { text },
         timestamp: now,

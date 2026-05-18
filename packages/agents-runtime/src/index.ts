@@ -115,7 +115,9 @@ export {
 export type { EntityMembershipRow, EntityTags, TagOperation } from './tags'
 export {
   createEntityIncludesQuery,
+  createEntityTimelineQuery,
   createEntityErrorsQuery,
+  createPendingTimelineOrder,
   getEntityState,
   normalizeEntityTimelineData,
   normalizeTimelineEntities,
@@ -124,6 +126,14 @@ export {
 export type {
   EntityTimelineData,
   EntityTimelineContentItem,
+  EntityTimelineInboxMode,
+  EntityTimelineQueryOptions,
+  EntityTimelineQueryRow,
+  EntityTimelineRunRow,
+  EntityTimelineRunItem,
+  EntityTimelineTextChunk,
+  EntityTimelineTextItem,
+  EntityTimelineToolCallItem,
   IncludesEntity,
   EntityTimelineSection,
   EntityTimelineState,

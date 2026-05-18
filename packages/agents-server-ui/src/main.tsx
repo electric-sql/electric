@@ -28,12 +28,31 @@ import { App } from './App'
 // to non-ngrok hosts. Covers the durable-streams client's internal fetches
 // too, since it calls through the global fetch.
 const originalFetch = window.fetch.bind(window)
+const shouldSkipNgrokWarning = (input: RequestInfo | URL): boolean => {
+  const url =
+    input instanceof Request
+      ? input.url
+      : input instanceof URL
+        ? input.href
+        : input
+  try {
+    return new URL(url, window.location.href).hostname.endsWith(
+      `.ngrok-free.app`
+    )
+  } catch {
+    return false
+  }
+}
+
 window.fetch = (
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> => {
   const headers = new Headers(init?.headers ?? {})
-  if (!headers.has(`ngrok-skip-browser-warning`)) {
+  if (
+    shouldSkipNgrokWarning(input) &&
+    !headers.has(`ngrok-skip-browser-warning`)
+  ) {
     headers.set(`ngrok-skip-browser-warning`, `true`)
   }
   return originalFetch(input, { ...init, headers })

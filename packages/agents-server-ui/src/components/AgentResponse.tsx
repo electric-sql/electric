@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useLiveQuery } from '@tanstack/react-db'
 import { Streamdown } from 'streamdown'
 import {
   getCachedMarkdownRender,
@@ -27,6 +28,9 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import styles from './AgentResponse.module.css'
 import type {
   EntityTimelineContentItem,
+  EntityTimelineRunRow,
+  EntityTimelineTextItem,
+  EntityTimelineToolCallItem,
   EntityTimelineSection,
 } from '@electric-ax/agents-runtime/client'
 
@@ -36,6 +40,16 @@ type AgentResponseSection = Extract<
 >
 
 const SHIKI_SETTLE_MS = 80
+
+function compareTimelineOrderValues(
+  left: string | number,
+  right: string | number
+): number {
+  if (typeof left === `number` && typeof right === `number`) {
+    return left - right
+  }
+  return String(left).localeCompare(String(right))
+}
 
 const MarkdownSegment = memo(function MarkdownSegment({
   text,
@@ -51,12 +65,12 @@ const MarkdownSegment = memo(function MarkdownSegment({
   canCache: boolean
 }): React.ReactElement {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const cachedHtmlHashRef = useRef<number | null>(null)
   // Tracks the content hash that the currently-displayed `cachedHtml`
   // belongs to, so we can distinguish "the underlying text changed and our
   // cached HTML is now stale" from "only the column width changed and our
   // cached HTML is still semantically correct, just laid out for a
   // different width".
-  const cachedHtmlHashRef = useRef<number | null>(null)
   const [cachedHtml, setCachedHtmlState] = useState<string | null>(() => {
     if (!canCache || !isMarkdownRenderCacheReady() || renderWidth <= 0)
       return null
@@ -229,6 +243,119 @@ function toolItemToCopyText(item: EntityTimelineContentItem): string {
   if (item.result) parts.push(item.result)
   return parts.join(`\n`)
 }
+
+function liveToolCallToContentItem(
+  item: EntityTimelineToolCallItem
+): Extract<EntityTimelineContentItem, { kind: `tool_call` }> {
+  return {
+    kind: `tool_call`,
+    toolCallId: item.tool_call_id ?? item.key,
+    toolName: item.tool_name,
+    args:
+      item.args && typeof item.args === `object`
+        ? (item.args as Record<string, unknown>)
+        : {},
+    status: item.status,
+    result: typeof item.result === `string` ? item.result : undefined,
+    isError: Boolean(item.error),
+  }
+}
+
+const LiveTextItem = memo(function LiveTextItem({
+  item,
+  isStreaming,
+  renderWidth,
+}: {
+  item: EntityTimelineTextItem
+  isStreaming: boolean
+  renderWidth: number
+}): React.ReactElement {
+  return (
+    <MarkdownSegment
+      text={item.content}
+      contentHash={0}
+      isStreaming={isStreaming}
+      renderWidth={renderWidth}
+      canCache={false}
+    />
+  )
+})
+
+export const AgentResponseLive = memo(function AgentResponseLive({
+  run,
+  isStreaming,
+  timestamp,
+  renderWidth = 0,
+}: {
+  run: EntityTimelineRunRow
+  isStreaming: boolean
+  timestamp?: number | null
+  renderWidth?: number
+}): React.ReactElement {
+  const { data: items = [] } = useLiveQuery(
+    (q) => (run.items ? q.from({ item: run.items }) : undefined),
+    [run.items]
+  )
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((a, b) =>
+        compareTimelineOrderValues(
+          a.text?.order ?? a.toolCall?.order ?? `~`,
+          b.text?.order ?? b.toolCall?.order ?? `~`
+        )
+      ),
+    [items]
+  )
+  const done = run.status !== `started`
+  const lastItem = sortedItems[sortedItems.length - 1]
+  const lastTextHasContent = lastItem?.text !== undefined
+  const showThinking = isStreaming && !done && !lastTextHasContent
+  const showTimestamp = timestamp != null && !isStreaming
+  const hasLeadingMeta = showThinking || done
+
+  return (
+    <Stack direction="column" gap={2} className={styles.root}>
+      {sortedItems.map((item, i) => {
+        if (item.text) {
+          return (
+            <LiveTextItem
+              key={item.$key}
+              item={item.text}
+              isStreaming={isStreaming && i === sortedItems.length - 1}
+              renderWidth={renderWidth}
+            />
+          )
+        }
+
+        return (
+          <ToolCallView
+            key={item.toolCall.key}
+            item={liveToolCallToContentItem(item.toolCall)}
+          />
+        )
+      })}
+
+      <Stack align="center" gap={2} className={styles.metaRow}>
+        {showThinking && <ThinkingIndicator />}
+        {done && (
+          <Text size={1} tone="muted" className={styles.doneText}>
+            ✓ done
+          </Text>
+        )}
+        {showTimestamp && (
+          <>
+            {hasLeadingMeta && (
+              <Text size={1} tone="muted" className={styles.metaSeparator}>
+                ·
+              </Text>
+            )}
+            <TimeText ts={timestamp} className={styles.timeText} />
+          </>
+        )}
+      </Stack>
+    </Stack>
+  )
+})
 
 export const AgentResponse = memo(function AgentResponse({
   section,
