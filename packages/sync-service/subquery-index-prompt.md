@@ -46,12 +46,33 @@ There are at least two duplicated memory pools:
 Adding a reverse index such as `shape_handle -> all values` would make removal
 faster, but it would increase memory.
 
+## Definitions
+
+### Subquery
+
+Each subquery gets it's own shape. If the select statement differs at all we count it as a different subquery, even if the difference is just in a constant. So:
+- SELECT id FROM users WHERE company_id=7
+- SELECT id FROM users WHERE company_id=8
+are two different subqueries and each get their own subquery_id (the handle for the subquery shape)
+
+### Subquery Group
+
+A subquery group is a set of subqueries that have the same field and polarity at a particular node in the filter tree.
+
+So for example the two subqueries in the two shapes below are differnt subqueries (because they differ by the company_id constant) but they are in the same subquery group because they have the same field (user_id) and polarity (:positive) at the same node in the filter tree:
+WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
+WHERE user_id IN (SELECT id FROM users WHERE company_id=8)
+
+A subquery_id may appear in multiple subquery groups if it appears at multiple nodes in the filter tree. For the subquery is the same (has the same subquery_id) in the two shapes below but falls into different subquery groups because it appears at a differnt node in the filter tree:
+WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
+WHERE project_id=4 AND user_id IN (SELECT id FROM users WHERE company_id=7)
+
 ## Goals
 
 - Reduce memory footprint of subqueries significantly while remaining consitant and performant
 - have near O(1) performance for:
-    - subquery addition and removal
-    - row processing by the where clause filter (so for afffected_shapes in the SubqueryIndex)
+    - subquery addition and removal, including subquery group addition and removal where needed
+    - row processing by the where clause filter (so for afffected_shapes in the SubqueryIndex) even when there are thousands of subqueries in a subquery group
 - Store one shared materialized view per subquery.
 - Support exact membership reads at separate logical times.
 - Preserve positive, negated, AND, OR, and NOT subquery correctness from v1.6.
@@ -108,20 +129,24 @@ Removing a subquery should not involve a full ETS table scan as this will be too
 
 #### SubqueryIndex
 
-This is a complete re-write of the existing SubqueryIndex that delegates most of it's resposibility to the the MultiTimeView.
+This is a complete re-write of the existing SubqueryIndex that delegates some of it's resposibility to the the MultiTimeView.
 
-When a shape is added to the SubqueryIndex at a particular node in the filter tree, SubqueryIndex will need to keep something like:
+Since there may be many subqueries in a subquery group, the SubqueryIndex should keep:
 
-node_id, subquery_id, polarity -> child_node_id
+subquery_group_id, value -> list(child_node_id)
 
-and add the shape to the child WhereCondition node
+where:
+subquery_group_id is a number (whatever is smallest in memory) and represents {node_id, field, polarity} but to save memory (as it's going to be repeated lots in the ETS table) we keep it small and also store:
+subquery_group_id -> {node_id, field, polarity} and
+{node_id, field, polarity} -> subquery_group_id
 
-When the SubqueryIndex is asked the affected_shapes for a given value, it will need to iterate through all {subquery_id, polarity} pairs it has and MapSet.union the affected shapes for each.
+and there's one child_node_id per subquery_id for the group. child_node_id is smaller in memory so we keep that in places where it's going to be repeated lots in the ETS table (e.g. in `subquery_group_id, value -> list(child_node_id)`)
 
-For a given {subquery_id, :positive} pair the affected shaped will be:
+
+So for `afffected_shapes` for a particular value, we'd look up the list of child_node_ids from the subquery_group_id, value pair then lookup the subquery_ids from the child_node_ids then for each subquery_id:
 
 if MultiTimeView.member_at_some_time?(subquery_id, value) do
-  WhereCondition.affected_shapes(node_id)
+  WhereCondition.affected_shapes(child_node_id)
 else
   MapSet.new()
 end
@@ -131,19 +156,21 @@ For a given {subquery_id, :negative} pair the affected shaped will be:
 if MultiTimeView.member_at_all_times?(subquery_id, value) do
   MapSet.new()
 else
-  WhereCondition.affected_shapes(node_id)
+  WhereCondition.affected_shapes(child_node_id)
 end
 
-This will ensure that the rows are included for all available times
+This will ensure that the rows are included for all available times.
 
-If the MultiTimeView has not been populated by the Materializer yet, the SubqueryIndex should return WhereCondition.affected_shapes(node_id)
+If the MultiTimeView has not been marked ready by the Materializer yet, the SubqueryIndex should return WhereCondition.affected_shapes(child_node_id)
+
+Removal of a subquery must not scale with the total number of shapes or the number of subqueries in the group, but can scale with the number of values for the subquery. This can be achived by getting the getting the values for the subquery from the MultiTimeView (as discussed above in the MultiTimeView section when talking about subquery removal) - whilst iterating though those values we can also delete those values in the SubqueryIndex for all the groups that it's in.
 
 #### Materializer
 
 This is the existing Materializer. It will just need to be updated to:
-- populate the MultiTimeView when the Materializer has initialised (it has a full materialized view). This should be at logical time 0.
+- populate the SubqueryIndex when the Materializer has initialised (it has a full materialized view). This should be at logical time 0.
 - increment logical time for each `{:materializer_changes` message it sends to outer consumers, and include the new logical time in that message
-- before the `{:materializer_changes` message is sent, the MultiTimeView should be updated with the changes giving the new logical time as the time of the change
+- before the `{:materializer_changes` message is sent, the SubqueryIndex should be updated with the changes giving the new logical time as the time of the change
 
 #### Logical Time
 
@@ -157,58 +184,20 @@ This can be a separate process that the outer consumer calls to acknoledge that 
 
 The SubqueryProgressMonitor can be implimented as an ETS table ordered by subquery_id then logical time with an index to where an outer shape_id entry is so that when an outer consumer acks a logical time for a subquery, the outer shape can be found in the the ordered list and removed and replaced with the acked time. The minimum of theses times is the minimum in-flight logical time for the subquery. This should mean that updating a outer shape's logical time is O(1) and reading the minimum in-flight logical time is O(1). The SubqueryProgressMonitor should notify the MultiTimeView when the minimum in-flight logical time for a subquery changes so that the MultiTimeView can compact it's ETS table.
 
+The SubqueryProgressMonitor must know about all shapes for a subquery (so for example if it's not seen an ack from one of them it needs to know the minimum time is still 0) or a subquery and have those shapes removed
+
 #### Consumer EventProcessors
 
 These should be updated so that rather than holding views of the subquery, they just hold the logical time. so the before and after views should instead just be the before and after logical times.
 - `convert_change` should have a function passed to it that access MultiTimeView.member? at the specified time
 - the move-in query needs entire views at specific times and so should call MultiTimeView.get(time) and care should be made to not keep this in memory for too long, perhaps we should GC the consumer process afterwards, or perhaps the task process that runs the query should call MultiTimeView.get(time) so that the memory is freed when the process ends
 
+### Concurrency model
 
-# The Problem With The Above Design
+Reads and writes to the MultiTimeView and SubqueryIndex ETS tables will mostly not be concurrent:
+- add_shape and remove_shape will happen on the ShapeLogCollector process
+- add_value and remove_value will happen while the ShapeLogCollector process is blocked so acts as if it were on the ShapeLogCollector process (ShapeLogCollector calls the Consumer which calls the Materializer which calls the SubqueryIndex to add/remove values, all synchronously)
+- a Materializer seeding a subquery will happen when the Materializer is ready (so asyncronously to the ShapeLogCollector process) but will then call mark_ready on the SubqueryIndex which is an atomic process
+- read of MultiTimeView may happen async by a consumer, but will be a read at a specific logical time so concurrentcy should not be an issue
+- the mimimum in-flight logical time for a subquery will be updated by the SubqueryProgressMonitor async, but this will just update a single number, so concurrentcy should not be an issue
 
-Subqueries have different subquery_ids even if they only differ in a constant, so:
-- SELECT id FROM users WHERE company_id=7
-- SELECT id FROM users WHERE company_id=8
-are two different subqueries. If the SubqueryIndex iterates through {subquery_id, :positive} pairs that may be thousands of pairs and be too slow since it's in the replication stream hot path.
-
-Instead we should, at each node, for each {field, polarity} pair, keep a reverse index for all the subqueries for that pair. So:
-WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
-WHERE user_id IN (SELECT id FROM users WHERE company_id=8)
-
-would be in the same reverse index because they have the same field (user_id) and polarity (:positive).
-
-Perhaps the index could have the form:
-subquery_group_id, value -> list({child_node_id, list(times)})
-
-where:
-subquery_group_id is a number (whatever is smallest in memory) and represents {node_id, field, polarity} but to save memory (as it's going to be repeated lots in the ETS table) we keep it small and also store:
-subquery_group_id -> {node_id, field, polarity} and
-{node_id, field, polarity} -> subquery_group_id
-
-and there's one child_node_id per subquery_id for the group
-
-Shape removal can be quick because we can keep track of subquery_id -> child_node_id and remove the shape from the child node, but removing nodes becomes slow since they're scattered throughout the ETS table. I suggest the cleaning up of nodes should be done asynchronously by a process that walks through the ETS table for nodes with no shapes and removes them. Race conditions can be avoided by doing an atomic conditional replace in the ETS table.
-
-Perhaps this will replace the MultiTimeView proposes above, we're still multi-time but we work at a group level rather than the subquery level. This would mean that the Materializer calls to add/remove values from the subquery must update all groups that the subquery is in.
-
-
-### Definitions
-
-#### Subquery
-
-Each subquery gets it's own shape. If the select statement differs at all we count it as a different subquery, even if the difference is just in a constant. So:
-- SELECT id FROM users WHERE company_id=7
-- SELECT id FROM users WHERE company_id=8
-are two different subqueries and each get their own subquery_id (the handle for the subquery shape)
-
-#### Subquery Group
-
-A subquery group is a set of subqueries that have the same field and polarity at a particular node in the filter tree.
-
-So for example the two subqueries in the two shapes below are differnt subqueries (because they differ by the company_id constant) but they are in the same subquery group because they have the same field (user_id) and polarity (:positive) at the same node in the filter tree:
-WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
-WHERE user_id IN (SELECT id FROM users WHERE company_id=8)
-
-A subquery_id may appear in multiple subquery groups if it appears at multiple nodes in the filter tree. For the subquery is the same (has the same subquery_id) in the two shapes below but falls into different subquery groups because it appears at a differnt node in the filter tree:
-WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
-WHERE project_id=4 AND user_id IN (SELECT id FROM users WHERE company_id=7)
