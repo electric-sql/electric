@@ -31,7 +31,7 @@ function subscriptionIdForEntityDispatchTarget(
   entityUrl: string
 ): string {
   const base = subscriptionIdForDispatchTarget(target)
-  if (!target.subscription_id) return base
+  if (!target.subscription_id && target.type !== `runner`) return base
   const digest = createHash(`sha256`).update(entityUrl).digest(`hex`)
   return `${base}:${digest.slice(0, 16)}`
 }
@@ -203,9 +203,21 @@ async function linkStreamToTargetSubscription(
         wake_stream: wakeStream,
         description: `Electric Agents runner ${target.runnerId}`,
       })
+      await removeLegacyRunnerSubscriptionStream(
+        ctx,
+        target,
+        subscriptionId,
+        streamPath
+      )
       return
     }
     await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
+    await removeLegacyRunnerSubscriptionStream(
+      ctx,
+      target,
+      subscriptionId,
+      streamPath
+    )
     return
   }
 
@@ -244,5 +256,25 @@ async function linkStreamToTargetSubscription(
         subscriptionWebhooks.subscriptionId,
       ],
       set: { webhookUrl },
+    })
+}
+
+async function removeLegacyRunnerSubscriptionStream(
+  ctx: TenantContext,
+  target: Extract<DispatchTarget, { type: `runner` }>,
+  subscriptionId: string,
+  streamPath: string
+): Promise<void> {
+  const legacySubscriptionId = subscriptionIdForDispatchTarget(target)
+  if (legacySubscriptionId === subscriptionId) return
+
+  await ctx.streamClient
+    .removeSubscriptionStream(legacySubscriptionId, streamPath)
+    .catch((err) => {
+      serverLog.warn(
+        `[dispatch-policy] failed to remove legacy runner stream from subscription`,
+        { subscriptionId: legacySubscriptionId, stream: streamPath },
+        err
+      )
     })
 }

@@ -11,11 +11,8 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { eq, not } from '@tanstack/db'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
-import { useServerConnection } from '../../hooks/useServerConnection'
 import { useWorkspace } from '../../hooks/useWorkspace'
 import { useRecentWorkingDirectories } from '../../hooks/useRecentWorkingDirectories'
-import { connectEntityStream } from '../../lib/entity-connection'
-import { createSendMessageAction } from '../../lib/sendMessage'
 import { Icon, Select, Stack, Text } from '../../ui'
 import { SchemaForm, hasSchemaProperties, isObjectSchema } from '../SchemaForm'
 import { WorkingDirectoryPicker } from '../WorkingDirectoryPicker'
@@ -96,7 +93,6 @@ export function NewSessionView({
   setToolbarTitle,
 }: StandaloneViewProps): React.ReactElement {
   const { entityTypesCollection, spawnEntity } = useElectricAgents()
-  const { activeServer } = useServerConnection()
   const { helpers } = useWorkspace()
   const [selected, setSelected] = useState<ElectricEntityType | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -131,18 +127,10 @@ export function NewSessionView({
     [entityTypes]
   )
 
-  const baseUrl = activeServer?.url ?? null
-
   /**
-   * Spawn an entity, optionally followed by a `/send` of an initial
-   * user message. We prefer this two-step over `initialMessage` on
-   * spawn so the message goes through the same path as the regular
-   * MessageInput (which is the proven path that wakes horton).
-   *
-   * On success we *replace this tile* with the freshly-created entity.
-   * That keeps the workspace layout intact (other tiles around us
-   * stay in place) and feels like opening a file in VS Code's
-   * "untitled" tab — the placeholder turns into the new content.
+   * Spawn an entity and let the server enqueue any initial user message.
+   * The server links dispatch before writing that message, avoiding a
+   * client-side stream preload on the critical path to the first wake.
    */
   const doSpawn = useCallback(
     async (
@@ -166,6 +154,7 @@ export function NewSessionView({
               },
             }
           : {}),
+        ...(initialUserText ? { initialMessage: initialUserText } : {}),
       })
       const entityUrl = `/${typeName}/${name}`
       try {
@@ -173,29 +162,13 @@ export function NewSessionView({
         helpers.openEntity(entityUrl, {
           target: { tileId, position: `replace` },
         })
-        if (initialUserText && baseUrl) {
-          const connection = await connectEntityStream({ baseUrl, entityUrl })
-          try {
-            const sendInitialMessage = createSendMessageAction({
-              db: connection.db,
-              baseUrl,
-              entityUrl,
-            })
-            await sendInitialMessage({
-              text: initialUserText,
-              mode: `immediate`,
-            }).isPersisted.promise
-          } finally {
-            connection.close()
-          }
-        }
       } catch (err) {
         setError(
           `Could not start session: ${err instanceof Error ? err.message : String(err)}.`
         )
       }
     },
-    [helpers, spawnEntity, baseUrl, tileId]
+    [helpers, spawnEntity, tileId]
   )
 
   const handleSelectType = useCallback(

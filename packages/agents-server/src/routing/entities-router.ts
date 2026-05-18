@@ -533,6 +533,8 @@ async function sendEntity(
   if (!entity.dispatch_policy) {
     const updatedEntity = await backfillEntityDispatchPolicy(ctx, entity)
     await linkEntityDispatchSubscription(ctx, updatedEntity)
+  } else if (entity.dispatch_policy.targets[0]?.type === `runner`) {
+    await linkEntityDispatchSubscription(ctx, entity)
   }
 
   if (parsed.afterMs && parsed.afterMs > 0) {
@@ -614,13 +616,13 @@ async function spawnEntity(
     wake: parsed.wake,
     created_by: principal.url,
   })
+  await linkEntityDispatchSubscription(ctx, entity)
   if (parsed.initialMessage !== undefined) {
     await ctx.entityManager.send(entity.url, {
       from: principal.url,
       payload: parsed.initialMessage,
     })
   }
-  await linkEntityDispatchSubscription(ctx, entity)
 
   return json(
     { ...toPublicEntity(entity), txid: entity.txid },
