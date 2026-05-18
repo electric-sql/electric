@@ -471,14 +471,15 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
 
 /**
  * Match a request URL against the user's saved `electric-cloud`
- * servers by host + path prefix. Returns the saved `ServerConfig`
- * when one is found so the webRequest hook can inject auth headers
- * for any path under that base URL (shape streams, RPC, health
- * checks, agent spawn, inbox sends — all the same auth context).
+ * servers by host + path prefix. Cloud URLs are tenant-scoped as
+ * `/services/<tenantId>`, so a single cloud-agents-server host can
+ * serve multiple tenants without us attaching tenant A's token to
+ * tenant B's request.
  *
- * Host-only match isn't enough: a single cloud-agents-server host
- * can serve many tenants, so we'd risk attaching tenant A's token
- * to tenant B's request. Base-URL prefix match guards against that.
+ * Legacy settings may still have a host-only Cloud URL from older
+ * builds. We allow that only when it is the sole possible match for
+ * the origin; otherwise we fail closed until `prepareConnection`
+ * rewrites the saved URL to the tenant-scoped form.
  */
 function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
   let parsed: URL
@@ -487,6 +488,7 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
   } catch {
     return null
   }
+  const hostOnlyMatches: Array<ServerConfig> = []
   for (const server of settings.servers) {
     if (server.source !== `electric-cloud`) continue
     if (!server.tenantId) continue
@@ -498,11 +500,18 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
     }
     if (base.origin !== parsed.origin) continue
     const basePath = base.pathname.replace(/\/+$/, ``)
-    if (basePath === `` || parsed.pathname.startsWith(`${basePath}/`)) {
+    if (basePath === ``) {
+      hostOnlyMatches.push(server)
+      continue
+    }
+    if (
+      parsed.pathname === basePath ||
+      parsed.pathname.startsWith(`${basePath}/`)
+    ) {
       return server
     }
   }
-  return null
+  return hostOnlyMatches.length === 1 ? hostOnlyMatches[0]! : null
 }
 
 /**
@@ -1645,11 +1654,22 @@ type AgentsServerHealthResult = { ok: true } | { ok: false; reason: string }
 
 function buildAgentsServerHealthUrl(baseUrl: string): string {
   try {
-    return new URL(`/_electric/health`, baseUrl).toString()
+    return appendPathToServerUrl(baseUrl, `/_electric/health`)
   } catch {
     const trimmed = baseUrl.replace(/\/+$/, ``)
     return `${trimmed}/_electric/health`
   }
+}
+
+function appendPathToServerUrl(baseUrl: string, pathName: string): string {
+  const base = new URL(baseUrl)
+  const basePath =
+    base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
+  const suffix = pathName.startsWith(`/`) ? pathName : `/${pathName}`
+  base.pathname = `${basePath}${suffix}`
+  base.search = ``
+  base.hash = ``
+  return base.toString()
 }
 
 function formatStartupNetworkError(

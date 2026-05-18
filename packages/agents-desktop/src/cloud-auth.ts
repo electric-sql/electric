@@ -109,8 +109,8 @@ export function getCloudAgentsBaseUrl(): string {
   const dashboardUrl = getCloudBaseUrl()
   try {
     const url = new URL(dashboardUrl)
-    if (url.hostname.startsWith(`dashboard`)) {
-      url.hostname = url.hostname.replace(/^dashboard/, `agents`)
+    if (/^dashboard([.-]|$)/.test(url.hostname)) {
+      url.hostname = url.hostname.replace(/^dashboard(?=[.-]|$)/, `agents`)
       // Strip path/query — agents server is host-only.
       url.pathname = `/`
       url.search = ``
@@ -240,7 +240,7 @@ export class CloudAuth {
 
   async signOut(): Promise<void> {
     await this.secretStore.delete(SECRET_REF)
-    this.cancelActiveFlow(`User signed out`)
+    this.cancelActiveFlow()
     this.setState({
       status: `signed-out`,
       email: null,
@@ -273,9 +273,10 @@ export class CloudAuth {
     provider: CloudAuthProvider,
     parent?: BrowserWindow | undefined
   ): Promise<void> {
-    this.cancelActiveFlow(`Replaced by new sign-in attempt`)
+    this.cancelActiveFlow()
     const stateNonce = randomUUID()
-    this.activeFlow = { state: stateNonce, provider }
+    const flow = { state: stateNonce, provider }
+    this.activeFlow = flow
     this.setState({
       status: `signing-in`,
       email: this.state.email,
@@ -313,7 +314,10 @@ export class CloudAuth {
     ) => {
       if (settled) return
       settled = true
-      const flow = this.activeFlow
+      if (this.activeFlow !== flow) {
+        if (this.activeWindow === win) this.activeWindow = null
+        return
+      }
       this.activeFlow = null
       // Close after the current event tick so we don't race with
       // Electron's own teardown when settling from inside a navigation
@@ -361,7 +365,6 @@ export class CloudAuth {
       // will rerender as soon as the response lands. Failure here is
       // non-fatal (we still have a valid JWT and email).
       void this.refreshWhoami(result.payload.token)
-      void flow
     }
 
     const tryIntercept = (rawUrl: string): boolean => {
@@ -478,7 +481,7 @@ export class CloudAuth {
     })
   }
 
-  private cancelActiveFlow(reason: string): void {
+  private cancelActiveFlow(): void {
     const win = this.activeWindow
     if (win && !win.isDestroyed()) {
       // We intentionally clear the flow before closing so the `closed`
@@ -487,7 +490,6 @@ export class CloudAuth {
       this.activeWindow = null
       win.close()
     }
-    void reason
   }
 
   private async loadStored(): Promise<CloudAuthSecret | null> {
@@ -516,7 +518,7 @@ export class CloudAuth {
 
   private isExpired(expiresAt: string): boolean {
     const ts = Date.parse(expiresAt)
-    if (Number.isNaN(ts)) return false
+    if (Number.isNaN(ts)) return true
     return ts < Date.now()
   }
 

@@ -2,6 +2,7 @@ import { ShapeStream, type Message, type Row } from '@electric-sql/client'
 import type { CloudAuth } from './cloud-auth'
 import { getCloudAgentsBaseUrl, getCloudBaseUrl } from './cloud-auth'
 import type { SecretStore } from './secret-store'
+import { Buffer } from 'node:buffer'
 
 /**
  * Per-tenant token storage prefix. Each cloud agent server's agents
@@ -12,6 +13,7 @@ import type { SecretStore } from './secret-store'
  * time, so we don't have to read from disk on every request.
  */
 const TOKEN_REF_PREFIX = `cloud-agents-token:`
+const AGENTS_TOKEN_EXPIRY_SKEW_MS = 60_000
 
 /**
  * Cloud agent-servers state machine.
@@ -147,7 +149,9 @@ export class CloudAgentServers {
 
   /** Synchronous lookup used by the main-process webRequest hook. */
   getAgentsToken(tenantId: string): string | undefined {
-    return this.agentsTokens.get(tenantId)
+    const token = this.agentsTokens.get(tenantId)
+    if (!token) return undefined
+    return isExpiredJwt(token, AGENTS_TOKEN_EXPIRY_SKEW_MS) ? undefined : token
   }
 
   /**
@@ -166,7 +170,12 @@ export class CloudAgentServers {
       const stored = await this.secretStore.get(
         `${TOKEN_REF_PREFIX}${tenantId}`
       )
-      if (stored) this.agentsTokens.set(tenantId, stored)
+      if (!stored) continue
+      if (isExpiredJwt(stored, AGENTS_TOKEN_EXPIRY_SKEW_MS)) {
+        await this.secretStore.delete(`${TOKEN_REF_PREFIX}${tenantId}`)
+        continue
+      }
+      this.agentsTokens.set(tenantId, stored)
     }
   }
 
@@ -231,12 +240,14 @@ export class CloudAgentServers {
    * Fetches a per-service principal token via `getTokenForAgents` on the
    * admin-API (authenticated with the user's cloud-auth bearer),
    * stores it in `SecretStore` and the in-memory cache, and returns
-   * just the bare base URL + tenant id to the renderer. The token
+   * a tenant-scoped agents URL + tenant id to the renderer. The token
    * itself is never sent over IPC and never lands in `settings.json`
    * — `main.ts`'s `webRequest.onBeforeSendHeaders` hook reads it
    * from `agentsTokens` to add `Authorization: Bearer <token>` and
    * `x-electric-service: <tenantId>` headers on outbound requests
-   * to this server's URL.
+   * to this server's URL. The URL includes `/services/<tenantId>` so
+   * multiple Cloud agent servers on the same host still match the
+   * correct tenant when the Electron request hooks inspect URLs.
    *
    * Throws on auth failure so the caller can surface a sensible
    * error in the UI.
@@ -244,6 +255,10 @@ export class CloudAgentServers {
   async prepareConnection(
     serviceId: string
   ): Promise<{ url: string; tenantId: string }> {
+    const url = cloudAgentServerUrl(serviceId)
+    const cached = this.getAgentsToken(serviceId)
+    if (cached) return { url, tenantId: serviceId }
+
     const token = await this.cloudAuth.getToken()
     if (!token) {
       throw new Error(`Not signed in to Electric Cloud`)
@@ -251,7 +266,6 @@ export class CloudAgentServers {
     const agentsToken = await this.fetchAgentsToken(serviceId, token)
     this.agentsTokens.set(serviceId, agentsToken)
     await this.secretStore.set(`${TOKEN_REF_PREFIX}${serviceId}`, agentsToken)
-    const url = getCloudAgentsBaseUrl().replace(/\/+$/, ``)
     return { url, tenantId: serviceId }
   }
 
@@ -439,6 +453,16 @@ export class CloudAgentServers {
   }
 }
 
+function cloudAgentServerUrl(serviceId: string): string {
+  const base = new URL(getCloudAgentsBaseUrl())
+  const basePath =
+    base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
+  base.pathname = `${basePath}/services/${encodeURIComponent(serviceId)}`
+  base.search = ``
+  base.hash = ``
+  return base.toString()
+}
+
 function extractAgentsToken(body: unknown): string | null {
   if (typeof body === `string`) {
     const token = body.trim()
@@ -468,6 +492,25 @@ function extractAgentsToken(body: unknown): string | null {
     }
   }
   return null
+}
+
+function isExpiredJwt(token: string, skewMs = 0): boolean {
+  const [, payload] = token.split(`.`)
+  if (!payload) return false
+  try {
+    const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, `=`)
+    const decoded = Buffer.from(
+      padded.replace(/-/g, `+`).replace(/_/g, `/`),
+      `base64`
+    ).toString(`utf8`)
+    const json = JSON.parse(decoded) as { exp?: unknown }
+    if (typeof json.exp !== `number` || !Number.isFinite(json.exp)) {
+      return false
+    }
+    return json.exp * 1000 <= Date.now() + skewMs
+  } catch {
+    return false
+  }
 }
 
 function collect<T>(rows: Map<string, Row> | undefined): Array<T> {
