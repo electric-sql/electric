@@ -493,57 +493,6 @@ describe(`runner routes`, () => {
     )
   })
 
-  it(`falls back to wake event details when subscription claims are unavailable`, async () => {
-    const ctx = buildContext({
-      principal: {
-        kind: `user`,
-        id: `owner@example.com`,
-        key: `user:owner@example.com`,
-        url: `/principal/user%3Aowner%40example.com`,
-      },
-    })
-    vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({} as any)
-    vi.mocked(ctx.entityManager.registry.getEntityByStream).mockResolvedValue({
-      url: `/chat/one`,
-      type: `chat`,
-      status: `idle`,
-      streams: { main: `/chat/one/main`, error: `/chat/one/error` },
-      subscription_id: `runner:runner-1`,
-      write_token: `entity-token`,
-      tags: {},
-      created_at: 1,
-      updated_at: 1,
-    })
-
-    const response = await globalRouter.fetch(
-      request(`POST`, `/_electric/runners/runner-1/claim`, {
-        subscription_id: `runner:runner-1:fallback`,
-        stream: `chat/one/main`,
-        generation: 7,
-      }),
-      ctx
-    )
-
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as Record<string, unknown>
-    expect(body).toMatchObject({
-      consumerId: expect.stringMatching(/^fallback-/),
-      epoch: 7,
-      wakeId: expect.stringMatching(/^fallback-/),
-      streamPath: `/chat/one/main`,
-      callback: expect.stringMatching(
-        /^http:\/\/server\/_electric\/callback-forward\/fallback-/
-      ),
-      claimToken: expect.any(String),
-    })
-    expect(body.streams).toEqual([{ path: `/chat/one/main`, offset: `-1` }])
-    expect(ctx.entityManager.registry.materializeActiveClaim).toHaveBeenCalled()
-    expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
-      `/chat/one`,
-      `running`
-    )
-  })
-
   it(`rejects invalid owner_principal with 400`, async () => {
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners`, {

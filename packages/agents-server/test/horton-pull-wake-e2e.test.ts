@@ -158,6 +158,59 @@ async function expectNoContentWithDiagnostics(
   )
 }
 
+async function waitForMockCallWithDiagnostics(
+  predicate: () => boolean,
+  opts: {
+    phase: string
+    baseUrl: string
+    streamBaseUrl: string
+    entityApiUrl: string
+    entityUrl: string
+    entityStream: string
+    runnerId: string
+    authHeaders: Record<string, string>
+  }
+): Promise<void> {
+  try {
+    await waitFor(async () => predicate(), 20_000, 50)
+  } catch (err) {
+    const subscriptionId = runnerEntitySubscriptionId(
+      opts.runnerId,
+      opts.entityUrl
+    )
+    const diagnostics = await Promise.all([
+      responseDiagnostic(`entity`, opts.entityApiUrl, {
+        headers: opts.authHeaders,
+      }),
+      responseDiagnostic(
+        `runner health`,
+        `${opts.baseUrl}/_electric/runners/${opts.runnerId}/health`,
+        { headers: opts.authHeaders }
+      ),
+      responseDiagnostic(
+        `subscription ${subscriptionId}`,
+        subscriptionUrl(opts.streamBaseUrl, subscriptionId)
+      ),
+      responseDiagnostic(
+        `runner wake stream`,
+        `${opts.streamBaseUrl}/runners/${opts.runnerId}/wake?offset=-1&live=false`
+      ),
+      responseDiagnostic(
+        `entity main stream`,
+        `${opts.streamBaseUrl}${opts.entityStream}?offset=-1&live=false`
+      ),
+    ])
+
+    throw new Error(
+      [
+        `${opts.phase} did not reach Horton within 20000ms`,
+        err instanceof Error ? err.message : String(err),
+        ...diagnostics,
+      ].join(`\n\n`)
+    )
+  }
+}
+
 function assertCompleteResponses(
   events: Array<any>,
   responseText: string,
@@ -285,7 +338,19 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       authHeaders,
     })
 
-    await waitFor(async () => mockStreamFn.mock.calls.length > 0, 20_000, 50)
+    await waitForMockCallWithDiagnostics(
+      () => mockStreamFn.mock.calls.length > 0,
+      {
+        phase: `initial send`,
+        baseUrl,
+        streamBaseUrl,
+        entityApiUrl,
+        entityUrl,
+        entityStream: spawned.streams.main,
+        runnerId,
+        authHeaders,
+      }
+    )
 
     await waitFor(async () => {
       const events = await readStreamEvents(streamBaseUrl, spawned.streams.main)
@@ -316,10 +381,18 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       authHeaders,
     })
 
-    await waitFor(
-      async () => mockStreamFn.mock.calls.length > firstCallCount,
-      20_000,
-      50
+    await waitForMockCallWithDiagnostics(
+      () => mockStreamFn.mock.calls.length > firstCallCount,
+      {
+        phase: `second send`,
+        baseUrl,
+        streamBaseUrl,
+        entityApiUrl,
+        entityUrl,
+        entityStream: spawned.streams.main,
+        runnerId,
+        authHeaders,
+      }
     )
 
     await waitFor(async () => {
