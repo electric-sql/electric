@@ -5,6 +5,7 @@ import { EntityTimeline } from '../EntityTimeline'
 import { MessageInput } from '../MessageInput'
 import { EntityContextDrawer } from '../EntityContextDrawer'
 import type { ViewProps } from '../../lib/workspace/viewRegistry'
+import type { EntityTimelineQueryRow } from '@electric-ax/agents-runtime/client'
 
 /**
  * The default view: chat / timeline + message composer.
@@ -81,6 +82,24 @@ function GenericChatBody({
       ),
     [optimisticInlineInboxKeys, pendingInbox]
   )
+  const inlinePendingInbox =
+    !entityStopped && !generationActive ? visiblePendingInbox[0] : undefined
+  const timelineRowsWithInlinePending = useMemo<Array<EntityTimelineQueryRow>>(
+    () =>
+      inlinePendingInbox
+        ? [
+            ...timelineRows,
+            {
+              $key: `inbox:${inlinePendingInbox.key}`,
+              inbox: inlinePendingInbox,
+            } as EntityTimelineQueryRow,
+          ]
+        : timelineRows,
+    [inlinePendingInbox, timelineRows]
+  )
+  const drawerPendingInbox = inlinePendingInbox
+    ? visiblePendingInbox.slice(1)
+    : visiblePendingInbox
 
   // If the timeline subscription errors out for an entity that isn't
   // currently spawning (so the failure isn't transient), bounce back to
@@ -95,7 +114,7 @@ function GenericChatBody({
   return (
     <>
       <EntityTimeline
-        rows={timelineRows}
+        rows={timelineRowsWithInlinePending}
         loading={loading}
         error={error}
         entityStopped={entityStopped}
@@ -110,7 +129,7 @@ function GenericChatBody({
         baseUrl={baseUrl}
         entityUrl={entityUrl ?? ``}
         disabled={entityStopped || !db}
-        pendingMessages={visiblePendingInbox}
+        pendingMessages={drawerPendingInbox}
         inlineQueuedSubmits={
           !entityStopped &&
           !generationActive &&
