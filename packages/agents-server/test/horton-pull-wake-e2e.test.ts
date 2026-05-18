@@ -4,7 +4,11 @@ import { DurableStreamTestServer } from '@durable-streams/server'
 import { BuiltinAgentsServer } from '../../agents/src/server'
 import { ElectricAgentsServer } from '../src/server'
 import { parsePrincipalKey } from '../src/principal'
-import { readStreamEvents, waitFor } from './test-utils'
+import {
+  durableStreamTestServerUrl,
+  readStreamEvents,
+  waitFor,
+} from './test-utils'
 import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
@@ -260,7 +264,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
     })
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: undefined,

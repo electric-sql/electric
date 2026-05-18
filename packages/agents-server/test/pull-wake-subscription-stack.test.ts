@@ -4,7 +4,8 @@ import { stream } from '@durable-streams/client'
 import { DurableStreamTestServer } from '@durable-streams/server'
 import { afterEach, describe, expect, it } from 'vitest'
 import { globalRouter } from '../src/routing/global-router'
-import { StreamClient, durableStreamsServiceUrl } from '../src/stream-client'
+import { StreamClient } from '../src/stream-client'
+import { durableStreamTestServerUrl } from './test-utils'
 import type { Server } from 'node:http'
 import type { TenantContext } from '../src/routing/context'
 
@@ -49,7 +50,7 @@ describe(`pull-wake subscription stack`, () => {
       webhooks: true,
     })
     await dsServer.start()
-    const streamBaseUrl = durableStreamsServiceUrl(dsServer.url, `default`)
+    const streamBaseUrl = durableStreamTestServerUrl(dsServer.url)
     const client = new StreamClient(streamBaseUrl)
 
     await client.ensure(`/runners/runner-1/wake`, {
@@ -77,7 +78,7 @@ describe(`pull-wake subscription stack`, () => {
       expect.objectContaining({
         type: `wake`,
         subscription_id: `runner:runner-1:one`,
-        stream: `default/horton/one/main`,
+        stream: `horton/one/main`,
         generation: 1,
       }),
     ])
@@ -104,7 +105,7 @@ describe(`pull-wake subscription stack`, () => {
       webhooks: true,
     })
     await dsServer.start()
-    const streamBaseUrl = durableStreamsServiceUrl(dsServer.url, `default`)
+    const streamBaseUrl = durableStreamTestServerUrl(dsServer.url)
     const client = new StreamClient(streamBaseUrl)
     await client.ensure(`/runners/runner-1/wake`, {
       contentType: `application/json`,

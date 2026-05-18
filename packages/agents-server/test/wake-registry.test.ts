@@ -16,7 +16,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { EntityManager } from '../src/entity-manager'
 import { ElectricAgentsServer } from '../src/server'
 import { WakeRegistry } from '../src/wake-registry'
-import { timeStep, waitForStreamEvents } from './test-utils'
+import {
+  durableStreamTestServerUrl,
+  timeStep,
+  waitForStreamEvents,
+} from './test-utils'
 import {
   TEST_ELECTRIC_URL,
   TEST_POSTGRES_URL,
@@ -795,7 +799,7 @@ describe(`Wake Registry Integration`, () => {
       receiverUrl = `http://127.0.0.1:${addr.port}`
 
       electricAgentsServer = new ElectricAgentsServer({
-        durableStreamsUrl: dsServer.url,
+        durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
         port: 0,
         postgresUrl: TEST_POSTGRES_URL,
         electricUrl: TEST_ELECTRIC_URL,

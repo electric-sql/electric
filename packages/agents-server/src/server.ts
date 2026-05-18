@@ -9,7 +9,7 @@ import {
 import { createDb, runMigrations } from './db/index.js'
 import { ossServerRouter } from './routing/oss-server-router.js'
 import { startStandaloneAgentsRuntime } from './standalone-runtime.js'
-import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
+import { StreamClient } from './stream-client.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import { getDevPrincipal, getPrincipalFromRequest } from './principal.js'
 import { apiError } from './electric-agents-http.js'
@@ -120,6 +120,16 @@ function createMockAgentBootstrap(options: {
   return { runtime, registry }
 }
 
+function durableStreamTestServerBackendUrl(origin: string): string {
+  // DurableStreamTestServer.start() returns the HTTP origin, while the
+  // reference server's stream backend is mounted under /v1/stream.
+  // User-provided durableStreamsUrl values are already backend prefixes and
+  // are passed through unchanged.
+  const url = new URL(origin)
+  url.pathname = `${url.pathname.replace(/\/+$/, ``)}/v1/stream`
+  return url.toString().replace(/\/+$/, ``)
+}
+
 export class ElectricAgentsServer {
   private server?: Server
   private electricAgentsManager?: StartedStandaloneAgentsRuntime[`manager`]
@@ -143,12 +153,9 @@ export class ElectricAgentsServer {
     }
     this.options = options
     this.streamClient = options.durableStreamsUrl
-      ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId, {
-            scope: `stream-root`,
-          }),
-          { bearer: options.durableStreamsBearer }
-        )
+      ? new StreamClient(options.durableStreamsUrl, {
+          bearer: options.durableStreamsBearer,
+        })
       : null!
   }
 
@@ -185,13 +192,11 @@ export class ElectricAgentsServer {
         serverLog.info(
           `[agent-server] durable streams server started at ${streamsUrl}`
         )
-        this.options.durableStreamsUrl = streamsUrl
-        this.streamClient = new StreamClient(
-          durableStreamsServiceUrl(streamsUrl, this.tenantId, {
-            scope: `stream-root`,
-          }),
-          { bearer: this.options.durableStreamsBearer }
-        )
+        this.options.durableStreamsUrl =
+          durableStreamTestServerBackendUrl(streamsUrl)
+        this.streamClient = new StreamClient(this.options.durableStreamsUrl, {
+          bearer: this.options.durableStreamsBearer,
+        })
       }
 
       this.streamsAgent = new Agent({
@@ -404,7 +409,7 @@ export class ElectricAgentsServer {
       principal,
       publicUrl: this.publicUrl,
       localUrl: this._url,
-      durableStreamsUrl: this.streamClient.baseUrl,
+      durableStreamsUrl: this.options.durableStreamsUrl!,
       durableStreamsBearer: this.options.durableStreamsBearer,
       durableStreamsRouting: this.options.durableStreamsRouting,
       durableStreamsDispatcher: this.streamsAgent,

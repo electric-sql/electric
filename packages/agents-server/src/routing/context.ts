@@ -19,7 +19,7 @@ export interface TenantContext {
   principal: Principal
   publicUrl: string
   localUrl?: string
-  /** Resolved Durable Streams root URL for this tenant. */
+  /** Durable Streams backend URL prefix. Stream and control paths are appended as-is. */
   durableStreamsUrl: string
   durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
