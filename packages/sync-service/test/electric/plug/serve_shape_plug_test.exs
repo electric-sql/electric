@@ -912,6 +912,98 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert get_resp_header(conn, "electric-handle") == [test_shape_handle]
     end
+
+    test "emits [:electric, :shape, :response_size] telemetry event", ctx do
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
+
+      next_offset = LogOffset.increment(@first_offset)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          @first_offset
+        end,
+        get_log_stream: fn @before_all_offset, @first_offset, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
+
+      test_pid = self()
+      ref = make_ref()
+      handler_id = "test-response-size-#{inspect(ref)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:electric, :shape, :response_size],
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:telemetry_response_size, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      stack_id = ctx.stack_id
+
+      try do
+        conn =
+          ctx
+          |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+          |> call_serve_shape_plug(ctx)
+
+        assert conn.status == 200
+
+        assert_receive {:telemetry_response_size, [:electric, :shape, :response_size],
+                        measurements, %{stack_id: ^stack_id} = metadata}
+
+        assert is_integer(measurements.bytes) and measurements.bytes > 0
+        assert metadata.root_table == "public.users"
+        assert metadata.is_live == false
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "[:electric, :shape, :response_size] uses nil label when request was not validated",
+         ctx do
+      test_pid = self()
+      ref = make_ref()
+      handler_id = "test-response-size-nil-#{inspect(ref)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:electric, :shape, :response_size],
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:telemetry_response_size, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      stack_id = ctx.stack_id
+
+      try do
+        # Missing `table` param fails validation, so the request never gets a
+        # parsed root_table. The fallback label must be `nil`, not anything
+        # attacker-controlled from the query string.
+        conn =
+          ctx
+          |> conn(:get, %{}, "?offset=-1")
+          |> call_serve_shape_plug(ctx)
+
+        assert conn.status == 400
+
+        assert_receive {:telemetry_response_size, [:electric, :shape, :response_size],
+                        _measurements, %{stack_id: ^stack_id} = metadata}
+
+        assert metadata.root_table == nil
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
   end
 
   describe "serving shapes with sse mode" do

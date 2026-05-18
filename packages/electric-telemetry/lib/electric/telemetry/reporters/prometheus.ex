@@ -14,8 +14,14 @@ defmodule ElectricTelemetry.Reporters.Prometheus do
     end)
   end
 
-  @buckets [0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1]
+  @latency_buckets [0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1]
+  @byte_buckets [1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000]
+
+  defp add_buckets_to_metric(%{unit: :byte} = metric) do
+    Map.update!(metric, :reporter_options, &Keyword.put_new(&1, :buckets, @byte_buckets))
+  end
+
   defp add_buckets_to_metric(metric) do
-    Map.update!(metric, :reporter_options, &Keyword.put_new(&1, :buckets, @buckets))
+    Map.update!(metric, :reporter_options, &Keyword.put_new(&1, :buckets, @latency_buckets))
   end
 end

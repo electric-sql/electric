@@ -1150,7 +1150,15 @@ defmodule Electric.Shapes.Api do
   end
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do
-    OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
+    OpenTelemetry.with_span(name, attributes, stack_id(request), fn ->
+      OpenTelemetry.add_process_memory_attributes(:start)
+
+      try do
+        fun.()
+      after
+        OpenTelemetry.add_process_memory_attributes(:end)
+      end
+    end)
   end
 
   @spec stack_id(Api.t() | Request.t() | Response.t()) :: String.t()
