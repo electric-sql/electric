@@ -182,7 +182,6 @@ export function createEntityStreamDB(
     const clone = { ...row }
     delete clone._seq
     delete clone._timeline_order
-    delete clone._optimistic
     return clone
   }
 
