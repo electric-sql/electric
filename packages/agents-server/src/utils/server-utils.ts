@@ -167,12 +167,13 @@ export async function forwardFetchRequest(options: {
   serviceId: string
   body?: Uint8Array
   dispatcher?: Agent
-  route?: `stream` | `stream-meta`
+  route?: `stream` | `control`
   durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsBearerMode?: `overwrite` | `if-missing` | `none`
 }): Promise<Response> {
   const routingAdapter = resolveDurableStreamsRoutingAdapter(
-    options.durableStreamsRouting
+    options.durableStreamsRouting,
+    options.durableStreamsUrl
   )
   const routingInput = {
     durableStreamsUrl: options.durableStreamsUrl,
@@ -180,8 +181,8 @@ export async function forwardFetchRequest(options: {
     requestUrl: options.request.url,
   }
   const upstreamUrl =
-    options.route === `stream-meta`
-      ? routingAdapter.streamMetaUrl(routingInput)
+    options.route === `control`
+      ? routingAdapter.controlUrl(routingInput)
       : routingAdapter.streamUrl(routingInput)
 
   const headers = new Headers(options.request.headers)

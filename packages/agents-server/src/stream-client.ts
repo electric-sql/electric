@@ -144,11 +144,24 @@ export function durableStreamsServiceUrl(
   serviceId: string
 ): string {
   const url = new URL(baseUrl)
-  if (/^\/v1\/stream\/[^/]+\/?$/.test(url.pathname)) {
+  if (/\/v1\/streams\/[^/]+\/?$/.test(url.pathname)) {
     return baseUrl.replace(/\/+$/, ``)
   }
-  const base = baseUrl.replace(/\/+$/, ``)
-  return `${base}/v1/stream/${encodeURIComponent(serviceId)}`
+  if (/\/v1\/stream\/[^/]+\/?$/.test(url.pathname)) {
+    return baseUrl.replace(/\/+$/, ``)
+  }
+  const encodedServiceId = encodeURIComponent(serviceId)
+  const path = url.pathname.replace(/\/+$/, ``) || `/`
+  if (path.endsWith(`/v1/streams`)) {
+    url.pathname = `${path}/${encodedServiceId}`
+  } else if (path.endsWith(`/v1/stream`)) {
+    url.pathname = `${path}/${encodedServiceId}`
+  } else if (url.hostname === `api.electric-sql.cloud`) {
+    url.pathname = `/v1/streams/${encodedServiceId}`
+  } else {
+    url.pathname = `${path === `/` ? `` : path}/v1/stream/${encodedServiceId}`
+  }
+  return url.toString().replace(/\/+$/, ``)
 }
 
 function isNotFoundError(err: unknown): boolean {
@@ -177,6 +190,12 @@ function normalizeSubscriptionPath(path: string): string {
   return path.replace(/^\/+/, ``).replace(/\/+$/, ``)
 }
 
+interface SubscriptionUrlInfo {
+  mode: `path-prefixed` | `tenant-root` | `plain`
+  serviceId: string | null
+  controlPath: string
+}
+
 export class StreamClient {
   constructor(
     readonly baseUrl: string,
@@ -202,16 +221,41 @@ export class StreamClient {
     return headers
   }
 
-  private subscriptionServiceId(): string | null {
+  private subscriptionUrlInfo(): SubscriptionUrlInfo {
     const url = new URL(this.baseUrl)
-    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
-    return match ? decodeURIComponent(match[2]!) : null
+    const pathPrefixedMatch = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(
+      url.pathname
+    )
+    if (pathPrefixedMatch) {
+      const [, prefix = ``, serviceId] = pathPrefixedMatch
+      return {
+        mode: `path-prefixed`,
+        serviceId: decodeURIComponent(serviceId!),
+        controlPath: `${prefix}/v1/stream/__ds`,
+      }
+    }
+
+    const tenantRootMatch = /^(.*)\/v1\/streams\/([^/]+)\/?$/.exec(url.pathname)
+    if (tenantRootMatch) {
+      const [, prefix = ``, serviceId] = tenantRootMatch
+      return {
+        mode: `tenant-root`,
+        serviceId: decodeURIComponent(serviceId!),
+        controlPath: `${prefix}/v1/streams/${serviceId}/__ds`,
+      }
+    }
+
+    return {
+      mode: `plain`,
+      serviceId: null,
+      controlPath: `${url.pathname.replace(/\/+$/, ``)}/__ds`,
+    }
   }
 
   private backendSubscriptionPath(path: string): string {
     const normalized = normalizeSubscriptionPath(path)
-    const serviceId = this.subscriptionServiceId()
-    if (!serviceId) return normalized
+    const { mode, serviceId } = this.subscriptionUrlInfo()
+    if (mode !== `path-prefixed` || !serviceId) return normalized
     if (normalized === serviceId || normalized.startsWith(`${serviceId}/`)) {
       return normalized
     }
@@ -220,8 +264,8 @@ export class StreamClient {
 
   private runtimeSubscriptionPath(path: string): string {
     const normalized = normalizeSubscriptionPath(path)
-    const serviceId = this.subscriptionServiceId()
-    if (!serviceId) return normalized
+    const { mode, serviceId } = this.subscriptionUrlInfo()
+    if (mode !== `path-prefixed` || !serviceId) return normalized
     return normalized.startsWith(`${serviceId}/`)
       ? normalized.slice(serviceId.length + 1)
       : normalized
@@ -229,15 +273,8 @@ export class StreamClient {
 
   private subscriptionUrl(subscriptionId: string): string {
     const url = new URL(this.baseUrl)
-    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
-    if (match) {
-      const [, prefix = ``, serviceId] = match
-      url.pathname = `${prefix}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
-      url.searchParams.set(`service`, decodeURIComponent(serviceId!))
-      return url.toString()
-    }
-
-    url.pathname = `${url.pathname.replace(/\/+$/, ``)}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
+    const { controlPath } = this.subscriptionUrlInfo()
+    url.pathname = `${controlPath.replace(/\/+$/, ``)}/subscriptions/${encodeURIComponent(subscriptionId)}`
     return url.toString()
   }
 

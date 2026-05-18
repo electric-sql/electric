@@ -73,17 +73,19 @@ const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
     const incomingUrl = new URL(input.requestUrl, `http://localhost`)
     const path = incomingUrl.pathname.replace(/^\/+/, ``)
     const target = new URL(
-      `/v1/stream/${input.serviceId}/${path}`,
+      `/v1/streams/${input.serviceId}/${path}`,
       input.durableStreamsUrl
     )
     target.search = incomingUrl.search
     return target
   },
-  streamMetaUrl(input) {
+  controlUrl(input) {
     const incomingUrl = new URL(input.requestUrl, `http://localhost`)
-    const target = new URL(incomingUrl.pathname, input.durableStreamsUrl)
+    const target = new URL(
+      `/v1/streams/${input.serviceId}${incomingUrl.pathname}`,
+      input.durableStreamsUrl
+    )
     target.search = incomingUrl.search
-    target.searchParams.set(`service`, input.serviceId)
     return target
   },
   toBackendStreamPath(_serviceId, streamPath) {
@@ -289,7 +291,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
 
     try {
       const result = await globalRouter.fetch(
-        createRequest(`GET`, `/v1/stream-meta/subscriptions/sub-1`),
+        createRequest(`GET`, `/__ds/subscriptions/sub-1`),
         {
           service: `test`,
           durableStreamsUrl: `http://durable.local`,
@@ -301,9 +303,36 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(fetchSpy).toHaveBeenCalledOnce()
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream-meta/subscriptions/sub-1`
+        `http://durable.local/v1/stream/__ds/subscriptions/sub-1`
       )
       expect(init).toMatchObject({ method: `GET` })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`reserves __ds control paths before normal stream operations`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 404 }))
+
+    try {
+      const result = await globalRouter.fetch(
+        createRequest(`POST`, `/__ds/unknown-control-route`),
+        {
+          service: `test`,
+          durableStreamsUrl: `http://durable.local`,
+          isShuttingDown: () => false,
+        } as unknown as TenantContext
+      )
+
+      expect(result.status).toBe(404)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      const [url, init] = fetchSpy.mock.calls[0]!
+      expect(String(url)).toBe(
+        `http://durable.local/v1/stream/__ds/unknown-control-route`
+      )
+      expect(init).toMatchObject({ method: `POST` })
     } finally {
       fetchSpy.mockRestore()
     }
@@ -316,7 +345,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
 
     try {
       const result = await globalRouter.fetch(
-        new Request(`http://localhost/v1/stream-meta/subscriptions/sub-1`, {
+        new Request(`http://localhost/__ds/subscriptions/sub-1`, {
           method: `GET`,
           headers: { authorization: `Bearer caller-token` },
         }),
@@ -345,7 +374,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
 
     try {
       const result = await globalRouter.fetch(
-        new Request(`http://localhost/v1/stream-meta/subscriptions/sub-1/ack`, {
+        new Request(`http://localhost/__ds/subscriptions/sub-1/ack`, {
           method: `POST`,
           headers: {
             authorization: `Bearer claim-token`,
@@ -379,7 +408,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
 
     try {
       const result = await globalRouter.fetch(
-        createRequest(`PUT`, `/v1/stream-meta/subscriptions/horton-handler`, {
+        createRequest(`PUT`, `/__ds/subscriptions/horton-handler`, {
           type: `webhook`,
           pattern: `horton/**`,
           webhook: { url: `http://localhost:4448/runtime-webhook` },
@@ -396,7 +425,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(result.status).toBe(201)
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream-meta/subscriptions/horton-handler`
+        `http://durable.local/v1/stream/__ds/subscriptions/horton-handler`
       )
       expect(JSON.parse(requestBodyText(init?.body))).toEqual({
         type: `webhook`,
@@ -436,7 +465,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
 
     try {
       const result = await globalRouter.fetch(
-        createRequest(`PUT`, `/v1/stream-meta/subscriptions/horton-handler`, {
+        createRequest(`PUT`, `/__ds/subscriptions/horton-handler`, {
           type: `webhook`,
           pattern: `horton/**`,
           streams: [`horton/demo/main`],
@@ -455,7 +484,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(result.status).toBe(201)
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream-meta/subscriptions/horton-handler?service=tenant-a`
+        `http://durable.local/v1/streams/tenant-a/__ds/subscriptions/horton-handler`
       )
       expect(JSON.parse(requestBodyText(init?.body))).toMatchObject({
         pattern: `horton/**`,
@@ -491,7 +520,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
 
     try {
       const result = await globalRouter.fetch(
-        createRequest(`PUT`, `/v1/stream-meta/subscriptions/horton-handler`, {
+        createRequest(`PUT`, `/__ds/subscriptions/horton-handler`, {
           type: `webhook`,
           pattern: `horton/**`,
           streams: [`horton/demo/main`, `tenant-a/horton/existing/main`],

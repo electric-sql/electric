@@ -53,13 +53,13 @@ describe(`AgentsHost`, () => {
 
     const runtime = await host.registerTenant({
       serviceId: `svc-coastal-stork`,
-      durableStreamsUrl: `https://api.electric-sql.cloud/v1/stream/svc-coastal-stork`,
+      durableStreamsUrl: `https://api.electric-sql.cloud/v1/streams/svc-coastal-stork`,
     })
 
     expect(runtime.serviceId).toBe(`svc-coastal-stork`)
     expect(host.getTenant(`svc-coastal-stork`)).toBe(runtime)
     expect(runtime.streamClient.baseUrl).toBe(
-      `https://api.electric-sql.cloud/v1/stream/svc-coastal-stork`
+      `https://api.electric-sql.cloud/v1/streams/svc-coastal-stork`
     )
     expect(runtime.wakeRegistry).toBe(host.wakeRegistry)
     expect(runtime.manager.registry.tenantId).toBe(`svc-coastal-stork`)
@@ -67,7 +67,7 @@ describe(`AgentsHost`, () => {
 
   it(`uses an explicitly supplied tenant stream client`, async () => {
     const streamClient = new StreamClient(
-      `https://api.electric-sql.cloud/v1/stream/svc-direct-client`
+      `https://api.electric-sql.cloud/v1/streams/svc-direct-client`
     )
     const host = new AgentsHost({
       db: createMockDb(),
@@ -90,7 +90,7 @@ describe(`AgentsHost`, () => {
 
     const runtime = await host.registerTenant({
       serviceId: `svc-before-start`,
-      durableStreamsUrl: `https://api.electric-sql.cloud/v1/stream/svc-before-start`,
+      durableStreamsUrl: `https://api.electric-sql.cloud/v1/streams/svc-before-start`,
     })
     const rehydrate = vi
       .spyOn(runtime, `rehydrateCronSchedules`)
@@ -140,7 +140,7 @@ describe(`AgentsHost`, () => {
 
     const registration = host.registerTenant({
       serviceId: `svc-race`,
-      durableStreamsUrl: `https://api.electric-sql.cloud/v1/stream/svc-race`,
+      durableStreamsUrl: `https://api.electric-sql.cloud/v1/streams/svc-race`,
     })
     await Promise.resolve()
 

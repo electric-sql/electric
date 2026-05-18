@@ -294,7 +294,8 @@ async function webhookForward(
   const parsedBody = parsedBodyResult.value as WebhookForwardBody | undefined
   const newWebhook = newWebhookPayload(parsedBody)
   const routingAdapter = resolveDurableStreamsRoutingAdapter(
-    ctx.durableStreamsRouting
+    ctx.durableStreamsRouting,
+    ctx.durableStreamsUrl
   )
 
   if (parsedBody) {
@@ -537,7 +538,10 @@ async function callbackForward(
     ctx.service,
     consumerId,
     requestBody,
-    resolveDurableStreamsRoutingAdapter(ctx.durableStreamsRouting)
+    resolveDurableStreamsRoutingAdapter(
+      ctx.durableStreamsRouting,
+      ctx.durableStreamsUrl
+    )
   )
 
   let upstream: Response

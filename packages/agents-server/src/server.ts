@@ -7,7 +7,6 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import { createDb, runMigrations } from './db/index.js'
-import { pathPrefixedSingleTenantDurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import { ossServerRouter } from './routing/oss-server-router.js'
 import { startStandaloneAgentsRuntime } from './standalone-runtime.js'
 import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
@@ -403,9 +402,7 @@ export class ElectricAgentsServer {
       localUrl: this._url,
       durableStreamsUrl: this.options.durableStreamsUrl,
       durableStreamsBearer: this.options.durableStreamsBearer,
-      durableStreamsRouting:
-        this.options.durableStreamsRouting ??
-        pathPrefixedSingleTenantDurableStreamsRoutingAdapter,
+      durableStreamsRouting: this.options.durableStreamsRouting,
       durableStreamsDispatcher: this.streamsAgent,
       electricUrl: this.options.electricUrl,
       electricSecret: this.options.electricSecret,

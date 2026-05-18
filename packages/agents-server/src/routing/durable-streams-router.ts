@@ -48,7 +48,7 @@ export const durableStreamsRouter: DurableStreamsRoutes = Router<
   Response | undefined
 >()
 
-durableStreamsRouter.all(`/v1/stream-meta/subscriptions/*`, subscriptionProxy)
+durableStreamsRouter.all(`*`, subscriptionProxy)
 durableStreamsRouter.post(`*`, streamAppend)
 durableStreamsRouter.all(`*`, proxyPassThrough)
 
@@ -71,7 +71,7 @@ async function forwardToDurableStreams(
   ctx: TenantContext,
   request: IRequest,
   body?: Uint8Array,
-  route: `stream` | `stream-meta` = `stream`,
+  route: `stream` | `control` = `stream`,
   urlOverride?: string
 ): Promise<Response> {
   const headers = new Headers(request.headers)
@@ -106,22 +106,88 @@ async function forwardToDurableStreams(
   })
 }
 
-function subscriptionIdFromPath(pathname: string): string | null {
-  const match = /^\/v1\/stream-meta\/subscriptions\/([^/]+)(?:\/.*)?$/.exec(
-    pathname
-  )
-  return match ? decodeURIComponent(match[1]!) : null
+type SubscriptionProxyAction =
+  | `base`
+  | `streams`
+  | `stream`
+  | `callback`
+  | `claim`
+  | `ack`
+  | `release`
+
+interface SubscriptionProxyRoute {
+  subscriptionId: string
+  action: SubscriptionProxyAction
+  streamPath?: string
+}
+
+function controlPathSuffix(pathname: string): string | null {
+  const segments = pathname.split(`/`).filter(Boolean)
+  const controlIndex =
+    segments[0] === `__ds`
+      ? 0
+      : segments[0] === `v1` &&
+          segments[1] === `stream` &&
+          segments[2] === `__ds`
+        ? 2
+        : segments[0] === `v1` &&
+            segments[1] === `streams` &&
+            segments[3] === `__ds`
+          ? 3
+          : -1
+  if (controlIndex < 0) return null
+  return `/${segments.slice(controlIndex).join(`/`)}`
+}
+
+function isReservedControlPath(pathname: string): boolean {
+  return controlPathSuffix(pathname) !== null
+}
+
+function subscriptionRouteFromPath(
+  pathname: string
+): SubscriptionProxyRoute | null {
+  const routePath = controlPathSuffix(pathname)
+  if (!routePath) return null
+
+  const segments = routePath.split(`/`).filter(Boolean)
+  if (segments[0] !== `__ds` || segments[1] !== `subscriptions`) return null
+
+  const subscriptionId = segments[2] ? decodeURIComponent(segments[2]) : ``
+  if (!subscriptionId) return null
+
+  const tail = segments.slice(3)
+  if (tail.length === 0) return { subscriptionId, action: `base` }
+  if (tail[0] === `streams` && tail.length === 1) {
+    return { subscriptionId, action: `streams` }
+  }
+  if (tail[0] === `streams` && tail.length > 1) {
+    return {
+      subscriptionId,
+      action: `stream`,
+      streamPath: decodeURIComponent(tail.slice(1).join(`/`)),
+    }
+  }
+  if (
+    tail.length === 1 &&
+    [`callback`, `claim`, `ack`, `release`].includes(tail[0]!)
+  ) {
+    return {
+      subscriptionId,
+      action: tail[0] as SubscriptionProxyAction,
+    }
+  }
+
+  return null
 }
 
 function isSubscriptionBasePath(pathname: string): boolean {
-  return /^\/v1\/stream-meta\/subscriptions\/[^/]+\/?$/.test(pathname)
+  return subscriptionRouteFromPath(pathname)?.action === `base`
 }
 
 function usesSubscriptionScopedBearer(requestUrl: string): boolean {
   const pathname = new URL(requestUrl, `http://localhost`).pathname
-  return /^\/v1\/stream-meta\/subscriptions\/[^/]+\/(?:ack|release|callback)\/?$/.test(
-    pathname
-  )
+  const action = subscriptionRouteFromPath(pathname)?.action
+  return action === `ack` || action === `release` || action === `callback`
 }
 
 function rewriteSubscriptionBodyForBackend(
@@ -244,16 +310,17 @@ function rewriteSubscriptionStreamPathInUrl(
   service: string,
   routingAdapter: DurableStreamsRoutingAdapter
 ): string {
-  const match =
-    /^(\/v1\/stream-meta\/subscriptions\/[^/]+\/streams\/)(.+)$/.exec(
-      requestUrl.pathname
-    )
-  if (!match) return requestUrl.toString()
+  const route = subscriptionRouteFromPath(requestUrl.pathname)
+  if (route?.action !== `stream` || !route.streamPath) {
+    return requestUrl.toString()
+  }
 
-  const [, prefix, encodedPath] = match
-  const streamPath = decodeURIComponent(encodedPath!)
+  const prefix = requestUrl.pathname.slice(
+    0,
+    requestUrl.pathname.indexOf(`/streams/`) + `/streams/`.length
+  )
   requestUrl.pathname = `${prefix}${encodeURIComponent(
-    routingAdapter.toBackendStreamPath(service, streamPath)
+    routingAdapter.toBackendStreamPath(service, route.streamPath)
   )}`
   return requestUrl.toString()
 }
@@ -263,11 +330,22 @@ async function subscriptionProxy(
   ctx: TenantContext
 ): Promise<Response | undefined> {
   const url = new URL(request.url)
-  const subscriptionId = subscriptionIdFromPath(url.pathname)
-  if (!subscriptionId) return undefined
+  if (!isReservedControlPath(url.pathname)) return undefined
+  const route = subscriptionRouteFromPath(url.pathname)
+  if (!route) {
+    const upstream = await forwardToDurableStreams(
+      ctx,
+      request,
+      undefined,
+      `control`
+    )
+    return responseFromUpstream(upstream)
+  }
+  const { subscriptionId } = route
 
   const routingAdapter = resolveDurableStreamsRoutingAdapter(
-    ctx.durableStreamsRouting
+    ctx.durableStreamsRouting,
+    ctx.durableStreamsUrl
   )
   let requestBody: Uint8Array | undefined
   let targetWebhookUrl: string | null = null
@@ -296,10 +374,7 @@ async function subscriptionProxy(
     }
   }
 
-  if (
-    request.method.toUpperCase() === `DELETE` &&
-    /\/streams\/.+$/.test(url.pathname)
-  ) {
+  if (request.method.toUpperCase() === `DELETE` && route.action === `stream`) {
     requestUrl = rewriteSubscriptionStreamPathInUrl(
       url,
       ctx.service,
@@ -311,7 +386,7 @@ async function subscriptionProxy(
     ctx,
     request,
     requestBody,
-    `stream-meta`,
+    `control`,
     requestUrl
   )
   let responseBytes: Uint8Array = upstream.body
@@ -391,7 +466,7 @@ async function proxyPassThrough(
   const upstream = await forwardToDurableStreams(ctx, request)
   const streamPath = new URL(request.url).pathname
   const method = request.method.toUpperCase()
-  const isControlPath = streamPath.startsWith(`/v1/stream-meta/`)
+  const isControlPath = isReservedControlPath(streamPath)
   const endTrackedRead =
     method === `GET` && !isControlPath
       ? await ctx.entityBridgeManager.beginClientRead(streamPath)
