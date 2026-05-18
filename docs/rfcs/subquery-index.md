@@ -248,7 +248,6 @@ Compaction should run:
 - when a value is read
 - when a value is written
 - in a periodic asynchronous compaction pass
-- when the progress monitor advances the minimum required time
 
 `remove_subquery/1` must not scan the whole ETS table. The table should be an
 ordered set with keys ordered by `subquery_id`, so removal can iterate the
@@ -424,13 +423,7 @@ SubqueryProgressMonitor.notify_processed_up_to(from_time, subquery_id)
 Move-in queries currently build SQL from whole before and after views. The new
 implementation should avoid retaining large views in the consumer process.
 
-Preferred approach:
-
-- Build the triggering dependency candidate predicate from the move delta
-  values when possible.
-- Read full view values at a specific time only for positions that require
-  exclusion logic.
-- If full views are required, materialize them inside the task process that
+Preferred approach - materialize them inside the task process that
   runs the query so the memory is released when the task exits.
 
 This is important because replacing long-lived consumer views with
