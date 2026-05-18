@@ -16,7 +16,6 @@ import { validateBody } from './schema.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
 import { forwardFetchRequest } from '../utils/server-utils.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
-import { durableStreamsControlPath } from './durable-streams-control-path.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
@@ -37,6 +36,13 @@ const subscriptionProxyBodySchema = Type.Object(
 
 type SubscriptionProxyBody = Static<typeof subscriptionProxyBodySchema>
 
+const subscriptionControlActions = [
+  `callback`,
+  `claim`,
+  `ack`,
+  `release`,
+] as const
+
 export type DurableStreamsRoutes = RouterType<
   IRequest,
   [TenantContext],
@@ -49,7 +55,34 @@ export const durableStreamsRouter: DurableStreamsRoutes = Router<
   Response | undefined
 >()
 
-durableStreamsRouter.all(`*`, subscriptionProxy)
+durableStreamsRouter.put(
+  `/__ds/subscriptions/:subscriptionId`,
+  subscriptionBase
+)
+durableStreamsRouter.get(
+  `/__ds/subscriptions/:subscriptionId`,
+  subscriptionBase
+)
+durableStreamsRouter.delete(
+  `/__ds/subscriptions/:subscriptionId`,
+  subscriptionBase
+)
+durableStreamsRouter.post(
+  `/__ds/subscriptions/:subscriptionId/streams`,
+  subscriptionStreams
+)
+durableStreamsRouter.delete(
+  `/__ds/subscriptions/:subscriptionId/streams/:streamPath+`,
+  subscriptionStream
+)
+for (const action of subscriptionControlActions) {
+  durableStreamsRouter.post(
+    `/__ds/subscriptions/:subscriptionId/${action}`,
+    subscriptionAction(action)
+  )
+}
+durableStreamsRouter.all(`/__ds`, controlPassThrough)
+durableStreamsRouter.all(`/__ds/*`, controlPassThrough)
 durableStreamsRouter.post(`*`, streamAppend)
 durableStreamsRouter.all(`*`, proxyPassThrough)
 
@@ -73,7 +106,8 @@ async function forwardToDurableStreams(
   request: IRequest,
   body?: Uint8Array,
   route: `stream` | `control` = `stream`,
-  urlOverride?: string
+  urlOverride?: string,
+  durableStreamsBearerMode: `overwrite` | `if-missing` = `overwrite`
 ): Promise<Response> {
   const headers = new Headers(request.headers)
   headers.delete(`host`)
@@ -95,11 +129,7 @@ async function forwardToDurableStreams(
     body: requestBody,
     durableStreamsUrl: ctx.durableStreamsUrl,
     durableStreamsBearer: ctx.durableStreamsBearer,
-    durableStreamsBearerMode: usesSubscriptionScopedBearer(
-      urlOverride ?? request.url
-    )
-      ? `if-missing`
-      : `overwrite`,
+    durableStreamsBearerMode,
     durableStreamsRouting: ctx.durableStreamsRouting,
     serviceId: ctx.service,
     dispatcher: ctx.durableStreamsDispatcher,
@@ -120,51 +150,6 @@ interface SubscriptionProxyRoute {
   subscriptionId: string
   action: SubscriptionProxyAction
   streamPath?: string
-}
-
-const subscriptionControlActions = [`callback`, `claim`, `ack`, `release`]
-
-function isReservedControlPath(pathname: string): boolean {
-  return durableStreamsControlPath(pathname) !== null
-}
-
-function subscriptionRouteFromPath(
-  pathname: string
-): SubscriptionProxyRoute | null {
-  const [prefix, resource, encodedId, action, ...tail] = pathname
-    .split(`/`)
-    .filter(Boolean)
-  if (prefix !== `__ds` || resource !== `subscriptions` || !encodedId) {
-    return null
-  }
-
-  const subscriptionId = decodeURIComponent(encodedId)
-  if (!action) return { subscriptionId, action: `base` }
-
-  if (action === `streams`) {
-    if (tail.length === 0) return { subscriptionId, action: `streams` }
-    return {
-      subscriptionId,
-      action: `stream`,
-      streamPath: decodeURIComponent(tail.join(`/`)),
-    }
-  }
-
-  if (tail.length === 0 && subscriptionControlActions.includes(action)) {
-    return { subscriptionId, action: action as SubscriptionProxyAction }
-  }
-
-  return null
-}
-
-function isSubscriptionBasePath(pathname: string): boolean {
-  return subscriptionRouteFromPath(pathname)?.action === `base`
-}
-
-function usesSubscriptionScopedBearer(requestUrl: string): boolean {
-  const pathname = new URL(requestUrl, `http://localhost`).pathname
-  const action = subscriptionRouteFromPath(pathname)?.action
-  return action === `ack` || action === `release` || action === `callback`
 }
 
 function rewriteSubscriptionBodyForBackend(
@@ -282,42 +267,86 @@ function decodeJson(bytes: Uint8Array): Record<string, unknown> | null {
   }
 }
 
+function routeParam(request: IRequest, name: string): string {
+  const value = request.params[name]
+  const raw = Array.isArray(value) ? value[0] : value
+  return decodeURIComponent(raw ?? ``)
+}
+
+function subscriptionBase(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  return subscriptionProxy(request, ctx, {
+    subscriptionId: routeParam(request, `subscriptionId`),
+    action: `base`,
+  })
+}
+
+function subscriptionStreams(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  return subscriptionProxy(request, ctx, {
+    subscriptionId: routeParam(request, `subscriptionId`),
+    action: `streams`,
+  })
+}
+
+function subscriptionStream(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  return subscriptionProxy(request, ctx, {
+    subscriptionId: routeParam(request, `subscriptionId`),
+    action: `stream`,
+    streamPath: routeParam(request, `streamPath`),
+  })
+}
+
+function subscriptionAction(action: SubscriptionProxyAction) {
+  return (request: IRequest, ctx: TenantContext): Promise<Response> =>
+    subscriptionProxy(request, ctx, {
+      subscriptionId: routeParam(request, `subscriptionId`),
+      action,
+    })
+}
+
+async function controlPassThrough(
+  request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  const upstream = await forwardToDurableStreams(
+    ctx,
+    request,
+    undefined,
+    `control`
+  )
+  return responseFromUpstream(upstream)
+}
+
 function rewriteSubscriptionStreamPathInUrl(
   requestUrl: URL,
   service: string,
-  routingAdapter: DurableStreamsRoutingAdapter
+  routingAdapter: DurableStreamsRoutingAdapter,
+  streamPath: string
 ): string {
-  const route = subscriptionRouteFromPath(requestUrl.pathname)
-  if (route?.action !== `stream` || !route.streamPath) {
-    return requestUrl.toString()
-  }
-
   const prefix = requestUrl.pathname.slice(
     0,
     requestUrl.pathname.indexOf(`/streams/`) + `/streams/`.length
   )
   requestUrl.pathname = `${prefix}${encodeURIComponent(
-    routingAdapter.toBackendStreamPath(service, route.streamPath)
+    routingAdapter.toBackendStreamPath(service, streamPath)
   )}`
   return requestUrl.toString()
 }
 
 async function subscriptionProxy(
   request: IRequest,
-  ctx: TenantContext
-): Promise<Response | undefined> {
+  ctx: TenantContext,
+  route: SubscriptionProxyRoute
+): Promise<Response> {
   const url = new URL(request.url)
-  if (!isReservedControlPath(url.pathname)) return undefined
-  const route = subscriptionRouteFromPath(url.pathname)
-  if (!route) {
-    const upstream = await forwardToDurableStreams(
-      ctx,
-      request,
-      undefined,
-      `control`
-    )
-    return responseFromUpstream(upstream)
-  }
   const { subscriptionId } = route
 
   const routingAdapter = resolveDurableStreamsRoutingAdapter(
@@ -355,16 +384,24 @@ async function subscriptionProxy(
     requestUrl = rewriteSubscriptionStreamPathInUrl(
       url,
       ctx.service,
-      routingAdapter
+      routingAdapter,
+      route.streamPath ?? ``
     )
   }
 
+  const durableStreamsBearerMode =
+    route.action === `ack` ||
+    route.action === `release` ||
+    route.action === `callback`
+      ? `if-missing`
+      : `overwrite`
   const upstream = await forwardToDurableStreams(
     ctx,
     request,
     requestBody,
     `control`,
-    requestUrl
+    requestUrl,
+    durableStreamsBearerMode
   )
   let responseBytes: Uint8Array = upstream.body
     ? new Uint8Array(await upstream.arrayBuffer())
@@ -379,10 +416,7 @@ async function subscriptionProxy(
 
   if (!upstream.ok) return response
 
-  if (
-    request.method.toUpperCase() === `DELETE` &&
-    isSubscriptionBasePath(url.pathname)
-  ) {
+  if (request.method.toUpperCase() === `DELETE` && route.action === `base`) {
     await ctx.pgDb
       .delete(subscriptionWebhooks)
       .where(
@@ -443,13 +477,12 @@ async function proxyPassThrough(
   const upstream = await forwardToDurableStreams(ctx, request)
   const streamPath = new URL(request.url).pathname
   const method = request.method.toUpperCase()
-  const isControlPath = isReservedControlPath(streamPath)
   const endTrackedRead =
-    method === `GET` && !isControlPath
+    method === `GET`
       ? await ctx.entityBridgeManager.beginClientRead(streamPath)
       : null
   try {
-    if (method === `HEAD` && !isControlPath) {
+    if (method === `HEAD`) {
       await ctx.entityBridgeManager.touchByStreamPath(streamPath)
     }
     return responseFromUpstream(upstream)
