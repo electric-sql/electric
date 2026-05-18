@@ -727,6 +727,7 @@ export function EntityTimeline({
   const settledKeysRef = useRef(new Set<string>())
   const settleCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handledScrollSignalRef = useRef(scrollToBottomSignal)
+  const previousStreamingAgentKeyRef = useRef<string | null>(null)
   const textColumnWidth = Math.max(0, contentWidth - CHAT_SURFACE_GUTTER)
 
   const spawnTime = useMemo(() => {
@@ -880,6 +881,17 @@ export function EntityTimeline({
   useEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false
   }, [rowVirtualizer])
+
+  const scrollToTimelineEnd = useCallback(() => {
+    if (!viewport || rows.length === 0) return
+    rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+
+    // The stopped/status footer sits outside the virtual list, so make sure the
+    // physical scroll container is also flush with its full content height.
+    requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight
+    })
+  }, [rowVirtualizer, rows.length, viewport])
 
   const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
     setViewport(node)
@@ -1038,11 +1050,46 @@ export function EntityTimeline({
     if (!isNearBottom.current) return
 
     const frame = requestAnimationFrame(() => {
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      scrollToTimelineEnd()
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rowVirtualizer, rows, viewport])
+  }, [rows, scrollToTimelineEnd, viewport])
+
+  useLayoutEffect(() => {
+    if (!contentElement || !viewport) return
+
+    let frame: ReturnType<typeof requestAnimationFrame> | null = null
+    const pinToBottom = () => {
+      if (!isNearBottom.current) return
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = null
+        scrollToTimelineEnd()
+      })
+    }
+
+    const observer = new ResizeObserver(pinToBottom)
+    observer.observe(contentElement)
+    return () => {
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [contentElement, scrollToTimelineEnd, viewport])
+
+  useLayoutEffect(() => {
+    const previousStreamingAgentKey = previousStreamingAgentKeyRef.current
+    previousStreamingAgentKeyRef.current = lastStreamingAgentKey
+    if (!previousStreamingAgentKey || lastStreamingAgentKey) return
+
+    isNearBottom.current = true
+    setShowJumpToBottom(false)
+    const frame = requestAnimationFrame(() => {
+      scrollToTimelineEnd()
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [lastStreamingAgentKey, scrollToTimelineEnd])
 
   useLayoutEffect(() => {
     if (handledScrollSignalRef.current === scrollToBottomSignal) return
@@ -1052,11 +1099,11 @@ export function EntityTimeline({
 
     if (!viewport || rows.length === 0) return
     const frame = requestAnimationFrame(() => {
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      scrollToTimelineEnd()
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [rowVirtualizer, rows.length, scrollToBottomSignal, viewport])
+  }, [rows.length, scrollToBottomSignal, scrollToTimelineEnd, viewport])
 
   useEffect(
     () => () => {
@@ -1071,9 +1118,9 @@ export function EntityTimeline({
     if (rows.length > 0) {
       isNearBottom.current = true
       setShowJumpToBottom(false)
-      rowVirtualizer.scrollToIndex(rows.length - 1, { align: `end` })
+      scrollToTimelineEnd()
     }
-  }, [rowVirtualizer, rows.length])
+  }, [rows.length, scrollToTimelineEnd])
 
   if (loading) {
     return (
