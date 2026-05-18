@@ -530,10 +530,10 @@ async function sendEntity(
   await ctx.entityManager.ensurePrincipal(principal)
   const { entityUrl, entity } = requireExistingEntityRoute(request)
 
-  if (!entity.dispatch_policy) {
-    const updatedEntity = await backfillEntityDispatchPolicy(ctx, entity)
-    await linkEntityDispatchSubscription(ctx, updatedEntity)
-  }
+  const dispatchEntity = entity.dispatch_policy
+    ? entity
+    : await backfillEntityDispatchPolicy(ctx, entity)
+  await linkEntityDispatchSubscription(ctx, dispatchEntity)
 
   if (parsed.afterMs && parsed.afterMs > 0) {
     await ctx.entityManager.enqueueDelayedSend(

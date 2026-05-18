@@ -269,7 +269,7 @@ describe(`dispatch policy routing`, () => {
     )
   })
 
-  it(`does not relink existing runner-dispatched entities before sending`, async () => {
+  it(`recreates missing runner dispatch subscriptions before sending`, async () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
@@ -287,8 +287,17 @@ describe(`dispatch policy routing`, () => {
     )
 
     expect(response.status).toBe(204)
-    expect(ctx.streamClient.getSubscription).not.toHaveBeenCalled()
-    expect(ctx.streamClient.putSubscription).not.toHaveBeenCalled()
+    expect(ctx.streamClient.getSubscription).toHaveBeenCalledWith(
+      expect.stringMatching(/^runner:runner-1:/)
+    )
+    expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
+      expect.stringMatching(/^runner:runner-1:/),
+      expect.objectContaining({
+        type: `pull-wake`,
+        streams: [`/chat/one/main`],
+        wake_stream: `/runners/runner-1/wake`,
+      })
+    )
     expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
     expect(ctx.entityManager.send).toHaveBeenCalledWith(
       `/chat/one`,
@@ -317,7 +326,10 @@ describe(`dispatch policy routing`, () => {
     )
 
     expect(response.status).toBe(204)
-    expect(ctx.streamClient.getSubscription).not.toHaveBeenCalled()
+    expect(ctx.streamClient.getSubscription).toHaveBeenCalledWith(
+      expect.stringMatching(/^runner:runner-1:/)
+    )
+    expect(ctx.streamClient.putSubscription).not.toHaveBeenCalled()
     expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
     expect(ctx.streamClient.removeSubscriptionStream).not.toHaveBeenCalled()
     expect(ctx.entityManager.send).toHaveBeenCalledWith(
