@@ -78,11 +78,15 @@ defmodule Electric.Plug.ServeShapePlug do
       end
     after
       # Must run unconditionally on every path:
+      # - The `memory.end.*` snapshot needs to land on the root span even when
+      #   we re-raise mid-stream (the path where emit_shape_telemetry/1 is
+      #   skipped) — that's exactly when memory data is most useful.
       # - OpentelemetryTelemetry keeps span contexts on a per-process stack, so
       #   a missed end_telemetry_span call would leak the span to the next
       #   request handled by this worker process (and grow the stack over time).
       # - Admission permits acquired in check_admission must be returned
       #   on success, halt, and uncaught exception paths alike.
+      OpenTelemetry.add_process_memory_attributes(:end)
       OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
       release_admission_permit()
     end
@@ -380,6 +384,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp start_telemetry_span(conn) do
     OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "Plug_shape_get", %{}, %{})
+    OpenTelemetry.add_process_memory_attributes(:start)
 
     conn
     |> add_span_attrs_from_conn()
