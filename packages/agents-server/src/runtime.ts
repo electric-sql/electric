@@ -64,7 +64,9 @@ export class ElectricAgentsTenantRuntime {
       this.streamClient = options.streamClient
     } else if (options.durableStreamsUrl) {
       this.streamClient = new StreamClient(
-        durableStreamsServiceUrl(options.durableStreamsUrl, this.serviceId),
+        durableStreamsServiceUrl(options.durableStreamsUrl, this.serviceId, {
+          scope: `stream-root`,
+        }),
         { bearer: options.durableStreamsBearer }
       )
     } else {

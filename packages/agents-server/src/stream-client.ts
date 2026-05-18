@@ -14,6 +14,8 @@ export interface StreamClientOptions {
   bearer?: DurableStreamsBearerProvider
 }
 
+type DurableStreamsUrlScope = `service` | `stream-root`
+
 export interface StreamAppendResult {
   offset: string
 }
@@ -141,7 +143,8 @@ function durableStreamsBearerHeaders(
 
 export function durableStreamsServiceUrl(
   baseUrl: string,
-  serviceId: string
+  serviceId: string,
+  options: { scope?: DurableStreamsUrlScope } = {}
 ): string {
   const url = new URL(baseUrl)
   if (/\/v1\/streams\/[^/]+\/?$/.test(url.pathname)) {
@@ -150,12 +153,15 @@ export function durableStreamsServiceUrl(
   if (/\/v1\/stream\/[^/]+\/?$/.test(url.pathname)) {
     return baseUrl.replace(/\/+$/, ``)
   }
+  const scope = options.scope ?? `service`
   const encodedServiceId = encodeURIComponent(serviceId)
   const path = url.pathname.replace(/\/+$/, ``) || `/`
   if (path.endsWith(`/v1/streams`)) {
     url.pathname = `${path}/${encodedServiceId}`
   } else if (path.endsWith(`/v1/stream`)) {
-    url.pathname = `${path}/${encodedServiceId}`
+    url.pathname = scope === `service` ? `${path}/${encodedServiceId}` : path
+  } else if (scope === `stream-root`) {
+    url.pathname = `${path === `/` ? `` : path}/v1/stream`
   } else {
     url.pathname = `${path === `/` ? `` : path}/v1/stream/${encodedServiceId}`
   }

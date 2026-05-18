@@ -144,7 +144,9 @@ export class ElectricAgentsServer {
     this.options = options
     this.streamClient = options.durableStreamsUrl
       ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId),
+          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId, {
+            scope: `stream-root`,
+          }),
           { bearer: options.durableStreamsBearer }
         )
       : null!
@@ -185,7 +187,9 @@ export class ElectricAgentsServer {
         )
         this.options.durableStreamsUrl = streamsUrl
         this.streamClient = new StreamClient(
-          durableStreamsServiceUrl(streamsUrl, this.tenantId),
+          durableStreamsServiceUrl(streamsUrl, this.tenantId, {
+            scope: `stream-root`,
+          }),
           { bearer: this.options.durableStreamsBearer }
         )
       }

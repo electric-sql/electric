@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { StreamClient } from '../src/stream-client'
+import { StreamClient, durableStreamsServiceUrl } from '../src/stream-client'
 
 const {
   appendMock,
@@ -243,5 +243,31 @@ describe(`StreamClient`, () => {
     } finally {
       fetchMock.mockRestore()
     }
+  })
+})
+
+describe(`durableStreamsServiceUrl`, () => {
+  it(`derives a single-tenant stream root from a bare server origin`, () => {
+    expect(
+      durableStreamsServiceUrl(`http://127.0.0.1:4545`, `tenant-a`, {
+        scope: `stream-root`,
+      })
+    ).toBe(`http://127.0.0.1:4545/v1/stream`)
+  })
+
+  it(`derives a service-scoped stream root for host tenant registrations`, () => {
+    expect(durableStreamsServiceUrl(`http://127.0.0.1:4545`, `tenant-a`)).toBe(
+      `http://127.0.0.1:4545/v1/stream/tenant-a`
+    )
+  })
+
+  it(`preserves explicitly scoped stream roots`, () => {
+    expect(
+      durableStreamsServiceUrl(
+        `https://streams.test/v1/streams/tenant-a`,
+        `tenant-a`,
+        { scope: `stream-root` }
+      )
+    ).toBe(`https://streams.test/v1/streams/tenant-a`)
   })
 })
