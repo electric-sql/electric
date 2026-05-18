@@ -58,7 +58,9 @@ export async function startStandaloneAgentsRuntime(
     options.streamClient ??
     (options.durableStreamsUrl
       ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, serviceId),
+          durableStreamsServiceUrl(options.durableStreamsUrl, serviceId, {
+            scope: `stream-root`,
+          }),
           { bearer: options.durableStreamsBearer }
         )
       : undefined)

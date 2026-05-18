@@ -14,6 +14,8 @@ export interface StreamClientOptions {
   bearer?: DurableStreamsBearerProvider
 }
 
+type DurableStreamsUrlScope = `service` | `stream-root`
+
 export interface StreamAppendResult {
   offset: string
 }
@@ -141,14 +143,29 @@ function durableStreamsBearerHeaders(
 
 export function durableStreamsServiceUrl(
   baseUrl: string,
-  serviceId: string
+  serviceId: string,
+  options: { scope?: DurableStreamsUrlScope } = {}
 ): string {
   const url = new URL(baseUrl)
-  if (/^\/v1\/stream\/[^/]+\/?$/.test(url.pathname)) {
+  if (/\/v1\/streams\/[^/]+\/?$/.test(url.pathname)) {
     return baseUrl.replace(/\/+$/, ``)
   }
-  const base = baseUrl.replace(/\/+$/, ``)
-  return `${base}/v1/stream/${encodeURIComponent(serviceId)}`
+  if (/\/v1\/stream\/[^/]+\/?$/.test(url.pathname)) {
+    return baseUrl.replace(/\/+$/, ``)
+  }
+  const scope = options.scope ?? `service`
+  const encodedServiceId = encodeURIComponent(serviceId)
+  const path = url.pathname.replace(/\/+$/, ``) || `/`
+  if (path.endsWith(`/v1/streams`)) {
+    url.pathname = `${path}/${encodedServiceId}`
+  } else if (path.endsWith(`/v1/stream`)) {
+    url.pathname = scope === `service` ? `${path}/${encodedServiceId}` : path
+  } else if (scope === `stream-root`) {
+    url.pathname = `${path === `/` ? `` : path}/v1/stream`
+  } else {
+    url.pathname = `${path === `/` ? `` : path}/v1/stream/${encodedServiceId}`
+  }
+  return url.toString().replace(/\/+$/, ``)
 }
 
 function isNotFoundError(err: unknown): boolean {
@@ -202,42 +219,17 @@ export class StreamClient {
     return headers
   }
 
-  private subscriptionServiceId(): string | null {
-    const url = new URL(this.baseUrl)
-    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
-    return match ? decodeURIComponent(match[2]!) : null
-  }
-
   private backendSubscriptionPath(path: string): string {
-    const normalized = normalizeSubscriptionPath(path)
-    const serviceId = this.subscriptionServiceId()
-    if (!serviceId) return normalized
-    if (normalized === serviceId || normalized.startsWith(`${serviceId}/`)) {
-      return normalized
-    }
-    return `${serviceId}/${normalized}`
+    return normalizeSubscriptionPath(path)
   }
 
   private runtimeSubscriptionPath(path: string): string {
-    const normalized = normalizeSubscriptionPath(path)
-    const serviceId = this.subscriptionServiceId()
-    if (!serviceId) return normalized
-    return normalized.startsWith(`${serviceId}/`)
-      ? normalized.slice(serviceId.length + 1)
-      : normalized
+    return normalizeSubscriptionPath(path)
   }
 
   private subscriptionUrl(subscriptionId: string): string {
     const url = new URL(this.baseUrl)
-    const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
-    if (match) {
-      const [, prefix = ``, serviceId] = match
-      url.pathname = `${prefix}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
-      url.searchParams.set(`service`, decodeURIComponent(serviceId!))
-      return url.toString()
-    }
-
-    url.pathname = `${url.pathname.replace(/\/+$/, ``)}/v1/stream-meta/subscriptions/${encodeURIComponent(subscriptionId)}`
+    url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
     return url.toString()
   }
 

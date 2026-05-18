@@ -7,7 +7,6 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import { createDb, runMigrations } from './db/index.js'
-import { pathPrefixedSingleTenantDurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 import { ossServerRouter } from './routing/oss-server-router.js'
 import { startStandaloneAgentsRuntime } from './standalone-runtime.js'
 import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
@@ -145,7 +144,9 @@ export class ElectricAgentsServer {
     this.options = options
     this.streamClient = options.durableStreamsUrl
       ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId),
+          durableStreamsServiceUrl(options.durableStreamsUrl, this.tenantId, {
+            scope: `stream-root`,
+          }),
           { bearer: options.durableStreamsBearer }
         )
       : null!
@@ -186,7 +187,9 @@ export class ElectricAgentsServer {
         )
         this.options.durableStreamsUrl = streamsUrl
         this.streamClient = new StreamClient(
-          durableStreamsServiceUrl(streamsUrl, this.tenantId),
+          durableStreamsServiceUrl(streamsUrl, this.tenantId, {
+            scope: `stream-root`,
+          }),
           { bearer: this.options.durableStreamsBearer }
         )
       }
@@ -401,11 +404,9 @@ export class ElectricAgentsServer {
       principal,
       publicUrl: this.publicUrl,
       localUrl: this._url,
-      durableStreamsUrl: this.options.durableStreamsUrl,
+      durableStreamsUrl: this.streamClient.baseUrl,
       durableStreamsBearer: this.options.durableStreamsBearer,
-      durableStreamsRouting:
-        this.options.durableStreamsRouting ??
-        pathPrefixedSingleTenantDurableStreamsRoutingAdapter,
+      durableStreamsRouting: this.options.durableStreamsRouting,
       durableStreamsDispatcher: this.streamsAgent,
       electricUrl: this.options.electricUrl,
       electricSecret: this.options.electricSecret,

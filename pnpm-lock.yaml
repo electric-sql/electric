@@ -4168,14 +4168,14 @@ packages:
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
 
-  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f':
-    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f}
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350}
     version: 0.2.3
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350':
-    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350}
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217}
     version: 0.2.3
     engines: {node: '>=18.0.0'}
     hasBin: true
@@ -4185,14 +4185,14 @@ packages:
     version: 0.3.1
     engines: {node: '>=18.0.0'}
 
-  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f':
-    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f}
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350}
     version: 0.2.5
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350':
-    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350}
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217}
     version: 0.2.5
     engines: {node: '>=18.0.0'}
     hasBin: true
@@ -23198,20 +23198,20 @@ snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
 
-  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f':
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350':
     dependencies:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
       fastq: 1.20.1
 
-  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350':
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217':
     dependencies:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
       fastq: 1.20.1
 
   '@durable-streams/server@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@350(typescript@5.8.3)':
     dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f
-      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f(typescript@5.8.3)
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
+      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217(typescript@5.8.3)
       '@neophi/sieve-cache': 1.5.0
       lmdb: 3.5.4
       pino: 10.3.1
@@ -23219,17 +23219,17 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@262cb1f(typescript@5.8.3)':
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)':
     dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.6.5(typescript@5.8.3)
     transitivePeerDependencies:
       - typescript
 
-  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350(typescript@5.8.3)':
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217(typescript@5.8.3)':
     dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@262cb1f
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.6.5(typescript@5.8.3)
     transitivePeerDependencies:

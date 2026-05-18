@@ -883,7 +883,7 @@ describe(`Wake Registry Integration`, () => {
     pattern: string
   ): Promise<void> {
     const subRes = await fetch(
-      `${baseUrl}/v1/stream-meta/subscriptions/${encodeURIComponent(id)}`,
+      `${baseUrl}/__ds/subscriptions/${encodeURIComponent(id)}`,
       {
         method: `PUT`,
         headers: { 'content-type': `application/json` },
