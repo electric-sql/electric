@@ -1,42 +1,65 @@
-# RFC: Shared Subquery Indexes with Logical-Time Views
+---
+title: Shared Subquery Indexes with Logical-Time Views
+version: "0.1"
+status: draft
+owner: robacourt
+contributors: []
+created: 2026-05-18
+last_updated: 2026-05-18
+prd: "N/A - based on https://github.com/electric-sql/electric/issues/4279"
+prd_version: "N/A"
+---
 
-Status: Draft
-
-Scope: `packages/sync-service`
+# Shared Subquery Indexes with Logical-Time Views
 
 ## Summary
 
-Electric v1.6 introduced per-shape subquery indexing so boolean subquery
-shapes stay live while dependency rows move across `WHERE` boundaries. That
-solved correctness, but it made memory scale with the number of outer shape
-consumers.
-
-This RFC proposes replacing per-consumer materialized subquery views with one
-shared, versioned view per subquery. Consumers do not copy the subquery view.
-Instead, each consumer keeps the logical time it is reading and asks the shared
-view for membership at that time.
-
-The design keeps current move-in/move-out correctness for positive, negated,
-`AND`, `OR`, and `NOT` subquery expressions, while reducing duplicate memory in
-the filter index and in consumer event handlers.
+Electric v1.6 added per-shape subquery indexing so shapes with boolean subquery
+filters can stay live while dependency rows move across `WHERE` boundaries.
+That solved correctness, but it stores the same dependency view repeatedly in
+the filter index and in consumer event handlers. This RFC proposes one shared,
+logical-time view per subquery. Consumers register the subqueries they read,
+keep only the logical time they are reading, and call
+`SubqueryProgressMonitor.notify_processed_up_to(time, subquery_id)` when they no
+longer need older times. The filter index routes conservatively across retained
+times and verifies exact membership by asking the shared view at the consumer's
+logical time.
 
 ## Background
 
-The current implementation stores subquery state in two duplicated places:
+Issue: https://github.com/electric-sql/electric/issues/4279
 
-- `Electric.Shapes.Filter.Indexes.SubqueryIndex` stores per-shape routing and
-  exact membership rows.
-- `Electric.Shapes.Consumer.EventHandler.Subqueries` stores per-consumer
-  `MapSet` views, including both before and after views while a move-in is
-  buffering.
+Related work:
 
-The key correctness problem is that consumers can temporarily disagree about a
-subquery's membership. One consumer may have processed a dependency move while
-another has not. The current implementation handles that by letting each outer
-shape seed and update its own exact view.
+- PR #4051 introduced the v1.6 subquery move correctness work:
+  https://github.com/electric-sql/electric/pull/4051
+- PR #4280 proposed a narrower SubqueryIndex memory design using shared base
+  views with sparse XOR exceptions:
+  https://github.com/electric-sql/electric/pull/4280
+- Current `SubqueryIndex`:
+  `packages/sync-service/lib/electric/shapes/filter/indexes/subquery_index.ex`
+- Current consumer view setup:
+  `packages/sync-service/lib/electric/shapes/consumer/event_handler_builder.ex`
+- Current move buffering:
+  `packages/sync-service/lib/electric/shapes/consumer/subqueries/active_move.ex`
+- Current SQL move-in query construction:
+  `packages/sync-service/lib/electric/shapes/querying.ex`
 
-This is correct, but it duplicates the same dependency view across many
-consumers.
+The v1.6 subquery work allowed shapes with boolean combinations around
+subqueries to stay live when dependency rows move. Without that, Electric would
+invalidate the outer shape and require a full resync.
+
+The current implementation achieves correctness by letting each consumer own a
+local dependency view. `EventHandlerBuilder` reads each dependency
+materializer's values into a per-consumer `MapSet`. During an active move,
+`ActiveMove` stores `views_before_move` and `views_after_move`. Separately,
+`SubqueryIndex` stores per-shape routing rows and exact membership rows keyed
+by `shape_handle`, `subquery_ref`, and value.
+
+That model is correct because consumers can temporarily disagree about the same
+subquery. One consumer may have processed a dependency move while another has
+not. The current implementation represents that by copying the dependency view
+per consumer.
 
 ## Problem
 
@@ -46,41 +69,115 @@ For a popular subquery, memory currently scales roughly with:
 number_of_outer_consumers * number_of_values_in_subquery
 ```
 
-There are two major pools of duplicated memory:
+There are two large duplicated pools:
 
-1. Subquery routing and exact membership rows keyed by outer shape.
-2. Consumer-held dependency views, including before and after views during
-   active move-in buffering.
+- `SubqueryIndex` stores value membership and routing rows per outer shape.
+- Consumer event handlers store dependency views per outer shape, and store
+  both before and after views while a move-in is active.
 
-A reverse index such as `shape_handle -> all values` would make removal faster,
-but it would add another per-consumer value list and worsen the memory problem.
+Shape removal is also expensive because current value-keyed membership rows do
+not have a cheap reverse path from a shape to all of the rows it owns. Adding a
+reverse index such as `shape_handle -> all values` would improve removal, but
+it would add another copy of the full per-shape dependency view.
 
-## Goals
+The wider design problem is that the current system optimizes for the
+exceptional case, where every consumer has a distinct subquery view, by paying
+that memory cost in the common case where many consumers share the same view
+and only diverge briefly during moves.
+
+**Link to PRD hypothesis:** There is no PRD for this RFC. The working
+hypothesis comes from issue #4279:
+
+> Redesigning the SubqueryIndex so it does not store full per-shape dependency
+> views will make shape add/remove scalable and reduce memory consumption,
+> while preserving v1.6 subquery move correctness.
+
+## Goals & Non-Goals
+
+### Goals
 
 - Store one shared materialized view per subquery.
-- Allow consumers to read exact membership at separate logical times.
-- Keep routing conservative enough while consumers are at different logical
-  times.
-- Keep subquery addition and removal proportional to the subquery and group
-  data being changed, not to the total number of shapes in the stack.
+- Allow consumers to read exact subquery membership at separate logical times.
+- Remove long-lived per-consumer `MapSet` views from event handlers.
+- Remove per-shape exact membership rows from `SubqueryIndex`.
+- Keep routing conservative while consumers are at different logical times.
+- Keep first-time child creation correct by synchronously seeding routing before
+  the child is considered indexed.
+- Keep shape removal proportional to the shape's subquery participants and
+  routing edges, not to the full dependency view.
 - Preserve correctness for positive subqueries, negated subqueries, `AND`,
   `OR`, and `NOT`.
 - Avoid changing the client wire protocol.
 
-## Non-Goals
+### Non-Goals
 
-- This RFC does not change Electric's HTTP protocol.
-- This RFC does not change the semantics of supported subqueries.
-- This RFC does not attempt to make negated-subquery routing better than
+- Do not change Electric's HTTP protocol.
+- Do not change supported subquery semantics.
+- Do not redesign DNF planning, tags, or `active_conditions`.
+- Do not remove the need to materialize SQL array parameters for move-in
+  queries in the first implementation. The goal is to avoid long-lived copies;
+  transient query-local arrays may remain.
+- Do not make negated-subquery routing better than
   `O(number_of_affected_shapes)`. If a value is absent from a large negated
-  subquery group, all of those shapes are genuinely affected.
+  group, all of those shapes are genuinely affected.
+- Do not intern equivalent SQL subqueries that have different dependency shape
+  handles. A `subquery_id` is the dependency shape handle for v1.
 
-## Definitions
+## Proposal
 
-### Subquery
+### Core Idea
+
+Move subquery membership out of per-shape state and into one versioned view per
+subquery:
+
+```text
+MultiTimeView[{subquery_id, value}] -> membership_history
+consumer[{shape_handle, subquery_ref}] -> {subquery_id, filter_time}
+```
+
+Consumers no longer copy the subquery view. They register each subquery they
+read, store the logical time returned by the materializer, and ask
+`MultiTimeView.member?(subquery_id, value, time)` when they need exact
+membership.
+
+The filter index no longer stores exact per-shape membership rows. It stores
+compact routing topology:
+
+```text
+subquery_group_id
+child_node_id per {subquery_group_id, subquery_id}
+shape participant rows
+fallback rows while initial indexing is incomplete
+```
+
+Positive routing is value-keyed for values that are members at some retained
+logical time. Negated routing is group-keyed and then filtered by shared
+membership history.
+
+### Architecture
+
+```text
+Dependency materializer
+  -> writes MultiTimeView at monotonically increasing logical times
+  -> emits dependency move events with from_time and to_time
+
+Consumer event handler
+  -> registers subqueries through the materializer
+  -> stores subquery_id and logical times, not MapSet views
+  -> calls notify_processed_up_to/2 after old times are no longer needed
+
+SubqueryIndex
+  -> stores subquery groups, child nodes, and participant routing
+  -> asks MultiTimeView for membership at some/all retained times for routing
+  -> asks MultiTimeView for membership at a consumer time for exact checks
+```
+
+### Definitions
+
+#### Subquery
 
 A subquery is represented by its dependency shape. The `subquery_id` is the
-handle of that dependency shape.
+dependency shape handle.
 
 Different `SELECT` statements are different subqueries, even if they differ
 only by constants. For example:
@@ -90,90 +187,81 @@ SELECT id FROM users WHERE company_id = 7
 SELECT id FROM users WHERE company_id = 8
 ```
 
-These are two different subqueries and get two different `subquery_id` values.
+These get different `subquery_id` values.
 
-### Subquery Group
+#### Subquery Group
 
-A subquery group is a set of subquery occurrences with the same:
+A subquery group is a set of subquery occurrences with the same filter tree
+node, field key, and polarity.
 
-- filter tree node
-- field key
-- polarity
-
-For example, these two outer shapes use different subqueries, but the same
-subquery group if the subquery occurrence appears at the same filter node:
+For example, these outer shapes use different subqueries but can share the same
+subquery group if the occurrence is at the same filter node:
 
 ```sql
 WHERE user_id IN (SELECT id FROM users WHERE company_id = 7)
 WHERE user_id IN (SELECT id FROM users WHERE company_id = 8)
 ```
 
-The subqueries differ by `company_id`, but the group is the same because the
-field key is `user_id` and the polarity is positive.
+The field key is `user_id`, and the polarity is positive.
 
-A single `subquery_id` can appear in multiple groups if it appears at multiple
-nodes in outer filter trees.
-
-### Child Node
+#### Child Node
 
 A `child_node_id` is created per `{subquery_group_id, subquery_id}` pair.
 
-The child node owns a child `WhereCondition` that contains all outer shapes
-using that subquery in that group. This means many outer shapes can share one
-child node.
+The child node owns a child `WhereCondition` containing all outer shapes using
+that subquery in that group. Many outer shapes can therefore share one child
+node.
 
-### Logical Time
+#### Logical Time
 
 Logical time is a monotonically increasing integer per subquery.
 
 Time `0` represents the materializer's initial view. Each committed dependency
 move that changes subquery membership increments the logical time and records
-the move at the new time.
+the transition at the new time.
 
-Logical time should use normal BEAM integers. Wrapping is unnecessary and would
-make comparison and compaction harder to reason about.
+Use normal BEAM integers. Wrapping is unnecessary and would make comparison and
+compaction harder to reason about.
 
-### Processed-Up-To Time
+#### Processed-Up-To Time
 
-The progress monitor's public API is expressed as a processed-up-to
-notification:
-
-Consumers call:
+The public progress API is:
 
 ```elixir
 SubqueryProgressMonitor.notify_processed_up_to(time, subquery_id)
 ```
 
-after they no longer need to read the subquery at `time` or earlier.
-The public function can include `self()` in the message to the monitor, so the
-consumer identity is resolved from registration rather than passed at every
-call site.
+Consumers call this after they no longer need to read the subquery at `time` or
+earlier. For a move from logical time `a` to logical time `b`, once the
+consumer has finished processing that move and is steady at `b`, it notifies
+that it has processed up to `a`.
 
-For a move from logical time `a` to logical time `b`, once the consumer has
-finished processing that move and is steady at `b`, it notifies that it has
-processed up to `a`.
+Internally, the monitor tracks `required_time`: the earliest logical time a
+live consumer may still read. `notify_processed_up_to(a, subquery_id)` advances
+that consumer's `required_time` to `a + 1`.
 
-Internally, the progress monitor should track `required_time`: the earliest
-logical time a live consumer may still read. `notify_processed_up_to(a,
-subquery_id)` advances that consumer's `required_time` to `a + 1`.
-
-The minimum required time for compaction is:
+The compaction lower bound is:
 
 ```text
 min(required_time_for_live_consumers)
 ```
 
-Consumers register with the logical time they are starting from. If a consumer
-starts from current logical time `t`, its initial `required_time` is `t`.
+Consumers register at the logical time they are starting from. If a consumer
+starts from current logical time `t`, its initial `required_time` is `t`
+because it may read time `t`.
 
-## Proposal
+`required_time` is a retention bound, not necessarily the same as the time used
+for live exact filter checks. During an active move, a consumer may need the old
+time for buffered conversion or move-in query work while live exact checks have
+already advanced to the new time. The implementation must keep those two uses
+explicit.
 
 ### MultiTimeView
 
-`SubqueryIndex.MultiTimeView` stores one shared materialized view per subquery.
+`Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView` stores one
+shared view per subquery in ETS, with one table per stack.
 
-It is an ETS-backed structure, with one ETS table per stack. The main logical
-key is:
+The logical key is:
 
 ```text
 {subquery_id, value} -> membership_history
@@ -188,8 +276,7 @@ is represented as an empty history:
 []
 ```
 
-Values that have moved use a small transition history. The exact structure
-should be benchmarked before implementation. A simple starting point is:
+Values that moved use compact flat histories:
 
 ```elixir
 [:out, 9]
@@ -198,8 +285,8 @@ should be benchmarked before implementation. A simple starting point is:
 [:in, 9, 11]
 ```
 
-The first list item is the membership state before the first transition. Each
-time after it toggles membership from that time onwards.
+The first list item is membership before the first transition. Each integer
+after it is a logical time where membership toggles from that time onwards.
 
 Examples:
 
@@ -213,6 +300,14 @@ Examples:
 # In before 9, out from 9 to 10, in from 11 onwards.
 [:in, 9, 11]
 ```
+
+Use `[]` rather than `true` for the always-present case for consistency with
+other histories. On BEAM, both `[]` and `true` are immediate terms, so neither
+is more compact as an ETS value.
+
+Use flat lists such as `[:out, 9]` rather than tuples containing lists such as
+`{:out, [9]}` because the flat list is smaller and is enough for the common
+short-history case.
 
 The API should support:
 
@@ -231,11 +326,11 @@ remove_subquery(subquery_id)
 `member_at_some_time?/2` and `member_at_all_times?/2` operate over the retained
 time window for that subquery.
 
-#### Compaction
+### Compaction
 
-The `SubqueryProgressMonitor` provides the minimum required logical time for
-each subquery. `MultiTimeView` can compact entries by evaluating membership at
-that time and removing transitions at or before it.
+`SubqueryProgressMonitor` provides the minimum required logical time for each
+subquery. `MultiTimeView` can compact entries by evaluating membership at that
+time and removing transitions at or before it.
 
 Compaction must preserve membership at all retained times. For example:
 
@@ -243,8 +338,8 @@ Compaction must preserve membership at all retained times. For example:
 [:out, 9, 11]
 ```
 
-If `min_required_time = 10`, membership at time `10` is `true`, and the compacted
-history becomes:
+If `min_required_time = 10`, membership at time `10` is `true`, and the
+compacted history becomes:
 
 ```elixir
 [:in, 11]
@@ -257,203 +352,121 @@ Compaction should run:
 
 - when a value is read
 - when a value is written
-- in a periodic asynchronous compaction pass
+- in a periodic asynchronous pass
+- when a consumer unregisters and releases the minimum pinned time
 
-`remove_subquery/1` must not scan the whole ETS table. The table should be an
-ordered set with keys ordered by `subquery_id`, so removal can iterate the
-contiguous key range for one subquery.
+### SubqueryIndex Data Model
 
-### SubqueryIndex
+The hot ETS rows should use compact integer IDs for groups, children, and
+subqueries where practical. Full shape handles and dependency handles can be
+stored in metadata rows and interned at boundaries.
 
-`SubqueryIndex` becomes responsible for topology and routing, while
-`MultiTimeView` owns exact membership.
-
-The index stores compact integer identifiers for repeated values:
+Suggested logical rows:
 
 ```text
-{node_id, field_key, polarity} -> subquery_group_id
-subquery_group_id -> {node_id, field_key, polarity}
-
-{subquery_group_id, subquery_id} -> child_node_id
-child_node_id -> {subquery_group_id, subquery_id, next_condition_id}
-subquery_id -> [{subquery_group_id, child_node_id}]
+{:group, group_key} -> group_id
+{:child, group_id, subquery_id} -> child_node_id
+{:child_meta, child_node_id} -> {group_id, subquery_id, polarity, next_condition_id}
+{:child_shape, child_node_id} -> {shape_handle, branch_key}
+{:shape_child, shape_handle} -> child_node_id
+{:shape_subquery, shape_handle, subquery_ref} -> {subquery_id, filter_time}
+{:fallback, shape_handle} -> true
 ```
 
-Using small integer ids avoids repeating large tuples, field keys, and shape
-handles in per-value ETS rows.
-
-For positive groups, the routing index stores values that can be members at
-some retained logical time:
+Positive routing keeps value-keyed entries:
 
 ```text
-{positive_value, subquery_group_id, value} -> [child_node_id]
+{:positive, group_id, value} -> child_node_id
 ```
 
-For negative groups, the index stores all negative children for the group:
+Negated routing keeps group-keyed entries:
 
 ```text
-{negative_children, subquery_group_id} -> [child_node_id]
+{:negated, group_id} -> child_node_id
 ```
 
-The negative path cannot avoid considering all affected children when a value
-is absent from the subquery views. That is acceptable because those children are
-affected.
+This replaces per-shape value membership rows with per-child routing rows and a
+shared membership view.
 
-#### Affected Shapes
+### First-Time Child Creation
 
-For a root-table change, `SubqueryIndex.affected_shapes/4` evaluates the
-left-hand side value for the subquery node.
+First-time child creation must seed synchronously.
 
-If evaluation fails, it falls back to all children in the group.
+When `SubqueryIndex` creates a new `child_node_id` for
+`{subquery_group_id, subquery_id}`, it must:
 
-If a subquery is not ready, the child node is routed conservatively.
+1. Ensure the dependency materializer has populated `MultiTimeView` and marked
+   the subquery ready.
+2. Create the child `WhereCondition`.
+3. Insert the outer shapes into the child condition.
+4. Seed positive routing for every value in
+   `MultiTimeView.values(subquery_id, current_time)`.
+5. Add negated group routing if the group is negated.
+6. Remove fallback only after the child is fully routable.
 
-For a positive group:
+This is `O(number_of_values_in_subquery)` for the first child of a
+`{group, subquery_id}` pair. That cost is acceptable because it happens on
+child creation, not on every consumer using the same child.
+
+### Routing
+
+Positive routing should route a root-table value to a child if the value is a
+member of the child subquery at any retained logical time:
 
 ```elixir
-for child_node_id <- positive_children_for_value(group_id, value),
-    subquery_id = subquery_id_for_child(child_node_id),
-    MultiTimeView.member_at_some_time?(subquery_id, value) do
-  WhereCondition.affected_shapes(child_node_id, record)
-end
+MultiTimeView.member_at_some_time?(subquery_id, value)
 ```
 
-For a negative group:
+This is conservative. If some consumers still read an old time and others read
+a new time, both old and new members remain routable until compaction proves no
+consumer can read the old time.
+
+Negated routing should enumerate the negated children for the group and keep
+children where the value is not a member at all retained times:
 
 ```elixir
-for child_node_id <- all_negative_children(group_id),
-    subquery_id = subquery_id_for_child(child_node_id),
-    not MultiTimeView.member_at_all_times?(subquery_id, value) do
-  WhereCondition.affected_shapes(child_node_id, record)
-end
+not MultiTimeView.member_at_all_times?(subquery_id, value)
 ```
 
-This keeps routing broad enough for all consumers reading any retained logical
-time.
+This is `O(number_of_affected_shapes)` for large negated groups. That is
+acceptable because a value absent from a large negated group genuinely affects
+all of those shapes.
 
-#### Shape Addition
-
-Adding an outer shape to an existing `{group, subquery_id}` child is near O(1):
-the shape is added to the child `WhereCondition`.
-
-Creating the first child for `{group, subquery_id}` requires indexing current
-values for that subquery in the group. That is O(number of values in the
-subquery), which is acceptable and unavoidable. First-time child creation should
-seed synchronously so the child is fully routable before the shape is considered
-indexed.
-
-#### Shape Removal
-
-Removing an outer shape removes it from the child `WhereCondition`.
-
-If the child becomes empty, remove the `{group, subquery_id}` child and update
-the group value indexes by iterating the values for `subquery_id` from
-`MultiTimeView`. This is proportional to the number of values in that subquery,
-not to the total number of shapes or subqueries.
-
-### Materializer
-
-The materializer continues to track dependency shape membership from the
-dependency log.
-
-It changes in three ways:
-
-1. On initial load, it populates `MultiTimeView` for the subquery at logical
-   time `0`, then marks the subquery ready.
-2. On each committed batch that produces net move events, it increments the
-   subquery logical time.
-3. Before sending `{:materializer_changes, ...}` to subscribers, it writes the
-   move events to `MultiTimeView` at the new logical time.
-
-The subscriber payload should include both the old and new logical time:
+Exact filter verification uses the consumer's filter time:
 
 ```elixir
-%{
-  move_in: [{value, original_string}],
-  move_out: [{value, original_string}],
-  txids: [txid],
-  from_time: old_time,
-  to_time: new_time
-}
+MultiTimeView.member?(subquery_id, typed_value, filter_time)
 ```
 
-If a committed batch has no net membership move, logical time does not need to
-advance.
+`WhereClause.subquery_member_from_index/2` should therefore resolve
+`shape_handle + subquery_ref` to `{subquery_id, filter_time}` and call the
+shared view. The callback remains the boundary used by
+`WhereClause.includes_record?/3`.
 
-The existing `Materializer.LinkValues` ETS cache should be removed or replaced
-by `MultiTimeView` rather than kept as a second full shared copy.
+### Materializer Integration
 
-### Consumer Event Handlers
+The materializer owns the source of truth for a dependency subquery. It should
+populate `MultiTimeView` during initial materialization and mark the subquery
+ready only after the full initial view is visible.
 
-Consumers store logical times instead of materialized subquery views.
+When a committed dependency change alters membership, the materializer should:
 
-The steady handler keeps:
+1. Read the current logical time `a`.
+2. Increment to logical time `b`.
+3. Write the transition into `MultiTimeView` at `b`.
+4. Update positive routing before emitting the move if the value is newly
+   routable at some retained time.
+5. Emit the dependency move with `from_time: a`, `to_time: b`, `subquery_id`,
+   changed values, and move kind.
 
-```elixir
-%{subquery_ref => logical_time}
-```
+Consumers must not observe a move event whose target time is absent from
+`MultiTimeView`.
 
-`Shape.convert_change/3` and DNF metadata projection need to accept a membership
-callback instead of requiring a concrete `MapSet` view:
+### Consumer Registration
 
-```elixir
-fn subquery_ref, value, time ->
-  MultiTimeView.member?(subquery_id, value, time)
-end
-```
-
-In steady state, old and new records use the same logical time.
-
-During a buffered move-in, `ActiveMove` stores:
-
-```elixir
-times_before_move
-times_after_move
-```
-
-instead of:
-
-```elixir
-views_before_move
-views_after_move
-```
-
-Buffered transactions before the splice boundary are converted using
-`times_before_move`. Buffered transactions after the splice boundary are
-converted using `times_after_move`.
-
-After the move is spliced and the consumer becomes steady at `to_time`, it
-calls:
-
-```elixir
-SubqueryProgressMonitor.notify_processed_up_to(from_time, subquery_id)
-```
-
-#### Move-In Queries
-
-Move-in queries currently build SQL from whole before and after views. The new
-implementation should avoid retaining large views in the consumer process.
-
-Preferred approach:
-
-- Build the triggering dependency candidate predicate from the move delta
-  values when possible.
-- Read full view values at a specific time only for positions that require
-  exclusion logic.
-- If full views are required, materialize them inside the task process that
-  runs the query so the memory is released when the task exits.
-
-This is important because replacing long-lived consumer views with
-short-lived task views is where much of the memory win comes from.
-
-### SubqueryProgressMonitor
-
-`SubqueryProgressMonitor` tracks the earliest logical time still needed by live
-outer consumers.
-
-Registration must happen atomically with choosing the consumer's starting
-logical time. The materializer should provide a serialized registration call,
-for example:
+Consumers register for each subquery they read. Registration should be
+serialized through the dependency materializer so the returned time and the
+shared view are consistent:
 
 ```elixir
 {:ok, current_time} =
@@ -464,168 +477,281 @@ for example:
   )
 ```
 
-The materializer handles the call in its GenServer, reads its current logical
-time, registers the outer consumer with the progress monitor, and returns that
-time to the consumer. This prevents a race where the materializer advances and
-compacts a time before the new consumer is registered as needing it.
+The registration side effects are:
 
-The monitor stores the returned time as the consumer's internal
-`required_time`.
+- wait until the dependency materializer has finished initial population
+- register the consumer with `SubqueryProgressMonitor`
+- set the consumer's initial `required_time` to `current_time`
+- return `current_time` to the caller
 
-When a consumer finishes a move from `from_time` to `to_time`, it calls:
-
-```elixir
-SubqueryProgressMonitor.notify_processed_up_to(from_time, subquery_id)
-```
-
-The monitor then advances that consumer's `required_time` to `from_time + 1`.
-
-The monitor maintains two ETS indexes:
-
-```text
-{subquery_id, consumer_shape_handle} -> required_time
-{subquery_id, required_time, consumer_shape_handle} -> true
-```
-
-The first index makes updates O(1). The second index makes the minimum
-required time for a subquery cheap to read.
-
-If `notify_processed_up_to/2` infers consumer identity from the caller process,
-the monitor also needs a lookup from registered consumer pid to
-`consumer_shape_handle`.
-
-When the minimum changes, the monitor notifies `MultiTimeView`:
+This replaces the current `Materializer.get_link_values/1` setup path for
+subquery event handlers. The handler should keep compact references such as:
 
 ```elixir
-MultiTimeView.set_min_required_time(subquery_id, min_required_time)
+%{
+  ["$sublink", "0"] => %{subquery_id: dep_handle, time: current_time}
+}
 ```
 
-When an outer shape is removed, the monitor removes that consumer from every
-subquery it was registered for and recomputes the affected minima.
+not `MapSet` views.
 
-### Concurrency Model
+The monitor should track consumers by process monitor plus registered
+subqueries so dead consumers automatically release pinned times. An explicit
+unregister path can be added for normal shutdown, but correctness must not
+depend on it.
 
-Most writes are already serialized by existing processes:
+### Consumer Move Handling
 
-- Shape addition and removal happen through the ShapeLogCollector path.
-- Dependency changes are applied by materializers.
-- Outer consumers process events synchronously when ShapeLogCollector publishes
-  to them.
+For a move from time `a` to time `b`, `ActiveMove` should store times, not
+views:
 
-`MultiTimeView` writes happen in the materializer before it sends
-`materializer_changes` to subscribers.
-
-`SubqueryIndex` topology changes happen when shapes are added or removed from
-the filter.
-
-`SubqueryIndex` reads happen from ShapeLogCollector while routing replication
-changes.
-
-Consumer reads from `MultiTimeView` can happen concurrently with writes. This
-is safe because membership is always read at an explicit logical time, and ETS
-updates replace complete membership-history values atomically.
-
-The ready flag is important. Until a subquery has been seeded into
-`MultiTimeView` and any group routing rows have been created, routing must be
-conservative.
-
-## Expected Benefits
-
-- One retained membership view per subquery instead of one per outer shape.
-- Consumer processes retain logical times instead of large `MapSet` views.
-- Move-in buffering retains before/after logical times instead of before/after
-  `MapSet` views.
-- Subquery removal is proportional to the removed subquery's values and group
-  entries, not to total stack size.
-- Positive routing remains value-keyed and efficient.
-
-## Risks
-
-### Off-by-One Compaction
-
-The biggest correctness risk is compacting away a logical time that some
-consumer still needs.
-
-The invariant is:
-
-```text
-MultiTimeView may drop transitions at or before min_required_time
-after rewriting the entry to preserve membership at min_required_time.
-
-min_required_time = min(required_time_by_live_consumer)
+```elixir
+%ActiveMove{
+  subquery_id: subquery_id,
+  from_time: a,
+  to_time: b,
+  values: values
+}
 ```
 
-Tests should cover move-in, move-out, repeated toggles, consumer registration,
-consumer removal, and compaction across all of those cases.
+Elixir-side evaluation of buffered transactions should use callbacks into
+`MultiTimeView`:
 
-### Negated Routing Cost
+```elixir
+before_member? = fn ref, value -> member?(ref, value, a) end
+after_member? = fn ref, value -> member?(ref, value, b) end
+```
 
-For negated subquery groups, a value absent from all subqueries affects all
-children in the group. This can be large, but it is proportional to the number
-of affected shapes.
+For SQL move-in queries, the first implementation can still materialize
+query-local arrays by calling `MultiTimeView.values(subquery_id, time)`. The
+important change is that these arrays are transient query parameters, not
+long-lived per-consumer state.
 
-The implementation should avoid extra memory-heavy complement indexes unless
-there is evidence they are necessary.
+After the move is spliced and the consumer no longer needs time `a`, it calls:
 
-### Move-In Query Memory
+```elixir
+SubqueryProgressMonitor.notify_processed_up_to(a, subquery_id)
+```
 
-If move-in query generation materializes full before and after views in the
-consumer process, the design will keep a major source of memory duplication.
+The consumer's exact-filter time is separate from this retention notification.
+It should advance to `b` at the same point the current implementation would
+update per-shape membership rows for subsequent routing. The important
+invariant is that live routing must not under-route, while `required_time`
+continues to pin `a` until the consumer no longer needs the old view.
 
-Full view materialization should be avoided where possible and isolated to
-short-lived task processes where not possible.
+### Querying Changes
 
-### Fallback Windows
+`Querying.move_in_where_clause/5` currently receives
+`views_before_move` and `views_after_move` maps. Replace those maps with a view
+resolver that can provide values for a subquery ref at a logical time:
 
-Unready subqueries and not-yet-seeded group routing must route conservatively.
-This may temporarily over-route, but must not under-route.
+```elixir
+values_for.(subquery_ref, time)
+```
 
-## Testing Plan
+Initial implementation can adapt this resolver back into arrays at the SQL
+boundary, preserving existing SQL generation behavior. A later optimization can
+special-case the triggering subquery position and use only the changed values
+for candidate selection when the DNF plan makes that safe.
 
-Add focused unit tests for `MultiTimeView`:
+This keeps the first implementation smaller while still removing long-lived
+view copies.
 
-- membership at exact logical times
-- `member_at_some_time?/2`
-- `member_at_all_times?/2`
-- move-in and move-out transitions
-- repeated toggles
-- compaction after `set_min_required_time/2`
-- subquery removal by ordered key range
+### Failure Modes
 
-Add focused unit tests for `SubqueryProgressMonitor`:
+If `MultiTimeView` is not ready for a subquery, shapes using that subquery must
+stay in fallback routing. They must not be marked ready.
 
-- registration at current time
-- `notify_processed_up_to/2`
-- minimum required time updates
-- consumer removal
-- multiple consumers at different times
+If a consumer dies while it pins an old time, `SubqueryProgressMonitor` must
+release its registration via the process monitor. Otherwise compaction can be
+blocked indefinitely.
 
-Add `SubqueryIndex` tests:
+If a dependency materializer is removed, `MultiTimeView.remove_subquery/1` must
+remove the view and `SubqueryIndex` must remove the children and participants
+associated with that subquery without scanning unrelated shapes.
 
-- positive group routing
-- negative group routing
-- shared child nodes per `{group, subquery_id}`
-- conservative routing for unready subqueries
-- child removal after the last outer shape is removed
-- no full-table scan on subquery removal
+If compaction falls behind, correctness is preserved but routing becomes more
+conservative and histories grow. Add telemetry so this is visible.
 
-Update consumer event-handler tests:
+### Telemetry
 
-- steady conversion using logical times
-- buffered move-in using before and after logical times
-- queued moves across multiple logical times
-- progress notifications after splice
-- negated move-in and move-out behavior
+Add enough telemetry to prove or disprove the design:
 
-Keep or extend integration tests for:
+- number of values per subquery
+- number of retained histories per subquery
+- max and average history length
+- min/current logical time gap per subquery
+- number of registered consumers per subquery
+- number of child nodes per subquery group
+- first-child synchronous seed duration
+- shape removal duration
+- transient SQL move-in array size
 
-- dependency move-in
-- dependency move-out
-- nested subqueries
-- subqueries combined with non-subquery predicates
-- rows moving between two dependency values in one transaction
+### Complexity Check
+
+- **Is this the simplest approach?** No. The simplest immediate fix is adding a
+  reverse index for shape-owned values or using tombstones. Those approaches do
+  less architectural work, but they keep or increase the duplicated full-view
+  memory that caused the problem. This proposal is more complex because it
+  crosses the materializer, event handler, querying, and filter index
+  boundaries, but it removes both major long-lived duplicate view pools.
+- **What could we cut?** The first implementation can keep existing SQL array
+  generation, materializing arrays only at query time. It can also postpone
+  aggressive history encoding, background compaction tuning, and cross-handle
+  subquery interning.
+- **What's the 90/10 solution?** Implement `MultiTimeView`, serialized
+  registration, per-consumer logical times, and shared child routing. Keep
+  move-in SQL generation structurally the same by resolving values from the
+  shared view at the SQL boundary. Add telemetry before optimizing the query
+  format further.
 
 ## Open Questions
 
-- Should `MultiTimeView` expose `values(subquery_id, time)` as a materialized
-  `MapSet`, a stream, or both?
+Unresolved questions that need further discussion or will be determined during
+implementation:
+
+| Question | Options | Resolution Path |
+|----------|---------|-----------------|
+| **How should `values(subquery_id, time)` expose large views?** | Materialized `MapSet`, stream, both | Start with query-local materialization for compatibility, then prototype streaming or chunked array construction if telemetry shows spikes. |
+| **Where should exact filter times live?** | In `SubqueryIndex` participant rows, in `SubqueryProgressMonitor`, or in consumer-owned state with callbacks | Decide during implementation. The filter needs fast `shape_handle + subquery_ref -> time` lookup, so `SubqueryIndex` is the likely owner. |
+| **When should positive routing rows be removed after compaction?** | Opportunistically on read/write, periodic cleanup, immediate cleanup when min time advances | Implement opportunistic plus periodic cleanup first. Add immediate cleanup only if stale positive routes are expensive. |
+| **Should long histories switch representation?** | Keep flat lists, switch to tuples/arrays after a threshold, or compact eagerly | Keep flat lists for v1 and add telemetry for max history length before adding another representation. |
+
+## Definition of Success
+
+### Primary Hypothesis
+
+> We believe that implementing shared subquery logical-time views will enable
+> the issue #4279 hypothesis: subquery indexing can become scalable for shape
+> add/remove and memory use while preserving v1.6 subquery move correctness.
+>
+> We'll know we're right if shared subqueries no longer allocate full
+> per-consumer dependency views in steady state, shape removal no longer scans
+> value-keyed membership rows owned by unrelated shapes, and existing subquery
+> move correctness tests continue to pass.
+>
+> We'll know we're wrong if retained histories grow without bound under normal
+> consumer lag, move-in query memory still dominates production incidents, or
+> the cross-subsystem complexity creates correctness regressions compared with
+> the current per-consumer view model.
+
+### Functional Requirements
+
+| Requirement | Acceptance Criteria |
+|-------------|---------------------|
+| Shared subquery view | One `MultiTimeView` view exists per `subquery_id`, and steady-state consumers do not store full `MapSet` views. |
+| Per-consumer logical time | Each consumer can evaluate subquery membership at its own logical time. |
+| Correct registration | Consumer registration is serialized with the materializer and returns a current logical time whose view is ready. |
+| Progress notification | Consumers call `notify_processed_up_to(time, subquery_id)` after finishing moves, and compaction uses the minimum required time. |
+| Synchronous first child seed | First-time child creation seeds routing for the current view before removing fallback. |
+| Positive routing correctness | Values that are members at any retained time route to the relevant child node. |
+| Negated routing correctness | Negated groups route conservatively and filter with `member_at_all_times?/2`. |
+| Shape removal scalability | Removing a shape follows participant and child rows, not all subquery values for unrelated shapes. |
+| Move-in compatibility | Existing move-in SQL behavior can be produced from logical-time views without long-lived before/after `MapSet` copies. |
+| Observability | Telemetry reports retained time gaps, history sizes, seed duration, and removal duration. |
+
+### Learning Goals
+
+1. Measure how large retained logical-time windows become under realistic
+   consumer lag.
+2. Measure whether transient move-in SQL arrays remain a material memory cost
+   after removing long-lived view copies.
+3. Determine whether flat list histories are sufficient or whether a threshold
+   representation is needed.
+4. Determine whether conservative positive routing creates measurable extra
+   filter work before compaction catches up.
+
+## Alternatives Considered
+
+These alternatives are based on the discussion and rejected approaches in
+PR #4280.
+
+### Alternative 1: Add `shape_handle -> all values`
+
+**Description:** Add a reverse index from each shape to the full set of values
+it has inserted into `SubqueryIndex`.
+
+**Why not:** This improves shape removal, but it adds another full per-shape
+dependency view. It makes the removal path easier by increasing the same memory
+duplication this RFC is trying to remove.
+
+### Alternative 2: Tombstone Removed Shapes And Clean Later
+
+**Description:** Mark removed shapes as tombstoned and clean their value-keyed
+membership rows asynchronously.
+
+**Why not:** This is useful as an emergency mitigation, but it is not a
+structural memory fix. It leaves stale rows in the hot routing path and
+requires liveness checks or cleanup debt elsewhere.
+
+### Alternative 3: One Global Widened Filter
+
+**Description:** Store one widened filter for each subquery and route every
+value that might match any participant, relying on downstream exact filtering.
+
+**Why not:** A slow or stalled consumer can keep the shared filter broad and
+over-route work for every other participant. This preserves correctness, but it
+can move cost from memory to sustained routing and filtering work.
+
+### Alternative 4: Intern Full Dependency Views
+
+**Description:** Deduplicate identical full dependency views by interning
+`MapSet` values or equivalent view structures.
+
+**Why not:** This handles exact equality at a point in time, but one-value
+moves immediately create new views or require a second delta representation.
+At that point the design becomes a versioned or sparse-delta view. Logical time
+models that state directly.
+
+### Alternative 5: Versioned Lazy Exception Clearing
+
+**Description:** Keep sparse exceptions and clear or promote them lazily with
+versions instead of doing eager cleanup.
+
+**Why not:** This can reduce some hot-path work, but it adds versioning and
+cleanup complexity while retaining a separate exception model. This is better
+as a follow-up optimization if measurements show cleanup cost is high.
+
+### Alternative 6: Shared Base View With Sparse XOR Exceptions
+
+**Description:** The design in PR #4280 stores one base dependency view per
+cohort and stores sparse per-participant XOR exceptions for values where a
+participant temporarily differs from the base.
+
+**Why not:** This is a lower-risk, index-focused approach and may still be the
+right short-term fix if this RFC is too broad. However, it leaves consumer-held
+before/after views in place and represents temporary divergence as
+per-participant exceptions instead of as consumers reading different logical
+times.
+The logical-time design is a broader refactor, but it addresses the duplicated
+state in both `SubqueryIndex` and consumer event handlers.
+
+## Revision History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 0.1 | 2026-05-18 | robacourt | Initial draft using the Stratovolt RFC template and alternatives from PR #4280. |
+
+---
+
+## RFC Quality Checklist
+
+Before submitting for review, verify:
+
+**Alignment**
+- [x] RFC implements the working issue hypothesis, with no separate PRD.
+- [x] API naming matches ElectricSQL conventions.
+- [x] Success criteria link back to the issue hypothesis.
+
+**Calibration for Level 1-2 PMF**
+- [x] This is the smallest version of the logical-time design that validates
+  the memory hypothesis.
+- [x] Non-goals explicitly defer protocol changes, DNF redesign, and deeper
+  query optimization.
+- [x] Complexity Check section is filled out honestly.
+- [x] An engineer could start implementing tomorrow.
+
+**Completeness**
+- [x] Happy path is clear.
+- [x] Critical failure modes are addressed.
+- [x] Open questions are acknowledged, not glossed over.
