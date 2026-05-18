@@ -252,6 +252,12 @@ describe(`Wake detection`, () => {
       params: { table: `foo` },
       signal: aborter.signal,
       fetchClient: fetchWrapper,
+      backoffOptions: {
+        initialDelay: 0,
+        maxDelay: 0,
+        multiplier: 1,
+        maxRetries: Infinity,
+      },
       onError: () => ({ params: {} }),
     })
     const unsub = stream.subscribe(() => {})
