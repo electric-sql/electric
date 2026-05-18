@@ -100,6 +100,11 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       registry: {
         getEntityByStream: vi.fn().mockResolvedValue(entity),
         updateStatus: vi.fn().mockResolvedValue(undefined),
+        materializeReleasedClaim: vi.fn().mockResolvedValue({
+          claim: null,
+          entityCleared: true,
+        }),
+        materializeHeartbeatClaim: vi.fn().mockResolvedValue(undefined),
       },
       enrichPayload: vi.fn(async (payload: Record<string, unknown>) => ({
         ...payload,
@@ -579,5 +584,195 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     } finally {
       fetchSpy.mockRestore()
     }
+  })
+
+  describe(`claim release on done callback (regression for #4340)`, () => {
+    const upstreamOk = (): void => {
+      vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, next_wake: false }), {
+          headers: { 'content-type': `application/json` },
+        })
+      )
+    }
+
+    it(`marks the consumer_claims row released and the entity idle on done`, async () => {
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      // Simulate the runtime's claim phase having minted a token.
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-1`
+      )
+
+      try {
+        const response = await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(response.status).toBe(200)
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+            ackedStreams: [{ path: `/horton/demo/main`, offset: `1` }],
+          })
+        )
+        expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
+          `/horton/demo`,
+          `idle`
+        )
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
+
+    it(`still releases the consumer_claims row when the in-memory write token is missing (e.g. server restart)`, async () => {
+      // Reproduces the production failure mode where the in-memory
+      // ClaimWriteTokenStore is empty (server restarted between dispatch and
+      // done, or another wake evicted the token) but the consumer_claims row
+      // is still active in the DB. Today the release path skips
+      // materializeReleasedClaim under this condition and the row leaks.
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      // Intentionally do NOT mint a write token — simulates the token
+      // being lost between the runtime's claim phase and its done call.
+
+      try {
+        const response = await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        expect(response.status).toBe(200)
+        // The DB row identity (consumerId, epoch) is sufficient to release
+        // the claim — release must not depend on in-memory write-token state.
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+          })
+        )
+        // The entity should transition back to idle so the UI no longer
+        // shows it as "running" after the agent finishes.
+        expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
+          `/horton/demo`,
+          `idle`
+        )
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
+
+    it(`releases an earlier wake's claim even after a later wake evicted its in-memory token`, async () => {
+      // Same defect, different cause: two wakes for the same entity arrive
+      // close together. The second's mint evicts the first's token. The
+      // first wake's done call then finds stillOwnsClaim=false and skips
+      // the release.
+      const select = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      upstreamOk()
+      const ctx = buildContext({
+        pgDb: { select: select.select } as any,
+      })
+      // Simulate the DB state where consumer-old's row is still active but
+      // entityDispatchState's active claim is consumer-new (the later wake).
+      ;(
+        ctx.entityManager.registry.materializeReleasedClaim as any
+      ).mockResolvedValue({ claim: null, entityCleared: false })
+
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-1`
+      )
+      // A second wake arrives and re-mints for the same stream, evicting
+      // wake-1 from the in-memory store.
+      ctx.runtime.claimWriteTokens.mint(
+        `tenant-a`,
+        `/horton/demo/main`,
+        `wake-2`
+      )
+
+      try {
+        await globalRouter.fetch(
+          new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+            method: `POST`,
+            headers: {
+              'content-type': `application/json`,
+              authorization: `Bearer callback-token`,
+            },
+            body: JSON.stringify({
+              epoch: 7,
+              acks: [{ path: `/horton/demo/main`, offset: `1` }],
+              done: true,
+            }),
+          }),
+          ctx
+        )
+
+        // The DB row for wake-1 must still be released.
+        expect(
+          ctx.entityManager.registry.materializeReleasedClaim
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            consumerId: `wake-1`,
+            epoch: 7,
+          })
+        )
+        // But the entity status must NOT be set to idle — wake-2 is still
+        // in flight and owns the entity's active dispatch.
+        expect(ctx.entityManager.registry.updateStatus).not.toHaveBeenCalled()
+      } finally {
+        vi.mocked(globalThis.fetch).mockRestore()
+      }
+    })
   })
 })
