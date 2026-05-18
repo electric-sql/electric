@@ -533,8 +533,6 @@ async function sendEntity(
   if (!entity.dispatch_policy) {
     const updatedEntity = await backfillEntityDispatchPolicy(ctx, entity)
     await linkEntityDispatchSubscription(ctx, updatedEntity)
-  } else if (entity.dispatch_policy.targets[0]?.type === `runner`) {
-    await linkEntityDispatchSubscription(ctx, entity)
   }
 
   if (parsed.afterMs && parsed.afterMs > 0) {

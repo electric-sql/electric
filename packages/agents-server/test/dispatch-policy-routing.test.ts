@@ -269,7 +269,7 @@ describe(`dispatch policy routing`, () => {
     )
   })
 
-  it(`relinks existing runner-dispatched entities before sending`, async () => {
+  it(`does not relink existing runner-dispatched entities before sending`, async () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
@@ -287,14 +287,9 @@ describe(`dispatch policy routing`, () => {
     )
 
     expect(response.status).toBe(204)
-    expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
-      expect.stringMatching(/^runner:runner-1:/),
-      expect.objectContaining({
-        type: `pull-wake`,
-        streams: [`/chat/one/main`],
-        wake_stream: `/runners/runner-1/wake`,
-      })
-    )
+    expect(ctx.streamClient.getSubscription).not.toHaveBeenCalled()
+    expect(ctx.streamClient.putSubscription).not.toHaveBeenCalled()
+    expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
     expect(ctx.entityManager.send).toHaveBeenCalledWith(
       `/chat/one`,
       expect.objectContaining({ payload: `hello` })
@@ -322,6 +317,7 @@ describe(`dispatch policy routing`, () => {
     )
 
     expect(response.status).toBe(204)
+    expect(ctx.streamClient.getSubscription).not.toHaveBeenCalled()
     expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
     expect(ctx.streamClient.removeSubscriptionStream).not.toHaveBeenCalled()
     expect(ctx.entityManager.send).toHaveBeenCalledWith(
@@ -330,14 +326,11 @@ describe(`dispatch policy routing`, () => {
     )
   })
 
-  it(`treats runner subscription create conflicts as an idempotent relink`, async () => {
+  it(`treats runner subscription create conflicts as an idempotent spawn link`, async () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
     const ctx = buildContext()
-    ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
-      entity(dispatchPolicy)
-    )
     ;(ctx.streamClient.getSubscription as any)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
@@ -358,17 +351,13 @@ describe(`dispatch policy routing`, () => {
     ctx.entityManager.send = vi.fn(async () => undefined)
 
     const response = await globalRouter.fetch(
-      request(`POST`, `/_electric/entities/chat/one/send`, {
-        payload: `hello`,
+      request(`PUT`, `/_electric/entities/chat/one`, {
+        dispatch_policy: dispatchPolicy,
       }),
       ctx
     )
 
-    expect(response.status).toBe(204)
+    expect(response.status).toBe(201)
     expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
-    expect(ctx.entityManager.send).toHaveBeenCalledWith(
-      `/chat/one`,
-      expect.objectContaining({ payload: `hello` })
-    )
   })
 })
