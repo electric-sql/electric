@@ -1,5 +1,17 @@
 # electric-ax
 
+## 0.2.2
+
+### Patch Changes
+
+- 21ad820: Harden Electric Agents remote error reporting and add optional `ELECTRIC_AGENTS_PRINCIPAL` support for principal-aware servers.
+- Updated dependencies [c4e046f]
+- Updated dependencies [21ad820]
+- Updated dependencies [a15c7b6]
+- Updated dependencies [0e72995]
+  - @electric-ax/agents@0.4.2
+  - @electric-sql/client@1.5.18
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @electric-ax/agents
 
+## 0.4.2
+
+### Patch Changes
+
+- c4e046f: Add Electric Cloud sign-in to the desktop app. New Settings → Account panel signs in via GitHub or Google through `dashboard.electric-sql.cloud`'s loopback OAuth flow (the same one the CLI uses), encrypts the resulting JWT with `safeStorage`, refreshes name + workspaces via `auth.whoami`, and offers a one-click jump to the user's Electric Cloud dashboard.
+
+  Add first-launch onboarding for Electric Cloud sign-in and LLM API keys, plus a Cloud Agent Servers settings section that syncs the user's Cloud agent servers, mints per-tenant agents tokens in the main process, and connects the desktop runtime/UI to tenant-scoped Cloud agents URLs without exposing those tokens to the renderer or `settings.json`.
+
+- 21ad820: Harden Electric Agents remote error reporting and add optional `ELECTRIC_AGENTS_PRINCIPAL` support for principal-aware servers.
+- 0e72995: Move spawn worker tool instructions from system prompt to initial message for better worker briefing
+
 ## 0.4.1
 
 ### Patch Changes

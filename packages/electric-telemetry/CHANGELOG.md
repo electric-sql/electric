@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.2.6
+
+### Patch Changes
+
+- ed48bba: Add per-shape `electric.shape.response_size.bytes` telemetry distribution, tagged by `root_table`, `is_live`, and `stack_id`. Operators can now attribute response payload volume to individual shapes and tell initial snapshots apart from live long-poll responses.
+
 ## 0.2.5
 
 ### Patch Changes
