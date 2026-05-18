@@ -94,9 +94,9 @@ rather than specifying a time you can also ask for membership across all times:
 member_at_some_time?(subquery_id, value) = true
 member_at_all_times?(subquery_id, value) = false
 
-These are useful for the where clause filter which needs to keep the filter broad enough so that all consumers get all the changes they need while they may be at any of the logical times. 
+These are useful for the where clause filter which needs to keep the filter broad enough so that all consumers get all the changes they need while they may be at any of the logical times.
 
-For each subquery there will be a minimum logical time needed (the minimum in-flight logical time for the subquery) which the SubqueryProgressMonitor will set on the MultiTimeView. This allows the MultiTimeViewETS table to be compacted for memory and performace efficientcy. For any given list(times) it can be compacted by removing times from before the minimum in-flight logical time, making sure to update the :in/:out marker at the beginning of the list appropriately or removing it if there are no times left. 
+For each subquery there will be a minimum logical time needed (the minimum in-flight logical time for the subquery) which the SubqueryProgressMonitor will set on the MultiTimeView. This allows the MultiTimeViewETS table to be compacted for memory and performace efficientcy. For any given list(times) it can be compacted by removing times from before the minimum in-flight logical time, making sure to update the :in/:out marker at the beginning of the list appropriately or removing it if there are no times left.
 
 Compacting should happen:
 - when the list is read (e.g. when member? for the value is called)
@@ -147,19 +147,20 @@ This is the existing Materializer. It will just need to be updated to:
 
 #### Logical Time
 
-Logical Time is monotonically incrementing counter per subquery. 
+Logical Time is monotonically incrementing counter per subquery.
 
 This needs to be a memory efficient data staructure that can be incremented indefinately. If it needs to wrap we need to make sure we use appropriate conparison functions when comparing times. Wrapping is an acceptable solution since there will only ever be so many moves in flight for any given subquery and memory would explode due to that before wrapping would cause comparison failures.
 
 #### SubqueryProgressMonitor
 
-Pin worked out from acks
--LRU algorithm 
+This can be a separate process that the outer consumer calls to acknoledge that it's finished with a logical time for a subquery. The SubqueryProgressMonitor can then keep track of the minimum in-flight logical time for each subquery and set that on the MultiTimeView so that the MultiTimeView can compact it's ETS table for memory and performance efficientcy.
+
+The SubqueryProgressMonitor can be implimented as an ETS table ordered by subquery_id then logical time with an index to where an outer shape_id entry is so that when an outer consumer acks a logical time for a subquery, the outer shape can be found in the the ordered list and removed and replaced with the acked time. The minimum of theses times is the minimum in-flight logical time for the subquery. This should mean that updating a outer shape's logical time is O(1) and reading the minimum in-flight logical time is O(1). The SubqueryProgressMonitor should notify the MultiTimeView when the minimum in-flight logical time for a subquery changes so that the MultiTimeView can compact it's ETS table.
 
 #### Consumer EventProcessors
 
-These should be updated so that rather than holding views of the subquery, they just hold the logical time. so the before and after views should instead just be the before and after logical times. 
-- `convert_change` should have a function passed to it that access MultiTimeView.member? at the specified time  
+These should be updated so that rather than holding views of the subquery, they just hold the logical time. so the before and after views should instead just be the before and after logical times.
+- `convert_change` should have a function passed to it that access MultiTimeView.member? at the specified time
 - the move-in query needs entire views at specific times and so should call MultiTimeView.get(time) and care should be made to not keep this in memory for too long, perhaps we should GC the consumer process afterwards, or perhaps the task process that runs the query should call MultiTimeView.get(time) so that the memory is freed when the process ends
 
 
@@ -177,13 +178,37 @@ WHERE user_id IN (SELECT id FROM users WHERE company_id=8)
 would be in the same reverse index because they have the same field (user_id) and polarity (:positive).
 
 Perhaps the index could have the form:
-subquery_cohort_id, value -> list({child_node_id, list(times)})
+subquery_group_id, value -> list({child_node_id, list(times)})
 
 where:
-subquery_cohort_id is a number (whatever is smallest in memory) and represents {node_id, field, polarity} but to save memory (as it's going to be repeated lots in the ETS table) we keep it small and also store:
-subquery_cohort_id -> {node_id, field, polarity} and
-{node_id, field, polarity} -> subquery_cohort_id
+subquery_group_id is a number (whatever is smallest in memory) and represents {node_id, field, polarity} but to save memory (as it's going to be repeated lots in the ETS table) we keep it small and also store:
+subquery_group_id -> {node_id, field, polarity} and
+{node_id, field, polarity} -> subquery_group_id
 
-and there's one child_node_id per subquery_id for the cohort
+and there's one child_node_id per subquery_id for the group
 
 Shape removal can be quick because we can keep track of subquery_id -> child_node_id and remove the shape from the child node, but removing nodes becomes slow since they're scattered throughout the ETS table. I suggest the cleaning up of nodes should be done asynchronously by a process that walks through the ETS table for nodes with no shapes and removes them. Race conditions can be avoided by doing an atomic conditional replace in the ETS table.
+
+Perhaps this will replace the MultiTimeView proposes above, we're still multi-time but we work at a group level rather than the subquery level. This would mean that the Materializer calls to add/remove values from the subquery must update all groups that the subquery is in.
+
+
+### Definitions
+
+#### Subquery
+
+Each subquery gets it's own shape. If the select statement differs at all we count it as a different subquery, even if the difference is just in a constant. So:
+- SELECT id FROM users WHERE company_id=7
+- SELECT id FROM users WHERE company_id=8
+are two different subqueries and each get their own subquery_id (the handle for the subquery shape)
+
+#### Subquery Group
+
+A subquery group is a set of subqueries that have the same field and polarity at a particular node in the filter tree.
+
+So for example the two subqueries in the two shapes below are differnt subqueries (because they differ by the company_id constant) but they are in the same subquery group because they have the same field (user_id) and polarity (:positive) at the same node in the filter tree:
+WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
+WHERE user_id IN (SELECT id FROM users WHERE company_id=8)
+
+A subquery_id may appear in multiple subquery groups if it appears at multiple nodes in the filter tree. For the subquery is the same (has the same subquery_id) in the two shapes below but falls into different subquery groups because it appears at a differnt node in the filter tree:
+WHERE user_id IN (SELECT id FROM users WHERE company_id=7)
+WHERE project_id=4 AND user_id IN (SELECT id FROM users WHERE company_id=7)
