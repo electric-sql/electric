@@ -43,6 +43,7 @@ type ServerConfig = {
   desiredState: `connected` | `disconnected`
   localRuntimeEnabled: boolean
   headers?: Record<string, string>
+  tenantId?: string
 }
 
 type DesktopRuntimeStatus = `stopped` | `starting` | `running` | `error`
@@ -102,6 +103,12 @@ type ApiKeysStatus = {
   suggested: ApiKeys
 }
 
+type OnboardingState = {
+  dismissed: boolean
+  hasAnyKey: boolean
+  signedIn: boolean
+}
+
 // Mirror of `DesktopCommand` in main.ts. Kept as a string union here so
 // the preload bundle has zero runtime cost; main is the source of
 // truth for which commands actually fire.
@@ -145,6 +152,48 @@ type DesktopAppearance = `light` | `dark` | `system`
 type DesktopContextMenuRequest = {
   kind: `selection`
   selectionText: string
+}
+
+// Mirror of `cloud-auth.ts` types — kept inline here so the preload
+// bundle stays self-contained (no shared workspace type imports).
+type CloudAuthProvider = `github` | `google`
+type CloudAuthStatus = `signed-out` | `signing-in` | `signed-in` | `error`
+type CloudAuthWorkspace = {
+  id: string
+  name: string
+}
+type CloudAuthState = {
+  status: CloudAuthStatus
+  email: string | null
+  name: string | null
+  userId: string | null
+  workspaces: ReadonlyArray<CloudAuthWorkspace> | null
+  error: string | null
+}
+
+type CloudAgentServersStatus =
+  | `idle`
+  | `loading`
+  | `ready`
+  | `unauthorized`
+  | `error`
+
+type CloudAgentServer = {
+  id: string
+  name: string
+  workspaceId: string | null
+  workspaceName: string | null
+  projectId: string | null
+  projectName: string | null
+  environmentId: string | null
+  environmentName: string | null
+  updatedAt: string | null
+}
+
+type CloudAgentServersState = {
+  status: CloudAgentServersStatus
+  servers: ReadonlyArray<CloudAgentServer>
+  error: string | null
 }
 
 function isEditableElement(target: EventTarget | null): boolean {
@@ -237,6 +286,10 @@ const api = {
     ipcRenderer.invoke(`desktop:get-api-keys-status`),
   saveApiKeys: (keys: ApiKeys): Promise<void> =>
     ipcRenderer.invoke(`desktop:save-api-keys`, keys),
+  getOnboardingState: (): Promise<OnboardingState> =>
+    ipcRenderer.invoke(`desktop:get-onboarding-state`),
+  setOnboardingDismissed: (dismissed: boolean): Promise<void> =>
+    ipcRenderer.invoke(`desktop:set-onboarding-dismissed`, dismissed),
   getWorkingDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(`desktop:get-working-directory`),
   chooseWorkingDirectory: (): Promise<string | null> =>
@@ -324,6 +377,57 @@ const api = {
       ipcRenderer.invoke(`desktop:mcp-disable`, name, serverId),
     enable: (name: string, serverId?: string): Promise<void> =>
       ipcRenderer.invoke(`desktop:mcp-enable`, name, serverId),
+  },
+  // ── Electric Cloud auth surface ────────────────────────────────
+  // Sign-in opens a child BrowserWindow that intercepts the
+  // dashboard OAuth callback redirect; the resolved state is pushed
+  // through `onStateChanged`.
+  cloudAuth: {
+    getState: (): Promise<CloudAuthState> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-state`),
+    signIn: (provider: CloudAuthProvider): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-sign-in`, provider),
+    signOut: (): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-sign-out`),
+    openDashboard: (): Promise<void> =>
+      ipcRenderer.invoke(`desktop:cloud-auth-open-dashboard`),
+    onStateChanged: (
+      callback: (state: CloudAuthState) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        state: CloudAuthState
+      ) => callback(state)
+      ipcRenderer.on(`desktop:cloud-auth-state-changed`, listener)
+      return () =>
+        ipcRenderer.removeListener(`desktop:cloud-auth-state-changed`, listener)
+    },
+  },
+  // ── Cloud agent servers ──────────────────────────────────────────
+  cloudAgentServers: {
+    getState: (): Promise<CloudAgentServersState> =>
+      ipcRenderer.invoke(`desktop:cloud-agent-servers-state`),
+    onStateChanged: (
+      callback: (state: CloudAgentServersState) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        state: CloudAgentServersState
+      ) => callback(state)
+      ipcRenderer.on(`desktop:cloud-agent-servers-state-changed`, listener)
+      return () =>
+        ipcRenderer.removeListener(
+          `desktop:cloud-agent-servers-state-changed`,
+          listener
+        )
+    },
+    prepareConnection: (
+      serviceId: string
+    ): Promise<{ url: string; tenantId: string }> =>
+      ipcRenderer.invoke(
+        `desktop:cloud-agent-server-prepare-connection`,
+        serviceId
+      ),
   },
 }
 

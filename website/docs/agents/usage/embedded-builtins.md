@@ -168,6 +168,8 @@ Environment variables:
 | Variable                         | Description                                           |
 | -------------------------------- | ----------------------------------------------------- |
 | `ELECTRIC_AGENTS_SERVER_URL`     | Required coordinator server URL.                      |
+| `ELECTRIC_AGENTS_PRINCIPAL`      | Optional principal key sent as `Electric-Principal`.  |
+| `ELECTRIC_AGENTS_SERVER_HEADERS` | Optional JSON object of additional server headers.    |
 | `ELECTRIC_AGENTS_BUILTIN_BASE_URL` | Public webhook base URL for the built-in server.   |
 | `ELECTRIC_AGENTS_BUILTIN_HOST`   | Bind host.                                            |
 | `ELECTRIC_AGENTS_BUILTIN_PORT`   | Built-in server port. Defaults to `4448`.             |

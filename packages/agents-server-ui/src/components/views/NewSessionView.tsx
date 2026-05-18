@@ -113,6 +113,7 @@ export function NewSessionView({
       return query
         .from({ t: entityTypesCollection })
         .where(({ t }) => not(eq(t.name, `worker`)))
+        .where(({ t }) => not(eq(t.name, `principal`)))
         .orderBy(({ t }) => t.name, `asc`)
     },
     [entityTypesCollection]

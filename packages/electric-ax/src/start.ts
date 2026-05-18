@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
+import { mergeElectricPrincipalHeader } from '@electric-ax/agents/server-headers'
 import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 import {
@@ -19,6 +20,7 @@ const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
 const DEFAULT_COMPOSE_PROJECT_NAME = `electric-agents`
 const DEFAULT_PULL_WAKE_RUNNER_ID = `builtin-agents`
 const DEFAULT_PULL_WAKE_OWNER_PRINCIPAL = `/principal/system%3Abuiltin-agents`
+const PRINCIPAL_URL_PREFIX = `/principal/`
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
 )
@@ -113,6 +115,12 @@ function runnerIdFromIdentity(identity: string | undefined): string {
   return slug ? `builtin-${slug}` : DEFAULT_PULL_WAKE_RUNNER_ID
 }
 
+function principalUrlFromConfig(value: string): string {
+  return value.startsWith(PRINCIPAL_URL_PREFIX)
+    ? value
+    : `${PRINCIPAL_URL_PREFIX}${encodeURIComponent(value)}`
+}
+
 export function resolvePullWakeRunnerId(
   env: NodeJS.ProcessEnv = process.env,
   fileEnv: Record<string, string> = readDotEnvFile()
@@ -132,8 +140,10 @@ export function resolvePullWakeOwnerPrincipal(
   env: NodeJS.ProcessEnv = process.env,
   fileEnv: Record<string, string> = readDotEnvFile()
 ): string {
+  const principal = readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_PRINCIPAL`])
+  if (principal) return principalUrlFromConfig(principal)
   const identity = readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_IDENTITY`])
-  if (identity) return `/principal/${encodeURIComponent(identity)}`
+  if (identity) return principalUrlFromConfig(identity)
   return DEFAULT_PULL_WAKE_OWNER_PRINCIPAL
 }
 
@@ -167,6 +177,16 @@ function parseAdditionalServerHeaders(
   }
   const normalized = Object.fromEntries(headers.entries())
   return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function resolveServerHeaders(
+  env: NodeJS.ProcessEnv,
+  fileEnv: Record<string, string>
+): Record<string, string> | undefined {
+  return mergeElectricPrincipalHeader(
+    parseAdditionalServerHeaders(env, fileEnv),
+    readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_PRINCIPAL`])
+  )
 }
 
 function mergeHeaders(
@@ -376,7 +396,7 @@ export async function startBuiltinAgentsServer(
   const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
   const runnerId = resolvePullWakeRunnerId(env, fileEnv)
   const ownerPrincipal = resolvePullWakeOwnerPrincipal(env, fileEnv)
-  const serverHeaders = mergeHeaders(parseAdditionalServerHeaders(env, fileEnv))
+  const serverHeaders = mergeHeaders(resolveServerHeaders(env, fileEnv))
   const agentServerUrl =
     params.agentServerUrl ??
     env.ELECTRIC_AGENTS_URL?.trim() ??

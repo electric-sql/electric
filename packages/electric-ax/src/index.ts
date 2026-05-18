@@ -9,6 +9,7 @@ import { installCompletions, setupCompletions } from './completions.js'
 import { entityApiPath } from './entity-api.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
 import { appendPathToUrl } from '@electric-ax/agents-runtime'
+import { mergeElectricPrincipalHeader } from '@electric-ax/agents/server-headers'
 import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,
@@ -133,22 +134,28 @@ export function getElectricCliEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ElectricCliEnv {
   const explicitIdentity = env.ELECTRIC_AGENTS_IDENTITY?.trim()
+  const headers = parseElectricAgentsHeaders(env.ELECTRIC_AGENTS_SERVER_HEADERS)
   return {
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
     electricAgentsIdentity:
       explicitIdentity || getDefaultElectricAgentsIdentity(),
-    electricAgentsHeaders: parseElectricAgentsHeaders(
-      env.ELECTRIC_AGENTS_SERVER_HEADERS
+    electricAgentsHeaders: mergeElectricPrincipalHeader(
+      headers,
+      env.ELECTRIC_AGENTS_PRINCIPAL
     ),
   }
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  if (error instanceof Error) {
+    return error.message || error.name || `Unknown error`
+  }
+  const message = String(error)
+  return message || `Unknown error`
 }
 
 function fail(message: string): never {
-  throw new CliError(message)
+  throw new CliError(message || `Unknown error`)
 }
 
 function relativeTime(epochMs: number): string {
@@ -345,37 +352,60 @@ async function electricAgentsFetch(
   }
 }
 
-async function parseJsonResponse(
-  res: Response
-): Promise<Record<string, unknown>> {
+async function parseJsonResponse(res: Response): Promise<unknown> {
   const text = await res.text()
   try {
-    return JSON.parse(text) as Record<string, unknown>
+    return JSON.parse(text) as unknown
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error
-    return { error: { message: text || res.statusText } }
+    return { error: { message: text || fallbackResponseMessage(res) } }
   }
 }
 
-function failFromResponse(data: Record<string, unknown>, res: Response): never {
-  const err = data.error as Record<string, unknown> | undefined
-  fail(String(err?.message ?? res.statusText))
+function fallbackResponseMessage(res: Response): string {
+  const status = res.status ? `HTTP ${res.status}` : `HTTP error`
+  return res.statusText ? `${status}: ${res.statusText}` : status
+}
+
+function stringMessage(value: unknown): string | undefined {
+  if (typeof value !== `string`) return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return undefined
+  return trimmed
+}
+
+function errorMessageFromValue(value: unknown): string | undefined {
+  const direct = stringMessage(value)
+  if (direct) return direct
+
+  if (!value || typeof value !== `object` || Array.isArray(value)) {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  return (
+    errorMessageFromValue(record.message) ??
+    errorMessageFromValue(record.error) ??
+    errorMessageFromValue(record.reason) ??
+    errorMessageFromValue(record.detail)
+  )
+}
+
+function responseErrorMessage(data: unknown, res: Response): string {
+  return errorMessageFromValue(data) ?? fallbackResponseMessage(res)
+}
+
+function failFromResponse(data: unknown, res: Response): never {
+  fail(responseErrorMessage(data, res))
 }
 
 async function fetchEntityTypes(
   env: ElectricCliEnv
 ): Promise<Array<ElectricAgentsEntityType>> {
   const res = await electricAgentsFetch(env, `/_electric/entity-types`)
-  const data = await res.json()
+  const data = await parseJsonResponse(res)
   if (!res.ok) {
-    fail(
-      typeof data === `object` && data !== null
-        ? String(
-            (data as { error?: { message?: string } }).error?.message ??
-              res.statusText
-          )
-        : res.statusText
-    )
+    failFromResponse(data, res)
   }
   if (!Array.isArray(data)) {
     fail(`Unexpected response from server when listing entity types`)
@@ -411,16 +441,9 @@ async function fetchEntities(
   if (options.parent) searchParams.set(`parent`, options.parent)
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ``
   const res = await electricAgentsFetch(env, `/_electric/entities${suffix}`)
-  const data = await res.json()
+  const data = await parseJsonResponse(res)
   if (!res.ok) {
-    fail(
-      typeof data === `object` && data !== null
-        ? String(
-            (data as { error?: { message?: string } }).error?.message ??
-              res.statusText
-          )
-        : res.statusText
-    )
+    failFromResponse(data, res)
   }
   if (!Array.isArray(data)) {
     fail(`Unexpected response from server when listing entities`)
@@ -702,6 +725,8 @@ function getHelpText(commandName: string): string {
 Environment:
   ELECTRIC_AGENTS_URL        Base URL of the server (default: ${DEFAULT_ELECTRIC_AGENTS_URL})
   ELECTRIC_AGENTS_IDENTITY   Sender identity for messages (default: ${getDefaultElectricAgentsIdentity()})
+  ELECTRIC_AGENTS_PRINCIPAL  Optional principal key sent as the Electric-Principal header
+  ELECTRIC_AGENTS_SERVER_HEADERS  Optional JSON object of additional server headers
   ANTHROPIC_API_KEY          Required for '${agentsCommand} start-builtin' and '${agentsCommand} quickstart'
 
 Examples:

@@ -1,4 +1,5 @@
 import { BuiltinAgentsServer } from './server.js'
+import { mergeElectricPrincipalHeader } from './server-headers.js'
 import type { BuiltinAgentsServerOptions } from './server.js'
 
 type EnvSource = Record<string, string | undefined>
@@ -121,7 +122,12 @@ export function resolveBuiltinAgentsEntrypointOptions(
     `pull-wake runner id`
   )
 
-  const serverHeaders = mergeHeaders(parseAdditionalServerHeaders(env))
+  const serverHeaders = mergeHeaders(
+    mergeElectricPrincipalHeader(
+      parseAdditionalServerHeaders(env),
+      readEnv(env, [`ELECTRIC_AGENTS_PRINCIPAL`])
+    )
+  )
 
   return {
     agentServerUrl,

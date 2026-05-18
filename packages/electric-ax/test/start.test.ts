@@ -101,6 +101,18 @@ describe(`resolvePullWakeRunnerId`, () => {
 })
 
 describe(`resolvePullWakeOwnerPrincipal`, () => {
+  it(`prefers the configured agents principal`, () => {
+    expect(
+      resolvePullWakeOwnerPrincipal(
+        {
+          ELECTRIC_AGENTS_PRINCIPAL: `service:svc-test`,
+          ELECTRIC_AGENTS_IDENTITY: `a@example.com`,
+        },
+        {}
+      )
+    ).toBe(`/principal/service%3Asvc-test`)
+  })
+
   it(`uses the agents identity when present`, () => {
     expect(
       resolvePullWakeOwnerPrincipal(

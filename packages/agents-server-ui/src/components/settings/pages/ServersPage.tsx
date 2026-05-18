@@ -4,8 +4,13 @@ import { useServerConnection } from '../../../hooks/useServerConnection'
 import { Badge, Button, Field, Icon, Input, Stack, Text } from '../../../ui'
 import { SettingsRow, SettingsScreen, SettingsSection } from '../SettingsScreen'
 import {
+  loadCloudAgentServersState,
   loadDesktopState,
+  onCloudAgentServersStateChanged,
   onDesktopStateChanged,
+  prepareCloudAgentServerConnection,
+  type CloudAgentServer,
+  type CloudAgentServersState,
   type DiscoveredServer,
   type LocalRuntimeStatus,
   type ServerConnectionStatus,
@@ -44,6 +49,15 @@ export function ServersPage(): React.ReactElement {
     [connections]
   )
   const savedUrls = useMemo(() => new Set(servers.map((s) => s.url)), [servers])
+  const savedCloudTenantIds = useMemo(
+    () =>
+      new Set(
+        servers
+          .filter((s) => s.source === `electric-cloud` && s.tenantId)
+          .map((s) => s.tenantId as string)
+      ),
+    [servers]
+  )
   const newDiscovered = useMemo(
     () =>
       discovered
@@ -76,6 +90,24 @@ export function ServersPage(): React.ReactElement {
     const off = onDesktopStateChanged((state) =>
       setDiscovered(state.discoveredServers ?? [])
     )
+    return () => {
+      cancelled = true
+      off?.()
+    }
+  }, [isDesktop])
+
+  const [cloudAgents, setCloudAgents] = useState<CloudAgentServersState | null>(
+    null
+  )
+  useEffect(() => {
+    if (!isDesktop) return
+    let cancelled = false
+    void loadCloudAgentServersState().then((state) => {
+      if (!cancelled) setCloudAgents(state)
+    })
+    const off = onCloudAgentServersStateChanged((next) => {
+      setCloudAgents(next)
+    })
     return () => {
       cancelled = true
       off?.()
@@ -135,6 +167,13 @@ export function ServersPage(): React.ReactElement {
           ))
         )}
       </SettingsSection>
+      {isDesktop && (
+        <CloudAgentServersSection
+          state={cloudAgents}
+          savedTenantIds={savedCloudTenantIds}
+          onAdd={addServer}
+        />
+      )}
       <SettingsSection
         title="Add Server"
         description={
@@ -304,6 +343,162 @@ function ServerRow({
         </Button>
       </div>
     </>
+  )
+}
+
+function CloudAgentServersSection({
+  state,
+  savedTenantIds,
+  onAdd,
+}: {
+  state: CloudAgentServersState | null
+  savedTenantIds: Set<string>
+  onAdd: (server: {
+    name: string
+    url: string
+    source: `manual` | `local-discovery` | `electric-cloud`
+    desiredState: `connected` | `disconnected`
+    localRuntimeEnabled: boolean
+    tenantId?: string
+  }) => void
+}): React.ReactElement {
+  const status = state?.status ?? `idle`
+  const servers = state?.servers ?? []
+  const description =
+    status === `idle`
+      ? `Sign in to Electric Cloud (Settings → Account) to see the agent servers your workspaces have access to.`
+      : status === `loading`
+        ? `Loading agent servers from Electric Cloud…`
+        : status === `unauthorized`
+          ? `Sign-in expired. Sign back in (Settings → Account) to refresh the list.`
+          : servers.length === 0
+            ? `No agent servers in your workspaces yet. Create one from the Electric Cloud dashboard.`
+            : `Agent servers across the workspaces you're a member of. Click Connect on one to make it the active server for this window.`
+
+  return (
+    <SettingsSection title="Cloud Agent Servers" description={description}>
+      {state?.error && status !== `unauthorized` && (
+        <div style={{ padding: `8px 16px 0` }}>
+          <Text size={1} tone="danger">
+            {state.error}
+          </Text>
+        </div>
+      )}
+      {servers.length > 0 && (
+        <div>
+          {servers.map((server) => (
+            <CloudAgentServerRow
+              key={server.id}
+              server={server}
+              savedTenantIds={savedTenantIds}
+              onAdd={onAdd}
+            />
+          ))}
+        </div>
+      )}
+    </SettingsSection>
+  )
+}
+
+function CloudAgentServerRow({
+  server,
+  savedTenantIds,
+  onAdd,
+}: {
+  server: CloudAgentServer
+  savedTenantIds: Set<string>
+  onAdd: (server: {
+    name: string
+    url: string
+    source: `manual` | `local-discovery` | `electric-cloud`
+    desiredState: `connected` | `disconnected`
+    localRuntimeEnabled: boolean
+    tenantId?: string
+  }) => void
+}): React.ReactElement {
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const alreadyAdded = savedTenantIds.has(server.id)
+
+  const path = [
+    server.workspaceName,
+    server.projectName,
+    server.environmentName,
+  ]
+    .filter((segment): segment is string => Boolean(segment))
+    .join(` › `)
+
+  const handleConnect = async (): Promise<void> => {
+    if (connecting || alreadyAdded) return
+    setConnecting(true)
+    setError(null)
+    try {
+      const result = await prepareCloudAgentServerConnection(server.id)
+      if (!result) {
+        throw new Error(`Could not prepare the cloud connection.`)
+      }
+      onAdd({
+        name: server.name,
+        url: result.url,
+        source: `electric-cloud`,
+        desiredState: `connected`,
+        // The cloud-agents-server itself is just a tenanted router —
+        // entity-type registration (Horton, Worker) and the actual
+        // runtime execution still live on this machine. Same wiring
+        // as a local server; the only difference is the agents-server
+        // URL points at the cloud instead of `localhost`.
+        localRuntimeEnabled: true,
+        // Persisted alongside the URL so main's webRequest hook + the
+        // undici global interceptor can look up the matching agents
+        // token from SecretStore on every outbound request to this server.
+        tenantId: result.tenantId,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  return (
+    <SettingsRow
+      label={server.name}
+      description={
+        <Stack direction="column" gap={1}>
+          {path && (
+            <Text size={1} tone="muted">
+              {path}
+            </Text>
+          )}
+          <Text size={1} tone="muted" family="mono">
+            {server.id}
+          </Text>
+          {error && (
+            <Text size={1} tone="danger">
+              {error}
+            </Text>
+          )}
+        </Stack>
+      }
+      control={
+        <Stack direction="row" gap={2} align="center">
+          <Badge tone="info" size={1}>
+            Cloud
+          </Badge>
+          <Button
+            variant="soft"
+            tone="neutral"
+            size={1}
+            disabled={connecting || alreadyAdded}
+            onClick={() => {
+              void handleConnect()
+            }}
+          >
+            {alreadyAdded ? `Added` : connecting ? `Connecting…` : `Connect`}
+          </Button>
+        </Stack>
+      }
+    />
   )
 }
 

@@ -6,6 +6,15 @@ import type {
 import { openAuthorizeWindow } from './oauth-window'
 import { SecretStore } from './secret-store'
 import {
+  CloudAuth,
+  type CloudAuthProvider,
+  type CloudAuthState,
+} from './cloud-auth'
+import {
+  CloudAgentServers,
+  type CloudAgentServersState,
+} from './cloud-agent-servers'
+import {
   BrowserWindow,
   Menu,
   Tray,
@@ -15,6 +24,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  session,
   shell,
 } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -22,6 +32,8 @@ import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import * as undici from 'undici'
+import type { Dispatcher } from 'undici'
 
 type ServerSource = `manual` | `local-discovery` | `electric-cloud`
 type ServerDesiredState = `connected` | `disconnected`
@@ -34,6 +46,15 @@ type ServerConfig = {
   desiredState: ServerDesiredState
   localRuntimeEnabled: boolean
   headers?: Record<string, string>
+  /**
+   * For `source: 'electric-cloud'` only — the `stream_services.id`
+   * the cloud-agents-server uses to identify this tenant. The
+   * matching agents bearer token lives in `SecretStore` keyed by tenant id
+   * (`cloud-agents-token:<tenantId>`), not in `settings.json`.
+   * The webRequest hook reads both fields to inject auth headers
+   * on outgoing requests targeting this server's URL.
+   */
+  tenantId?: string
 }
 
 type ServerConnectionStatus =
@@ -106,6 +127,14 @@ type DesktopSettings = {
   defaultServerId: string | null
   workingDirectory: string | null
   apiKeysRef: string
+  /**
+   * Onboarding wizard ("Sign in to Electric Cloud" → API keys) gets
+   * surfaced on launch until the user finishes it or explicitly
+   * clicks "Don't show again". Once set, the modal stays hidden even
+   * if the user later signs out / clears keys. Settings → General and
+   * Settings → Account are the recovery paths after that.
+   */
+  onboardingDismissed?: boolean
   /**
    * MCP servers shipped by the desktop app's settings — global to all
    * workspaces, edited via the Settings UI (or by hand in
@@ -242,6 +271,7 @@ const DEV_PRINCIPAL = ((): string | null => {
   return raw
 })()
 const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
+const PRINCIPAL_KEY_PREFIXES = new Set([`user`, `agent`, `service`, `system`])
 
 function mergeHeaders(
   ...sources: Array<Record<string, string> | undefined>
@@ -274,6 +304,20 @@ function runnerOwnerPrincipalFromHeaders(
   }
   if (normalized.has(`authorization`)) return undefined
   return PULL_WAKE_OWNER_PRINCIPAL
+}
+
+function runnerOwnerPrincipalFromUserId(
+  userId: string | null | undefined
+): string | undefined {
+  const trimmed = userId?.trim()
+  if (!trimmed) return undefined
+  if (trimmed.startsWith(`/principal/`)) return trimmed
+  const colon = trimmed.indexOf(`:`)
+  const principalKey =
+    colon > 0 && PRINCIPAL_KEY_PREFIXES.has(trimmed.slice(0, colon))
+      ? trimmed
+      : `user:${trimmed}`
+  return `/principal/${encodeURIComponent(principalKey)}`
 }
 
 /**
@@ -376,6 +420,8 @@ const windowSelections = new Map<number, string | null>()
 const runtimeEntries = new Map<string, RuntimeEntry>()
 const lastMcpSnapshots = new Map<string, RegistrySnapshot>()
 let secretStore: SecretStore | null = null
+let cloudAuth: CloudAuth | null = null
+let cloudAgentServers: CloudAgentServers | null = null
 
 function configureRuntimeEnvironment(): void {
   // Packaged macOS apps can launch with cwd `/`, which makes the agents
@@ -398,6 +444,272 @@ function secretsPath(): string {
 function getSecretStore(): SecretStore {
   if (!secretStore) secretStore = new SecretStore(secretsPath())
   return secretStore
+}
+
+function getCloudAuth(): CloudAuth {
+  if (!cloudAuth) {
+    cloudAuth = new CloudAuth(getSecretStore())
+    cloudAuth.subscribe((next) => {
+      broadcastCloudAuthState(next)
+      // Drive cloud-agent-servers from auth state transitions: start the
+      // shape streams when we have a token, tear them down on sign-out.
+      if (next.status === `signed-in`) {
+        void getCloudAgentServers().start()
+      } else {
+        void getCloudAgentServers().stop()
+      }
+    })
+  }
+  return cloudAuth
+}
+
+function getCloudAgentServers(): CloudAgentServers {
+  if (!cloudAgentServers) {
+    cloudAgentServers = new CloudAgentServers(getCloudAuth(), getSecretStore())
+    cloudAgentServers.subscribe((next) => broadcastCloudAgentServersState(next))
+  }
+  return cloudAgentServers
+}
+
+function broadcastCloudAuthState(next: CloudAuthState): void {
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(`desktop:cloud-auth-state-changed`, next)
+    }
+  }
+}
+
+function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(`desktop:cloud-agent-servers-state-changed`, next)
+    }
+  }
+}
+
+/**
+ * Match a request URL against the user's saved `electric-cloud`
+ * servers by host + path prefix. Cloud URLs are tenant-scoped as
+ * `/services/<tenantId>`, so a single cloud-agents-server host can
+ * serve multiple tenants without us attaching tenant A's token to
+ * tenant B's request.
+ *
+ * Legacy settings may still have a host-only Cloud URL from older
+ * builds. We allow that only when it is the sole possible match for
+ * the origin; otherwise we fail closed until `prepareConnection`
+ * rewrites the saved URL to the tenant-scoped form.
+ */
+function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
+  let parsed: URL
+  try {
+    parsed = new URL(requestUrl)
+  } catch {
+    return null
+  }
+  const hostOnlyMatches: Array<ServerConfig> = []
+  for (const server of settings.servers) {
+    if (server.source !== `electric-cloud`) continue
+    if (!server.tenantId) continue
+    let base: URL
+    try {
+      base = new URL(server.url)
+    } catch {
+      continue
+    }
+    if (base.origin !== parsed.origin) continue
+    const basePath = base.pathname.replace(/\/+$/, ``)
+    if (basePath === ``) {
+      hostOnlyMatches.push(server)
+      continue
+    }
+    if (
+      parsed.pathname === basePath ||
+      parsed.pathname.startsWith(`${basePath}/`)
+    ) {
+      return server
+    }
+  }
+  return hostOnlyMatches.length === 1 ? hostOnlyMatches[0]! : null
+}
+
+/**
+ * Decorate outgoing requests bound for a saved cloud agent server
+ * with `Authorization: Bearer <agents token>` and
+ * `x-electric-service: <tenantId>` headers. Two injection points,
+ * both reading from the same in-memory agents-token map
+ * (`SecretStore`-backed):
+ *
+ *  1. Renderer fetches — Electron's
+ *     `session.webRequest.onBeforeSendHeaders` hook catches anything
+ *     coming out of `webContents.fetch` / shape streams / etc.
+ *  2. Main-process fetches — installed as a global undici dispatcher
+ *     interceptor so `BuiltinAgentsServer`'s outbound calls (entity-
+ *     type registration, runtime → agents-server traffic) and our
+ *     own `checkAgentsServerHealth` all pick up the same auth
+ *     without each call-site needing to know.
+ *
+ * The agents bearer token lives only in the encrypted `SecretStore` + the
+ * in-memory agents-token map — neither the renderer nor
+ * `settings.json` ever sees it.
+ *
+ * Installed once at app launch. Requests not matching a saved cloud
+ * server pass through unchanged.
+ */
+function installCloudAuthHeaderInjection(): void {
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const extra = buildCloudAuthHeaders(details.url)
+    if (!extra) {
+      callback({ requestHeaders: details.requestHeaders })
+      return
+    }
+    callback({
+      requestHeaders: { ...details.requestHeaders, ...extra },
+    })
+  })
+
+  installCloudAuthUndiciInterceptor()
+}
+
+/**
+ * Build the cloud-auth headers to inject on a request to `url`, or
+ * `null` if the URL doesn't target a saved cloud agent server (or we
+ * don't have a stored agents token for it).
+ *
+ * Headers emitted (only when we have the data):
+ *  - `Authorization: Bearer <agents token>` — proves the request is
+ *    authorized for the tenant.
+ *  - `x-electric-service: <tenantId>` — routes to the right tenant.
+ *  - `x-electric-asserted-user-id` / `-email` / `-name` — the cloud
+ *    agents server requires these for runner-targeted dispatch (see
+ *    `assertDispatchPolicyAllowed`). We assert the currently signed-in
+ *    Electric Cloud user. The cloud-agents-server only trusts these
+ *    when `trustAssertedUserHeaders` is enabled in its config, so
+ *    they're harmless to include unconditionally.
+ */
+function buildCloudAuthHeaders(url: string): Record<string, string> | null {
+  const server = findCloudServerForUrl(url)
+  if (!server || !server.tenantId) return null
+  const token = cloudAgentServers?.getAgentsToken(server.tenantId)
+  if (!token) {
+    // Tenant is known but the user has no stored token yet (uncommon —
+    // a manual edit of `settings.json` or a `SecretStore` corruption).
+    // Skip rather than send a half-authenticated request.
+    return null
+  }
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'x-electric-service': server.tenantId,
+  }
+  const cloudAuthState = cloudAuth?.getState()
+  if (cloudAuthState?.userId) {
+    headers[`x-electric-asserted-user-id`] = cloudAuthState.userId
+  }
+  if (cloudAuthState?.email) {
+    headers[`x-electric-asserted-email`] = cloudAuthState.email
+  }
+  if (cloudAuthState?.name) {
+    headers[`x-electric-asserted-name`] = cloudAuthState.name
+  }
+  return headers
+}
+
+/**
+ * Global undici dispatcher interceptor for the main process.
+ *
+ * Electron's `session.webRequest` catches renderer-side fetches but
+ * not Node-side ones. The local agent runtime (`BuiltinAgentsServer`
+ * from `@electric-ax/agents`) makes Node fetches to the connected
+ * agent-server URL when it registers entity types and proxies
+ * runtime traffic. For cloud servers those calls would 401 without
+ * the agents token, so we install a global undici interceptor that
+ * mirrors the renderer hook above and adds the same two headers.
+ *
+ * Matches by full request URL via `findCloudServerForUrl` — same
+ * base-URL prefix logic as the renderer hook, so a single cloud-
+ * agents-server host serving many tenants can't accidentally see
+ * tenant A's token on tenant B's request.
+ */
+function installCloudAuthUndiciInterceptor(): void {
+  const base = undici.getGlobalDispatcher()
+  const composed = base.compose(
+    (dispatch): Dispatcher[`dispatch`] =>
+      (opts, handler) => {
+        const fullUrl = composeRequestUrl(opts.origin, opts.path)
+        const extra = fullUrl ? buildCloudAuthHeaders(fullUrl) : null
+        if (!extra) return dispatch(opts, handler)
+        // undici treats `Authorization` (capitalized) and `authorization`
+        // as the same header but our `mergeUndiciHeaders` keys is
+        // case-sensitive — lower-case the keys we add so a previously
+        // set lower-case `authorization` from the caller gets replaced.
+        const lowered: Record<string, string> = {}
+        for (const [key, value] of Object.entries(extra)) {
+          lowered[key.toLowerCase()] = value
+        }
+        return dispatch(
+          { ...opts, headers: mergeUndiciHeaders(opts.headers, lowered) },
+          handler
+        )
+      }
+  )
+  undici.setGlobalDispatcher(composed)
+}
+
+/**
+ * Best-effort reconstruction of the URL undici is about to request.
+ * `origin` is the parsed `https://host:port` of the dispatch target;
+ * `path` is the request path-and-query. Either can be a string or a
+ * `URL` depending on caller, so we normalize both.
+ */
+function composeRequestUrl(
+  origin: string | URL | null | undefined,
+  path: string | undefined
+): string | null {
+  if (!origin) return null
+  const originStr = typeof origin === `string` ? origin : origin.origin
+  if (!originStr) return null
+  return `${originStr}${path ?? ``}`
+}
+
+/**
+ * Merge a set of header overrides into whatever shape undici handed
+ * us. Undici accepts headers as an object map, an `IncomingHttpHeaders`-
+ * style record, or a flat `[name, value, name, value, …]` array. We
+ * preserve the original shape where possible — overrides win on
+ * case-insensitive name conflicts.
+ */
+function mergeUndiciHeaders(
+  existing: Dispatcher.DispatchOptions[`headers`],
+  overrides: Record<string, string>
+): Record<string, string> {
+  const overrideKeysLower = new Set(
+    Object.keys(overrides).map((key) => key.toLowerCase())
+  )
+  const out: Record<string, string> = {}
+  const pushPair = (name: string, value: string | undefined): void => {
+    if (value === undefined) return
+    if (overrideKeysLower.has(name.toLowerCase())) return
+    out[name] = value
+  }
+  if (Array.isArray(existing)) {
+    for (let i = 0; i + 1 < existing.length; i += 2) {
+      const name = existing[i]
+      const value = existing[i + 1]
+      if (typeof name === `string` && typeof value === `string`) {
+        pushPair(name, value)
+      }
+    }
+  } else if (existing && typeof existing === `object`) {
+    for (const [name, value] of Object.entries(
+      existing as Record<string, string | Array<string> | undefined>
+    )) {
+      if (typeof value === `string`) pushPair(name, value)
+      else if (Array.isArray(value)) pushPair(name, value.join(`, `))
+    }
+  }
+  for (const [name, value] of Object.entries(overrides)) {
+    out[name] = value
+  }
+  return out
 }
 
 function normalizeServer(
@@ -436,6 +748,12 @@ function normalizeServer(
         : (opts.defaultDesiredState ?? `disconnected`)
   const localRuntimeEnabled = maybe.localRuntimeEnabled !== false
   const headers = normalizeHeaderRecord(maybe.headers)
+  const tenantId =
+    source === `electric-cloud` &&
+    typeof maybe.tenantId === `string` &&
+    maybe.tenantId.trim().length > 0
+      ? maybe.tenantId.trim()
+      : undefined
   return {
     id,
     name,
@@ -444,6 +762,7 @@ function normalizeServer(
     desiredState,
     localRuntimeEnabled,
     ...(headers ? { headers } : {}),
+    ...(tenantId ? { tenantId } : {}),
   }
 }
 
@@ -722,6 +1041,7 @@ async function loadSettings(): Promise<void> {
           ? parsed.workingDirectory
           : null,
       apiKeysRef,
+      onboardingDismissed: parsed.onboardingDismissed === true,
       mcp: normalizeMcp(parsed.mcp),
       pullWakeRunnerId,
     }
@@ -1352,11 +1672,22 @@ type AgentsServerHealthResult = { ok: true } | { ok: false; reason: string }
 
 function buildAgentsServerHealthUrl(baseUrl: string): string {
   try {
-    return new URL(`/_electric/health`, baseUrl).toString()
+    return appendPathToServerUrl(baseUrl, `/_electric/health`)
   } catch {
     const trimmed = baseUrl.replace(/\/+$/, ``)
     return `${trimmed}/_electric/health`
   }
+}
+
+function appendPathToServerUrl(baseUrl: string, pathName: string): string {
+  const base = new URL(baseUrl)
+  const basePath =
+    base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
+  const suffix = pathName.startsWith(`/`) ? pathName : `/${pathName}`
+  base.pathname = `${basePath}${suffix}`
+  base.search = ``
+  base.hash = ``
+  return base.toString()
 }
 
 function formatStartupNetworkError(
@@ -1384,6 +1715,9 @@ async function checkAgentsServerHealth(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   const healthUrl = buildAgentsServerHealthUrl(baseUrl)
+  // Auth for cloud-server health checks is added by the global
+  // undici interceptor installed in `installCloudAuthHeaderInjection`
+  // — no per-call-site plumbing needed.
   try {
     const res = await fetch(healthUrl, {
       signal: controller.signal,
@@ -1511,6 +1845,37 @@ async function startRuntime(serverId: string): Promise<void> {
   entry.lastError = null
   refreshDesktopState()
 
+  if (activeServer.source === `electric-cloud`) {
+    if (!activeServer.tenantId) {
+      entry.status = `error`
+      entry.lastError = `Cloud server ${activeServer.name} is missing a tenant id.`
+      refreshDesktopState()
+      return
+    }
+    try {
+      const prepared = await getCloudAgentServers().prepareConnection(
+        activeServer.tenantId
+      )
+      if (prepared.url !== activeServer.url) {
+        activeServer.url = prepared.url
+        await saveSettings()
+      }
+    } catch (err) {
+      const cachedToken = getCloudAgentServers().getAgentsToken(
+        activeServer.tenantId
+      )
+      if (!cachedToken) {
+        entry.status = `error`
+        entry.lastError = `Could not prepare cloud agents token for ${activeServer.name}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+        refreshDesktopState()
+        return
+      }
+      console.warn(`[agents-desktop] cloud agents token refresh failed:`, err)
+    }
+  }
+
   const serverHealth = await checkAgentsServerHealth(activeServer.url, 4_000)
   if (!serverHealth.ok) {
     entry.status = `offline`
@@ -1544,7 +1909,18 @@ async function startRuntime(serverId: string): Promise<void> {
 
   const serverWithPrincipal = injectDevPrincipalHeaders(activeServer)
   const runtimeHeaders = mergeHeaders(serverWithPrincipal.headers)
-  const runnerOwnerPrincipal = runnerOwnerPrincipalFromHeaders(runtimeHeaders)
+  // For `electric-cloud` source servers, the cloud-agents-server
+  // authenticates each request via `x-electric-asserted-user-id`
+  // headers (injected by the undici / webRequest hooks). Register the
+  // runner under that user principal instead of the `local-desktop`
+  // fallback used for unauthenticated local servers.
+  const cloudAuthUserId =
+    activeServer.source === `electric-cloud`
+      ? (cloudAuth?.getState().userId ?? null)
+      : null
+  const runnerOwnerPrincipal =
+    runnerOwnerPrincipalFromUserId(cloudAuthUserId) ??
+    runnerOwnerPrincipalFromHeaders(runtimeHeaders)
   console.info(
     `[agents-desktop] Starting built-in agents runtime for server ${activeServer.url}`
   )
@@ -1581,9 +1957,22 @@ async function startRuntime(serverId: string): Promise<void> {
       label: `Electric Agents Desktop`,
       headers: runtimeHeaders,
       claimHeaders: runtimeHeaders,
-      claimTokenHeader: hasHeader(runtimeHeaders, `authorization`)
-        ? `electric-claim-token`
-        : undefined,
+      // For `electric-cloud` source servers the global undici
+      // interceptor adds `Authorization: Bearer <agents token>` on
+      // every outbound request. If the pull-wake runner default-
+      // stuffed the claim token into that same `authorization`
+      // header, our interceptor would overwrite it and the cloud
+      // server would never see the claim token → wake claim races
+      // would silently drop the new input ("no fresh wake input in
+      // catch-up"). Route the claim token to a separate header so
+      // the two channels don't collide. Local + manual servers keep
+      // the previous behavior (claim token in `authorization` only
+      // when an explicit auth header is present).
+      claimTokenHeader:
+        activeServer.source === `electric-cloud` ||
+        hasHeader(runtimeHeaders, `authorization`)
+          ? `electric-claim-token`
+          : undefined,
     },
   })
   entry.runtime = nextRuntime
@@ -1714,6 +2103,34 @@ async function setApiKeys(next: ApiKeys): Promise<void> {
       .filter((server) => server.desiredState === `connected`)
       .map((server) => restartRuntime(server.id))
   )
+}
+
+/**
+ * Snapshot consumed by the renderer's onboarding wizard. `dismissed`
+ * is the persisted "Don't show again" flag; `hasAnyKey` lets the
+ * wizard skip the API-keys step when keys already exist; `signedIn`
+ * lets it skip the Electric Cloud step when a session is already
+ * restored. The renderer decides whether to render the modal based on
+ * those three bits — the main process doesn't make the policy call.
+ */
+type OnboardingState = {
+  dismissed: boolean
+  hasAnyKey: boolean
+  signedIn: boolean
+}
+
+function getOnboardingState(): OnboardingState {
+  const cloudStatus = cloudAuth?.getState().status
+  return {
+    dismissed: settings.onboardingDismissed === true,
+    hasAnyKey: Boolean(apiKeys.anthropic || apiKeys.openai),
+    signedIn: cloudStatus === `signed-in`,
+  }
+}
+
+async function setOnboardingDismissed(dismissed: boolean): Promise<void> {
+  settings.onboardingDismissed = dismissed
+  await saveSettings()
 }
 
 async function setSelectedServerForWindow(
@@ -1949,6 +2366,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle(`desktop:save-api-keys`, async (_event, keys: ApiKeys) => {
     await setApiKeys(keys)
   })
+  ipcMain.handle(`desktop:get-onboarding-state`, () => getOnboardingState())
+  ipcMain.handle(
+    `desktop:set-onboarding-dismissed`,
+    async (_event, dismissed: boolean) => {
+      await setOnboardingDismissed(Boolean(dismissed))
+    }
+  )
   ipcMain.handle(
     `desktop:get-working-directory`,
     () => settings.workingDirectory
@@ -2037,6 +2461,49 @@ function registerIpcHandlers(): void {
         win.webContents.goForward()
       }
       sendNavigationState(win)
+    }
+  )
+
+  // ── Electric Cloud auth IPC ─────────────────────────────────────
+  // OAuth via dashboard.electric-sql.cloud's CLI flow: we open a child
+  // BrowserWindow, the user signs in with GitHub/Google, the admin-API
+  // 302s to the loopback `cli_port` redirect URI, and `CloudAuth`
+  // intercepts that redirect to capture the JWT. State pushes come
+  // through `desktop:cloud-auth-state-changed` (see broadcaster).
+  ipcMain.handle(`desktop:cloud-auth-state`, () => getCloudAuth().getState())
+  ipcMain.handle(
+    `desktop:cloud-auth-sign-in`,
+    async (event, provider: CloudAuthProvider) => {
+      const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined
+      await getCloudAuth().signIn(provider, parent)
+    }
+  )
+  ipcMain.handle(`desktop:cloud-auth-sign-out`, async () => {
+    await getCloudAuth().signOut()
+  })
+  ipcMain.handle(`desktop:cloud-auth-open-dashboard`, () => {
+    getCloudAuth().openDashboard()
+  })
+
+  // ── Cloud agent servers ─────────────────────────────────────────
+  // The user-scoped shape stream of agent stream services
+  // (`/api/internal/v1/agent-servers`) joined client-side against the
+  // workspaces / projects / environments shapes so the UI can label
+  // each agent server with the workspace → project → environment it
+  // belongs to. Lifecycle is driven from cloud-auth: streams start
+  // when a JWT is available, stop on sign-out.
+  ipcMain.handle(`desktop:cloud-agent-servers-state`, () =>
+    getCloudAgentServers().getState()
+  )
+  // Prepare a URL the renderer can hand to the normal `addServer`
+  // flow: hits the admin-API to mint a per-service agents bearer
+  // token, stores that token in SecretStore, and returns only the
+  // cloud agents base URL + tenant id. The renderer never sees the
+  // user's cloud-auth bearer or the agents token.
+  ipcMain.handle(
+    `desktop:cloud-agent-server-prepare-connection`,
+    async (_event, serviceId: string) => {
+      return await getCloudAgentServers().prepareConnection(serviceId)
     }
   )
 
@@ -2581,6 +3048,19 @@ async function main(): Promise<void> {
   configureRuntimeEnvironment()
   await loadSettings()
   registerIpcHandlers()
+  await getCloudAuth().initialize()
+  // Hydrate the per-tenant agents-token cache from `SecretStore`
+  // BEFORE we install the webRequest hook so a window opening
+  // straight onto a saved cloud server gets the auth headers added.
+  const cloudTenantIds = settings.servers
+    .filter((s) => s.source === `electric-cloud` && s.tenantId)
+    .map((s) => s.tenantId as string)
+  await getCloudAgentServers().hydrateTokens(cloudTenantIds)
+  installCloudAuthHeaderInjection()
+  // Eagerly kick the cloud-agent-servers streams once on boot — the
+  // CloudAuth subscriber handles subsequent sign-in/sign-out edges.
+  // Safe to call when signed-out: `start()` no-ops without a token.
+  void getCloudAgentServers().start()
   nativeTheme.on(`updated`, refreshNativeTitleBars)
 
   app.setAboutPanelOptions({
