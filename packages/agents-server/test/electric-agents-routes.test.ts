@@ -338,6 +338,43 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
     }
   })
 
+  it(`treats prefixed __ds paths as normal stream paths`, async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 204 }))
+    const endRead = vi.fn()
+    const beginClientRead = vi.fn().mockResolvedValue(endRead)
+
+    try {
+      const result = await globalRouter.fetch(
+        createRequest(`GET`, `/v1/stream/__ds/subscriptions/sub-1`),
+        {
+          service: `test`,
+          durableStreamsUrl: `http://durable.local`,
+          entityBridgeManager: {
+            beginClientRead,
+            touchByStreamPath: vi.fn(),
+          },
+          isShuttingDown: () => false,
+        } as unknown as TenantContext
+      )
+
+      expect(result.status).toBe(204)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      const [url, init] = fetchSpy.mock.calls[0]!
+      expect(String(url)).toBe(
+        `http://durable.local/v1/stream/test/v1/stream/__ds/subscriptions/sub-1`
+      )
+      expect(init).toMatchObject({ method: `GET` })
+      expect(beginClientRead).toHaveBeenCalledWith(
+        `/v1/stream/__ds/subscriptions/sub-1`
+      )
+      expect(endRead).toHaveBeenCalledOnce()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it(`uses configured durable streams bearer auth for service-scoped subscription traffic`, async () => {
     const fetchSpy = vi
       .spyOn(globalThis, `fetch`)

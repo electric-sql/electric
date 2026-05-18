@@ -2,6 +2,7 @@ import {
   prefixTenantStreamPath,
   stripTenantStreamPrefix,
 } from './tenant-stream-paths.js'
+import { durableStreamsControlPath } from './durable-streams-control-path.js'
 
 export interface DurableStreamsRoutingInput {
   durableStreamsUrl: string
@@ -30,46 +31,14 @@ function withoutTrailingSlash(pathname: string): string {
   return pathname.replace(/\/+$/, ``) || `/`
 }
 
-function splitControlPath(pathname: string): string | null {
-  const segments = pathname.split(`/`).filter(Boolean)
-  const controlIndex =
-    segments[0] === `__ds`
-      ? 0
-      : segments[0] === `v1` &&
-          segments[1] === `stream` &&
-          segments[2] === `__ds`
-        ? 2
-        : segments[0] === `v1` &&
-            segments[1] === `streams` &&
-            segments[3] === `__ds`
-          ? 3
-          : -1
-  if (controlIndex < 0) return null
-  return `/${segments.slice(controlIndex).join(`/`)}`
-}
-
-function logicalStreamPathFromRequest(
-  requestUrl: string,
-  serviceId: string
-): { incomingUrl: URL; streamPath: string } {
+function logicalStreamPathFromRequest(requestUrl: string): {
+  incomingUrl: URL
+  streamPath: string
+} {
   const incomingUrl = new URL(requestUrl, `http://localhost`)
-  const segments = incomingUrl.pathname.split(`/`).filter(Boolean)
-  if (segments[0] === `v1` && segments[1] === `stream`) {
-    return {
-      incomingUrl,
-      streamPath: segments.length > 2 ? `/${segments.slice(3).join(`/`)}` : `/`,
-    }
-  }
-  if (segments[0] === `v1` && segments[1] === `streams`) {
-    return {
-      incomingUrl,
-      streamPath: segments.length > 2 ? `/${segments.slice(3).join(`/`)}` : `/`,
-    }
-  }
-
   return {
     incomingUrl,
-    streamPath: incomingUrl.pathname || `/${serviceId}`,
+    streamPath: incomingUrl.pathname,
   }
 }
 
@@ -92,7 +61,7 @@ function backendStreamUrl(rootUrl: URL, backendStreamPath: string): URL {
 
 function pathPrefixedControlUrl(input: DurableStreamsRoutingInput): URL {
   const incomingUrl = new URL(input.requestUrl, `http://localhost`)
-  const controlPath = splitControlPath(incomingUrl.pathname)
+  const controlPath = durableStreamsControlPath(incomingUrl.pathname)
   if (!controlPath)
     return removeServiceQuery(appendSearch(incomingUrl, incomingUrl))
   const root = pathPrefixedStreamRootUrl(input)
@@ -133,7 +102,7 @@ function tenantRootBackendUrl(rootUrl: URL, streamPath: string): URL {
 
 function tenantRootControlUrl(input: DurableStreamsRoutingInput): URL {
   const incomingUrl = new URL(input.requestUrl, `http://localhost`)
-  const controlPath = splitControlPath(incomingUrl.pathname)
+  const controlPath = durableStreamsControlPath(incomingUrl.pathname)
   if (!controlPath)
     return removeServiceQuery(appendSearch(incomingUrl, incomingUrl))
   const root = tenantRootStreamRootUrl(input)
@@ -145,8 +114,7 @@ export const pathPrefixedSingleTenantDurableStreamsRoutingAdapter: DurableStream
   {
     streamUrl(input) {
       const { incomingUrl, streamPath } = logicalStreamPathFromRequest(
-        input.requestUrl,
-        input.serviceId
+        input.requestUrl
       )
       const target = backendStreamUrl(
         pathPrefixedStreamRootUrl(input),
@@ -170,8 +138,7 @@ export const tenantRootDurableStreamsRoutingAdapter: DurableStreamsRoutingAdapte
   {
     streamUrl(input) {
       const { incomingUrl, streamPath } = logicalStreamPathFromRequest(
-        input.requestUrl,
-        input.serviceId
+        input.requestUrl
       )
       const target = tenantRootBackendUrl(
         tenantRootStreamRootUrl(input),

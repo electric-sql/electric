@@ -16,6 +16,7 @@ import { validateBody } from './schema.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
 import { forwardFetchRequest } from '../utils/server-utils.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
+import { durableStreamsControlPath } from './durable-streams-control-path.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
@@ -121,32 +122,14 @@ interface SubscriptionProxyRoute {
   streamPath?: string
 }
 
-function controlPathSuffix(pathname: string): string | null {
-  const segments = pathname.split(`/`).filter(Boolean)
-  const controlIndex =
-    segments[0] === `__ds`
-      ? 0
-      : segments[0] === `v1` &&
-          segments[1] === `stream` &&
-          segments[2] === `__ds`
-        ? 2
-        : segments[0] === `v1` &&
-            segments[1] === `streams` &&
-            segments[3] === `__ds`
-          ? 3
-          : -1
-  if (controlIndex < 0) return null
-  return `/${segments.slice(controlIndex).join(`/`)}`
-}
-
 function isReservedControlPath(pathname: string): boolean {
-  return controlPathSuffix(pathname) !== null
+  return durableStreamsControlPath(pathname) !== null
 }
 
 function subscriptionRouteFromPath(
   pathname: string
 ): SubscriptionProxyRoute | null {
-  const routePath = controlPathSuffix(pathname)
+  const routePath = durableStreamsControlPath(pathname)
   if (!routePath) return null
 
   const segments = routePath.split(`/`).filter(Boolean)
