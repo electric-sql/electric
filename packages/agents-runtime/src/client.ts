@@ -10,6 +10,7 @@ export {
 } from './entity-timeline'
 export { db, entities, entity, tagged } from './observation-sources'
 export { appendPathToUrl } from './url'
+export { ELECTRIC_PRINCIPAL_HEADER } from './headers'
 export { buildSections, buildTimelineEntries } from './use-chat'
 
 export type {

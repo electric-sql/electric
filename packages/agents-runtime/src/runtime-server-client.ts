@@ -1,8 +1,7 @@
 import type { EntityTags, TagOperation } from './tags'
+import { ELECTRIC_PRINCIPAL_HEADER } from './headers'
 import { appendPathToUrl } from './url'
 import type { ClaimTokenHeader, HeadersProvider } from './types'
-
-const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
 
 export interface RuntimeServerClientConfig {
   baseUrl: string

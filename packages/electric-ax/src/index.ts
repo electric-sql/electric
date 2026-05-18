@@ -8,7 +8,10 @@ import { Command } from 'commander'
 import { installCompletions, setupCompletions } from './completions.js'
 import { entityApiPath } from './entity-api.js'
 import { ensureAnthropicApiKey } from './prompt-api-key.js'
-import { appendPathToUrl } from '@electric-ax/agents-runtime'
+import {
+  appendPathToUrl,
+  mergeElectricPrincipalHeader,
+} from '@electric-ax/agents-runtime'
 import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,
@@ -129,19 +132,6 @@ function parseElectricAgentsHeaders(
   return Object.keys(normalized).length > 0 ? normalized : undefined
 }
 
-function mergeElectricAgentsPrincipalHeader(
-  headers: Record<string, string> | undefined,
-  principal: string | undefined
-): Record<string, string> | undefined {
-  const merged = new Headers(headers)
-  const trimmedPrincipal = principal?.trim()
-  if (trimmedPrincipal) {
-    merged.set(`electric-principal`, trimmedPrincipal)
-  }
-  const normalized = Object.fromEntries(merged.entries())
-  return Object.keys(normalized).length > 0 ? normalized : undefined
-}
-
 export function getElectricCliEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ElectricCliEnv {
@@ -151,7 +141,7 @@ export function getElectricCliEnv(
     electricAgentsUrl: env.ELECTRIC_AGENTS_URL || DEFAULT_ELECTRIC_AGENTS_URL,
     electricAgentsIdentity:
       explicitIdentity || getDefaultElectricAgentsIdentity(),
-    electricAgentsHeaders: mergeElectricAgentsPrincipalHeader(
+    electricAgentsHeaders: mergeElectricPrincipalHeader(
       headers,
       env.ELECTRIC_AGENTS_PRINCIPAL
     ),
@@ -382,7 +372,8 @@ function fallbackResponseMessage(res: Response): string {
 function stringMessage(value: unknown): string | undefined {
   if (typeof value !== `string`) return undefined
   const trimmed = value.trim()
-  return trimmed || undefined
+  if (trimmed.length === 0) return undefined
+  return trimmed
 }
 
 function errorMessageFromValue(value: unknown): string | undefined {

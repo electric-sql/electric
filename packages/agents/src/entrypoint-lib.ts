@@ -1,4 +1,5 @@
 import { BuiltinAgentsServer } from './server.js'
+import { mergeElectricPrincipalHeader } from '@electric-ax/agents-runtime'
 import type { BuiltinAgentsServerOptions } from './server.js'
 
 type EnvSource = Record<string, string | undefined>
@@ -84,19 +85,6 @@ function parseAdditionalServerHeaders(
   return Object.keys(normalized).length > 0 ? normalized : undefined
 }
 
-function mergePrincipalHeader(
-  headers: Record<string, string> | undefined,
-  principal: string | undefined
-): Record<string, string> | undefined {
-  const merged = new Headers(headers)
-  const trimmedPrincipal = principal?.trim()
-  if (trimmedPrincipal) {
-    merged.set(`electric-principal`, trimmedPrincipal)
-  }
-  const normalized = Object.fromEntries(merged.entries())
-  return Object.keys(normalized).length > 0 ? normalized : undefined
-}
-
 function mergeHeaders(
   ...sources: Array<Record<string, string> | undefined>
 ): Record<string, string> | undefined {
@@ -135,7 +123,7 @@ export function resolveBuiltinAgentsEntrypointOptions(
   )
 
   const serverHeaders = mergeHeaders(
-    mergePrincipalHeader(
+    mergeElectricPrincipalHeader(
       parseAdditionalServerHeaders(env),
       readEnv(env, [`ELECTRIC_AGENTS_PRINCIPAL`])
     )

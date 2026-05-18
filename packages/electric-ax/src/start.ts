@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BuiltinAgentsServer } from '@electric-ax/agents'
-import { appendPathToUrl } from '@electric-ax/agents-runtime'
+import {
+  appendPathToUrl,
+  mergeElectricPrincipalHeader,
+} from '@electric-ax/agents-runtime'
 import { readDotEnvFile, resolveAnthropicApiKey } from './env.js'
 import {
   ELECTRIC_IMAGE_TAG,
@@ -171,24 +174,11 @@ function parseAdditionalServerHeaders(
   return Object.keys(normalized).length > 0 ? normalized : undefined
 }
 
-function mergePrincipalHeader(
-  headers: Record<string, string> | undefined,
-  principal: string | undefined
-): Record<string, string> | undefined {
-  const merged = new Headers(headers)
-  const trimmedPrincipal = principal?.trim()
-  if (trimmedPrincipal) {
-    merged.set(`electric-principal`, trimmedPrincipal)
-  }
-  const normalized = Object.fromEntries(merged.entries())
-  return Object.keys(normalized).length > 0 ? normalized : undefined
-}
-
 function resolveServerHeaders(
   env: NodeJS.ProcessEnv,
   fileEnv: Record<string, string>
 ): Record<string, string> | undefined {
-  return mergePrincipalHeader(
+  return mergeElectricPrincipalHeader(
     parseAdditionalServerHeaders(env, fileEnv),
     readConfigValue(env, fileEnv, [`ELECTRIC_AGENTS_PRINCIPAL`])
   )
