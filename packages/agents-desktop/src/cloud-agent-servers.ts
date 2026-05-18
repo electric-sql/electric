@@ -240,12 +240,13 @@ export class CloudAgentServers {
    * Fetches a per-service principal token via `getTokenForAgents` on the
    * admin-API (authenticated with the user's cloud-auth bearer),
    * stores it in `SecretStore` and the in-memory cache, and returns
-   * a tenant-scoped agents URL + tenant id to the renderer. The token
-   * itself is never sent over IPC and never lands in `settings.json`
+   * an agents URL carrying `?service=<tenantId>` + tenant id to the
+   * renderer. The token itself is never sent over IPC and never lands
+   * in `settings.json`
    * — `main.ts`'s `webRequest.onBeforeSendHeaders` hook reads it
    * from `agentsTokens` to add `Authorization: Bearer <token>` and
    * `x-electric-service: <tenantId>` headers on outbound requests
-   * to this server's URL. The URL includes `/services/<tenantId>` so
+   * to this server's URL. The URL includes `?service=<tenantId>` so
    * multiple Cloud agent servers on the same host still match the
    * correct tenant when the Electron request hooks inspect URLs.
    *
@@ -455,10 +456,7 @@ export class CloudAgentServers {
 
 function cloudAgentServerUrl(serviceId: string): string {
   const base = new URL(getCloudAgentsBaseUrl())
-  const basePath =
-    base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
-  base.pathname = `${basePath}/services/${encodeURIComponent(serviceId)}`
-  base.search = ``
+  base.searchParams.set(`service`, serviceId)
   base.hash = ``
   return base.toString()
 }
