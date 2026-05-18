@@ -18,7 +18,7 @@
 
 - [x] **Step 1: Write the migration SQL**
 
-Existing `owner_user_id` values are key-form strings (e.g., `local-desktop`). The new column expects principal URLs (e.g., `/principal/system%3Alocal-desktop`). Since we have no backwards compatibility, the migration deletes existing runner rows — runners are ephemeral and will re-register on next startup. Must also clean up dependent tables (`consumer_claims` and `entity_dispatch_state`) since there are no FK constraints to cascade the deletes.
+Existing `owner_user_id` values are key-form strings (e.g., `dev-local`). The new column expects principal URLs (e.g., `/principal/system%3Adev-local`). Since we have no backwards compatibility, the migration deletes existing runner rows — runners are ephemeral and will re-register on next startup. Must also clean up dependent tables (`consumer_claims` and `entity_dispatch_state`) since there are no FK constraints to cascade the deletes.
 
 ```sql
 UPDATE consumer_claims SET status = 'expired', updated_at = NOW() WHERE status = 'active' AND runner_id IS NOT NULL;
@@ -1328,7 +1328,7 @@ Replace the previous owner-user constant/env var. No backwards-compat fallback �
 ```ts
 const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
-  `/principal/system%3Alocal-desktop`
+  `/principal/system%3Adev-local`
 ```
 
 Rename the helper function (line 265-274). Do NOT use the `authorization` header as a principal source — that's a bearer token, not a principal identifier. When the request has auth headers, the server middleware extracts `ctx.principal` from them and uses `ctx.principal.url` as the owner. So when only auth is present (no explicit `electric-principal` header), return `undefined` to let the server derive the owner:

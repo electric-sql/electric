@@ -255,7 +255,7 @@ const PULL_WAKE_REGISTER_RUNNER =
       )
 const PULL_WAKE_OWNER_PRINCIPAL =
   process.env.ELECTRIC_DESKTOP_PULL_WAKE_OWNER_PRINCIPAL?.trim() ||
-  `/principal/system%3Alocal-desktop`
+  `/principal/system%3Adev-local`
 const DEV_PRINCIPAL = ((): string | null => {
   const raw = process.env.ELECTRIC_DESKTOP_PRINCIPAL?.trim() || null
   if (!raw) return null
@@ -1912,7 +1912,7 @@ async function startRuntime(serverId: string): Promise<void> {
   // For `electric-cloud` source servers, the cloud-agents-server
   // authenticates each request via `x-electric-asserted-user-id`
   // headers (injected by the undici / webRequest hooks). Register the
-  // runner under that user principal instead of the `local-desktop`
+  // runner under that user principal instead of the dev-local
   // fallback used for unauthenticated local servers.
   const cloudAuthUserId =
     activeServer.source === `electric-cloud`
