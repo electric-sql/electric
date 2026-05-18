@@ -471,15 +471,16 @@ function broadcastCloudAgentServersState(next: CloudAgentServersState): void {
 
 /**
  * Match a request URL against the user's saved `electric-cloud`
- * servers by host + path prefix. Cloud URLs are tenant-scoped as
- * `/services/<tenantId>`, so a single cloud-agents-server host can
+ * servers by host + base path + `service` query marker. Cloud URLs
+ * carry `?service=<tenantId>` so a single cloud-agents-server host can
  * serve multiple tenants without us attaching tenant A's token to
  * tenant B's request.
  *
- * Legacy settings may still have a host-only Cloud URL from older
- * builds. We allow that only when it is the sole possible match for
- * the origin; otherwise we fail closed until `prepareConnection`
- * rewrites the saved URL to the tenant-scoped form.
+ * Legacy settings may still have a host-only Cloud URL. We allow a
+ * request without a `service` query marker only when it is the sole
+ * possible match for the origin + base path; otherwise we fail closed
+ * until `prepareConnection` rewrites the saved URL to include the
+ * service marker.
  */
 function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
   let parsed: URL
@@ -488,7 +489,8 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
   } catch {
     return null
   }
-  const hostOnlyMatches: Array<ServerConfig> = []
+  const fallbackMatches: Array<ServerConfig> = []
+  const requestedService = parsed.searchParams.get(`service`)
   for (const server of settings.servers) {
     if (server.source !== `electric-cloud`) continue
     if (!server.tenantId) continue
@@ -500,18 +502,20 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
     }
     if (base.origin !== parsed.origin) continue
     const basePath = base.pathname.replace(/\/+$/, ``)
-    if (basePath === ``) {
-      hostOnlyMatches.push(server)
+    if (
+      basePath !== `` &&
+      parsed.pathname !== basePath &&
+      !parsed.pathname.startsWith(`${basePath}/`)
+    ) {
       continue
     }
-    if (
-      parsed.pathname === basePath ||
-      parsed.pathname.startsWith(`${basePath}/`)
-    ) {
-      return server
+    if (requestedService) {
+      if (requestedService === server.tenantId) return server
+      continue
     }
+    fallbackMatches.push(server)
   }
-  return hostOnlyMatches.length === 1 ? hostOnlyMatches[0]! : null
+  return fallbackMatches.length === 1 ? fallbackMatches[0]! : null
 }
 
 /**
@@ -607,7 +611,7 @@ function buildCloudAuthHeaders(url: string): Record<string, string> | null {
  * mirrors the renderer hook above and adds the same two headers.
  *
  * Matches by full request URL via `findCloudServerForUrl` — same
- * base-URL prefix logic as the renderer hook, so a single cloud-
+ * `service` query marker as the renderer hook, so a single cloud-
  * agents-server host serving many tenants can't accidentally see
  * tenant A's token on tenant B's request.
  */
@@ -1663,13 +1667,23 @@ function buildAgentsServerHealthUrl(baseUrl: string): string {
 
 function appendPathToServerUrl(baseUrl: string, pathName: string): string {
   const base = new URL(baseUrl)
+  const pathUrl = new URL(pathName, `http://electric-agents.local`)
   const basePath =
     base.pathname === `/` ? `` : base.pathname.replace(/\/+$/, ``)
-  const suffix = pathName.startsWith(`/`) ? pathName : `/${pathName}`
-  base.pathname = `${basePath}${suffix}`
-  base.search = ``
-  base.hash = ``
-  return base.toString()
+  const suffix = pathUrl.pathname.startsWith(`/`)
+    ? pathUrl.pathname
+    : `/${pathUrl.pathname}`
+  const target = new URL(base)
+  target.pathname = `${basePath}${suffix}`
+  target.search = ``
+  target.hash = pathUrl.hash
+  base.searchParams.forEach((value, key) => {
+    target.searchParams.append(key, value)
+  })
+  pathUrl.searchParams.forEach((value, key) => {
+    target.searchParams.append(key, value)
+  })
+  return target.toString()
 }
 
 function formatStartupNetworkError(
