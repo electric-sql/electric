@@ -54,7 +54,7 @@ interface ClaimCallbackResponse {
   claimToken?: string
   token?: string
   writeToken?: string
-  error?: { code: string }
+  error?: { code?: string; message?: string }
 }
 
 interface RawClaimCallbackResponse extends Omit<ClaimCallbackResponse, `ok`> {
@@ -143,6 +143,17 @@ function applyClaimTokenHeader(
     claimTokenHeader === `both`
   ) {
     headers.set(`electric-claim-token`, token)
+  }
+}
+
+function parseClaimCallbackResponseBody(
+  body: string
+): RawClaimCallbackResponse {
+  if (!body) return {}
+  try {
+    return JSON.parse(body) as RawClaimCallbackResponse
+  } catch {
+    return { error: { message: `Non-JSON claim callback response` } }
   }
 }
 
@@ -297,7 +308,7 @@ function createInFlightTracker() {
   }
 }
 
-export async function processWebhookWake(
+export async function processWake(
   notification: WebhookNotification,
   config: ProcessWakeConfig
 ): Promise<WakeResult | null> {
@@ -327,6 +338,8 @@ export async function processWebhookWake(
   }
   const serverHeaders = await resolveHeadersProvider(config.claimHeaders)
   const debugWakeTypes = process.env.ELECTRIC_AGENTS_DEBUG_WAKE_TYPES === `1`
+  let claimCallbackStatus: number | null = null
+  let claimCallbackResponseBody = ``
 
   if (!typeName) {
     // Don't ack — let the server's own timeout reclaim the wake.
@@ -814,7 +827,11 @@ export async function processWebhookWake(
         })
       )
       .then(async (response) => {
-        const rawClaimData = (await response.json()) as RawClaimCallbackResponse
+        claimCallbackStatus = response.status
+        claimCallbackResponseBody = await response.text()
+        const rawClaimData = parseClaimCallbackResponseBody(
+          claimCallbackResponseBody
+        )
         claimData = {
           ...rawClaimData,
           ok:
@@ -825,6 +842,13 @@ export async function processWebhookWake(
         if (claimData.claimToken) activeClaimToken = claimData.claimToken
         if (claimData.token) activeClaimToken = claimData.token
         claimMs = +(performance.now() - claimT0).toFixed(2)
+        if (!claimData.ok) {
+          const logClaimCallbackReturned =
+            response.status === 401 ? log.error : log.warn
+          logClaimCallbackReturned(
+            `claim callback returned status=${response.status} ok=false claimMs=${claimMs} hasWriteToken=${Boolean(claimData.writeToken)} errorCode=${claimData.error?.code ?? `(none)`} errorMessage=${claimData.error?.message ?? `(none)`} callback=${callback} responseBody=${claimCallbackResponseBody || `(empty)`}`
+          )
+        }
         return claimData
       })
 
@@ -838,7 +862,14 @@ export async function processWebhookWake(
       lastCatchUpOffset = db.offset
     }
 
-    if (!claimed.ok) return null
+    if (!claimed.ok) {
+      const logClaimCallbackRejected =
+        claimCallbackStatus === 401 ? log.error : log.warn
+      logClaimCallbackRejected(
+        `claim callback rejected wake status=${claimCallbackStatus ?? `(unknown)`} errorCode=${claimed.error?.code ?? `(none)`} errorMessage=${claimed.error?.message ?? `(none)`} callback=${callback} responseBody=${claimCallbackResponseBody || `(empty)`}`
+      )
+      return null
+    }
     claimedWake = true
     writeToken = claimed.writeToken ?? ``
 
@@ -1819,8 +1850,6 @@ export async function processWebhookWake(
 
   return result
 }
-
-export const processWake: typeof processWebhookWake = processWebhookWake
 
 async function sendDone(
   callback: string,

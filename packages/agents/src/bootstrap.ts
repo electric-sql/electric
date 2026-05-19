@@ -143,7 +143,7 @@ export async function createBuiltinAgentHandler(
     subscriptionPathForType: (name) => `/${name}/*/main`,
     defaultDispatchPolicyForType,
     serverHeaders,
-    idleTimeout: 5_000,
+    idleTimeout: 5 * 60_000,
     createElectricTools,
     publicUrl,
     name: runtimeName ?? `builtin-agents`,

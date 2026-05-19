@@ -48,6 +48,7 @@ import { AppearancePage } from './components/settings/pages/AppearancePage'
 import { CredentialsPage } from './components/settings/pages/CredentialsPage'
 import { ServersPage } from './components/settings/pages/ServersPage'
 import { McpServersPage } from './components/settings/pages/McpServersPage'
+import { LocalRuntimePage } from './components/settings/pages/LocalRuntimePage'
 import styles from './router.module.css'
 
 const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
@@ -56,6 +57,7 @@ const SETTINGS_CATEGORY_IDS: ReadonlyArray<SettingsCategoryId> = [
   `servers`,
   `credentials`,
   `appearance`,
+  `local-runtime`,
   `mcp-servers`,
 ]
 
@@ -430,6 +432,8 @@ function SettingsCategoryPage(): React.ReactElement {
       return <ServersPage />
     case `credentials`:
       return <CredentialsPage />
+    case `local-runtime`:
+      return <LocalRuntimePage />
     case `mcp-servers`:
       return <McpServersPage />
     case `general`:

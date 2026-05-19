@@ -14,8 +14,6 @@ export interface StreamClientOptions {
   bearer?: DurableStreamsBearerProvider
 }
 
-type DurableStreamsUrlScope = `service` | `stream-root`
-
 export interface StreamAppendResult {
   offset: string
 }
@@ -32,15 +30,6 @@ export interface StreamReadResult {
 export interface WaitForMessagesResult {
   messages: Array<StreamMessage>
   timedOut: boolean
-}
-
-export interface ConsumerStateResponse {
-  state: string
-  wake_id?: string | null
-  webhook?: {
-    wake_id?: string | null
-    subscription_id?: string
-  }
 }
 
 export interface SubscriptionStreamInfo {
@@ -131,6 +120,16 @@ export async function applyDurableStreamsBearer(
   }
 }
 
+function appendPathToBaseUrl(baseUrl: string, path: string): string {
+  const url = new URL(baseUrl)
+  const basePath = url.pathname.replace(/\/+$/, ``)
+  const childPath = path.replace(/^\/+/, ``)
+  url.pathname = childPath
+    ? `${basePath === `/` ? `` : basePath}/${childPath}`
+    : basePath || `/`
+  return url.toString().replace(/\/+$/, ``)
+}
+
 function durableStreamsBearerHeaders(
   bearer: DurableStreamsBearerProvider | undefined
 ): HeadersRecord | undefined {
@@ -139,33 +138,6 @@ function durableStreamsBearerHeaders(
     authorization: async () =>
       (await resolveDurableStreamsBearer(bearer)) ?? ``,
   }
-}
-
-export function durableStreamsServiceUrl(
-  baseUrl: string,
-  serviceId: string,
-  options: { scope?: DurableStreamsUrlScope } = {}
-): string {
-  const url = new URL(baseUrl)
-  if (/\/v1\/streams\/[^/]+\/?$/.test(url.pathname)) {
-    return baseUrl.replace(/\/+$/, ``)
-  }
-  if (/\/v1\/stream\/[^/]+\/?$/.test(url.pathname)) {
-    return baseUrl.replace(/\/+$/, ``)
-  }
-  const scope = options.scope ?? `service`
-  const encodedServiceId = encodeURIComponent(serviceId)
-  const path = url.pathname.replace(/\/+$/, ``) || `/`
-  if (path.endsWith(`/v1/streams`)) {
-    url.pathname = `${path}/${encodedServiceId}`
-  } else if (path.endsWith(`/v1/stream`)) {
-    url.pathname = scope === `service` ? `${path}/${encodedServiceId}` : path
-  } else if (scope === `stream-root`) {
-    url.pathname = `${path === `/` ? `` : path}/v1/stream`
-  } else {
-    url.pathname = `${path === `/` ? `` : path}/v1/stream/${encodedServiceId}`
-  }
-  return url.toString().replace(/\/+$/, ``)
 }
 
 function isNotFoundError(err: unknown): boolean {
@@ -201,7 +173,7 @@ export class StreamClient {
   ) {}
 
   private streamUrl(path: string): string {
-    return `${this.baseUrl}${path}`
+    return appendPathToBaseUrl(this.baseUrl, path)
   }
 
   private streamHeaders(): HeadersRecord | undefined {
@@ -228,9 +200,10 @@ export class StreamClient {
   }
 
   private subscriptionUrl(subscriptionId: string): string {
-    const url = new URL(this.baseUrl)
-    url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
-    return url.toString()
+    return appendPathToBaseUrl(
+      this.baseUrl,
+      `/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
+    )
   }
 
   private subscriptionChildUrl(
@@ -270,7 +243,7 @@ export class StreamClient {
       })
       const headers: Record<string, string> = {
         'content-type': `application/json`,
-        'Stream-Forked-From': sourcePath,
+        'Stream-Forked-From': new URL(this.streamUrl(sourcePath)).pathname,
       }
       injectTraceHeaders(headers)
 
@@ -814,21 +787,5 @@ export class StreamClient {
     return this.subscriptionResponseBody(
       JSON.parse(text) as SubscriptionResponse
     )
-  }
-
-  async getConsumerState(
-    consumerId: string
-  ): Promise<ConsumerStateResponse | null> {
-    const res = await fetch(
-      `${this.baseUrl}/consumers/${encodeURIComponent(consumerId)}`,
-      { method: `GET`, headers: await this.requestHeaders() }
-    )
-    if (res.status === 404) return null
-    if (!res.ok) {
-      throw new Error(
-        `Consumer query failed: ${res.status} ${await res.text()}`
-      )
-    }
-    return res.json() as Promise<ConsumerStateResponse>
   }
 }

@@ -11,7 +11,7 @@ import {
 import { SchemaValidator } from './electric-agents/schema-validator.js'
 import { serverLog } from './utils/log.js'
 import { isPermanentElectricAgentsError } from './scheduler.js'
-import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
+import { StreamClient } from './stream-client.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import type { EntityBridgeCoordinator } from './entity-bridge-manager.js'
@@ -63,12 +63,9 @@ export class ElectricAgentsTenantRuntime {
     if (options.streamClient) {
       this.streamClient = options.streamClient
     } else if (options.durableStreamsUrl) {
-      this.streamClient = new StreamClient(
-        durableStreamsServiceUrl(options.durableStreamsUrl, this.serviceId, {
-          scope: `stream-root`,
-        }),
-        { bearer: options.durableStreamsBearer }
-      )
+      this.streamClient = new StreamClient(options.durableStreamsUrl, {
+        bearer: options.durableStreamsBearer,
+      })
     } else {
       throw new Error(`Either durableStreamsUrl or streamClient is required`)
     }

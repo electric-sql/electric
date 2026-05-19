@@ -4,7 +4,7 @@ import { EntityBridgeManager } from './entity-bridge-manager.js'
 import { serverLog } from './utils/log.js'
 import { ElectricAgentsTenantRuntime } from './runtime.js'
 import { Scheduler } from './scheduler.js'
-import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
+import { StreamClient } from './stream-client.js'
 import { TagStreamOutboxDrainer } from './tag-stream-outbox-drainer.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import { WakeRegistry } from './wake-registry.js'
@@ -57,12 +57,9 @@ export async function startStandaloneAgentsRuntime(
   const streamClient =
     options.streamClient ??
     (options.durableStreamsUrl
-      ? new StreamClient(
-          durableStreamsServiceUrl(options.durableStreamsUrl, serviceId, {
-            scope: `stream-root`,
-          }),
-          { bearer: options.durableStreamsBearer }
-        )
+      ? new StreamClient(options.durableStreamsUrl, {
+          bearer: options.durableStreamsBearer,
+        })
       : undefined)
   if (!streamClient) {
     throw new Error(`Either durableStreamsUrl or streamClient is required`)

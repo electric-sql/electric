@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getPrincipalFromRequest,
+  parsePrincipalInput,
+  parsePrincipalUrl,
   parsePrincipalKey,
-  principalKeyFromUrl,
   principalUrl,
 } from '../src/principal.js'
 
@@ -19,7 +21,7 @@ describe(`principal parser`, () => {
       const url = `/principal/${encodeURIComponent(key)}`
       expect(principal.url).toBe(url)
       expect(principalUrl(key)).toBe(url)
-      expect(principalKeyFromUrl(url)).toBe(key)
+      expect(parsePrincipalUrl(url)?.key).toBe(key)
     })
   }
 
@@ -32,9 +34,18 @@ describe(`principal parser`, () => {
   it(`encodes URL-unsafe principal ids canonically`, () => {
     const principal = parsePrincipalKey(`user:alice@example.com`)
     expect(principal.url).toBe(`/principal/user%3Aalice%40example.com`)
-    expect(principalKeyFromUrl(principal.url)).toBe(`user:alice@example.com`)
-    expect(principalKeyFromUrl(`/principal/user:alice@example.com`)).toBe(
+    expect(parsePrincipalUrl(principal.url)?.key).toBe(`user:alice@example.com`)
+    expect(parsePrincipalUrl(`/principal/user:alice@example.com`)?.key).toBe(
       `user:alice@example.com`
+    )
+  })
+
+  it(`parses principal keys and URLs through one canonical input parser`, () => {
+    expect(parsePrincipalInput(`user:alice@example.com`)?.url).toBe(
+      `/principal/user%3Aalice%40example.com`
+    )
+    expect(parsePrincipalInput(`/principal/user:alice@example.com`)?.url).toBe(
+      `/principal/user%3Aalice%40example.com`
     )
   })
 
@@ -42,5 +53,21 @@ describe(`principal parser`, () => {
     for (const key of [`userkyle`, `user:`, `user:/kyle`, `admin:kyle`]) {
       expect(() => parsePrincipalKey(key)).toThrow()
     }
+  })
+
+  it(`ignores malformed principal request headers`, () => {
+    const request = new Request(`http://server`, {
+      headers: { 'electric-principal': `not-a-principal` },
+    })
+
+    expect(getPrincipalFromRequest(request)).toBeNull()
+  })
+
+  it(`accepts canonical principal URLs in request headers`, () => {
+    const request = new Request(`http://server`, {
+      headers: { 'electric-principal': `/principal/user%3Akyle` },
+    })
+
+    expect(getPrincipalFromRequest(request)?.key).toBe(`user:kyle`)
   })
 })

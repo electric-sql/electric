@@ -267,7 +267,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`PUT`, `/_electric/shared-state/board-1`),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local/v1/stream/test`,
+          durableStreamsUrl: `http://durable.local/custom/ds-prefix`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
       )
@@ -276,7 +276,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(fetchSpy).toHaveBeenCalledOnce()
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream/test/_electric/shared-state/board-1`
+        `http://durable.local/custom/ds-prefix/_electric/shared-state/board-1`
       )
       expect(init).toMatchObject({ method: `PUT` })
     } finally {
@@ -294,7 +294,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         createRequest(`GET`, `/__ds/subscriptions/sub-1`),
         {
           service: `test`,
-          durableStreamsUrl: `http://durable.local/v1/stream/test`,
+          durableStreamsUrl: `http://durable.local/custom/ds-prefix`,
           isShuttingDown: () => false,
         } as unknown as TenantContext
       )
@@ -303,7 +303,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(fetchSpy).toHaveBeenCalledOnce()
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream/test/__ds/subscriptions/sub-1`
+        `http://durable.local/custom/ds-prefix/__ds/subscriptions/sub-1`
       )
       expect(init).toMatchObject({ method: `GET` })
     } finally {

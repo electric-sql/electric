@@ -8,6 +8,7 @@ import {
   ErrCodeUnauthorized,
 } from '../electric-agents-types.js'
 import { runnerWakeStream } from '../entity-registry.js'
+import { DurableStreamsSubscriptionError } from '../stream-client.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
 import { serverLog } from '../utils/log.js'
 import type {
@@ -16,6 +17,9 @@ import type {
   ElectricAgentsEntity,
 } from '../electric-agents-types.js'
 import type { TenantContext } from './context.js'
+import type { SubscriptionCreateInput } from '../stream-client.js'
+
+const linkedDispatchSubscriptions = new WeakMap<object, Set<string>>()
 
 export function subscriptionIdForDispatchTarget(
   target: DispatchTarget
@@ -31,7 +35,7 @@ function subscriptionIdForEntityDispatchTarget(
   entityUrl: string
 ): string {
   const base = subscriptionIdForDispatchTarget(target)
-  if (!target.subscription_id) return base
+  if (!target.subscription_id && target.type !== `runner`) return base
   const digest = createHash(`sha256`).update(entityUrl).digest(`hex`)
   return `${base}:${digest.slice(0, 16)}`
 }
@@ -109,12 +113,92 @@ function sameDispatchDestination(
   return false
 }
 
+function subscriptionHasStream(
+  ctx: TenantContext,
+  existing: { streams?: Array<string | { path?: string }> },
+  streamPath: string
+): boolean {
+  const normalizedStream = streamPath.replace(/^\/+/, ``)
+  const backendStream = `${ctx.service}/${normalizedStream}`
+  return (
+    existing.streams?.some((stream) => {
+      const path = typeof stream === `string` ? stream : stream.path
+      if (!path) return false
+      const normalized = path.replace(/^\/+/, ``)
+      return normalized === normalizedStream || normalized === backendStream
+    }) ?? false
+  )
+}
+
+function dispatchLinkCacheKey(
+  ctx: TenantContext,
+  subscriptionId: string,
+  streamPath: string
+): string {
+  return `${ctx.service}:${subscriptionId}:${streamPath}`
+}
+
+function getDispatchLinkCache(ctx: TenantContext): Set<string> {
+  let cache = linkedDispatchSubscriptions.get(ctx.streamClient)
+  if (!cache) {
+    cache = new Set()
+    linkedDispatchSubscriptions.set(ctx.streamClient, cache)
+  }
+  return cache
+}
+
+function isSubscriptionAlreadyExistsError(err: unknown): boolean {
+  if (!(err instanceof DurableStreamsSubscriptionError)) return false
+  if (err.status === 409) return true
+  return (
+    err.code === `SUBSCRIPTION_ALREADY_EXISTS` ||
+    err.code === `ALREADY_EXISTS` ||
+    /already exists/i.test(err.errorMessage ?? err.body ?? err.message)
+  )
+}
+
+async function ensureSubscriptionIncludesStream(
+  ctx: TenantContext,
+  subscriptionId: string,
+  streamPath: string,
+  input: SubscriptionCreateInput,
+  existing: { streams?: Array<string | { path?: string }> } | null
+): Promise<void> {
+  if (!existing) {
+    try {
+      await ctx.streamClient.putSubscription(subscriptionId, input)
+      return
+    } catch (err) {
+      if (!isSubscriptionAlreadyExistsError(err)) throw err
+      existing = await ctx.streamClient.getSubscription(subscriptionId)
+      if (!existing) {
+        serverLog.warn(
+          `[dispatch-policy] subscription create raced with existing subscription but it could not be read`,
+          { subscriptionId, stream: streamPath }
+        )
+        return
+      }
+    }
+  }
+
+  if (!subscriptionHasStream(ctx, existing, streamPath)) {
+    await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
+  }
+}
+
 export async function assertDispatchPolicyAllowed(
   ctx: TenantContext,
   policy: DispatchPolicy | undefined
 ): Promise<void> {
   const target = policy?.targets[0]
   if (!target || target.type !== `runner`) return
+  if (!ctx.principal) {
+    throw new ElectricAgentsError(
+      ErrCodeUnauthorized,
+      `Runner dispatch requires an authenticated owner`,
+      401
+    )
+  }
 
   const runner = await ctx.entityManager.registry.getRunner(target.runnerId)
   if (!runner) {
@@ -124,7 +208,7 @@ export async function assertDispatchPolicyAllowed(
       404
     )
   }
-  if (ctx.principal && runner.owner_user_id !== ctx.principal.key) {
+  if (runner.owner_principal !== ctx.principal.url) {
     throw new ElectricAgentsError(
       ErrCodeUnauthorized,
       `Runner dispatch requires the authenticated owner`,
@@ -143,7 +227,19 @@ export async function linkEntityDispatchSubscription(
   )
   const target = dispatchPolicy?.targets[0]
   if (!target) return
-  await linkStreamToTargetSubscription(ctx, target, entity)
+  const subscriptionId = subscriptionIdForEntityDispatchTarget(
+    target,
+    entity.url
+  )
+  const cacheKey = dispatchLinkCacheKey(
+    ctx,
+    subscriptionId,
+    entity.streams.main
+  )
+  const cache = getDispatchLinkCache(ctx)
+  if (cache.has(cacheKey)) return
+  await linkStreamToTargetSubscription(ctx, target, entity, subscriptionId)
+  cache.add(cacheKey)
 }
 
 export async function unlinkEntityDispatchSubscription(
@@ -160,6 +256,9 @@ export async function unlinkEntityDispatchSubscription(
     target,
     entity.url
   )
+  getDispatchLinkCache(ctx).delete(
+    dispatchLinkCacheKey(ctx, subscriptionId, entity.streams.main)
+  )
   await ctx.streamClient
     .removeSubscriptionStream(subscriptionId, entity.streams.main)
     .catch((err) => {
@@ -174,13 +273,13 @@ export async function unlinkEntityDispatchSubscription(
 async function linkStreamToTargetSubscription(
   ctx: TenantContext,
   target: DispatchTarget,
-  entity: ElectricAgentsEntity
+  entity: ElectricAgentsEntity,
+  subscriptionId: string
 ): Promise<void> {
   const streamPath = entity.streams.main
-  const subscriptionId = subscriptionIdForEntityDispatchTarget(
-    target,
-    entity.url
-  )
+  await ctx.streamClient.ensure(streamPath, {
+    contentType: `application/json`,
+  })
   const existing = await ctx.streamClient.getSubscription(subscriptionId)
 
   if (target.type === `runner`) {
@@ -196,16 +295,18 @@ async function linkStreamToTargetSubscription(
     await ctx.streamClient.ensure(wakeStream, {
       contentType: `application/json`,
     })
-    if (!existing) {
-      await ctx.streamClient.putSubscription(subscriptionId, {
+    await ensureSubscriptionIncludesStream(
+      ctx,
+      subscriptionId,
+      streamPath,
+      {
         type: `pull-wake`,
         streams: [streamPath],
         wake_stream: wakeStream,
         description: `Electric Agents runner ${target.runnerId}`,
-      })
-      return
-    }
-    await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
+      },
+      existing
+    )
     return
   }
 
@@ -221,16 +322,18 @@ async function linkStreamToTargetSubscription(
     ctx.publicUrl,
     `/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
   )
-  if (!existing) {
-    await ctx.streamClient.putSubscription(subscriptionId, {
+  await ensureSubscriptionIncludesStream(
+    ctx,
+    subscriptionId,
+    streamPath,
+    {
       type: `webhook`,
       streams: [streamPath],
       webhook: { url: forwardUrl },
       description: `Electric Agents webhook ${subscriptionId}`,
-    })
-  } else {
-    await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
-  }
+    },
+    existing
+  )
   await ctx.pgDb
     .insert(subscriptionWebhooks)
     .values({

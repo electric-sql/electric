@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { StreamClient, durableStreamsServiceUrl } from '../src/stream-client'
+import { StreamClient } from '../src/stream-client'
 
 const {
   appendMock,
@@ -97,13 +97,15 @@ describe(`StreamClient`, () => {
     await expect(client.exists(`/_cron/test`)).rejects.toBe(error)
   })
 
-  it(`createSubscription uses the reserved __ds subscription contract`, async () => {
+  it(`createSubscription appends reserved __ds control paths to the opaque backend URL`, async () => {
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
       new Response(JSON.stringify({ subscription_id: `sub-1` }), {
         headers: { 'content-type': `application/json` },
       })
     )
-    const client = new StreamClient(`http://127.0.0.1:4545/v1/stream/tenant-a`)
+    const client = new StreamClient(
+      `http://127.0.0.1:4545/custom/ds-prefix?tenant=tenant-a`
+    )
 
     try {
       await client.createSubscription(
@@ -114,7 +116,7 @@ describe(`StreamClient`, () => {
       )
 
       expect(fetchMock).toHaveBeenCalledWith(
-        `http://127.0.0.1:4545/v1/stream/tenant-a/__ds/subscriptions/sub-1`,
+        `http://127.0.0.1:4545/custom/ds-prefix/__ds/subscriptions/sub-1?tenant=tenant-a`,
         expect.objectContaining({ method: `PUT` })
       )
       const [, init] = fetchMock.mock.calls[0]!
@@ -243,31 +245,5 @@ describe(`StreamClient`, () => {
     } finally {
       fetchMock.mockRestore()
     }
-  })
-})
-
-describe(`durableStreamsServiceUrl`, () => {
-  it(`derives a single-tenant stream root from a bare server origin`, () => {
-    expect(
-      durableStreamsServiceUrl(`http://127.0.0.1:4545`, `tenant-a`, {
-        scope: `stream-root`,
-      })
-    ).toBe(`http://127.0.0.1:4545/v1/stream`)
-  })
-
-  it(`derives a service-scoped stream root for host tenant registrations`, () => {
-    expect(durableStreamsServiceUrl(`http://127.0.0.1:4545`, `tenant-a`)).toBe(
-      `http://127.0.0.1:4545/v1/stream/tenant-a`
-    )
-  })
-
-  it(`preserves explicitly scoped stream roots`, () => {
-    expect(
-      durableStreamsServiceUrl(
-        `https://streams.test/v1/streams/tenant-a`,
-        `tenant-a`,
-        { scope: `stream-root` }
-      )
-    ).toBe(`https://streams.test/v1/streams/tenant-a`)
   })
 })

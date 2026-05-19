@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getCronStreamPath } from '@electric-ax/agents-runtime'
 import { DurableStreamTestServer } from '@durable-streams/server'
 import { ElectricAgentsServer } from '../src/server'
-import { readStreamEvents, waitFor } from './test-utils'
+import {
+  durableStreamTestServerUrl,
+  readStreamEvents,
+  waitFor,
+} from './test-utils'
 import {
   TEST_ELECTRIC_URL,
   TEST_POSTGRES_URL,
@@ -17,7 +21,7 @@ describe(`Scheduler Integration`, () => {
 
   async function startElectricAgentsServer(): Promise<void> {
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: TEST_ELECTRIC_URL,

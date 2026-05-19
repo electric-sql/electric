@@ -15,11 +15,11 @@ function request(method: string, path: string, body?: unknown): Request {
 function runner(overrides: Record<string, unknown> = {}) {
   return {
     id: `runner-1`,
-    owner_user_id: `user:owner@example.com`,
+    owner_principal: `/principal/user%3Aowner%40example.com`,
     label: `Local runner`,
-    kind: `local`,
-    admin_status: `enabled`,
-    liveness: `offline`,
+    kind: `local` as const,
+    admin_status: `enabled` as const,
+    liveness: `offline` as const,
     wake_stream: `/runners/runner-1/wake`,
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
@@ -32,7 +32,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
     createRunner: vi.fn(async (input) =>
       runner({
         id: input.id,
-        owner_user_id: input.ownerUserId,
+        owner_principal: input.ownerPrincipal,
         label: input.label,
         wake_stream: input.wakeStream ?? `/runners/${input.id}/wake`,
       })
@@ -48,6 +48,13 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
     getEntityByStream: vi.fn(),
     materializeActiveClaim: vi.fn(),
     updateStatus: vi.fn(),
+    getActiveClaimsForRunner: vi.fn(async () => []),
+    getRunnerDiagnostics: vi.fn(async () => null),
+    getDispatchStatsForRunner: vi.fn(async () => ({
+      entities_with_active_claim: 0,
+      entities_with_outstanding_wake: 0,
+      entities_with_pending_work: 0,
+    })),
   }
   const insertChain = {
     values: vi.fn(() => ({
@@ -60,7 +67,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       kind: `user`,
       id: `owner@example.com`,
       key: `user:owner@example.com`,
-      url: `/principal/user:owner@example.com`,
+      url: `/principal/user%3Aowner%40example.com`,
     },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
@@ -86,7 +93,7 @@ describe(`runner routes`, () => {
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners`, {
         id: `runner-1`,
-        owner_user_id: `other@example.com`,
+        owner_principal: `/principal/user%3Aother%40example.com`,
         label: `Local runner`,
       }),
       buildContext({
@@ -94,7 +101,7 @@ describe(`runner routes`, () => {
           kind: `user`,
           id: `owner@example.com`,
           key: `user:owner@example.com`,
-          url: `/principal/user:owner@example.com`,
+          url: `/principal/user%3Aowner%40example.com`,
         },
       })
     )
@@ -108,14 +115,14 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
 
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners`, {
         id: `runner-1`,
-        owner_user_id: `user:owner@example.com`,
+        owner_principal: `/principal/user%3Aowner%40example.com`,
         label: `Local runner`,
       }),
       ctx
@@ -125,12 +132,32 @@ describe(`runner routes`, () => {
     expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
         id: `runner-1`,
-        ownerUserId: `user:owner@example.com`,
+        ownerPrincipal: `/principal/user%3Aowner%40example.com`,
       })
     )
     expect(ctx.streamClient.ensure).toHaveBeenCalledWith(
       `/runners/runner-1/wake`,
       { contentType: `application/json` }
+    )
+  })
+
+  it(`canonicalizes legacy owner_principal URLs on registration`, async () => {
+    const ctx = buildContext()
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners`, {
+        id: `runner-1`,
+        owner_principal: `/principal/user:owner@example.com`,
+        label: `Local runner`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(201)
+    expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerPrincipal: `/principal/user%3Aowner%40example.com`,
+      })
     )
   })
 
@@ -140,7 +167,7 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
 
@@ -155,13 +182,190 @@ describe(`runner routes`, () => {
     expect(response.status).toBe(201)
     expect(ctx.entityManager.registry.createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
-        ownerUserId: `user:owner@example.com`,
+        ownerPrincipal: `/principal/user%3Aowner%40example.com`,
       })
     )
   })
 
-  it(`allows unauthenticated runner claims when no server auth is configured`, async () => {
+  it(`canonicalizes legacy owner_principal URLs when listing runners`, async () => {
     const ctx = buildContext()
+
+    const response = await globalRouter.fetch(
+      request(
+        `GET`,
+        `/_electric/runners?owner_principal=${encodeURIComponent(`/principal/user:owner@example.com`)}`
+      ),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    expect(ctx.entityManager.registry.listRunners).toHaveBeenCalledWith({
+      ownerPrincipal: `/principal/user%3Aowner%40example.com`,
+    })
+  })
+
+  it(`rejects unauthenticated runner listing`, async () => {
+    const ctx = buildContext({ principal: undefined as any })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners`),
+      ctx
+    )
+
+    expect(response.status).toBe(401)
+    expect(ctx.entityManager.registry.listRunners).not.toHaveBeenCalled()
+  })
+
+  it(`returns runner health with diagnostics and claim state`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        admin_status: `enabled`,
+      })
+    )
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+      last_seen_at: new Date().toISOString(),
+      diagnostics: {
+        stream_connected: true,
+        reconnect_count: 0,
+        last_heartbeat_ok: true,
+      },
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.runner).toMatchObject({
+      id: `runner-1`,
+      liveness_status: `online`,
+    })
+    expect(body.client).toMatchObject({ stream_connected: true })
+    expect(body.claims).toMatchObject({ active_count: 0 })
+    expect(body.health).toMatchObject({ status: `healthy`, issues: [] })
+  })
+
+  it(`sanitizes heartbeat diagnostics before storing them`, async () => {
+    const ctx = buildContext()
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners/runner-1/heartbeat`, {
+        lease_ms: 30_000,
+        wake_stream_offset: `123`,
+        diagnostics: {
+          status: `streaming`,
+          stream_connected: `yes`,
+          stream_connected_since: null,
+          reconnect_count: `2`,
+          last_heartbeat_ok: false,
+          last_claim_result: `invalid`,
+          last_error: `heartbeat failed`,
+          claims_failed: 1,
+          events_received: -1,
+          extra: { noisy: true },
+        },
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const heartbeatInput = vi.mocked(ctx.entityManager.registry.heartbeatRunner)
+      .mock.calls[0]![0]
+    expect(heartbeatInput).toMatchObject({
+      runnerId: `runner-1`,
+      wakeStreamOffset: `123`,
+      diagnostics: {
+        status: `streaming`,
+        stream_connected_since: null,
+        last_heartbeat_ok: false,
+        last_error: `heartbeat failed`,
+        claims_failed: 1,
+      },
+    })
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`stream_connected`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`reconnect_count`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`last_claim_result`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`events_received`)
+    expect(heartbeatInput.diagnostics).not.toHaveProperty(`extra`)
+  })
+
+  it(`sanitizes stored runner diagnostics before returning health`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        admin_status: `enabled`,
+      })
+    )
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+      last_seen_at: new Date().toISOString(),
+      diagnostics: {
+        stream_connected: `yes`,
+        reconnect_count: 6,
+        last_heartbeat_ok: false,
+        last_error: 500,
+      },
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.client).toEqual({
+      reconnect_count: 6,
+      last_heartbeat_ok: false,
+    })
+    expect(body.health.issues).toContain(`Client reports last heartbeat failed`)
+    expect(body.health.issues).toContain(`Client has reconnected 6 times`)
+  })
+
+  it(`returns unhealthy when runner lease is expired`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        admin_status: `enabled`,
+      })
+    )
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: new Date(Date.now() - 10_000).toISOString(),
+      last_seen_at: new Date(Date.now() - 15_000).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.health.status).toBe(`unhealthy`)
+    expect(body.health.issues.length).toBeGreaterThan(0)
+  })
+
+  it(`rejects unauthenticated runner claims`, async () => {
+    const ctx = buildContext({ principal: undefined as any })
     const response = await globalRouter.fetch(
       request(`POST`, `/_electric/runners/runner-1/claim`, {
         subscription_id: `runner:runner-1`,
@@ -171,8 +375,23 @@ describe(`runner routes`, () => {
       ctx
     )
 
-    expect(response.status).toBe(204)
-    expect(ctx.streamClient.claimSubscription).toHaveBeenCalled()
+    expect(response.status).toBe(401)
+    expect(ctx.streamClient.claimSubscription).not.toHaveBeenCalled()
+  })
+
+  it(`rejects unauthenticated runner registration for an explicit owner`, async () => {
+    const ctx = buildContext({ principal: undefined as any })
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners`, {
+        id: `runner-1`,
+        owner_principal: `/principal/user%3Aowner%40example.com`,
+        label: `Local runner`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(401)
+    expect(ctx.entityManager.registry.createRunner).not.toHaveBeenCalled()
   })
 
   it(`returns DS claim conflicts as 409 responses`, async () => {
@@ -181,7 +400,7 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockRejectedValue(
@@ -224,7 +443,7 @@ describe(`runner routes`, () => {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({
@@ -274,13 +493,119 @@ describe(`runner routes`, () => {
     )
   })
 
+  it(`rejects invalid owner_principal with 400`, async () => {
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners`, {
+        id: `runner-1`,
+        owner_principal: `/principal/not-a-valid-key`,
+        label: `Local runner`,
+      }),
+      buildContext({
+        principal: {
+          kind: `user`,
+          id: `owner@example.com`,
+          key: `user:owner@example.com`,
+          url: `/principal/user%3Aowner%40example.com`,
+        },
+      })
+    )
+
+    expect(response.status).toBe(400)
+  })
+
+  it(`returns unhealthy when runner is disabled`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        admin_status: `disabled`,
+      })
+    )
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+      last_seen_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.health.status).toBe(`unhealthy`)
+    expect(body.health.issues).toContain(`Runner is disabled`)
+    expect(body.runner.liveness_status).toBe(`offline`)
+  })
+
+  it(`returns degraded when stream is disconnected`, async () => {
+    const ctx = buildContext()
+    vi.mocked(ctx.entityManager.registry.getRunner).mockResolvedValue(
+      runner({
+        admin_status: `enabled`,
+      })
+    )
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+      last_seen_at: new Date().toISOString(),
+      diagnostics: {
+        stream_connected: false,
+        reconnect_count: 2,
+        last_heartbeat_ok: true,
+      },
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.health.status).toBe(`degraded`)
+    expect(body.health.issues).toContain(`Client reports stream disconnected`)
+  })
+
+  it(`ignores invalid runner lease timestamps in health output`, async () => {
+    const ctx = buildContext()
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: `not-a-date`,
+      last_seen_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.runner.lease_expires_at).toBeNull()
+    expect(body.runner.lease_remaining_ms).toBeNull()
+    expect(body.runner.liveness_status).toBe(`offline`)
+  })
+
   it(`uses the pending stream from multi-stream claim responses`, async () => {
     const ctx = buildContext({
       principal: {
         kind: `user`,
         id: `owner@example.com`,
         key: `user:owner@example.com`,
-        url: `/principal/user:owner@example.com`,
+        url: `/principal/user%3Aowner%40example.com`,
       },
     })
     vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({

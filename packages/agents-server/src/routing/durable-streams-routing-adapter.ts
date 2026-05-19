@@ -12,12 +12,11 @@ export interface DurableStreamsRoutingAdapter {
 }
 
 function appendSearch(target: URL, source: URL): URL {
-  target.search = source.search
-  return target
-}
-
-function removeServiceQuery(target: URL): URL {
-  target.searchParams.delete(`service`)
+  source.searchParams.forEach((value, key) => {
+    if (key !== `service`) {
+      target.searchParams.append(key, value)
+    }
+  })
   return target
 }
 
@@ -32,7 +31,7 @@ function appendRequestPathToStreamRoot(input: DurableStreamsRoutingInput): URL {
   target.pathname = path
     ? `${withoutTrailingSlash(target.pathname)}/${path}`
     : withoutTrailingSlash(target.pathname)
-  return removeServiceQuery(appendSearch(target, incomingUrl))
+  return appendSearch(target, incomingUrl)
 }
 
 export const streamRootDurableStreamsRoutingAdapter: DurableStreamsRoutingAdapter =

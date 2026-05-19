@@ -171,13 +171,13 @@ export function SettingsMenu(): React.ReactElement {
                     truncate
                     className={styles.runtimeUrl}
                   >
-                    {runtimeUrl}
+                    Pull-wake
                   </Text>
                 ) : (
                   <Text size={1} tone="muted" className={styles.runtimeHint}>
                     {localRuntimeDisabled
                       ? `Disabled for this server`
-                      : `No runtime URL yet`}
+                      : `Runtime not started`}
                   </Text>
                 )}
                 {runtimeError && (

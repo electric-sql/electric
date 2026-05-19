@@ -4,7 +4,7 @@
  */
 
 import { zodToJsonSchema } from 'zod-to-json-schema'
-import { processWebhookWake } from './process-wake'
+import { processWake } from './process-wake'
 import { getEntityType, listEntityTypes } from './define-entity'
 import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 import { passthrough } from './entity-schema'
@@ -118,13 +118,11 @@ export interface RuntimeRouter {
     options?: Pick<ProcessWakeConfig, `claimHeaders` | `claimTokenHeader`>
   ) => void
 
-  /**
-   * Dispatch an already-parsed webhook wake notification.
-   */
+  /** Dispatch an already-parsed webhook wake notification. */
   dispatchWebhookWake: (notification: WebhookNotification) => void
 
   /**
-   * Wait for all in-flight webhook wake handlers to settle.
+   * Wait for all in-flight wake handlers to settle.
    * Throws any wake errors instead of hiding them behind logs.
    */
   drainWakes: () => Promise<void>
@@ -240,7 +238,7 @@ export function createRuntimeRouter(
     const wakeLabel = notification.entity?.url ?? notification.streamPath
     const controller = new AbortController()
     const wake: Promise<void> = Promise.resolve(
-      processWebhookWake(notification, {
+      processWake(notification, {
         ...wakeConfig,
         ...options,
         shutdownSignal: controller.signal,
