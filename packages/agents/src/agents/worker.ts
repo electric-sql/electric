@@ -9,7 +9,7 @@ import {
   createWriteTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
-import { unrestrictedSandbox } from '@electric-ax/agents-runtime/sandbox'
+import { chooseDefaultSandbox } from '@electric-ax/agents-runtime/sandbox'
 import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { WORKER_TOOL_NAMES, createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
@@ -296,9 +296,7 @@ export function registerWorker(
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
       const readSet = new Set<string>()
-      const sandbox = await unrestrictedSandbox({
-        workingDirectory,
-      })
+      const sandbox = await chooseDefaultSandbox(workingDirectory)
       const builtinTools = buildToolsForWorker(
         args.tools,
         sandbox,

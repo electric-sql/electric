@@ -5,6 +5,8 @@ export type { NativeSandboxOpts } from './sandbox/native'
 export { remoteSandbox } from './sandbox/remote'
 export type { RemoteProvider, RemoteSandboxOpts } from './sandbox/remote'
 export type { RemoteSandboxClient } from './sandbox/remote/types'
+export { chooseDefaultSandbox } from './sandbox/default'
+export type { ChooseDefaultSandboxOpts } from './sandbox/default'
 export { SandboxError } from './sandbox/types'
 export type {
   Sandbox,

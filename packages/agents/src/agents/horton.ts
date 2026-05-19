@@ -28,7 +28,7 @@ import {
   createFetchUrlTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
-import { unrestrictedSandbox } from '@electric-ax/agents-runtime/sandbox'
+import { chooseDefaultSandbox } from '@electric-ax/agents-runtime/sandbox'
 import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import type { MessageReceived } from '@electric-ax/agents-runtime'
@@ -386,9 +386,7 @@ function createAssistantHandler(options: {
         : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const agentsMd = readAgentsMd(effectiveCwd)
-    const sandbox = await unrestrictedSandbox({
-      workingDirectory: effectiveCwd,
-    })
+    const sandbox = await chooseDefaultSandbox(effectiveCwd)
     const tools = [
       ...ctx.electricTools,
       ...createHortonTools(sandbox, ctx, readSet, {

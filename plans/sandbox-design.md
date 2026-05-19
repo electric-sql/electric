@@ -274,14 +274,13 @@ Collapsed from old 6a + 6b. Plumbing PR; sandbox surface lands and all tools use
 - **First failing test:** `it('sandbox.fetch rejects http://169.254.169.254/')`.
 - **Diff target:** ~250 lines.
 
-### PR 6d — Horton/Worker default to `nativeSandbox` + working-directory fix
+### PR 6d — Default sandbox selector + Horton/Worker wiring
 
-- Horton on desktop defaults to `nativeSandbox()` when on macOS/Linux. Windows defaults to `unrestricted` with a banner directing users to install WSL2.
-- **Working-directory default fix.** `agents-desktop/src/main.ts:1939` currently falls back to `app.getPath('home')` when no working directory is set. Change to a dedicated subdirectory (e.g. `~/Documents/electric-workspace/`), created on first launch. Refuse to start with `~` or `/` as the working directory regardless of sandbox shape — write-allowlist is moot if the workspace _is_ home.
-- `ELECTRIC_AGENTS_UNRESTRICTED=1` env override is the documented panic switch (logged loudly when set).
-- Worker inherits the parent's sandbox handle. Worker construction takes a `Sandbox` parameter; cannot construct its own. Enforced by type signature, not comment.
-- **First failing test:** `it('Worker cannot construct its own sandbox; it must accept the parent\'s')` — type-level test.
-- **Diff target:** ~250 lines + docs + release notes.
+- New `chooseDefaultSandbox(workingDirectory, env?)` helper in `packages/agents-runtime/src/sandbox/default.ts`. Picks `nativeSandbox` when the platform supports it, `unrestrictedSandbox` otherwise. `ELECTRIC_AGENTS_UNRESTRICTED=1` (`true`/`yes`/`on`) forces unrestricted on any platform — the documented panic-revert path.
+- Horton and Worker call `chooseDefaultSandbox(workingDirectory)` instead of constructing `unrestrictedSandbox` directly. Behavior change: on macOS/Linux without the panic env, LLM-driven bash/read/write/edit/fetch_url tools now run inside the Seatbelt/bwrap sandbox by default.
+- **Working-directory `~`-fallback fix is deferred.** `agents-desktop/src/main.ts:1939`'s `app.getPath('home')` fallback is a desktop-UX change with its own implications (forcing users to pick a working directory on first launch). The sandbox primitive lands without it; that fix is a separate, smaller PR in the desktop app.
+- **First failing test:** `it('chooseDefaultSandbox returns nativeSandbox on supported platforms')`.
+- **Diff target:** ~150 lines + docs.
 
 ---
 
