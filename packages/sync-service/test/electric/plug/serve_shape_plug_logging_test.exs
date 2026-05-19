@@ -30,7 +30,12 @@ defmodule Electric.Plug.ServeShapePlugLoggingTest do
   end
 
   defp build_plug_opts(ctx) do
-    Api.plug_opts(stack_id: ctx.stack_id, inspector: @inspector, stack_ready_timeout: 100)
+    Api.plug_opts(
+      stack_id: ctx.stack_id,
+      inspector: @inspector,
+      stack_ready_timeout: 100,
+      max_concurrent_requests: Electric.Config.get_env(:max_concurrent_requests)
+    )
   end
 
   defp call_serve_shape_plug(conn, ctx) do

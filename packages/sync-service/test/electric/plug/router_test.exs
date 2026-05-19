@@ -3753,6 +3753,7 @@ defmodule Electric.Plug.RouterTest do
             max_age: 60,
             stale_age: 300,
             persistent_kv: ctx.persistent_kv,
+            max_concurrent_requests: Electric.Config.get_env(:max_concurrent_requests),
             allow_shape_deletion: true
           )
       }

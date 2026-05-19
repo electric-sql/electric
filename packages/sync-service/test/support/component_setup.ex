@@ -516,6 +516,7 @@ defmodule Support.ComponentSetup do
       max_age: 60,
       stale_age: 300,
       allow_shape_deletion: true,
+      max_concurrent_requests: Electric.Config.get_env(:max_concurrent_requests),
       secret: ctx[:secret]
     ]
     |> Keyword.merge(
