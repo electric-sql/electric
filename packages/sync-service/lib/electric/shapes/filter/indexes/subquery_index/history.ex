@@ -39,21 +39,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.History do
 
   @doc """
   Is the value a member at `time`?
-
-  `nil` histories are never members.
   """
   @spec member?(history(), time()) :: boolean()
   def member?(nil, _time), do: false
   def member?([], _time), do: true
 
-  def member?([initial | toggles], time) do
-    toggles_at_or_before = Enum.count(toggles, &(&1 <= time))
-
-    case rem(toggles_at_or_before, 2) do
-      0 -> initial == :in
-      1 -> initial == :out
-    end
-  end
+  def member?([initial, t | _], time) when time < t, do: initial == :in
+  def member?([initial, _t | rest], time), do: member?([flip(initial) | rest], time)
+  def member?([initial], _time), do: initial == :in
 
   @doc "Is the value a member at any retained logical time?"
   @spec member_at_some_time?(history()) :: boolean()
@@ -72,13 +65,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.History do
   strictly greater than any previously recorded toggle.
   """
   @spec mark_in(history(), time()) :: t()
-  def mark_in(nil, time), do: [:out, time]
-  def mark_in([], _time), do: []
-
-  def mark_in([initial | toggles] = history, time) do
-    case last_state(initial, toggles) do
-      :in -> history
-      :out -> [initial | toggles ++ [time]]
+  def mark_in(history, time) do
+    if member?(history, time) do
+      history
+    else
+      append_time(history, time)
     end
   end
 
@@ -89,13 +80,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.History do
   strictly greater than any previously recorded toggle.
   """
   @spec mark_out(history(), time()) :: history()
-  def mark_out(nil, _time), do: nil
-  def mark_out([], time), do: [:in, time]
-
-  def mark_out([initial | toggles] = history, time) do
-    case last_state(initial, toggles) do
-      :out -> history
-      :in -> [initial | toggles ++ [time]]
+  def mark_out(history, time) do
+    if member?(history, time) do
+      append_time(history, time)
+    else
+      history
     end
   end
 
@@ -110,23 +99,19 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.History do
   def compact(nil, _min_required_time), do: nil
   def compact([], _min_required_time), do: []
 
-  def compact([initial | toggles], min_required_time) do
-    {folded, kept} = Enum.split_with(toggles, &(&1 <= min_required_time))
+  def compact([_initial, t | _] = history, min_required_time) when t > min_required_time,
+    do: history
 
-    new_initial =
-      if rem(length(folded), 2) == 0, do: initial, else: flip(initial)
+  def compact([initial, _t | rest], min_required_time),
+    do: compact([flip(initial) | rest], min_required_time)
 
-    case {new_initial, kept} do
-      {:in, []} -> []
-      {:out, []} -> nil
-      {state, times} -> [state | times]
-    end
-  end
-
-  defp last_state(initial, toggles) do
-    if rem(length(toggles), 2) == 0, do: initial, else: flip(initial)
-  end
+  def compact([:in], _min_required_time), do: []
+  def compact([:out], _min_required_time), do: nil
 
   defp flip(:in), do: :out
   defp flip(:out), do: :in
+
+  defp append_time(nil, time), do: [:out, time]
+  defp append_time([], time), do: [:in, time]
+  defp append_time(history, time), do: history ++ [time]
 end
