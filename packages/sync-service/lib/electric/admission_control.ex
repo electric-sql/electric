@@ -137,6 +137,69 @@ defmodule Electric.AdmissionControl do
   end
 
   @doc """
+  Atomically move an in-flight permit from `from_kind` to `to_kind` for a
+  stack.
+
+  On the success path this is a single `:ets.update_counter/4` call:
+  both counters move together, so the total in-flight count
+  (`from + to`) is invariant throughout. Returns `:ok`.
+
+  When `to_kind` is at capacity the result is rolled back with a second
+  atomic op and `{:error, :overloaded}` is returned; `from_kind` is left
+  unchanged from the caller's perspective. During the brief mid-state
+  the destination row sits at `cap + 1`, so any concurrent
+  `try_acquire(to_kind)` also rejects — the same outcome it would
+  produce anyway.
+
+  ## Options
+
+    * `:max_concurrent` — required. Cap for `to_kind`.
+    * `:table_name` — ETS table (default: `:electric_admission_control`).
+
+  """
+  def try_swap(stack_id, from_kind, to_kind, opts)
+      when from_kind in @allowed_kinds and to_kind in @allowed_kinds do
+    table = Keyword.get(opts, :table_name, @table_name)
+    cap = Keyword.fetch!(opts, :max_concurrent)
+    to_pos = tuple_pos(to_kind)
+    from_pos = tuple_pos(from_kind)
+    default = {stack_id, 0, 0}
+
+    [new_to, _new_from] =
+      :ets.update_counter(
+        table,
+        stack_id,
+        [{to_pos, 1, cap, cap + 1}, {from_pos, -1, 0, 0}],
+        default
+      )
+
+    if new_to > cap do
+      :ets.update_counter(
+        table,
+        stack_id,
+        [{to_pos, -1, 0, 0}, {from_pos, 1}],
+        default
+      )
+
+      :telemetry.execute(
+        [:electric, :admission_control, :swap_rejected],
+        %{count: 1, limit: cap},
+        %{stack_id: stack_id, from: from_kind, to: to_kind}
+      )
+
+      {:error, :overloaded}
+    else
+      :telemetry.execute(
+        [:electric, :admission_control, :swap],
+        %{count: 1, current: new_to, limit: cap},
+        %{stack_id: stack_id, from: from_kind, to: to_kind}
+      )
+
+      :ok
+    end
+  end
+
+  @doc """
   Get the current number of in-flight requests for a stack.
 
   Returns a map with `:initial` and `:existing` counts.

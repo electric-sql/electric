@@ -351,6 +351,69 @@ defmodule Electric.AdmissionControlTest do
     end
   end
 
+  describe "try_swap/4" do
+    setup do
+      table_name = :"swap_counter_#{System.unique_integer([:positive])}"
+      {:ok, _} = start_supervised({AdmissionControl, table_name: table_name, name: nil})
+      %{table_name: table_name}
+    end
+
+    test "moves the in-flight count from :initial to :existing", %{table_name: t} do
+      :ok = AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 10)
+      assert %{initial: 1, existing: 0} = AdmissionControl.get_current("s", table_name: t)
+
+      assert :ok =
+               AdmissionControl.try_swap("s", :initial, :existing,
+                 table_name: t,
+                 max_concurrent: 10
+               )
+
+      assert %{initial: 0, existing: 1} = AdmissionControl.get_current("s", table_name: t)
+    end
+
+    test "returns {:error, :overloaded} when the destination bucket is full",
+         %{table_name: t} do
+      # Saturate :existing.
+      for _ <- 1..3 do
+        :ok = AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 3)
+      end
+
+      :ok = AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 10)
+
+      assert {:error, :overloaded} =
+               AdmissionControl.try_swap("s", :initial, :existing,
+                 table_name: t,
+                 max_concurrent: 3
+               )
+
+      # On failure, source must be unchanged.
+      assert %{initial: 1, existing: 3} = AdmissionControl.get_current("s", table_name: t)
+    end
+
+    test "is atomic under concurrent swap attempts at the cap", %{table_name: t} do
+      # Acquire 10 :initial permits, cap :existing at 5, run 10 concurrent swaps,
+      # exactly 5 should succeed.
+      for _ <- 1..10 do
+        :ok = AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 100)
+      end
+
+      tasks =
+        for _ <- 1..10 do
+          Task.async(fn ->
+            AdmissionControl.try_swap("s", :initial, :existing,
+              table_name: t,
+              max_concurrent: 5
+            )
+          end)
+        end
+
+      results = Task.await_many(tasks)
+      assert Enum.count(results, &(&1 == :ok)) == 5
+      assert Enum.count(results, &(&1 == {:error, :overloaded})) == 5
+      assert %{initial: 5, existing: 5} = AdmissionControl.get_current("s", table_name: t)
+    end
+  end
+
   describe "default table name" do
     setup [:with_stack_id_from_test]
 
