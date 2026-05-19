@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -27,7 +27,9 @@ describe(`write tool`, () => {
     expect(result.content[0]).toMatchObject({ type: `text` })
     const written = await readFile(join(cwd, `hello.txt`), `utf-8`)
     expect(written).toBe(`hi there`)
-    expect(readSet.has(join(cwd, `hello.txt`))).toBe(true)
+    // readSet now stores realpath-canonical paths (write goes through
+    // resolveSafePath), so checks compare to the canonical form.
+    expect(readSet.has(join(await realpath(cwd), `hello.txt`))).toBe(true)
     await sandbox.dispose()
   })
 

@@ -89,6 +89,7 @@
     }
   },
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "0.0.52",
     "@electric-ax/agents-mcp": "workspace:*",
     "@anthropic-ai/sdk": "^0.78.0",
     "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217",
