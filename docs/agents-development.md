@@ -54,7 +54,7 @@ All commands below assume you are in the project root. All `pnpm dev` commands u
 
 ### Step 1 — Install dependencies and build workspace prerequisites
 
-In a fresh checkout or worktree, workspace packages have no `dist/` directories. The agent packages depend on `@electric-sql/client` (the typescript-client) and on `@electric-ax/agents-mcp` at runtime, so both must be built before starting any agent server.
+In a fresh checkout or worktree, workspace packages have no `dist/` directories. The full dependency chain is `typescript-client` → `agents-mcp` → `agents-runtime` → (`agents-server`, `agents`), so the first two must be built before anything else.
 
 ```sh
 pnpm install
@@ -76,7 +76,7 @@ Services will be available at:
 
 ### Step 3 — Build agents-runtime
 
-`agents-server` and `agents` both depend on `agents-runtime`, so it must be built first.
+`agents-runtime` depends on `agents-mcp` (built in Step 1), and both `agents-server` and `agents` depend on `agents-runtime`, so it must be built next.
 
 ```sh
 pnpm -C packages/agents-runtime dev
