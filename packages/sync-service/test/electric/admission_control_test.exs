@@ -412,6 +412,108 @@ defmodule Electric.AdmissionControlTest do
       assert Enum.count(results, &(&1 == {:error, :overloaded})) == 5
       assert %{initial: 5, existing: 5} = AdmissionControl.get_current("s", table_name: t)
     end
+
+    # Regression for a race introduced by an earlier implementation that used
+    # a threshold-clamped increment for the destination counter. When the
+    # destination was already at cap, every concurrent racer captured the same
+    # clamped post-increment value `cap + 1` even though only the first racer's
+    # increment actually moved the row. All racers then ran the rollback path
+    # and each decremented the destination by 1 — net effect: the destination
+    # counter dropped *below* its true in-flight count, breaking cap
+    # enforcement for subsequent acquires.
+    test "concurrent rejected swaps preserve the destination counter",
+         %{table_name: t} do
+      # Pre-saturate :existing at cap=5 via direct acquires.
+      for _ <- 1..5 do
+        :ok =
+          AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 5)
+      end
+
+      # Pre-acquire 10 :initial permits so we have real permits to swap from.
+      for _ <- 1..10 do
+        :ok =
+          AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 100)
+      end
+
+      assert %{initial: 10, existing: 5} = AdmissionControl.get_current("s", table_name: t)
+
+      # All swaps target a saturated :existing — all must reject.
+      tasks =
+        for _ <- 1..10 do
+          Task.async(fn ->
+            AdmissionControl.try_swap("s", :initial, :existing,
+              table_name: t,
+              max_concurrent: 5
+            )
+          end)
+        end
+
+      results = Task.await_many(tasks)
+
+      assert Enum.all?(results, &(&1 == {:error, :overloaded}))
+
+      # The buggy implementation would leave :existing below 5 (real permits
+      # decremented during rollback) and/or :initial below 10. With the
+      # rollback restricted to each racer's own increment, both columns are
+      # exactly back to their starting values.
+      assert %{initial: 10, existing: 5} = AdmissionControl.get_current("s", table_name: t)
+    end
+
+    # Regression for a related race: an earlier implementation decremented
+    # from_kind in the same atomic op that incremented to_kind, creating a
+    # window where a concurrent try_acquire(from_kind) could observe an
+    # under-count, succeed, and push from_kind above its cap when the swap
+    # was later rolled back.
+    test "from_kind cap is preserved against concurrent try_acquire during swap",
+         %{table_name: t} do
+      # Saturate :initial at cap=2.
+      :ok =
+        AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 2)
+
+      :ok =
+        AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 2)
+
+      # Saturate :existing at cap=2 so every swap rejects (which is the
+      # scenario where the from_kind transient under-count would otherwise
+      # bite on rollback).
+      :ok =
+        AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 2)
+
+      :ok =
+        AdmissionControl.try_acquire("s", :existing, table_name: t, max_concurrent: 2)
+
+      # Race many try_swap calls (all will reject) against many
+      # try_acquire(:initial) calls (all should reject — :initial is at cap).
+      swap_tasks =
+        for _ <- 1..50 do
+          Task.async(fn ->
+            AdmissionControl.try_swap("s", :initial, :existing,
+              table_name: t,
+              max_concurrent: 2
+            )
+          end)
+        end
+
+      acquire_tasks =
+        for _ <- 1..50 do
+          Task.async(fn ->
+            AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 2)
+          end)
+        end
+
+      swap_results = Task.await_many(swap_tasks)
+      acquire_results = Task.await_many(acquire_tasks)
+
+      # Every swap rejects (:existing is at cap).
+      assert Enum.all?(swap_results, &(&1 == {:error, :overloaded}))
+
+      # Every acquire rejects (:initial was at cap and try_swap never
+      # creates a transient under-count for from_kind).
+      assert Enum.all?(acquire_results, &(&1 == {:error, :overloaded}))
+
+      # Both buckets stayed at exactly their caps.
+      assert %{initial: 2, existing: 2} = AdmissionControl.get_current("s", table_name: t)
+    end
   end
 
   describe "default table name" do

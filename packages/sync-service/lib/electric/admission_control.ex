@@ -137,25 +137,42 @@ defmodule Electric.AdmissionControl do
   end
 
   @doc """
-  Atomically move an in-flight permit from `from_kind` to `to_kind` for a
-  stack.
+  Move an in-flight permit from `from_kind` to `to_kind` for a stack.
 
-  On the success path this is a single `:ets.update_counter/4` call:
-  both counters move together, so the total in-flight count
-  (`from + to`) is invariant throughout. Returns `:ok`.
+  The swap is implemented as two atomic ETS ops rather than a single
+  multi-column update:
 
-  When `to_kind` is at capacity the result is rolled back with a second
-  atomic op and `{:error, :overloaded}` is returned; `from_kind` is left
-  unchanged from the caller's perspective. During the brief mid-state
-  the destination row sits at `cap + 1`, so any concurrent
-  `try_acquire(to_kind)` also rejects — the same outcome it would
-  produce anyway.
+    1. **Plain increment of `to_kind`** (no threshold clamp). Each caller's
+       `+1` is real, so each rejected caller's rollback removes exactly its
+       own contribution — the row recovers cleanly even when N callers race
+       past a saturated `to_kind`. A threshold-clamped form was rejected
+       here because rolling back from a clamped-to-`cap + 1` value can
+       remove real permits when multiple racers all see the clamped value.
+
+    2. **If `new_to > cap`**, atomic decrement of `to_kind` (rollback) and
+       return `{:error, :overloaded}`. `from_kind` is left untouched, so
+       the caller still holds its original `from_kind` permit.
+
+    3. **Otherwise**, atomic decrement of `from_kind` (success). Returns
+       `:ok`.
+
+  Because `from_kind` is only decremented on the success path, no
+  concurrent `try_acquire(from_kind)` ever observes a transient
+  under-count for `from_kind`. The hard cap on `from_kind` is preserved.
+
+  The mid-state between op 1 and the success-path op 3 has `to_kind`
+  incremented but `from_kind` not yet decremented — total in-flight
+  appears as `original_total + 1`. A concurrent `try_acquire(to_kind)`
+  during this window can spuriously reject when, post-swap, it would
+  have fit. That's the deliberate trade: pessimistic over-rejection
+  (bounded by the duration of one in-process branch, microseconds)
+  instead of any possibility of over-admission.
 
   The caller must already hold a `from_kind` permit (acquired via
-  `try_acquire/3`). Calling `try_swap/4` without an outstanding `from_kind`
-  permit will silently grant a phantom `to_kind` permit — there is no
-  runtime check, because adding one would defeat the single-call
-  atomicity that lets the swap preserve the `from + to` invariant.
+  `try_acquire/3`). Calling `try_swap/4` without an outstanding
+  `from_kind` permit will silently grant a phantom `to_kind` permit —
+  there is no runtime check, because adding one would require a
+  separate read of `from_kind` and reintroduce a TOCTOU window.
 
   ## Options
 
@@ -163,6 +180,7 @@ defmodule Electric.AdmissionControl do
     * `:table_name` — ETS table (default: `:electric_admission_control`).
 
   """
+  @spec try_swap(String.t(), atom(), atom(), keyword()) :: :ok | {:error, :overloaded}
   def try_swap(stack_id, from_kind, to_kind, opts)
       when from_kind in @allowed_kinds and to_kind in @allowed_kinds do
     table_name = Keyword.get(opts, :table_name, @table_name)
@@ -171,30 +189,28 @@ defmodule Electric.AdmissionControl do
     from_pos = tuple_pos(from_kind)
     default = {stack_id, 0, 0}
 
-    [new_to, _new_from] =
-      :ets.update_counter(
-        table_name,
-        stack_id,
-        [{to_pos, 1, cap, cap + 1}, {from_pos, -1, 0, 0}],
-        default
-      )
+    # Plain increment, no threshold clamp. Returns the post-increment value.
+    new_to = :ets.update_counter(table_name, stack_id, {to_pos, 1}, default)
 
     if new_to > cap do
-      :ets.update_counter(
-        table_name,
-        stack_id,
-        [{to_pos, -1, 0, 0}, {from_pos, 1}],
-        default
-      )
+      # Rollback: simple unclamped decrement. We just added 1 atomically,
+      # so subtracting our own contribution cannot drive the column below
+      # the value other racers (if any) brought it to.
+      :ets.update_counter(table_name, stack_id, {to_pos, -1}, default)
 
       :telemetry.execute(
         [:electric, :admission_control, :swap_rejected],
-        %{count: 1, limit: cap},
-        %{stack_id: stack_id, from: from_kind, to: to_kind, current: cap}
+        %{count: 1, current: new_to, limit: cap},
+        %{stack_id: stack_id, from: from_kind, to: to_kind}
       )
 
       {:error, :overloaded}
     else
+      # Success: drop the from_kind permit. Clamp at 0 to be defensive
+      # against callers who lied about holding a from_kind permit
+      # (documented above as a phantom-permit footgun, not a crash).
+      :ets.update_counter(table_name, stack_id, {from_pos, -1, 0, 0}, default)
+
       :telemetry.execute(
         [:electric, :admission_control, :swap],
         %{count: 1, current: new_to, limit: cap},
