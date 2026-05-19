@@ -2,10 +2,29 @@ import { describe, expect, it, vi } from 'vitest'
 import { globalRouter } from '../src/routing/global-router'
 import { DurableStreamsSubscriptionError } from '../src/stream-client'
 import type { TenantContext } from '../src/routing/context'
+import type { DurableStreamsRoutingAdapter } from '../src/routing/durable-streams-routing-adapter'
 import type {
   DispatchPolicy,
   ElectricAgentsEntity,
 } from '../src/electric-agents-types'
+
+const servicePrefixAdapter: DurableStreamsRoutingAdapter = {
+  streamUrl: ({ durableStreamsUrl }) => new URL(durableStreamsUrl),
+  controlUrl: ({ durableStreamsUrl }) => new URL(durableStreamsUrl),
+  toBackendStreamPath: (serviceId, path) => {
+    const normalized = path.replace(/^\/+/, ``)
+    if (normalized === serviceId || normalized.startsWith(`${serviceId}/`)) {
+      return normalized
+    }
+    return `${serviceId}/${normalized}`
+  },
+  toRuntimeStreamPath: (serviceId, path) => {
+    const normalized = path.replace(/^\/+/, ``)
+    return normalized.startsWith(`${serviceId}/`)
+      ? normalized.slice(serviceId.length + 1)
+      : normalized
+  },
+}
 
 function request(method: string, path: string, body?: unknown): Request {
   return new Request(`http://server${path}`, {
@@ -309,7 +328,12 @@ describe(`dispatch policy routing`, () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
-    const ctx = buildContext()
+    // Service-routed deployment: the worker returns backend-prefixed stream
+    // paths, so dispatch-policy's subscriptionHasStream must consult the
+    // adapter to recognise an already-linked stream.
+    const ctx = buildContext({
+      durableStreamsRouting: servicePrefixAdapter,
+    })
     ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
       entity(dispatchPolicy)
     )
@@ -357,7 +381,9 @@ describe(`dispatch policy routing`, () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
-    const ctx = buildContext()
+    const ctx = buildContext({
+      durableStreamsRouting: servicePrefixAdapter,
+    })
     ;(ctx.streamClient.getSubscription as any)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({

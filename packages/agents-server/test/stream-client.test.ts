@@ -260,7 +260,7 @@ describe(`StreamClient`, () => {
     const client = new StreamClient(
       `https://streams.test/v1/stream/svc-tenant-a`,
       {
-        routing: {
+        subscriptionRouting: {
           serviceId: `svc-tenant-a`,
           adapter: servicePrefixRoutingAdapter(),
         },
@@ -303,7 +303,7 @@ describe(`StreamClient`, () => {
     const client = new StreamClient(
       `https://streams.test/v1/stream/svc-tenant-a`,
       {
-        routing: {
+        subscriptionRouting: {
           serviceId: `svc-tenant-a`,
           adapter: servicePrefixRoutingAdapter(),
         },
@@ -338,7 +338,7 @@ describe(`StreamClient`, () => {
       `https://streams.test/v1/stream/svc-tenant-a`,
       {
         bearer: `service-token`,
-        routing: {
+        subscriptionRouting: {
           serviceId: `svc-tenant-a`,
           adapter: servicePrefixRoutingAdapter(),
         },
@@ -367,6 +367,39 @@ describe(`StreamClient`, () => {
     }
   })
 
+  it(`service-prefixes release stream/path fields via the routing adapter`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(
+      `https://streams.test/v1/stream/svc-tenant-a`,
+      {
+        bearer: `service-token`,
+        subscriptionRouting: {
+          serviceId: `svc-tenant-a`,
+          adapter: servicePrefixRoutingAdapter(),
+        },
+      }
+    )
+
+    try {
+      await client.releaseSubscription(`sub-1`, `claim-token`, {
+        wake_id: `wake-1`,
+        generation: 1,
+        stream: `/discord-bot/abc/main`,
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        stream: `svc-tenant-a/discord-bot/abc/main`,
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
   it(`leaves already-prefixed subscription paths idempotent`, async () => {
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
       new Response(JSON.stringify({ subscription_id: `sub-1` }), {
@@ -376,7 +409,7 @@ describe(`StreamClient`, () => {
     const client = new StreamClient(
       `https://streams.test/v1/stream/svc-tenant-a`,
       {
-        routing: {
+        subscriptionRouting: {
           serviceId: `svc-tenant-a`,
           adapter: servicePrefixRoutingAdapter(),
         },

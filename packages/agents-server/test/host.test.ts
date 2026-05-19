@@ -157,4 +157,103 @@ describe(`AgentsHost`, () => {
     expect(runtime.stop).toHaveBeenCalledOnce()
     expect(host.getTenant(`svc-race`)).toBeUndefined()
   })
+
+  // Regression test for electric-sql/stratovolt#1519: webhook fanout silently
+  // dropped on service-routed deployments because subscription payloads were
+  // not run through the routing adapter. This test asserts the wire-through
+  // from `registerTenant({ durableStreamsRouting })` to the per-tenant
+  // `StreamClient`'s outgoing subscription request body.
+  it(`applies durableStreamsRouting adapter to per-tenant subscription payloads`, async () => {
+    const adapter = {
+      streamUrl: ({ durableStreamsUrl }: { durableStreamsUrl: string }) =>
+        new URL(durableStreamsUrl),
+      controlUrl: ({ durableStreamsUrl }: { durableStreamsUrl: string }) =>
+        new URL(durableStreamsUrl),
+      toBackendStreamPath: (serviceId: string, path: string) => {
+        const normalized = path.replace(/^\/+/, ``)
+        if (
+          normalized === serviceId ||
+          normalized.startsWith(`${serviceId}/`)
+        ) {
+          return normalized
+        }
+        return `${serviceId}/${normalized}`
+      },
+      toRuntimeStreamPath: (serviceId: string, path: string) => {
+        const normalized = path.replace(/^\/+/, ``)
+        return normalized.startsWith(`${serviceId}/`)
+          ? normalized.slice(serviceId.length + 1)
+          : normalized
+      },
+    }
+
+    const host = new AgentsHost({
+      db: createMockDb(),
+      pgClient: vi.fn() as any,
+    })
+
+    const runtime = await host.registerTenant({
+      serviceId: `svc-routed-tenant`,
+      durableStreamsUrl: `https://streams.test/v1/stream/svc-routed-tenant`,
+      durableStreamsRouting: adapter,
+    })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-host` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      await runtime.streamClient.putSubscription(`sub-host`, {
+        type: `webhook`,
+        streams: [`/discord-bot/abc/main`],
+        webhook: { url: `http://agent.local/webhook` },
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        type: `webhook`,
+        streams: [`svc-routed-tenant/discord-bot/abc/main`],
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  // Mirror without `durableStreamsRouting`: confirms the default branch is
+  // bit-identical to the prior slash-normalising behaviour for tenant-root
+  // deployments.
+  it(`omits the routing adapter when durableStreamsRouting is not provided`, async () => {
+    const host = new AgentsHost({
+      db: createMockDb(),
+      pgClient: vi.fn() as any,
+    })
+
+    const runtime = await host.registerTenant({
+      serviceId: `svc-default-tenant`,
+      durableStreamsUrl: `https://streams.test/v1/stream/svc-default-tenant`,
+    })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-default` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      await runtime.streamClient.putSubscription(`sub-default`, {
+        type: `webhook`,
+        streams: [`/discord-bot/abc/main`],
+        webhook: { url: `http://agent.local/webhook` },
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        streams: [`discord-bot/abc/main`],
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
 })

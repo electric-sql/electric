@@ -325,7 +325,7 @@ export class AgentsHost {
         bearer: config.durableStreamsBearer,
         ...(config.durableStreamsRouting
           ? {
-              routing: {
+              subscriptionRouting: {
                 serviceId: config.serviceId,
                 adapter: config.durableStreamsRouting,
               },

@@ -119,7 +119,17 @@ function subscriptionHasStream(
   streamPath: string
 ): boolean {
   const normalizedStream = streamPath.replace(/^\/+/, ``)
-  const backendStream = `${ctx.service}/${normalizedStream}`
+  // Defence-in-depth: `StreamClient.subscriptionResponseBody` already maps
+  // server-returned paths back to the runtime namespace when an adapter is
+  // configured, so `existing.streams` should be runtime-namespaced. The
+  // backend-namespace comparison below catches cases where the response did
+  // not pass through the adapter (custom `streamClient`, older deployments,
+  // etc.) and also makes the intent of the comparison explicit.
+  const backendStream =
+    ctx.durableStreamsRouting?.toBackendStreamPath(
+      ctx.service,
+      normalizedStream
+    ) ?? normalizedStream
   return (
     existing.streams?.some((stream) => {
       const path = typeof stream === `string` ? stream : stream.path

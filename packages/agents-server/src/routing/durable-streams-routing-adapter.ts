@@ -7,7 +7,27 @@ export interface DurableStreamsRoutingInput {
 export interface DurableStreamsRoutingAdapter {
   streamUrl(input: DurableStreamsRoutingInput): URL
   controlUrl(input: DurableStreamsRoutingInput): URL
+  /**
+   * Map a runtime-namespace stream path to the backend (durable-streams
+   * worker) namespace under which it is stored / keyed.
+   *
+   * **Required to be idempotent:** if `streamPath` is already in the backend
+   * namespace, the implementation MUST return it unchanged. Subscription
+   * payloads round-trip through `toBackendStreamPath` whenever they are
+   * written or refreshed, so an adapter that unconditionally prefixes will
+   * cause runaway double-prefixing across `getSubscription` →
+   * `addSubscriptionStreams` cycles.
+   *
+   * Implementations should also be deterministic, side-effect free, and must
+   * not throw — exceptions surface inside subscription ack / release paths
+   * where they can cause re-dispatch storms.
+   */
   toBackendStreamPath(serviceId: string, streamPath: string): string
+  /**
+   * Inverse of `toBackendStreamPath`. Strip the backend transform so callers
+   * can reason in the runtime namespace. Must be idempotent for paths
+   * already in the runtime namespace.
+   */
   toRuntimeStreamPath(serviceId: string, streamPath: string): string
 }
 
