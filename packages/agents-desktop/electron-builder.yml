@@ -10,6 +10,7 @@ files:
   - dist/**/*
   - assets/**/*
   - package.json
+  - '!**/node_modules/@rollup/**'
 
 extraResources:
   - from: ../agents-server-ui/dist-desktop
