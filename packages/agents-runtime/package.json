@@ -78,6 +78,7 @@
   },
   "peerDependencies": {
     "@tanstack/react-db": ">=0.1.78",
+    "e2b": ">=2.0.0",
     "react": ">=18"
   },
   "peerDependenciesMeta": {
@@ -85,6 +86,9 @@
       "optional": true
     },
     "@tanstack/react-db": {
+      "optional": true
+    },
+    "e2b": {
       "optional": true
     }
   },

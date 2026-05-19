@@ -11,7 +11,7 @@ This doc is the implementation contract for the `Sandbox` primitive (Primitive 2
 ## 0. TL;DR
 
 - **`Sandbox` is a narrow interface we own**: `exec`, `readFile`, `writeFile`, `mkdir`, `fetch`, `dispose`. Designed against what `bash` / `read` / `write` / `edit` / `fetch_url` actually need — nothing more.
-- **Two providers in v1**: `unrestrictedSandbox()` (no-op pass-through, named explicitly), `nativeSandbox()` (thin adapter over `@anthropic-ai/sandbox-runtime`). `remoteSandbox()` is **deferred to v2** — no customer has asked for it and the per-provider semantics are too leaky to abstract cleanly today (see Appendix B).
+- **Three providers in v1**: `unrestrictedSandbox()` (no-op pass-through, named explicitly), `nativeSandbox()` (thin adapter over `@anthropic-ai/sandbox-runtime`), `remoteSandbox({provider: 'e2b'})` (adapter over E2B's npm SDK, loaded as an optional peer dependency). Adding additional remote providers (Vercel, Daytona) is mechanical: implement `RemoteSandboxClient` against the provider's SDK and register it in `loadClient`.
 - **All policy is in our config object**, never leaked through to the underlying library. Switching `nativeSandbox`'s engine later (Codex vendored crate, hand-rolled, microsandbox if it ever fits) does not touch tools or runtime plumbing.
 - **Lifecycle is owned by `Sandbox`**: one instance per wake (not per `useAgent` call), constructed lazily, disposed on wake end. For `unrestricted` and `native`, `dispose()` is cheap.
 - **Sub-PR plan (collapsed)**: 6a (interface + unrestricted + tool refactor + bash env-scrub + symlink fixes; behavior-preserving plumbing), 6b (`nativeSandbox` adapter + conformance tests, opt-in), 6c (`NetPolicy` for `fetch_url`), 6d (Horton/Worker default to native + `ELECTRIC_AGENTS_UNRESTRICTED` panic switch).
@@ -169,16 +169,26 @@ nativeSandbox({
 
 **Env scrubbing** lives at the tool layer (the bash tool stops forwarding `process.env`), not at the sandbox layer. The sandbox sets `PATH`, `HOME`, `USER`, `LANG`, `TERM` and nothing else. This is hardcoded; not a config knob.
 
-### 5.3 `remoteSandbox` — **deferred to v2**
+### 5.3 `remoteSandbox(opts)` — E2B in v1
 
-Cut from v1 after the remote-operator critique and the scope review. Reasons:
+```ts
+remoteSandbox({
+  provider: 'e2b',
+  workingDirectory?: string,         // path inside the VM; default '/work'
+  apiKey?: string,                   // or E2B_API_KEY env
+  template?: string,                 // provider-specific template
+  allowedHosts?: string[],           // hostname allowlist for sandbox.fetch
+  client?: RemoteSandboxClient,      // pre-constructed client (testing / custom wrapping)
+})
+```
 
-- No current customer has asked for it.
-- Per-provider semantics (workspace persistence, network defaults, cold-start tail latency, quota models) are too divergent to abstract cleanly without a concrete use case to design against. E2B has `pause`/`resume`; Vercel does not. E2B has internet by default; Vercel is allowlisted. `allowedHosts` is unenforceable server-side on E2B without their proxy beta.
-- Cold-start P99 of 4-8s on Vercel and 2-15s on E2B during deploy churn would block agent loops on every turn; the per-`useAgent` lifecycle implied by the original design is unworkable.
-- Cost: per-conversation $0.02-0.05 of pure sandbox time, before retries.
-
-The `Sandbox` interface is designed to accept remote adapters later. When a customer pays for it, we'll design the lifecycle (likely wake-spanning with explicit snapshot/resume, not per-turn) against their use case.
+- **SDK loading:** dynamic `import('e2b')` so the package is an optional peer dependency. Customers using the remote provider install `e2b` separately; the rest of agents-runtime carries zero remote-sandbox code at install time.
+- **Adapter shape:** `RemoteSandboxClient` (`{exec, readFile, writeFile, mkdir, kill}`) abstracts the provider SDK. Each provider gets a `createXxxClient(opts) → RemoteSandboxClient`. Tests pass a fake client via the `client` option, no real SDK required.
+- **FS semantics:** all paths are _VM-rooted_. The default working directory inside the VM is `/work`. Paths outside the working directory are denied for writes via a TS-level check; reads inherit the VM's filesystem visibility (system binaries, language stdlibs etc. are visible). Stronger read isolation belongs to provider-side templating, not our adapter.
+- **`sandbox.fetch()` runs in the host Node process**, not inside the VM, with a TS-level hostname allowlist. To route outbound traffic through the VM, use `sandbox.exec('curl …')`. Documented caveat; v1.1 may add VM-routed fetch.
+- **Lifecycle:** `dispose()` calls `client.kill()` (which terminates the VM). Idempotent. The single-instance constraint that `nativeSandbox` has does not apply — multiple `remoteSandbox` instances against the same or different providers can coexist.
+- **Cold start:** provider-dependent. Cost is one VM allocation at construction; reuse the sandbox for all calls in the wake (per-wake lifecycle, see §4).
+- **Adding more providers** (Vercel, Daytona) is mechanical: write a new `createXxxClient` returning `RemoteSandboxClient` and register it in `loadClient`. The adapter interface is the contract.
 
 ---
 
