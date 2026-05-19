@@ -89,6 +89,32 @@ jobs:
     with:
       git_ref: ${{ needs.changesets.outputs.agent_server_release_tag }}
 
+  update-cloud-agents-server:
+    name: Update Agents Server version used by Cloud
+    runs-on: ubuntu-latest
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.agent_server_release_tag != '' }}
+    steps:
+      - name: Get Agents Server version
+        id: agents_server
+        run: |
+          RELEASE_TAG='${{ needs.changesets.outputs.agent_server_release_tag }}'
+          VERSION="${RELEASE_TAG##*@}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger cloud agents server update
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.CROSSREPO_PAT }}
+          repository: electric-sql/stratovolt
+          event-type: update-agents-server
+          client-payload: |
+            {
+              "electric_commit_sha": "${{ github.sha }}",
+              "agents_server_release_tag": "${{ needs.changesets.outputs.agent_server_release_tag }}",
+              "agents_server_version": "${{ steps.agents_server.outputs.version }}"
+            }
+
   update-cloud:
     name: Update Electric version used by Cloud
     runs-on: ubuntu-latest
