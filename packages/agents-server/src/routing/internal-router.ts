@@ -2,6 +2,7 @@
  * Sub-router for /_electric/* control-plane routes.
  */
 
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { appendPathToUrl } from '@electric-ax/agents-runtime'
 import { Type, type Static } from '@sinclair/typebox'
 import { and, eq } from 'drizzle-orm'
@@ -16,6 +17,7 @@ import {
   ErrCodeCallbackNotFound,
   ErrCodeForkInProgress,
   ErrCodeSubscriptionNotFound,
+  ErrCodeUnauthorized,
 } from '../electric-agents-types.js'
 import { ATTR, tracer } from '../tracing.js'
 import { decodeJsonObject } from '../utils/server-utils.js'
@@ -91,6 +93,7 @@ type WebhookForwardBody = Static<typeof webhookForwardBodySchema>
 type CallbackForwardBody = Static<typeof callbackForwardBodySchema>
 
 const DS_SUBSCRIPTION_CALLBACK_PREFIX = `ds-subscription:`
+const WEBHOOK_SIGNATURE_TOLERANCE_MS = 5 * 60_000
 
 export type InternalRoutes = RouterType<
   IRequest,
@@ -163,6 +166,33 @@ function claimTokenFromRequest(request: IRequest): string | undefined {
       ?.replace(/^Bearer\s+/i, ``)
       .trim() || undefined
   )
+}
+
+function verifyWebhookSignature(
+  secret: string | null | undefined,
+  body: Uint8Array,
+  header: string | null
+): boolean {
+  if (!secret || !header) return false
+
+  const match = header.match(/^t=(\d+),sha256=([0-9a-f]{64})$/)
+  if (!match) return false
+
+  const timestampSeconds = Number(match[1])
+  if (!Number.isSafeInteger(timestampSeconds)) return false
+
+  const timestampMs = timestampSeconds * 1000
+  if (Math.abs(Date.now() - timestampMs) > WEBHOOK_SIGNATURE_TOLERANCE_MS) {
+    return false
+  }
+
+  const hmac = createHmac(`sha256`, secret)
+  hmac.update(`${timestampSeconds}.`)
+  hmac.update(body)
+  const expected = Buffer.from(hmac.digest(`hex`), `hex`)
+  const actual = Buffer.from(match[2], `hex`)
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
 }
 
 function newWebhookPayload(body: WebhookForwardBody | undefined): {
@@ -239,39 +269,56 @@ async function webhookForward(
     subscriptionId
   )
 
-  const lookupPromise: Promise<string | null> = tracer.startActiveSpan(
-    `db.lookupSubscription`,
-    async (span) => {
-      try {
-        const rows = await ctx.pgDb
-          .select()
-          .from(subscriptionWebhooks)
-          .where(
-            and(
-              eq(subscriptionWebhooks.tenantId, ctx.service),
-              eq(subscriptionWebhooks.subscriptionId, subscriptionId)
-            )
+  const lookupPromise: Promise<{
+    webhookUrl: string
+    webhookSecret: string | null
+  } | null> = tracer.startActiveSpan(`db.lookupSubscription`, async (span) => {
+    try {
+      const rows = await ctx.pgDb
+        .select()
+        .from(subscriptionWebhooks)
+        .where(
+          and(
+            eq(subscriptionWebhooks.tenantId, ctx.service),
+            eq(subscriptionWebhooks.subscriptionId, subscriptionId)
           )
-          .limit(1)
-        return rows[0]?.webhookUrl ?? null
-      } finally {
-        span.end()
-      }
+        )
+        .limit(1)
+      const row = rows[0]
+      return row
+        ? {
+            webhookUrl: row.webhookUrl,
+            webhookSecret: row.webhookSecret ?? null,
+          }
+        : null
+    } finally {
+      span.end()
     }
-  )
+  })
 
-  const [targetWebhookUrl, body] = await Promise.all([
+  const [target, body] = await Promise.all([
     lookupPromise,
     readRequestBody(request as Request),
   ])
 
-  if (!targetWebhookUrl) {
+  if (!target) {
     return apiError(
       404,
       ErrCodeSubscriptionNotFound,
       `Unknown webhook subscription`
     )
   }
+
+  if (
+    !verifyWebhookSignature(
+      target.webhookSecret,
+      body,
+      request.headers.get(`webhook-signature`)
+    )
+  ) {
+    return apiError(401, ErrCodeUnauthorized, `Invalid webhook signature`)
+  }
+
   const parsedBodyResult = validateOptionalJsonBody(
     webhookForwardBodySchema,
     body,
@@ -301,6 +348,10 @@ async function webhookForward(
       parsedBody.consumer_id ??
       null
     const callbackUrl = newWebhook?.callbackUrl ?? parsedBody.callback ?? null
+    const storedCallbackUrl =
+      newWebhook && callbackUrl
+        ? `${DS_SUBSCRIPTION_CALLBACK_PREFIX}${subscriptionId}`
+        : callbackUrl
 
     if (primaryStream) {
       rootSpan?.setAttribute(ATTR.STREAM_PATH, primaryStream)
@@ -331,7 +382,7 @@ async function webhookForward(
       )
 
       const upsertPromise =
-        consumerId && callbackUrl
+        consumerId && storedCallbackUrl
           ? tracer
               .startActiveSpan(`db.upsertConsumerCallback`, async (span) => {
                 try {
@@ -340,7 +391,7 @@ async function webhookForward(
                     .values({
                       tenantId: ctx.service,
                       consumerId,
-                      callbackUrl,
+                      callbackUrl: storedCallbackUrl,
                       primaryStream,
                     })
                     .onConflictDoUpdate({
@@ -348,7 +399,7 @@ async function webhookForward(
                         consumerCallbacks.tenantId,
                         consumerCallbacks.consumerId,
                       ],
-                      set: { callbackUrl, primaryStream },
+                      set: { callbackUrl: storedCallbackUrl, primaryStream },
                     })
                 } finally {
                   span.end()
@@ -431,9 +482,9 @@ async function webhookForward(
     upstream = await tracer.startActiveSpan(
       `fetch.agent-handler`,
       async (span) => {
-        span.setAttribute(`http.url`, targetWebhookUrl)
+        span.setAttribute(`http.url`, target.webhookUrl)
         try {
-          return await fetch(targetWebhookUrl, {
+          return await fetch(target.webhookUrl, {
             method: request.method,
             headers,
             body: bodyFromBytes(forwardBody),

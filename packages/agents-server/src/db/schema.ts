@@ -352,6 +352,7 @@ export const subscriptionWebhooks = pgTable(
     tenantId: text(`tenant_id`).notNull().default(`default`),
     subscriptionId: text(`subscription_id`).notNull(),
     webhookUrl: text(`webhook_url`).notNull(),
+    webhookSecret: text(`webhook_secret`),
     createdAt: timestamp(`created_at`, { withTimezone: true })
       .notNull()
       .defaultNow(),

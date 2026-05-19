@@ -432,9 +432,12 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
   })
 
   it(`rewrites webhook subscription targets and keeps the original target locally`, async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, `fetch`)
-      .mockResolvedValue(new Response(null, { status: 201 }))
+    const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ webhook_secret: `whsec_route_test` }), {
+        status: 201,
+        headers: { 'content-type': `application/json` },
+      })
+    )
     const db = fakeInsertDb()
 
     try {
@@ -469,6 +472,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         tenantId: `svc-agent-1`,
         subscriptionId: `horton-handler`,
         webhookUrl: `http://localhost:4448/runtime-webhook`,
+        webhookSecret: `whsec_route_test`,
       })
     } finally {
       fetchSpy.mockRestore()

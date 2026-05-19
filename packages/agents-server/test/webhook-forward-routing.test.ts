@@ -1,8 +1,11 @@
+import { createHmac } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { ClaimWriteTokenStore } from '../src/claim-write-token-store'
 import { globalRouter } from '../src/routing/global-router'
 import type { TenantContext } from '../src/routing/context'
 import type { DurableStreamsRoutingAdapter } from '../src/routing/durable-streams-routing-adapter'
+
+const TEST_WEBHOOK_SECRET = `whsec_test`
 
 function request(method: string, path: string, body?: unknown): Request {
   return new Request(`http://agents.local${path}`, {
@@ -10,6 +13,22 @@ function request(method: string, path: string, body?: unknown): Request {
     headers:
       body === undefined ? undefined : { 'content-type': `application/json` },
     body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+function signedWebhookForwardRequest(path: string, body: unknown): Request {
+  const rawBody = JSON.stringify(body)
+  const timestamp = Math.floor(Date.now() / 1000)
+  const signature = createHmac(`sha256`, TEST_WEBHOOK_SECRET)
+    .update(`${timestamp}.${rawBody}`)
+    .digest(`hex`)
+  return new Request(`http://agents.local${path}`, {
+    method: `POST`,
+    headers: {
+      'content-type': `application/json`,
+      'webhook-signature': `t=${timestamp},sha256=${signature}`,
+    },
+    body: rawBody,
   })
 }
 
@@ -120,9 +139,43 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
 }
 
 describe(`webhook forwarding for Durable Streams subscriptions`, () => {
+  it(`rejects unsigned webhook-forward deliveries`, async () => {
+    const select = selectDb([
+      {
+        webhookUrl: `http://runtime.local/_electric/builtin-agent-handler`,
+        webhookSecret: TEST_WEBHOOK_SECRET,
+      },
+    ])
+    const fetchSpy = vi.spyOn(globalThis, `fetch`)
+
+    try {
+      const response = await globalRouter.fetch(
+        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
+          subscription_id: `horton-handler`,
+          wake_id: `wake-unsigned`,
+          generation: 1,
+          streams: [],
+          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+          callback_token: `callback-token`,
+        }),
+        buildContext({
+          pgDb: { select: select.select } as any,
+        })
+      )
+
+      expect(response.status).toBe(401)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it(`adapts the new webhook wake payload into the runtime wake payload`, async () => {
     const select = selectDb([
-      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+      {
+        webhookUrl: `http://runtime.local/_electric/builtin-agent-handler`,
+        webhookSecret: TEST_WEBHOOK_SECRET,
+      },
     ])
     const insert = insertDb()
     const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
@@ -133,21 +186,24 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
-          subscription_id: `horton-handler`,
-          wake_id: `wake-1`,
-          generation: 7,
-          streams: [
-            {
-              path: `horton/demo/main`,
-              acked_offset: `0`,
-              tail_offset: `1`,
-              has_pending: true,
-            },
-          ],
-          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
-          callback_token: `callback-token`,
-        }),
+        signedWebhookForwardRequest(
+          `/_electric/webhook-forward/horton-handler`,
+          {
+            subscription_id: `horton-handler`,
+            wake_id: `wake-1`,
+            generation: 7,
+            streams: [
+              {
+                path: `horton/demo/main`,
+                acked_offset: `0`,
+                tail_offset: `1`,
+                has_pending: true,
+              },
+            ],
+            callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+            callback_token: `callback-token`,
+          }
+        ),
         buildContext({
           pgDb: { select: select.select, insert: insert.insert } as any,
         })
@@ -174,7 +230,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-1`,
-        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `ds-subscription:horton-handler`,
         primaryStream: `/horton/demo/main`,
       })
     } finally {
@@ -184,7 +240,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
   it(`routes new webhook wakes to the pending stream when DS includes stale streams first`, async () => {
     const select = selectDb([
-      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+      {
+        webhookUrl: `http://runtime.local/_electric/builtin-agent-handler`,
+        webhookSecret: TEST_WEBHOOK_SECRET,
+      },
     ])
     const insert = insertDb()
     const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
@@ -210,27 +269,30 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
-          subscription_id: `horton-handler`,
-          wake_id: `wake-2`,
-          generation: 8,
-          streams: [
-            {
-              path: `horton/old/main`,
-              acked_offset: `10`,
-              tail_offset: `10`,
-              has_pending: false,
-            },
-            {
-              path: `horton/pending/main`,
-              acked_offset: `0`,
-              tail_offset: `1`,
-              has_pending: true,
-            },
-          ],
-          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
-          callback_token: `callback-token`,
-        }),
+        signedWebhookForwardRequest(
+          `/_electric/webhook-forward/horton-handler`,
+          {
+            subscription_id: `horton-handler`,
+            wake_id: `wake-2`,
+            generation: 8,
+            streams: [
+              {
+                path: `horton/old/main`,
+                acked_offset: `10`,
+                tail_offset: `10`,
+                has_pending: false,
+              },
+              {
+                path: `horton/pending/main`,
+                acked_offset: `0`,
+                tail_offset: `1`,
+                has_pending: true,
+              },
+            ],
+            callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+            callback_token: `callback-token`,
+          }
+        ),
         buildContext({
           pgDb: { select: select.select, insert: insert.insert } as any,
           entityManager: {
@@ -268,7 +330,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-2`,
-        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `ds-subscription:horton-handler`,
         primaryStream: `/horton/pending/main`,
       })
     } finally {
@@ -278,7 +340,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
   it(`keeps root-relative DS wake stream paths before forwarding to the runtime`, async () => {
     const select = selectDb([
-      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+      {
+        webhookUrl: `http://runtime.local/_electric/builtin-agent-handler`,
+        webhookSecret: TEST_WEBHOOK_SECRET,
+      },
     ])
     const insert = insertDb()
     const getEntityByStream = vi.fn().mockResolvedValue({
@@ -301,21 +366,24 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
-          subscription_id: `horton-handler`,
-          wake_id: `wake-prefixed`,
-          generation: 9,
-          streams: [
-            {
-              path: `horton/demo/main`,
-              acked_offset: `0`,
-              tail_offset: `1`,
-              has_pending: true,
-            },
-          ],
-          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
-          callback_token: `callback-token`,
-        }),
+        signedWebhookForwardRequest(
+          `/_electric/webhook-forward/horton-handler`,
+          {
+            subscription_id: `horton-handler`,
+            wake_id: `wake-prefixed`,
+            generation: 9,
+            streams: [
+              {
+                path: `horton/demo/main`,
+                acked_offset: `0`,
+                tail_offset: `1`,
+                has_pending: true,
+              },
+            ],
+            callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+            callback_token: `callback-token`,
+          }
+        ),
         buildContext({
           pgDb: { select: select.select, insert: insert.insert } as any,
           entityManager: {
@@ -353,7 +421,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-prefixed`,
-        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `ds-subscription:horton-handler`,
         primaryStream: `/horton/demo/main`,
       })
     } finally {
@@ -403,7 +471,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
   it(`auto-acks webhook wakes for stopped entities`, async () => {
     const select = selectDb([
-      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+      {
+        webhookUrl: `http://runtime.local/_electric/builtin-agent-handler`,
+        webhookSecret: TEST_WEBHOOK_SECRET,
+      },
     ])
     const insert = insertDb()
     const stoppedEntity = {
@@ -419,21 +490,24 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
 
     try {
       const response = await globalRouter.fetch(
-        request(`POST`, `/_electric/webhook-forward/horton-handler`, {
-          subscription_id: `horton-handler`,
-          wake_id: `wake-stopped`,
-          generation: 8,
-          streams: [
-            {
-              path: `horton/demo/main`,
-              acked_offset: `1`,
-              tail_offset: `2`,
-              has_pending: true,
-            },
-          ],
-          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
-          callback_token: `callback-token`,
-        }),
+        signedWebhookForwardRequest(
+          `/_electric/webhook-forward/horton-handler`,
+          {
+            subscription_id: `horton-handler`,
+            wake_id: `wake-stopped`,
+            generation: 8,
+            streams: [
+              {
+                path: `horton/demo/main`,
+                acked_offset: `1`,
+                tail_offset: `2`,
+                has_pending: true,
+              },
+            ],
+            callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+            callback_token: `callback-token`,
+          }
+        ),
         buildContext({
           pgDb: { select: select.select, insert: insert.insert } as any,
           entityManager: {
@@ -516,6 +590,69 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       )
       expect(ctx.entityBridgeManager.onEntityChanged).toHaveBeenCalledWith(
         `/horton/demo`
+      )
+      expect(
+        ctx.runtime.claimWriteTokens.isValid(
+          `tenant-a`,
+          `/horton/demo/main`,
+          claimToken
+        )
+      ).toBe(false)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`acks Durable Streams subscription callbacks through the stream client`, async () => {
+    const select = selectDb([
+      {
+        callbackUrl: `ds-subscription:horton-handler`,
+        primaryStream: `/horton/demo/main`,
+      },
+    ])
+    const fetchSpy = vi.spyOn(globalThis, `fetch`)
+    const ackSubscription = vi
+      .fn()
+      .mockResolvedValue({ ok: true, next_wake: false })
+    const ctx = buildContext({
+      pgDb: { select: select.select } as any,
+      streamClient: { ackSubscription } as any,
+    })
+    const claimToken = ctx.runtime.claimWriteTokens.mint(
+      `tenant-a`,
+      `/horton/demo/main`,
+      `wake-1`
+    )
+
+    try {
+      const response = await globalRouter.fetch(
+        new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+          method: `POST`,
+          headers: {
+            'content-type': `application/json`,
+            authorization: `Bearer tenant-token`,
+            'electric-claim-token': `callback-token`,
+          },
+          body: JSON.stringify({
+            epoch: 7,
+            acks: [{ path: `/horton/demo/main`, offset: `1` }],
+            done: true,
+          }),
+        }),
+        ctx
+      )
+
+      expect(response.status).toBe(200)
+      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(ackSubscription).toHaveBeenCalledWith(
+        `horton-handler`,
+        `callback-token`,
+        {
+          wake_id: `wake-1`,
+          generation: 7,
+          acks: [{ stream: `horton/demo/main`, offset: `1` }],
+          done: true,
+        }
       )
       expect(
         ctx.runtime.claimWriteTokens.isValid(

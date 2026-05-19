@@ -8,7 +8,10 @@ import {
   ErrCodeUnauthorized,
 } from '../electric-agents-types.js'
 import { runnerWakeStream } from '../entity-registry.js'
-import { DurableStreamsSubscriptionError } from '../stream-client.js'
+import {
+  DurableStreamsSubscriptionError,
+  type SubscriptionResponse,
+} from '../stream-client.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
 import { serverLog } from '../utils/log.js'
 import type {
@@ -161,11 +164,10 @@ async function ensureSubscriptionIncludesStream(
   streamPath: string,
   input: SubscriptionCreateInput,
   existing: { streams?: Array<string | { path?: string }> } | null
-): Promise<void> {
+): Promise<SubscriptionResponse | null> {
   if (!existing) {
     try {
-      await ctx.streamClient.putSubscription(subscriptionId, input)
-      return
+      return await ctx.streamClient.putSubscription(subscriptionId, input)
     } catch (err) {
       if (!isSubscriptionAlreadyExistsError(err)) throw err
       existing = await ctx.streamClient.getSubscription(subscriptionId)
@@ -174,7 +176,7 @@ async function ensureSubscriptionIncludesStream(
           `[dispatch-policy] subscription create raced with existing subscription but it could not be read`,
           { subscriptionId, stream: streamPath }
         )
-        return
+        return null
       }
     }
   }
@@ -182,6 +184,7 @@ async function ensureSubscriptionIncludesStream(
   if (!subscriptionHasStream(existing, streamPath)) {
     await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
   }
+  return existing as SubscriptionResponse
 }
 
 export async function assertDispatchPolicyAllowed(
@@ -320,7 +323,7 @@ async function linkStreamToTargetSubscription(
     ctx.publicUrl,
     `/_electric/webhook-forward/${encodeURIComponent(subscriptionId)}`
   )
-  await ensureSubscriptionIncludesStream(
+  const subscription = await ensureSubscriptionIncludesStream(
     ctx,
     subscriptionId,
     streamPath,
@@ -332,18 +335,23 @@ async function linkStreamToTargetSubscription(
     },
     existing
   )
+  const webhookSecret = subscription?.webhook_secret
   await ctx.pgDb
     .insert(subscriptionWebhooks)
     .values({
       tenantId: ctx.service,
       subscriptionId,
       webhookUrl,
+      ...(webhookSecret ? { webhookSecret } : {}),
     })
     .onConflictDoUpdate({
       target: [
         subscriptionWebhooks.tenantId,
         subscriptionWebhooks.subscriptionId,
       ],
-      set: { webhookUrl },
+      set: {
+        webhookUrl,
+        ...(webhookSecret ? { webhookSecret } : {}),
+      },
     })
 }

@@ -189,6 +189,12 @@ export function createRuntimeRouter(
     createElectricTools,
     idleTimeout,
     heartbeatInterval,
+    ...(serverHeaders
+      ? {
+          claimHeaders: serverHeaders,
+          claimTokenHeader: `electric-claim-token` as const,
+        }
+      : {}),
   }
   const getRegisteredType = (name: string) =>
     registry ? registry.get(name) : getEntityType(name)

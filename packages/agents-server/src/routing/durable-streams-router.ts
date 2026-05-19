@@ -290,7 +290,11 @@ async function forwardSubscriptionRequest(
     requestUrl?: string
     bearerMode?: `overwrite` | `if-missing`
   } = {}
-): Promise<{ upstream: Response; response: Response }> {
+): Promise<{
+  upstream: Response
+  response: Response
+  responseBytes: Uint8Array
+}> {
   const upstream = await forwardToDurableStreams(
     ctx,
     request,
@@ -306,27 +310,51 @@ async function forwardSubscriptionRequest(
   return {
     upstream,
     response: responseFromUpstream(upstream, responseBytes),
+    responseBytes,
+  }
+}
+
+function webhookSecretFromSubscriptionResponse(
+  body: Uint8Array
+): string | undefined {
+  if (body.length === 0) return undefined
+  try {
+    const json = JSON.parse(new TextDecoder().decode(body)) as {
+      webhook_secret?: unknown
+    }
+    return typeof json.webhook_secret === `string`
+      ? json.webhook_secret
+      : undefined
+  } catch {
+    return undefined
   }
 }
 
 async function upsertSubscriptionWebhook(
   ctx: TenantContext,
   subscriptionId: string,
-  targetWebhookUrl: string
+  targetWebhookUrl: string,
+  webhookSecret: string | undefined
 ): Promise<void> {
+  const values = {
+    tenantId: ctx.service,
+    subscriptionId,
+    webhookUrl: targetWebhookUrl,
+    ...(webhookSecret ? { webhookSecret } : {}),
+  }
+  const set = {
+    webhookUrl: targetWebhookUrl,
+    ...(webhookSecret ? { webhookSecret } : {}),
+  }
   await ctx.pgDb
     .insert(subscriptionWebhooks)
-    .values({
-      tenantId: ctx.service,
-      subscriptionId,
-      webhookUrl: targetWebhookUrl,
-    })
+    .values(values)
     .onConflictDoUpdate({
       target: [
         subscriptionWebhooks.tenantId,
         subscriptionWebhooks.subscriptionId,
       ],
-      set: { webhookUrl: targetWebhookUrl },
+      set,
     })
 }
 
@@ -370,16 +398,14 @@ async function putSubscriptionBase(
   )
   if (!rewrite.ok) return rewrite.response
 
-  const { upstream, response } = await forwardSubscriptionRequest(
-    request,
-    ctx,
-    { body: rewrite.body }
-  )
+  const { upstream, response, responseBytes } =
+    await forwardSubscriptionRequest(request, ctx, { body: rewrite.body })
   if (upstream.ok && rewrite.targetWebhookUrl) {
     await upsertSubscriptionWebhook(
       ctx,
       subscriptionId,
-      rewrite.targetWebhookUrl
+      rewrite.targetWebhookUrl,
+      webhookSecretFromSubscriptionResponse(responseBytes)
     )
   }
   return response

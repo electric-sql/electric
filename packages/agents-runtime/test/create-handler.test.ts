@@ -602,6 +602,59 @@ describe(`createRuntimeHandler`, () => {
     expect(headers.get(`content-type`)).toBe(`application/json`)
   })
 
+  it(`uses configured server headers for webhook wake callbacks`, async () => {
+    defineEntity(`test-agent`, { handler: async () => {} })
+    processWakeMock.mockResolvedValueOnce(null)
+
+    const notification = {
+      consumerId: `consumer-1`,
+      epoch: 1,
+      wakeId: `wake-1`,
+      streamPath: `/streams/entity:test-1`,
+      streams: [{ path: `/streams/entity:test-1`, offset: `0_0` }],
+      callback: `http://localhost:3000/_electric/callback-forward/wake-1`,
+      claimToken: `tok-1`,
+      entity: {
+        type: `test-agent`,
+        status: `active`,
+        url: `http://localhost:3000/test-agent/test-1`,
+        streams: {
+          main: `/streams/entity:test-1`,
+          error: `/streams/entity-error:test-1`,
+        },
+      },
+    }
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      handlerUrl: `http://localhost:4000/electric-agents`,
+      serverHeaders: {
+        Authorization: `Bearer tenant-token`,
+        'X-Tenant': `tenant-a`,
+      },
+    })
+
+    const response = await handler.handleWebhookRequest(
+      new Request(`http://localhost/electric-agents`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify(notification),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(processWakeMock).toHaveBeenCalledWith(
+      notification,
+      expect.objectContaining({
+        claimHeaders: {
+          Authorization: `Bearer tenant-token`,
+          'X-Tenant': `tenant-a`,
+        },
+        claimTokenHeader: `electric-claim-token`,
+      })
+    )
+  })
+
   it(`registers custom state collections as output schemas`, async () => {
     defineEntity(`stateful-agent`, {
       state: {
