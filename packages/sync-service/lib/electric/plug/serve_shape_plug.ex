@@ -23,7 +23,8 @@ defmodule Electric.Plug.ServeShapePlug do
   This avoids any SQLite access on the admission-control hot path. After
   `:load_shape` completes, `:reclassify_admission_kind` atomically swaps the
   `:initial` permit for an `:existing` permit so the `:initial` slot is freed
-  for the next validate-and-load wave while this request continues streaming.
+  for the next request without waiting for the whole initial snapshot to finish
+  streaming to the client.
 
   Using `after` (rather than `register_before_send`) is also what makes the
   streaming path correct: `before_send` fires when `send_chunked` starts
@@ -58,7 +59,8 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :reject_subquery_shape_compaction_request
   plug :load_shape
   # Reclassify off :initial as soon as load_shape returns so the :initial
-  # cap bounds validate-and-load throughput, not streaming concurrency.
+  # admission slot becomes available for new requests while the current
+  # handler still streams the shape response to the client.
   plug :reclassify_admission_kind
   plug :serve_shape_response
 
@@ -358,10 +360,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # Runs after :load_shape. Moves the handler out of :initial so the
   # :initial bucket can admit the next validate-and-load wave while this
-  # request is still streaming. If :existing is at cap, we keep the
-  # :initial permit — request still completes, just charged to the wrong
-  # bucket; the next swap attempt from another request will succeed once
-  # the bucket drains naturally.
+  # request is still streaming.
   defp reclassify_admission_kind(%Conn{assigns: %{config: config}} = conn, _) do
     case Process.get(@admission_permit_key) do
       {stack_id, :initial} ->
