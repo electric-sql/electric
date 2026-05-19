@@ -283,9 +283,8 @@ const primaryPlatform = computed(
       <template #eyebrow>Desktop</template>
       <template #title>Choose your platform</template>
       <template #subtitle>
-        Pre-built artifacts for macOS, Windows and Linux. Signing and
-        notarization are still being wired up, so OS install warnings are
-        expected on this&nbsp;preview.
+        Install the desktop app to start, monitor and return to long-running
+        agents from your own computer.
       </template>
 
       <div class="ad-desktop-grid">
@@ -318,6 +317,25 @@ const primaryPlatform = computed(
           </div>
         </article>
       </div>
+
+      <aside class="custom-block warning ad-signing-note">
+        <p class="custom-block-title">Unsigned Preview</p>
+        <p>
+          App signing is still in progress, so macOS and Windows may need an
+          extra confirmation before opening Electric Agents for the first time.
+        </p>
+        <ul>
+          <li>
+            <strong>macOS:</strong> try opening the app, then go to
+            <strong>System Settings → Privacy &amp; Security</strong> and choose
+            <strong>Open Anyway</strong>.
+          </li>
+          <li>
+            <strong>Windows:</strong> choose <strong>More info</strong>, then
+            <strong>Run anyway</strong>.
+          </li>
+        </ul>
+      </aside>
     </Section>
 
     <!-- ─────────────────── §3 — Mobile (coming soon) ─────────────────── -->
@@ -639,6 +657,22 @@ const primaryPlatform = computed(
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.ad-signing-note {
+  margin-top: 24px;
+  padding-bottom: 18px;
+}
+
+.ad-signing-note p {
+  max-width: 700px;
+}
+
+.ad-signing-note ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
 }
 
 /* ── §3 mobile ──────────────────────────────────────────────── */
