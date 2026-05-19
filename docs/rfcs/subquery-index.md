@@ -1,6 +1,6 @@
 ---
 title: Shared Subquery Indexes with Logical-Time Views
-version: "0.1"
+version: "0.2"
 status: draft
 owner: robacourt
 contributors: []
@@ -1034,6 +1034,110 @@ This is proportional to the removed subquery's children, participants, and
 values. It should not scan the whole `SubqueryIndex` or all shapes in the
 stack.
 
+### Memory Savings Prototype
+
+The prototype script is:
+
+```text
+packages/sync-service/scripts/subquery_logical_time_memory.exs
+```
+
+Run it directly with Elixir so it does not start the sync-service application:
+
+```sh
+elixir scripts/subquery_logical_time_memory.exs
+```
+
+There is also a focused test file:
+
+```text
+packages/sync-service/test/electric/shapes/filter/subquery_logical_time_memory_bench_test.exs
+```
+
+The prototype compares:
+
+- the current model: current `SubqueryIndex`-style ETS rows, per-consumer
+  `MapSet` views, and active-move before/after views;
+- the logical-time model: shared `MultiTimeView` rows, shared child routing and
+  metadata rows, progress-monitor rows, compact per-consumer subquery
+  references, and active moves that store changed values plus logical times.
+
+The model intentionally uses small integer dependency values. That is
+conservative for workloads with large text, UUID, or composite values because
+the current model duplicates those values per shape, while the logical-time
+model stores them once per retained subquery value plus routing rows.
+
+The local run below was generated on:
+
+```text
+OTP: 28
+Elixir: 1.19.5
+Architecture: aarch64-apple-darwin24.5.0
+Word size: 8 bytes
+```
+
+#### Local Measured Scenarios
+
+| Scenario | Current total | Current index | Current consumers | Logical total | Logical ETS | Logical consumers | Savings |
+|----------|---------------|---------------|-------------------|---------------|-------------|-------------------|---------|
+| 1 shape, 1k values, steady | 331.6 KiB | 302.4 KiB | 29.3 KiB | 222.9 KiB | 222.6 KiB | 256 B | 32.8% |
+| 10 shapes, 1k values, steady | 3.2 MiB | 2.91 MiB | 292.5 KiB | 229.1 KiB | 226.6 KiB | 2.5 KiB | 93.0% |
+| 100 shapes, 1k values, steady | 31.92 MiB | 29.06 MiB | 2.86 MiB | 290.9 KiB | 265.9 KiB | 25.0 KiB | 99.1% |
+| 100 shapes, 10k values, steady | 318.9 MiB | 290.02 MiB | 28.87 MiB | 1.78 MiB | 1.76 MiB | 25.0 KiB | 99.4% |
+| 100 shapes, 1k base, 100 added x 10 advanced | 32.24 MiB | 29.35 MiB | 2.88 MiB | 309.6 KiB | 284.6 KiB | 25.0 KiB | 99.1% |
+| 100 shapes, 1k base, 100 added x 99 advanced | 35.07 MiB | 31.94 MiB | 3.13 MiB | 309.6 KiB | 284.6 KiB | 25.0 KiB | 99.1% |
+| 100 shapes, 1k base, 100 added x 10 active move | 32.87 MiB | 29.35 MiB | 3.52 MiB | 349.8 KiB | 284.6 KiB | 65.2 KiB | 99.0% |
+| 100 shapes, 1k base, 1k added x 99 active move | 75.51 MiB | 57.77 MiB | 17.75 MiB | 4.25 MiB | 453.4 KiB | 3.81 MiB | 94.4% |
+
+Interpretation:
+
+- One-shape cohorts still save memory, but only by a constant factor. There is
+  no sharing benefit when a subquery has one participant.
+- Shared steady-state cohorts get the largest win because the current model
+  stores value membership and consumer views once per shape.
+- Active moves remain materially smaller because the logical-time model stores
+  changed values and times, not before and after full dependency views.
+- The harsh `1k added x 99 active move` case still grows because every active
+  move stores the changed values. It is still much smaller than the current
+  model because it avoids duplicating the 1k base view twice per active move.
+
+#### Customer-Shaped Estimates
+
+These estimates use the same script. They extrapolate from measured row costs
+and use the customer workload ratios from PR #4280:
+
+- HumanLayer: 75 observed `WHERE` clauses, 134 subquery occurrences, 13 literal
+  cohorts.
+- AutoArc: 611 observed `WHERE` clauses, 291 subquery occurrences, 209 literal
+  cohorts.
+- Hazel: 13 observed shape handles, 4 subquery occurrences, 4 literal cohorts.
+
+The extrapolation is for 100k shapes and preserves each workload's observed
+ratio of subquery occurrences to literal cohorts.
+
+| Customer | Observed occurrences -> cohorts | Shared occurrences | Participants @100k | Cohorts @100k | Rows/subquery | Current | Logical-time | Savings |
+|----------|---------------------------------|--------------------|--------------------|--------------|---------------|---------|--------------|---------|
+| HumanLayer | 134 -> 13 | 90.3% | 178,667 | 17,334 | 1,000 | 55.77 GiB | 4.2 GiB | 92.5% |
+| HumanLayer | 134 -> 13 | 90.3% | 178,667 | 17,334 | 10,000 | 556.19 GiB | 40.59 GiB | 92.7% |
+| AutoArc | 291 -> 209 | 28.2% | 47,627 | 34,207 | 1,000 | 14.87 GiB | 8.04 GiB | 45.9% |
+| AutoArc | 291 -> 209 | 28.2% | 47,627 | 34,207 | 10,000 | 148.26 GiB | 79.86 GiB | 46.1% |
+| Hazel | 4 -> 4 | 0.0% | 30,770 | 30,770 | 1,000 | 9.61 GiB | 7.23 GiB | 24.8% |
+| Hazel | 4 -> 4 | 0.0% | 30,770 | 30,770 | 10,000 | 95.79 GiB | 71.83 GiB | 25.0% |
+
+Interpretation:
+
+- HumanLayer benefits most because the captured workload has high literal
+  subquery sharing.
+- AutoArc still benefits, but many literal subqueries are not shared, so the
+  logical-time model stores more per-cohort shared views.
+- Hazel has no observed literal sharing. The estimate still shows a constant
+  factor reduction because the current model stores both index membership rows
+  and consumer `MapSet` views per shape, while the logical-time model stores
+  one shared view per one-participant cohort and compact consumer references.
+- If a production workload has one-off subqueries with large dependency views,
+  the logical-time design is still better than current state, but it is not the
+  main win. The main win comes when multiple shapes share a subquery.
+
 ### Materializer Integration
 
 The materializer owns the source of truth for a dependency subquery. It should
@@ -1322,6 +1426,7 @@ state in both `SubqueryIndex` and consumer event handlers.
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.2 | 2026-05-18 | robacourt | Added operation examples, a memory prototype script, measured local memory scenarios, and customer-shaped estimates based on PR #4280 ratios. |
 | 0.1 | 2026-05-18 | robacourt | Initial draft using the Stratovolt RFC template and alternatives from PR #4280. |
 
 ---
