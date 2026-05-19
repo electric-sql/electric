@@ -880,7 +880,8 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
         dependency_move_policy:
           Keyword.get(opts, :dependency_move_policy, :stream_dependency_moves)
       },
-      views: %{["$sublink", "0"] => Keyword.get(opts, :subquery_view, MapSet.new())}
+      views: %{["$sublink", "0"] => Keyword.get(opts, :subquery_view, MapSet.new())},
+      subquery_refs: %{["$sublink", "0"] => %{subquery_id: dep_handle, time: 0}}
     }
   end
 

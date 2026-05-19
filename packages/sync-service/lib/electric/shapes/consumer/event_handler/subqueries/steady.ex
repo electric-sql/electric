@@ -15,12 +15,16 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
   alias Electric.Shapes.Consumer.Subqueries.ShapeInfo
   alias Electric.Shapes.Consumer.Subqueries.Views
 
-  @enforce_keys [:shape_info, :views]
-  defstruct [:shape_info, :views, queue: MoveQueue.new()]
+  @enforce_keys [:shape_info, :views, :subquery_refs]
+  defstruct [:shape_info, :views, :subquery_refs, queue: MoveQueue.new()]
+
+  @type subquery_ref_meta() :: %{subquery_id: term(), time: non_neg_integer()}
+  @type subquery_refs() :: %{[String.t()] => subquery_ref_meta()}
 
   @type t() :: %__MODULE__{
           shape_info: ShapeInfo.t(),
           views: Views.t(),
+          subquery_refs: subquery_refs(),
           queue: MoveQueue.t()
         }
 
@@ -49,7 +53,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
     subquery_ref = RefResolver.ref_from_dep_handle!(state.shape_info.ref_resolver, dep_handle)
     dep_index = subquery_ref |> List.last() |> String.to_integer()
     dep_view = Views.current(state.views, subquery_ref)
-    next_state = %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view)}
+
+    next_state = %{
+      state
+      | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view),
+        subquery_refs: advance_subquery_time(state.subquery_refs, subquery_ref, payload[:to_time])
+    }
 
     with {:ok, next_state, effects} <- drain_queue(next_state, EffectList.new()) do
       {:ok, next_state, EffectList.to_list(effects)}
@@ -86,6 +95,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
                    Buffering.start(
                      state.shape_info,
                      state.views,
+                     state.subquery_refs,
                      queue,
                      move,
                      subquery_ref,
@@ -119,6 +129,13 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
             )
         end
     end
+  end
+
+  @doc false
+  def advance_subquery_time(subquery_refs, _subquery_ref, nil), do: subquery_refs
+
+  def advance_subquery_time(subquery_refs, subquery_ref, to_time) do
+    Map.update!(subquery_refs, subquery_ref, fn meta -> %{meta | time: to_time} end)
   end
 
   defp outer_move_kind(

@@ -10,6 +10,7 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
   use Supervisor
 
   alias Electric.Replication.ShapeLogCollector
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor
 
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
@@ -26,6 +27,7 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     children = [
+      {ProgressMonitor, stack_id: stack_id},
       {ShapeLogCollector, opts},
       {ShapeLogCollector.RequestBatcher, stack_id: stack_id}
     ]

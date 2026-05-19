@@ -16,18 +16,20 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   alias Electric.Shapes.Consumer.Subqueries.SplicePlan
   alias Electric.Shapes.Consumer.Subqueries.Views
 
-  @enforce_keys [:shape_info, :queue, :active_move]
-  defstruct [:shape_info, :queue, :active_move]
+  @enforce_keys [:shape_info, :queue, :active_move, :subquery_refs]
+  defstruct [:shape_info, :queue, :active_move, :subquery_refs]
 
   @type t() :: %__MODULE__{
           shape_info: ShapeInfo.t(),
           queue: MoveQueue.t(),
-          active_move: ActiveMove.t()
+          active_move: ActiveMove.t(),
+          subquery_refs: Steady.subquery_refs()
         }
 
   @spec start(
           ShapeInfo.t(),
           Views.t(),
+          Steady.subquery_refs(),
           MoveQueue.t(),
           IndexChanges.move(),
           [String.t()],
@@ -36,6 +38,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   def start(
         %ShapeInfo{} = shape_info,
         views,
+        subquery_refs,
         %MoveQueue{} = queue,
         {dep_move_kind, dep_index, values, txids} = move,
         subquery_ref,
@@ -45,6 +48,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
     state = %__MODULE__{
       shape_info: shape_info,
       queue: queue,
+      subquery_refs: subquery_refs,
       active_move:
         views
         |> ActiveMove.start(dep_index, dep_move_kind, subquery_ref, values, txids)
@@ -89,7 +93,13 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
     dep_index = subquery_ref |> List.last() |> String.to_integer()
     dep_view = Views.current(state.active_move.views_after_move, subquery_ref)
 
-    {:ok, %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view)}, []}
+    {:ok,
+     %{
+       state
+       | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view),
+         subquery_refs:
+           Steady.advance_subquery_time(state.subquery_refs, subquery_ref, payload[:to_time])
+     }, []}
   end
 
   def handle_event(%__MODULE__{} = state, {:pg_snapshot_known, snapshot}) do
@@ -137,6 +147,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
       steady_state = %Steady{
         shape_info: state.shape_info,
         views: active_move.views_after_move,
+        subquery_refs: state.subquery_refs,
         queue: state.queue
       }
 

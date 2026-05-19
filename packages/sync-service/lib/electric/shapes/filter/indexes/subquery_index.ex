@@ -37,15 +37,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
           :ets.new(:subquery_index, [:set, :public])
 
         stack_id ->
-          :ets.new(table_name(stack_id), [:set, :public, :named_table])
+          try do
+            :ets.new(table_name(stack_id), [:set, :public, :named_table])
+          rescue
+            ArgumentError -> table_name(stack_id)
+          end
       end
 
-    multi_time_view =
-      case Keyword.get(opts, :stack_id) do
-        nil -> MultiTimeView.new()
-        stack_id -> MultiTimeView.for_stack(stack_id) || MultiTimeView.new(stack_id: stack_id)
-      end
-
+    multi_time_view = MultiTimeView.new(Keyword.take(opts, [:stack_id]))
     %SubqueryIndex{table: table, multi_time_view: multi_time_view}
   end
 

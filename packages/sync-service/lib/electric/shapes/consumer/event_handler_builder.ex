@@ -6,6 +6,7 @@ defmodule Electric.Shapes.Consumer.EventHandlerBuilder do
   alias Electric.Shapes.Consumer.SetupEffects
   alias Electric.Shapes.Consumer.State
   alias Electric.Shapes.DnfPlan
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Shape
 
   @spec build(State.t(), :create | :restore) ::
@@ -14,19 +15,25 @@ defmodule Electric.Shapes.Consumer.EventHandlerBuilder do
       when dep_handles != [] do
     {:ok, dnf_plan} = DnfPlan.compile(state.shape)
     dependency_move_policy = dependency_move_policy(state.stack_id, state.shape)
+    mtv = MultiTimeView.new(stack_id: state.stack_id)
 
-    {views, dep_handle_to_ref, dep_index_to_ref} =
+    {views, subquery_refs, dep_handle_to_ref, dep_index_to_ref} =
       dep_handles
       |> Enum.with_index()
-      |> Enum.reduce({%{}, %{}, %{}}, fn {handle, index},
-                                         {views, handle_mapping, index_mapping} ->
+      |> Enum.reduce({%{}, %{}, %{}, %{}}, fn {handle, index},
+                                              {views, subquery_refs, handle_mapping,
+                                               index_mapping} ->
         materializer_opts = %{stack_id: state.stack_id, shape_handle: handle}
-        :ok = Materializer.wait_until_ready(materializer_opts)
-        view = Materializer.get_link_values(materializer_opts)
+
+        {:ok, time} =
+          Materializer.register_subquery_consumer(materializer_opts, state.shape_handle, self())
+
+        view = mtv |> MultiTimeView.values(handle, time) |> MapSet.new()
         ref = ["$sublink", Integer.to_string(index)]
 
-        {Map.put(views, ref, view), Map.put(handle_mapping, handle, {index, ref}),
-         Map.put(index_mapping, index, ref)}
+        {Map.put(views, ref, view),
+         Map.put(subquery_refs, ref, %{subquery_id: handle, time: time}),
+         Map.put(handle_mapping, handle, {index, ref}), Map.put(index_mapping, index, ref)}
       end)
 
     buffer_max_transactions =
@@ -47,7 +54,8 @@ defmodule Electric.Shapes.Consumer.EventHandlerBuilder do
         buffer_max_transactions: buffer_max_transactions,
         dependency_move_policy: dependency_move_policy
       },
-      views: views
+      views: views,
+      subquery_refs: subquery_refs
     }
 
     {:ok, handler,

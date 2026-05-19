@@ -1315,7 +1315,6 @@ defmodule Electric.ShapeCacheTest do
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
     end
 
-    @tag :subquery_phase_2
     test "restarted subquery shape reseeds the subquery index after restart", ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 

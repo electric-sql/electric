@@ -15,6 +15,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Eval
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor
   alias Electric.Shapes.Shape
 
   import Electric.Replication.LogOffset
@@ -47,6 +50,30 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def wait_until_ready(state) do
     GenServer.call(name(state), :wait_until_ready, :infinity)
+  end
+
+  @doc """
+  Register `pid` as a consumer of this materializer's dependency subquery
+  on behalf of `outer_shape_handle`. Blocks until the materializer has
+  finished its initial materialization, then registers the consumer with
+  `SubqueryProgressMonitor` at the materializer's current logical time and
+  returns that time.
+
+  Replaces the pre-RFC pattern of `wait_until_ready/1 + get_link_values/1`
+  for indexing-path setup; consumers no longer copy the dependency view.
+  """
+  @spec register_subquery_consumer(
+          %{stack_id: Electric.stack_id(), shape_handle: Electric.shape_handle()},
+          outer_shape_handle :: term(),
+          pid()
+        ) :: {:ok, non_neg_integer()}
+  def register_subquery_consumer(opts, outer_shape_handle, pid)
+      when is_pid(pid) do
+    GenServer.call(
+      name(opts),
+      {:register_subquery_consumer, outer_shape_handle, pid},
+      :infinity
+    )
   end
 
   @doc """
@@ -131,7 +158,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
         offset: LogOffset.before_all(),
         subscribed_offset: nil,
         ref: nil,
-        subscribers: MapSet.new()
+        subscribers: MapSet.new(),
+        logical_time: 0
       })
 
     {:ok, state, {:continue, :start_materializer}}
@@ -177,8 +205,15 @@ defmodule Electric.Shapes.Consumer.Materializer do
       |> apply_changes(state)
 
     write_link_values(state)
+    publish_initial_view_to_mtv(state)
 
     {:noreply, %{state | offset: offset}}
+  end
+
+  defp publish_initial_view_to_mtv(%{stack_id: stack_id, shape_handle: shape_handle} = state) do
+    mtv = MultiTimeView.new(stack_id: stack_id)
+    MultiTimeView.init_subquery(mtv, shape_handle, Map.keys(state.value_counts))
+    MultiTimeView.mark_ready(mtv, shape_handle)
   end
 
   @doc """
@@ -232,6 +267,21 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Process.monitor(pid)
 
     {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
+  end
+
+  def handle_call({:register_subquery_consumer, outer_shape_handle, pid}, _from, state) do
+    %{stack_id: stack_id, shape_handle: shape_handle, logical_time: time} = state
+
+    :ok =
+      ProgressMonitor.register_consumer(
+        stack_id,
+        shape_handle,
+        outer_shape_handle,
+        pid,
+        time
+      )
+
+    {:reply, {:ok, time}, state}
   end
 
   # if the supervisor is going down then this process will also be taken down
@@ -410,13 +460,22 @@ defmodule Electric.Shapes.Consumer.Materializer do
     events =
       cancel_matching_move_events(state.pending_events)
 
-    if events != %{} do
-      events = finalize_txids(events)
+    state =
+      if events != %{} do
+        events = finalize_txids(events)
+        from_time = state.logical_time
+        to_time = from_time + 1
+        apply_events_to_mtv(state, events, to_time)
+        envelope = Map.merge(events, %{from_time: from_time, to_time: to_time})
 
-      for pid <- state.subscribers do
-        send(pid, {:materializer_changes, state.shape_handle, events})
+        for pid <- state.subscribers do
+          send(pid, {:materializer_changes, state.shape_handle, envelope})
+        end
+
+        %{state | logical_time: to_time}
+      else
+        state
       end
-    end
 
     write_link_values(state)
 
@@ -424,6 +483,22 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   defp maybe_flush_pending_events(state, _commit?), do: state
+
+  defp apply_events_to_mtv(%{stack_id: stack_id, shape_handle: shape_handle}, events, to_time) do
+    mtv = MultiTimeView.new(stack_id: stack_id)
+    index = SubqueryIndex.for_stack(stack_id)
+
+    for {value, _original} <- Map.get(events, :move_in, []) do
+      MultiTimeView.mark_in(mtv, shape_handle, value, to_time)
+      if index, do: SubqueryIndex.add_positive_route(index, shape_handle, value)
+    end
+
+    for {value, _original} <- Map.get(events, :move_out, []) do
+      MultiTimeView.mark_out(mtv, shape_handle, value, to_time)
+    end
+
+    :ok
+  end
 
   defp finalize_txids(events) do
     Map.update(events, :txids, [], &Enum.sort(&1))

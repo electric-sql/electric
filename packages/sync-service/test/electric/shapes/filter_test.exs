@@ -630,8 +630,8 @@ defmodule Electric.Shapes.FilterTest do
     end)
   end
 
-  @tag :subquery_phase_2
-  test "Filter.remove_shape/2 removes seeded subquery index state" do
+  @tag :uses_legacy_subquery_api
+  test "remove_shape/2 removes seeded subquery index state" do
     filter = Filter.new()
     state_before = snapshot_filter_ets(filter)
     shape_id = "seeded-shape"
@@ -933,7 +933,7 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   describe "subquery shapes routing in filter" do
-    @describetag :subquery_phase_2
+    @describetag :uses_legacy_subquery_api
 
     import Support.DbSetup
     import Support.DbStructureSetup
