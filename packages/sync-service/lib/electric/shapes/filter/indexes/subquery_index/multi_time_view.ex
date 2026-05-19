@@ -152,20 +152,32 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView do
 
   @doc """
   Advance the minimum required logical time for `subquery_id` and compact all
-  retained histories. Values that are out for the entire retained window have
-  their rows deleted.
+  retained histories. Returns the list of values whose history compacted to
+  empty (and were therefore deleted) — useful for cascading routing cleanup.
   """
-  @spec set_min_required_time(t(), subquery_id(), time()) :: :ok
+  @spec set_min_required_time(t(), subquery_id(), time()) :: [value()]
   def set_min_required_time(view, subquery_id, time) do
     :ets.insert(view, {{:min_required_time, subquery_id}, time})
 
     view
     |> :ets.match({{:value, subquery_id, :"$1"}, :"$2"})
-    |> Enum.each(fn [value, history] ->
-      compact_history(view, subquery_id, value, history, time)
+    |> Enum.flat_map(fn [value, history] ->
+      case compact_history(view, subquery_id, value, history, time) do
+        :deleted -> [value]
+        :ok -> []
+      end
     end)
+  end
 
-    :ok
+  @doc """
+  All `subquery_id`s currently tracked by this view (every subquery that
+  has been initialised and not yet `remove_subquery`'d).
+  """
+  @spec subquery_ids(t()) :: [subquery_id()]
+  def subquery_ids(view) do
+    view
+    |> :ets.match({{:current_time, :"$1"}, :_})
+    |> Enum.map(fn [id] -> id end)
   end
 
   @doc "Delete every row for `subquery_id`."
@@ -210,9 +222,16 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView do
 
   defp compact_history(view, subquery_id, value, history, min_required_time) do
     case History.compact(history, min_required_time) do
-      ^history -> :ok
-      nil -> :ets.delete(view, {:value, subquery_id, value})
-      new -> :ets.insert(view, {{:value, subquery_id, value}, new})
+      ^history ->
+        :ok
+
+      nil ->
+        :ets.delete(view, {:value, subquery_id, value})
+        :deleted
+
+      new ->
+        :ets.insert(view, {{:value, subquery_id, value}, new})
+        :ok
     end
   end
 end

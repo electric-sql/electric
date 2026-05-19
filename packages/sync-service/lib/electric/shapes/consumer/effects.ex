@@ -389,7 +389,11 @@ defmodule Electric.Shapes.Consumer.Effects do
   defp build_views_map(mtv, subquery_refs, trigger_ref, trigger_time) do
     Map.new(subquery_refs, fn {ref, %{subquery_id: id, time: time}} ->
       effective_time = if ref == trigger_ref, do: trigger_time, else: time
-      {ref, mtv |> Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView.values(id, effective_time) |> MapSet.new()}
+
+      {ref,
+       mtv
+       |> Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView.values(id, effective_time)
+       |> MapSet.new()}
     end)
   end
 end

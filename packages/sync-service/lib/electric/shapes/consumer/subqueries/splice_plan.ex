@@ -22,7 +22,10 @@ defmodule Electric.Shapes.Consumer.Subqueries.SplicePlan do
   def build(%ActiveMove{} = active_move, %ShapeInfo{} = shape_info, subquery_refs) do
     {pre_txns, post_txns} = ActiveMove.split_buffer(active_move)
     mtv = MultiTimeView.for_stack(shape_info.stack_id)
-    views_before_move = views_at(mtv, subquery_refs, active_move.subquery_ref, active_move.from_time)
+
+    views_before_move =
+      views_at(mtv, subquery_refs, active_move.subquery_ref, active_move.from_time)
+
     views_after_move = views_at(mtv, subquery_refs, active_move.subquery_ref, active_move.to_time)
 
     with {:ok, pre_ops} <- convert_txns(pre_txns, shape_info, views_before_move),

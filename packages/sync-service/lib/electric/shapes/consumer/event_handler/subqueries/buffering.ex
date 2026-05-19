@@ -112,23 +112,6 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
     {:ok, %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view)}, []}
   end
 
-  # The base view for reducing buffered move queue entries is the consumer's
-  # view *as if* the in-flight active move had already spliced. For the
-  # trigger ref that means MTV at `active_move.to_time`; for every other ref
-  # the consumer is still pinned at its currently-tracked time.
-  defp view_after_active_move(mtv, active_move, subquery_refs, subquery_ref) do
-    %{subquery_id: subquery_id} = Map.fetch!(subquery_refs, subquery_ref)
-
-    time =
-      if subquery_ref == active_move.subquery_ref do
-        active_move.to_time
-      else
-        subquery_refs[subquery_ref].time
-      end
-
-    mtv |> MultiTimeView.values(subquery_id, time) |> MapSet.new()
-  end
-
   def handle_event(%__MODULE__{} = state, {:pg_snapshot_known, snapshot}) do
     state
     |> Map.put(:active_move, ActiveMove.record_snapshot!(state.active_move, snapshot))
@@ -261,5 +244,22 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
 
   defp maybe_notify_flushed(effects, log_offset) do
     EffectList.append(effects, %Effects.NotifyFlushed{log_offset: log_offset})
+  end
+
+  # The base view for reducing buffered move queue entries is the consumer's
+  # view *as if* the in-flight active move had already spliced. For the
+  # trigger ref that means MTV at `active_move.to_time`; for every other ref
+  # the consumer is still pinned at its currently-tracked time.
+  defp view_after_active_move(mtv, active_move, subquery_refs, subquery_ref) do
+    %{subquery_id: subquery_id} = Map.fetch!(subquery_refs, subquery_ref)
+
+    time =
+      if subquery_ref == active_move.subquery_ref do
+        active_move.to_time
+      else
+        subquery_refs[subquery_ref].time
+      end
+
+    mtv |> MultiTimeView.values(subquery_id, time) |> MapSet.new()
   end
 end

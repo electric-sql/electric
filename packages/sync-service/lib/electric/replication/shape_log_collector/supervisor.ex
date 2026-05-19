@@ -10,6 +10,7 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
   use Supervisor
 
   alias Electric.Replication.ShapeLogCollector
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.Compactor
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor
 
   def name(stack_id) do
@@ -28,6 +29,7 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
 
     children = [
       {ProgressMonitor, stack_id: stack_id},
+      {Compactor, stack_id: stack_id},
       {ShapeLogCollector, opts},
       {ShapeLogCollector.RequestBatcher, stack_id: stack_id}
     ]
