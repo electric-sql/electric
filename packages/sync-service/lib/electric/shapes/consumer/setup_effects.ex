@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Consumer.SetupEffects do
 
   alias Electric.Replication.ShapeLogCollector
   alias Electric.Shapes.Consumer.State
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 
   require Logger
 
@@ -43,28 +42,12 @@ defmodule Electric.Shapes.Consumer.SetupEffects do
     end
   end
 
-  defp execute_effect(%SeedSubqueryIndex{}, %State{event_handler: %{views: views}} = state) do
-    case SubqueryIndex.for_stack(state.stack_id) do
-      nil ->
-        {:ok, state}
-
-      index ->
-        for {ref, view} <- views do
-          dep_index = ref |> List.last() |> String.to_integer()
-
-          SubqueryIndex.seed_membership(
-            index,
-            state.shape_handle,
-            ref,
-            dep_index,
-            view
-          )
-        end
-
-        SubqueryIndex.mark_ready(index, state.shape_handle)
-        {:ok, state}
-    end
-  end
-
+  # TODO phase 2 (subquery-index RFC): replace per-shape `seed_membership` with
+  # `SubqueryIndex.set_shape_subquery/5` per subquery_ref after the consumer
+  # has registered with `SubqueryProgressMonitor` at the materializer's
+  # current logical time. The shared child routing is seeded once, at child
+  # creation, from `MultiTimeView.values/3` — not here. `mark_ready/2` still
+  # clears fallback for the shape, but only after every `set_shape_subquery`
+  # has been written so routing has a real logical time to read.
   defp execute_effect(%SeedSubqueryIndex{}, %State{} = state), do: {:ok, state}
 end

@@ -6,7 +6,6 @@ defmodule Electric.Shapes.Consumer.Effects do
 
   alias Electric.Connection.Manager
   alias Electric.Postgres.SnapshotQuery
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.ShapeCache.Storage
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
@@ -219,25 +218,16 @@ defmodule Electric.Shapes.Consumer.Effects do
     acc
   end
 
-  defp execute_effect(%AddToSubqueryIndex{} = effect, acc) do
-    update_subquery_index(acc, effect.dep_index, effect.subquery_ref, effect.values, :add)
-  end
-
-  defp execute_effect(%RemoveFromSubqueryIndex{} = effect, acc) do
-    update_subquery_index(acc, effect.dep_index, effect.subquery_ref, effect.values, :remove)
-  end
-
-  defp update_subquery_index(acc, dep_index, subquery_ref, values, op) do
-    state = acc.state
-    index = SubqueryIndex.for_stack(state.stack_id)
-    fun = if op == :add, do: &SubqueryIndex.add_value/5, else: &SubqueryIndex.remove_value/5
-
-    for {value, _original} <- values do
-      fun.(index, state.shape_handle, subquery_ref, dep_index, value)
-    end
-
-    acc
-  end
+  # TODO phase 2 (subquery-index RFC): re-wire AddToSubqueryIndex / RemoveFromSubqueryIndex
+  # against the new shared MultiTimeView + grouped SubqueryIndex routing. With
+  # the rewrite, per-shape value membership is no longer stored — the
+  # materializer writes transitions into MultiTimeView and triggers routing
+  # updates via SubqueryIndex.add_positive_route / remove_positive_route at
+  # the *subquery* level, not per consumer. The consumer effect path becomes a
+  # progress notification (SubqueryProgressMonitor.notify_processed_up_to/4)
+  # rather than a per-shape index update.
+  defp execute_effect(%AddToSubqueryIndex{} = _effect, acc), do: acc
+  defp execute_effect(%RemoveFromSubqueryIndex{} = _effect, acc), do: acc
 
   @spec query_move_in_async(pid() | atom(), map(), StartMoveInQuery.t(), pid()) :: :ok
   def query_move_in_async(

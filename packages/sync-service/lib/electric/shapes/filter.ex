@@ -21,6 +21,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
@@ -33,7 +34,8 @@ defmodule Electric.Shapes.Filter do
     :where_cond_table,
     :eq_index_table,
     :incl_index_table,
-    :subquery_index
+    :subquery_index,
+    :multi_time_view
   ]
 
   @type t :: %Filter{}
@@ -41,14 +43,24 @@ defmodule Electric.Shapes.Filter do
 
   @spec new(keyword()) :: Filter.t()
   def new(opts \\ []) do
+    stack_opts = Keyword.take(opts, [:stack_id])
+
     %Filter{
       shapes_table: :ets.new(:filter_shapes, [:set, :private]),
       tables_table: :ets.new(:filter_tables, [:set, :private]),
       where_cond_table: :ets.new(:filter_where, [:set, :private]),
       eq_index_table: :ets.new(:filter_eq, [:set, :private]),
       incl_index_table: :ets.new(:filter_incl, [:set, :private]),
-      subquery_index: SubqueryIndex.new(Keyword.take(opts, [:stack_id]))
+      subquery_index: SubqueryIndex.new(stack_opts),
+      multi_time_view: multi_time_view(stack_opts)
     }
+  end
+
+  defp multi_time_view(opts) do
+    case Keyword.get(opts, :stack_id) do
+      nil -> MultiTimeView.new()
+      stack_id -> MultiTimeView.for_stack(stack_id) || MultiTimeView.new(stack_id: stack_id)
+    end
   end
 
   @spec has_shape?(t(), shape_id()) :: boolean()
@@ -84,8 +96,8 @@ defmodule Electric.Shapes.Filter do
 
     where_cond_id = get_or_create_table_condition(filter, shape.root_table)
 
-    WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
     maybe_register_subquery_shape(filter, shape_id, shape)
+    WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
 
     filter
   end
@@ -96,7 +108,7 @@ defmodule Electric.Shapes.Filter do
          %Shape{shape_dependencies: [_ | _]} = shape
        ) do
     {:ok, plan} = DnfPlan.compile(shape)
-    SubqueryIndex.register_shape(index, shape_id, plan)
+    SubqueryIndex.register_shape(index, shape_id, plan, shape.shape_dependencies_handles)
   end
 
   defp maybe_register_subquery_shape(_filter, _shape_id, _shape), do: :ok

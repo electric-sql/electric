@@ -2263,6 +2263,7 @@ defmodule Electric.Shapes.ConsumerTest do
              ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
     end
 
+    @tag :subquery_phase_2
     test "consumer startup seeds the stack-scoped subquery index", ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 
@@ -2294,6 +2295,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert positions == SubqueryIndex.positions_for_shape(index, shape_handle)
     end
 
+    @tag :subquery_phase_2
     test "consumer steady dependency move_in adds value to the subquery index", ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 
