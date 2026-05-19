@@ -49,7 +49,7 @@ defmodule Electric.Shapes.Api do
     :shape,
     :stack_id,
     :feature_flags,
-    :max_concurrent_requests,
+    max_concurrent_requests: %{initial: 100, existing: 1000},
     allow_shape_deletion: false,
     keepalive_interval: 21_000,
     long_poll_timeout: 20_000,

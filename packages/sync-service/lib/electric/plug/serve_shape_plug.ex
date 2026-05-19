@@ -289,47 +289,38 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
-    max_concurrent_requests = config[:api].max_concurrent_requests
+    kind = admission_kind(conn)
+    max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
 
-    # max_concurrent_requests is nil when admission control is not configured
-    # (e.g. embedded mode or tests that only exercise auth). Skip admission in
-    # that case — the request proceeds uncapped.
-    if is_nil(max_concurrent_requests) do
-      conn
-    else
-      kind = admission_kind(conn)
-      max_concurrent = Map.fetch!(max_concurrent_requests, kind)
+    case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
+      :ok ->
+        # Stash the acquired permit in the process dictionary so the `after`
+        # clause in call/2 releases it on every code path (success, halt, or
+        # uncaught exception).
+        Process.put(@admission_permit_key, {stack_id, kind})
+        conn
 
-      case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
-        :ok ->
-          # Stash the acquired permit in the process dictionary so the `after`
-          # clause in call/2 releases it on every code path (success, halt, or
-          # uncaught exception).
-          Process.put(@admission_permit_key, {stack_id, kind})
-          conn
+      {:error, :overloaded} ->
+        retry_after = calculate_retry_after(stack_id, max_concurrent)
 
-        {:error, :overloaded} ->
-          retry_after = calculate_retry_after(stack_id, max_concurrent)
+        response =
+          Api.Response.error(
+            get_in(config, [:api]),
+            %{
+              code: "concurrent_request_limit_exceeded",
+              message:
+                "Concurrent #{kind} request limit exceeded (limit: #{max_concurrent}), please retry"
+            },
+            status: 503,
+            known_error: true,
+            retry_after: retry_after
+          )
 
-          response =
-            Api.Response.error(
-              get_in(config, [:api]),
-              %{
-                code: "concurrent_request_limit_exceeded",
-                message:
-                  "Concurrent #{kind} request limit exceeded (limit: #{max_concurrent}), please retry"
-              },
-              status: 503,
-              known_error: true,
-              retry_after: retry_after
-            )
-
-          conn
-          |> put_resp_header("cache-control", "no-store")
-          |> put_resp_header("surrogate-control", "no-store")
-          |> Api.Response.send(response)
-          |> halt()
-      end
+        conn
+        |> put_resp_header("cache-control", "no-store")
+        |> put_resp_header("surrogate-control", "no-store")
+        |> Api.Response.send(response)
+        |> halt()
     end
   end
 
