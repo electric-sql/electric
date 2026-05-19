@@ -1,7 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
-import { relative, resolve } from 'node:path'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { resolveInsideWorkdir } from './path-guard'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
@@ -22,19 +22,16 @@ export function createReadFileTool(
     execute: async (_toolCallId, params) => {
       const { path: filePath } = params as { path: string }
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
+        const guard = await resolveInsideWorkdir(filePath, workingDirectory)
+        if (!guard.ok) {
           return {
             content: [
-              {
-                type: `text` as const,
-                text: `Error: Path "${filePath}" is outside the working directory`,
-              },
+              { type: `text` as const, text: `Error: ${guard.reason}` },
             ],
             details: { charCount: 0 },
           }
         }
+        const resolved = guard.resolved
 
         const fileStat = await stat(resolved)
         if (fileStat.size > MAX_FILE_SIZE) {
