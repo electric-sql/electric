@@ -1,3 +1,8 @@
+import type {
+  DesktopServerFetchRequest,
+  DesktopServerFetchResponse,
+} from './server-connection'
+
 type ServerHeaderConfig = {
   name?: string
   url: string
@@ -10,6 +15,8 @@ type ActiveServerHeaders = {
 }
 
 const DEFAULT_ACTIVE_PRINCIPAL = `system:dev-local`
+const DESKTOP_SERVER_FETCH_METHODS = new Set([`POST`, `PUT`, `PATCH`, `DELETE`])
+const NULL_BODY_STATUSES = new Set([204, 205, 304])
 
 let activeServerHeaders: ActiveServerHeaders | null = null
 
@@ -78,6 +85,85 @@ function matchesActiveServer(input: RequestInfo | URL): boolean {
   )
 }
 
+function isLocalHttpUrl(url: URL): boolean {
+  if (url.protocol !== `http:`) return false
+  const hostname = url.hostname.toLowerCase()
+  return (
+    hostname === `localhost` ||
+    hostname === `127.0.0.1` ||
+    hostname === `0.0.0.0` ||
+    hostname === `[::1]` ||
+    hostname === `::1`
+  )
+}
+
+function activeServerIsLocal(): boolean {
+  if (!activeServerHeaders) return false
+  try {
+    return isLocalHttpUrl(new URL(activeServerHeaders.baseUrl))
+  } catch {
+    return false
+  }
+}
+
+function requestMethod(input: RequestInfo | URL, init: RequestInit): string {
+  return (
+    init.method ??
+    (input instanceof Request ? input.method : undefined) ??
+    `GET`
+  ).toUpperCase()
+}
+
+function desktopServerFetchApi():
+  | ((
+      request: DesktopServerFetchRequest
+    ) => Promise<DesktopServerFetchResponse>)
+  | undefined {
+  if (typeof window === `undefined`) return undefined
+  return window.electronAPI?.serverFetch
+}
+
+function shouldUseDesktopServerFetch(
+  input: RequestInfo | URL,
+  init: RequestInit
+): boolean {
+  const method = requestMethod(input, init)
+  return (
+    DESKTOP_SERVER_FETCH_METHODS.has(method) &&
+    activeServerIsLocal() &&
+    matchesActiveServer(input) &&
+    Boolean(desktopServerFetchApi())
+  )
+}
+
+async function desktopFetchBody(
+  input: RequestInfo | URL,
+  init: RequestInit
+): Promise<string | null | undefined> {
+  if (init.body === undefined || init.body === null) {
+    if (input instanceof Request) {
+      if (input.bodyUsed) return undefined
+      return await input.clone().text()
+    }
+    return null
+  }
+  if (typeof init.body === `string`) return init.body
+  if (init.body instanceof URLSearchParams) return init.body.toString()
+  if (init.body instanceof Blob) return await init.body.text()
+  return undefined
+}
+
+function responseFromDesktopFetch(
+  response: DesktopServerFetchResponse
+): Response {
+  const body = NULL_BODY_STATUSES.has(response.status) ? null : response.body
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  })
+}
+
 export function registerActiveServerHeaders(
   server: ServerHeaderConfig | null
 ): void {
@@ -105,20 +191,45 @@ export function getActivePrincipal(): string {
   )
 }
 
+function hasDesktopHeaderInjection(): boolean {
+  return (
+    typeof window !== `undefined` &&
+    Boolean((window as { electronAPI?: unknown }).electronAPI)
+  )
+}
+
 export async function serverFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> {
+  const method = requestMethod(input, init)
   const headers = new Headers(
     input instanceof Request ? input.headers : undefined
   )
   new Headers(init.headers).forEach((value, key) => {
     headers.set(key, value)
   })
-  for (const [key, value] of Object.entries(
-    getConfiguredServerHeaders(input)
-  )) {
-    if (!headers.has(key)) headers.set(key, value)
+  if (!hasDesktopHeaderInjection()) {
+    for (const [key, value] of Object.entries(
+      getConfiguredServerHeaders(input)
+    )) {
+      if (!headers.has(key)) headers.set(key, value)
+    }
+  }
+  if (shouldUseDesktopServerFetch(input, init)) {
+    const api = desktopServerFetchApi()
+    const url = urlFromInput(input)
+    const body = await desktopFetchBody(input, init)
+    if (api && url && body !== undefined) {
+      return responseFromDesktopFetch(
+        await api({
+          url: url.toString(),
+          method,
+          headers: Object.fromEntries(headers.entries()),
+          body,
+        })
+      )
+    }
   }
   return fetch(input, { ...init, headers })
 }

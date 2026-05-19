@@ -98,6 +98,21 @@ type DesktopState = {
   pullWakeRunnerId: string | null
 }
 
+type DesktopServerFetchRequest = {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string | null
+}
+
+type DesktopServerFetchResponse = {
+  url: string
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  body: string
+}
+
 type ServerConnectionState = {
   serverId: string
   status: ServerConnectionStatus
@@ -204,7 +219,7 @@ const APP_ICON_FILE =
   process.platform === `darwin` ? `icon-mac.png` : `icon.png`
 const APP_ICON_PATH = path.join(RESOURCE_DIR, `assets`, APP_ICON_FILE)
 const APP_DISPLAY_NAME = `Electric Agents`
-const MAX_CONNECTIONS_PER_HOST = `256`
+const IGNORE_CONNECTION_LIMIT_DOMAINS = `localhost,127.0.0.1`
 const SETTINGS_VERSION = 2
 const GLOBAL_API_KEYS_REF = `api-keys:global`
 const RECONNECT_BASE_MS = 1_000
@@ -229,11 +244,16 @@ if (DESKTOP_USER_DATA_DIR) {
 const MCP_OAUTH_REDIRECT_BASE = `http://127.0.0.1:53117`
 
 // Electric streams can hold many long-polling HTTP requests open to the same
-// agents server. Raise Chromium's default per-host connection cap before
-// Electron creates its network context so those streams do not queue behind it.
+// local agents server. Electron supports bypassing Chromium's connection cap
+// for a domain list; this must run before Electron creates its network context.
 app.commandLine.appendSwitch(
-  `max-connections-per-host`,
-  MAX_CONNECTIONS_PER_HOST
+  `ignore-connections-limit`,
+  IGNORE_CONNECTION_LIMIT_DOMAINS
+)
+console.info(
+  `[agents-desktop] ignore-connections-limit=${app.commandLine.getSwitchValue(
+    `ignore-connections-limit`
+  )}`
 )
 
 /**
@@ -537,12 +557,40 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
   return fallbackMatches.length === 1 ? fallbackMatches[0]! : null
 }
 
+function findSavedServerForUrl(requestUrl: string): ServerConfig | null {
+  let parsed: URL
+  try {
+    parsed = new URL(requestUrl)
+  } catch {
+    return null
+  }
+
+  for (const server of settings.servers) {
+    let base: URL
+    try {
+      base = new URL(server.url)
+    } catch {
+      continue
+    }
+    if (base.origin !== parsed.origin) continue
+    const basePath = base.pathname.replace(/\/+$/, ``)
+    if (
+      basePath === `` ||
+      parsed.pathname === basePath ||
+      parsed.pathname.startsWith(`${basePath}/`)
+    ) {
+      return server
+    }
+  }
+  return null
+}
+
 /**
- * Decorate outgoing requests bound for a saved cloud agent server
- * with `Authorization: Bearer <agents token>` and
- * `x-electric-service: <tenantId>` headers. Two injection points,
- * both reading from the same in-memory agents-token map
- * (`SecretStore`-backed):
+ * Decorate outgoing requests bound for saved agent servers with the
+ * configured server headers. Cloud agent servers also receive
+ * `Authorization: Bearer <agents token>` and `x-electric-service:
+ * <tenantId>` headers. Two injection points, both reading from the
+ * same in-memory agents-token map (`SecretStore`-backed):
  *
  *  1. Renderer fetches — Electron's
  *     `session.webRequest.onBeforeSendHeaders` hook catches anything
@@ -562,7 +610,10 @@ function findCloudServerForUrl(requestUrl: string): ServerConfig | null {
  */
 function installCloudAuthHeaderInjection(): void {
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    const extra = buildCloudAuthHeaders(details.url)
+    const extra = mergeHeaders(
+      buildSavedServerHeaders(details.url) ?? undefined,
+      buildCloudAuthHeaders(details.url) ?? undefined
+    )
     if (!extra) {
       callback({ requestHeaders: details.requestHeaders })
       return
@@ -573,6 +624,87 @@ function installCloudAuthHeaderInjection(): void {
   })
 
   installCloudAuthUndiciInterceptor()
+}
+
+function buildSavedServerHeaders(url: string): Record<string, string> | null {
+  const server = findSavedServerForUrl(url)
+  if (!server) return null
+  return mergeHeaders(injectDevPrincipalHeaders(server).headers) ?? null
+}
+
+function assertDesktopServerFetchAllowed(
+  request: unknown
+): DesktopServerFetchRequest {
+  if (!request || typeof request !== `object`) {
+    throw new Error(`Invalid desktop server fetch request`)
+  }
+  const raw = request as Partial<DesktopServerFetchRequest>
+  if (typeof raw.url !== `string` || raw.url.trim().length === 0) {
+    throw new Error(`Invalid desktop server fetch URL`)
+  }
+  if (typeof raw.method !== `string` || raw.method.trim().length === 0) {
+    throw new Error(`Invalid desktop server fetch method`)
+  }
+  if (!raw.headers || typeof raw.headers !== `object`) {
+    throw new Error(`Invalid desktop server fetch headers`)
+  }
+  if (raw.body !== null && typeof raw.body !== `string`) {
+    throw new Error(`Invalid desktop server fetch body`)
+  }
+
+  const url = raw.url.trim()
+  const method = raw.method.trim().toUpperCase()
+  if (![`POST`, `PUT`, `PATCH`, `DELETE`].includes(method)) {
+    throw new Error(`Desktop server fetch only supports mutating requests`)
+  }
+  const server = findSavedServerForUrl(url)
+  if (!server || server.source === `electric-cloud`) {
+    throw new Error(
+      `Desktop server fetch is only available for saved local servers`
+    )
+  }
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(`Invalid desktop server fetch URL`)
+  }
+  if (
+    parsed.protocol !== `http:` ||
+    !isLocalLoopbackHostname(parsed.hostname)
+  ) {
+    throw new Error(`Desktop server fetch only supports local HTTP servers`)
+  }
+
+  return {
+    url,
+    method,
+    headers: normalizeHeaderRecord(raw.headers) ?? {},
+    body: raw.body,
+  }
+}
+
+async function desktopServerFetch(
+  request: unknown
+): Promise<DesktopServerFetchResponse> {
+  const checked = assertDesktopServerFetchAllowed(request)
+  const headers = mergeHeaders(
+    buildSavedServerHeaders(checked.url) ?? undefined,
+    buildCloudAuthHeaders(checked.url) ?? undefined,
+    checked.headers
+  )
+  const response = await fetch(checked.url, {
+    method: checked.method,
+    headers,
+    body: checked.body,
+  })
+  return {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToRecord(response.headers),
+    body: await response.text(),
+  }
 }
 
 /**
@@ -799,6 +931,17 @@ function headersToRecord(headers: Headers): Record<string, string> {
     record[key] = value
   })
   return record
+}
+
+function isLocalLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase()
+  return (
+    normalized === `localhost` ||
+    normalized === `127.0.0.1` ||
+    normalized === `0.0.0.0` ||
+    normalized === `[::1]` ||
+    normalized === `::1`
+  )
 }
 
 function normalizeServers(
@@ -2345,6 +2488,9 @@ function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     return desktopStateForWindow(win)
   })
+  ipcMain.handle(`desktop:server-fetch`, (_event, request: unknown) =>
+    desktopServerFetch(request)
+  )
   ipcMain.handle(
     `desktop:set-active-server`,
     async (_event, server: ServerConfig | null) => {

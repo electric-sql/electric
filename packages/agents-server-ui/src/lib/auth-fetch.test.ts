@@ -87,6 +87,122 @@ describe(`server fetch helpers`, () => {
     expect(headers.has(`authorization`)).toBe(false)
   })
 
+  it(`leaves configured headers to desktop injection inside Electron`, async () => {
+    ;(globalThis as { window?: unknown }).window = {
+      electronAPI: {},
+    }
+    registerActiveServerHeaders({
+      name: `Local`,
+      url: `http://localhost:4437`,
+      headers: { 'electric-principal': `system:dev-local` },
+    })
+
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`ok`))
+
+    await serverFetch(
+      `http://localhost:4437/_electric/entities/horton/a/send`,
+      {
+        method: `POST`,
+        headers: { 'content-type': `text/plain` },
+      }
+    )
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `http://localhost:4437/_electric/entities/horton/a/send`
+    )
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers)
+    expect(headers.get(`content-type`)).toBe(`text/plain`)
+    expect(headers.has(`electric-principal`)).toBe(false)
+  })
+
+  it(`routes local mutating requests through the desktop server fetch transport`, async () => {
+    const desktopFetch = vi.fn().mockResolvedValue({
+      url: `http://127.0.0.1:4437/_electric/entities/horton/a`,
+      status: 204,
+      statusText: `No Content`,
+      headers: {},
+      body: ``,
+    })
+    ;(globalThis as { window?: unknown }).window = {
+      electronAPI: { serverFetch: desktopFetch },
+    }
+    registerActiveServerHeaders({
+      name: `Local`,
+      url: `http://127.0.0.1:4437`,
+      headers: { 'electric-principal': `system:dev-local` },
+    })
+
+    const fetchMock = vi.spyOn(globalThis, `fetch`)
+
+    const response = await serverFetch(
+      `http://127.0.0.1:4437/_electric/entities/horton/a`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
+
+    expect(response.status).toBe(204)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(desktopFetch).toHaveBeenCalledWith({
+      url: `http://127.0.0.1:4437/_electric/entities/horton/a`,
+      method: `PUT`,
+      headers: { 'content-type': `application/json` },
+      body: `{}`,
+    })
+  })
+
+  it(`keeps local GET requests in the browser in Electron`, async () => {
+    const desktopFetch = vi.fn()
+    ;(globalThis as { window?: unknown }).window = {
+      electronAPI: { serverFetch: desktopFetch },
+    }
+    registerActiveServerHeaders({
+      name: `Local`,
+      url: `http://127.0.0.1:4437`,
+      headers: { 'electric-principal': `system:dev-local` },
+    })
+
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`ok`))
+
+    await serverFetch(`http://127.0.0.1:4437/_electric/shape`)
+
+    expect(desktopFetch).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it(`keeps non-local mutating requests in the browser in Electron`, async () => {
+    const desktopFetch = vi.fn()
+    ;(globalThis as { window?: unknown }).window = {
+      electronAPI: { serverFetch: desktopFetch },
+    }
+    registerActiveServerHeaders({
+      name: `Cloud`,
+      url: `https://agents.example.test`,
+      headers: { Authorization: `Bearer tenant-token` },
+    })
+
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(`ok`))
+
+    await serverFetch(
+      `https://agents.example.test/_electric/entities/horton/a`,
+      {
+        method: `PUT`,
+        body: JSON.stringify({}),
+      }
+    )
+
+    expect(desktopFetch).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it(`returns the active principal as a canonical principal URL`, () => {
     registerActiveServerHeaders({
       name: `Tenant`,
