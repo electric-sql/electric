@@ -14,7 +14,9 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   alias Electric.Shapes.Consumer.Subqueries.RefResolver
   alias Electric.Shapes.Consumer.Subqueries.ShapeInfo
   alias Electric.Shapes.Consumer.Subqueries.SplicePlan
-  alias Electric.Shapes.Consumer.Subqueries.Views
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor
 
   @enforce_keys [:shape_info, :queue, :active_move, :subquery_refs]
   defstruct [:shape_info, :queue, :active_move, :subquery_refs]
@@ -28,32 +30,45 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
 
   @spec start(
           ShapeInfo.t(),
-          Views.t(),
           Steady.subquery_refs(),
           MoveQueue.t(),
           IndexChanges.move(),
           [String.t()],
+          from_time :: non_neg_integer(),
+          to_time :: non_neg_integer(),
           keyword()
         ) :: {:ok, t(), [Effects.t()]}
   def start(
         %ShapeInfo{} = shape_info,
-        views,
         subquery_refs,
         %MoveQueue{} = queue,
-        {dep_move_kind, dep_index, values, txids} = move,
+        {dep_move_kind, dep_index, values, txids},
         subquery_ref,
+        from_time,
+        to_time,
         opts \\ []
-      )
-      when is_map(views) do
+      ) do
+    %{subquery_id: subquery_id} = Map.fetch!(subquery_refs, subquery_ref)
+
     state = %__MODULE__{
       shape_info: shape_info,
       queue: queue,
       subquery_refs: subquery_refs,
       active_move:
-        views
-        |> ActiveMove.start(dep_index, dep_move_kind, subquery_ref, values, txids)
+        ActiveMove.start(
+          subquery_id,
+          dep_index,
+          dep_move_kind,
+          subquery_ref,
+          values,
+          from_time,
+          to_time,
+          txids
+        )
         |> ActiveMove.carry_latest_seen_lsn(Keyword.get(opts, :latest_seen_lsn))
     }
+
+    move = {dep_move_kind, dep_index, values, txids}
 
     effects =
       EffectList.new()
@@ -91,15 +106,27 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   def handle_event(%__MODULE__{} = state, {:materializer_changes, dep_handle, payload}) do
     subquery_ref = RefResolver.ref_from_dep_handle!(state.shape_info.ref_resolver, dep_handle)
     dep_index = subquery_ref |> List.last() |> String.to_integer()
-    dep_view = Views.current(state.active_move.views_after_move, subquery_ref)
+    mtv = MultiTimeView.for_stack(state.shape_info.stack_id)
+    dep_view = view_after_active_move(mtv, state.active_move, state.subquery_refs, subquery_ref)
 
-    {:ok,
-     %{
-       state
-       | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view),
-         subquery_refs:
-           Steady.advance_subquery_time(state.subquery_refs, subquery_ref, payload[:to_time])
-     }, []}
+    {:ok, %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view)}, []}
+  end
+
+  # The base view for reducing buffered move queue entries is the consumer's
+  # view *as if* the in-flight active move had already spliced. For the
+  # trigger ref that means MTV at `active_move.to_time`; for every other ref
+  # the consumer is still pinned at its currently-tracked time.
+  defp view_after_active_move(mtv, active_move, subquery_refs, subquery_ref) do
+    %{subquery_id: subquery_id} = Map.fetch!(subquery_refs, subquery_ref)
+
+    time =
+      if subquery_ref == active_move.subquery_ref do
+        active_move.to_time
+      else
+        subquery_refs[subquery_ref].time
+      end
+
+    mtv |> MultiTimeView.values(subquery_id, time) |> MapSet.new()
   end
 
   def handle_event(%__MODULE__{} = state, {:pg_snapshot_known, snapshot}) do
@@ -135,7 +162,8 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
   end
 
   defp splice(%{active_move: active_move} = state) do
-    with {:ok, splice_plan} <- SplicePlan.build(active_move, state.shape_info) do
+    with {:ok, splice_plan} <-
+           SplicePlan.build(active_move, state.shape_info, state.subquery_refs) do
       index_effects =
         IndexChanges.effects_for_complete(
           state.shape_info.dnf_plan,
@@ -144,10 +172,18 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
           active_move.subquery_ref
         )
 
+      advance_consumer_to_after_move(state, active_move)
+
+      next_subquery_refs =
+        Steady.advance_subquery_time(
+          state.subquery_refs,
+          active_move.subquery_ref,
+          active_move.to_time
+        )
+
       steady_state = %Steady{
         shape_info: state.shape_info,
-        views: active_move.views_after_move,
-        subquery_refs: state.subquery_refs,
+        subquery_refs: next_subquery_refs,
         queue: state.queue
       }
 
@@ -185,9 +221,34 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
       dnf_plan: shape_info.dnf_plan,
       trigger_dep_index: active_move.dep_index,
       values: active_move.values,
-      views_before_move: active_move.views_before_move,
-      views_after_move: active_move.views_after_move
+      subquery_id: active_move.subquery_id,
+      subquery_ref: active_move.subquery_ref,
+      from_time: active_move.from_time,
+      to_time: active_move.to_time
     }
+  end
+
+  defp advance_consumer_to_after_move(%__MODULE__{shape_info: shape_info}, active_move) do
+    case SubqueryIndex.for_stack(shape_info.stack_id) do
+      nil ->
+        :ok
+
+      index ->
+        SubqueryIndex.set_shape_subquery(
+          index,
+          shape_info.shape_handle,
+          active_move.subquery_ref,
+          active_move.subquery_id,
+          active_move.to_time
+        )
+
+        ProgressMonitor.notify_processed_up_to(
+          shape_info.stack_id,
+          active_move.from_time,
+          active_move.subquery_id,
+          shape_info.shape_handle
+        )
+    end
   end
 
   defp maybe_subscribe_global_lsn(effects, true) do

@@ -15,11 +15,15 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
   @type entry() :: {[move_value()], MapSet.t(txid())}
 
   # move_out/move_in are maps from dep_index to {[move_value], MapSet<txid>}
-  defstruct move_out: %{}, move_in: %{}
+  # to_times tracks the latest payload `to_time` seen per dep_index, so when
+  # a queued batch is later popped we know what materializer logical time it
+  # represents.
+  defstruct move_out: %{}, move_in: %{}, to_times: %{}
 
   @type t() :: %__MODULE__{
           move_out: %{non_neg_integer() => entry()},
-          move_in: %{non_neg_integer() => entry()}
+          move_in: %{non_neg_integer() => entry()},
+          to_times: %{non_neg_integer() => non_neg_integer()}
         }
 
   @type batch_kind() :: :move_out | :move_in
@@ -60,6 +64,12 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
 
     {new_outs, new_ins} = reduce(ops, dep_view)
 
+    to_times =
+      case Map.get(payload, :to_time) do
+        nil -> queue.to_times
+        new_to_time -> Map.update(queue.to_times, dep_index, new_to_time, &max(&1, new_to_time))
+      end
+
     %__MODULE__{
       move_out:
         put_or_delete(
@@ -74,31 +84,48 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueue do
           dep_index,
           new_ins,
           MapSet.union(existing_in_txids, new_txids)
-        )
+        ),
+      to_times: to_times
     }
   end
 
   @doc """
   Pop the next batch of operations. Returns move-out batches (any dep) before move-in batches.
-  Returns `{batch, updated_queue}` or `nil` if the queue is empty.
+  Returns `{batch, to_time, updated_queue}` or `nil` if the queue is empty.
+  `to_time` is the latest materializer logical time seen for this dep_index, or
+  `nil` if the batch was enqueued without a `:to_time` key.
   """
-  @spec pop_next(t()) :: {batch(), t()} | nil
+  @spec pop_next(t()) :: {batch(), non_neg_integer() | nil, t()} | nil
   def pop_next(%__MODULE__{move_out: move_out} = queue) when move_out != %{} do
     {dep_index, {values, txids}} = Enum.min_by(move_out, &elem(&1, 0))
+    to_time = Map.get(queue.to_times, dep_index)
 
-    {{:move_out, dep_index, values, sorted_txids(txids)},
-     %{queue | move_out: Map.delete(move_out, dep_index)}}
+    next_queue = %{queue | move_out: Map.delete(move_out, dep_index)}
+
+    {{:move_out, dep_index, values, sorted_txids(txids)}, to_time,
+     drop_to_time_if_dep_empty(next_queue, dep_index)}
   end
 
   def pop_next(%__MODULE__{move_out: move_out, move_in: move_in} = queue)
       when move_out == %{} and move_in != %{} do
     {dep_index, {values, txids}} = Enum.min_by(move_in, &elem(&1, 0))
+    to_time = Map.get(queue.to_times, dep_index)
 
-    {{:move_in, dep_index, values, sorted_txids(txids)},
-     %{queue | move_in: Map.delete(move_in, dep_index)}}
+    next_queue = %{queue | move_in: Map.delete(move_in, dep_index)}
+
+    {{:move_in, dep_index, values, sorted_txids(txids)}, to_time,
+     drop_to_time_if_dep_empty(next_queue, dep_index)}
   end
 
   def pop_next(%__MODULE__{}), do: nil
+
+  defp drop_to_time_if_dep_empty(%__MODULE__{} = queue, dep_index) do
+    if Map.has_key?(queue.move_out, dep_index) or Map.has_key?(queue.move_in, dep_index) do
+      queue
+    else
+      %{queue | to_times: Map.delete(queue.to_times, dep_index)}
+    end
+  end
 
   defp sorted_txids(%MapSet{} = txids), do: Enum.sort(txids)
 

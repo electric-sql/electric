@@ -1,27 +1,34 @@
 defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
   # Tracks a single buffered move-in while we wait to splice it into the log.
+  #
+  # Holds the logical-time window of the move (`from_time` and `to_time`)
+  # against the shared `MultiTimeView` — not a per-consumer copy of the
+  # dependency view. The splice path materialises views from MTV at
+  # `from_time` / `to_time` on demand.
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Shapes.Consumer.Subqueries.Views
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
   @type move_value() :: {term(), term()}
 
   @enforce_keys [
+    :subquery_id,
     :dep_index,
     :dep_move_kind,
     :subquery_ref,
     :values,
-    :views_before_move,
-    :views_after_move
+    :from_time,
+    :to_time
   ]
   defstruct [
+    :subquery_id,
     :dep_index,
     :dep_move_kind,
     :subquery_ref,
     :values,
-    :views_before_move,
-    :views_after_move,
+    :from_time,
+    :to_time,
     txids: [],
     snapshot: nil,
     move_in_snapshot_name: nil,
@@ -35,12 +42,13 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
   ]
 
   @type t() :: %__MODULE__{
+          subquery_id: term(),
           dep_index: non_neg_integer(),
           dep_move_kind: :move_in | :move_out,
           subquery_ref: [String.t()],
           values: [move_value()],
-          views_before_move: Views.t(),
-          views_after_move: Views.t(),
+          from_time: non_neg_integer(),
+          to_time: non_neg_integer(),
           txids: [non_neg_integer()],
           snapshot: {term(), term(), [term()]} | nil,
           move_in_snapshot_name: String.t() | nil,
@@ -54,25 +62,53 @@ defmodule Electric.Shapes.Consumer.Subqueries.ActiveMove do
         }
 
   @spec start(
-          Views.t(),
+          subquery_id :: term(),
           non_neg_integer(),
           :move_in | :move_out,
           [String.t()],
           [move_value()],
+          from_time :: non_neg_integer(),
+          to_time :: non_neg_integer(),
           [non_neg_integer()]
         ) :: t()
-  def start(views, dep_index, dep_move_kind, subquery_ref, values, txids \\ [])
-      when is_map(views) do
+  def start(
+        subquery_id,
+        dep_index,
+        dep_move_kind,
+        subquery_ref,
+        values,
+        from_time,
+        to_time,
+        txids \\ []
+      ) do
     %__MODULE__{
+      subquery_id: subquery_id,
       dep_index: dep_index,
       dep_move_kind: dep_move_kind,
       subquery_ref: subquery_ref,
       values: values,
-      txids: txids,
-      views_before_move: views,
-      views_after_move: Views.apply_move(views, subquery_ref, values, dep_move_kind)
+      from_time: from_time,
+      to_time: to_time,
+      txids: txids
     }
   end
+
+  @doc """
+  Materialise the dependency view as a `MapSet` at the active move's
+  `from_time`. The result is intended for transient use at the SplicePlan /
+  TransactionConverter boundary; do not retain it.
+  """
+  @spec view_before_move(t(), MultiTimeView.t()) :: MapSet.t()
+  def view_before_move(%__MODULE__{subquery_id: id, from_time: t}, mtv),
+    do: mtv |> MultiTimeView.values(id, t) |> MapSet.new()
+
+  @doc """
+  Materialise the dependency view as a `MapSet` at the active move's
+  `to_time`.
+  """
+  @spec view_after_move(t(), MultiTimeView.t()) :: MapSet.t()
+  def view_after_move(%__MODULE__{subquery_id: id, to_time: t}, mtv),
+    do: mtv |> MultiTimeView.values(id, t) |> MapSet.new()
 
   @spec buffer_txn(t(), Transaction.t()) :: t()
   def buffer_txn(%__MODULE__{} = active_move, %Transaction{} = txn) do

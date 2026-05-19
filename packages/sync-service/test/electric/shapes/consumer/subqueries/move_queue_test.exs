@@ -92,11 +92,13 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
       |> MoveQueue.enqueue(@dep, %{move_in: [{2, "2"}], move_out: [{1, "1"}]}, MapSet.new([1]))
       |> MoveQueue.enqueue(@dep, %{move_in: [{3, "3"}]}, MapSet.new([1]))
 
-    assert {{:move_out, 0, [{1, "1"}], []}, queue} = MoveQueue.pop_next(queue)
+    assert {{:move_out, 0, [{1, "1"}], []}, _to_time, queue} = MoveQueue.pop_next(queue)
     assert queue.move_out == %{}
     assert {[{2, "2"}, {3, "3"}], _} = Map.fetch!(queue.move_in, 0)
 
-    assert {{:move_in, 0, [{2, "2"}, {3, "3"}], []}, queue} = MoveQueue.pop_next(queue)
+    assert {{:move_in, 0, [{2, "2"}, {3, "3"}], []}, _to_time, queue} =
+             MoveQueue.pop_next(queue)
+
     assert queue.move_out == %{}
     assert queue.move_in == %{}
     assert nil == MoveQueue.pop_next(queue)
@@ -116,7 +118,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.MoveQueueTest do
         MapSet.new()
       )
 
-    assert {{:move_in, 0, _, [10, 20]}, _queue} = MoveQueue.pop_next(queue)
+    assert {{:move_in, 0, _, [10, 20]}, _to_time, _queue} = MoveQueue.pop_next(queue)
   end
 
   test "length counts queued values across both batches" do

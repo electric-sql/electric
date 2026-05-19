@@ -38,14 +38,24 @@ defmodule Electric.Shapes.Consumer.Effects do
 
   defmodule StartMoveInQuery do
     @moduledoc false
-    defstruct [:dnf_plan, :trigger_dep_index, :values, :views_before_move, :views_after_move]
+    defstruct [
+      :dnf_plan,
+      :trigger_dep_index,
+      :values,
+      :subquery_id,
+      :subquery_ref,
+      :from_time,
+      :to_time
+    ]
 
     @type t() :: %__MODULE__{
             dnf_plan: Electric.Shapes.DnfPlan.t(),
             trigger_dep_index: non_neg_integer(),
             values: list(),
-            views_before_move: Electric.Shapes.Consumer.Subqueries.Views.t(),
-            views_after_move: Electric.Shapes.Consumer.Subqueries.Views.t()
+            subquery_id: term(),
+            subquery_ref: [String.t()],
+            from_time: non_neg_integer(),
+            to_time: non_neg_integer()
           }
   end
 
@@ -236,12 +246,23 @@ defmodule Electric.Shapes.Consumer.Effects do
         %StartMoveInQuery{} = request,
         consumer_pid
       ) do
+    alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
+
+    mtv = MultiTimeView.for_stack(consumer_state.stack_id)
+    subquery_refs = consumer_state.event_handler.subquery_refs
+
+    views_before_move =
+      build_views_map(mtv, subquery_refs, request.subquery_ref, request.from_time)
+
+    views_after_move =
+      build_views_map(mtv, subquery_refs, request.subquery_ref, request.to_time)
+
     {where, params} =
       Querying.move_in_where_clause(
         request.dnf_plan,
         request.trigger_dep_index,
-        request.views_before_move,
-        request.views_after_move,
+        views_before_move,
+        views_after_move,
         consumer_state.shape.where.used_refs
       )
 
@@ -276,7 +297,7 @@ defmodule Electric.Shapes.Consumer.Effects do
 
             Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params},
               dnf_plan: request.dnf_plan,
-              views: request.views_after_move
+              views: views_after_move
             )
             |> Stream.transform(
               fn -> {0, 0} end,
@@ -359,5 +380,16 @@ defmodule Electric.Shapes.Consumer.Effects do
         xip_list: Enum.map(xip_list, &to_string/1)
       }
     }
+  end
+
+  # Build `%{subquery_ref => MapSet}` for every ref the consumer knows about.
+  # The trigger ref reads MTV at `trigger_time`; the others read at the
+  # consumer's currently-pinned time so the move-in query sees a consistent
+  # view across all dependencies.
+  defp build_views_map(mtv, subquery_refs, trigger_ref, trigger_time) do
+    Map.new(subquery_refs, fn {ref, %{subquery_id: id, time: time}} ->
+      effective_time = if ref == trigger_ref, do: trigger_time, else: time
+      {ref, mtv |> Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView.values(id, effective_time) |> MapSet.new()}
+    end)
   end
 end
