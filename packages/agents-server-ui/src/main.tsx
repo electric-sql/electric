@@ -36,8 +36,12 @@ function isNgrokHost(input: RequestInfo | URL): boolean {
       url.hostname.endsWith(`.ngrok-free.app`) ||
       url.hostname === `ngrok.app` ||
       url.hostname.endsWith(`.ngrok.app`) ||
+      url.hostname === `ngrok.dev` ||
+      url.hostname.endsWith(`.ngrok.dev`) ||
       url.hostname === `ngrok.io` ||
-      url.hostname.endsWith(`.ngrok.io`)
+      url.hostname.endsWith(`.ngrok.io`) ||
+      url.hostname === `ngrok-free.dev` ||
+      url.hostname.endsWith(`.ngrok-free.dev`)
     )
   } catch {
     return false

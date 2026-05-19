@@ -19,6 +19,8 @@ import type {
 import type { TenantContext } from './context.js'
 import type { SubscriptionCreateInput } from '../stream-client.js'
 
+const linkedDispatchSubscriptions = new WeakMap<object, Set<string>>()
+
 export function subscriptionIdForDispatchTarget(
   target: DispatchTarget
 ): string {
@@ -128,6 +130,23 @@ function subscriptionHasStream(
   )
 }
 
+function dispatchLinkCacheKey(
+  ctx: TenantContext,
+  subscriptionId: string,
+  streamPath: string
+): string {
+  return `${ctx.service}:${subscriptionId}:${streamPath}`
+}
+
+function getDispatchLinkCache(ctx: TenantContext): Set<string> {
+  let cache = linkedDispatchSubscriptions.get(ctx.streamClient)
+  if (!cache) {
+    cache = new Set()
+    linkedDispatchSubscriptions.set(ctx.streamClient, cache)
+  }
+  return cache
+}
+
 function isSubscriptionAlreadyExistsError(err: unknown): boolean {
   if (!(err instanceof DurableStreamsSubscriptionError)) return false
   if (err.status === 409) return true
@@ -208,7 +227,19 @@ export async function linkEntityDispatchSubscription(
   )
   const target = dispatchPolicy?.targets[0]
   if (!target) return
-  await linkStreamToTargetSubscription(ctx, target, entity)
+  const subscriptionId = subscriptionIdForEntityDispatchTarget(
+    target,
+    entity.url
+  )
+  const cacheKey = dispatchLinkCacheKey(
+    ctx,
+    subscriptionId,
+    entity.streams.main
+  )
+  const cache = getDispatchLinkCache(ctx)
+  if (cache.has(cacheKey)) return
+  await linkStreamToTargetSubscription(ctx, target, entity, subscriptionId)
+  cache.add(cacheKey)
 }
 
 export async function unlinkEntityDispatchSubscription(
@@ -225,6 +256,9 @@ export async function unlinkEntityDispatchSubscription(
     target,
     entity.url
   )
+  getDispatchLinkCache(ctx).delete(
+    dispatchLinkCacheKey(ctx, subscriptionId, entity.streams.main)
+  )
   await ctx.streamClient
     .removeSubscriptionStream(subscriptionId, entity.streams.main)
     .catch((err) => {
@@ -239,16 +273,13 @@ export async function unlinkEntityDispatchSubscription(
 async function linkStreamToTargetSubscription(
   ctx: TenantContext,
   target: DispatchTarget,
-  entity: ElectricAgentsEntity
+  entity: ElectricAgentsEntity,
+  subscriptionId: string
 ): Promise<void> {
   const streamPath = entity.streams.main
   await ctx.streamClient.ensure(streamPath, {
     contentType: `application/json`,
   })
-  const subscriptionId = subscriptionIdForEntityDispatchTarget(
-    target,
-    entity.url
-  )
   const existing = await ctx.streamClient.getSubscription(subscriptionId)
 
   if (target.type === `runner`) {

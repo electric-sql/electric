@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getPrincipalFromRequest,
+  parsePrincipalInput,
   parsePrincipalUrl,
   parsePrincipalKey,
   principalUrl,
@@ -39,6 +40,15 @@ describe(`principal parser`, () => {
     )
   })
 
+  it(`parses principal keys and URLs through one canonical input parser`, () => {
+    expect(parsePrincipalInput(`user:alice@example.com`)?.url).toBe(
+      `/principal/user%3Aalice%40example.com`
+    )
+    expect(parsePrincipalInput(`/principal/user:alice@example.com`)?.url).toBe(
+      `/principal/user%3Aalice%40example.com`
+    )
+  })
+
   it(`rejects invalid keys`, () => {
     for (const key of [`userkyle`, `user:`, `user:/kyle`, `admin:kyle`]) {
       expect(() => parsePrincipalKey(key)).toThrow()
@@ -51,5 +61,13 @@ describe(`principal parser`, () => {
     })
 
     expect(getPrincipalFromRequest(request)).toBeNull()
+  })
+
+  it(`accepts canonical principal URLs in request headers`, () => {
+    const request = new Request(`http://server`, {
+      headers: { 'electric-principal': `/principal/user%3Akyle` },
+    })
+
+    expect(getPrincipalFromRequest(request)?.key).toBe(`user:kyle`)
   })
 })

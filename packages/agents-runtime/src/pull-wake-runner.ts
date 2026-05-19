@@ -28,7 +28,6 @@ export interface PullWakeRunnerConfig {
   heartbeatIntervalMs?: number
   eventHeartbeatThrottleMs?: number
   leaseMs?: number
-  maxConcurrentClaims?: number
   heartbeatPath?: string
   claimPath?: string
   onError?: (error: Error) => void
@@ -93,7 +92,6 @@ type PullWakeRunnerState =
   | `running.reconnecting`
   | `stopping`
 
-const DEFAULT_MAX_CONCURRENT_CLAIMS = 10
 const INITIAL_RECONNECT_BACKOFF_MS = 1_000
 const MAX_RECONNECT_BACKOFF_MS = 30_000
 const CLAIM_ACTOR_STOP_GRACE_MS = 1_000
@@ -109,6 +107,8 @@ export function createPullWakeRunner(
   let response: PullWakeStreamResponse | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let eventHeartbeatTimer: ReturnType<typeof setTimeout> | null = null
+  let heartbeatInFlight: Promise<void> | null = null
+  let heartbeatPending = false
   let currentOffset = config.offset ?? `-1`
   let startedAt: string | null = null
   let streamConnected = false
@@ -127,12 +127,10 @@ export function createPullWakeRunner(
   let claimsFailed = 0
   let consecutiveHeartbeatFailures = 0
   let acceptingClaims = false
-  let activeClaimCount = 0
-  let runGeneration = 0
   let nextReconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS
   let streamResetError: Error | null = null
   let stopPromise: Promise<void> | null = null
-  const claimActors = new Map<Promise<void>, number>()
+  const claimActors = new Set<Promise<void>>()
 
   const wakePath =
     config.wakeStreamPath ??
@@ -153,10 +151,6 @@ export function createPullWakeRunner(
     config.claimPath ??
     `/_electric/runners/${encodeURIComponent(config.runnerId)}/claim`
   const claimUrl = appendPathToUrl(config.baseUrl, claimPath)
-  const maxConcurrentClaims = Math.max(
-    1,
-    Math.floor(config.maxConcurrentClaims ?? DEFAULT_MAX_CONCURRENT_CLAIMS)
-  )
 
   const toStatus = (): PullWakeRunnerStatus => {
     switch (state) {
@@ -237,15 +231,31 @@ export function createPullWakeRunner(
 
   const notifyHeartbeatChange = (): void => {
     const signal = controller?.signal
-    if (!signal || signal.aborted || heartbeatIntervalMs <= 0) return
+    if (!signal || signal.aborted || eventHeartbeatThrottleMs <= 0) return
     if (eventHeartbeatTimer) return
     eventHeartbeatTimer = setTimeout(() => {
       eventHeartbeatTimer = null
-      void heartbeat(signal)
+      requestHeartbeat(signal)
     }, eventHeartbeatThrottleMs)
   }
 
-  const heartbeat = async (signal: AbortSignal): Promise<void> => {
+  const requestHeartbeat = (signal: AbortSignal): void => {
+    if (signal.aborted) return
+    heartbeatPending = true
+    if (heartbeatInFlight) return
+    heartbeatInFlight = flushHeartbeats(signal).finally(() => {
+      heartbeatInFlight = null
+    })
+  }
+
+  const flushHeartbeats = async (signal: AbortSignal): Promise<void> => {
+    while (heartbeatPending && !signal.aborted) {
+      heartbeatPending = false
+      await sendHeartbeat(signal)
+    }
+  }
+
+  const sendHeartbeat = async (signal: AbortSignal): Promise<void> => {
     try {
       const headers = new Headers(await resolveHeaders())
       headers.set(`content-type`, `application/json`)
@@ -254,16 +264,13 @@ export function createPullWakeRunner(
         headers,
         body: JSON.stringify({
           lease_ms: leaseMs,
-          ...(currentOffset !== undefined
-            ? { wake_stream_offset: currentOffset }
-            : {}),
+          wake_stream_offset: currentOffset,
           diagnostics: buildDiagnostics(),
         }),
         signal,
       })
       lastHeartbeatAt = new Date().toISOString()
       if (!res.ok) {
-        lastHeartbeatOk = false
         throw new Error(
           `Pull-wake runner heartbeat failed for ${config.runnerId}: ${res.status} ${await res.text()}`
         )
@@ -289,13 +296,14 @@ export function createPullWakeRunner(
 
   const startHeartbeat = (signal: AbortSignal): void => {
     if (heartbeatIntervalMs <= 0) return
-    void heartbeat(signal)
+    requestHeartbeat(signal)
     heartbeatTimer = setInterval(() => {
-      void heartbeat(signal)
+      requestHeartbeat(signal)
     }, heartbeatIntervalMs)
   }
 
   const stopHeartbeat = (): void => {
+    heartbeatPending = false
     if (heartbeatTimer) {
       clearInterval(heartbeatTimer)
       heartbeatTimer = null
@@ -395,37 +403,6 @@ export function createPullWakeRunner(
   const isRunningState = (): boolean =>
     state === `starting` || state.startsWith(`running.`)
 
-  const waitForClaimCapacity = async (
-    signal: AbortSignal
-  ): Promise<boolean> => {
-    let abortListener: (() => void) | null = null
-    const abortPromise = new Promise<void>((resolve) => {
-      if (signal.aborted) {
-        resolve()
-        return
-      }
-      abortListener = () => resolve()
-      signal.addEventListener(`abort`, abortListener, { once: true })
-    })
-
-    try {
-      while (
-        acceptingClaims &&
-        !signal.aborted &&
-        activeClaimCount >= maxConcurrentClaims
-      ) {
-        const inFlight = [...claimActors.keys()]
-        if (inFlight.length === 0) return true
-        await Promise.race([...inFlight, abortPromise]).catch(() => undefined)
-      }
-      return acceptingClaims && !signal.aborted
-    } finally {
-      if (abortListener) {
-        signal.removeEventListener(`abort`, abortListener)
-      }
-    }
-  }
-
   const claimAndDispatch = async (
     event: PullWakeEvent,
     signal: AbortSignal
@@ -455,20 +432,12 @@ export function createPullWakeRunner(
     }
   }
 
-  const spawnClaimActor = (
-    event: PullWakeEvent,
-    signal: AbortSignal,
-    generation: number
-  ): void => {
-    activeClaimCount++
+  const spawnClaimActor = (event: PullWakeEvent, signal: AbortSignal): void => {
     let actor: Promise<void>
     actor = claimAndDispatch(event, signal).finally(() => {
-      if (claimActors.get(actor) === generation) {
-        activeClaimCount--
-      }
       claimActors.delete(actor)
     })
-    claimActors.set(actor, generation)
+    claimActors.add(actor)
   }
 
   const waitForClaimActors = async (
@@ -480,7 +449,7 @@ export function createPullWakeRunner(
       if (remainingMs <= 0) return false
       const result = await new Promise<`settled` | `timeout`>((resolve) => {
         const timer = setTimeout(() => resolve(`timeout`), remainingMs)
-        void Promise.allSettled([...claimActors.keys()]).then(() => {
+        void Promise.allSettled([...claimActors]).then(() => {
           clearTimeout(timer)
           resolve(`settled`)
         })
@@ -505,10 +474,7 @@ export function createPullWakeRunner(
     })
   }
 
-  const consumeWakeStream = async (
-    signal: AbortSignal,
-    generation: number
-  ): Promise<void> => {
+  const consumeWakeStream = async (signal: AbortSignal): Promise<void> => {
     streamResetError = null
     response = await streamFactory({
       url: wakeUrl,
@@ -528,12 +494,7 @@ export function createPullWakeRunner(
         if (event?.type === `wake`) {
           eventsReceived++
           notifyHeartbeatChange()
-          if (await waitForClaimCapacity(signal)) {
-            spawnClaimActor(event, signal, generation)
-          } else {
-            claimsSkipped++
-            notifyHeartbeatChange()
-          }
+          if (acceptingClaims && !signal.aborted) spawnClaimActor(event, signal)
         }
         if (
           response.offset !== undefined &&
@@ -565,7 +526,7 @@ export function createPullWakeRunner(
         state = `running.connecting`
         notifyHeartbeatChange()
         try {
-          await consumeWakeStream(signal, runGeneration)
+          await consumeWakeStream(signal)
           if (!signal.aborted) {
             state = `running.reconnecting`
             notifyHeartbeatChange()
@@ -610,7 +571,6 @@ export function createPullWakeRunner(
     response?.cancel?.(new Error(`pull wake runner stopped`))
     if (!(await waitForClaimActors())) {
       claimActors.clear()
-      activeClaimCount = 0
     }
     config.runtime.abortWakes()
     await loop?.catch((err) => {
@@ -633,7 +593,21 @@ export function createPullWakeRunner(
       if (loop || stopPromise) return
       state = `starting`
       controller = new AbortController()
-      runGeneration++
+      reconnectCount = 0
+      lastError = null
+      lastErrorAt = null
+      lastHeartbeatAt = null
+      lastHeartbeatOk = false
+      lastClaimAt = null
+      lastClaimResult = null
+      lastDispatchAt = null
+      eventsReceived = 0
+      claimsSucceeded = 0
+      claimsSkipped = 0
+      claimsFailed = 0
+      consecutiveHeartbeatFailures = 0
+      nextReconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS
+      streamResetError = null
       startedAt = new Date().toISOString()
       startHeartbeat(controller.signal)
       loop = run().finally(() => {
@@ -648,7 +622,12 @@ export function createPullWakeRunner(
       await stopPromise
     },
     async waitForStopped() {
+      if (stopPromise) {
+        await stopPromise
+        return
+      }
       await loop
+      if (stopPromise) await stopPromise
     },
     get running() {
       return isRunningState()

@@ -336,6 +336,21 @@ describe(`dispatch policy routing`, () => {
       `/chat/one`,
       expect.objectContaining({ payload: `hello` })
     )
+
+    const second = await globalRouter.fetch(
+      request(`POST`, `/_electric/entities/chat/one/send`, {
+        payload: `again`,
+      }),
+      ctx
+    )
+
+    expect(second.status).toBe(204)
+    expect(ctx.streamClient.getSubscription).toHaveBeenCalledTimes(1)
+    expect(ctx.streamClient.ensure).toHaveBeenCalledTimes(2)
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(
+      `/chat/one`,
+      expect.objectContaining({ payload: `again` })
+    )
   })
 
   it(`treats runner subscription create conflicts as an idempotent spawn link`, async () => {

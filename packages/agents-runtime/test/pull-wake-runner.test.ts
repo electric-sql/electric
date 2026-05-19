@@ -400,6 +400,128 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`coalesces event heartbeats while a heartbeat is in flight`, async () => {
+    const firstHeartbeat = deferred<Response>()
+    const yieldWake = deferred<void>()
+    const streamClosed = deferred<void>()
+    let heartbeatCalls = 0
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes(`/heartbeat`)) {
+          heartbeatCalls++
+          JSON.parse(String(init?.body))
+          return heartbeatCalls === 1
+            ? firstHeartbeat.promise
+            : Response.json({})
+        }
+        return Response.json(notification(`one`))
+      }
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const testRuntime = runtime()
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        await yieldWake.promise
+        yield wakeEvent(`one`)
+        await streamClosed.promise
+      },
+      cancel: () => streamClosed.resolve(),
+      closed: streamClosed.promise,
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      eventHeartbeatThrottleMs: 1,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(streamFactory).toHaveBeenCalledTimes(1)
+      expect(heartbeatCalls).toBe(1)
+    })
+
+    yieldWake.resolve()
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(1)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(heartbeatCalls).toBe(1)
+
+    firstHeartbeat.resolve(Response.json({}))
+    await waitFor(() => {
+      expect(heartbeatCalls).toBe(2)
+    })
+
+    await runner.stop()
+  })
+
+  it(`resets heartbeat failure counters across restarts`, async () => {
+    const heartbeatFailures = [deferred<Response>(), deferred<Response>()]
+    const streamClosed = [deferred<void>(), deferred<void>()]
+    const cancel = [
+      vi.fn(() => streamClosed[0]!.resolve()),
+      vi.fn(() => streamClosed[1]!.resolve()),
+    ]
+    let heartbeatCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes(`/heartbeat`)) {
+        const failure = heartbeatFailures[heartbeatCalls++]
+        if (failure) return failure.promise
+        return Response.json({})
+      }
+      return new Response(null, { status: 204 })
+    })
+    vi.stubGlobal(`fetch`, fetchMock)
+    const streamFactory = vi.fn(async () => {
+      const index = streamFactory.mock.calls.length - 1
+      return {
+        async *jsonStream() {
+          await streamClosed[index]!.promise
+        },
+        cancel: cancel[index],
+        closed: streamClosed[index]!.promise,
+      }
+    })
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: runtime(),
+      heartbeatIntervalMs: 60_000,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(streamFactory).toHaveBeenCalledTimes(1)
+      expect(heartbeatCalls).toBe(1)
+    })
+    heartbeatFailures[0]!.resolve(new Response(`failed`, { status: 500 }))
+    await waitFor(() => {
+      expect(runner.getHealth().last_heartbeat_ok).toBe(false)
+    })
+    await runner.stop()
+
+    runner.start()
+    await waitFor(() => {
+      expect(streamFactory).toHaveBeenCalledTimes(2)
+      expect(heartbeatCalls).toBe(2)
+    })
+    heartbeatFailures[1]!.resolve(new Response(`failed`, { status: 500 }))
+    await waitFor(() => {
+      expect(runner.getHealth().last_heartbeat_ok).toBe(false)
+    })
+
+    expect(cancel[1]).not.toHaveBeenCalled()
+    await runner.stop()
+  })
+
   it(`resolves async headers before opening the durable stream`, async () => {
     durableStreamMocks.stream.mockResolvedValueOnce({
       offset: `42`,
@@ -478,48 +600,6 @@ describe(`createPullWakeRunner`, () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(testRuntime.drainWakes).not.toHaveBeenCalled()
-    await runner.stop()
-  })
-
-  it(`pauses claim spawning at maxConcurrentClaims without unbounded queuing`, async () => {
-    const firstClaim = deferred<Response>()
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(async () => firstClaim.promise)
-      .mockImplementationOnce(async () => Response.json(notification(`two`)))
-    vi.stubGlobal(`fetch`, fetchMock)
-    const testRuntime = runtime()
-    const streamFactory = vi.fn(async () => ({
-      offset: `84`,
-      async *jsonStream() {
-        yield wakeEvent(`one`)
-        yield wakeEvent(`two`)
-      },
-      closed: Promise.resolve(),
-    }))
-
-    const runner = createPullWakeRunner({
-      baseUrl: `http://server`,
-      runnerId: `runner-1`,
-      runtime: testRuntime,
-      heartbeatIntervalMs: 0,
-      maxConcurrentClaims: 1,
-      streamFactory,
-    })
-
-    runner.start()
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-    })
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-
-    firstClaim.resolve(Response.json(notification(`one`)))
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2)
-      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(2)
-    })
-
     await runner.stop()
   })
 
@@ -754,7 +834,7 @@ describe(`createPullWakeRunner`, () => {
     consoleError.mockRestore()
   })
 
-  it(`does not let a stuck claim actor block stop or later claim capacity`, async () => {
+  it(`does not let a stuck claim actor block stop or a later restart`, async () => {
     vi.useFakeTimers()
     const claimStarted = deferred<void>()
     const secondClaimStarted = deferred<void>()
@@ -790,7 +870,6 @@ describe(`createPullWakeRunner`, () => {
       runnerId: `runner-1`,
       runtime: testRuntime,
       heartbeatIntervalMs: 0,
-      maxConcurrentClaims: 1,
       streamFactory,
     })
 
@@ -809,44 +888,6 @@ describe(`createPullWakeRunner`, () => {
     await vi.advanceTimersByTimeAsync(1_000)
     await secondStop
     expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it(`records a skipped claim when stop aborts a capacity wait`, async () => {
-    vi.useFakeTimers()
-    const claimStarted = deferred<void>()
-    const secondEventYielded = deferred<void>()
-    const fetchMock = vi.fn(async () => {
-      claimStarted.resolve()
-      return new Promise<Response>(() => {})
-    })
-    vi.stubGlobal(`fetch`, fetchMock)
-    const streamFactory = vi.fn(async () => ({
-      offset: `84`,
-      async *jsonStream() {
-        yield wakeEvent(`one`)
-        secondEventYielded.resolve()
-        yield wakeEvent(`two`)
-      },
-      closed: Promise.resolve(),
-    }))
-    const runner = createPullWakeRunner({
-      baseUrl: `http://server`,
-      runnerId: `runner-1`,
-      runtime: runtime(),
-      heartbeatIntervalMs: 0,
-      maxConcurrentClaims: 1,
-      streamFactory,
-    })
-
-    runner.start()
-    await claimStarted.promise
-    await secondEventYielded.promise
-    const stopped = runner.stop()
-    await vi.advanceTimersByTimeAsync(1_000)
-    await stopped
-
-    expect(runner.getHealth().events_received).toBe(2)
-    expect(runner.getHealth().claims_skipped).toBe(1)
   })
 
   it(`throws drain errors after recording them and marking the runner stopped`, async () => {
@@ -917,16 +958,21 @@ describe(`createPullWakeRunner`, () => {
 
     const firstStop = runner.stop()
     const secondStop = runner.stop()
+    let waitForStoppedResolved = false
+    const stopped = runner.waitForStopped().then(() => {
+      waitForStoppedResolved = true
+    })
     await drainStarted.promise
 
     expect(testRuntime.abortWakes).toHaveBeenCalledTimes(1)
     expect(testRuntime.drainWakes).toHaveBeenCalledTimes(1)
+    expect(waitForStoppedResolved).toBe(false)
 
     runner.start()
     expect(streamFactory).toHaveBeenCalledTimes(1)
 
     drainReleased.resolve()
-    await Promise.all([firstStop, secondStop])
+    await Promise.all([firstStop, secondStop, stopped])
 
     expect(testRuntime.abortWakes).toHaveBeenCalledTimes(1)
     expect(testRuntime.drainWakes).toHaveBeenCalledTimes(1)

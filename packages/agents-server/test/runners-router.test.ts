@@ -575,6 +575,30 @@ describe(`runner routes`, () => {
     expect(body.health.issues).toContain(`Client reports stream disconnected`)
   })
 
+  it(`ignores invalid runner lease timestamps in health output`, async () => {
+    const ctx = buildContext()
+    vi.mocked(
+      ctx.entityManager.registry.getRunnerDiagnostics
+    ).mockResolvedValue({
+      runner_id: `runner-1`,
+      owner_principal: `/principal/user%3Aowner%40example.com`,
+      liveness_lease_expires_at: `not-a-date`,
+      last_seen_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+
+    const response = await globalRouter.fetch(
+      request(`GET`, `/_electric/runners/runner-1/health`),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, any>
+    expect(body.runner.lease_expires_at).toBeNull()
+    expect(body.runner.lease_remaining_ms).toBeNull()
+    expect(body.runner.liveness_status).toBe(`offline`)
+  })
+
   it(`uses the pending stream from multi-stream claim responses`, async () => {
     const ctx = buildContext({
       principal: {

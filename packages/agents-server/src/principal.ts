@@ -47,6 +47,16 @@ export function parsePrincipalUrl(url: string): Principal | null {
   }
 }
 
+export function parsePrincipalInput(input: string): Principal | null {
+  const urlPrincipal = parsePrincipalUrl(input)
+  if (urlPrincipal) return urlPrincipal
+  try {
+    return parsePrincipalKey(input)
+  } catch {
+    return null
+  }
+}
+
 export function isPrincipalUrl(url: string): boolean {
   return parsePrincipalUrl(url) !== null
 }
@@ -54,11 +64,7 @@ export function isPrincipalUrl(url: string): boolean {
 export function getPrincipalFromRequest(request: Request): Principal | null {
   const value = request.headers.get(ELECTRIC_PRINCIPAL_HEADER)
   if (!value) return null
-  try {
-    return parsePrincipalKey(value)
-  } catch {
-    return null
-  }
+  return parsePrincipalInput(value)
 }
 
 export function getDevPrincipal(): Principal {

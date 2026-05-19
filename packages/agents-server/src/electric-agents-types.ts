@@ -141,6 +141,9 @@ export interface RunnerHeartbeatRequest {
 }
 
 export type RunnerHealthStatus = `healthy` | `degraded` | `unhealthy`
+export type RunnerClientDiagnostics = Partial<
+  Omit<PullWakeRunnerHealth, `running` | `offset`>
+>
 
 export interface RunnerHealthResponse {
   runner: {
@@ -154,7 +157,7 @@ export interface RunnerHealthResponse {
     last_seen_at: string | null
     created_at: string
   }
-  client: Omit<PullWakeRunnerHealth, `running` | `offset`> | null
+  client: RunnerClientDiagnostics | null
   claims: {
     active_count: number
     active: Array<{

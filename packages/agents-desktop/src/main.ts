@@ -690,7 +690,6 @@ async function desktopServerFetch(
   const checked = assertDesktopServerFetchAllowed(request)
   const headers = mergeHeaders(
     buildSavedServerHeaders(checked.url) ?? undefined,
-    buildCloudAuthHeaders(checked.url) ?? undefined,
     checked.headers
   )
   const response = await fetch(checked.url, {

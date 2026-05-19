@@ -440,9 +440,13 @@ async function runnerHealth(
     await ctx.entityManager.registry.getRunnerDiagnostics(runnerId)
 
   const now = Date.now()
-  const leaseExpiresAt = runtimeDiagnostics?.liveness_lease_expires_at
+  const parsedLeaseExpiresAt = runtimeDiagnostics?.liveness_lease_expires_at
     ? new Date(runtimeDiagnostics.liveness_lease_expires_at).getTime()
     : null
+  const leaseExpiresAt =
+    parsedLeaseExpiresAt !== null && Number.isFinite(parsedLeaseExpiresAt)
+      ? parsedLeaseExpiresAt
+      : null
 
   let livenessStatus: `online` | `offline` | `expired`
   if (runner.admin_status === `disabled`) {
@@ -511,7 +515,10 @@ async function runnerHealth(
       id: runner.id,
       admin_status: runner.admin_status,
       liveness_status: livenessStatus,
-      lease_expires_at: runtimeDiagnostics?.liveness_lease_expires_at ?? null,
+      lease_expires_at:
+        leaseExpiresAt !== null
+          ? (runtimeDiagnostics?.liveness_lease_expires_at ?? null)
+          : null,
       lease_remaining_ms:
         leaseExpiresAt !== null ? Math.max(0, leaseExpiresAt - now) : null,
       wake_stream: runner.wake_stream,
