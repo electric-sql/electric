@@ -25,6 +25,7 @@ import Section from '../agents-home/Section.vue'
 import BottomCtaStrap from '../BottomCtaStrap.vue'
 
 const githubReleaseBase = `https://github.com/electric-sql/electric/releases`
+const appReleaseNotesUrl = `${githubReleaseBase}?q=%22%40electric-ax%2Fagents-desktop%22&expanded=true`
 
 type DesktopPlatformId =
   | 'macos-arm64'
@@ -45,8 +46,6 @@ type DesktopPlatform = {
   downloads: DownloadOption[]
 }
 
-const stableVersion = `0.1.4`
-const stableTag = `@electric-ax/agents-desktop@${stableVersion}`
 const canaryTag = `agents-desktop-canary`
 
 const desktopPlatforms: DesktopPlatform[] = [
@@ -58,7 +57,7 @@ const desktopPlatforms: DesktopPlatform[] = [
     downloads: [
       {
         label: `Download for Mac (Apple Silicon)`,
-        assetName: `Electric-Agents-${stableVersion}-mac-arm64.dmg`,
+        assetName: `Electric-Agents-mac-arm64.dmg`,
       },
     ],
   },
@@ -70,7 +69,7 @@ const desktopPlatforms: DesktopPlatform[] = [
     downloads: [
       {
         label: `Download for Mac (Intel)`,
-        assetName: `Electric-Agents-${stableVersion}-mac-x64.dmg`,
+        assetName: `Electric-Agents-mac-x64.dmg`,
       },
     ],
   },
@@ -82,7 +81,7 @@ const desktopPlatforms: DesktopPlatform[] = [
     downloads: [
       {
         label: `Download for Windows`,
-        assetName: `Electric-Agents-${stableVersion}-win-x64.exe`,
+        assetName: `Electric-Agents-win-x64.exe`,
       },
     ],
   },
@@ -94,11 +93,11 @@ const desktopPlatforms: DesktopPlatform[] = [
     downloads: [
       {
         label: `Download AppImage`,
-        assetName: `Electric-Agents-${stableVersion}-linux-x64.AppImage`,
+        assetName: `Electric-Agents-linux-x64.AppImage`,
       },
       {
         label: `Download DEB`,
-        assetName: `Electric-Agents-${stableVersion}-linux-x64.deb`,
+        assetName: `Electric-Agents-linux-x64.deb`,
       },
     ],
   },
@@ -177,6 +176,10 @@ function releaseUrl(tag: string, assetName: string): string {
   return `${githubReleaseBase}/download/${encodeURIComponent(tag)}/${assetName}`
 }
 
+function latestReleaseUrl(assetName: string): string {
+  return `${githubReleaseBase}/latest/download/${assetName}`
+}
+
 /* Detect the visitor's OS on mount; default to macOS Apple Silicon
    so SSR / first paint always renders a sensible primary. */
 const detectedId = ref<DesktopPlatformId>('macos-arm64')
@@ -247,9 +250,7 @@ const primaryPlatform = computed(
             size="medium"
             theme="brand"
             :text="primaryPlatform.downloads[0].label"
-            :href="
-              releaseUrl(stableTag, primaryPlatform.downloads[0].assetName)
-            "
+            :href="latestReleaseUrl(primaryPlatform.downloads[0].assetName)"
           />
           <VPButton
             tag="a"
@@ -261,10 +262,9 @@ const primaryPlatform = computed(
         </div>
 
         <p class="ad-hero-meta">
-          v{{ stableVersion }} ·
           <a
             class="ad-meta-link"
-            :href="`${githubReleaseBase}/tag/${encodeURIComponent(stableTag)}`"
+            :href="appReleaseNotesUrl"
             target="_blank"
             rel="noreferrer"
             >Release notes</a
@@ -312,7 +312,7 @@ const primaryPlatform = computed(
               size="medium"
               :theme="platform.id === detectedId && idx === 0 ? 'brand' : 'alt'"
               :text="opt.label"
-              :href="releaseUrl(stableTag, opt.assetName)"
+              :href="latestReleaseUrl(opt.assetName)"
             />
           </div>
         </article>
