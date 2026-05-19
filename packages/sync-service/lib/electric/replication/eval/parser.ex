@@ -1055,7 +1055,7 @@ defmodule Electric.Replication.Eval.Parser do
       bool_array =
         concrete
         |> from_concrete([lexpr, rexpr])
-        |> Map.put(:map_over_array_in_pos, 1)
+        |> Map.merge(%{map_over_array_in_pos: 1, type: {:array, :bool}})
 
       {name, impl} =
         case expr.kind do
@@ -1272,7 +1272,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:ok,
          %Func{
            location: loc,
-           type: extract_base_type_name(target_type),
+           type: target_type,
            args: [arg],
            implementation: impl,
            map_over_array_in_pos: 0,
@@ -1350,7 +1350,7 @@ defmodule Electric.Replication.Eval.Parser do
            impl ->
              %Func{
                location: arg.location,
-               type: to_type,
+               type: {:array, to_type},
                args: [arg],
                implementation: impl,
                name: "#{from_type}_to_#{to_type}",
@@ -1579,7 +1579,7 @@ defmodule Electric.Replication.Eval.Parser do
     {:ok,
      %Const{
        value: value,
-       type: if(not is_nil(map_over_array_in_pos), do: {:array, func.type}, else: func.type),
+       type: func.type,
        location: func.location
      }}
   rescue
