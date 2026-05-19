@@ -46,6 +46,7 @@ type DesktopPlatform = {
   downloads: DownloadOption[]
 }
 
+const stableTag = `agents-desktop-latest`
 const canaryTag = `agents-desktop-canary`
 
 const desktopPlatforms: DesktopPlatform[] = [
@@ -177,7 +178,7 @@ function releaseUrl(tag: string, assetName: string): string {
 }
 
 function latestReleaseUrl(assetName: string): string {
-  return `${githubReleaseBase}/latest/download/${assetName}`
+  return releaseUrl(stableTag, assetName)
 }
 
 /* Detect the visitor's OS on mount; default to macOS Apple Silicon

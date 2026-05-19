@@ -106,6 +106,7 @@ jobs:
           RELEASE_NAME: ${{ inputs.release_name }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           SIGN: ${{ inputs.sign }}
+          STABLE_LATEST_TAG: agents-desktop-latest
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -154,6 +155,33 @@ jobs:
                 --target "$COMMIT_SHA" \
                 --title "$RELEASE_NAME" \
                 --notes "Desktop artifacts for Electric Agents ${VERSION}."
+            fi
+
+            if [[ "$CHANNEL" == "stable" ]]; then
+              git tag -f "$STABLE_LATEST_TAG" "$COMMIT_SHA"
+              git push origin "refs/tags/${STABLE_LATEST_TAG}" --force
+
+              {
+                echo "Latest stable Electric Agents Desktop build."
+                echo
+                echo "- Source release: ${RELEASE_TAG}"
+                echo "- Source commit: ${COMMIT_SHA}"
+                echo "- Workflow run: ${RUN_URL}"
+                echo "- Desktop package version: ${VERSION}"
+                echo "- Signed/notarized: ${SIGN}"
+              } > latest-release-notes.md
+
+              if gh release view "$STABLE_LATEST_TAG" >/dev/null 2>&1; then
+                gh release edit "$STABLE_LATEST_TAG" \
+                  --title "Electric Agents Desktop Latest" \
+                  --notes-file latest-release-notes.md
+              else
+                gh release create "$STABLE_LATEST_TAG" \
+                  --target "$COMMIT_SHA" \
+                  --title "Electric Agents Desktop Latest" \
+                  --notes-file latest-release-notes.md \
+                  --latest=false
+              fi
             fi
           fi
 
@@ -542,9 +570,18 @@ jobs:
         if: ${{ inputs.publish }}
         shell: bash
         env:
+          CHANNEL: ${{ inputs.channel }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-        run: gh release upload "$RELEASE_TAG" packages/agents-desktop/publish-assets/* --clobber
+          STABLE_LATEST_TAG: agents-desktop-latest
+        run: |
+          set -euo pipefail
+
+          gh release upload "$RELEASE_TAG" packages/agents-desktop/publish-assets/* --clobber
+
+          if [[ "$CHANNEL" == "stable" ]]; then
+            gh release upload "$STABLE_LATEST_TAG" packages/agents-desktop/publish-assets/* --clobber
+          fi
 
   update-pr-comment:
     name: Update PR artifact comment
