@@ -53,22 +53,18 @@ describe(`AgentsHost`, () => {
 
     const runtime = await host.registerTenant({
       serviceId: `svc-coastal-stork`,
-      durableStreamsUrl: `https://streams.test/v1/streams/svc-coastal-stork`,
+      durableStreamsUrl: `https://streams.test/v1/stream`,
     })
 
     expect(runtime.serviceId).toBe(`svc-coastal-stork`)
     expect(host.getTenant(`svc-coastal-stork`)).toBe(runtime)
-    expect(runtime.streamClient.baseUrl).toBe(
-      `https://streams.test/v1/streams/svc-coastal-stork`
-    )
+    expect(runtime.streamClient.baseUrl).toBe(`https://streams.test/v1/stream`)
     expect(runtime.wakeRegistry).toBe(host.wakeRegistry)
     expect(runtime.manager.registry.tenantId).toBe(`svc-coastal-stork`)
   })
 
   it(`uses an explicitly supplied tenant stream client`, async () => {
-    const streamClient = new StreamClient(
-      `https://streams.test/v1/streams/svc-direct-client`
-    )
+    const streamClient = new StreamClient(`https://streams.test/v1/stream`)
     const host = new AgentsHost({
       db: createMockDb(),
       pgClient: vi.fn() as any,
@@ -90,7 +86,7 @@ describe(`AgentsHost`, () => {
 
     const runtime = await host.registerTenant({
       serviceId: `svc-before-start`,
-      durableStreamsUrl: `https://streams.test/v1/streams/svc-before-start`,
+      durableStreamsUrl: `https://streams.test/v1/stream`,
     })
     const rehydrate = vi
       .spyOn(runtime, `rehydrateCronSchedules`)
@@ -140,7 +136,7 @@ describe(`AgentsHost`, () => {
 
     const registration = host.registerTenant({
       serviceId: `svc-race`,
-      durableStreamsUrl: `https://streams.test/v1/streams/svc-race`,
+      durableStreamsUrl: `https://streams.test/v1/stream`,
     })
     await Promise.resolve()
 

@@ -99,7 +99,7 @@ describe(`EntityProjector`, () => {
 
   it(`projects all tenants from one shared entities shape into tenant streams`, async () => {
     const streamClient = {
-      baseUrl: `https://streams.test/v1/stream/svc-a`,
+      baseUrl: `https://streams.test/v1/stream`,
       exists: vi.fn().mockResolvedValue(false),
       create: vi.fn().mockResolvedValue(undefined),
       readJson: vi.fn().mockResolvedValue([]),
@@ -161,7 +161,7 @@ describe(`EntityProjector`, () => {
       contentType: `application/json`,
     })
     expect(mockState.producerStreams[0]!.url).toBe(
-      `https://streams.test/v1/stream/svc-a${result.streamUrl}`
+      `https://streams.test/v1/stream${result.streamUrl}`
     )
 
     expect(mockState.producerAppends).toHaveLength(1)

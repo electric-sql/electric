@@ -42,12 +42,12 @@ function insertDb() {
   return { insert, values, onConflictDoUpdate }
 }
 
-const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
+const customRootTestAdapter: DurableStreamsRoutingAdapter = {
   streamUrl(input) {
     const incomingUrl = new URL(input.requestUrl, `http://localhost`)
     const path = incomingUrl.pathname.replace(/^\/+/, ``)
     const target = new URL(
-      `/v1/streams/${input.serviceId}/${path}`,
+      `/custom-stream-root/${path}`,
       input.durableStreamsUrl
     )
     target.search = incomingUrl.search
@@ -56,17 +56,11 @@ const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
   controlUrl(input) {
     const incomingUrl = new URL(input.requestUrl, `http://localhost`)
     const target = new URL(
-      `/v1/streams/${input.serviceId}${incomingUrl.pathname}`,
+      `/custom-stream-root${incomingUrl.pathname}`,
       input.durableStreamsUrl
     )
     target.search = incomingUrl.search
     return target
-  },
-  toBackendStreamPath(_serviceId, streamPath) {
-    return streamPath.replace(/^\/+/, ``)
-  },
-  toRuntimeStreamPath(_serviceId, streamPath) {
-    return streamPath.replace(/^\/+/, ``)
   },
 }
 
@@ -93,7 +87,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       url: `/principal/system:framework`,
     },
     publicUrl: `http://agents.local`,
-    durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
+    durableStreamsUrl: `http://durable.local/v1/stream`,
     durableStreamsDispatcher: undefined as any,
     pgDb: undefined as any,
     entityManager: {
@@ -151,7 +145,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
               has_pending: true,
             },
           ],
-          callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
           callback_token: `callback-token`,
         }),
         buildContext({
@@ -180,7 +174,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-1`,
-        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/demo/main`,
       })
     } finally {
@@ -234,7 +228,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
               has_pending: true,
             },
           ],
-          callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
           callback_token: `callback-token`,
         }),
         buildContext({
@@ -274,7 +268,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-2`,
-        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/pending/main`,
       })
     } finally {
@@ -319,7 +313,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
               has_pending: true,
             },
           ],
-          callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
           callback_token: `callback-token`,
         }),
         buildContext({
@@ -359,7 +353,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-prefixed`,
-        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/demo/main`,
       })
     } finally {
@@ -370,7 +364,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
   it(`claims new webhook wakes locally and returns a tenant-scoped claim write token`, async () => {
     const select = selectDb([
       {
-        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/demo/main`,
       },
     ])
@@ -437,7 +431,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
               has_pending: true,
             },
           ],
-          callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          callback_url: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
           callback_token: `callback-token`,
         }),
         buildContext({
@@ -464,7 +458,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
   it(`translates runtime done callbacks to the new Durable Streams callback shape`, async () => {
     const select = selectDb([
       {
-        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/demo/main`,
       },
     ])
@@ -502,7 +496,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(response.status).toBe(200)
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`
+        `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`
       )
       expect(init).toMatchObject({
         method: `POST`,
@@ -535,10 +529,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     }
   })
 
-  it(`lets a routing adapter own callback ack stream paths`, async () => {
+  it(`keeps callback ack stream paths independent of routing adapter URLs`, async () => {
     const select = selectDb([
       {
-        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/demo/main`,
       },
     ])
@@ -563,7 +557,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
           }),
         }),
         buildContext({
-          durableStreamsRouting: serviceRoutedTestAdapter,
+          durableStreamsRouting: customRootTestAdapter,
           pgDb: { select: select.select } as any,
         })
       )

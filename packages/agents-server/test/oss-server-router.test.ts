@@ -20,7 +20,7 @@ function buildTenantContext(
       url: `/principal/system:framework`,
     },
     publicUrl: `http://server`,
-    durableStreamsUrl: `http://durable.local/v1/stream/tenant-test`,
+    durableStreamsUrl: `http://durable.local/v1/stream`,
     durableStreamsDispatcher: undefined as any,
     pgDb: undefined as any,
     entityManager: undefined as any,
@@ -60,7 +60,7 @@ describe(`OSS server routing wrapper`, () => {
       expect(response.headers.get(`location`)).toBeNull()
       expect(fetchSpy).toHaveBeenCalledOnce()
       expect(String(fetchSpy.mock.calls[0]![0])).toBe(
-        `http://durable.local/v1/stream/tenant-test`
+        `http://durable.local/v1/stream`
       )
     } finally {
       fetchSpy.mockRestore()

@@ -131,14 +131,14 @@ describe(`StreamClient`, () => {
     }
   })
 
-  it(`does not tenant-prefix subscription streams for tenant-root URLs`, async () => {
+  it(`keeps subscription streams relative to the configured base URL`, async () => {
     const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
       new Response(JSON.stringify({ subscription_id: `sub-1` }), {
         headers: { 'content-type': `application/json` },
       })
     )
     const client = new StreamClient(
-      `https://streams.test/v1/streams/svc-tenant-a`
+      `https://streams.test/v1/stream/svc-agent-1`
     )
 
     try {
@@ -149,7 +149,7 @@ describe(`StreamClient`, () => {
       })
 
       expect(fetchMock).toHaveBeenCalledWith(
-        `https://streams.test/v1/streams/svc-tenant-a/__ds/subscriptions/sub-1`,
+        `https://streams.test/v1/stream/svc-agent-1/__ds/subscriptions/sub-1`,
         expect.objectContaining({ method: `PUT` })
       )
       const [, init] = fetchMock.mock.calls[0]!
@@ -168,10 +168,9 @@ describe(`StreamClient`, () => {
         headers: { 'content-type': `application/json` },
       })
     )
-    const client = new StreamClient(
-      `http://127.0.0.1:4545/v1/stream/tenant-a`,
-      { bearer: `service-token` }
-    )
+    const client = new StreamClient(`http://127.0.0.1:4545/v1/stream`, {
+      bearer: `service-token`,
+    })
 
     try {
       await client.putSubscription(`sub-1`, {
@@ -202,10 +201,9 @@ describe(`StreamClient`, () => {
         })
       )
     let token = 0
-    const client = new StreamClient(
-      `http://127.0.0.1:4545/v1/stream/tenant-a`,
-      { bearer: () => `service-token-${++token}` }
-    )
+    const client = new StreamClient(`http://127.0.0.1:4545/v1/stream`, {
+      bearer: () => `service-token-${++token}`,
+    })
 
     try {
       await client.getSubscription(`sub-1`)
@@ -228,10 +226,9 @@ describe(`StreamClient`, () => {
         headers: { 'content-type': `application/json` },
       })
     )
-    const client = new StreamClient(
-      `http://127.0.0.1:4545/v1/stream/tenant-a`,
-      { bearer: `service-token` }
-    )
+    const client = new StreamClient(`http://127.0.0.1:4545/v1/stream`, {
+      bearer: `service-token`,
+    })
 
     try {
       await client.ackSubscription(`sub-1`, `claim-token`, {

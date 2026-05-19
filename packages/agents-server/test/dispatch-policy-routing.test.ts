@@ -314,7 +314,7 @@ describe(`dispatch policy routing`, () => {
       entity(dispatchPolicy)
     )
     ;(ctx.streamClient.getSubscription as any).mockResolvedValue({
-      streams: [{ path: `tenant-test/chat/one/main` }],
+      streams: [{ path: `chat/one/main` }],
     })
     ctx.entityManager.send = vi.fn(async () => undefined)
 
@@ -353,6 +353,33 @@ describe(`dispatch policy routing`, () => {
     )
   })
 
+  it(`re-adds runner streams when an old subscription contains a service-prefixed path`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+    ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
+      entity(dispatchPolicy)
+    )
+    ;(ctx.streamClient.getSubscription as any).mockResolvedValue({
+      streams: [{ path: `tenant-test/chat/one/main` }],
+    })
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/entities/chat/one/send`, {
+        payload: `hello`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(ctx.streamClient.addSubscriptionStreams).toHaveBeenCalledWith(
+      expect.stringMatching(/^runner:runner-1:/),
+      [`/chat/one/main`]
+    )
+  })
+
   it(`treats runner subscription create conflicts as an idempotent spawn link`, async () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
@@ -361,7 +388,7 @@ describe(`dispatch policy routing`, () => {
     ;(ctx.streamClient.getSubscription as any)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
-        streams: [{ path: `tenant-test/chat/one/main` }],
+        streams: [{ path: `chat/one/main` }],
       })
     ;(ctx.streamClient.putSubscription as any).mockRejectedValueOnce(
       new DurableStreamsSubscriptionError(

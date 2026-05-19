@@ -21,7 +21,6 @@ import { ATTR, tracer } from '../tracing.js'
 import { decodeJsonObject } from '../utils/server-utils.js'
 import { serverLog } from '../utils/log.js'
 import { cronRouter } from './cron-router.js'
-import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import { electricProxyRouter } from './electric-proxy-router.js'
 import { entitiesRouter } from './entities-router.js'
 import { entityTypesRouter } from './entity-types-router.js'
@@ -31,7 +30,6 @@ import { routeBody, validateOptionalJsonBody, withSchema } from './schema.js'
 import { withLeadingSlash } from './tenant-stream-paths.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
-import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 
 const wakeRegistrationBodySchema = Type.Object({
   subscriberUrl: Type.String(),
@@ -220,14 +218,6 @@ function newWebhookPayload(body: WebhookForwardBody | undefined): {
   }
 }
 
-function toRuntimeStreamPath(
-  path: string,
-  service: string,
-  routingAdapter: DurableStreamsRoutingAdapter
-): string {
-  return withLeadingSlash(routingAdapter.toRuntimeStreamPath(service, path))
-}
-
 async function registerWake(
   request: IRequest,
   ctx: TenantContext
@@ -293,10 +283,6 @@ async function webhookForward(
   let runningEntityUrl: string | null = null
   const parsedBody = parsedBodyResult.value as WebhookForwardBody | undefined
   const newWebhook = newWebhookPayload(parsedBody)
-  const routingAdapter = resolveDurableStreamsRoutingAdapter(
-    ctx.durableStreamsRouting,
-    ctx.durableStreamsUrl
-  )
 
   if (parsedBody) {
     const rawPrimaryStream =
@@ -307,7 +293,7 @@ async function webhookForward(
       null
     const primaryStream =
       typeof rawPrimaryStream === `string`
-        ? toRuntimeStreamPath(rawPrimaryStream, ctx.service, routingAdapter)
+        ? withLeadingSlash(rawPrimaryStream)
         : null
     const consumerId =
       newWebhook?.wakeId ??
@@ -534,15 +520,7 @@ async function callbackForward(
     return json(responseBody)
   }
 
-  const upstreamBody = encodeCallbackForwardBody(
-    ctx.service,
-    consumerId,
-    requestBody,
-    resolveDurableStreamsRoutingAdapter(
-      ctx.durableStreamsRouting,
-      ctx.durableStreamsUrl
-    )
-  )
+  const upstreamBody = encodeCallbackForwardBody(consumerId, requestBody)
 
   let upstream: Response
   try {
@@ -697,13 +675,11 @@ async function mintClaimWriteToken(
 }
 
 function encodeCallbackForwardBody(
-  service: string,
   consumerId: string,
-  body: CallbackForwardBody | undefined,
-  routingAdapter: DurableStreamsRoutingAdapter
+  body: CallbackForwardBody | undefined
 ): Uint8Array {
   const payload = encodeCallbackForwardPayload(consumerId, body, (stream) =>
-    routingAdapter.toBackendStreamPath(service, stream)
+    stream.replace(/^\/+/, ``)
   )
   return new TextEncoder().encode(JSON.stringify(payload))
 }

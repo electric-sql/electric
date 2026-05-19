@@ -114,18 +114,16 @@ function sameDispatchDestination(
 }
 
 function subscriptionHasStream(
-  ctx: TenantContext,
   existing: { streams?: Array<string | { path?: string }> },
   streamPath: string
 ): boolean {
   const normalizedStream = streamPath.replace(/^\/+/, ``)
-  const backendStream = `${ctx.service}/${normalizedStream}`
   return (
     existing.streams?.some((stream) => {
       const path = typeof stream === `string` ? stream : stream.path
       if (!path) return false
       const normalized = path.replace(/^\/+/, ``)
-      return normalized === normalizedStream || normalized === backendStream
+      return normalized === normalizedStream
     }) ?? false
   )
 }
@@ -181,7 +179,7 @@ async function ensureSubscriptionIncludesStream(
     }
   }
 
-  if (!subscriptionHasStream(ctx, existing, streamPath)) {
+  if (!subscriptionHasStream(existing, streamPath)) {
     await ctx.streamClient.addSubscriptionStreams(subscriptionId, [streamPath])
   }
 }

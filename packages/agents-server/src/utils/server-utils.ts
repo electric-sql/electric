@@ -174,8 +174,8 @@ export async function forwardFetchRequest(options: {
     headers: Headers
   }
   durableStreamsUrl: string
-  durableStreamsRouting?: DurableStreamsRoutingAdapter
   serviceId: string
+  durableStreamsRouting?: DurableStreamsRoutingAdapter
   body?: Uint8Array
   dispatcher?: Agent
   route?: `stream` | `control`

@@ -68,12 +68,12 @@ function fakeInsertDb() {
   }
 }
 
-const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
+const customRootTestAdapter: DurableStreamsRoutingAdapter = {
   streamUrl(input) {
     const incomingUrl = new URL(input.requestUrl, `http://localhost`)
     const path = incomingUrl.pathname.replace(/^\/+/, ``)
     const target = new URL(
-      `/v1/streams/${input.serviceId}/${path}`,
+      `/custom-stream-root/${path}`,
       input.durableStreamsUrl
     )
     target.search = incomingUrl.search
@@ -82,17 +82,11 @@ const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
   controlUrl(input) {
     const incomingUrl = new URL(input.requestUrl, `http://localhost`)
     const target = new URL(
-      `/v1/streams/${input.serviceId}${incomingUrl.pathname}`,
+      `/custom-stream-root${incomingUrl.pathname}`,
       input.durableStreamsUrl
     )
     target.search = incomingUrl.search
     return target
-  },
-  toBackendStreamPath(_serviceId, streamPath) {
-    return streamPath.replace(/^\/+/, ``)
-  },
-  toRuntimeStreamPath(_serviceId, streamPath) {
-    return streamPath.replace(/^\/+/, ``)
   },
 }
 
@@ -451,9 +445,9 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           webhook: { url: `http://localhost:4448/runtime-webhook` },
         }),
         {
-          service: `tenant-a`,
+          service: `svc-agent-1`,
           publicUrl: `http://agents.local`,
-          durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
+          durableStreamsUrl: `http://durable.local/v1/stream/svc-agent-1`,
           pgDb: db.db,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -462,7 +456,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(result.status).toBe(201)
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler`
+        `http://durable.local/v1/stream/svc-agent-1/__ds/subscriptions/horton-handler`
       )
       expect(JSON.parse(requestBodyText(init?.body))).toEqual({
         type: `webhook`,
@@ -472,7 +466,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         },
       })
       expect(db.values).toHaveBeenCalledWith({
-        tenantId: `tenant-a`,
+        tenantId: `svc-agent-1`,
         subscriptionId: `horton-handler`,
         webhookUrl: `http://localhost:4448/runtime-webhook`,
       })
@@ -481,7 +475,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
     }
   })
 
-  it(`lets a routing adapter own service-routed subscription URLs and stream names`, async () => {
+  it(`lets a routing adapter own custom subscription URLs without changing stream names`, async () => {
     const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -512,7 +506,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           service: `tenant-a`,
           publicUrl: `http://agents.local`,
           durableStreamsUrl: `http://durable.local`,
-          durableStreamsRouting: serviceRoutedTestAdapter,
+          durableStreamsRouting: customRootTestAdapter,
           pgDb: db.db,
           isShuttingDown: () => false,
         } as unknown as TenantContext
@@ -521,7 +515,7 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
       expect(result.status).toBe(201)
       const [url, init] = fetchSpy.mock.calls[0]!
       expect(String(url)).toBe(
-        `http://durable.local/v1/streams/tenant-a/__ds/subscriptions/horton-handler`
+        `http://durable.local/custom-stream-root/__ds/subscriptions/horton-handler`
       )
       expect(JSON.parse(requestBodyText(init?.body))).toMatchObject({
         pattern: `horton/**`,
@@ -564,15 +558,19 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
           webhook: { url: `http://localhost:4448/runtime-webhook` },
         }),
         {
-          service: `tenant-a`,
+          service: `svc-agent-1`,
           publicUrl: `http://agents.local`,
-          durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
+          durableStreamsUrl: `http://durable.local/v1/stream/svc-agent-1`,
           pgDb: db.db,
           isShuttingDown: () => false,
         } as unknown as TenantContext
       )
 
       expect(result.status).toBe(201)
+      const [url] = fetchSpy.mock.calls[0]!
+      expect(String(url)).toBe(
+        `http://durable.local/v1/stream/svc-agent-1/__ds/subscriptions/horton-handler`
+      )
       const [, init] = fetchSpy.mock.calls[0]!
       expect(JSON.parse(requestBodyText(init?.body))).toMatchObject({
         pattern: `horton/**`,

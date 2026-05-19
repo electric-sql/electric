@@ -15,10 +15,8 @@ import {
 import { validateBody } from './schema.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
 import { forwardFetchRequest } from '../utils/server-utils.js'
-import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
-import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 
 const subscriptionProxyBodySchema = Type.Object(
   {
@@ -128,10 +126,10 @@ async function forwardToDurableStreams(
     },
     body: requestBody,
     durableStreamsUrl: ctx.durableStreamsUrl,
+    serviceId: ctx.service,
     durableStreamsBearer: ctx.durableStreamsBearer,
     durableStreamsBearerMode,
     durableStreamsRouting: ctx.durableStreamsRouting,
-    serviceId: ctx.service,
     dispatcher: ctx.durableStreamsDispatcher,
     route,
   })
@@ -140,38 +138,28 @@ async function forwardToDurableStreams(
 type SubscriptionControlAction = (typeof subscriptionControlActions)[number]
 
 function rewriteSubscriptionBodyForBackend(
-  payload: Record<string, unknown>,
-  service: string,
-  routingAdapter: DurableStreamsRoutingAdapter
+  payload: Record<string, unknown>
 ): void {
   if (typeof payload.pattern === `string`) {
-    payload.pattern = routingAdapter.toBackendStreamPath(
-      service,
-      payload.pattern
-    )
+    payload.pattern = normalizeSubscriptionPath(payload.pattern)
   }
   if (Array.isArray(payload.streams)) {
     payload.streams = payload.streams.map((stream) =>
-      typeof stream === `string`
-        ? routingAdapter.toBackendStreamPath(service, stream)
-        : stream
+      typeof stream === `string` ? normalizeSubscriptionPath(stream) : stream
     )
   }
   if (typeof payload.wake_stream === `string`) {
-    payload.wake_stream = routingAdapter.toBackendStreamPath(
-      service,
-      payload.wake_stream
-    )
+    payload.wake_stream = normalizeSubscriptionPath(payload.wake_stream)
   }
   if (Array.isArray(payload.acks)) {
     payload.acks = payload.acks.map((ack) => {
       if (!ack || typeof ack !== `object`) return ack
       const next = { ...(ack as Record<string, unknown>) }
       if (typeof next.stream === `string`) {
-        next.stream = routingAdapter.toBackendStreamPath(service, next.stream)
+        next.stream = normalizeSubscriptionPath(next.stream)
       }
       if (typeof next.path === `string`) {
-        next.path = routingAdapter.toBackendStreamPath(service, next.path)
+        next.path = normalizeSubscriptionPath(next.path)
       }
       return next
     })
@@ -180,9 +168,7 @@ function rewriteSubscriptionBodyForBackend(
 
 function rewriteSubscriptionResponseForClient(
   bytes: Uint8Array,
-  response: Response,
-  service: string,
-  routingAdapter: DurableStreamsRoutingAdapter
+  response: Response
 ): Uint8Array {
   if (!response.headers.get(`content-type`)?.includes(`application/json`)) {
     return bytes
@@ -191,15 +177,12 @@ function rewriteSubscriptionResponseForClient(
   if (!payload) return bytes
 
   if (typeof payload.pattern === `string`) {
-    payload.pattern = routingAdapter.toRuntimeStreamPath(
-      service,
-      payload.pattern
-    )
+    payload.pattern = normalizeSubscriptionPath(payload.pattern)
   }
   if (Array.isArray(payload.streams)) {
     payload.streams = payload.streams.map((stream) => {
       if (typeof stream === `string`) {
-        return routingAdapter.toRuntimeStreamPath(service, stream)
+        return normalizeSubscriptionPath(stream)
       }
       if (
         stream &&
@@ -208,8 +191,7 @@ function rewriteSubscriptionResponseForClient(
       ) {
         return {
           ...(stream as Record<string, unknown>),
-          path: routingAdapter.toRuntimeStreamPath(
-            service,
+          path: normalizeSubscriptionPath(
             (stream as Record<string, string>).path
           ),
         }
@@ -218,29 +200,30 @@ function rewriteSubscriptionResponseForClient(
     })
   }
   if (typeof payload.wake_stream === `string`) {
-    payload.wake_stream = routingAdapter.toRuntimeStreamPath(
-      service,
-      payload.wake_stream
-    )
+    payload.wake_stream = normalizeSubscriptionPath(payload.wake_stream)
   }
   if (typeof payload.stream === `string`) {
-    payload.stream = routingAdapter.toRuntimeStreamPath(service, payload.stream)
+    payload.stream = normalizeSubscriptionPath(payload.stream)
   }
   if (Array.isArray(payload.acks)) {
     payload.acks = payload.acks.map((ack) => {
       if (!ack || typeof ack !== `object`) return ack
       const next = { ...(ack as Record<string, unknown>) }
       if (typeof next.stream === `string`) {
-        next.stream = routingAdapter.toRuntimeStreamPath(service, next.stream)
+        next.stream = normalizeSubscriptionPath(next.stream)
       }
       if (typeof next.path === `string`) {
-        next.path = routingAdapter.toRuntimeStreamPath(service, next.path)
+        next.path = normalizeSubscriptionPath(next.path)
       }
       return next
     })
   }
 
   return new TextEncoder().encode(JSON.stringify(payload))
+}
+
+function normalizeSubscriptionPath(path: string): string {
+  return path.replace(/^\/+/, ``)
 }
 
 function decodeJson(bytes: Uint8Array): Record<string, unknown> | null {
@@ -260,20 +243,10 @@ function routeParam(request: IRequest, name: string): string {
   return decodeURIComponent(raw ?? ``)
 }
 
-function subscriptionRoutingAdapter(
-  ctx: TenantContext
-): DurableStreamsRoutingAdapter {
-  return resolveDurableStreamsRoutingAdapter(
-    ctx.durableStreamsRouting,
-    ctx.durableStreamsUrl
-  )
-}
-
 async function rewriteSubscriptionRequestBody(
   request: IRequest,
   ctx: TenantContext,
-  subscriptionId: string,
-  routingAdapter: DurableStreamsRoutingAdapter
+  subscriptionId: string
 ): Promise<
   | {
       ok: true
@@ -300,11 +273,7 @@ async function rewriteSubscriptionRequestBody(
     )
   }
 
-  rewriteSubscriptionBodyForBackend(
-    payload as Record<string, unknown>,
-    ctx.service,
-    routingAdapter
-  )
+  rewriteSubscriptionBodyForBackend(payload as Record<string, unknown>)
 
   return {
     ok: true,
@@ -316,7 +285,6 @@ async function rewriteSubscriptionRequestBody(
 async function forwardSubscriptionRequest(
   request: IRequest,
   ctx: TenantContext,
-  routingAdapter: DurableStreamsRoutingAdapter,
   opts: {
     body?: Uint8Array
     requestUrl?: string
@@ -334,12 +302,7 @@ async function forwardSubscriptionRequest(
   let responseBytes: Uint8Array = upstream.body
     ? new Uint8Array(await upstream.arrayBuffer())
     : new Uint8Array()
-  responseBytes = rewriteSubscriptionResponseForClient(
-    responseBytes,
-    upstream,
-    ctx.service,
-    routingAdapter
-  )
+  responseBytes = rewriteSubscriptionResponseForClient(responseBytes, upstream)
   return {
     upstream,
     response: responseFromUpstream(upstream, responseBytes),
@@ -383,8 +346,6 @@ async function deleteSubscriptionWebhook(
 
 function rewriteSubscriptionStreamPathInUrl(
   requestUrl: URL,
-  service: string,
-  routingAdapter: DurableStreamsRoutingAdapter,
   streamPath: string
 ): string {
   const prefix = requestUrl.pathname.slice(
@@ -392,7 +353,7 @@ function rewriteSubscriptionStreamPathInUrl(
     requestUrl.pathname.indexOf(`/streams/`) + `/streams/`.length
   )
   requestUrl.pathname = `${prefix}${encodeURIComponent(
-    routingAdapter.toBackendStreamPath(service, streamPath)
+    normalizeSubscriptionPath(streamPath)
   )}`
   return requestUrl.toString()
 }
@@ -402,19 +363,16 @@ async function putSubscriptionBase(
   ctx: TenantContext
 ): Promise<Response> {
   const subscriptionId = routeParam(request, `subscriptionId`)
-  const routingAdapter = subscriptionRoutingAdapter(ctx)
   const rewrite = await rewriteSubscriptionRequestBody(
     request,
     ctx,
-    subscriptionId,
-    routingAdapter
+    subscriptionId
   )
   if (!rewrite.ok) return rewrite.response
 
   const { upstream, response } = await forwardSubscriptionRequest(
     request,
     ctx,
-    routingAdapter,
     { body: rewrite.body }
   )
   if (upstream.ok && rewrite.targetWebhookUrl) {
@@ -431,9 +389,7 @@ async function getSubscriptionBase(
   request: IRequest,
   ctx: TenantContext
 ): Promise<Response> {
-  const routingAdapter = subscriptionRoutingAdapter(ctx)
-  return (await forwardSubscriptionRequest(request, ctx, routingAdapter))
-    .response
+  return (await forwardSubscriptionRequest(request, ctx)).response
 }
 
 async function deleteSubscriptionBase(
@@ -441,12 +397,7 @@ async function deleteSubscriptionBase(
   ctx: TenantContext
 ): Promise<Response> {
   const subscriptionId = routeParam(request, `subscriptionId`)
-  const routingAdapter = subscriptionRoutingAdapter(ctx)
-  const { upstream, response } = await forwardSubscriptionRequest(
-    request,
-    ctx,
-    routingAdapter
-  )
+  const { upstream, response } = await forwardSubscriptionRequest(request, ctx)
   if (upstream.ok) {
     await deleteSubscriptionWebhook(ctx, subscriptionId)
   }
@@ -458,17 +409,15 @@ async function postSubscriptionStreams(
   ctx: TenantContext
 ): Promise<Response> {
   const subscriptionId = routeParam(request, `subscriptionId`)
-  const routingAdapter = subscriptionRoutingAdapter(ctx)
   const rewrite = await rewriteSubscriptionRequestBody(
     request,
     ctx,
-    subscriptionId,
-    routingAdapter
+    subscriptionId
   )
   if (!rewrite.ok) return rewrite.response
 
   return (
-    await forwardSubscriptionRequest(request, ctx, routingAdapter, {
+    await forwardSubscriptionRequest(request, ctx, {
       body: rewrite.body,
     })
   ).response
@@ -478,15 +427,12 @@ async function deleteSubscriptionStream(
   request: IRequest,
   ctx: TenantContext
 ): Promise<Response> {
-  const routingAdapter = subscriptionRoutingAdapter(ctx)
   const requestUrl = rewriteSubscriptionStreamPathInUrl(
     new URL(request.url),
-    ctx.service,
-    routingAdapter,
     routeParam(request, `streamPath`)
   )
   return (
-    await forwardSubscriptionRequest(request, ctx, routingAdapter, {
+    await forwardSubscriptionRequest(request, ctx, {
       requestUrl,
     })
   ).response
@@ -495,12 +441,10 @@ async function deleteSubscriptionStream(
 function subscriptionAction(action: SubscriptionControlAction) {
   return async (request: IRequest, ctx: TenantContext): Promise<Response> => {
     const subscriptionId = routeParam(request, `subscriptionId`)
-    const routingAdapter = subscriptionRoutingAdapter(ctx)
     const rewrite = await rewriteSubscriptionRequestBody(
       request,
       ctx,
-      subscriptionId,
-      routingAdapter
+      subscriptionId
     )
     if (!rewrite.ok) return rewrite.response
 
@@ -509,7 +453,7 @@ function subscriptionAction(action: SubscriptionControlAction) {
         ? `if-missing`
         : `overwrite`
     return (
-      await forwardSubscriptionRequest(request, ctx, routingAdapter, {
+      await forwardSubscriptionRequest(request, ctx, {
         body: rewrite.body,
         bearerMode,
       })
@@ -546,10 +490,10 @@ async function streamAppend(
         },
         body,
         durableStreamsUrl: ctx.durableStreamsUrl,
+        serviceId: ctx.service,
         durableStreamsBearer: ctx.durableStreamsBearer,
         durableStreamsBearerMode: `overwrite`,
         durableStreamsRouting: ctx.durableStreamsRouting,
-        serviceId: ctx.service,
         dispatcher: ctx.durableStreamsDispatcher,
       })
   )
