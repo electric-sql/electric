@@ -1091,9 +1091,9 @@ Word size: 8 bytes
 
 Interpretation:
 
-- One-shape cohorts still save memory, but only by a constant factor. There is
-  no sharing benefit when a subquery has one participant.
-- Shared steady-state cohorts get the largest win because the current model
+- Subqueries used by one shape still save memory, but only by a constant
+  factor. There is no sharing benefit when a subquery has one participant.
+- Shared steady-state subqueries get the largest win because the current model
   stores value membership and consumer views once per shape.
 - Active moves remain materially smaller because the logical-time model stores
   changed values and times, not before and after full dependency views.
@@ -1106,17 +1106,20 @@ Interpretation:
 These estimates use the same script. They extrapolate from measured row costs
 and use the customer workload ratios from PR #4280:
 
-- HumanLayer: 75 observed `WHERE` clauses, 134 subquery occurrences, 13 literal
-  cohorts.
-- AutoArc: 611 observed `WHERE` clauses, 291 subquery occurrences, 209 literal
-  cohorts.
-- Hazel: 13 observed shape handles, 4 subquery occurrences, 4 literal cohorts.
+- HumanLayer: 75 observed `WHERE` clauses, 134 subquery occurrences, 13
+  distinct literal subqueries.
+- AutoArc: 611 observed `WHERE` clauses, 291 subquery occurrences, 209
+  distinct literal subqueries.
+- Hazel: 13 observed shape handles, 4 subquery occurrences, 4 distinct literal
+  subqueries.
 
 The extrapolation is for 100k shapes and preserves each workload's observed
-ratio of subquery occurrences to literal cohorts.
+ratio of subquery occurrences to distinct literal subqueries. A distinct
+literal subquery here means a distinct dependency subquery, not a subquery
+group.
 
-| Customer | Observed occurrences -> cohorts | Shared occurrences | Participants @100k | Cohorts @100k | Rows/subquery | Current | Logical-time | Savings |
-|----------|---------------------------------|--------------------|--------------------|--------------|---------------|---------|--------------|---------|
+| Customer | Observed occurrences -> distinct subqueries | Shared occurrences | Participants @100k | Distinct subqueries @100k | Rows/subquery | Current | Logical-time | Savings |
+|----------|----------------------------------------------|--------------------|--------------------|---------------------------|---------------|---------|--------------|---------|
 | HumanLayer | 134 -> 13 | 90.3% | 178,667 | 17,334 | 1,000 | 55.77 GiB | 4.2 GiB | 92.5% |
 | HumanLayer | 134 -> 13 | 90.3% | 178,667 | 17,334 | 10,000 | 556.19 GiB | 40.59 GiB | 92.7% |
 | AutoArc | 291 -> 209 | 28.2% | 47,627 | 34,207 | 1,000 | 14.87 GiB | 8.04 GiB | 45.9% |
@@ -1129,11 +1132,11 @@ Interpretation:
 - HumanLayer benefits most because the captured workload has high literal
   subquery sharing.
 - AutoArc still benefits, but many literal subqueries are not shared, so the
-  logical-time model stores more per-cohort shared views.
+  logical-time model stores more per-subquery shared views.
 - Hazel has no observed literal sharing. The estimate still shows a constant
   factor reduction because the current model stores both index membership rows
   and consumer `MapSet` views per shape, while the logical-time model stores
-  one shared view per one-participant cohort and compact consumer references.
+  one shared view per one-participant subquery and compact consumer references.
 - If a production workload has one-off subqueries with large dependency views,
   the logical-time design is still better than current state, but it is not the
   main win. The main win comes when multiple shapes share a subquery.
@@ -1411,8 +1414,8 @@ as a follow-up optimization if measurements show cleanup cost is high.
 ### Alternative 6: Shared Base View With Sparse XOR Exceptions
 
 **Description:** The design in PR #4280 stores one base dependency view per
-cohort and stores sparse per-participant XOR exceptions for values where a
-participant temporarily differs from the base.
+grouped subquery index entry and stores sparse per-participant XOR exceptions
+for values where a participant temporarily differs from the base.
 
 **Why not:** This is a lower-risk, index-focused approach and may still be the
 right short-term fix if this RFC is too broad. However, it leaves consumer-held
