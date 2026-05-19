@@ -158,11 +158,6 @@ describe(`AgentsHost`, () => {
     expect(host.getTenant(`svc-race`)).toBeUndefined()
   })
 
-  // Regression test for electric-sql/stratovolt#1519: webhook fanout silently
-  // dropped on service-routed deployments because subscription payloads were
-  // not run through the routing adapter. This test asserts the wire-through
-  // from `registerTenant({ durableStreamsRouting })` to the per-tenant
-  // `StreamClient`'s outgoing subscription request body.
   it(`applies durableStreamsRouting adapter to per-tenant subscription payloads`, async () => {
     const adapter = {
       streamUrl: ({ durableStreamsUrl }: { durableStreamsUrl: string }) =>
@@ -221,9 +216,6 @@ describe(`AgentsHost`, () => {
     }
   })
 
-  // Mirror without `durableStreamsRouting`: confirms the default branch is
-  // bit-identical to the prior slash-normalising behaviour for tenant-root
-  // deployments.
   it(`omits the routing adapter when durableStreamsRouting is not provided`, async () => {
     const host = new AgentsHost({
       db: createMockDb(),

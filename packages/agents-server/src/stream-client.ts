@@ -18,22 +18,6 @@ export interface StreamClientSubscriptionRouting {
 
 export interface StreamClientOptions {
   bearer?: DurableStreamsBearerProvider
-  /**
-   * Adapter applied to every subscription-payload field that names a stream
-   * path, in both directions: outgoing requests go through `toBackendStreamPath`
-   * and incoming responses are mapped back through `toRuntimeStreamPath` so
-   * callers always see the runtime namespace.
-   *
-   * Subscriptions are stored in the durable-streams worker keyed on the
-   * backend stream path (e.g. service-prefixed `<serviceId>/<path>` in
-   * service-routed cloud deployments). Stream URLs use the same transform via
-   * the per-request router, so without this option the subscription's
-   * registered streams never match the keys appends are indexed under, and
-   * webhook fanout silently drops.
-   *
-   * Tenant-root / single-tenant deployments can omit this; the default
-   * behaviour is bit-identical to the prior slash-normalising code.
-   */
   subscriptionRouting?: StreamClientSubscriptionRouting
 }
 
@@ -214,11 +198,6 @@ export class StreamClient {
     return headers
   }
 
-  /**
-   * Paired with `runtimeSubscriptionPath`. Apply on outgoing subscription
-   * payloads (request bodies); the inverse runs on incoming responses so
-   * callers always see the runtime namespace.
-   */
   private backendSubscriptionPath(path: string): string {
     const normalized = normalizeSubscriptionPath(path)
     const routing = this.options.subscriptionRouting

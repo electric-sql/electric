@@ -15,12 +15,6 @@ export interface AgentsHostTenantConfig {
   serviceId: string
   durableStreamsUrl?: string
   durableStreamsBearer?: DurableStreamsBearerProvider
-  /**
-   * Routing adapter applied to subscription path payloads so they match the
-   * backend stream-path namespace used for appends. Required for cloud /
-   * service-routed durable-streams deployments where appends are keyed on a
-   * service-prefixed path; safe to omit for tenant-root deployments.
-   */
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   streamClient?: StreamClient
 }

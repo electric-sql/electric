@@ -328,9 +328,6 @@ describe(`dispatch policy routing`, () => {
     const dispatchPolicy: DispatchPolicy = {
       targets: [{ type: `runner`, runnerId: `runner-1` }],
     }
-    // Service-routed deployment: the worker returns backend-prefixed stream
-    // paths, so dispatch-policy's subscriptionHasStream must consult the
-    // adapter to recognise an already-linked stream.
     const ctx = buildContext({
       durableStreamsRouting: servicePrefixAdapter,
     })
