@@ -151,6 +151,12 @@ defmodule Electric.AdmissionControl do
   `try_acquire(to_kind)` also rejects — the same outcome it would
   produce anyway.
 
+  The caller must already hold a `from_kind` permit (acquired via
+  `try_acquire/3`). Calling `try_swap/4` without an outstanding `from_kind`
+  permit will silently grant a phantom `to_kind` permit — there is no
+  runtime check, because adding one would defeat the single-call
+  atomicity that lets the swap preserve the `from + to` invariant.
+
   ## Options
 
     * `:max_concurrent` — required. Cap for `to_kind`.
@@ -159,7 +165,7 @@ defmodule Electric.AdmissionControl do
   """
   def try_swap(stack_id, from_kind, to_kind, opts)
       when from_kind in @allowed_kinds and to_kind in @allowed_kinds do
-    table = Keyword.get(opts, :table_name, @table_name)
+    table_name = Keyword.get(opts, :table_name, @table_name)
     cap = Keyword.fetch!(opts, :max_concurrent)
     to_pos = tuple_pos(to_kind)
     from_pos = tuple_pos(from_kind)
@@ -167,7 +173,7 @@ defmodule Electric.AdmissionControl do
 
     [new_to, _new_from] =
       :ets.update_counter(
-        table,
+        table_name,
         stack_id,
         [{to_pos, 1, cap, cap + 1}, {from_pos, -1, 0, 0}],
         default
@@ -175,7 +181,7 @@ defmodule Electric.AdmissionControl do
 
     if new_to > cap do
       :ets.update_counter(
-        table,
+        table_name,
         stack_id,
         [{to_pos, -1, 0, 0}, {from_pos, 1}],
         default
@@ -184,7 +190,7 @@ defmodule Electric.AdmissionControl do
       :telemetry.execute(
         [:electric, :admission_control, :swap_rejected],
         %{count: 1, limit: cap},
-        %{stack_id: stack_id, from: from_kind, to: to_kind}
+        %{stack_id: stack_id, from: from_kind, to: to_kind, current: cap}
       )
 
       {:error, :overloaded}
