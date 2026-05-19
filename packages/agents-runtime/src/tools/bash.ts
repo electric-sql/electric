@@ -9,7 +9,7 @@ export function createBashTool(workingDirectory: string): AgentTool {
   return {
     name: `bash`,
     label: `Bash`,
-    description: `Execute a shell command and return its output. Commands run in a sandboxed working directory with a 30-second timeout.`,
+    description: `Execute a shell command and return its output. Commands run with a 30-second timeout and a 50KB output cap.`,
     parameters: Type.Object({
       command: Type.String({ description: `The shell command to execute` }),
     }),
