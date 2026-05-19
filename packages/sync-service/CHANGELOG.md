@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 1.6.6
+
+### Patch Changes
+
+- 8a94d7f: Fix `@>` (and other array operators) returning 400 when the right-hand side uses a non-foldable `ARRAY[...]::T[]` outer cast, e.g. `"organization_ids" @> ARRAY[$1]::uuid[]` with a column or parameter inside the constructor. The where-clause parser was assigning the element type (`:uuid`) instead of the array type (`{:array, :uuid}`) to array-cast and array-implicit-cast functions, which made the `@>` operator overload lookup fail with `Could not select an operator overload`.
+- 4590862: Remove the single-function PartialMode module by moving its query_subset() function into SnapshotQuery, so that its implementation could sit close to SnapshotQuery.execute_for_shape().
+- eac6dea: Wrap telemetry-poller MFAs in `ElectricTelemetry.Poller.safe_invoke/3` so that transient collector failures (`:noproc`, `:timeout`, `:shutdown`/`:normal` exits, `ArgumentError` from not-yet-created ETS tables) no longer cause `:telemetry_poller` to permanently remove the measurement from its polling list. Unexpected errors are now logged as warnings with the offending MFA and the collector keeps being polled on subsequent ticks. Strips now-redundant defensive `try/catch` / `with`-fallthrough code from individual collectors.
+
+  Note: user-supplied periodic measurement functions no longer have exceptions propagated up to `:telemetry_poller`'s own error logger — they are caught and logged via `ElectricTelemetry.Poller` instead.
+
 ## 1.6.5
 
 ### Patch Changes
