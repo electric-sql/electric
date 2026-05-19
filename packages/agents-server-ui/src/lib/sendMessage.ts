@@ -219,7 +219,7 @@ export function createSendMessageAction({
       )
       const res = await serverFetch(url, {
         method: `POST`,
-        headers: { 'content-type': `application/json` },
+        headers: { 'content-type': `text/plain` },
         body: JSON.stringify({
           from: sender,
           key,
