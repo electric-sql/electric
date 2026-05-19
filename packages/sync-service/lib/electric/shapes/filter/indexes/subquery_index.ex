@@ -19,29 +19,47 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   alias Electric.Replication.Eval.Runner
   alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Filter
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Filter.WhereCondition
 
-  @type t :: :ets.tid() | atom()
+  defstruct [:table, :multi_time_view]
+
+  @type t :: %SubqueryIndex{table: :ets.tid() | atom(), multi_time_view: MultiTimeView.t() | nil}
 
   defp table_name(stack_id) when is_stack_id(stack_id), do: :"subquery_index:#{stack_id}"
 
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
-    case Keyword.get(opts, :stack_id) do
-      nil ->
-        :ets.new(:subquery_index, [:set, :public])
+    table =
+      case Keyword.get(opts, :stack_id) do
+        nil ->
+          :ets.new(:subquery_index, [:set, :public])
 
-      stack_id ->
-        :ets.new(table_name(stack_id), [:set, :public, :named_table])
-    end
+        stack_id ->
+          :ets.new(table_name(stack_id), [:set, :public, :named_table])
+      end
+
+    multi_time_view =
+      case Keyword.get(opts, :stack_id) do
+        nil -> MultiTimeView.new()
+        stack_id -> MultiTimeView.for_stack(stack_id) || MultiTimeView.new(stack_id: stack_id)
+      end
+
+    %SubqueryIndex{table: table, multi_time_view: multi_time_view}
   end
 
   @spec for_stack(String.t()) :: t() | nil
   def for_stack(stack_id) when is_stack_id(stack_id) do
     case :ets.whereis(table_name(stack_id)) do
-      :undefined -> nil
-      _tid -> table_name(stack_id)
+      :undefined ->
+        nil
+
+      _tid ->
+        %SubqueryIndex{
+          table: table_name(stack_id),
+          multi_time_view: MultiTimeView.for_stack(stack_id)
+        }
     end
   end
 
@@ -53,7 +71,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   indexed by `dep_index`.
   """
   @spec register_shape(t(), term(), DnfPlan.t(), [term()]) :: :ok
-  def register_shape(table, shape_handle, %DnfPlan{} = plan, dep_handles) do
+  def register_shape(%SubqueryIndex{table: table}, shape_handle, %DnfPlan{} = plan, dep_handles) do
     for {_pos, info} <- plan.positions, info.is_subquery do
       polarity = if info.negated, do: :negated, else: :positive
       :ets.insert(table, {{:polarity, shape_handle, info.subquery_ref}, polarity})
@@ -70,7 +88,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   @doc "Remove all metadata for `shape_handle`."
   @spec unregister_shape(t(), term()) :: :ok
-  def unregister_shape(table, shape_handle) do
+  def unregister_shape(%SubqueryIndex{table: table}, shape_handle) do
     :ets.match_delete(table, {{:polarity, shape_handle, :_}, :_})
     :ets.match_delete(table, {{:dep_handle, shape_handle, :_}, :_})
     :ets.match_delete(table, {{:shape_subquery, shape_handle, :_}, :_})
@@ -91,7 +109,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec add_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :ok
   def add_shape(
-        %Filter{subquery_index: table} = filter,
+        %Filter{subquery_index: %SubqueryIndex{table: table} = index} = filter,
         condition_id,
         shape_handle,
         optimisation,
@@ -107,7 +125,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     {child_node_id, next_condition_id} =
       ensure_child(
         filter,
-        table,
+        index,
         group_id,
         subquery_id,
         optimisation.polarity,
@@ -126,7 +144,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     :ets.insert(table, {{:child_shape, child_node_id, shape_handle, branch_key}, true})
     :ets.insert(table, {{:shape_child, shape_handle, child_node_id, branch_key}, true})
 
-    if fallback?(table, shape_handle) do
+    if shape_in_fallback?(table, shape_handle) do
       :ets.insert(
         table,
         {{:node_fallback, condition_id, optimisation.field, child_node_id, shape_handle}, true}
@@ -143,7 +161,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec remove_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :deleted | :ok
   def remove_shape(
-        %Filter{subquery_index: table, multi_time_view: mtv} = filter,
+        %Filter{subquery_index: %SubqueryIndex{table: table, multi_time_view: mtv}} = filter,
         condition_id,
         shape_handle,
         optimisation,
@@ -192,13 +210,23 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   consumer has registered with the materializer in phase 2 of the RFC.
   """
   @spec set_shape_subquery(t(), term(), [String.t()], term(), non_neg_integer()) :: :ok
-  def set_shape_subquery(table, shape_handle, subquery_ref, subquery_id, time) do
+  def set_shape_subquery(
+        %SubqueryIndex{table: table},
+        shape_handle,
+        subquery_ref,
+        subquery_id,
+        time
+      ) do
     :ets.insert(table, {{:shape_subquery, shape_handle, subquery_ref}, {subquery_id, time}})
     :ok
   end
 
   @spec get_shape_subquery(t(), term(), [String.t()]) :: {term(), non_neg_integer()} | nil
-  def get_shape_subquery(table, shape_handle, subquery_ref) do
+  def get_shape_subquery(%SubqueryIndex{table: table}, shape_handle, subquery_ref) do
+    do_get_shape_subquery(table, shape_handle, subquery_ref)
+  end
+
+  defp do_get_shape_subquery(table, shape_handle, subquery_ref) do
     case :ets.lookup(table, {:shape_subquery, shape_handle, subquery_ref}) do
       [{_, mapping}] -> mapping
       [] -> nil
@@ -207,18 +235,22 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   @doc "Mark a shape as routable (clear fallback rows)."
   @spec mark_ready(t(), term()) :: :ok
-  def mark_ready(table, shape_handle) do
+  def mark_ready(%SubqueryIndex{table: table}, shape_handle) do
     :ets.delete(table, {:fallback, shape_handle})
     :ets.match_delete(table, {{:node_fallback, :_, :_, :_, shape_handle}, :_})
     :ok
   end
 
   @spec fallback?(t(), term()) :: boolean()
-  def fallback?(table, shape_handle), do: :ets.member(table, {:fallback, shape_handle})
+  def fallback?(%SubqueryIndex{table: table}, shape_handle),
+    do: shape_in_fallback?(table, shape_handle)
+
+  defp shape_in_fallback?(table, shape_handle),
+    do: :ets.member(table, {:fallback, shape_handle})
 
   @doc "Whether `shape_handle` is attached to at least one indexed subquery node."
   @spec has_positions?(t(), term()) :: boolean()
-  def has_positions?(table, shape_handle) do
+  def has_positions?(%SubqueryIndex{table: table}, shape_handle) do
     :ets.match(table, {{:shape_child, shape_handle, :_, :_}, :_}, 1) != :"$end_of_table"
   end
 
@@ -228,7 +260,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   retained window for that subquery.
   """
   @spec add_positive_route(t(), term(), term()) :: :ok
-  def add_positive_route(table, subquery_id, value) do
+  def add_positive_route(%SubqueryIndex{table: table}, subquery_id, value) do
     for child_node_id <- children_for_subquery(table, subquery_id) do
       case :ets.lookup(table, {:child_meta, child_node_id}) do
         [{_, %{polarity: :positive, group_id: group_id}}] ->
@@ -248,7 +280,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   retained window.
   """
   @spec remove_positive_route(t(), term(), term()) :: :ok
-  def remove_positive_route(table, subquery_id, value) do
+  def remove_positive_route(%SubqueryIndex{table: table}, subquery_id, value) do
     for child_node_id <- children_for_subquery(table, subquery_id) do
       case :ets.lookup(table, {:child_meta, child_node_id}) do
         [{_, %{polarity: :positive, group_id: group_id}}] ->
@@ -264,11 +296,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   @doc """
   Cascade removal of `subquery_id`: drop every child node, participant
-  row, and routing row tied to that subquery. The MultiTimeView is also
-  cleared so values for the subquery are gone everywhere.
+  row, and routing row tied to that subquery. The bundled MultiTimeView is
+  also cleared so values for the subquery are gone everywhere.
   """
-  @spec remove_subquery(t(), MultiTimeView.t(), term()) :: :ok
-  def remove_subquery(table, mtv, subquery_id) do
+  @spec remove_subquery(t(), term()) :: :ok
+  def remove_subquery(%SubqueryIndex{table: table, multi_time_view: mtv}, subquery_id) do
     for child_node_id <- children_for_subquery(table, subquery_id) do
       cleanup_child_shapes(table, child_node_id)
       delete_child(table, mtv, child_node_id)
@@ -286,7 +318,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec affected_shapes(Filter.t(), reference(), term(), map()) :: MapSet.t()
   def affected_shapes(
-        %Filter{subquery_index: table, multi_time_view: mtv} = filter,
+        %Filter{subquery_index: %SubqueryIndex{table: table, multi_time_view: mtv}} = filter,
         condition_id,
         field_key,
         record
@@ -314,7 +346,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   @spec all_shape_ids(Filter.t(), reference(), term()) :: MapSet.t()
-  def all_shape_ids(%Filter{subquery_index: table} = filter, condition_id, field_key) do
+  def all_shape_ids(
+        %Filter{subquery_index: %SubqueryIndex{table: table}} = filter,
+        condition_id,
+        field_key
+      ) do
     table
     |> all_children(condition_id, field_key)
     |> Enum.reduce(MapSet.new(), fn child_node_id, acc ->
@@ -334,13 +370,17 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   Falls back to polarity-based answer while the shape is in fallback or
   before its consumer has registered a logical time.
   """
-  @spec membership_or_fallback?(t(), MultiTimeView.t() | nil, term(), [String.t()], term()) ::
-          boolean()
-  def membership_or_fallback?(table, mtv, shape_handle, subquery_ref, typed_value) do
-    if fallback?(table, shape_handle) do
+  @spec membership_or_fallback?(t(), term(), [String.t()], term()) :: boolean()
+  def membership_or_fallback?(
+        %SubqueryIndex{table: table, multi_time_view: mtv},
+        shape_handle,
+        subquery_ref,
+        typed_value
+      ) do
+    if shape_in_fallback?(table, shape_handle) do
       polarity_default(table, shape_handle, subquery_ref)
     else
-      case get_shape_subquery(table, shape_handle, subquery_ref) do
+      case do_get_shape_subquery(table, shape_handle, subquery_ref) do
         {subquery_id, time} when not is_nil(mtv) ->
           MultiTimeView.member?(mtv, subquery_id, typed_value, time)
 
@@ -354,11 +394,17 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   Strict exact membership without the fallback shortcut. Returns `false`
   when no logical time has been set for `{shape_handle, subquery_ref}`.
   """
-  @spec member?(t(), MultiTimeView.t() | nil, term(), [String.t()], term()) :: boolean()
-  def member?(_table, nil, _shape_handle, _subquery_ref, _typed_value), do: false
+  @spec member?(t(), term(), [String.t()], term()) :: boolean()
+  def member?(%SubqueryIndex{multi_time_view: nil}, _shape_handle, _subquery_ref, _typed_value),
+    do: false
 
-  def member?(table, mtv, shape_handle, subquery_ref, typed_value) do
-    case get_shape_subquery(table, shape_handle, subquery_ref) do
+  def member?(
+        %SubqueryIndex{table: table, multi_time_view: mtv},
+        shape_handle,
+        subquery_ref,
+        typed_value
+      ) do
+    case do_get_shape_subquery(table, shape_handle, subquery_ref) do
       {subquery_id, time} -> MultiTimeView.member?(mtv, subquery_id, typed_value, time)
       nil -> false
     end
@@ -400,7 +446,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     end
   end
 
-  defp ensure_child(filter, table, group_id, subquery_id, polarity, condition_id, field_key) do
+  defp ensure_child(filter, index, group_id, subquery_id, polarity, condition_id, field_key) do
+    %SubqueryIndex{table: table, multi_time_view: mtv} = index
+
     case :ets.lookup(table, {:child, group_id, subquery_id}) do
       [{_, child_node_id}] ->
         [{_, meta}] = :ets.lookup(table, {:child_meta, child_node_id})
@@ -425,7 +473,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         :ets.insert(table, {{:child_meta, child_node_id}, meta})
         :ets.insert(table, {{:subquery_child, subquery_id, child_node_id}, true})
 
-        seed_child_routing(table, filter.multi_time_view, child_node_id, meta)
+        seed_child_routing(table, mtv, child_node_id, meta)
         {child_node_id, next_condition_id}
     end
   end

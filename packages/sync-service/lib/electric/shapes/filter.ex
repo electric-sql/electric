@@ -21,7 +21,6 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
@@ -34,8 +33,7 @@ defmodule Electric.Shapes.Filter do
     :where_cond_table,
     :eq_index_table,
     :incl_index_table,
-    :subquery_index,
-    :multi_time_view
+    :subquery_index
   ]
 
   @type t :: %Filter{}
@@ -43,24 +41,14 @@ defmodule Electric.Shapes.Filter do
 
   @spec new(keyword()) :: Filter.t()
   def new(opts \\ []) do
-    stack_opts = Keyword.take(opts, [:stack_id])
-
     %Filter{
       shapes_table: :ets.new(:filter_shapes, [:set, :private]),
       tables_table: :ets.new(:filter_tables, [:set, :private]),
       where_cond_table: :ets.new(:filter_where, [:set, :private]),
       eq_index_table: :ets.new(:filter_eq, [:set, :private]),
       incl_index_table: :ets.new(:filter_incl, [:set, :private]),
-      subquery_index: SubqueryIndex.new(stack_opts),
-      multi_time_view: multi_time_view(stack_opts)
+      subquery_index: SubqueryIndex.new(Keyword.take(opts, [:stack_id]))
     }
-  end
-
-  defp multi_time_view(opts) do
-    case Keyword.get(opts, :stack_id) do
-      nil -> MultiTimeView.new()
-      stack_id -> MultiTimeView.for_stack(stack_id) || MultiTimeView.new(stack_id: stack_id)
-    end
   end
 
   @spec has_shape?(t(), shape_id()) :: boolean()

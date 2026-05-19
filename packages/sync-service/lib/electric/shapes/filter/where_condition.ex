@@ -339,7 +339,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   defp other_shapes_affected(
-         %Filter{subquery_index: index, multi_time_view: mtv, where_cond_table: table},
+         %Filter{subquery_index: index, where_cond_table: table},
          condition_id,
          record
        ) do
@@ -350,7 +350,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [shape_count: map_size(other_shapes)],
       fn ->
         for {{shape_id, _branch_key}, where} <- other_shapes,
-            other_shape_matches?(index, mtv, shape_id, where, record),
+            other_shape_matches?(index, shape_id, where, record),
             into: MapSet.new() do
           shape_id
         end
@@ -358,11 +358,11 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  defp other_shape_matches?(index, mtv, shape_id, where, record) do
+  defp other_shape_matches?(index, shape_id, where, record) do
     case WhereClause.includes_record_result(
            where,
            record,
-           WhereClause.subquery_member_from_index(index, mtv, shape_id)
+           WhereClause.subquery_member_from_index(index, shape_id)
          ) do
       {:ok, included?} -> included?
       :error -> true

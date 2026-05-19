@@ -666,7 +666,8 @@ defmodule Electric.Shapes.FilterTest do
       where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
       eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
       incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort(),
-      subquery_index: :ets.tab2list(filter.subquery_index) |> Enum.sort()
+      subquery_index: :ets.tab2list(filter.subquery_index.table) |> Enum.sort(),
+      multi_time_view: :ets.tab2list(filter.subquery_index.multi_time_view) |> Enum.sort()
     }
   end
 

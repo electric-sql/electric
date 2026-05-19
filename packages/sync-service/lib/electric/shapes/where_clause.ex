@@ -2,7 +2,6 @@ defmodule Electric.Shapes.WhereClause do
   alias PgInterop.Sublink
   alias Electric.Replication.Eval.Runner
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex
-  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
   @spec includes_record_result(
           Electric.Replication.Eval.Expr.t() | nil,
@@ -51,17 +50,11 @@ defmodule Electric.Shapes.WhereClause do
   Used for filter-side exact verification: checks whether a specific
   shape currently contains a typed value for a canonical subquery ref.
   """
-  @spec subquery_member_from_index(SubqueryIndex.t(), MultiTimeView.t() | nil, term()) ::
+  @spec subquery_member_from_index(SubqueryIndex.t(), term()) ::
           ([String.t()], term() -> boolean())
-  def subquery_member_from_index(index, multi_time_view, shape_handle) do
+  def subquery_member_from_index(index, shape_handle) do
     fn subquery_ref, typed_value ->
-      SubqueryIndex.membership_or_fallback?(
-        index,
-        multi_time_view,
-        shape_handle,
-        subquery_ref,
-        typed_value
-      )
+      SubqueryIndex.membership_or_fallback?(index, shape_handle, subquery_ref, typed_value)
     end
   end
 end
