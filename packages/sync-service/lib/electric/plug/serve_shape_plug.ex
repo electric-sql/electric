@@ -331,6 +331,8 @@ defmodule Electric.Plug.ServeShapePlug do
     cond do
       is_nil(handle) -> :initial
       ShapeStatus.has_shape_handle?(stack_id, handle) -> :existing
+      # Handle is present but unknown locally (stale from another instance,
+      # or for a shape this node has not yet recovered/created).
       true -> :initial
     end
   rescue
@@ -372,7 +374,9 @@ defmodule Electric.Plug.ServeShapePlug do
             Process.put(@admission_permit_key, {stack_id, :existing})
 
           {:error, :overloaded} ->
-            :ok
+            Logger.debug(fn ->
+              ":existing bucket at cap; keeping :initial permit for this request"
+            end)
         end
 
         conn
