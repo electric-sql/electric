@@ -139,40 +139,9 @@ defmodule Electric.AdmissionControl do
   @doc """
   Move an in-flight permit from `from_kind` to `to_kind` for a stack.
 
-  The swap is implemented as two atomic ETS ops rather than a single
-  multi-column update:
-
-    1. **Plain increment of `to_kind`** (no threshold clamp). Each caller's
-       `+1` is real, so each rejected caller's rollback removes exactly its
-       own contribution — the row recovers cleanly even when N callers race
-       past a saturated `to_kind`. A threshold-clamped form was rejected
-       here because rolling back from a clamped-to-`cap + 1` value can
-       remove real permits when multiple racers all see the clamped value.
-
-    2. **If `new_to > cap`**, atomic decrement of `to_kind` (rollback) and
-       return `{:error, :overloaded}`. `from_kind` is left untouched, so
-       the caller still holds its original `from_kind` permit.
-
-    3. **Otherwise**, atomic decrement of `from_kind` (success). Returns
-       `:ok`.
-
-  Because `from_kind` is only decremented on the success path, no
-  concurrent `try_acquire(from_kind)` ever observes a transient
-  under-count for `from_kind`. The hard cap on `from_kind` is preserved.
-
-  The mid-state between op 1 and the success-path op 3 has `to_kind`
-  incremented but `from_kind` not yet decremented — total in-flight
-  appears as `original_total + 1`. A concurrent `try_acquire(to_kind)`
-  during this window can spuriously reject when, post-swap, it would
-  have fit. That's the deliberate trade: pessimistic over-rejection
-  (bounded by the duration of one in-process branch, microseconds)
-  instead of any possibility of over-admission.
-
   The caller must already hold a `from_kind` permit (acquired via
   `try_acquire/3`). Calling `try_swap/4` without an outstanding
-  `from_kind` permit will silently grant a phantom `to_kind` permit —
-  there is no runtime check, because adding one would require a
-  separate read of `from_kind` and reintroduce a TOCTOU window.
+  `from_kind` permit will silently grant a phantom `to_kind` permit.
 
   ## Options
 

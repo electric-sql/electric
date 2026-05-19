@@ -51,8 +51,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # query params and an OTEL span.
   #
   # put_resp_content_type runs first so admission rejections (503) still
-  # carry `Content-Type: application/json`. The header is a single response
-  # write with no state reads — it does not affect the cost of admission.
+  # carry `Content-Type: application/json`.
   #
   # check_admission then runs ahead of all per-request work. Classification
   # depends only on the request URL and a cheap ETS lookup — never on shape
@@ -296,7 +295,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
-    kind = admission_kind(conn)
+    kind = admission_kind(conn, stack_id)
     max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
 
     case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
@@ -331,8 +330,7 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp admission_kind(conn) do
-    stack_id = get_in(conn.assigns, [:config, :stack_id])
+  defp admission_kind(conn, stack_id) do
     handle = conn.query_params["handle"]
 
     cond do
@@ -367,27 +365,14 @@ defmodule Electric.Plug.ServeShapePlug do
   # :initial bucket can admit the next validate-and-load wave while this
   # request is still streaming.
   defp reclassify_admission_kind(%Conn{assigns: %{config: config}} = conn, _) do
-    case Process.get(@admission_permit_key) do
-      {stack_id, :initial} ->
-        max = Map.fetch!(config[:api].max_concurrent_requests, :existing)
-
-        case Electric.AdmissionControl.try_swap(stack_id, :initial, :existing,
-               max_concurrent: max
-             ) do
-          :ok ->
-            Process.put(@admission_permit_key, {stack_id, :existing})
-
-          {:error, :overloaded} ->
-            Logger.debug(fn ->
-              ":existing bucket at cap; keeping :initial permit for this request"
-            end)
-        end
-
-        conn
-
-      _ ->
-        conn
+    with {stack_id, :initial} <- Process.get(@admission_permit_key),
+         max = Map.fetch!(config[:api].max_concurrent_requests, :existing),
+         :ok <-
+           Electric.AdmissionControl.try_swap(stack_id, :initial, :existing, max_concurrent: max) do
+      Process.put(@admission_permit_key, {stack_id, :existing})
     end
+
+    conn
   end
 
   defp load_shape(%Conn{assigns: %{request: request}} = conn, _) do
