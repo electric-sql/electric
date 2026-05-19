@@ -2209,34 +2209,45 @@ defmodule Electric.Plug.RouterTest do
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]
-    test "classifies requests based on shape existence, not offset value", %{
+    test "classifies requests by handle presence, not shape existence or offset value", %{
       opts: opts,
       stack_id: stack_id
     } do
-      # A request for a shape that doesn't exist should be classified as :initial
-      # Pre-fill both initial admission slots so :initial requests are rejected
+      # A request with no handle is always classified as :initial regardless of whether
+      # the shape already exists. Pre-fill initial slots and verify rejection.
       :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
       :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
       assert %{initial: 2, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
 
+      # No handle → :initial → rejected because :initial is full
       conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
       assert %{status: 503} = conn
 
-      # Release permits and create the shape
+      # Clean up and create the shape
       Electric.AdmissionControl.release(stack_id, :initial)
       Electric.AdmissionControl.release(stack_id, :initial)
 
       conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      offset = get_resp_last_offset(conn)
 
-      # Now the shape exists. Re-fill initial slots.
+      # Now re-fill initial slots and verify that a request WITH a valid handle
+      # is classified as :existing (bypasses the full :initial bucket).
       :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
       :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
       assert %{initial: 2, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
 
-      # offset=-1 for an existing shape should be classified as :existing, not :initial
-      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
-      assert %{status: 200} = conn
+      # Known handle → :existing → succeeds even though :initial is at cap
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{shape_handle}")
+        |> Router.call(opts)
+
+      assert conn.status in [200, 204, 304]
+
+      # Also confirm no-handle still uses :initial even though shape now exists
+      conn2 = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 503} = conn2
 
       # Clean up manually acquired permits
       Electric.AdmissionControl.release(stack_id, :initial)
@@ -2302,6 +2313,39 @@ defmodule Electric.Plug.RouterTest do
       # Clean up
       Electric.AdmissionControl.release(stack_id, :initial)
       Electric.AdmissionControl.release(stack_id, :initial)
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "reclassify_admission_kind swaps :initial permit to :existing after load_shape", %{
+      opts: opts,
+      stack_id: stack_id
+    } do
+      test_pid = self()
+      ref = make_ref()
+      handler_id = "test-admission-swap-#{inspect(ref)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:electric, :admission_control, :swap],
+        fn _event, _measurements, metadata, _ ->
+          send(test_pid, {:admission_swap, metadata})
+        end,
+        nil
+      )
+
+      try do
+        # A new shape request (no handle) starts as :initial.
+        # After load_shape completes, reclassify_admission_kind swaps to :existing.
+        conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+        assert %{status: 200} = conn
+
+        assert_receive {:admission_swap, %{stack_id: ^stack_id, from: :initial, to: :existing}},
+                       1000
+      after
+        :telemetry.detach(handler_id)
+      end
     end
   end
 

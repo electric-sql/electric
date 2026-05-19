@@ -17,6 +17,14 @@ defmodule Electric.Plug.ServeShapePlug do
   clause in `call/2` releases it — firing for success, halt, and exception
   paths alike.
 
+  Admission classification uses only `conn.query_params["handle"]` and a
+  single ETS membership check: requests with no handle or an unknown handle
+  are classified as `:initial`; requests with a known handle are `:existing`.
+  This avoids any SQLite access on the admission-control hot path. After
+  `:load_shape` completes, `:reclassify_admission_kind` atomically swaps the
+  `:initial` permit for an `:existing` permit so the `:initial` slot is freed
+  for the next validate-and-load wave while this request continues streaming.
+
   Using `after` (rather than `register_before_send`) is also what makes the
   streaming path correct: `before_send` fires when `send_chunked` starts
   streaming, not when it finishes, which would end the telemetry span before
@@ -29,6 +37,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   alias Electric.Utils
   alias Electric.Shapes.Api
+  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
 
@@ -39,13 +48,18 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with
   # query params and an OTEL span.
+  #
+  # check_admission MUST stay first. Classification depends only on the
+  # request URL and a cheap ETS lookup — never on shape ETS state or SQLite.
+  plug :check_admission
   plug :put_resp_content_type, "application/json"
   plug :parse_body
   plug :validate_request
   plug :reject_subquery_shape_compaction_request
-  plug :resolve_existing_shape
-  plug :check_admission
   plug :load_shape
+  # Reclassify off :initial as soon as load_shape returns so the :initial
+  # cap bounds validate-and-load throughput, not streaming concurrency.
+  plug :reclassify_admission_kind
   plug :serve_shape_response
 
   @impl Plug
@@ -273,72 +287,64 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  # Check if the shape already exists so admission control can classify
-  # accurately (:initial for new shapes, :existing for known shapes).
-  #
-  # Classification is stored in conn.private without touching request.params.handle.
-  # Mutating the request handle would flip `load_shape` from the no-handle
-  # `get_or_create_shape_handle` path to the strict-match `resolve_shape_handle`
-  # path; if the shape were cleaned between the two steps the client would see a
-  # 409 refetch flow for a handle they never sent.
-  defp resolve_existing_shape(%Conn{assigns: %{config: config, request: request}} = conn, _) do
-    stack_id = get_in(config, [:stack_id])
-
-    case Electric.Shapes.fetch_handle_by_shape(stack_id, request.params.shape_definition) do
-      {:ok, _handle} -> put_private(conn, :shape_exists?, true)
-      :error -> put_private(conn, :shape_exists?, false)
-    end
-  rescue
-    # Narrow rescue by design: guards against the startup race where the shape cache's ETS
-    # tables haven't been created yet — ETS operations (lookup, insert, whereis) raise
-    # ArgumentError on a missing table, which can happen when a request arrives before the
-    # shape subsystem finishes initializing.
-    ArgumentError -> put_private(conn, :shape_exists?, false)
-  end
-
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
-    kind = admission_kind(conn)
-    max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
+    max_concurrent_requests = config[:api].max_concurrent_requests
 
-    case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
-      :ok ->
-        # Stash the acquired permit in the process dictionary so the `after`
-        # clause in call/2 releases it on every code path (success, halt, or
-        # uncaught exception).
-        Process.put(@admission_permit_key, {stack_id, kind})
-        conn
+    # max_concurrent_requests is nil when admission control is not configured
+    # (e.g. embedded mode or tests that only exercise auth). Skip admission in
+    # that case — the request proceeds uncapped.
+    if is_nil(max_concurrent_requests) do
+      conn
+    else
+      kind = admission_kind(conn)
+      max_concurrent = Map.fetch!(max_concurrent_requests, kind)
 
-      {:error, :overloaded} ->
-        retry_after = calculate_retry_after(stack_id, max_concurrent)
+      case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
+        :ok ->
+          # Stash the acquired permit in the process dictionary so the `after`
+          # clause in call/2 releases it on every code path (success, halt, or
+          # uncaught exception).
+          Process.put(@admission_permit_key, {stack_id, kind})
+          conn
 
-        response =
-          Api.Response.error(
-            get_in(config, [:api]),
-            %{
-              code: "concurrent_request_limit_exceeded",
-              message:
-                "Concurrent #{kind} request limit exceeded (limit: #{max_concurrent}), please retry"
-            },
-            status: 503,
-            known_error: true,
-            retry_after: retry_after
-          )
+        {:error, :overloaded} ->
+          retry_after = calculate_retry_after(stack_id, max_concurrent)
 
-        conn
-        |> put_resp_header("cache-control", "no-store")
-        |> put_resp_header("surrogate-control", "no-store")
-        |> Api.Response.send(response)
-        |> halt()
+          response =
+            Api.Response.error(
+              get_in(config, [:api]),
+              %{
+                code: "concurrent_request_limit_exceeded",
+                message:
+                  "Concurrent #{kind} request limit exceeded (limit: #{max_concurrent}), please retry"
+              },
+              status: 503,
+              known_error: true,
+              retry_after: retry_after
+            )
+
+          conn
+          |> put_resp_header("cache-control", "no-store")
+          |> put_resp_header("surrogate-control", "no-store")
+          |> Api.Response.send(response)
+          |> halt()
+      end
     end
   end
 
   defp admission_kind(conn) do
-    if conn.private[:shape_exists?] do
-      :existing
-    else
-      :initial
+    stack_id = get_in(conn.assigns, [:config, :stack_id])
+    handle = conn.query_params["handle"]
+
+    cond do
+      is_nil(handle) -> :initial
+      ShapeStatus.has_shape_handle?(stack_id, handle) -> :existing
+      true -> :initial
     end
+  rescue
+    # Per-stack shape_meta_table may not exist yet during startup.
+    ArgumentError -> :initial
   end
 
   defp calculate_retry_after(_stack_id, _max_concurrent) do
@@ -354,6 +360,34 @@ defmodule Electric.Plug.ServeShapePlug do
     case Process.delete(@admission_permit_key) do
       {stack_id, kind} -> Electric.AdmissionControl.release(stack_id, kind)
       nil -> :ok
+    end
+  end
+
+  # Runs after :load_shape. Moves the handler out of :initial so the
+  # :initial bucket can admit the next validate-and-load wave while this
+  # request is still streaming. If :existing is at cap, we keep the
+  # :initial permit — request still completes, just charged to the wrong
+  # bucket; the next swap attempt from another request will succeed once
+  # the bucket drains naturally.
+  defp reclassify_admission_kind(%Conn{assigns: %{config: config}} = conn, _) do
+    case Process.get(@admission_permit_key) do
+      {stack_id, :initial} ->
+        max = Map.fetch!(config[:api].max_concurrent_requests, :existing)
+
+        case Electric.AdmissionControl.try_swap(stack_id, :initial, :existing,
+               max_concurrent: max
+             ) do
+          :ok ->
+            Process.put(@admission_permit_key, {stack_id, :existing})
+
+          {:error, :overloaded} ->
+            :ok
+        end
+
+        conn
+
+      _ ->
+        conn
     end
   end
 

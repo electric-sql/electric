@@ -1257,13 +1257,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
-    test "does not call release when exception occurs before check_admission runs", ctx do
+    test "permit is acquired and properly released when exception occurs during validate_request",
+         ctx do
       :ok = Electric.AdmissionControl.try_acquire(ctx.stack_id, :initial, max_concurrent: 1000)
       :ok = Electric.AdmissionControl.try_acquire(ctx.stack_id, :initial, max_concurrent: 1000)
       :ok = Electric.AdmissionControl.try_acquire(ctx.stack_id, :existing, max_concurrent: 1000)
 
-      # If validation raises before check_admission, no permit was acquired,
-      # so permit counters remain at their previous values.
+      # check_admission runs first and acquires a permit, then validate_request raises.
+      # The after-block in call/2 releases the permit, so counters return to pre-request values.
       Repatch.patch(Electric.Shapes.Api, :validate_params, fn _api, _params ->
         raise RuntimeError, "crash during validation"
       end)
@@ -1273,31 +1274,32 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert %{initial: 2, existing: 1} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
-    test "releases correct :existing permit when shape exists and offset is -1", ctx do
-      # Regression: when an existing shape is requested with offset=-1 (reconnecting
-      # client), resolve_existing_shape classifies the request as :existing. If
-      # load_shape then raises, the error handler must release :existing — not
-      # :initial (which the old offset-based heuristic would have picked).
-      Repatch.patch(Electric.Shapes, :fetch_handle_by_shape, fn _stack_id, _shape ->
-        {:ok, @test_shape_handle}
+    test "releases correct :existing permit when known handle and load_shape raises", ctx do
+      # When a request carries a handle that is present in the ETS shape-meta
+      # table, check_admission classifies it as :existing. If load_shape then
+      # raises, the error handler must release :existing — not :initial.
+      Repatch.patch(Electric.ShapeCache.ShapeStatus, :has_shape_handle?, fn _stack_id, _handle ->
+        true
       end)
 
       Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
         raise RuntimeError, "simulated crash"
       end)
 
-      call_plug_expecting_crash(ctx)
+      try do
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=0_0&handle=#{@test_shape_handle}")
+        |> ServeShapePlug.call(ctx.plug_opts)
+      catch
+        _kind, _reason -> :ok
+      end
 
       assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
-    test "releases correct :initial permit when shape does not exist", ctx do
-      # Complement to the above: when the shape doesn't exist, the permit kind
-      # is :initial. Verify the counter returns to zero on exception.
-      Repatch.patch(Electric.Shapes, :fetch_handle_by_shape, fn _stack_id, _shape ->
-        :error
-      end)
-
+    test "releases correct :initial permit when no handle provided and load_shape raises", ctx do
+      # Without a handle, check_admission classifies the request as :initial.
+      # Verify the counter returns to zero on exception.
       Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
         raise RuntimeError, "simulated crash"
       end)
@@ -1320,19 +1322,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
       catch
         _kind, _reason -> :ok
       end
-    end
-
-    test "resolve_existing_shape unexpected exception does not leak permit", ctx do
-      # resolve_existing_shape runs BEFORE check_admission, so a non-ArgumentError
-      # raise here must propagate without a permit having been acquired. Counter
-      # must stay at zero.
-      Repatch.patch(Electric.Shapes, :fetch_handle_by_shape, fn _stack_id, _shape ->
-        raise RuntimeError, "unexpected failure in shape cache lookup"
-      end)
-
-      call_plug_expecting_crash(ctx)
-
-      assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     test "successful snapshot response releases permit via after-block", ctx do
