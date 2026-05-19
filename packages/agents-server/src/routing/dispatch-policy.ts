@@ -136,7 +136,7 @@ export async function assertDispatchPolicyAllowed(
 export function shouldLinkDispatchBeforeInitialMessage(
   policy: DispatchPolicy | undefined
 ): boolean {
-  return policy?.targets[0]?.type === `webhook`
+  return policy?.targets[0] !== undefined
 }
 
 export async function linkEntityDispatchSubscription(
