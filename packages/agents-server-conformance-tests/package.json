@@ -41,7 +41,7 @@
     "stylecheck": "eslint . --quiet"
   },
   "dependencies": {
-    "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@350",
+    "@durable-streams/client": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217",
     "@electric-sql/client": "^1.5.18",
     "fast-check": "^4.6.0",
     "vitest": "^4.1.0"
