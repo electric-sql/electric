@@ -348,10 +348,6 @@ async function webhookForward(
       parsedBody.consumer_id ??
       null
     const callbackUrl = newWebhook?.callbackUrl ?? parsedBody.callback ?? null
-    const storedCallbackUrl =
-      newWebhook && callbackUrl
-        ? `${DS_SUBSCRIPTION_CALLBACK_PREFIX}${subscriptionId}`
-        : callbackUrl
 
     if (primaryStream) {
       rootSpan?.setAttribute(ATTR.STREAM_PATH, primaryStream)
@@ -382,7 +378,7 @@ async function webhookForward(
       )
 
       const upsertPromise =
-        consumerId && storedCallbackUrl
+        consumerId && callbackUrl
           ? tracer
               .startActiveSpan(`db.upsertConsumerCallback`, async (span) => {
                 try {
@@ -391,7 +387,7 @@ async function webhookForward(
                     .values({
                       tenantId: ctx.service,
                       consumerId,
-                      callbackUrl: storedCallbackUrl,
+                      callbackUrl,
                       primaryStream,
                     })
                     .onConflictDoUpdate({
@@ -399,7 +395,7 @@ async function webhookForward(
                         consumerCallbacks.tenantId,
                         consumerCallbacks.consumerId,
                       ],
-                      set: { callbackUrl: storedCallbackUrl, primaryStream },
+                      set: { callbackUrl, primaryStream },
                     })
                 } finally {
                   span.end()
@@ -595,6 +591,11 @@ async function callbackForward(
       )
       upstream = json(result)
     } else {
+      const token = claimTokenFromRequest(request)
+      if (token) {
+        headers.set(`authorization`, `Bearer ${token}`)
+        headers.delete(`electric-claim-token`)
+      }
       upstream = await fetch(target.callbackUrl, {
         method: request.method,
         headers,

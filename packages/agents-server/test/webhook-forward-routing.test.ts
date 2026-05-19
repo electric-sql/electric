@@ -230,7 +230,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-1`,
-        callbackUrl: `ds-subscription:horton-handler`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/demo/main`,
       })
     } finally {
@@ -330,7 +330,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-2`,
-        callbackUrl: `ds-subscription:horton-handler`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/pending/main`,
       })
     } finally {
@@ -421,7 +421,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-prefixed`,
-        callbackUrl: `ds-subscription:horton-handler`,
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
         primaryStream: `/horton/demo/main`,
       })
     } finally {
@@ -598,6 +598,55 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
           claimToken
         )
       ).toBe(false)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`forwards electric claim tokens as Durable Streams callback authorization`, async () => {
+    const select = selectDb([
+      {
+        callbackUrl: `http://durable.local/v1/stream/__ds/subscriptions/horton-handler/callback`,
+        primaryStream: `/horton/demo/main`,
+      },
+    ])
+    const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, next_wake: false }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      const response = await globalRouter.fetch(
+        new Request(`http://agents.local/_electric/callback-forward/wake-1`, {
+          method: `POST`,
+          headers: {
+            'content-type': `application/json`,
+            authorization: `Bearer tenant-token`,
+            'electric-claim-token': `callback-token`,
+          },
+          body: JSON.stringify({
+            epoch: 7,
+            acks: [{ path: `/horton/demo/main`, offset: `1` }],
+            done: true,
+          }),
+        }),
+        buildContext({
+          pgDb: { select: select.select } as any,
+        })
+      )
+
+      expect(response.status).toBe(200)
+      const [, init] = fetchSpy.mock.calls[0]!
+      const headers = init?.headers as Headers
+      expect(headers.get(`authorization`)).toBe(`Bearer callback-token`)
+      expect(headers.get(`electric-claim-token`)).toBeNull()
+      expect(requestBodyJson(init?.body)).toEqual({
+        wake_id: `wake-1`,
+        generation: 7,
+        acks: [{ stream: `horton/demo/main`, offset: `1` }],
+        done: true,
+      })
     } finally {
       fetchSpy.mockRestore()
     }
