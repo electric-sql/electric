@@ -50,10 +50,15 @@ defmodule Electric.Plug.ServeShapePlug do
   # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with
   # query params and an OTEL span.
   #
-  # check_admission MUST stay first. Classification depends only on the
-  # request URL and a cheap ETS lookup — never on shape ETS state or SQLite.
-  plug :check_admission
+  # put_resp_content_type runs first so admission rejections (503) still
+  # carry `Content-Type: application/json`. The header is a single response
+  # write with no state reads — it does not affect the cost of admission.
+  #
+  # check_admission then runs ahead of all per-request work. Classification
+  # depends only on the request URL and a cheap ETS lookup — never on shape
+  # ETS state or SQLite.
   plug :put_resp_content_type, "application/json"
+  plug :check_admission
   plug :parse_body
   plug :validate_request
   plug :reject_subquery_shape_compaction_request
