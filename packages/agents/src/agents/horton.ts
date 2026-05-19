@@ -26,9 +26,10 @@ import {
   createWriteTool,
   braveSearchTool,
   createFetchUrlTool,
-  fetchUrlTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
+import { unrestrictedSandbox } from '@electric-ax/agents-runtime/sandbox'
+import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import type { MessageReceived } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
@@ -273,7 +274,7 @@ The current year is ${new Date().getFullYear()}.`
 }
 
 export function createHortonTools(
-  workingDirectory: string,
+  sandbox: Sandbox,
   ctx: HandlerContext,
   readSet: Set<string>,
   opts: {
@@ -284,21 +285,21 @@ export function createHortonTools(
   } = {}
 ): Array<AgentTool> {
   return [
-    createBashTool(workingDirectory),
-    createReadFileTool(workingDirectory, readSet),
-    createWriteTool(workingDirectory, readSet),
-    createEditTool(workingDirectory, readSet),
+    createBashTool(sandbox),
+    createReadFileTool(sandbox, readSet),
+    createWriteTool(sandbox, readSet),
+    createEditTool(sandbox, readSet),
     braveSearchTool,
     ...(opts.modelCatalog && opts.modelConfig
       ? [
-          createFetchUrlTool({
+          createFetchUrlTool(sandbox, {
             catalog: opts.modelCatalog,
             modelConfig: opts.modelConfig,
             log: (message) => serverLog.info(message),
             logPrefix: opts.logPrefix ?? `[horton]`,
           }),
         ]
-      : [fetchUrlTool]),
+      : [createFetchUrlTool(sandbox)]),
     createSpawnWorkerTool(ctx, opts.modelConfig),
     createSendTool(ctx.send),
     ...(opts.docsSearchTool ? [opts.docsSearchTool] : []),
@@ -385,9 +386,12 @@ function createAssistantHandler(options: {
         : workingDirectory
     const modelConfig = resolveBuiltinModelConfig(modelCatalog, ctx.args)
     const agentsMd = readAgentsMd(effectiveCwd)
+    const sandbox = await unrestrictedSandbox({
+      workingDirectory: effectiveCwd,
+    })
     const tools = [
       ...ctx.electricTools,
-      ...createHortonTools(effectiveCwd, ctx, readSet, {
+      ...createHortonTools(sandbox, ctx, readSet, {
         docsSearchTool,
         modelConfig,
         modelCatalog,
@@ -538,8 +542,12 @@ function createAssistantHandler(options: {
       tools: tools as AgentTool[],
       ...(streamFn && { streamFn }),
     })
-    await ctx.agent.run()
-    await titlePromise
+    try {
+      await ctx.agent.run()
+      await titlePromise
+    } finally {
+      await sandbox.dispose()
+    }
   }
 }
 

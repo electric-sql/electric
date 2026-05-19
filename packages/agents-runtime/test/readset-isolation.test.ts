@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createEditTool } from '../src/tools/edit'
 import { createReadFileTool } from '../src/tools/read-file'
+import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 
 describe(`readSet isolation across handler invocations`, () => {
   let cwd: string
@@ -18,13 +19,14 @@ describe(`readSet isolation across handler invocations`, () => {
 
   it(`entity A's read does not satisfy entity B's edit guard`, async () => {
     await writeFile(join(cwd, `shared.txt`), `aaa bbb`, `utf-8`)
+    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
 
     const readSetA = new Set<string>()
-    const readA = createReadFileTool(cwd, readSetA)
+    const readA = createReadFileTool(sandbox, readSetA)
     await readA.execute(`a`, { path: `shared.txt` })
 
     const readSetB = new Set<string>()
-    const editB = createEditTool(cwd, readSetB)
+    const editB = createEditTool(sandbox, readSetB)
     const result = await editB.execute(`b`, {
       path: `shared.txt`,
       old_string: `aaa`,
@@ -34,5 +36,6 @@ describe(`readSet isolation across handler invocations`, () => {
     expect((result.content[0] as { text: string }).text).toMatch(
       /has not been read in this session/
     )
+    await sandbox.dispose()
   })
 })

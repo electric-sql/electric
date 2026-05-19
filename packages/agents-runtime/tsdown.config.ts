@@ -1,7 +1,13 @@
 import type { Options } from 'tsdown'
 
 const config: Options = {
-  entry: [`src/index.ts`, `src/react.ts`, `src/tools.ts`, `src/client.ts`],
+  entry: [
+    `src/index.ts`,
+    `src/react.ts`,
+    `src/tools.ts`,
+    `src/sandbox.ts`,
+    `src/client.ts`,
+  ],
   format: [`esm`, `cjs`],
   dts: true,
   clean: true,

@@ -1,13 +1,14 @@
-import { readFile, stat } from 'node:fs/promises'
-import { relative, resolve } from 'node:path'
+import { stat } from 'node:fs/promises'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
+import { resolveSafePath } from './safe-path'
+import type { Sandbox } from '../sandbox/types'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
 
 export function createReadFileTool(
-  workingDirectory: string,
+  sandbox: Sandbox,
   readSet?: Set<string>
 ): AgentTool {
   return {
@@ -22,9 +23,11 @@ export function createReadFileTool(
     execute: async (_toolCallId, params) => {
       const { path: filePath } = params as { path: string }
       try {
-        const resolved = resolve(workingDirectory, filePath)
-        const rel = relative(workingDirectory, resolved)
-        if (rel.startsWith(`..`)) {
+        const resolved = await resolveSafePath(
+          sandbox.workingDirectory,
+          filePath
+        )
+        if (!resolved) {
           return {
             content: [
               {
@@ -49,7 +52,7 @@ export function createReadFileTool(
           }
         }
 
-        const buffer = await readFile(resolved)
+        const buffer = await sandbox.readFile(resolved)
 
         // Detect binary: check for null bytes in the first 8KB (same heuristic git/grep use).
         const sample = buffer.subarray(0, 8192)

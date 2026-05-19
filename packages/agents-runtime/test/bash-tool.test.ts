@@ -1,8 +1,9 @@
 import { mkdtemp, realpath, rm } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBashTool } from '../src/tools/bash'
+import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 
 describe(`bash tool`, () => {
   let cwd: string
@@ -15,8 +16,9 @@ describe(`bash tool`, () => {
     await rm(cwd, { recursive: true, force: true })
   })
 
-  it(`runs commands in the working directory without overriding HOME`, async () => {
-    const tool = createBashTool(cwd)
+  it(`runs commands in the working directory and exposes HOME from the sandbox`, async () => {
+    const sandbox = await unrestrictedSandbox({ workingDirectory: cwd })
+    const tool = createBashTool(sandbox)
     const result = await tool.execute(`call-1`, {
       command: `node -e "console.log(process.cwd()); console.log(process.env.HOME)"`,
     })
@@ -25,7 +27,9 @@ describe(`bash tool`, () => {
     const lines = (result.content[0] as { text: string }).text
       .trim()
       .split(`\n`)
-    expect(lines).toEqual([await realpath(cwd), process.env.HOME ?? homedir()])
+    expect(lines[0]).toBe(await realpath(cwd))
+    expect(lines[1]).toBe(process.env.HOME ?? ``)
+    await sandbox.dispose()
   })
 
   // Characterization: the bash tool currently passes `env: { ...process.env }`

@@ -4,11 +4,13 @@ import {
   createBashTool,
   braveSearchTool,
   createEditTool,
-  fetchUrlTool,
+  createFetchUrlTool,
   createReadFileTool,
   createWriteTool,
   createSendTool,
 } from '@electric-ax/agents-runtime/tools'
+import { unrestrictedSandbox } from '@electric-ax/agents-runtime/sandbox'
+import type { Sandbox } from '@electric-ax/agents-runtime/sandbox'
 import { WORKER_TOOL_NAMES, createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   REASONING_EFFORT_VALUES,
@@ -114,7 +116,7 @@ function parseWorkerArgs(value: Readonly<Record<string, unknown>>): WorkerArgs {
 
 function buildToolsForWorker(
   tools: ReadonlyArray<WorkerToolName>,
-  workingDirectory: string,
+  sandbox: Sandbox,
   ctx: HandlerContext,
   readSet: Set<string>
 ): Array<AgentTool> {
@@ -122,22 +124,22 @@ function buildToolsForWorker(
   for (const name of tools) {
     switch (name) {
       case `bash`:
-        out.push(createBashTool(workingDirectory))
+        out.push(createBashTool(sandbox))
         break
       case `read`:
-        out.push(createReadFileTool(workingDirectory, readSet))
+        out.push(createReadFileTool(sandbox, readSet))
         break
       case `write`:
-        out.push(createWriteTool(workingDirectory, readSet))
+        out.push(createWriteTool(sandbox, readSet))
         break
       case `edit`:
-        out.push(createEditTool(workingDirectory, readSet))
+        out.push(createEditTool(sandbox, readSet))
         break
       case `web_search`:
         out.push(braveSearchTool)
         break
       case `fetch_url`:
-        out.push(fetchUrlTool)
+        out.push(createFetchUrlTool(sandbox))
         break
       case `spawn_worker`:
         out.push(createSpawnWorkerTool(ctx))
@@ -294,9 +296,12 @@ export function registerWorker(
     async handler(ctx) {
       const args = parseWorkerArgs(ctx.args)
       const readSet = new Set<string>()
+      const sandbox = await unrestrictedSandbox({
+        workingDirectory,
+      })
       const builtinTools = buildToolsForWorker(
         args.tools,
-        workingDirectory,
+        sandbox,
         ctx,
         readSet
       )
@@ -325,7 +330,11 @@ export function registerWorker(
         tools: [...builtinTools, ...sharedStateTools],
         ...(streamFn && { streamFn }),
       })
-      await ctx.agent.run()
+      try {
+        await ctx.agent.run()
+      } finally {
+        await sandbox.dispose()
+      }
     },
   })
 }

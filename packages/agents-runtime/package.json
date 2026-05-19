@@ -64,6 +64,16 @@
         "default": "./dist/tools.cjs"
       }
     },
+    "./sandbox": {
+      "import": {
+        "types": "./dist/sandbox.d.ts",
+        "default": "./dist/sandbox.js"
+      },
+      "require": {
+        "types": "./dist/sandbox.d.cts",
+        "default": "./dist/sandbox.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "peerDependencies": {
