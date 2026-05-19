@@ -10,6 +10,7 @@ export { StreamClient } from './stream-client.js'
 export type {
   DurableStreamsBearerProvider,
   StreamClientOptions,
+  StreamClientSubscriptionRouting,
   SubscriptionClaimResponse,
   SubscriptionCreateInput,
   SubscriptionResponse,

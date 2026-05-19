@@ -1,6 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StreamClient } from '../src/stream-client'
+import type { DurableStreamsRoutingAdapter } from '../src/routing/durable-streams-routing-adapter'
+
+function servicePrefixRoutingAdapter(): DurableStreamsRoutingAdapter {
+  return {
+    streamUrl: ({ durableStreamsUrl }) => new URL(durableStreamsUrl),
+    controlUrl: ({ durableStreamsUrl }) => new URL(durableStreamsUrl),
+    toBackendStreamPath: (serviceId, path) => {
+      const normalized = path.replace(/^\/+/, ``)
+      if (normalized === serviceId || normalized.startsWith(`${serviceId}/`)) {
+        return normalized
+      }
+      return `${serviceId}/${normalized}`
+    },
+    toRuntimeStreamPath: (serviceId, path) => {
+      const normalized = path.replace(/^\/+/, ``)
+      return normalized.startsWith(`${serviceId}/`)
+        ? normalized.slice(serviceId.length + 1)
+        : normalized
+    },
+  }
+}
 
 const {
   appendMock,
@@ -217,6 +238,162 @@ describe(`StreamClient`, () => {
       expect(
         new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get(`authorization`)
       ).toBe(`Bearer service-token-2`)
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`service-prefixes subscription paths via the routing adapter on putSubscription`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          subscription_id: `sub-1`,
+          pattern: `svc-tenant-a/discord-bot/abc/main`,
+          streams: [
+            { path: `svc-tenant-a/discord-bot/abc/main`, tail_offset: `0` },
+          ],
+          wake_stream: `svc-tenant-a/runners/runner-1/wake`,
+        }),
+        { headers: { 'content-type': `application/json` } }
+      )
+    )
+    const client = new StreamClient(
+      `https://streams.test/v1/stream/svc-tenant-a`,
+      {
+        routing: {
+          serviceId: `svc-tenant-a`,
+          adapter: servicePrefixRoutingAdapter(),
+        },
+      }
+    )
+
+    try {
+      const response = await client.putSubscription(`sub-1`, {
+        type: `webhook`,
+        streams: [`/discord-bot/abc/main`],
+        webhook: { url: `http://agent.local/webhook` },
+        wake_stream: `/runners/runner-1/wake`,
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        type: `webhook`,
+        streams: [`svc-tenant-a/discord-bot/abc/main`],
+        webhook: { url: `http://agent.local/webhook` },
+        wake_stream: `svc-tenant-a/runners/runner-1/wake`,
+      })
+
+      // Response paths are stripped back to the logical (runtime) namespace.
+      expect(response.pattern).toBe(`discord-bot/abc/main`)
+      expect(response.wake_stream).toBe(`runners/runner-1/wake`)
+      expect(response.streams).toEqual([
+        { path: `discord-bot/abc/main`, tail_offset: `0` },
+      ])
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`service-prefixes subscription paths on addSubscriptionStreams`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(
+      `https://streams.test/v1/stream/svc-tenant-a`,
+      {
+        routing: {
+          serviceId: `svc-tenant-a`,
+          adapter: servicePrefixRoutingAdapter(),
+        },
+      }
+    )
+
+    try {
+      await client.addSubscriptionStreams(`sub-1`, [
+        `/discord-bot/abc/main`,
+        `/discord-bot/def/main`,
+      ])
+
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toEqual({
+        streams: [
+          `svc-tenant-a/discord-bot/abc/main`,
+          `svc-tenant-a/discord-bot/def/main`,
+        ],
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`service-prefixes ack stream/path fields via the routing adapter`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(
+      `https://streams.test/v1/stream/svc-tenant-a`,
+      {
+        bearer: `service-token`,
+        routing: {
+          serviceId: `svc-tenant-a`,
+          adapter: servicePrefixRoutingAdapter(),
+        },
+      }
+    )
+
+    try {
+      await client.ackSubscription(`sub-1`, `claim-token`, {
+        wake_id: `wake-1`,
+        generation: 1,
+        acks: [
+          { stream: `/discord-bot/abc/main`, offset: `5` },
+          { path: `/discord-bot/def/main`, offset: `6` },
+        ],
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        acks: [
+          { stream: `svc-tenant-a/discord-bot/abc/main`, offset: `5` },
+          { path: `svc-tenant-a/discord-bot/def/main`, offset: `6` },
+        ],
+      })
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`leaves already-prefixed subscription paths idempotent`, async () => {
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_id: `sub-1` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const client = new StreamClient(
+      `https://streams.test/v1/stream/svc-tenant-a`,
+      {
+        routing: {
+          serviceId: `svc-tenant-a`,
+          adapter: servicePrefixRoutingAdapter(),
+        },
+      }
+    )
+
+    try {
+      await client.putSubscription(`sub-1`, {
+        type: `webhook`,
+        streams: [`svc-tenant-a/discord-bot/abc/main`],
+        webhook: { url: `http://agent.local/webhook` },
+      })
+
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        streams: [`svc-tenant-a/discord-bot/abc/main`],
+      })
     } finally {
       fetchMock.mockRestore()
     }

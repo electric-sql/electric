@@ -9,11 +9,19 @@ import { DEFAULT_TENANT_ID, UnregisteredTenantError } from './tenant.js'
 import { WakeRegistry } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
 import type { DurableStreamsBearerProvider } from './stream-client.js'
+import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 
 export interface AgentsHostTenantConfig {
   serviceId: string
   durableStreamsUrl?: string
   durableStreamsBearer?: DurableStreamsBearerProvider
+  /**
+   * Routing adapter applied to subscription path payloads so they match the
+   * backend stream-path namespace used for appends. Required for cloud /
+   * service-routed durable-streams deployments where appends are keyed on a
+   * service-prefixed path; safe to omit for tenant-root deployments.
+   */
+  durableStreamsRouting?: DurableStreamsRoutingAdapter
   streamClient?: StreamClient
 }
 
@@ -315,6 +323,14 @@ export class AgentsHost {
     if (config.durableStreamsUrl) {
       return new StreamClient(config.durableStreamsUrl, {
         bearer: config.durableStreamsBearer,
+        ...(config.durableStreamsRouting
+          ? {
+              routing: {
+                serviceId: config.serviceId,
+                adapter: config.durableStreamsRouting,
+              },
+            }
+          : {}),
       })
     }
     throw new Error(

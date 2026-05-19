@@ -7,11 +7,29 @@ import {
 import { ErrCodeNotFound } from './electric-agents-types.js'
 import { ATTR, injectTraceHeaders, withSpan } from './tracing.js'
 import type { HeadersRecord, MaybePromise } from '@durable-streams/client'
+import type { DurableStreamsRoutingAdapter } from './routing/durable-streams-routing-adapter.js'
 
 export type DurableStreamsBearerProvider = string | (() => MaybePromise<string>)
 
+export interface StreamClientSubscriptionRouting {
+  serviceId: string
+  adapter: DurableStreamsRoutingAdapter
+}
+
 export interface StreamClientOptions {
   bearer?: DurableStreamsBearerProvider
+  /**
+   * Optional routing adapter applied to subscription path payloads (patterns,
+   * stream paths, wake_streams, ack/release bodies, and server responses).
+   *
+   * Subscriptions are stored in the durable-streams worker keyed on the
+   * backend stream path (e.g. service-prefixed `<serviceId>/<path>` in
+   * service-routed cloud deployments). Stream URLs use the same transform
+   * via the per-request router, so without this option the subscription's
+   * registered streams never match the keys appends are indexed under, and
+   * webhook fanout silently drops.
+   */
+  routing?: StreamClientSubscriptionRouting
 }
 
 export interface StreamAppendResult {
@@ -192,11 +210,21 @@ export class StreamClient {
   }
 
   private backendSubscriptionPath(path: string): string {
-    return normalizeSubscriptionPath(path)
+    const normalized = normalizeSubscriptionPath(path)
+    const routing = this.options.routing
+    if (!routing) return normalized
+    return normalizeSubscriptionPath(
+      routing.adapter.toBackendStreamPath(routing.serviceId, normalized)
+    )
   }
 
   private runtimeSubscriptionPath(path: string): string {
-    return normalizeSubscriptionPath(path)
+    const normalized = normalizeSubscriptionPath(path)
+    const routing = this.options.routing
+    if (!routing) return normalized
+    return normalizeSubscriptionPath(
+      routing.adapter.toRuntimeStreamPath(routing.serviceId, normalized)
+    )
   }
 
   private subscriptionUrl(subscriptionId: string): string {
