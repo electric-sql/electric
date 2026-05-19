@@ -9,7 +9,7 @@ import {
   createRuntimeHandler,
 } from '@electric-ax/agents-runtime'
 import { serverLog } from './log'
-import { registerHorton } from './agents/horton'
+import { registerHorton, type HortonMcpAllowlist } from './agents/horton'
 import { registerWorker } from './agents/worker'
 import { createBuiltinModelCatalog } from './model-catalog'
 import { createSkillsRegistry } from './skills/registry'
@@ -49,6 +49,7 @@ export interface BuiltinAgentHandlerOptions {
   defaultDispatchPolicyForType?: (
     typeName: string
   ) => DispatchPolicy | undefined
+  mcpAllowlist: HortonMcpAllowlist
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -131,6 +132,7 @@ export async function createBuiltinAgentHandler(
     streamFn,
     skillsRegistry,
     modelCatalog,
+    mcpAllowlist: options.mcpAllowlist,
   })
 
   registerWorker(registry, { workingDirectory: cwd, streamFn, modelCatalog })
@@ -160,6 +162,7 @@ export async function createBuiltinAgentHandler(
 
 export async function createAgentHandler(
   agentServerUrl: string,
+  mcpAllowlist: HortonMcpAllowlist,
   workingDirectory?: string,
   streamFn?: StreamFn,
   createElectricTools?: BuiltinAgentHandlerOptions[`createElectricTools`],
@@ -171,6 +174,7 @@ export async function createAgentHandler(
     workingDirectory,
     streamFn,
     createElectricTools,
+    mcpAllowlist,
   })
 }
 

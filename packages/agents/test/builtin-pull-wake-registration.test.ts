@@ -83,6 +83,7 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
       agentServerUrl: agentsServer.url,
       mockStreamFn,
       pullWake: { runnerId: `test-runner` },
+      mcpAllowlist: `*`,
     })
 
     await builtinServer.start()

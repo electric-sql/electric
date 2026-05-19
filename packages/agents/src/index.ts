@@ -42,6 +42,7 @@ export {
   HORTON_MODEL,
   registerHorton,
 } from './agents/horton.js'
+export type { HortonMcpAllowlist } from './agents/horton.js'
 export { registerWorker } from './agents/worker.js'
 export {
   WORKER_TOOL_NAMES,

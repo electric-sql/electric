@@ -35,6 +35,7 @@ describe(`horton model selection`, () => {
     registerHorton(registry, {
       workingDirectory: `/tmp`,
       modelCatalog,
+      mcpAllowlist: [],
     })
 
     const def = registry.get(`horton`)
@@ -69,6 +70,7 @@ describe(`horton model selection`, () => {
     registerHorton(registry, {
       workingDirectory: `/tmp`,
       modelCatalog,
+      mcpAllowlist: [],
     })
 
     const def = registry.get(`horton`)

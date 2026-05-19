@@ -4,6 +4,7 @@ import {
   createBuiltinAgentHandler,
   registerBuiltinAgentTypes,
 } from './bootstrap.js'
+import type { HortonMcpAllowlist } from './agents/horton.js'
 import {
   createRegistry as createMcpRegistry,
   loadConfig as loadMcpConfig,
@@ -76,6 +77,7 @@ export interface BuiltinAgentsServerOptions {
   loadProjectMcpConfig?: boolean
   /** Override for the built-in skills directory; required when embedders bundle this package. */
   baseSkillsDir?: string
+  mcpAllowlist: HortonMcpAllowlist
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -299,6 +301,7 @@ export class BuiltinAgentsServer {
         runtimeName: `builtin-agents`,
         baseSkillsDir: this.options.baseSkillsDir,
         serverHeaders: pullWake.headers,
+        mcpAllowlist: this.options.mcpAllowlist,
       })
       if (!this.bootstrap) {
         throw new Error(

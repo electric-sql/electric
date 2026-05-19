@@ -2107,6 +2107,8 @@ async function startRuntime(serverId: string): Promise<void> {
     workingDirectory: settings.workingDirectory ?? app.getPath(`home`),
     extraMcpServers: settings.mcp?.servers,
     loadProjectMcpConfig: true,
+    // MCP servers are already curated in the desktop settings UI.
+    mcpAllowlist: `*`,
     mcpOAuthRedirectBase: MCP_OAUTH_REDIRECT_BASE,
     baseSkillsDir: AGENT_SKILLS_DIR,
     openAuthorizeUrl: (url, server) => {

@@ -347,6 +347,9 @@ function readAgentsMd(workingDirectory: string): string | null {
   }
 }
 
+/** `'*'` for every registered MCP server, or a list of server names (`[]` disables MCP). */
+export type HortonMcpAllowlist = `*` | ReadonlyArray<string>
+
 function createAssistantHandler(options: {
   workingDirectory: string
   streamFn?: StreamFn
@@ -355,6 +358,7 @@ function createAssistantHandler(options: {
   skillsRegistry: SkillsRegistry | null
   modelCatalog: BuiltinModelCatalog
   docsUrl?: string
+  mcpAllowlist: HortonMcpAllowlist
 }) {
   const {
     workingDirectory,
@@ -364,6 +368,7 @@ function createAssistantHandler(options: {
     skillsRegistry,
     modelCatalog,
     docsUrl,
+    mcpAllowlist,
   } = options
   const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
 
@@ -393,7 +398,11 @@ function createAssistantHandler(options: {
       ...(skillsRegistry && skillsRegistry.catalog.size > 0
         ? createSkillTools(skillsRegistry, ctx)
         : []),
-      ...mcp.tools(),
+      ...(mcpAllowlist === `*`
+        ? mcp.tools()
+        : mcpAllowlist.length > 0
+          ? mcp.tools([...mcpAllowlist])
+          : []),
     ]
 
     const titlePromise =
@@ -548,6 +557,7 @@ export function registerHorton(
     skillsRegistry?: SkillsRegistry | null
     modelCatalog: BuiltinModelCatalog
     docsUrl?: string
+    mcpAllowlist: HortonMcpAllowlist
   }
 ): Array<string> {
   const {
@@ -555,6 +565,7 @@ export function registerHorton(
     streamFn,
     skillsRegistry = null,
     modelCatalog,
+    mcpAllowlist,
   } = options
   const docsUrl = options.docsUrl ?? process.env.HORTON_DOCS_URL
 
@@ -587,6 +598,7 @@ export function registerHorton(
     skillsRegistry,
     modelCatalog,
     docsUrl,
+    mcpAllowlist,
   })
 
   const hortonCreationSchema = z.object({

@@ -1,6 +1,16 @@
 import { BuiltinAgentsServer } from './server.js'
 import { mergeElectricPrincipalHeader } from './server-headers.js'
+import type { HortonMcpAllowlist } from './agents/horton.js'
 import type { BuiltinAgentsServerOptions } from './server.js'
+
+function parseMcpAllowlistEnv(raw: string | undefined): HortonMcpAllowlist {
+  if (!raw) return []
+  if (raw === `*`) return `*`
+  return raw
+    .split(`,`)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
 
 type EnvSource = Record<string, string | undefined>
 
@@ -136,6 +146,10 @@ export function resolveBuiltinAgentsEntrypointOptions(
         `ELECTRIC_AGENTS_WORKING_DIRECTORY`,
         `WORKING_DIRECTORY`,
       ]) ?? cwd,
+    // ELECTRIC_AGENTS_MCP_ALLOWLIST: `*`, comma-separated names, or empty/unset for no MCP.
+    mcpAllowlist: parseMcpAllowlistEnv(
+      readEnv(env, [`ELECTRIC_AGENTS_MCP_ALLOWLIST`])
+    ),
     pullWake: {
       runnerId,
       registerRunner:

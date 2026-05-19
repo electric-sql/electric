@@ -104,6 +104,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     server = new BuiltinAgentsServer({
       agentServerUrl: mockServer.url,
       pullWake: { runnerId: `test-runner` },
+      mcpAllowlist: `*`,
       mockStreamFn,
       workingDirectory: workspace,
       loadProjectMcpConfig: true,
@@ -133,6 +134,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     server = new BuiltinAgentsServer({
       agentServerUrl: mockServer.url,
       pullWake: { runnerId: `test-runner` },
+      mcpAllowlist: `*`,
       mockStreamFn,
       workingDirectory: workspace,
       loadProjectMcpConfig: true,
@@ -154,6 +156,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     server = new BuiltinAgentsServer({
       agentServerUrl: mockServer.url,
       pullWake: { runnerId: `test-runner` },
+      mcpAllowlist: `*`,
       mockStreamFn,
       workingDirectory: workspace,
       loadProjectMcpConfig: true,
@@ -183,6 +186,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     server = new BuiltinAgentsServer({
       agentServerUrl: mockServer.url,
       pullWake: { runnerId: `test-runner` },
+      mcpAllowlist: `*`,
       mockStreamFn,
       workingDirectory: workspace,
       loadProjectMcpConfig: true,
@@ -220,6 +224,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     server = new BuiltinAgentsServer({
       agentServerUrl: mockServer.url,
       pullWake: { runnerId: `test-runner` },
+      mcpAllowlist: `*`,
       mockStreamFn,
       workingDirectory: workspace,
       extraMcpServers: [
@@ -249,6 +254,7 @@ describe(`BuiltinAgentsServer — MCP merge`, () => {
     server = new BuiltinAgentsServer({
       agentServerUrl: mockServer.url,
       pullWake: { runnerId: `test-runner` },
+      mcpAllowlist: `*`,
       mockStreamFn,
       workingDirectory: workspace,
       loadProjectMcpConfig: true,
