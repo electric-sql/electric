@@ -473,16 +473,6 @@ WHERE user_id IN (SELECT id FROM users WHERE company_id = 8)
 WHERE user_id NOT IN (SELECT id FROM users WHERE company_id = 7)
 ```
 
-Symbols used below:
-
-- `V_s`: values in subquery `s` over the retained window.
-- `H_v`: transition history length for one `{subquery_id, value}` row.
-- `C_s`: child nodes attached to subquery `s`.
-- `P_c`: outer shapes attached to child node `c`.
-- `K`: changed values in one dependency move.
-- `N_g`: child nodes in a negated group.
-- `R`: root-table candidate rows returned by a move-in SQL query.
-
 #### Initial `MultiTimeView` State
 
 The initial materializer state for `s7` stores one row per dependency value,
@@ -498,8 +488,8 @@ not one row per outer shape:
 
 The empty history means the value is present for the whole retained window.
 
-Memory is `O(V_s)` for the shared view. In this example, `shape_a` and
-`shape_b` do not duplicate `{10, 20}`.
+Memory is `O(number_of_values_in_subquery_retained_window)` for the shared
+view. In this example, `shape_a` and `shape_b` do not duplicate `{10, 20}`.
 
 #### `register_subquery_consumer`
 
@@ -583,12 +573,17 @@ What is evaluated:
 Cost:
 
 ```text
-O(number_of_subquery_occurrences_in_shape + V_s + child_where_insert)
+O(
+  number_of_subquery_occurrences_in_shape +
+  number_of_values_in_s7_retained_window +
+  child_where_insert
+)
 ```
 
-The `V_s` term only applies because this is the first child for
-`{g_user_pos, s7}`. Memory added is `O(V_s)` positive routing rows for the
-child plus `O(number_of_subquery_occurrences_in_shape)` participant rows.
+The value-count term only applies because this is the first child for
+`{g_user_pos, s7}`. Memory added is
+`O(number_of_values_in_s7_retained_window)` positive routing rows for the child
+plus `O(number_of_subquery_occurrences_in_shape)` participant rows.
 
 #### `add_shape`: Additional Shape Sharing An Existing Child
 
@@ -617,7 +612,8 @@ Cost:
 O(number_of_subquery_occurrences_in_shape + child_where_insert)
 ```
 
-Memory added is per-shape metadata only, not `O(V_s)`.
+Memory added is per-shape metadata only, not
+`O(number_of_values_in_s7_retained_window)`.
 
 #### `add_shape`: Same Group, Different Subquery
 
@@ -634,8 +630,8 @@ Rows added include:
 {:shape_subquery, shape_c, ["$sublink", "0"]} -> {s8, 0}
 ```
 
-Cost is `O(V_s8)` for the first `s8` child in this group. This is expected:
-`s8` has different dependency values from `s7`.
+Cost is `O(number_of_values_in_s8_retained_window)` for the first `s8` child in
+this group. This is expected: `s8` has different dependency values from `s7`.
 
 #### `add_shape`: Negated Shape
 
@@ -664,7 +660,8 @@ Cost:
 O(number_of_subquery_occurrences_in_shape + child_where_insert)
 ```
 
-Memory added for negated routing is `O(1)` per child, not `O(V_s)`.
+Memory added for negated routing is `O(1)` per child, not
+`O(number_of_values_in_s7_retained_window)`.
 
 #### `affected_shapes`: Positive Group
 
@@ -693,7 +690,11 @@ Both shapes are affected.
 Cost:
 
 ```text
-O(children_for_value + child_where_eval + exact_subquery_checks * H_v)
+O(
+  children_for_value +
+  child_where_eval +
+  exact_subquery_checks * transition_history_length_for_value
+)
 ```
 
 For this example, `children_for_value = 1`. There is no scan of all shapes and
@@ -736,7 +737,11 @@ Only `shape_a` is affected.
 Cost remains:
 
 ```text
-O(children_for_value + child_where_eval + exact_subquery_checks * H_v)
+O(
+  children_for_value +
+  child_where_eval +
+  exact_subquery_checks * transition_history_length_for_value
+)
 ```
 
 The extra memory for the move is one history row for `{s7, 30}` plus one
@@ -769,7 +774,11 @@ advances to logical time `1`, `NOT IN s7` is false for `30`.
 Cost:
 
 ```text
-O(N_g * H_v + child_where_eval + exact_subquery_checks * H_v)
+O(
+  number_of_negated_children_in_group * transition_history_length_for_value +
+  child_where_eval +
+  exact_subquery_checks * transition_history_length_for_value
+)
 ```
 
 This is intentionally proportional to the number of affected negated children.
@@ -812,7 +821,7 @@ What is evaluated:
 Cost:
 
 ```text
-O(K * (history_update + C_s))
+O(number_of_changed_values * (history_update + child_nodes_for_subquery))
 ```
 
 For a remove of `20` from `s7` at time `2`, the history becomes:
@@ -856,7 +865,7 @@ Steady memory added per active move is:
 O(number_of_changed_values + number_of_subquery_refs)
 ```
 
-not `O(V_s)`.
+not `O(number_of_values_in_s7_retained_window)`.
 
 #### `notify_processed_up_to` And Compaction
 
@@ -919,7 +928,7 @@ layout chosen. Compaction cost is paid separately and can be incremental. For
 one compacted value it is:
 
 ```text
-O(H_v + positive_children_for_subquery)
+O(transition_history_length_for_value + positive_children_for_subquery)
 ```
 
 If compaction is batched, total work is proportional to the histories visited
@@ -952,10 +961,8 @@ move-in snapshot rows returned by Postgres
 Cost for the compatibility implementation:
 
 ```text
-O(V_s + R)
+O(number_of_values_in_s7_retained_window + root_rows_returned_by_move_in_query)
 ```
-
-where `R` is the number of root-table rows returned by the move-in query.
 
 This does not yet minimize move-in query memory, but it moves full-view arrays
 out of steady consumer state and into short-lived query tasks.
@@ -999,7 +1006,7 @@ The positive route cleanup iterates `MultiTimeView.values(s7)` and deletes the
 specific `{group, value, child}` route rows. That last-child case costs:
 
 ```text
-O(V_s + child_metadata)
+O(number_of_values_in_s7_retained_window + child_metadata)
 ```
 
 It does not scan unrelated subqueries or unrelated shapes.
@@ -1027,7 +1034,11 @@ progress monitor rows for s7
 Cost:
 
 ```text
-O(C_s + sum(P_c) + V_s)
+O(
+  child_nodes_for_subquery +
+  sum(shapes_attached_to_each_child) +
+  number_of_values_in_s7_retained_window
+)
 ```
 
 This is proportional to the removed subquery's children, participants, and
