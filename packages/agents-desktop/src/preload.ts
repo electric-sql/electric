@@ -80,6 +80,21 @@ type DesktopState = {
   pullWakeRunnerId: string | null
 }
 
+type DesktopServerFetchRequest = {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string | null
+}
+
+type DesktopServerFetchResponse = {
+  url: string
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  body: string
+}
+
 type ServerConnectionState = {
   serverId: string
   status: ServerConnectionStatus
@@ -263,6 +278,10 @@ const api = {
     ipcRenderer.invoke(`desktop:save-servers`, servers),
   getDesktopState: (): Promise<DesktopState> =>
     ipcRenderer.invoke(`desktop:get-state`),
+  serverFetch: (
+    request: DesktopServerFetchRequest
+  ): Promise<DesktopServerFetchResponse> =>
+    ipcRenderer.invoke(`desktop:server-fetch`, request),
   setNativeAppearance: (appearance: DesktopAppearance): Promise<void> =>
     ipcRenderer.invoke(`desktop:set-native-appearance`, appearance),
   setActiveServer: (server: ServerConfig | null): Promise<void> =>

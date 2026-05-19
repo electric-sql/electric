@@ -16,7 +16,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { EntityManager } from '../src/entity-manager'
 import { ElectricAgentsServer } from '../src/server'
 import { WakeRegistry } from '../src/wake-registry'
-import { timeStep, waitForStreamEvents } from './test-utils'
+import {
+  durableStreamTestServerUrl,
+  timeStep,
+  waitForStreamEvents,
+} from './test-utils'
 import {
   TEST_ELECTRIC_URL,
   TEST_POSTGRES_URL,
@@ -761,8 +765,6 @@ describe(`Wake Registry Integration`, () => {
   let baseUrl: string
   let receiver: Server
   let receiverUrl: string
-  let wakeCount = 0
-  let wakeResolvers: Array<() => void> = []
 
   function getElectricAgentsManager(): EntityManager {
     return (electricAgentsServer as any).electricAgentsManager as EntityManager
@@ -774,12 +776,8 @@ describe(`Wake Registry Integration`, () => {
         const chunks: Array<Buffer> = []
         req.on(`data`, (c: Buffer) => chunks.push(c))
         req.on(`end`, () => {
-          wakeCount++
           res.writeHead(200, { 'content-type': `application/json` })
           res.end(JSON.stringify({ done: true }))
-          const resolvers = wakeResolvers
-          wakeResolvers = []
-          for (const resolve of resolvers) resolve()
         })
       })
 
@@ -801,7 +799,7 @@ describe(`Wake Registry Integration`, () => {
       receiverUrl = `http://127.0.0.1:${addr.port}`
 
       electricAgentsServer = new ElectricAgentsServer({
-        durableStreamsUrl: dsServer.url,
+        durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
         port: 0,
         postgresUrl: TEST_POSTGRES_URL,
         electricUrl: TEST_ELECTRIC_URL,
@@ -822,36 +820,6 @@ describe(`Wake Registry Integration`, () => {
       ])
     })
   }, 120_000)
-
-  function waitForWakes(
-    targetCount: number,
-    timeoutMs = 10_000
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (wakeCount >= targetCount) {
-        resolve()
-        return
-      }
-      const timeout = setTimeout(
-        () =>
-          reject(
-            new Error(
-              `Timed out waiting for ${targetCount} wakes (got ${wakeCount})`
-            )
-          ),
-        timeoutMs
-      )
-      const check = (): void => {
-        if (wakeCount >= targetCount) {
-          clearTimeout(timeout)
-          resolve()
-        } else {
-          wakeResolvers.push(check)
-        }
-      }
-      wakeResolvers.push(check)
-    })
-  }
 
   async function waitForWakeEvents(
     streamPath: string,
@@ -898,7 +866,6 @@ describe(`Wake Registry Integration`, () => {
   }
 
   it(`spawn with wake registers condition and delivers wake on child run completion`, async () => {
-    const startCount = wakeCount
     const ts = Date.now()
     const typeName = `wakerf${ts}`
 
@@ -930,16 +897,6 @@ describe(`Wake Registry Integration`, () => {
       url: string
       streams: { main: string }
     }
-
-    // Send a message to trigger the initial webhook wake for parent
-    await fetch(`${baseUrl}/_electric/entities${parent.url}/send`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ payload: `init` }),
-    })
-
-    // Wait for the parent's webhook
-    await waitForWakes(startCount + 1)
 
     // Spawn child entity
     const childRes = await fetch(
@@ -1451,15 +1408,6 @@ describe(`Wake Registry Integration`, () => {
       oneShot: false,
     })
 
-    // Send a message to watcher to trigger initial webhook (transition consumer to idle)
-    await fetch(`${baseUrl}/_electric/entities${watcher.url}/send`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ payload: `init` }),
-    })
-    const afterSendTarget = wakeCount + 1
-    await waitForWakes(afterSendTarget)
-
     // Trigger wake evaluation directly on the manager
     await manager.evaluateWakes(source.url, {
       type: `texts`,
@@ -1527,15 +1475,6 @@ describe(`Wake Registry Integration`, () => {
       condition: `runFinished`,
       oneShot: false,
     })
-
-    // Trigger initial webhook for subscriber
-    await fetch(`${baseUrl}/_electric/entities${subscriber.url}/send`, {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({ payload: `init` }),
-    })
-    const afterSendTarget = wakeCount + 1
-    await waitForWakes(afterSendTarget)
 
     // Trigger wake evaluation directly
     await manager.evaluateWakes(observed.url, {

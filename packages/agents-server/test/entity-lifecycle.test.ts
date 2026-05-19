@@ -6,6 +6,7 @@ import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
 } from './test-backend'
+import { durableStreamTestServerUrl } from './test-utils'
 
 describe(`entity lifecycle`, () => {
   let dsServer: DurableStreamTestServer | null = null
@@ -21,7 +22,7 @@ describe(`entity lifecycle`, () => {
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
 
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: TEST_ELECTRIC_URL,

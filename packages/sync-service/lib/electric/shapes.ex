@@ -139,7 +139,7 @@ defmodule Electric.Shapes do
     end
   end
 
-  def query_subset(handle, shape, subset, opts) do
-    Electric.Shapes.PartialModes.query_subset(handle, shape, subset, opts)
-  end
+  defdelegate query_subset(handle, shape, subset, opts),
+    to: Electric.Postgres.SnapshotQuery,
+    as: :execute_for_subset
 end

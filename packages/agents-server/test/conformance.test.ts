@@ -15,6 +15,7 @@ import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
 } from './test-backend'
+import { durableStreamTestServerUrl } from './test-utils'
 
 const CLI_BIN = path.resolve(
   __dirname,
@@ -39,7 +40,7 @@ describe(`Electric Agents Entity Runtime`, () => {
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
 
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: TEST_ELECTRIC_URL,
@@ -68,7 +69,7 @@ describeCli(`Electric Agents CLI`, () => {
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
 
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: TEST_ELECTRIC_URL,
@@ -97,7 +98,7 @@ describe(`Electric Agents Mock Agent`, () => {
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
 
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       mockStreamFn: MOCK_STREAM_FN,
       postgresUrl: TEST_POSTGRES_URL,
@@ -127,7 +128,7 @@ describeCli(`Electric Agents CLI with Mock Agent`, () => {
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
 
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       mockStreamFn: MOCK_STREAM_FN,
       postgresUrl: TEST_POSTGRES_URL,

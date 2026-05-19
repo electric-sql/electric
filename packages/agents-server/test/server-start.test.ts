@@ -179,8 +179,6 @@ vi.mock(`drizzle-orm`, () => ({
 }))
 
 vi.mock(`../src/stream-client`, () => ({
-  durableStreamsServiceUrl: (baseUrl: string, serviceId: string) =>
-    `${baseUrl.replace(/\/+$/, ``)}/v1/stream/${encodeURIComponent(serviceId)}`,
   StreamClient: class MockStreamClient {
     exists(): Promise<boolean> {
       return streamExistsMock()
@@ -192,10 +190,6 @@ vi.mock(`../src/stream-client`, () => ({
 
     readJson(): Promise<Array<Record<string, unknown>>> {
       return streamReadJsonMock()
-    }
-
-    getConsumerState(): Promise<null> {
-      return Promise.resolve(null)
     }
   },
 }))

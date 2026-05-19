@@ -11,13 +11,12 @@ import type {
   StandardSchemaV1,
 } from '@standard-schema/spec'
 
-const { processWebhookWakeMock } = vi.hoisted(() => ({
-  processWebhookWakeMock: vi.fn(),
+const { processWakeMock } = vi.hoisted(() => ({
+  processWakeMock: vi.fn(),
 }))
 
 vi.mock(`../src/process-wake`, () => ({
-  processWebhookWake: processWebhookWakeMock,
-  processWake: processWebhookWakeMock,
+  processWake: processWakeMock,
 }))
 
 function makeStandardSchema(
@@ -63,10 +62,14 @@ function makeResponse() {
   }
 }
 
+function flushAsyncWork(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe(`createRuntimeHandler`, () => {
   beforeEach(() => {
     clearRegistry()
-    processWebhookWakeMock.mockReset()
+    processWakeMock.mockReset()
   })
 
   afterEach(() => {
@@ -77,7 +80,7 @@ describe(`createRuntimeHandler`, () => {
     defineEntity(`test-agent`, { handler: async () => {} })
 
     let resolveWake!: () => void
-    processWebhookWakeMock.mockImplementation(
+    processWakeMock.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveWake = resolve
@@ -118,7 +121,7 @@ describe(`createRuntimeHandler`, () => {
       'content-type': `application/json`,
     })
     expect(res.end).toHaveBeenCalledWith(JSON.stringify({ ok: true }))
-    expect(processWebhookWakeMock).toHaveBeenCalledWith(
+    expect(processWakeMock).toHaveBeenCalledWith(
       notification,
       expect.objectContaining({
         baseUrl: `http://localhost:3000`,
@@ -135,7 +138,7 @@ describe(`createRuntimeHandler`, () => {
     defineEntity(`test-agent`, { handler: async () => {} })
 
     let resolveWake!: () => void
-    processWebhookWakeMock.mockImplementation(
+    processWakeMock.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveWake = resolve
@@ -195,7 +198,7 @@ describe(`createRuntimeHandler`, () => {
 
   it(`records wake errors in debugState() until drained`, async () => {
     defineEntity(`test-agent`, { handler: async () => {} })
-    processWebhookWakeMock.mockRejectedValueOnce(new Error(`wake failed`))
+    processWakeMock.mockRejectedValueOnce(new Error(`wake failed`))
 
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
@@ -230,8 +233,7 @@ describe(`createRuntimeHandler`, () => {
     )
 
     expect(response.status).toBe(200)
-    await Promise.resolve()
-    await Promise.resolve()
+    await flushAsyncWork()
 
     expect(handler.debugState()).toMatchObject({
       pendingWakeCount: 0,
@@ -260,7 +262,7 @@ describe(`createRuntimeHandler`, () => {
 
     await handler.onEnter(req, res)
 
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
     expect(res.writeHead).toHaveBeenCalledWith(400, {
       'content-type': `application/json`,
     })
@@ -293,7 +295,7 @@ describe(`createRuntimeHandler`, () => {
 
     await handler.onEnter(req, res)
 
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
     expect(res.writeHead).toHaveBeenCalledWith(400, {
       'content-type': `application/json`,
     })
@@ -314,7 +316,7 @@ describe(`createRuntimeHandler`, () => {
     )
 
     expect(response).toBeNull()
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
   })
 
   it(`returns 503 for unknown entity types`, async () => {
@@ -354,7 +356,7 @@ describe(`createRuntimeHandler`, () => {
     await expect(response.json()).resolves.toMatchObject({
       error: expect.stringContaining(`nonexistent-agent`),
     })
-    expect(processWebhookWakeMock).not.toHaveBeenCalled()
+    expect(processWakeMock).not.toHaveBeenCalled()
   })
 
   it(`routes matching fetch requests through handleRequest`, async () => {
@@ -396,7 +398,7 @@ describe(`createRuntimeHandler`, () => {
     expect(response).toBeInstanceOf(Response)
     expect(response?.status).toBe(200)
     await expect(response?.json()).resolves.toEqual({ ok: true })
-    expect(processWebhookWakeMock).toHaveBeenCalledWith(
+    expect(processWakeMock).toHaveBeenCalledWith(
       notification,
       expect.objectContaining({
         baseUrl: `http://localhost:3000`,

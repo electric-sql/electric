@@ -3,7 +3,7 @@ import { PostgresRegistry } from './entity-registry.js'
 import { EntityProjector } from './entity-projector.js'
 import { ElectricAgentsTenantRuntime } from './runtime.js'
 import { PostgresSchedulerClient, Scheduler } from './scheduler.js'
-import { StreamClient, durableStreamsServiceUrl } from './stream-client.js'
+import { StreamClient } from './stream-client.js'
 import { TagStreamOutboxDrainer } from './tag-stream-outbox-drainer.js'
 import { DEFAULT_TENANT_ID, UnregisteredTenantError } from './tenant.js'
 import { WakeRegistry } from './wake-registry.js'
@@ -313,10 +313,9 @@ export class AgentsHost {
   private createStreamClient(config: AgentsHostTenantConfig): StreamClient {
     if (config.streamClient) return config.streamClient
     if (config.durableStreamsUrl) {
-      return new StreamClient(
-        durableStreamsServiceUrl(config.durableStreamsUrl, config.serviceId),
-        { bearer: config.durableStreamsBearer }
-      )
+      return new StreamClient(config.durableStreamsUrl, {
+        bearer: config.durableStreamsBearer,
+      })
     }
     throw new Error(
       `AgentsHost tenant "${config.serviceId}" must provide a streamClient or durableStreamsUrl`

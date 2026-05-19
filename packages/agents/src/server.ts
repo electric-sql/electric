@@ -33,20 +33,6 @@ import type {
 import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 
-const PRINCIPAL_KEY_PREFIXES = new Set([`user`, `agent`, `service`, `system`])
-
-function normalizeOwnerUserId(
-  ownerUserId: string | undefined
-): string | undefined {
-  const trimmed = ownerUserId?.trim()
-  if (!trimmed) return undefined
-  const colon = trimmed.indexOf(`:`)
-  if (colon > 0 && PRINCIPAL_KEY_PREFIXES.has(trimmed.slice(0, colon))) {
-    return trimmed
-  }
-  return `user:${trimmed}`
-}
-
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string
   workingDirectory?: string
@@ -54,13 +40,14 @@ export interface BuiltinAgentsServerOptions {
   /** Pull-wake runner configuration for built-in agents. */
   pullWake: {
     runnerId: string
-    ownerUserId?: string
+    ownerPrincipal?: string
     label?: string
     registerRunner?: boolean
     headers?: PullWakeRunnerConfig[`headers`]
     claimHeaders?: PullWakeRunnerConfig[`claimHeaders`]
     claimTokenHeader?: PullWakeRunnerConfig[`claimTokenHeader`]
     heartbeatIntervalMs?: PullWakeRunnerConfig[`heartbeatIntervalMs`]
+    eventHeartbeatThrottleMs?: PullWakeRunnerConfig[`eventHeartbeatThrottleMs`]
     leaseMs?: PullWakeRunnerConfig[`leaseMs`]
   }
   /** Invoked when an `authorizationCode` server needs user consent. */
@@ -331,11 +318,11 @@ export class BuiltinAgentsServer {
         claimHeaders: pullWake.claimHeaders,
         claimTokenHeader: pullWake.claimTokenHeader,
         heartbeatIntervalMs: pullWake.heartbeatIntervalMs,
+        eventHeartbeatThrottleMs: pullWake.eventHeartbeatThrottleMs,
         leaseMs: pullWake.leaseMs,
         offset: registeredRunner?.wake_stream_offset,
         onError: (error) => {
           serverLog.error(`[builtin-agents] pull-wake runner failed`, error)
-          return true
         },
       })
       this.pullWakeRunner.start()
@@ -413,20 +400,18 @@ export class BuiltinAgentsServer {
         : pullWake.headers
     )
     headers.set(`content-type`, `application/json`)
-    const ownerUserId = normalizeOwnerUserId(pullWake.ownerUserId)
-    const body: Record<string, unknown> = {
-      id: pullWake.runnerId,
-      label: pullWake.label ?? `Built-in agents`,
-      kind: `local`,
-      admin_status: `enabled`,
-    }
-    if (ownerUserId) body.owner_user_id = ownerUserId
     const response = await fetch(
       appendPathToUrl(this.options.agentServerUrl, `/_electric/runners`),
       {
         method: `POST`,
         headers,
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          id: pullWake.runnerId,
+          owner_principal: pullWake.ownerPrincipal,
+          label: pullWake.label ?? `Built-in agents`,
+          kind: `local`,
+          admin_status: `enabled`,
+        }),
       }
     )
     if (!response.ok) {

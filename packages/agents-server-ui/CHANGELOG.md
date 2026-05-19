@@ -1,5 +1,16 @@
 # @electric-ax/agents-server-ui
 
+## 0.4.4
+
+### Patch Changes
+
+- e126eba: Route local desktop mutating agents-server requests through the Electron main process so CORS preflights cannot stall behind renderer connection limits.
+- e126eba: Default unauthenticated local desktop sessions to the `system:dev-local` principal and resolve optimistic send principals at mutation time so pending messages do not render as `unknown`.
+- e126eba: Send new-session initial messages through the spawn request so pull-wake sessions can start without waiting for the UI to preload the entity stream.
+- Updated dependencies [e126eba]
+- Updated dependencies [e126eba]
+  - @electric-ax/agents-runtime@0.2.2
+
 ## 0.4.3
 
 ### Patch Changes

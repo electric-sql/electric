@@ -58,7 +58,7 @@ export function SettingsScreen({
         )}
       </div>
       <ScrollArea className={styles.scroll}>
-        <div className={styles.body}>
+        <div className={styles.body} data-desktop-selection-context>
           <h1 className={styles.pageTitle}>{title}</h1>
           <Stack direction="column" gap={6} className={styles.sections}>
             {children}

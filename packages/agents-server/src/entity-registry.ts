@@ -7,6 +7,7 @@ import {
   entityDispatchState,
   entityManifestSources,
   entityTypes,
+  runnerRuntimeDiagnostics,
   runners,
   tagStreamOutbox,
 } from './db/schema.js'
@@ -74,7 +75,7 @@ export interface TagStreamOutboxRow {
 
 export interface RegisterRunnerInput {
   id: string
-  ownerUserId: string
+  ownerPrincipal: string
   label: string
   kind?: RunnerKind
   adminStatus?: RunnerAdminStatus
@@ -83,10 +84,22 @@ export interface RegisterRunnerInput {
 
 export interface HeartbeatRunnerInput {
   runnerId: string
+  ownerPrincipal: string
   heartbeatAt?: Date
   livenessLeaseExpiresAt?: Date
   leaseMs?: number
   wakeStreamOffset?: string
+  diagnostics?: Record<string, unknown>
+}
+
+export interface RunnerRuntimeDiagnostics {
+  runner_id: string
+  owner_principal: string
+  wake_stream_offset?: string
+  last_seen_at: string
+  liveness_lease_expires_at: string
+  diagnostics?: Record<string, unknown>
+  updated_at: string
 }
 
 export interface MaterializeActiveClaimInput {
@@ -141,7 +154,7 @@ export class PostgresRegistry {
       .values({
         tenantId: this.tenantId,
         id: input.id,
-        ownerUserId: input.ownerUserId,
+        ownerPrincipal: input.ownerPrincipal,
         label: input.label,
         kind: input.kind ?? `local`,
         adminStatus: input.adminStatus ?? `enabled`,
@@ -151,7 +164,7 @@ export class PostgresRegistry {
       .onConflictDoUpdate({
         target: [runners.tenantId, runners.id],
         set: {
-          ownerUserId: input.ownerUserId,
+          ownerPrincipal: input.ownerPrincipal,
           label: input.label,
           kind: input.kind ?? `local`,
           adminStatus: input.adminStatus ?? `enabled`,
@@ -177,11 +190,11 @@ export class PostgresRegistry {
   }
 
   async listRunners(filter?: {
-    ownerUserId?: string
+    ownerPrincipal?: string
   }): Promise<Array<ElectricAgentsRunner>> {
     const conditions = [eq(runners.tenantId, this.tenantId)]
-    if (filter?.ownerUserId) {
-      conditions.push(eq(runners.ownerUserId, filter.ownerUserId))
+    if (filter?.ownerPrincipal) {
+      conditions.push(eq(runners.ownerPrincipal, filter.ownerPrincipal))
     }
     const rows = await this.db
       .select()
@@ -199,22 +212,66 @@ export class PostgresRegistry {
       input.livenessLeaseExpiresAt ??
       new Date(now.getTime() + (input.leaseMs ?? DEFAULT_RUNNER_LEASE_MS))
 
-    const rows = await this.db
-      .update(runners)
-      .set({
+    await this.db
+      .insert(runnerRuntimeDiagnostics)
+      .values({
+        tenantId: this.tenantId,
+        runnerId: input.runnerId,
+        ownerPrincipal: input.ownerPrincipal,
         lastSeenAt: now,
         livenessLeaseExpiresAt: leaseExpiresAt,
-        ...(input.wakeStreamOffset !== undefined
-          ? { wakeStreamOffset: input.wakeStreamOffset }
-          : {}),
+        wakeStreamOffset: input.wakeStreamOffset,
+        diagnostics: input.diagnostics,
         updatedAt: now,
       })
-      .where(
-        and(eq(runners.tenantId, this.tenantId), eq(runners.id, input.runnerId))
-      )
-      .returning()
+      .onConflictDoUpdate({
+        target: [
+          runnerRuntimeDiagnostics.tenantId,
+          runnerRuntimeDiagnostics.runnerId,
+        ],
+        set: {
+          lastSeenAt: now,
+          ownerPrincipal: input.ownerPrincipal,
+          livenessLeaseExpiresAt: leaseExpiresAt,
+          ...(input.wakeStreamOffset !== undefined
+            ? { wakeStreamOffset: input.wakeStreamOffset }
+            : {}),
+          ...(input.diagnostics !== undefined
+            ? { diagnostics: input.diagnostics }
+            : {}),
+          updatedAt: now,
+        },
+      })
 
-    return rows[0] ? this.rowToRunner(rows[0]) : null
+    const runner = await this.getRunner(input.runnerId)
+    if (!runner) return null
+    return {
+      ...runner,
+      last_seen_at: now.toISOString(),
+      liveness_lease_expires_at: leaseExpiresAt.toISOString(),
+      ...(input.wakeStreamOffset !== undefined
+        ? { wake_stream_offset: input.wakeStreamOffset }
+        : {}),
+      ...(input.diagnostics !== undefined
+        ? { diagnostics: input.diagnostics }
+        : {}),
+    }
+  }
+
+  async getRunnerDiagnostics(
+    runnerId: string
+  ): Promise<RunnerRuntimeDiagnostics | null> {
+    const rows = await this.db
+      .select()
+      .from(runnerRuntimeDiagnostics)
+      .where(
+        and(
+          eq(runnerRuntimeDiagnostics.tenantId, this.tenantId),
+          eq(runnerRuntimeDiagnostics.runnerId, runnerId)
+        )
+      )
+      .limit(1)
+    return rows[0] ? this.rowToRunnerRuntimeDiagnostics(rows[0]) : null
   }
 
   async setRunnerAdminStatus(
@@ -365,6 +422,54 @@ export class PostgresRegistry {
         )
     }
     return claim
+  }
+
+  async getActiveClaimsForRunner(
+    runnerId: string
+  ): Promise<Array<ConsumerClaim>> {
+    const rows = await this.db
+      .select()
+      .from(consumerClaims)
+      .where(
+        and(
+          eq(consumerClaims.tenantId, this.tenantId),
+          eq(consumerClaims.runnerId, runnerId),
+          eq(consumerClaims.status, `active`)
+        )
+      )
+    return rows.map((row) => this.rowToConsumerClaim(row))
+  }
+
+  async getDispatchStatsForRunner(runnerId: string): Promise<{
+    entities_with_active_claim: number
+    entities_with_outstanding_wake: number
+    entities_with_pending_work: number
+  }> {
+    const rows = await this.db
+      .select()
+      .from(entityDispatchState)
+      .where(
+        and(
+          eq(entityDispatchState.tenantId, this.tenantId),
+          eq(entityDispatchState.activeRunnerId, runnerId)
+        )
+      )
+
+    let activeClaim = 0
+    let outstandingWake = 0
+    let pendingWork = 0
+    for (const row of rows) {
+      if (row.activeConsumerId) activeClaim++
+      if (row.outstandingWakeId && !row.activeConsumerId) outstandingWake++
+      const pending = row.pendingSourceStreams as Array<unknown> | null
+      if (pending && pending.length > 0) pendingWork++
+    }
+
+    return {
+      entities_with_active_claim: activeClaim,
+      entities_with_outstanding_wake: outstandingWake,
+      entities_with_pending_work: pendingWork,
+    }
   }
 
   private entityTypeWhere(name: string) {
@@ -1172,23 +1277,28 @@ export class PostgresRegistry {
   }
 
   private rowToRunner(row: typeof runners.$inferSelect): ElectricAgentsRunner {
-    const now = Date.now()
-    const livenessExpiry = row.livenessLeaseExpiresAt?.getTime()
     return {
       id: row.id,
-      owner_user_id: row.ownerUserId,
+      owner_principal: row.ownerPrincipal,
       label: row.label,
       kind: assertRunnerKind(row.kind),
       admin_status: assertRunnerAdminStatus(row.adminStatus),
-      liveness:
-        livenessExpiry !== undefined && livenessExpiry > now
-          ? `online`
-          : `offline`,
-      last_seen_at: row.lastSeenAt?.toISOString(),
-      liveness_lease_expires_at: row.livenessLeaseExpiresAt?.toISOString(),
       wake_stream: row.wakeStream,
-      wake_stream_offset: row.wakeStreamOffset ?? undefined,
       created_at: row.createdAt.toISOString(),
+      updated_at: row.updatedAt.toISOString(),
+    }
+  }
+
+  private rowToRunnerRuntimeDiagnostics(
+    row: typeof runnerRuntimeDiagnostics.$inferSelect
+  ): RunnerRuntimeDiagnostics {
+    return {
+      runner_id: row.runnerId,
+      owner_principal: row.ownerPrincipal,
+      wake_stream_offset: row.wakeStreamOffset ?? undefined,
+      last_seen_at: row.lastSeenAt.toISOString(),
+      liveness_lease_expires_at: row.livenessLeaseExpiresAt.toISOString(),
+      diagnostics: (row.diagnostics as Record<string, unknown>) ?? undefined,
       updated_at: row.updatedAt.toISOString(),
     }
   }

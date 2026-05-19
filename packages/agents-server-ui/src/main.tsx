@@ -23,16 +23,40 @@ import { App } from './App'
 
 // ngrok's free tier intercepts browser requests with an HTML warning page
 // (status 200, no CORS header) — every fetch to an ngrok host fails CORS
-// as a result. Setting `ngrok-skip-browser-warning` on every outbound
-// request makes ngrok pass through to the upstream. No effect on requests
-// to non-ngrok hosts. Covers the durable-streams client's internal fetches
-// too, since it calls through the global fetch.
+// as a result. Set `ngrok-skip-browser-warning` only for ngrok hosts:
+// adding a custom header to local sends forces CORS preflights.
+function isNgrokHost(input: RequestInfo | URL): boolean {
+  try {
+    const url =
+      input instanceof Request
+        ? new URL(input.url, window.location.href)
+        : new URL(input, window.location.href)
+    return (
+      url.hostname === `ngrok-free.app` ||
+      url.hostname.endsWith(`.ngrok-free.app`) ||
+      url.hostname === `ngrok.app` ||
+      url.hostname.endsWith(`.ngrok.app`) ||
+      url.hostname === `ngrok.dev` ||
+      url.hostname.endsWith(`.ngrok.dev`) ||
+      url.hostname === `ngrok.io` ||
+      url.hostname.endsWith(`.ngrok.io`) ||
+      url.hostname === `ngrok-free.dev` ||
+      url.hostname.endsWith(`.ngrok-free.dev`)
+    )
+  } catch {
+    return false
+  }
+}
+
 const originalFetch = window.fetch.bind(window)
 window.fetch = (
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> => {
-  const headers = new Headers(init?.headers ?? {})
+  if (!isNgrokHost(input)) return originalFetch(input, init)
+  const headers = new Headers(
+    init?.headers ?? (input instanceof Request ? input.headers : undefined)
+  )
   if (!headers.has(`ngrok-skip-browser-warning`)) {
     headers.set(`ngrok-skip-browser-warning`, `true`)
   }

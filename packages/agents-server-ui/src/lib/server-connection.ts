@@ -41,6 +41,21 @@ export interface DesktopState {
   pullWakeRunnerId: string | null
 }
 
+export interface DesktopServerFetchRequest {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string | null
+}
+
+export interface DesktopServerFetchResponse {
+  url: string
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  body: string
+}
+
 export interface ServerConnectionState {
   serverId: string
   status: ServerConnectionStatus
@@ -227,6 +242,9 @@ declare global {
       getServers: () => Promise<Array<ServerConfig>>
       saveServers: (servers: Array<ServerConfig>) => Promise<void>
       getDesktopState?: () => Promise<DesktopState>
+      serverFetch?: (
+        request: DesktopServerFetchRequest
+      ) => Promise<DesktopServerFetchResponse>
       setNativeAppearance?: (appearance: DesktopAppearance) => Promise<void>
       setActiveServer?: (server: ServerConfig | null) => Promise<void>
       setSelectedServer?: (serverId: string | null) => Promise<void>

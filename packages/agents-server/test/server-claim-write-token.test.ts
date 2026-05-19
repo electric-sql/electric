@@ -8,6 +8,7 @@ import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
 } from './test-backend'
+import { durableStreamTestServerUrl } from './test-utils'
 import type { Server } from 'node:http'
 
 describe(`Claim-scoped write tokens`, () => {
@@ -19,7 +20,7 @@ describe(`Claim-scoped write tokens`, () => {
 
   async function startElectricAgentsServer(): Promise<void> {
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: TEST_ELECTRIC_URL,

@@ -54,8 +54,22 @@
     {
       "idx": 7,
       "version": "7",
+      "when": 1778899200000,
+      "tag": "0007_runner_diagnostics_and_principal",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778976000000,
+      "tag": "0008_runner_runtime_diagnostics",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
       "when": 1778540000000,
-      "tag": "0007_entity_signal_statuses",
+      "tag": "0009_entity_signal_statuses",
       "breakpoints": true
     }
   ]

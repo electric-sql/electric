@@ -1,9 +1,14 @@
+import { createHash } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DurableStreamTestServer } from '@durable-streams/server'
 import { BuiltinAgentsServer } from '../../agents/src/server'
 import { ElectricAgentsServer } from '../src/server'
 import { parsePrincipalKey } from '../src/principal'
-import { readStreamEvents, waitFor } from './test-utils'
+import {
+  durableStreamTestServerUrl,
+  readStreamEvents,
+  waitFor,
+} from './test-utils'
 import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
@@ -64,6 +69,152 @@ function eventType(event: any): unknown {
   return event.type ?? event.value?.type ?? event.value?.value?.type
 }
 
+function runnerEntitySubscriptionId(
+  runnerId: string,
+  entityUrl: string
+): string {
+  const digest = createHash(`sha256`).update(entityUrl).digest(`hex`)
+  return `runner:${runnerId}:${digest.slice(0, 16)}`
+}
+
+function subscriptionUrl(
+  streamBaseUrl: string,
+  subscriptionId: string
+): string {
+  const url = new URL(streamBaseUrl)
+  const match = /^(.*)\/v1\/stream\/([^/]+)\/?$/.exec(url.pathname)
+  if (match) {
+    const [, prefix = ``, serviceId] = match
+    url.pathname = `${prefix}/v1/stream/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
+    url.searchParams.set(`service`, decodeURIComponent(serviceId!))
+    return url.toString()
+  }
+
+  url.pathname = `${url.pathname.replace(/\/+$/, ``)}/__ds/subscriptions/${encodeURIComponent(subscriptionId)}`
+  return url.toString()
+}
+
+function truncateDiagnostic(value: string, max = 4_000): string {
+  return value.length > max ? `${value.slice(0, max)}...<truncated>` : value
+}
+
+async function responseDiagnostic(
+  label: string,
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<string> {
+  try {
+    const res = await fetch(input, init)
+    const body = truncateDiagnostic(await res.text())
+    return `${label}: ${res.status} ${res.statusText}\n${body}`
+  } catch (err) {
+    return `${label}: fetch failed\n${err instanceof Error ? err.stack : String(err)}`
+  }
+}
+
+async function expectNoContentWithDiagnostics(
+  res: Response,
+  opts: {
+    phase: string
+    baseUrl: string
+    streamBaseUrl: string
+    entityApiUrl: string
+    entityUrl: string
+    runnerId: string
+    authHeaders: Record<string, string>
+  }
+): Promise<void> {
+  if (res.status === 204) return
+
+  const body = truncateDiagnostic(await res.text())
+  const subscriptionId = runnerEntitySubscriptionId(
+    opts.runnerId,
+    opts.entityUrl
+  )
+  const diagnostics = await Promise.all([
+    responseDiagnostic(`entity`, opts.entityApiUrl, {
+      headers: opts.authHeaders,
+    }),
+    responseDiagnostic(
+      `runner`,
+      `${opts.baseUrl}/_electric/runners/${opts.runnerId}`,
+      {
+        headers: opts.authHeaders,
+      }
+    ),
+    responseDiagnostic(
+      `runner health`,
+      `${opts.baseUrl}/_electric/runners/${opts.runnerId}/health`,
+      { headers: opts.authHeaders }
+    ),
+    responseDiagnostic(
+      `subscription ${subscriptionId}`,
+      subscriptionUrl(opts.streamBaseUrl, subscriptionId)
+    ),
+  ])
+
+  throw new Error(
+    [
+      `${opts.phase} returned ${res.status} ${res.statusText}; expected 204`,
+      `response body:\n${body}`,
+      ...diagnostics,
+    ].join(`\n\n`)
+  )
+}
+
+async function waitForMockCallWithDiagnostics(
+  predicate: () => boolean,
+  opts: {
+    phase: string
+    baseUrl: string
+    streamBaseUrl: string
+    entityApiUrl: string
+    entityUrl: string
+    entityStream: string
+    runnerId: string
+    authHeaders: Record<string, string>
+  }
+): Promise<void> {
+  try {
+    await waitFor(async () => predicate(), 20_000, 50)
+  } catch (err) {
+    const subscriptionId = runnerEntitySubscriptionId(
+      opts.runnerId,
+      opts.entityUrl
+    )
+    const diagnostics = await Promise.all([
+      responseDiagnostic(`entity`, opts.entityApiUrl, {
+        headers: opts.authHeaders,
+      }),
+      responseDiagnostic(
+        `runner health`,
+        `${opts.baseUrl}/_electric/runners/${opts.runnerId}/health`,
+        { headers: opts.authHeaders }
+      ),
+      responseDiagnostic(
+        `subscription ${subscriptionId}`,
+        subscriptionUrl(opts.streamBaseUrl, subscriptionId)
+      ),
+      responseDiagnostic(
+        `runner wake stream`,
+        `${opts.streamBaseUrl}/runners/${opts.runnerId}/wake?offset=-1&live=false`
+      ),
+      responseDiagnostic(
+        `entity main stream`,
+        `${opts.streamBaseUrl}${opts.entityStream}?offset=-1&live=false`
+      ),
+    ])
+
+    throw new Error(
+      [
+        `${opts.phase} did not reach Horton within 20000ms`,
+        err instanceof Error ? err.message : String(err),
+        ...diagnostics,
+      ].join(`\n\n`)
+    )
+  }
+}
+
 function assertCompleteResponses(
   events: Array<any>,
   responseText: string,
@@ -113,7 +264,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
     })
     await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
     electricAgentsServer = new ElectricAgentsServer({
-      durableStreamsUrl: dsServer.url,
+      durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
       electricUrl: undefined,
@@ -130,7 +281,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       pullWake: {
         runnerId,
         registerRunner: true,
-        ownerUserId: testPrincipal.key,
+        ownerPrincipal: testPrincipal.url,
         headers: authHeaders,
         claimHeaders: authHeaders,
         claimTokenHeader: `electric-claim-token`,
@@ -149,6 +300,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
 
   it(`dispatches explicit runner-policy wakes and Horton writes mocked responses`, async () => {
     const id = `pull-wake-horton-${Date.now()}`
+    const entityUrl = `/horton/${id}`
     const entityApiUrl = `${baseUrl}/_electric/entities/horton/${id}`
     const dispatch_policy = { targets: [{ type: `runner`, runnerId }] }
 
@@ -180,9 +332,29 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
         payload: `Please answer via pull-wake.`,
       }),
     })
-    expect(sendRes.status).toBe(204)
+    await expectNoContentWithDiagnostics(sendRes, {
+      phase: `initial send`,
+      baseUrl,
+      streamBaseUrl,
+      entityApiUrl,
+      entityUrl,
+      runnerId,
+      authHeaders,
+    })
 
-    await waitFor(async () => mockStreamFn.mock.calls.length > 0, 20_000, 50)
+    await waitForMockCallWithDiagnostics(
+      () => mockStreamFn.mock.calls.length > 0,
+      {
+        phase: `initial send`,
+        baseUrl,
+        streamBaseUrl,
+        entityApiUrl,
+        entityUrl,
+        entityStream: spawned.streams.main,
+        runnerId,
+        authHeaders,
+      }
+    )
 
     await waitFor(async () => {
       const events = await readStreamEvents(streamBaseUrl, spawned.streams.main)
@@ -203,12 +375,28 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
         payload: `Please answer via pull-wake again after idle.`,
       }),
     })
-    expect(secondSendRes.status).toBe(204)
+    await expectNoContentWithDiagnostics(secondSendRes, {
+      phase: `second send`,
+      baseUrl,
+      streamBaseUrl,
+      entityApiUrl,
+      entityUrl,
+      runnerId,
+      authHeaders,
+    })
 
-    await waitFor(
-      async () => mockStreamFn.mock.calls.length > firstCallCount,
-      20_000,
-      50
+    await waitForMockCallWithDiagnostics(
+      () => mockStreamFn.mock.calls.length > firstCallCount,
+      {
+        phase: `second send`,
+        baseUrl,
+        streamBaseUrl,
+        entityApiUrl,
+        entityUrl,
+        entityStream: spawned.streams.main,
+        runnerId,
+        authHeaders,
+      }
     )
 
     await waitFor(async () => {

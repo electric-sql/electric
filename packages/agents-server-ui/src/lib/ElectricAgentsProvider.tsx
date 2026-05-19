@@ -63,8 +63,58 @@ const entityTypeSchema = z.object({
   updated_at: z.string(),
 })
 
+const runnerDiagnosticsSchema = z.object({
+  started_at: z.string().nullable().optional(),
+  stream_connected: z.boolean().optional(),
+  stream_connected_since: z.string().nullable().optional(),
+  reconnect_count: z.number().optional(),
+  last_error: z.string().nullable().optional(),
+  last_error_at: z.string().nullable().optional(),
+  last_heartbeat_at: z.string().nullable().optional(),
+  last_heartbeat_ok: z.boolean().optional(),
+  last_claim_at: z.string().nullable().optional(),
+  last_claim_result: z
+    .enum([`claimed`, `no_work`, `error`])
+    .nullable()
+    .optional(),
+  last_dispatch_at: z.string().nullable().optional(),
+  events_received: z.number().optional(),
+  claims_succeeded: z.number().optional(),
+  claims_skipped: z.number().optional(),
+  claims_failed: z.number().optional(),
+})
+
+const runnerSchema = z.object({
+  id: z.string(),
+  owner_principal: z.string(),
+  label: z.string(),
+  kind: z.string(),
+  admin_status: z.enum([`enabled`, `disabled`]),
+  wake_stream: z.string(),
+  wake_stream_offset: z.string().nullable().optional(),
+  last_seen_at: z.string().nullable().optional(),
+  liveness_lease_expires_at: z.string().nullable().optional(),
+  diagnostics: runnerDiagnosticsSchema.nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+const runnerRuntimeDiagnosticsSchema = z.object({
+  runner_id: z.string(),
+  owner_principal: z.string(),
+  wake_stream_offset: z.string().nullable().optional(),
+  last_seen_at: z.string(),
+  liveness_lease_expires_at: z.string(),
+  diagnostics: runnerDiagnosticsSchema.nullable().optional(),
+  updated_at: z.string(),
+})
+
 export type ElectricEntity = z.infer<typeof entitySchema>
 export type ElectricEntityType = z.infer<typeof entityTypeSchema>
+export type ElectricRunner = z.infer<typeof runnerSchema>
+export type ElectricRunnerRuntimeDiagnostics = z.infer<
+  typeof runnerRuntimeDiagnosticsSchema
+>
 
 // --- Collection factories ---
 
@@ -116,12 +166,51 @@ function createEntityTypesCollection(baseUrl: string) {
   )
 }
 
+function createRunnersCollection(baseUrl: string) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `runners`,
+      schema: runnerSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: { table: `runners` },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.id,
+    })
+  )
+}
+
+export function createRunnerRuntimeDiagnosticsCollection(
+  baseUrl: string,
+  runnerId: string
+) {
+  return createCollection(
+    electricCollectionOptions({
+      id: `runner-runtime-diagnostics:${baseUrl}:${runnerId}`,
+      schema: runnerRuntimeDiagnosticsSchema,
+      shapeOptions: {
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        params: {
+          table: `runner_runtime_diagnostics`,
+          where: `runner_id = $1`,
+          params: { '1': runnerId },
+        },
+        fetchClient: serverFetch,
+      },
+      getKey: (item) => item.runner_id,
+    })
+  )
+}
+
 type EntitiesCollection = ReturnType<typeof createEntitiesCollection>
 type EntityTypesCollection = ReturnType<typeof createEntityTypesCollection>
+type RunnersCollection = ReturnType<typeof createRunnersCollection>
 
 type AppCollections = {
   entities: EntitiesCollection
   entityTypes: EntityTypesCollection
+  runners: RunnersCollection
 }
 
 const appCollectionsCache = new Map<string, AppCollections>()
@@ -132,6 +221,7 @@ function getOrCreateAppCollections(baseUrl: string): AppCollections {
   const collections = {
     entities: createEntitiesCollection(baseUrl),
     entityTypes: createEntityTypesCollection(baseUrl),
+    runners: createRunnersCollection(baseUrl),
   }
   appCollectionsCache.set(baseUrl, collections)
   return collections
@@ -142,6 +232,7 @@ function cleanupAppCollections(baseUrl: string): void {
   if (!collections) return
   collections.entities.cleanup()
   collections.entityTypes.cleanup()
+  collections.runners.cleanup()
   appCollectionsCache.delete(baseUrl)
 }
 
@@ -158,6 +249,7 @@ export async function preloadAppCollections(
   await Promise.all([
     collections.entities.preload(),
     collections.entityTypes.preload(),
+    collections.runners.preload(),
   ])
   return collections
 }
@@ -367,6 +459,7 @@ function createForkEntity(baseUrl: string) {
 interface ElectricAgentsState {
   entitiesCollection: EntitiesCollection | null
   entityTypesCollection: EntityTypesCollection | null
+  runnersCollection: RunnersCollection | null
   spawnEntity: ReturnType<typeof createSpawnAction> | null
   signalEntity: ReturnType<typeof createSignalAction> | null
   killEntity: ReturnType<typeof createKillAction> | null
@@ -376,6 +469,7 @@ interface ElectricAgentsState {
 const ElectricAgentsContext = createContext<ElectricAgentsState>({
   entitiesCollection: null,
   entityTypesCollection: null,
+  runnersCollection: null,
   spawnEntity: null,
   signalEntity: null,
   killEntity: null,
@@ -405,6 +499,7 @@ export function ElectricAgentsProvider({
       return {
         entitiesCollection: null,
         entityTypesCollection: null,
+        runnersCollection: null,
         spawnEntity: null,
         signalEntity: null,
         killEntity: null,
@@ -412,10 +507,12 @@ export function ElectricAgentsProvider({
       }
     }
 
-    const { entities, entityTypes } = getOrCreateAppCollections(baseUrl)
+    const { entities, entityTypes, runners } =
+      getOrCreateAppCollections(baseUrl)
     return {
       entitiesCollection: entities,
       entityTypesCollection: entityTypes,
+      runnersCollection: runners,
       spawnEntity: createSpawnAction(baseUrl, entities),
       signalEntity: createSignalAction(baseUrl, entities),
       killEntity: createKillAction(baseUrl, entities),

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DurableStreamTestServer } from '@durable-streams/server'
 
 import { StreamClient } from '../src/stream-client'
+import { durableStreamTestServerUrl } from './test-utils'
 
 describe(`StreamClient.fork`, () => {
   let dsServer: DurableStreamTestServer | null = null
@@ -14,7 +15,7 @@ describe(`StreamClient.fork`, () => {
       webhooks: true,
     })
     const baseUrl = await dsServer.start()
-    client = new StreamClient(baseUrl)
+    client = new StreamClient(durableStreamTestServerUrl(baseUrl))
   })
 
   afterAll(async () => {

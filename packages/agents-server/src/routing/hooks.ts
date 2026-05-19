@@ -1,6 +1,7 @@
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
 import { apiError } from '../electric-agents-http.js'
 import { ElectricAgentsError } from '../entity-manager.js'
+import { ELECTRIC_PRINCIPAL_HEADER } from '../principal.js'
 import { ATTR, extractTraceContext, tracer } from '../tracing.js'
 import { serverLog } from '../utils/log.js'
 import type { Span } from '@opentelemetry/api'
@@ -80,7 +81,13 @@ export function applyCors(
   )
   headers.set(
     `access-control-allow-headers`,
-    `content-type, authorization, electric-claim-token, ngrok-skip-browser-warning`
+    [
+      `content-type`,
+      `authorization`,
+      `electric-claim-token`,
+      ELECTRIC_PRINCIPAL_HEADER,
+      `ngrok-skip-browser-warning`,
+    ].join(`, `)
   )
   headers.set(`access-control-expose-headers`, `*`)
   return new Response(response.body, {

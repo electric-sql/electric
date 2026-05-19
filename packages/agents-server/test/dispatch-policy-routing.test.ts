@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { globalRouter } from '../src/routing/global-router'
+import { DurableStreamsSubscriptionError } from '../src/stream-client'
 import type { TenantContext } from '../src/routing/context'
 import type {
   DispatchPolicy,
@@ -15,14 +16,15 @@ function request(method: string, path: string, body?: unknown): Request {
   })
 }
 
-function entity(dispatchPolicy?: DispatchPolicy): ElectricAgentsEntity & {
-  txid: number
-} {
+function entity(
+  dispatchPolicy?: DispatchPolicy,
+  id = `one`
+): ElectricAgentsEntity & { txid: number } {
   return {
-    url: `/chat/one`,
+    url: `/chat/${id}`,
     type: `chat`,
     status: `idle`,
-    streams: { main: `/chat/one/main`, error: `/chat/one/error` },
+    streams: { main: `/chat/${id}/main`, error: `/chat/${id}/error` },
     subscription_id: `chat-handler`,
     dispatch_policy: dispatchPolicy,
     write_token: `write-token`,
@@ -45,7 +47,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
       kind: `user`,
       id: `owner@example.com`,
       key: `user:owner@example.com`,
-      url: `/principal/user:owner@example.com`,
+      url: `/principal/user%3Aowner%40example.com`,
     },
     publicUrl: `http://server`,
     durableStreamsUrl: `http://durable.local`,
@@ -68,7 +70,7 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
         ),
         getRunner: vi.fn(async () => ({
           id: `runner-1`,
-          owner_user_id: `user:owner@example.com`,
+          owner_principal: `/principal/user%3Aowner%40example.com`,
           label: `Local runner`,
           kind: `local`,
           admin_status: `enabled`,
@@ -78,12 +80,15 @@ function buildContext(overrides: Partial<TenantContext> = {}): TenantContext {
         })),
       },
       ensurePrincipal: vi.fn(async () => undefined),
-      spawn: vi.fn(async (_type, req) => entity(req.dispatch_policy)),
+      spawn: vi.fn(async (_type, req) =>
+        entity(req.dispatch_policy, req.instance_id ?? `one`)
+      ),
     } as any,
     streamClient: {
       getSubscription: vi.fn(async () => null),
       putSubscription: vi.fn(async () => ({})),
       addSubscriptionStreams: vi.fn(async () => ({})),
+      removeSubscriptionStream: vi.fn(async () => ({})),
       ensure: vi.fn(async () => undefined),
     } as any,
     runtime: undefined as any,
@@ -113,13 +118,43 @@ describe(`dispatch policy routing`, () => {
       { contentType: `application/json` }
     )
     expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
-      `runner:runner-1`,
+      expect.stringMatching(/^runner:runner-1:/),
       expect.objectContaining({
         type: `pull-wake`,
         streams: [`/chat/one/main`],
         wake_stream: `/runners/runner-1/wake`,
       })
     )
+  })
+
+  it(`uses separate pull-wake subscriptions for separate runner-targeted entities`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+
+    const first = await globalRouter.fetch(
+      request(`PUT`, `/_electric/entities/chat/one`, {
+        dispatch_policy: dispatchPolicy,
+      }),
+      ctx
+    )
+    const second = await globalRouter.fetch(
+      request(`PUT`, `/_electric/entities/chat/two`, {
+        dispatch_policy: dispatchPolicy,
+      }),
+      ctx
+    )
+
+    expect(first.status).toBe(201)
+    expect(second.status).toBe(201)
+    const subscriptionIds = vi
+      .mocked(ctx.streamClient.putSubscription)
+      .mock.calls.map(([subscriptionId]) => subscriptionId)
+    expect(subscriptionIds).toHaveLength(2)
+    expect(subscriptionIds[0]).toMatch(/^runner:runner-1:/)
+    expect(subscriptionIds[1]).toMatch(/^runner:runner-1:/)
+    expect(subscriptionIds[0]).not.toBe(subscriptionIds[1])
   })
 
   it(`creates webhook subscriptions and stores the original target`, async () => {
@@ -175,11 +210,11 @@ describe(`dispatch policy routing`, () => {
       })
     )
     expect(ctx.entityManager.send).toHaveBeenCalledWith(`/chat/one`, {
-      from: `/principal/user:owner@example.com`,
+      from: `/principal/user%3Aowner%40example.com`,
       payload: `hello`,
     })
     expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
-      `runner:runner-1`,
+      expect.stringMatching(/^runner:runner-1:/),
       expect.objectContaining({
         type: `pull-wake`,
         streams: [`/chat/one/main`],
@@ -187,10 +222,8 @@ describe(`dispatch policy routing`, () => {
       })
     )
     expect(
-      (ctx.entityManager.send as any).mock.invocationCallOrder[0]
-    ).toBeGreaterThan(
       (ctx.streamClient.putSubscription as any).mock.invocationCallOrder[0]
-    )
+    ).toBeLessThan((ctx.entityManager.send as any).mock.invocationCallOrder[0])
   })
 
   it(`links webhook dispatch before sending spawn initialMessage`, async () => {
@@ -252,7 +285,7 @@ describe(`dispatch policy routing`, () => {
 
     expect(response.status).toBe(204)
     expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
-      `runner:runner-1`,
+      expect.stringMatching(/^runner:runner-1:/),
       expect.objectContaining({
         type: `pull-wake`,
         streams: [`/chat/one/main`],
@@ -266,5 +299,124 @@ describe(`dispatch policy routing`, () => {
       `/chat/one`,
       expect.objectContaining({ payload: `hello` })
     )
+  })
+
+  it(`recreates missing runner dispatch subscriptions before sending`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+    ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
+      entity(dispatchPolicy)
+    )
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/entities/chat/one/send`, {
+        payload: `hello`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(ctx.streamClient.getSubscription).toHaveBeenCalledWith(
+      expect.stringMatching(/^runner:runner-1:/)
+    )
+    expect(ctx.streamClient.putSubscription).toHaveBeenCalledWith(
+      expect.stringMatching(/^runner:runner-1:/),
+      expect.objectContaining({
+        type: `pull-wake`,
+        streams: [`/chat/one/main`],
+        wake_stream: `/runners/runner-1/wake`,
+      })
+    )
+    expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(
+      `/chat/one`,
+      expect.objectContaining({ payload: `hello` })
+    )
+  })
+
+  it(`does not re-add already linked runner streams before sending`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+    ;(ctx.entityManager.registry.getEntity as any).mockResolvedValue(
+      entity(dispatchPolicy)
+    )
+    ;(ctx.streamClient.getSubscription as any).mockResolvedValue({
+      streams: [{ path: `tenant-test/chat/one/main` }],
+    })
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/entities/chat/one/send`, {
+        payload: `hello`,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(204)
+    expect(ctx.streamClient.getSubscription).toHaveBeenCalledWith(
+      expect.stringMatching(/^runner:runner-1:/)
+    )
+    expect(ctx.streamClient.putSubscription).not.toHaveBeenCalled()
+    expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
+    expect(ctx.streamClient.removeSubscriptionStream).not.toHaveBeenCalled()
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(
+      `/chat/one`,
+      expect.objectContaining({ payload: `hello` })
+    )
+
+    const second = await globalRouter.fetch(
+      request(`POST`, `/_electric/entities/chat/one/send`, {
+        payload: `again`,
+      }),
+      ctx
+    )
+
+    expect(second.status).toBe(204)
+    expect(ctx.streamClient.getSubscription).toHaveBeenCalledTimes(1)
+    expect(ctx.streamClient.ensure).toHaveBeenCalledTimes(2)
+    expect(ctx.entityManager.send).toHaveBeenCalledWith(
+      `/chat/one`,
+      expect.objectContaining({ payload: `again` })
+    )
+  })
+
+  it(`treats runner subscription create conflicts as an idempotent spawn link`, async () => {
+    const dispatchPolicy: DispatchPolicy = {
+      targets: [{ type: `runner`, runnerId: `runner-1` }],
+    }
+    const ctx = buildContext()
+    ;(ctx.streamClient.getSubscription as any)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        streams: [{ path: `tenant-test/chat/one/main` }],
+      })
+    ;(ctx.streamClient.putSubscription as any).mockRejectedValueOnce(
+      new DurableStreamsSubscriptionError(
+        `Subscription creation failed`,
+        409,
+        JSON.stringify({
+          error: {
+            code: `SUBSCRIPTION_ALREADY_EXISTS`,
+            message: `Subscription already exists`,
+          },
+        })
+      )
+    )
+    ctx.entityManager.send = vi.fn(async () => undefined)
+
+    const response = await globalRouter.fetch(
+      request(`PUT`, `/_electric/entities/chat/one`, {
+        dispatch_policy: dispatchPolicy,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(201)
+    expect(ctx.streamClient.addSubscriptionStreams).not.toHaveBeenCalled()
   })
 })

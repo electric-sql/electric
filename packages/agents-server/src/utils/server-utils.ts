@@ -95,6 +95,7 @@ export function buildElectricProxyTarget(options: {
   electricUrl: string
   electricSecret?: string
   tenantId: string
+  principalUrl?: string
 }): URL {
   const targetPath = options.incomingUrl.pathname.replace(
     `/_electric/electric`,
@@ -130,9 +131,19 @@ export function buildElectricProxyTarget(options: {
   } else if (table === `runners`) {
     target.searchParams.set(
       `columns`,
-      `"tenant_id","id","owner_user_id","label","kind","admin_status","wake_stream","wake_stream_offset","last_seen_at","liveness_lease_expires_at","created_at","updated_at"`
+      `"tenant_id","id","owner_principal","label","kind","admin_status","wake_stream","created_at","updated_at"`
     )
-    applyTenantShapeWhere(target, options.tenantId)
+    applyTenantShapeWhere(target, options.tenantId, [
+      `owner_principal = ${sqlStringLiteral(options.principalUrl ?? ``)}`,
+    ])
+  } else if (table === `runner_runtime_diagnostics`) {
+    target.searchParams.set(
+      `columns`,
+      `"tenant_id","runner_id","owner_principal","wake_stream_offset","last_seen_at","liveness_lease_expires_at","diagnostics","updated_at"`
+    )
+    applyTenantShapeWhere(target, options.tenantId, [
+      `owner_principal = ${sqlStringLiteral(options.principalUrl ?? ``)}`,
+    ])
   } else if (table === `entity_dispatch_state`) {
     target.searchParams.set(
       `columns`,
@@ -232,8 +243,15 @@ export function decodeJsonObject(
   return null
 }
 
-function applyTenantShapeWhere(target: URL, tenantId: string): void {
-  const tenantWhere = `tenant_id = ${sqlStringLiteral(tenantId)}`
+function applyTenantShapeWhere(
+  target: URL,
+  tenantId: string,
+  extraConditions: Array<string> = []
+): void {
+  const tenantWhere = [
+    `tenant_id = ${sqlStringLiteral(tenantId)}`,
+    ...extraConditions,
+  ].join(` AND `)
   const existingWhere = target.searchParams.get(`where`)
   target.searchParams.set(
     `where`,
