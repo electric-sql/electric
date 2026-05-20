@@ -100,6 +100,10 @@ class RemoteSandbox implements Sandbox {
       stdout,
       stderr,
       timedOut: r.timedOut ?? false,
+      // Remote providers don't yet propagate caller-side aborts into the
+      // VM; the field exists for interface conformance and will become
+      // meaningful once the client contract supports forwarding signals.
+      aborted: false,
       outputTruncated,
     }
   }

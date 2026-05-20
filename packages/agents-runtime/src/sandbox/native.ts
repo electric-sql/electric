@@ -229,7 +229,9 @@ class NativeSandbox implements Sandbox {
         }, opts.timeoutMs)
       }
 
+      let aborted = false
       const onAbort = () => {
+        aborted = true
         killTree(`SIGTERM`)
         setTimeout(() => killTree(`SIGKILL`), 500).unref()
       }
@@ -250,6 +252,7 @@ class NativeSandbox implements Sandbox {
           stdout: Buffer.concat(stdoutChunks),
           stderr: Buffer.from(err.message),
           timedOut,
+          aborted,
           outputTruncated: truncated,
         })
       })
@@ -263,6 +266,7 @@ class NativeSandbox implements Sandbox {
           stdout: Buffer.concat(stdoutChunks),
           stderr: Buffer.concat(stderrChunks),
           timedOut,
+          aborted,
           outputTruncated: truncated,
         })
       })
@@ -307,9 +311,16 @@ class NativeSandbox implements Sandbox {
   }
 
   async exists(path: string): Promise<boolean> {
-    // assertReadable enforces policy boundaries — a denied path throws
-    // SandboxError('policy') here too. Missing paths return false.
-    const safe = await this.assertReadable(path)
+    // Safe-probe primitive: return false for both missing and policy-denied
+    // paths. Matches Vercel/Cloudflare/E2B LCD semantics; callers should not
+    // use `exists` to detect policy boundaries.
+    let safe: string
+    try {
+      safe = await this.assertReadable(path)
+    } catch (err) {
+      if (err instanceof SandboxError && err.kind === `policy`) return false
+      throw err
+    }
     try {
       await stat(safe)
       return true

@@ -313,31 +313,79 @@ describe(`sandbox conformance`, () => {
         }
       })
 
-      it(`exec honors AbortSignal`, async () => {
+      it(`stat rejects for missing paths`, async () => {
         const sandbox = await provider.create(cwd)
         try {
-          const ac = new AbortController()
-          const p = sandbox.exec({
-            command: `sleep 30`,
-            timeoutMs: 5000,
-            signal: ac.signal,
-          })
-          // Give the child time to spawn before aborting.
-          setTimeout(() => ac.abort(), 50)
-          const r = await p
-          if (provider.name === `remote (fake)`) {
-            // The fake client does not implement abort; assert the call
-            // completes successfully — real providers would honor it.
-            expect(r.exitCode).toBe(0)
-          } else {
-            // Killed by signal: exitCode null or non-zero, signal set, not timedOut.
-            expect(r.timedOut).toBe(false)
-            expect(r.exitCode === null || r.exitCode !== 0).toBe(true)
-          }
+          const missing = join(sandbox.workingDirectory, `nope.txt`)
+          await expect(sandbox.stat(missing)).rejects.toThrow()
         } finally {
           await sandbox.dispose()
         }
       })
+
+      it(`remove rejects nonexistent path (non-recursive)`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const missing = join(sandbox.workingDirectory, `nope.txt`)
+          await expect(sandbox.remove(missing)).rejects.toThrow()
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`remove rejects a directory without recursive flag`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const sub = join(sandbox.workingDirectory, `nonempty`)
+          await sandbox.mkdir(sub)
+          await sandbox.writeFile(join(sub, `leaf.txt`), `x`)
+          await expect(sandbox.remove(sub)).rejects.toThrow()
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it.skipIf(provider.name === `remote (fake)`)(
+        `exec honors AbortSignal mid-flight`,
+        async () => {
+          const sandbox = await provider.create(cwd)
+          try {
+            const ac = new AbortController()
+            const p = sandbox.exec({
+              command: `sleep 30`,
+              timeoutMs: 5000,
+              signal: ac.signal,
+            })
+            setTimeout(() => ac.abort(), 50)
+            const r = await p
+            expect(r.aborted).toBe(true)
+            expect(r.timedOut).toBe(false)
+            expect(r.exitCode === null || r.exitCode !== 0).toBe(true)
+          } finally {
+            await sandbox.dispose()
+          }
+        }
+      )
+
+      it.skipIf(provider.name === `remote (fake)`)(
+        `exec returns immediately when signal is already aborted`,
+        async () => {
+          const sandbox = await provider.create(cwd)
+          try {
+            const ac = new AbortController()
+            ac.abort()
+            const r = await sandbox.exec({
+              command: `sleep 30`,
+              timeoutMs: 5000,
+              signal: ac.signal,
+            })
+            expect(r.aborted).toBe(true)
+            expect(r.timedOut).toBe(false)
+          } finally {
+            await sandbox.dispose()
+          }
+        }
+      )
     })
   }
 

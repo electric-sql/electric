@@ -92,6 +92,7 @@ class UnrestrictedSandbox implements Sandbox {
 
       let timer: NodeJS.Timeout | undefined
       let timedOut = false
+      let aborted = false
       const killTree = (signal: NodeJS.Signals) => {
         // Negative PID signals the entire process group. We created the
         // group via `detached: true` above.
@@ -111,6 +112,7 @@ class UnrestrictedSandbox implements Sandbox {
       }
 
       const onAbort = () => {
+        aborted = true
         killTree(`SIGTERM`)
         setTimeout(() => killTree(`SIGKILL`), 500).unref()
       }
@@ -131,6 +133,7 @@ class UnrestrictedSandbox implements Sandbox {
           stdout: Buffer.concat(stdoutChunks),
           stderr: Buffer.from(err.message),
           timedOut,
+          aborted,
           outputTruncated: truncated,
         })
       })
@@ -144,6 +147,7 @@ class UnrestrictedSandbox implements Sandbox {
           stdout: Buffer.concat(stdoutChunks),
           stderr: Buffer.concat(stderrChunks),
           timedOut,
+          aborted,
           outputTruncated: truncated,
         })
       })

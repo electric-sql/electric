@@ -30,9 +30,11 @@ export interface Sandbox {
    */
   readdir(path: string): Promise<ReadonlyArray<DirEntry>>
   /**
-   * Returns true iff the path exists and is reachable by this sandbox's
-   * read policy. Missing paths return `false`; paths denied by policy
-   * (e.g. the deny-overlay on native) throw `SandboxError('policy')`.
+   * Returns true iff the path exists and is reachable. As a safe-probe
+   * primitive, returns `false` both for missing paths and for paths denied
+   * by the sandbox's read policy — callers should treat `exists` as
+   * least-info and not use it to detect policy boundaries. (Matches the
+   * Vercel/Cloudflare/E2B LCD semantics.)
    */
   exists(path: string): Promise<boolean>
   /** Remove a file or (when `recursive: true`) a directory tree. */
@@ -84,6 +86,12 @@ export interface SandboxExecResult {
   stdout: Buffer
   stderr: Buffer
   timedOut: boolean
+  /**
+   * True iff the command was terminated because the caller's
+   * `SandboxExecOpts.signal` fired. Distinct from `timedOut` (timeoutMs
+   * elapsed) and from a naturally-delivered `signal` field.
+   */
+  aborted: boolean
   outputTruncated: boolean
 }
 

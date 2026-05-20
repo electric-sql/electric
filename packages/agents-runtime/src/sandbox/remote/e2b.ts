@@ -112,18 +112,34 @@ export function adaptE2B(
           type: e.type === `dir` ? (`directory` as const) : (`file` as const),
         }))
       }
-      // Fallback via shell: `ls -1Ap` puts a trailing `/` on directories.
-      const r = await sbx.commands.run(`ls -1Ap ${shellQuote(path)}`)
+      // Fallback via `find -print0` (NUL-delimited, newline-safe). The
+      // `%y` printf code reports d/f/l so we can populate `type` correctly
+      // including symlinks. BusyBox `find` lacks `-printf`; in that case we
+      // re-run with a plainer command and lose symlink fidelity.
+      const r = await sbx.commands.run(
+        `find ${shellQuote(path)} -mindepth 1 -maxdepth 1 -printf '%y\\t%f\\0' 2>/dev/null || find ${shellQuote(path)} -mindepth 1 -maxdepth 1 -printf '%f\\0'`
+      )
       if (r.exitCode !== 0) {
-        throw new Error(r.stderr || `readdir failed: exit ${r.exitCode}`)
+        throwShellError(r.stderr, `readdir`, path)
       }
-      return r.stdout
-        .split(`\n`)
-        .filter((line) => line.length > 0)
-        .map((line) => ({
-          name: line.endsWith(`/`) ? line.slice(0, -1) : line,
-          type: line.endsWith(`/`) ? (`directory` as const) : (`file` as const),
-        }))
+      const records = r.stdout.split(`\0`).filter((s) => s.length > 0)
+      return records.map((rec) => {
+        const tab = rec.indexOf(`\t`)
+        if (tab === -1) {
+          return { name: rec, type: `other` as const }
+        }
+        const kind = rec.slice(0, tab)
+        const name = rec.slice(tab + 1)
+        const type: `file` | `directory` | `symlink` | `other` =
+          kind === `d`
+            ? `directory`
+            : kind === `f`
+              ? `file`
+              : kind === `l`
+                ? `symlink`
+                : `other`
+        return { name, type }
+      })
     },
     async exists(path) {
       if (sbx.files.exists) return sbx.files.exists(path)
@@ -135,10 +151,13 @@ export function adaptE2B(
         await sbx.files.remove(path)
         return
       }
-      const flag = opts?.recursive ? `-rf` : `-f`
-      const r = await sbx.commands.run(`rm ${flag} ${shellQuote(path)}`)
+      // `-f` would swallow missing-path errors; we want the conformance
+      // contract of "remove of nonexistent throws". Use plain `rm` (or
+      // `rm -r` for recursive) and lift exit codes into typed errors.
+      const flag = opts?.recursive ? `-r` : ``
+      const r = await sbx.commands.run(`rm ${flag} ${shellQuote(path)}`.trim())
       if (r.exitCode !== 0) {
-        throw new Error(r.stderr || `remove failed: exit ${r.exitCode}`)
+        throwShellError(r.stderr, `remove`, path)
       }
     },
     async stat(path): Promise<FileStat> {
@@ -157,18 +176,22 @@ export function adaptE2B(
             : 0,
         }
       }
-      // Fallback: parse `stat` output (GNU/BusyBox compatible numeric form).
+      // Fallback: run `stat` once and validate the output shape. GNU/BSD
+      // formats both produce three pipe-separated fields; we use `||` to
+      // try GNU first then BSD, with stderr suppression so the two attempts
+      // don't corrupt each other's output.
       const r = await sbx.commands.run(
-        `stat -c '%F|%s|%Y' ${shellQuote(path)} 2>/dev/null || stat -f '%HT|%z|%m' ${shellQuote(path)}`
+        `(stat -c '%F|%s|%Y' ${shellQuote(path)} 2>/dev/null || stat -f '%HT|%z|%m' ${shellQuote(path)} 2>/dev/null)`
       )
-      if (r.exitCode !== 0) {
+      const fields = r.stdout.trim().split(`|`)
+      if (r.exitCode !== 0 || fields.length !== 3) {
         const err = new Error(
-          r.stderr || `stat failed`
+          r.stderr || `stat: no such file or directory: ${path}`
         ) as NodeJS.ErrnoException
         err.code = `ENOENT`
         throw err
       }
-      const [kind, size, mtime] = r.stdout.trim().split(`|`)
+      const [kind, size, mtime] = fields
       const lowerKind = (kind ?? ``).toLowerCase()
       const type: FileStat[`type`] = lowerKind.includes(`directory`)
         ? `directory`
@@ -192,4 +215,17 @@ export function adaptE2B(
 
 function shellQuote(arg: string): string {
   return `'` + arg.replace(/'/g, `'\\''`) + `'`
+}
+
+function throwShellError(stderr: string, op: string, path: string): never {
+  const err = new Error(
+    stderr || `${op}: failed for ${path}`
+  ) as NodeJS.ErrnoException
+  // Best-effort code classification from common stderr substrings; falls
+  // back to EIO so consumers don't see an undefined `code` field.
+  if (/No such file|cannot stat|cannot access/i.test(stderr))
+    err.code = `ENOENT`
+  else if (/Permission denied/i.test(stderr)) err.code = `EACCES`
+  else err.code = `EIO`
+  throw err
 }
