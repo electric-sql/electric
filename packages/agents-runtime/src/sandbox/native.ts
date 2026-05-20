@@ -1,5 +1,13 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { ProxyAgent, type Dispatcher } from 'undici'
@@ -9,6 +17,8 @@ import {
 } from '@anthropic-ai/sandbox-runtime'
 import {
   SandboxError,
+  type DirEntry,
+  type FileStat,
   type Sandbox,
   type SandboxExecOpts,
   type SandboxExecResult,
@@ -219,8 +229,21 @@ class NativeSandbox implements Sandbox {
         }, opts.timeoutMs)
       }
 
+      const onAbort = () => {
+        killTree(`SIGTERM`)
+        setTimeout(() => killTree(`SIGKILL`), 500).unref()
+      }
+      if (opts.signal) {
+        if (opts.signal.aborted) onAbort()
+        else opts.signal.addEventListener(`abort`, onAbort, { once: true })
+      }
+      const clearAbort = () => {
+        if (opts.signal) opts.signal.removeEventListener(`abort`, onAbort)
+      }
+
       child.on(`error`, (err) => {
         if (timer) clearTimeout(timer)
+        clearAbort()
         res({
           exitCode: null,
           signal: null,
@@ -233,6 +256,7 @@ class NativeSandbox implements Sandbox {
 
       child.on(`close`, (code, signal) => {
         if (timer) clearTimeout(timer)
+        clearAbort()
         res({
           exitCode: code,
           signal,
@@ -247,17 +271,71 @@ class NativeSandbox implements Sandbox {
 
   async readFile(path: string): Promise<Buffer> {
     const safe = await this.assertReadable(path)
-    return readFile(safe)
+    try {
+      return await readFile(safe)
+    } catch (err) {
+      throw wrapFsError(err, `readFile`, path)
+    }
   }
 
   async writeFile(path: string, content: Buffer | string): Promise<void> {
     const safe = await this.assertWritable(path)
-    await writeFile(safe, content)
+    try {
+      await writeFile(safe, content)
+    } catch (err) {
+      throw wrapFsError(err, `writeFile`, path)
+    }
   }
 
   async mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
     const safe = await this.assertWritable(path)
-    await mkdir(safe, { recursive: opts?.recursive ?? false })
+    try {
+      await mkdir(safe, { recursive: opts?.recursive ?? false })
+    } catch (err) {
+      throw wrapFsError(err, `mkdir`, path)
+    }
+  }
+
+  async readdir(path: string): Promise<ReadonlyArray<DirEntry>> {
+    const safe = await this.assertReadable(path)
+    try {
+      const entries = await readdir(safe, { withFileTypes: true })
+      return entries.map((e) => ({ name: e.name, type: dirEntryType(e) }))
+    } catch (err) {
+      throw wrapFsError(err, `readdir`, path)
+    }
+  }
+
+  async exists(path: string): Promise<boolean> {
+    // assertReadable enforces policy boundaries — a denied path throws
+    // SandboxError('policy') here too. Missing paths return false.
+    const safe = await this.assertReadable(path)
+    try {
+      await stat(safe)
+      return true
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === `ENOENT`) return false
+      throw wrapFsError(err, `exists`, path)
+    }
+  }
+
+  async remove(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    const safe = await this.assertWritable(path)
+    try {
+      await rm(safe, { recursive: opts?.recursive ?? false, force: false })
+    } catch (err) {
+      throw wrapFsError(err, `remove`, path)
+    }
+  }
+
+  async stat(path: string): Promise<FileStat> {
+    const safe = await this.assertReadable(path)
+    try {
+      const s = await stat(safe)
+      return toFileStat(s)
+    } catch (err) {
+      throw wrapFsError(err, `stat`, path)
+    }
   }
 
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
@@ -418,4 +496,38 @@ class NativeSandbox implements Sandbox {
       }
     }
   }
+}
+
+function dirEntryType(e: {
+  isDirectory(): boolean
+  isFile(): boolean
+  isSymbolicLink(): boolean
+}): DirEntry[`type`] {
+  if (e.isSymbolicLink()) return `symlink`
+  if (e.isDirectory()) return `directory`
+  if (e.isFile()) return `file`
+  return `other`
+}
+
+function toFileStat(s: {
+  isFile(): boolean
+  isDirectory(): boolean
+  isSymbolicLink(): boolean
+  size: number
+  mtimeMs: number
+}): FileStat {
+  let type: FileStat[`type`] = `other`
+  if (s.isSymbolicLink()) type = `symlink`
+  else if (s.isDirectory()) type = `directory`
+  else if (s.isFile()) type = `file`
+  return { type, size: s.size, mtimeMs: s.mtimeMs }
+}
+
+function wrapFsError(err: unknown, op: string, path: string): Error {
+  if (err instanceof SandboxError) return err
+  const e = err as NodeJS.ErrnoException
+  return new SandboxError(
+    `runtime`,
+    `nativeSandbox.${op}("${path}") failed: ${e.code ?? ``} ${e.message ?? String(err)}`.trim()
+  )
 }

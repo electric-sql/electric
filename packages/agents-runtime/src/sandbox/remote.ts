@@ -1,6 +1,8 @@
 import { relative, resolve } from 'node:path'
 import {
   SandboxError,
+  type DirEntry,
+  type FileStat,
   type Sandbox,
   type SandboxExecOpts,
   type SandboxExecResult,
@@ -124,6 +126,43 @@ class RemoteSandbox implements Sandbox {
     }
   }
 
+  async readdir(path: string): Promise<ReadonlyArray<DirEntry>> {
+    this.assertLive()
+    try {
+      return await this.client.readdir(this.absolute(path))
+    } catch (err) {
+      throw wrapFsError(err, `readdir`, path)
+    }
+  }
+
+  async exists(path: string): Promise<boolean> {
+    this.assertLive()
+    try {
+      return await this.client.exists(this.absolute(path))
+    } catch (err) {
+      throw wrapFsError(err, `exists`, path)
+    }
+  }
+
+  async remove(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    this.assertLive()
+    this.assertWritable(path)
+    try {
+      await this.client.remove(this.absolute(path), opts)
+    } catch (err) {
+      throw wrapFsError(err, `remove`, path)
+    }
+  }
+
+  async stat(path: string): Promise<FileStat> {
+    this.assertLive()
+    try {
+      return await this.client.stat(this.absolute(path))
+    } catch (err) {
+      throw wrapFsError(err, `stat`, path)
+    }
+  }
+
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     this.assertLive()
     const url = typeof input === `string` ? new URL(input) : input
@@ -187,4 +226,13 @@ class RemoteSandbox implements Sandbox {
       )
     }
   }
+}
+
+function wrapFsError(err: unknown, op: string, path: string): Error {
+  if (err instanceof SandboxError) return err
+  const e = err as NodeJS.ErrnoException
+  return new SandboxError(
+    `runtime`,
+    `remoteSandbox.${op}("${path}") failed: ${e.code ?? ``} ${e.message ?? String(err)}`.trim()
+  )
 }

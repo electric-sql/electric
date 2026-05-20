@@ -46,14 +46,10 @@ export function createWriteTool(
         const rel = relative(sandbox.workingDirectory, resolved)
 
         let original = ``
-        let existed = true
-        try {
+        const existed = await sandbox.exists(resolved)
+        if (existed) {
           const buf = await sandbox.readFile(resolved)
           original = buf.toString(`utf-8`)
-        } catch (err) {
-          const code = (err as NodeJS.ErrnoException).code
-          if (code !== `ENOENT`) throw err
-          existed = false
         }
 
         await sandbox.mkdir(dirname(resolved), { recursive: true })

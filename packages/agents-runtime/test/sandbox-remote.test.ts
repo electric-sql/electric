@@ -44,6 +44,24 @@ function makeFakeClient(): RemoteSandboxClient & {
     async mkdir(path) {
       calls.mkdir.push(path)
     },
+    async readdir() {
+      return []
+    },
+    async exists(path) {
+      return files.has(path)
+    },
+    async remove(path) {
+      files.delete(path)
+    },
+    async stat(path) {
+      const buf = files.get(path)
+      if (!buf) {
+        const e: NodeJS.ErrnoException = new Error(`ENOENT: ${path}`)
+        e.code = `ENOENT`
+        throw e
+      }
+      return { type: `file` as const, size: buf.length, mtimeMs: 0 }
+    },
     async kill() {
       calls.killed = true
     },

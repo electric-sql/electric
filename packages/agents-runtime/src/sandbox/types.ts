@@ -24,6 +24,21 @@ export interface Sandbox {
   readFile(path: string): Promise<Buffer>
   writeFile(path: string, content: Buffer | string): Promise<void>
   mkdir(path: string, opts?: { recursive?: boolean }): Promise<void>
+  /**
+   * List entries in a directory. Order is not guaranteed; callers that
+   * need a stable order should sort by `name`.
+   */
+  readdir(path: string): Promise<ReadonlyArray<DirEntry>>
+  /**
+   * Returns true iff the path exists and is reachable by this sandbox's
+   * read policy. Missing paths return `false`; paths denied by policy
+   * (e.g. the deny-overlay on native) throw `SandboxError('policy')`.
+   */
+  exists(path: string): Promise<boolean>
+  /** Remove a file or (when `recursive: true`) a directory tree. */
+  remove(path: string, opts?: { recursive?: boolean }): Promise<void>
+  /** Metadata for an entry. Rejects with `SandboxError('runtime')` if missing. */
+  stat(path: string): Promise<FileStat>
 
   fetch(input: string | URL, init?: RequestInit): Promise<Response>
 
@@ -43,6 +58,24 @@ export interface SandboxExecOpts {
   stdin?: Buffer | string
   /** Truncate combined stdout+stderr to this many bytes per stream. */
   maxOutputBytes?: number
+  /**
+   * External cancellation signal. When aborted, the running command is
+   * terminated (same escalation as `timeoutMs`) and the result has
+   * `timedOut: false` with `signal` set to the signal used. First of
+   * `signal` or `timeoutMs` to fire wins.
+   */
+  signal?: AbortSignal
+}
+
+export interface DirEntry {
+  name: string
+  type: `file` | `directory` | `symlink` | `other`
+}
+
+export interface FileStat {
+  type: `file` | `directory` | `symlink` | `other`
+  size: number
+  mtimeMs: number
 }
 
 export interface SandboxExecResult {

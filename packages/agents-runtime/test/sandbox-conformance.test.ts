@@ -39,6 +39,7 @@ const nativeSupported =
 
 function makeFakeRemoteClient(): RemoteSandboxClient {
   const files = new Map<string, Buffer>()
+  const dirs = new Set<string>()
   return {
     async exec(opts) {
       // Minimal fake exec that handles a few shell patterns we use in the
@@ -71,7 +72,61 @@ function makeFakeRemoteClient(): RemoteSandboxClient {
     async writeFile(path, content) {
       files.set(path, Buffer.isBuffer(content) ? content : Buffer.from(content))
     },
-    async mkdir() {},
+    async mkdir(path) {
+      dirs.add(path)
+    },
+    async readdir(path) {
+      const prefix = path.endsWith(`/`) ? path : path + `/`
+      const seen = new Set<string>()
+      const out: Array<{ name: string; type: `file` | `directory` }> = []
+      for (const f of files.keys()) {
+        if (!f.startsWith(prefix)) continue
+        const rest = f.slice(prefix.length)
+        const [first] = rest.split(`/`)
+        if (!first || seen.has(first)) continue
+        seen.add(first)
+        out.push({
+          name: first,
+          type: rest.includes(`/`) ? `directory` : `file`,
+        })
+      }
+      for (const d of dirs) {
+        if (!d.startsWith(prefix)) continue
+        const rest = d.slice(prefix.length)
+        const [first] = rest.split(`/`)
+        if (!first || seen.has(first)) continue
+        seen.add(first)
+        out.push({ name: first, type: `directory` })
+      }
+      return out
+    },
+    async exists(path) {
+      if (files.has(path)) return true
+      for (const d of dirs) if (d === path) return true
+      return false
+    },
+    async remove(path, opts) {
+      if (files.delete(path)) return
+      if (opts?.recursive) {
+        const prefix = path.endsWith(`/`) ? path : path + `/`
+        for (const f of [...files.keys()])
+          if (f.startsWith(prefix) || f === path) files.delete(f)
+        for (const d of [...dirs])
+          if (d.startsWith(prefix) || d === path) dirs.delete(d)
+        return
+      }
+      const e: NodeJS.ErrnoException = new Error(`ENOENT: ${path}`)
+      e.code = `ENOENT`
+      throw e
+    },
+    async stat(path) {
+      const buf = files.get(path)
+      if (buf) return { type: `file`, size: buf.length, mtimeMs: 0 }
+      if (dirs.has(path)) return { type: `directory`, size: 0, mtimeMs: 0 }
+      const e: NodeJS.ErrnoException = new Error(`ENOENT: ${path}`)
+      e.code = `ENOENT`
+      throw e
+    },
     async kill() {},
   }
 }
@@ -183,6 +238,102 @@ describe(`sandbox conformance`, () => {
         try {
           const missing = join(sandbox.workingDirectory, `does-not-exist.txt`)
           await expect(sandbox.readFile(missing)).rejects.toThrow()
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`exists returns false for missing, true after writeFile`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const path = join(sandbox.workingDirectory, `exists.txt`)
+          expect(await sandbox.exists(path)).toBe(false)
+          await sandbox.writeFile(path, `hi`)
+          expect(await sandbox.exists(path)).toBe(true)
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`stat returns file metadata after writeFile`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const path = join(sandbox.workingDirectory, `meta.txt`)
+          await sandbox.writeFile(path, `12345`)
+          const s = await sandbox.stat(path)
+          expect(s.type).toBe(`file`)
+          expect(s.size).toBe(5)
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`readdir lists entries written into the working directory`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const root = sandbox.workingDirectory
+          await sandbox.writeFile(join(root, `a.txt`), `a`)
+          await sandbox.writeFile(join(root, `b.txt`), `b`)
+          await sandbox.mkdir(join(root, `sub`))
+          const entries = await sandbox.readdir(root)
+          const names = entries.map((e) => e.name).sort()
+          expect(names).toContain(`a.txt`)
+          expect(names).toContain(`b.txt`)
+          expect(names).toContain(`sub`)
+          const sub = entries.find((e) => e.name === `sub`)
+          expect(sub?.type).toBe(`directory`)
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`remove deletes a file and updates exists`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const path = join(sandbox.workingDirectory, `to-remove.txt`)
+          await sandbox.writeFile(path, `bye`)
+          expect(await sandbox.exists(path)).toBe(true)
+          await sandbox.remove(path)
+          expect(await sandbox.exists(path)).toBe(false)
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`remove({recursive:true}) deletes a directory tree`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const sub = join(sandbox.workingDirectory, `tree`)
+          await sandbox.mkdir(sub)
+          await sandbox.writeFile(join(sub, `leaf.txt`), `x`)
+          await sandbox.remove(sub, { recursive: true })
+          expect(await sandbox.exists(sub)).toBe(false)
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`exec honors AbortSignal`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          const ac = new AbortController()
+          const p = sandbox.exec({
+            command: `sleep 30`,
+            timeoutMs: 5000,
+            signal: ac.signal,
+          })
+          // Give the child time to spawn before aborting.
+          setTimeout(() => ac.abort(), 50)
+          const r = await p
+          if (provider.name === `remote (fake)`) {
+            // The fake client does not implement abort; assert the call
+            // completes successfully — real providers would honor it.
+            expect(r.exitCode).toBe(0)
+          } else {
+            // Killed by signal: exitCode null or non-zero, signal set, not timedOut.
+            expect(r.timedOut).toBe(false)
+            expect(r.exitCode === null || r.exitCode !== 0).toBe(true)
+          }
         } finally {
           await sandbox.dispose()
         }
