@@ -11,10 +11,11 @@ This doc is the implementation contract for the `Sandbox` primitive (Primitive 2
 ## 0. TL;DR
 
 - **`Sandbox` is a narrow interface we own**: `exec`, `readFile`, `writeFile`, `mkdir`, `fetch`, `dispose`. Designed against what `bash` / `read` / `write` / `edit` / `fetch_url` actually need — nothing more.
-- **Three providers in v1**: `unrestrictedSandbox()` (no-op pass-through, named explicitly), `nativeSandbox()` (thin adapter over `@anthropic-ai/sandbox-runtime`), `remoteSandbox({provider: 'e2b'})` (adapter over E2B's npm SDK, loaded as an optional peer dependency). Adding additional remote providers (Vercel, Daytona) is mechanical: implement `RemoteSandboxClient` against the provider's SDK and register it in `loadClient`.
-- **All policy is in our config object**, never leaked through to the underlying library. Switching `nativeSandbox`'s engine later (Codex vendored crate, hand-rolled, microsandbox if it ever fits) does not touch tools or runtime plumbing.
-- **Lifecycle is owned by `Sandbox`**: one instance per wake (not per `useAgent` call), constructed lazily, disposed on wake end. For `unrestricted` and `native`, `dispose()` is cheap.
-- **Sub-PR plan (collapsed)**: 6a (interface + unrestricted + tool refactor + bash env-scrub + symlink fixes; behavior-preserving plumbing), 6b (`nativeSandbox` adapter + conformance tests, opt-in), 6c (`NetPolicy` for `fetch_url`), 6d (Horton/Worker default to native + `ELECTRIC_AGENTS_UNRESTRICTED` panic switch).
+- **Three providers ship**: `unrestrictedSandbox()` (no-op pass-through, named explicitly), `remoteSandbox({provider: 'e2b'})` (adapter over E2B's npm SDK, optional peer dep), and `dockerSandbox()` (container isolation via `dockerode`, optional peer dep). Adding additional remote providers (Vercel, Daytona) is mechanical: implement `RemoteSandboxClient` against the provider's SDK and register it in `loadClient`.
+- **`nativeSandbox` was removed before merge.** Its underlying `SandboxManager` (Anthropic's `@anthropic-ai/sandbox-runtime`) is a process-global singleton incompatible with multi-entity hosting — two instances bound to different working directories conflict on `exec`. `dockerSandbox` is the strong-isolation story; `unrestrictedSandbox` + tool-layer policy (env scrubbing, symlink resolution, fetch SSRF guards) is the dev story.
+- **All policy is in our config object**, never leaked through to the underlying library.
+- **Lifecycle is owned by `Sandbox`**: one instance per wake (not per `useAgent` call), constructed lazily, disposed on wake end. For `unrestricted`, `dispose()` is cheap.
+- **Sub-PR plan (collapsed)**: 6a (interface + unrestricted + tool refactor + bash env-scrub + symlink fixes; behavior-preserving plumbing), 6b (~~`nativeSandbox` adapter~~ removed; replaced by `dockerSandbox` adapter + conformance tests, opt-in), 6c (`NetPolicy` for `fetch_url`), 6d (`chooseDefaultSandbox` helper, defaults to `unrestrictedSandbox`).
 
 ## 0.1 Threat model — what this primitive is and isn't
 
@@ -31,9 +32,9 @@ The release notes and any marketing language for Sandbox must state plainly what
 **In scope:**
 
 - Block filesystem and process escape from LLM-driven tool calls.
-- Make existing entities and tools work behind the abstraction with no behavior change (`unrestrictedSandbox` is the default for v1; opt-in to anything stronger).
-- Keep the door open to swap the native engine and add remote providers without touching tools or runtime plumbing.
-- Work on macOS and Linux. Graceful error on Windows ("use WSL2 or `remoteSandbox`").
+- Make existing entities and tools work behind the abstraction with no behavior change (`unrestrictedSandbox` is the default; opt-in to anything stronger).
+- Keep the door open to add remote providers without touching tools or runtime plumbing.
+- Work on macOS, Linux, and Windows. `unrestrictedSandbox` is portable; `dockerSandbox` works wherever a Docker daemon is reachable.
 
 **Out of scope (v1):**
 
@@ -51,7 +52,7 @@ Designed from the tools' concrete needs (`bash`, `read`, `write`, `edit`, `fetch
 
 ```ts
 export interface Sandbox {
-  readonly name: string                          // 'unrestricted' | 'native:macos-seatbelt' | 'native:linux-bwrap-only'
+  readonly name: string                          // 'unrestricted' | 'remote:e2b' | 'docker'
 
   exec(opts: SandboxExecOpts): Promise<SandboxExecResult>
 
@@ -95,7 +96,7 @@ export class SandboxError extends Error {
 - **`fetch` returns a real `Response`.** Body parsing, redirect following, and HTML extraction stay in the tool (fetch*url is content-shaped, not HTTP-shaped). The Sandbox decides \_whether* the request goes out; the tool decides what to do with the result. Init type is the standard `RequestInit` — no custom wrapper.
 - **No `stat`, no `SandboxCapability` set, no `maxBytes` parameter, no `SandboxReadOpts`.** Cut after the scope-reviewer critique. No v1 tool reads any of these. Tools already enforce their own size caps in tool code. If a remote provider lands in v2 with capability variance, we add it then.
 - **One `SandboxError` class with a `kind` discriminator**, not separate `PolicyError`/`RuntimeError`/`UnavailableError`. Tools `catch` broadly; runtime telemetry switches on `kind`.
-- **`name` makes weakness legible.** Linux is `'native:linux-bwrap-only'`, not `'native'` — log greppers and code reviewers see the limitation. macOS is `'native:macos-seatbelt'`. The colon-namespace is an explicit convention, not forecasting a registry.
+- **`name` makes weakness legible.** `unrestrictedSandbox` is `'unrestricted'` — when a customer reads logs, the word is there. `remoteSandbox` exposes `'remote:e2b'` (provider in the name). The colon-namespace is an explicit convention, not forecasting a registry.
 
 ---
 
@@ -116,7 +117,7 @@ Tools catch broadly and translate to a tool-result error message. Runtime teleme
 ## 4. Lifecycle
 
 ```ts
-const sandbox = await nativeSandbox({ workingDirectory, allowedHosts })
+const sandbox = await dockerSandbox({ workingDirectory, initialNetworkPolicy })
 try {
   await useAgent({ tools: [bash, read, write], sandbox }).run(...)
 } finally {
@@ -124,7 +125,7 @@ try {
 }
 ```
 
-- **Construction** is async (`await nativeSandbox(...)`). For `unrestricted`, it's a synchronous factory wrapped in `Promise.resolve`. For `native`, it spins up the proxy server.
+- **Construction** is async (`await dockerSandbox(...)`). For `unrestricted`, it's a synchronous factory wrapped in `Promise.resolve`. For `docker`, it pulls/starts a container and the host-side allowlist proxy.
 - **One sandbox per wake by default**, not per `useAgent` call. The runtime constructs `ctx.sandbox` on the first read and disposes at the end of the wake. A wake that does 10 `useAgent` calls reuses the same sandbox — files written by one survive for the next, the proxy is shared, the construction cost is amortized. Per-`useAgent` override is supported but rarely needed.
 - **`dispose()` should be called exactly once.** Tools don't call it; the runtime does. Documented as call-once, not idempotent — saves defensive boilerplate.
 - **No `pause`/`resume`.** Workspace persistence across wakes is an entity-author pattern (workspace ref in entity state, rehydrate on wake — investigation doc §3.7). Not a Sandbox API.
@@ -144,30 +145,28 @@ unrestrictedSandbox({ workingDirectory: string })
 - The point of the name: when a customer reads their code, `unrestrictedSandbox()` is a word they have to type. No silent default.
 - Used in: test environments; the panic-revert path (`ELECTRIC_AGENTS_UNRESTRICTED=1`); explicit opt-in for trusted server-side automation.
 
-### 5.2 `nativeSandbox(opts)`
+### 5.2 `nativeSandbox(opts)` — **REMOVED before merge**
 
-```ts
-nativeSandbox({
-  workingDirectory: string,                  // required; the bind-writable root
-  allowedHosts?: string[],                   // hostname allowlist for outbound network; default = []
-})
-```
+Originally a thin adapter over `@anthropic-ai/sandbox-runtime` (Seatbelt on
+macOS, bubblewrap on Linux). Removed because the underlying `SandboxManager`
+is a **process-global singleton**: two `nativeSandbox` instances bound to
+different working directories conflict and throw
+`SandboxError('unavailable')` on the second `exec()`. The agents-runtime
+hosts many agent entities concurrently, each with its own working directory,
+so this constraint is incompatible with the product.
 
-- **Engine:** `@anthropic-ai/sandbox-runtime` (Apache-2.0, npm). Pinned version vendored in `pnpm-lock.yaml`; bumps go through a manual audit checklist that re-runs the conformance suite.
-- **macOS:** Seatbelt profile via `sandbox-exec`. Name: `'native:macos-seatbelt'`.
-- **Linux/WSL2:** bubblewrap-only (no Landlock, no seccomp filter). Name: `'native:linux-bwrap-only'` so the limitation shows up in logs and reviews. We surface an actionable "install bubblewrap" error at startup if missing (`apt install bubblewrap` / `dnf install bubblewrap`).
-- **Network:** HTTP+SOCKS proxy on a local Unix socket, hostname-allowlisted. **Important:** the proxy only gates traffic that _uses_ it. Raw sockets in `bash`-spawned children bypass it (see §10). The allowlist is a best-effort guardrail, not a hard boundary.
-- **Windows:** throws `SandboxError({kind: 'unavailable'})` at construction with the WSL2 message.
-- **Translation layer:** `packages/agents-runtime/src/sandbox/native.ts` maps our config to `@anthropic-ai/sandbox-runtime`'s settings shape. Customers never see the library's config keys. When we swap engines (e.g. to a future Codex-vendored crate for stronger Linux), only this adapter changes.
-- **Lazy initialization:** the underlying `SandboxManager` (process-global state) is initialized on the _first_ `exec()` call, not at construction. FS/`fetch` policy is enforced in our TS adapter directly and doesn't require the OS sandbox to be running. This makes per-wake construction cheap for handlers that never spawn a subprocess and avoids the proxy-server startup cost in test environments.
-- **Single-instance per process** for active OS sandboxing: only one working directory can be active at a time inside one Node process. Concurrent `exec` from instances bound to different working directories throws `SandboxError({kind: 'unavailable'})`. Reference-counted disposal: the last `dispose()` calls `SandboxManager.reset()`.
-- **Read model — v1 is curated denylist, v2 will tighten to read-allowlist.** Decision recorded 2026-05-19: we ship with Anthropic's library defaults (broad-read base) plus an explicit deny overlay for known-sensitive paths. This is the pragmatic ship; it lets dev-tool reads (`git`, `node`, `python`) just work without enumeration, and it papers over the headline "LLM cats credentials from home dir" regression. Tightening to a curated read-allowlist (working dir + documented system paths + a short list of safe home configs) is a follow-up — same interface, change the adapter config only.
-- **Default deny overlay (v1):** `~/Library/Application Support`, `~/.ssh`, `~/.aws`, `~/.config/gcloud`, `~/.kube`, `~/.npmrc`, `~/.docker`, `~/.netrc`, `~/.config/gh`, `~/.pgpass`, `~/.huggingface`. Denied for read by the adapter regardless of the library's bundled profile. The list is documented as known-incomplete — option (2)'s allowlist is the structural fix.
-- **Startup self-test:** the adapter runs `/bin/echo hello` and `node -e 1` inside the sandbox at construction time. If either fails, `SandboxError({kind: 'unavailable'})` is thrown with the underlying error. This catches profile-vs-OS-version drift (Seatbelt has removed SBPL operations across macOS minors).
+Replacement coverage:
 
-**What is deliberately NOT configurable in v1:** `extraReadPaths`, `allowedEnvKeys`, `unavailableBehavior`. All cut per the scope review. Customers who need a wider profile can construct `unrestrictedSandbox()` explicitly. Customers who need narrower will get knobs in v1.1 with a real use case attached.
+- **Strong isolation** → `dockerSandbox()` (§5.4). No singleton; instances per
+  container are safe to run concurrently across entities.
+- **Local dev / laptop** → `unrestrictedSandbox()` with policy enforced at
+  the tool layer (env scrubbing, symlink resolution via `resolveSafePath`,
+  fetch SSRF guards).
 
-**Env scrubbing** lives at the tool layer (the bash tool stops forwarding `process.env`), not at the sandbox layer. The sandbox sets `PATH`, `HOME`, `USER`, `LANG`, `TERM` and nothing else. This is hardcoded; not a config knob.
+Historical note: the Linux bwrap-only weaknesses described in §10.2 and the
+Seatbelt critique in §10.3 are now moot for this codebase. They remain in the
+doc as context for why we did not adopt the bwrap-only path as the
+strong-isolation tier.
 
 ### 5.3 `remoteSandbox(opts)` — E2B in v1
 
@@ -196,7 +195,7 @@ remoteSandbox({
 
 **Two layers, narrowest wins** (collapsed from three per the scope review):
 
-1. **Runtime default** — `createRuntimeRouter({ defaultSandbox: (workingDirectory) => nativeSandbox({ workingDirectory, ... }) })`. A factory function the runtime calls per wake. The fallback for entities that don't override.
+1. **Runtime default** — `createRuntimeRouter({ defaultSandbox: (workingDirectory) => dockerSandbox({ workingDirectory, ... }) })`. A factory function the runtime calls per wake. The fallback for entities that don't override.
 2. **Per-`useAgent` override** — `ctx.useAgent({ ..., sandbox })`. Replaces the runtime default for this loop.
 
 If a customer wants per-entity-type behavior, they handle it inside the entity's handler — typically by branching in the factory function based on `entityType`. No first-class API for it; the use case can graduate to one when it shows up.
@@ -255,16 +254,13 @@ Collapsed from old 6a + 6b. Plumbing PR; sandbox surface lands and all tools use
 - **First failing test:** `it('createBashTool delegates to sandbox.exec instead of child_process.exec, and the resulting child does not inherit process.env')`.
 - **Diff target:** ~800 lines including tests.
 
-### PR 6b — `nativeSandbox` adapter
+### PR 6b — ~~`nativeSandbox` adapter~~ **REMOVED**
 
-- Add `@anthropic-ai/sandbox-runtime` as a pinned dependency. License attribution.
-- `packages/agents-runtime/src/sandbox/native.ts` implements `Sandbox` against the library.
-- Default deny overlay for `~/Library/Application Support`, `~/.ssh`, `~/.aws`, `~/.config/gcloud`, `~/.kube`, `~/.npmrc`.
-- Startup self-test (exec `/bin/echo` and `node -e 1` inside the sandbox).
-- Conformance scenarios: symlink traversal denied, env-var exfil denied, `/etc/sudoers` read denied, allowlisted-host fetch succeeds, non-allowlisted-host fetch denied.
-- **Still no default change.** Customers opt in by passing `nativeSandbox(...)`.
-- **First failing test:** `it('nativeSandbox.readFile denies access to ~/Library/Application Support/Anthropic')`.
-- **Diff target:** ~700 lines including conformance scenarios.
+Originally landed `nativeSandbox` over `@anthropic-ai/sandbox-runtime`.
+Removed before merge because `SandboxManager` is a process-global singleton
+incompatible with multi-entity hosting (see §5.2). The strong-isolation
+provider that actually shipped is `dockerSandbox` (§5.4), which has no
+per-process singleton constraint.
 
 ### PR 6c — `NetPolicy` for `fetch_url` and `sandbox.fetch`
 
@@ -276,18 +272,18 @@ Collapsed from old 6a + 6b. Plumbing PR; sandbox surface lands and all tools use
 
 ### PR 6d — Default sandbox selector + Horton/Worker wiring
 
-- New `chooseDefaultSandbox(workingDirectory, env?)` helper in `packages/agents-runtime/src/sandbox/default.ts`. Picks `nativeSandbox` when the platform supports it, `unrestrictedSandbox` otherwise. `ELECTRIC_AGENTS_UNRESTRICTED=1` (`true`/`yes`/`on`) forces unrestricted on any platform — the documented panic-revert path.
-- Horton and Worker call `chooseDefaultSandbox(workingDirectory)` instead of constructing `unrestrictedSandbox` directly. Behavior change: on macOS/Linux without the panic env, LLM-driven bash/read/write/edit/fetch_url tools now run inside the Seatbelt/bwrap sandbox by default.
+- `chooseDefaultSandbox(workingDirectory)` helper in `packages/agents-runtime/src/sandbox/default.ts`. Always returns `unrestrictedSandbox`. Stronger isolation is opt-in by constructing `dockerSandbox` or `remoteSandbox` directly.
+- Horton and Worker call `chooseDefaultSandbox(workingDirectory)`. The helper exists as a stable seam so a future runtime config (e.g. "always use docker for built-ins") can swap the default without touching entity handlers.
 - **Working-directory `~`-fallback fix is deferred.** `agents-desktop/src/main.ts:1939`'s `app.getPath('home')` fallback is a desktop-UX change with its own implications (forcing users to pick a working directory on first launch). The sandbox primitive lands without it; that fix is a separate, smaller PR in the desktop app.
-- **First failing test:** `it('chooseDefaultSandbox returns nativeSandbox on supported platforms')`.
-- **Diff target:** ~150 lines + docs.
+- **First failing test:** `it('chooseDefaultSandbox returns unrestrictedSandbox')`.
+- **Diff target:** ~50 lines + docs.
 
 ---
 
 ## 9. Resolutions to open decisions from the investigation
 
 - **§5.1** Per-entity / per-`useAgent` / runtime default? → Two layers: runtime default + per-`useAgent` override. Per-entity-type cut as speculative.
-- **§5.2** Bundled native profile vs customer-defined? → Bundled opinionated profile via `@anthropic-ai/sandbox-runtime`, plus our default deny overlay for known-sensitive home-dir paths, plus `allowedHosts`. No raw-profile escape hatch in v1.
+- **§5.2** Bundled native profile vs customer-defined? → Moot. `nativeSandbox` was removed before merge (see §5.2). Strong isolation moved to `dockerSandbox` (§5.4), where the policy surface is the container image + host-side allowlist proxy, not an Anthropic-bundled profile.
 - **§5.3** Remote provider matrix? → **Deferred to v2.** No v1 customer.
 
 ---

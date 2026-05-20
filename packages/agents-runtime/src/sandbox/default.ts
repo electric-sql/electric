@@ -1,52 +1,15 @@
-import { SandboxManager } from '@anthropic-ai/sandbox-runtime'
-import { nativeSandbox } from './native'
 import { unrestrictedSandbox } from './unrestricted'
 import type { Sandbox } from './types'
 
-const PANIC_TRUTHY = new Set([`1`, `true`, `yes`, `on`])
-
-export interface ChooseDefaultSandboxOpts {
-  /**
-   * Override for testing — defaults to checking both
-   * `SandboxManager.isSupportedPlatform()` AND that
-   * `checkDependencies()` reports no errors. A Linux host without
-   * `bubblewrap` installed will thus fall back to unrestricted rather
-   * than crash on first exec.
-   */
-  isNativeSupported?: () => boolean
-}
-
 /**
- * Pick the right Sandbox provider for built-in entities given the current
- * platform and environment. Used by Horton/Worker to default to
- * `nativeSandbox` on macOS/Linux while keeping a panic-revert path.
- *
- * Selection:
- * - `ELECTRIC_AGENTS_UNRESTRICTED` env truthy (`1`/`true`/`yes`/`on`) →
- *   `unrestrictedSandbox`. Documented as the emergency switch when the
- *   native engine misbehaves.
- * - Native platform supported → `nativeSandbox`.
- * - Otherwise → `unrestrictedSandbox`.
- *
- * Customers wiring their own entities can call this directly, or
- * construct any specific provider themselves.
+ * Pick the default Sandbox provider for built-in entities (Horton, Worker).
+ * Always returns `unrestrictedSandbox`; stronger isolation is opt-in by
+ * constructing `dockerSandbox` or `remoteSandbox` directly. Tool-layer
+ * policy (env scrubbing, symlink resolution, fetch SSRF guards) provides
+ * the in-process defenses for the unrestricted default.
  */
 export async function chooseDefaultSandbox(
-  workingDirectory: string,
-  env: NodeJS.ProcessEnv = process.env,
-  opts: ChooseDefaultSandboxOpts = {}
+  workingDirectory: string
 ): Promise<Sandbox> {
-  const panic = env.ELECTRIC_AGENTS_UNRESTRICTED
-  if (panic && PANIC_TRUTHY.has(panic.toLowerCase())) {
-    return unrestrictedSandbox({ workingDirectory })
-  }
-  const isSupported =
-    opts.isNativeSupported ??
-    (() =>
-      SandboxManager.isSupportedPlatform() &&
-      SandboxManager.checkDependencies().errors.length === 0)
-  if (isSupported()) {
-    return nativeSandbox({ workingDirectory })
-  }
   return unrestrictedSandbox({ workingDirectory })
 }

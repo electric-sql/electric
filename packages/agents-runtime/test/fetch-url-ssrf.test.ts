@@ -11,8 +11,8 @@ import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 // follow-up SSRF-hardening PR (NetPolicy on sandbox.fetch) has an explicit
 // regression target.
 //
-// Under nativeSandbox or remoteSandbox the hostname allowlist already
-// rejects these — see sandbox-native.test.ts and sandbox-remote.test.ts.
+// Under remoteSandbox or dockerSandbox the hostname allowlist already
+// rejects these — see sandbox-remote.test.ts and sandbox-docker.test.ts.
 describe(`fetch_url — current SSRF surface (unrestricted sandbox)`, () => {
   const originalFetch = globalThis.fetch
   let fetchMock: ReturnType<typeof vi.fn>

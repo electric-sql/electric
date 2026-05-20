@@ -2,8 +2,6 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { SandboxManager } from '@anthropic-ai/sandbox-runtime'
-import { nativeSandbox } from '../src/sandbox/native'
 import { remoteSandbox } from '../src/sandbox/remote'
 import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
 import { dockerSandbox } from '../src/sandbox/docker'
@@ -15,15 +13,15 @@ import { dockerAvailable, TEST_IMAGE, TEST_LABEL } from './helpers/docker-probe'
 
 /**
  * Cross-provider conformance: a single set of scenarios exercised against
- * unrestricted, native (real OS sandbox, gated by platform support), and
- * remote (driven by an in-memory fake of an SDK matching our
- * RemoteSandboxClient contract). For scenarios where a provider has
- * fundamentally different semantics, the case is marked accordingly and
- * the test asserts the documented outcome for that provider.
+ * unrestricted, remote (driven by an in-memory fake of an SDK matching
+ * our RemoteSandboxClient contract), and docker (gated by daemon
+ * availability). For scenarios where a provider has fundamentally
+ * different semantics, the case is marked accordingly and the test
+ * asserts the documented outcome for that provider.
  *
  * The contract this enforces:
- *   - exec is a real subprocess on unrestricted/native; a delegated call
- *     on remote.
+ *   - exec is a real subprocess on unrestricted; a delegated call on
+ *     remote; a container exec on docker.
  *   - writeFile + readFile roundtrip works.
  *   - writeFile outside the working directory is rejected with a
  *     SandboxError of kind 'policy'.
@@ -47,16 +45,12 @@ interface ProviderFactory {
   capabilities: ProviderCapabilities
   /**
    * "Outside the working directory" probe path. For host-filesystem
-   * providers (unrestricted/native) we use a host tempdir; for
-   * containerized providers we use /etc/passwd which is outside the
-   * sandbox cwd but always present in the container.
+   * providers (unrestricted) we use a host tempdir; for containerized
+   * providers we use /etc/passwd which is outside the sandbox cwd but
+   * always present in the container.
    */
   outsideKind: `host-tempdir` | `etc-passwd`
 }
-
-const nativeSupported =
-  SandboxManager.isSupportedPlatform() &&
-  SandboxManager.checkDependencies().errors.length === 0
 
 function makeFakeRemoteClient(): RemoteSandboxClient {
   const files = new Map<string, Buffer>()
@@ -168,18 +162,6 @@ const providers: Array<
     },
     outsideKind: `host-tempdir`,
     create: (cwd) => unrestrictedSandbox({ workingDirectory: cwd }),
-  },
-  {
-    name: `native`,
-    adapter: `native`,
-    enabled: nativeSupported,
-    capabilities: {
-      supportsAbort: true,
-      supportsRealGetUrl: true,
-      enforcesNetworkPolicy: true,
-    },
-    outsideKind: `host-tempdir`,
-    create: (cwd) => nativeSandbox({ workingDirectory: cwd }),
   },
   {
     name: `remote (fake)`,
@@ -514,9 +496,9 @@ describe(`sandbox conformance`, () => {
     })
   }
 
-  // Symlink escape — pertinent for unrestricted and native (real host
-  // filesystem). Skip for remote (VM-rooted, fake doesn't model symlinks)
-  // and docker (container fs, host workdir isn't mounted in).
+  // Symlink escape — pertinent for unrestricted (real host filesystem).
+  // Skip for remote (VM-rooted, fake doesn't model symlinks) and docker
+  // (container fs, host workdir isn't mounted in).
   for (const provider of providers.filter(
     (p) => p.outsideKind === `host-tempdir`
   )) {
