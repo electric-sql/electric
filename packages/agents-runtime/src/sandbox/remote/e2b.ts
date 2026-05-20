@@ -42,9 +42,7 @@ export async function createE2BClient(opts: {
   }
   try {
     // e2b is an optional peer dependency — resolved at runtime when the
-    // customer opts into the remote provider. Static type resolution is
-    // intentionally not required.
-    // @ts-expect-error - optional peer dep, no static type
+    // customer opts into the remote provider.
     mod = (await import(`e2b`)) as unknown as typeof mod
   } catch {
     throw new Error(
