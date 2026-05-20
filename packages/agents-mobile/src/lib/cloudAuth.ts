@@ -165,6 +165,47 @@ function isExpired(expiresAtIso: string): boolean {
 }
 
 /**
+ * Pull the token out of the dashboard's `getTokenForAgents` response.
+ * The endpoint has seen both bare-string and JSON-wrapped shapes; this
+ * accepts either to stay forward-compatible across admin-API versions.
+ */
+function extractAgentsToken(body: unknown): string | null {
+  if (typeof body === `string`) {
+    const trimmed = body.trim()
+    return trimmed.length > 0 ? trimmed : null
+  }
+  if (!body || typeof body !== `object`) return null
+  const root = body as Record<string, unknown>
+  const inner =
+    `json` in root && root.json && typeof root.json === `object`
+      ? (root.json as Record<string, unknown>)
+      : root
+  for (const key of [`token`, `agents_token`, `agentsToken`] as const) {
+    const value = inner[key]
+    if (typeof value === `string` && value.trim().length > 0) {
+      return value.trim()
+    }
+  }
+  return null
+}
+
+/**
+ * Detect a Cloud agent-server URL and return the service-id embedded in
+ * its `?service=` query param. Returns `null` for local URLs (which
+ * don't need a service-scoped agents token).
+ */
+export function getCloudServiceIdFromServerUrl(
+  serverUrl: string
+): string | null {
+  try {
+    const parsed = new URL(serverUrl)
+    return parsed.searchParams.get(`service`)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Singleton state machine that owns the cloud-auth session.
  *
  * The class isn't a React hook — instead the `CloudAuthContext` wraps
@@ -182,6 +223,10 @@ export class CloudAuth {
   }
   private listeners = new Set<(state: CloudAuthState) => void>()
   private initialized = false
+  // Per-service agents tokens fetched via `getTokenForAgents`. Kept in
+  // memory only — on restart they'll be re-fetched from the dashboard
+  // when the active server is restored. Cleared on sign-out.
+  private agentsTokens = new Map<string, string>()
 
   getState(): CloudAuthState {
     return this.state
@@ -312,6 +357,7 @@ export class CloudAuth {
 
   async signOut(): Promise<void> {
     await AsyncStorage.removeItem(STORAGE_KEY)
+    this.agentsTokens.clear()
     this.setState({
       status: `signed-out`,
       email: null,
@@ -328,6 +374,61 @@ export class CloudAuth {
     const stored = await this.loadStored()
     if (!stored || isExpired(stored.expiresAt)) return null
     return stored.token
+  }
+
+  /**
+   * Fetch (or return cached) per-service agents token for connecting to
+   * a Cloud agent server. Mirrors the desktop app's `prepareConnection`
+   * flow: trade the user's dashboard JWT for a service-scoped token via
+   * `/api/v1/services/streams/:serviceId/getTokenForAgents`, then cache
+   * it in memory so subsequent requests reuse the same token without an
+   * extra round-trip to the dashboard.
+   *
+   * Returns `null` when the user is signed out or the dashboard rejects
+   * the exchange (revoked session, no permission for this service);
+   * callers should fall back to unauthenticated requests, which the
+   * agents server will reject with 401 — exposing the failure to the
+   * UI rather than masking it.
+   */
+  async getAgentsToken(serviceId: string): Promise<string | null> {
+    const cached = this.agentsTokens.get(serviceId)
+    if (cached) return cached
+    const userToken = await this.getToken()
+    if (!userToken) return null
+    const url = new URL(
+      `/api/v1/services/streams/${encodeURIComponent(serviceId)}/getTokenForAgents`,
+      getCloudBaseUrl()
+    ).toString()
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: `POST`,
+        headers: {
+          'content-type': `application/json`,
+          authorization: `Bearer ${userToken}`,
+        },
+        body: `{}`,
+      })
+    } catch (err) {
+      console.warn(`[agents-mobile] cloud-auth: getTokenForAgents fetch:`, err)
+      return null
+    }
+    if (!res.ok) {
+      console.warn(
+        `[agents-mobile] cloud-auth: getTokenForAgents returned ${res.status}`
+      )
+      return null
+    }
+    let body: unknown
+    try {
+      body = await res.json()
+    } catch {
+      body = null
+    }
+    const token = extractAgentsToken(body)
+    if (!token) return null
+    this.agentsTokens.set(serviceId, token)
+    return token
   }
 
   /**

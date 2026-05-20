@@ -1,6 +1,7 @@
 import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
+import { serverFetch } from '@electric-ax/agents-server-ui/src/lib/auth-fetch'
 import { z } from 'zod'
 
 export type EntityStatus = `spawning` | `running` | `idle` | `stopped`
@@ -55,9 +56,10 @@ export function normalizeServerUrl(input: string): string {
 export async function checkServerHealth(serverUrl: string): Promise<void> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)
-  const res = await fetch(appendPathToUrl(serverUrl, `/_electric/health`), {
-    signal: controller.signal,
-  }).finally(() => clearTimeout(timeout))
+  const res = await serverFetch(
+    appendPathToUrl(serverUrl, `/_electric/health`),
+    { signal: controller.signal }
+  ).finally(() => clearTimeout(timeout))
   if (!res.ok) {
     throw new Error(`Health check failed (${res.status})`)
   }
@@ -70,6 +72,9 @@ export function createEntitiesCollection(baseUrl: string) {
       schema: entitySchema,
       shapeOptions: {
         url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        // Inject Authorization / x-electric-service from the active
+        // server's registered headers on every shape fetch.
+        fetchClient: serverFetch,
         params: {
           table: `entities`,
           columns: [
@@ -102,6 +107,7 @@ export function createEntityTypesCollection(baseUrl: string) {
       schema: entityTypeSchema,
       shapeOptions: {
         url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
+        fetchClient: serverFetch,
         params: { table: `entity_types` },
       },
       getKey: (item) => item.name,
@@ -120,7 +126,7 @@ export async function spawnEntity({
 }): Promise<string> {
   const name = makeEntityName()
   const entityUrl = `/${type}/${name}`
-  const spawnRes = await fetch(appendPathToUrl(baseUrl, entityUrl), {
+  const spawnRes = await serverFetch(appendPathToUrl(baseUrl, entityUrl), {
     method: `PUT`,
     headers: { 'content-type': `application/json` },
     body: JSON.stringify({}),
@@ -131,14 +137,17 @@ export async function spawnEntity({
 
   const text = initialMessage?.trim()
   if (text) {
-    const sendRes = await fetch(appendPathToUrl(baseUrl, `${entityUrl}/send`), {
-      method: `POST`,
-      headers: { 'content-type': `application/json` },
-      body: JSON.stringify({
-        from: `user`,
-        payload: { text },
-      }),
-    })
+    const sendRes = await serverFetch(
+      appendPathToUrl(baseUrl, `${entityUrl}/send`),
+      {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          from: `user`,
+          payload: { text },
+        }),
+      }
+    )
     if (!sendRes.ok) {
       throw new Error(await responseMessage(sendRes, `Send failed`))
     }

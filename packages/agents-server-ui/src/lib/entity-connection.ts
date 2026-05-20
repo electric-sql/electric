@@ -105,6 +105,7 @@ function createReactNativeStream(streamUrl: string): EntityStreamHandle {
   const stream = new DurableStream({
     url: streamUrl,
     contentType: `application/json`,
+    fetch: serverFetch,
   })
 
   return {

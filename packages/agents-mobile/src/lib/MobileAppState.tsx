@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { ReactNode } from 'react'
+import { cloudAuth } from './cloudAuth'
+import { prepareServerHeaders } from './serverHeaders'
 
 const SERVER_URL_KEY = `electric-agents-mobile.server-url`
 const ONBOARDING_DISMISSED_KEY = `electric-agents-mobile.onboarding-dismissed`
@@ -31,16 +33,34 @@ export function MobileAppStateProvider({
   const [onboardingDismissed, setOnboardingDismissedState] = useState(false)
 
   useEffect(() => {
-    Promise.all([
-      AsyncStorage.getItem(SERVER_URL_KEY),
-      AsyncStorage.getItem(ONBOARDING_DISMISSED_KEY),
-    ])
-      .then(([storedUrl, storedOnboarding]) => {
-        setServerUrl(storedUrl)
-        setOnboardingDismissedState(storedOnboarding === `true`)
-      })
-      .finally(() => setLoading(false))
+    void (async () => {
+      const [storedUrl, storedOnboarding] = await Promise.all([
+        AsyncStorage.getItem(SERVER_URL_KEY),
+        AsyncStorage.getItem(ONBOARDING_DISMISSED_KEY),
+      ])
+      // Inject server headers BEFORE flipping `loading` to false so any
+      // screen that mounts on the next render already has auth-fetch
+      // headers registered. Otherwise a race window lets early fetches
+      // go out unauthenticated and 401 against Cloud servers.
+      await prepareServerHeaders(storedUrl)
+      setServerUrl(storedUrl)
+      setOnboardingDismissedState(storedOnboarding === `true`)
+      setLoading(false)
+    })()
   }, [])
+
+  // Re-apply headers on cloud-auth transitions so a fresh sign-in
+  // immediately makes the agents-token available to in-flight
+  // collections without restarting the app. Also re-runs on serverUrl
+  // change (covers `saveServerUrl`).
+  useEffect(() => {
+    if (loading) return
+    void prepareServerHeaders(serverUrl)
+    const unsubscribe = cloudAuth.subscribe(() => {
+      void prepareServerHeaders(serverUrl)
+    })
+    return unsubscribe
+  }, [serverUrl, loading])
 
   const value = useMemo<MobileAppState>(
     () => ({
