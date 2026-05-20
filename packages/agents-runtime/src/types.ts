@@ -841,6 +841,12 @@ export interface HandlerContext<
   events: Array<ChangeEvent>
   actions: TActions
   electricTools: Array<AgentTool>
+  /**
+   * Aborted when the current handler invocation should stop early, e.g. after
+   * SIGINT or terminal shutdown. Non-agent handlers should pass this to
+   * cancellable work such as fetches or subprocesses.
+   */
+  signal: AbortSignal
   useAgent: (config: AgentConfig) => AgentHandle
   useContext: (config: UseContextConfig) => void
   timelineMessages: (opts?: TimelineProjectionOpts) => Array<TimestampedMessage>
@@ -889,8 +895,10 @@ export interface HandlerContext<
   ) => void
   /**
    * Register a handler for lifecycle signals delivered while this wake is active.
-   * Only catchable signals are delivered here; SIGKILL is terminal and bypasses
-   * entity code.
+   * Runtime/server-controlled signals are not delivered here: SIGINT aborts the
+   * active handler invocation, SIGSTOP/SIGCONT control pause/resume, and SIGKILL
+   * is terminal. The runtime currently delivers SIGHUP, SIGTERM, and SIGUSR to
+   * this handler.
    */
   onSignal: (
     handler: (signal: {

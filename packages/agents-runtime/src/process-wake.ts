@@ -586,6 +586,32 @@ export async function processWake(
     }
   }
 
+  function handleLatestSignalEvents(events: Array<ChangeEvent>): void {
+    const latestSignalEvents = new Map<string, ChangeEvent>()
+    for (const event of events) {
+      if (event.type === `signal`) {
+        latestSignalEvents.set(String(event.key), event)
+      }
+    }
+
+    for (const event of events) {
+      if (event.type === `signal`) {
+        if (latestSignalEvents.get(String(event.key)) === event) {
+          handleSignalEvent(event)
+        }
+      }
+    }
+  }
+
+  function handleRuntimeSideEffectEvents(events: Array<ChangeEvent>): void {
+    handleLatestSignalEvents(events)
+    for (const event of events) {
+      if (event.type !== `signal`) {
+        handleRuntimeSideEffectEvent(event)
+      }
+    }
+  }
+
   const getFreshKind = (events: Array<ChangeEvent>): FreshKind | null => {
     let hasWake = false
     const cancelledInboxKeys = new Set<string>()
@@ -706,12 +732,12 @@ export async function processWake(
     switch (value.signal) {
       case `SIGINT`:
         if (runAbortController) {
-          log.info(`SIGINT received, aborting active run`)
+          log.info(`SIGINT received, aborting active handler invocation`)
           runAbortController.abort()
         } else if (notification.entity?.status === `running`) {
-          // SIGINT may arrive in the small window before ctx.agent.run creates
-          // its controller. Only carry it forward for running entities; idle
-          // SIGINT is an ignored no-op and must not poison the next run.
+          // SIGINT may arrive in the small window before the handler invocation
+          // controller exists. Only carry it forward for running entities; idle
+          // SIGINT is an ignored no-op and must not poison the next invocation.
           log.info(
             `SIGINT received before active run controller, queuing abort`
           )
@@ -886,9 +912,7 @@ export async function processWake(
         return
       }
       pendingLiveBatches.shift()
-      for (const event of changeEvents) {
-        handleRuntimeSideEffectEvent(event)
-      }
+      handleRuntimeSideEffectEvents(changeEvents)
       setSafeAckOffset(batch.offset)
     }
   }
@@ -928,9 +952,7 @@ export async function processWake(
     }
 
     if (selectedKind === null) {
-      for (const event of deltaEvents) {
-        handleRuntimeSideEffectEvent(event)
-      }
+      handleRuntimeSideEffectEvents(deltaEvents)
       setSafeAckOffset(batches[batches.length - 1]!.offset)
       return null
     }
@@ -944,9 +966,7 @@ export async function processWake(
       log.warn(
         `fresh ${selectedKind} batch did not contain runnable wake input; acking as no-op`
       )
-      for (const event of deltaEvents) {
-        handleRuntimeSideEffectEvent(event)
-      }
+      handleRuntimeSideEffectEvents(deltaEvents)
       setSafeAckOffset(batches[batches.length - 1]!.offset)
       return null
     }
@@ -985,11 +1005,7 @@ export async function processWake(
       return
     }
 
-    for (const event of changeEvents) {
-      if (event.type === `signal`) {
-        handleSignalEvent(event)
-      }
-    }
+    handleLatestSignalEvents(changeEvents)
 
     catchUpEvents.push(...changeEvents)
 
@@ -1070,11 +1086,7 @@ export async function processWake(
     claimedWake = true
     writeToken = claimed.writeToken ?? ``
 
-    for (const event of catchUpEvents) {
-      if (event.type === `signal`) {
-        handleSignalEvent(event)
-      }
-    }
+    handleRuntimeSideEffectEvents(catchUpEvents)
 
     // 3b. Start heartbeat once this worker owns the wake
     heartbeat = setInterval(() => {
@@ -1870,6 +1882,7 @@ export async function processWake(
         }
       } catch (setupErr) {
         runAbortController = null
+        await waitForSignalHandlers()
         activeSignalHandler = null
         wakeSession.rollbackManifestEntries()
         const errMsg = toError(setupErr).message

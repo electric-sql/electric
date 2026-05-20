@@ -524,6 +524,7 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     state: config.state,
     actions: config.actions,
     electricTools: config.electricTools,
+    signal: config.runSignal ?? new AbortController().signal,
     useAgent(cfg) {
       agentConfig = cfg
       return agent

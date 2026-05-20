@@ -78,6 +78,36 @@ type WriteTokenValidator = (
   entity: ElectricAgentsEntity,
   token: string
 ) => boolean
+type ServerSignalOutcome = `transitioned` | `ignored`
+type ServerSignalHandling = {
+  status: ElectricAgentsEntity[`status`]
+  handled: boolean
+  outcome: ServerSignalOutcome
+  unregisterWakes: boolean
+}
+type ServerSignalValue = {
+  signal: EntitySignal
+  status: `handled` | `unhandled`
+  sender: typeof SERVER_SIGNAL_SENDER
+  timestamp: string
+  reason?: string
+  payload?: unknown
+  handled_at?: string
+  handled_by?: typeof SERVER_SIGNAL_SENDER
+  outcome?: ServerSignalOutcome
+  previous_state?: ElectricAgentsEntity[`status`]
+  new_state?: ElectricAgentsEntity[`status`]
+}
+type ServerSignalEvent = {
+  type: `signal`
+  key: string
+  value: ServerSignalValue
+  headers: {
+    operation: `insert`
+    timestamp: string
+    txid: string
+  }
+}
 
 function createInitialQueuePosition(date: Date): string {
   return `${String(date.getTime()).padStart(16, `0`)}:a0`
@@ -2412,9 +2442,16 @@ export class EntityManager {
       handling.status === previousState
         ? await this.registry.touchEntityWithTxid(entityUrl)
         : await this.registry.updateStatusWithTxid(entityUrl, handling.status)
+    if (txid === null) {
+      throw new ElectricAgentsError(
+        ErrCodeInvalidSignal,
+        `Cannot signal entity because it is already terminal`,
+        409
+      )
+    }
 
     const key = `sig-${now.getTime()}-${randomUUID().slice(0, 8)}`
-    const signalValue: Record<string, unknown> = {
+    const signalValue: ServerSignalValue = {
       signal: req.signal,
       status: handling.handled ? `handled` : `unhandled`,
       sender: SERVER_SIGNAL_SENDER,
@@ -2430,7 +2467,7 @@ export class EntityManager {
       signalValue.new_state = handling.status
     }
 
-    const signalEvent = {
+    const signalEvent: ServerSignalEvent = {
       type: `signal`,
       key,
       value: signalValue,
@@ -2444,7 +2481,10 @@ export class EntityManager {
     const shouldCloseStreams = isTerminalEntityStatus(handling.status)
     await this.appendSignalEvent(entity, signalEvent, shouldCloseStreams)
     if (!shouldCloseStreams) {
-      await this.evaluateWakes(entityUrl, signalEvent)
+      await this.evaluateWakes(
+        entityUrl,
+        signalEvent as unknown as Record<string, unknown>
+      )
     }
 
     if (handling.unregisterWakes) {
@@ -2477,12 +2517,7 @@ export class EntityManager {
   private serverHandlingForSignal(
     status: ElectricAgentsEntity[`status`],
     signal: EntitySignal
-  ): {
-    status: ElectricAgentsEntity[`status`]
-    handled: boolean
-    outcome: `transitioned` | `ignored`
-    unregisterWakes: boolean
-  } {
+  ): ServerSignalHandling {
     if (signal === `SIGKILL`) {
       return {
         status: `killed`,
@@ -2507,6 +2542,14 @@ export class EntityManager {
           outcome: `transitioned`,
           unregisterWakes: false,
         }
+      }
+    }
+    if (status === `paused` && signal !== `SIGCONT`) {
+      return {
+        status,
+        handled: true,
+        outcome: `ignored`,
+        unregisterWakes: false,
       }
     }
     if (signal === `SIGSTOP` && (status === `idle` || status === `running`)) {
@@ -2536,10 +2579,12 @@ export class EntityManager {
 
   private async appendSignalEvent(
     entity: ElectricAgentsEntity,
-    signalEvent: Record<string, unknown>,
+    signalEvent: ServerSignalEvent,
     closeStreams: boolean
   ): Promise<void> {
-    const signalData = this.encodeChangeEvent(signalEvent)
+    const signalData = this.encodeChangeEvent(
+      signalEvent as unknown as Record<string, unknown>
+    )
     if (!closeStreams) {
       await this.streamClient.append(entity.streams.main, signalData)
       return
@@ -2551,7 +2596,9 @@ export class EntityManager {
       value: signalEvent.value,
       headers: signalEvent.headers,
     }
-    const errorSignalData = this.encodeChangeEvent(errorCloseEvent)
+    const errorSignalData = this.encodeChangeEvent(
+      errorCloseEvent as unknown as Record<string, unknown>
+    )
 
     for (const [streamPath, data] of [
       [entity.streams.main, signalData],

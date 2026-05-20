@@ -35,6 +35,12 @@ describe(`signal-aware status write guards`, () => {
 })
 
 describe(`ElectricAgentsManager.signal semantics`, () => {
+  function decodeAppendBody(body: unknown): string {
+    return body instanceof Uint8Array
+      ? new TextDecoder().decode(body)
+      : String(body)
+  }
+
   function createSignalManager(status: `running` | `idle` | `paused`) {
     const entity = {
       url: `/chat/demo`,
@@ -131,6 +137,72 @@ describe(`ElectricAgentsManager.signal semantics`, () => {
       `/chat/demo`,
       `stopping`
     )
+  })
+
+  it(`marks non-resume paused signals as ignored so they do not wait for a runner`, async () => {
+    const { manager, registry, append } = createSignalManager(`paused`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGINT` })
+    ).resolves.toMatchObject({
+      previous_state: `paused`,
+      new_state: `paused`,
+      txid: 101,
+    })
+
+    expect(registry.touchEntityWithTxid).toHaveBeenCalledWith(`/chat/demo`)
+    expect(registry.updateStatusWithTxid).not.toHaveBeenCalled()
+    const body = decodeAppendBody(append.mock.calls[0]?.[1])
+    expect(body).toContain(`"status":"handled"`)
+    expect(body).toContain(`"outcome":"ignored"`)
+  })
+
+  it(`keeps paused SIGCONT unhandled after moving to idle so the runtime can resume queued work`, async () => {
+    const { manager, registry, append } = createSignalManager(`paused`)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGCONT` })
+    ).resolves.toMatchObject({
+      previous_state: `paused`,
+      new_state: `idle`,
+      txid: 202,
+    })
+
+    expect(registry.updateStatusWithTxid).toHaveBeenCalledWith(
+      `/chat/demo`,
+      `idle`
+    )
+    expect(decodeAppendBody(append.mock.calls[0]?.[1])).toContain(
+      `"status":"unhandled"`
+    )
+  })
+
+  it(`rejects signal updates when the guarded status write loses a terminal race`, async () => {
+    const { manager, registry, append } = createSignalManager(`idle`)
+    registry.updateStatusWithTxid.mockResolvedValueOnce(null)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGKILL` })
+    ).rejects.toMatchObject({
+      code: `INVALID_SIGNAL`,
+      status: 409,
+    })
+
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it(`rejects no-op signal updates when touch loses a terminal race`, async () => {
+    const { manager, registry, append } = createSignalManager(`idle`)
+    registry.touchEntityWithTxid.mockResolvedValueOnce(null)
+
+    await expect(
+      manager.signal(`/chat/demo`, { signal: `SIGINT` })
+    ).rejects.toMatchObject({
+      code: `INVALID_SIGNAL`,
+      status: 409,
+    })
+
+    expect(append).not.toHaveBeenCalled()
   })
 
   it(`wakes a paused entity by moving it to idle on a new message`, async () => {

@@ -623,6 +623,56 @@ describe(`processWake`, () => {
     ])
   })
 
+  it(`does not replay stale signals that were already handled in catch-up`, async () => {
+    const handler = vi.fn()
+    defineEntity(`test-agent`, {
+      handler,
+    })
+
+    mockDbPreload.mockImplementationOnce(async () => {
+      mockEntityOnBatch.current?.({
+        items: [
+          ev(
+            `signal`,
+            `sigstop-1`,
+            `insert`,
+            { signal: `SIGSTOP`, status: `unhandled` },
+            { offset: `10_500` }
+          ),
+          ev(
+            `signal`,
+            `sigstop-1`,
+            `update`,
+            { signal: `SIGSTOP`, status: `handled` },
+            { offset: `10_600` }
+          ),
+        ],
+        offset: `10_600`,
+      })
+    })
+
+    const notification = makeNotification()
+    notification.entity!.status = `running`
+
+    await processWake(notification, BASE_CONFIG)
+
+    expect(handler).not.toHaveBeenCalled()
+    expect(mockProducerAppend).not.toHaveBeenCalledWith(
+      expect.stringContaining(`"type":"signal"`)
+    )
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    const body = JSON.parse(doneCalls[0]![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_600` },
+    ])
+  })
+
   it(`lets SIGSTOP pause at the next handler checkpoint without aborting the run`, async () => {
     const handlerEvents: Array<string> = []
     let handlerStartedResolve: (() => void) | null = null
@@ -763,6 +813,129 @@ describe(`processWake`, () => {
     expect(body.acks).toEqual([
       { path: `/streams/entity:agent-1`, offset: `10_600` },
     ])
+  })
+
+  it(`exposes SIGINT cancellation to non-agent handlers through ctx.signal`, async () => {
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    let signalAbortedResolve: (() => void) | null = null
+    const signalAborted = new Promise<void>((resolve) => {
+      signalAbortedResolve = resolve
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        handlerStartedResolve?.()
+        if (ctx.signal.aborted) {
+          signalAbortedResolve?.()
+          return
+        }
+        await new Promise<void>((resolve) => {
+          ctx.signal.addEventListener(
+            `abort`,
+            () => {
+              signalAbortedResolve?.()
+              resolve()
+            },
+            { once: true }
+          )
+        })
+      },
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG)
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigint-handler`,
+          `insert`,
+          { signal: `SIGINT`, status: `unhandled` },
+          { offset: `10_500` }
+        ),
+      ],
+      offset: `10_500`,
+    })
+
+    await signalAborted
+    await wakePromise
+
+    expect(mockProducerAppend).toHaveBeenCalledWith(
+      expect.stringContaining(`"outcome":"aborted"`)
+    )
+  })
+
+  it(`waits for async signal handlers even when the main handler fails`, async () => {
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    let releaseHandler = (): void => {
+      throw new Error(`expected handler release`)
+    }
+    const handlerBlock = new Promise<void>((resolve) => {
+      releaseHandler = resolve
+    })
+    let signalHandlerStartedResolve: (() => void) | null = null
+    const signalHandlerStarted = new Promise<void>((resolve) => {
+      signalHandlerStartedResolve = resolve
+    })
+    let releaseSignalHandler = (): void => {
+      throw new Error(`expected signal handler release`)
+    }
+    const signalHandlerBlock = new Promise<void>((resolve) => {
+      releaseSignalHandler = resolve
+    })
+    let signalHandlerCompleted = false
+    let wakeSettled = false
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        ctx.onSignal(async () => {
+          signalHandlerStartedResolve?.()
+          await signalHandlerBlock
+          signalHandlerCompleted = true
+        })
+        handlerStartedResolve?.()
+        await handlerBlock
+        throw new Error(`handler failed after signal`)
+      },
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG).finally(() => {
+      wakeSettled = true
+    })
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigusr-handler`,
+          `insert`,
+          { signal: `SIGUSR`, status: `unhandled` },
+          { offset: `10_500` }
+        ),
+      ],
+      offset: `10_500`,
+    })
+    await signalHandlerStarted
+
+    releaseHandler()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(wakeSettled).toBe(false)
+
+    releaseSignalHandler()
+    await expect(wakePromise).rejects.toThrow(`handler failed after signal`)
+    expect(signalHandlerCompleted).toBe(true)
   })
 
   it(`applies SIGINT that arrives before the handler run controller is created`, async () => {
