@@ -203,16 +203,17 @@ export function createPiAgentAdapter(
     ): () => void {
       const eventQueue: Array<AgentEvent> = []
       let processing = false
+      let consuming = true
       let done = false
       const eventCounts: Record<string, number> = {}
       let textDeltaCount = 0
       const logPrefix = `[${config.entityUrl}]`
 
       const processQueue = (): void => {
-        if (processing || eventQueue.length === 0) return
+        if (!consuming || processing || eventQueue.length === 0) return
         processing = true
 
-        while (eventQueue.length > 0) {
+        while (consuming && eventQueue.length > 0) {
           const event = eventQueue.shift()!
           eventCounts[event.type] = (eventCounts[event.type] ?? 0) + 1
 
@@ -363,18 +364,23 @@ export function createPiAgentAdapter(
         }
 
         processing = false
-        if (done) {
+        if (consuming && done) {
           running = false
           resolveWhenDone()
         }
       }
 
       const unsubscribe = agent.subscribe((event: AgentEvent) => {
+        if (!consuming) return
         eventQueue.push(event)
         processQueue()
       })
 
-      return unsubscribe
+      return () => {
+        consuming = false
+        eventQueue.length = 0
+        unsubscribe()
+      }
     }
 
     return {
