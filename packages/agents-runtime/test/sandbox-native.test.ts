@@ -11,7 +11,13 @@ const supported =
   SandboxManager.checkDependencies().errors.length === 0
 const platformDescribe = supported ? describe : describe.skip
 
-describe(`nativeSandbox`, () => {
+// The whole suite needs the native OS sandbox tools available (bwrap on
+// Linux, sandbox-exec on macOS). On hosts without them, every test fails
+// at the factory's eager `checkDependencies()` step. Gate the entire
+// describe — sandbox-conformance.test.ts covers the cross-provider
+// TS-policy assertions on unsupported hosts via the unrestricted +
+// fake-remote providers.
+platformDescribe(`nativeSandbox`, () => {
   let cwd: string
 
   beforeEach(async () => {
