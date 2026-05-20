@@ -1717,8 +1717,8 @@ importers:
         version: 3.25.2(zod@4.3.6)
     devDependencies:
       '@durable-streams/server':
-        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217
-        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217(typescript@5.8.3)
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f(typescript@5.8.3)
       '@types/jsdom':
         specifier: ^27.0.0
         version: 27.0.0
@@ -1750,8 +1750,8 @@ importers:
         specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
         version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
       '@durable-streams/server':
-        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217
-        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217(typescript@5.8.3)
+        specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f
+        version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f(typescript@5.8.3)
       '@durable-streams/state':
         specifier: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217
         version: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217(typescript@5.8.3)
@@ -4174,14 +4174,26 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@durable-streams/server@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217':
-    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217}
-    version: 0.3.1
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@eac712f':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@eac712f}
+    version: 0.2.4
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@durable-streams/server@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f}
+    version: 0.3.2
     engines: {node: '>=18.0.0'}
 
   '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217':
     resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217}
     version: 0.2.5
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@eac712f':
+    resolution: {tarball: https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@eac712f}
+    version: 0.2.6
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -23177,10 +23189,15 @@ snapshots:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
       fastq: 1.20.1
 
-  '@durable-streams/server@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@5d5c217(typescript@5.8.3)':
+  '@durable-streams/client@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@eac712f':
     dependencies:
-      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
-      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217(typescript@5.8.3)
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      fastq: 1.20.1
+
+  '@durable-streams/server@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/server@eac712f(typescript@5.8.3)':
+    dependencies:
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@eac712f
+      '@durable-streams/state': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@eac712f(typescript@5.8.3)
       '@neophi/sieve-cache': 1.5.0
       lmdb: 3.5.4
       pino: 10.3.1
@@ -23191,6 +23208,14 @@ snapshots:
   '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217(typescript@5.8.3)':
     dependencies:
       '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@5d5c217
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.6.5(typescript@5.8.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@durable-streams/state@https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@eac712f(typescript@5.8.3)':
+    dependencies:
+      '@durable-streams/client': https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/client@eac712f
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.6.5(typescript@5.8.3)
     transitivePeerDependencies:

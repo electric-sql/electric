@@ -1,3 +1,4 @@
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -6,6 +7,7 @@ import {
 } from '../src/create-handler'
 import { clearRegistry, defineEntity } from '../src/define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { KeyObject } from 'node:crypto'
 import type {
   StandardJSONSchemaV1,
   StandardSchemaV1,
@@ -66,6 +68,51 @@ function flushAsyncWork(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+function signedWebhookRequest(
+  url: string,
+  body: string,
+  opts: {
+    kid: string
+    privateKey: KeyObject
+  }
+): Request {
+  const timestamp = Math.floor(Date.now() / 1000)
+  const payload = Buffer.concat([
+    Buffer.from(`${timestamp}.`),
+    Buffer.from(body),
+  ])
+  const signature = sign(null, payload, opts.privateKey).toString(`base64url`)
+  return new Request(url, {
+    method: `POST`,
+    headers: {
+      'content-type': `application/json`,
+      'webhook-signature': `t=${timestamp},kid=${opts.kid},ed25519=${signature}`,
+    },
+    body,
+  })
+}
+
+function publicJwkForKey(publicKey: KeyObject): {
+  kty: `OKP`
+  crv: `Ed25519`
+  x: string
+  kid: string
+  use: `sig`
+  alg: `EdDSA`
+} {
+  const exported = publicKey.export({ format: `jwk` }) as {
+    kty: `OKP`
+    crv: `Ed25519`
+    x: string
+  }
+  const kid = `ds_${createHash(`sha256`)
+    .update(
+      JSON.stringify({ crv: exported.crv, kty: exported.kty, x: exported.x })
+    )
+    .digest(`base64url`)}`
+  return { ...exported, kid, use: `sig`, alg: `EdDSA` }
+}
+
 describe(`createRuntimeHandler`, () => {
   beforeEach(() => {
     clearRegistry()
@@ -111,6 +158,7 @@ describe(`createRuntimeHandler`, () => {
       handlerUrl: `http://localhost:4000/electric-agents`,
       heartbeatInterval: 15_000,
       idleTimeout: 60_000,
+      webhookSignature: false,
     })
     const req = makeRequest(JSON.stringify(notification))
     const res = makeResponse()
@@ -167,6 +215,7 @@ describe(`createRuntimeHandler`, () => {
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
       handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
     })
 
     const response = await handler.handleWebhookRequest(
@@ -203,6 +252,7 @@ describe(`createRuntimeHandler`, () => {
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
       handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
     })
 
     const notification = {
@@ -256,6 +306,7 @@ describe(`createRuntimeHandler`, () => {
     const handler = createRuntimeHandler({
       baseUrl: `http://localhost:3000`,
       handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
     })
     const req = makeRequest(`{not-json`)
     const res = makeResponse()
@@ -309,6 +360,7 @@ describe(`createRuntimeHandler`, () => {
     const router = createRuntimeRouter({
       baseUrl: `http://localhost:3000`,
       webhookPath: `/custom-runtime`,
+      webhookSignature: false,
     })
 
     const response = await router.handleRequest(
@@ -323,6 +375,7 @@ describe(`createRuntimeHandler`, () => {
     const router = createRuntimeRouter({
       baseUrl: `http://localhost:3000`,
       webhookPath: `/custom-runtime`,
+      webhookSignature: false,
     })
 
     const notification = {
@@ -366,6 +419,7 @@ describe(`createRuntimeHandler`, () => {
       baseUrl: `http://localhost:3000`,
       webhookPath: `/custom-runtime`,
       serveEndpoint: `http://localhost:4000/custom-runtime`,
+      webhookSignature: false,
     })
 
     const notification = {
@@ -406,6 +460,97 @@ describe(`createRuntimeHandler`, () => {
         idleTimeout: undefined,
         shutdownSignal: expect.any(AbortSignal),
       })
+    )
+  })
+
+  it(`rejects unsigned webhook requests by default`, async () => {
+    defineEntity(`test-agent`, { handler: async () => {} })
+
+    const router = createRuntimeRouter({
+      baseUrl: `http://localhost:3000`,
+      webhookPath: `/custom-runtime`,
+    })
+
+    const response = await router.handleWebhookRequest(
+      new Request(`http://localhost/custom-runtime`, {
+        method: `POST`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({
+          entity: {
+            type: `test-agent`,
+            url: `http://localhost:3000/test-agent/test-1`,
+          },
+        }),
+      })
+    )
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({
+      error: `Missing webhook signature`,
+    })
+    expect(processWakeMock).not.toHaveBeenCalled()
+  })
+
+  it(`verifies Ed25519 webhook signatures against the configured JWKS`, async () => {
+    defineEntity(`test-agent`, { handler: async () => {} })
+
+    const { privateKey, publicKey } = generateKeyPairSync(`ed25519`)
+    const jwk = publicJwkForKey(publicKey)
+    const jwksUrl = `http://localhost:3000/__ds/jwks.json?test=valid`
+    const fetchMock = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ keys: [jwk] }), {
+        headers: {
+          'content-type': `application/jwk-set+json`,
+          'cache-control': `public, max-age=300`,
+        },
+      })
+    )
+    const router = createRuntimeRouter({
+      baseUrl: `http://localhost:3000`,
+      webhookPath: `/custom-runtime`,
+      webhookSignature: { jwksUrl },
+    })
+
+    const notification = {
+      consumerId: `consumer-1`,
+      epoch: 1,
+      wakeId: `wake-1`,
+      streamPath: `/streams/entity:test-1`,
+      streams: [{ path: `/streams/entity:test-1`, offset: `0_0` }],
+      callback: `http://localhost:3000/_electric/wakes/wake-1`,
+      claimToken: `tok-1`,
+      entity: {
+        type: `test-agent`,
+        status: `active`,
+        url: `http://localhost:3000/test-agent/test-1`,
+        streams: {
+          main: `/streams/entity:test-1`,
+          error: `/streams/entity-error:test-1`,
+        },
+      },
+    }
+    const body = JSON.stringify(notification)
+
+    const response = await router.handleWebhookRequest(
+      signedWebhookRequest(`http://localhost/custom-runtime`, body, {
+        kid: jwk.kid,
+        privateKey,
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      jwksUrl,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          accept: `application/jwk-set+json, application/json`,
+        }),
+      })
+    )
+    expect(processWakeMock).toHaveBeenCalledWith(
+      notification,
+      expect.objectContaining({ baseUrl: `http://localhost:3000` })
     )
   })
 

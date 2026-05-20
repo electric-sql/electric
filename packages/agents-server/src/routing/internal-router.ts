@@ -20,6 +20,7 @@ import {
 import { ATTR, tracer } from '../tracing.js'
 import { decodeJsonObject } from '../utils/server-utils.js'
 import { serverLog } from '../utils/log.js'
+import { getDefaultWebhookSigner } from '../webhook-signing.js'
 import { cronRouter } from './cron-router.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import { electricProxyRouter } from './electric-proxy-router.js'
@@ -32,6 +33,7 @@ import { withLeadingSlash } from './tenant-stream-paths.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
+import type { WebhookSigner } from '../webhook-signing.js'
 
 const wakeRegistrationBodySchema = Type.Object({
   subscriberUrl: Type.String(),
@@ -154,6 +156,10 @@ function durableStreamsSubscriptionCallback(value: string): string | null {
   return value.startsWith(DS_SUBSCRIPTION_CALLBACK_PREFIX)
     ? value.slice(DS_SUBSCRIPTION_CALLBACK_PREFIX.length)
     : null
+}
+
+function resolveWebhookSigner(ctx: TenantContext): WebhookSigner {
+  return ctx.webhookSigner ?? getDefaultWebhookSigner()
 }
 
 function claimTokenFromRequest(request: IRequest): string | undefined {
@@ -439,6 +445,10 @@ async function webhookForward(
   const headers = forwardHeadersFromRequest(request)
   headers.set(`content-type`, `application/json`)
   headers.delete(`content-length`)
+  headers.set(
+    `webhook-signature`,
+    await resolveWebhookSigner(ctx).sign(forwardBody)
+  )
 
   let upstream: Response
   try {

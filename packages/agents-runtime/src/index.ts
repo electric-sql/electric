@@ -227,6 +227,7 @@ export type {
 } from './model-runner'
 
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
+export { verifyWebhookSignature } from './webhook-signature'
 export { createPullWakeRunner } from './pull-wake-runner'
 export type {
   RuntimeRouter,
@@ -235,6 +236,12 @@ export type {
   RuntimeHandlerConfig,
   RuntimeHandlerResult,
 } from './create-handler'
+export type {
+  WebhookJwks,
+  WebhookPublicJwk,
+  WebhookSignatureVerificationResult,
+  WebhookSignatureVerifierConfig,
+} from './webhook-signature'
 export type {
   PullWakeEvent,
   PullWakeRunner,

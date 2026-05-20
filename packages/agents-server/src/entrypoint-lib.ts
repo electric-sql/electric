@@ -139,6 +139,10 @@ export function resolveElectricAgentsEntrypointOptions(
     `ELECTRIC_URL`,
   ])
   const electricSecret = readEnv(env, [`ELECTRIC_AGENTS_ELECTRIC_SECRET`])
+  const webhookSigningKey = readEnv(env, [
+    `ELECTRIC_AGENTS_WEBHOOK_SIGNING_PRIVATE_KEY`,
+    `WEBHOOK_SIGNING_PRIVATE_KEY`,
+  ])
   const baseUrl = readEnv(env, [`ELECTRIC_AGENTS_BASE_URL`, `BASE_URL`])
   return {
     service: readEnv(env, [`ELECTRIC_AGENTS_SERVICE`, `SERVICE`]),
@@ -153,6 +157,7 @@ export function resolveElectricAgentsEntrypointOptions(
       ? validateUrl(`Electric URL`, electricUrl)
       : undefined,
     electricSecret,
+    webhookSigningKey,
     host: readEnv(env, [`ELECTRIC_AGENTS_HOST`, `HOST`]) ?? DEFAULT_HOST,
     port: readPort(env),
     workingDirectory:

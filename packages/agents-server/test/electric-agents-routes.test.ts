@@ -96,6 +96,15 @@ const serviceRoutedTestAdapter: DurableStreamsRoutingAdapter = {
   },
 }
 
+const testJwk = {
+  kty: `OKP` as const,
+  crv: `Ed25519` as const,
+  x: `test-public-key`,
+  kid: `ds_test`,
+  use: `sig` as const,
+  alg: `EdDSA` as const,
+}
+
 describe(`ElectricAgentsRoutes schedule endpoints`, () => {
   it(`routes future-send schedule upserts to the manager and returns txid`, async () => {
     const manager = {
@@ -437,6 +446,29 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
     }
   })
 
+  it(`serves the agents-server webhook signing JWKS at the stream root`, async () => {
+    const webhookSigner = {
+      sign: vi.fn(),
+      jwks: vi.fn(() => ({ keys: [testJwk] })),
+    }
+
+    const result = await globalRouter.fetch(
+      createRequest(`GET`, `/__ds/jwks.json`),
+      {
+        service: `tenant-a`,
+        publicUrl: `http://agents.local`,
+        durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
+        webhookSigner,
+        isShuttingDown: () => false,
+      } as unknown as TenantContext
+    )
+
+    expect(result.status).toBe(200)
+    expect(result.headers.get(`content-type`)).toBe(`application/jwk-set+json`)
+    expect(result.headers.get(`cache-control`)).toBe(`public, max-age=300`)
+    await expect(result.json()).resolves.toEqual({ keys: [testJwk] })
+  })
+
   it(`rewrites webhook subscription targets and keeps the original target locally`, async () => {
     const fetchSpy = vi
       .spyOn(globalThis, `fetch`)
@@ -475,6 +507,63 @@ describe(`ElectricAgentsRoutes shared-state streams`, () => {
         tenantId: `tenant-a`,
         subscriptionId: `horton-handler`,
         webhookUrl: `http://localhost:4448/runtime-webhook`,
+      })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`rewrites subscription webhook signing metadata to the agents-server JWKS`, async () => {
+    const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: `horton-handler`,
+          subscription_id: `horton-handler`,
+          type: `webhook`,
+          webhook: {
+            url: `http://agents.local/_electric/webhook-forward/horton-handler`,
+            signing: {
+              alg: `ed25519`,
+              kid: `ds_durable`,
+              jwks_url: `http://durable.local/v1/stream/__ds/jwks.json`,
+            },
+          },
+        }),
+        { status: 201, headers: { 'content-type': `application/json` } }
+      )
+    )
+    const db = fakeInsertDb()
+    const webhookSigner = {
+      sign: vi.fn(),
+      jwks: vi.fn(() => ({ keys: [testJwk] })),
+    }
+
+    try {
+      const result = await globalRouter.fetch(
+        createRequest(`PUT`, `/__ds/subscriptions/horton-handler`, {
+          type: `webhook`,
+          pattern: `horton/**`,
+          webhook: { url: `http://localhost:4448/runtime-webhook` },
+        }),
+        {
+          service: `tenant-a`,
+          publicUrl: `http://agents.local`,
+          durableStreamsUrl: `http://durable.local/v1/stream/tenant-a`,
+          webhookSigner,
+          pgDb: db.db,
+          isShuttingDown: () => false,
+        } as unknown as TenantContext
+      )
+
+      expect(result.status).toBe(201)
+      await expect(result.json()).resolves.toMatchObject({
+        webhook: {
+          signing: {
+            alg: `ed25519`,
+            kid: `ds_test`,
+            jwks_url: `http://agents.local/__ds/jwks.json`,
+          },
+        },
       })
     } finally {
       fetchSpy.mockRestore()

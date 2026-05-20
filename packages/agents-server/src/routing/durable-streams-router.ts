@@ -15,10 +15,15 @@ import {
 import { validateBody } from './schema.js'
 import { rewriteLoopbackWebhookUrl } from '../utils/webhook-url.js'
 import { forwardFetchRequest } from '../utils/server-utils.js'
+import {
+  getDefaultWebhookSigner,
+  webhookSigningMetadata,
+} from '../webhook-signing.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { IRequest, RouterType } from 'itty-router'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
+import type { WebhookSigner } from '../webhook-signing.js'
 
 const subscriptionProxyBodySchema = Type.Object(
   {
@@ -81,6 +86,7 @@ for (const action of subscriptionControlActions) {
     subscriptionAction(action)
   )
 }
+durableStreamsRouter.get(`/__ds/jwks.json`, webhookJwks)
 durableStreamsRouter.all(`/__ds`, controlPassThrough)
 durableStreamsRouter.all(`/__ds/*`, controlPassThrough)
 durableStreamsRouter.post(`*`, streamAppend)
@@ -178,12 +184,12 @@ function rewriteSubscriptionBodyForBackend(
   }
 }
 
-function rewriteSubscriptionResponseForClient(
+async function rewriteSubscriptionResponseForClient(
   bytes: Uint8Array,
   response: Response,
-  service: string,
+  ctx: TenantContext,
   routingAdapter: DurableStreamsRoutingAdapter
-): Uint8Array {
+): Promise<Uint8Array> {
   if (!response.headers.get(`content-type`)?.includes(`application/json`)) {
     return bytes
   }
@@ -192,14 +198,14 @@ function rewriteSubscriptionResponseForClient(
 
   if (typeof payload.pattern === `string`) {
     payload.pattern = routingAdapter.toRuntimeStreamPath(
-      service,
+      ctx.service,
       payload.pattern
     )
   }
   if (Array.isArray(payload.streams)) {
     payload.streams = payload.streams.map((stream) => {
       if (typeof stream === `string`) {
-        return routingAdapter.toRuntimeStreamPath(service, stream)
+        return routingAdapter.toRuntimeStreamPath(ctx.service, stream)
       }
       if (
         stream &&
@@ -209,7 +215,7 @@ function rewriteSubscriptionResponseForClient(
         return {
           ...(stream as Record<string, unknown>),
           path: routingAdapter.toRuntimeStreamPath(
-            service,
+            ctx.service,
             (stream as Record<string, string>).path
           ),
         }
@@ -219,25 +225,42 @@ function rewriteSubscriptionResponseForClient(
   }
   if (typeof payload.wake_stream === `string`) {
     payload.wake_stream = routingAdapter.toRuntimeStreamPath(
-      service,
+      ctx.service,
       payload.wake_stream
     )
   }
   if (typeof payload.stream === `string`) {
-    payload.stream = routingAdapter.toRuntimeStreamPath(service, payload.stream)
+    payload.stream = routingAdapter.toRuntimeStreamPath(
+      ctx.service,
+      payload.stream
+    )
   }
   if (Array.isArray(payload.acks)) {
     payload.acks = payload.acks.map((ack) => {
       if (!ack || typeof ack !== `object`) return ack
       const next = { ...(ack as Record<string, unknown>) }
       if (typeof next.stream === `string`) {
-        next.stream = routingAdapter.toRuntimeStreamPath(service, next.stream)
+        next.stream = routingAdapter.toRuntimeStreamPath(
+          ctx.service,
+          next.stream
+        )
       }
       if (typeof next.path === `string`) {
-        next.path = routingAdapter.toRuntimeStreamPath(service, next.path)
+        next.path = routingAdapter.toRuntimeStreamPath(ctx.service, next.path)
       }
       return next
     })
+  }
+  if (
+    payload.webhook &&
+    typeof payload.webhook === `object` &&
+    !Array.isArray(payload.webhook)
+  ) {
+    const webhook = payload.webhook as Record<string, unknown>
+    webhook.signing = await webhookSigningMetadata(
+      resolveWebhookSigner(ctx),
+      ctx.publicUrl
+    )
   }
 
   return new TextEncoder().encode(JSON.stringify(payload))
@@ -267,6 +290,10 @@ function subscriptionRoutingAdapter(
     ctx.durableStreamsRouting,
     ctx.durableStreamsUrl
   )
+}
+
+function resolveWebhookSigner(ctx: TenantContext): WebhookSigner {
+  return ctx.webhookSigner ?? getDefaultWebhookSigner()
 }
 
 async function rewriteSubscriptionRequestBody(
@@ -334,10 +361,10 @@ async function forwardSubscriptionRequest(
   let responseBytes: Uint8Array = upstream.body
     ? new Uint8Array(await upstream.arrayBuffer())
     : new Uint8Array()
-  responseBytes = rewriteSubscriptionResponseForClient(
+  responseBytes = await rewriteSubscriptionResponseForClient(
     responseBytes,
     upstream,
-    ctx.service,
+    ctx,
     routingAdapter
   )
   return {
@@ -528,6 +555,19 @@ async function controlPassThrough(
     `control`
   )
   return responseFromUpstream(upstream)
+}
+
+async function webhookJwks(
+  _request: IRequest,
+  ctx: TenantContext
+): Promise<Response> {
+  return new Response(JSON.stringify(await resolveWebhookSigner(ctx).jwks()), {
+    status: 200,
+    headers: {
+      'content-type': `application/jwk-set+json`,
+      'cache-control': `public, max-age=300`,
+    },
+  })
 }
 
 async function streamAppend(

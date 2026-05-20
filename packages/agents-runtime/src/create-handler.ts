@@ -10,8 +10,10 @@ import { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 import { passthrough } from './entity-schema'
 import { runtimeLog } from './log'
 import { appendPathToUrl } from './url'
+import { verifyWebhookSignature } from './webhook-signature'
 import type { EntityRegistry } from './define-entity'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { WebhookSignatureVerifierConfig } from './webhook-signature'
 import type {
   AgentTool,
   EntityStreamDBWithActions,
@@ -51,6 +53,11 @@ export interface RuntimeRouterConfig {
   ) => DispatchPolicy | undefined
   /** Additional headers sent to agents-server control-plane requests. */
   serverHeaders?: HeadersProvider
+  /**
+   * Webhook signature verification. Enabled by default against
+   * `${baseUrl}/__ds/jwks.json`; set to false only for trusted in-process tests.
+   */
+  webhookSignature?: false | Partial<WebhookSignatureVerifierConfig>
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
   /** Heartbeat interval in ms (default: 10_000) */
@@ -181,6 +188,7 @@ export function createRuntimeRouter(
     publicUrl,
     name: runtimeName,
     serverHeaders,
+    webhookSignature,
   } = normalized
 
   const wakeConfig: ProcessWakeConfig = {
@@ -311,9 +319,23 @@ export function createRuntimeRouter(
       return json({ error: `Method not allowed` }, 405)
     }
 
+    const body = new Uint8Array(await request.arrayBuffer())
+    if (webhookSignature) {
+      const verification = await verifyWebhookSignature(
+        body,
+        request.headers.get(`webhook-signature`),
+        webhookSignature
+      )
+      if (!verification.ok) {
+        return json({ error: verification.error }, verification.status)
+      }
+    }
+
     let notification: WebhookNotification
     try {
-      notification = (await request.json()) as WebhookNotification
+      notification = JSON.parse(
+        new TextDecoder().decode(body)
+      ) as WebhookNotification
     } catch (err) {
       return json(
         {
@@ -591,10 +613,22 @@ function normalizeConfig(config: RuntimeRouterConfig): {
   registrationConcurrency?: number
   publicUrl?: string
   name?: string
+  webhookSignature: false | WebhookSignatureVerifierConfig
 } {
   const serveEndpoint = config.serveEndpoint ?? config.handlerUrl
   const webhookPath =
     config.webhookPath ?? getPathname(serveEndpoint) ?? `/electric-agents`
+  const webhookSignature =
+    config.webhookSignature === false
+      ? false
+      : {
+          jwksUrl:
+            config.webhookSignature?.jwksUrl ??
+            appendPathToUrl(config.baseUrl, `/__ds/jwks.json`),
+          toleranceSeconds: config.webhookSignature?.toleranceSeconds,
+          cacheTtlMs: config.webhookSignature?.cacheTtlMs,
+          fetchClient: config.webhookSignature?.fetchClient,
+        }
 
   return {
     baseUrl: config.baseUrl,
@@ -610,6 +644,7 @@ function normalizeConfig(config: RuntimeRouterConfig): {
     registrationConcurrency: config.registrationConcurrency,
     publicUrl: config.publicUrl,
     name: config.name,
+    webhookSignature,
   }
 }
 

@@ -7,6 +7,7 @@ import type { StreamClient } from '../stream-client.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { Principal } from '../principal.js'
 import type { DurableStreamsBearerProvider } from '../stream-client.js'
+import type { WebhookSigner } from '../webhook-signing.js'
 
 /**
  * Per-request tenant context passed through every router and handler.
@@ -24,6 +25,7 @@ export interface TenantContext {
   durableStreamsBearer?: DurableStreamsBearerProvider
   durableStreamsRouting?: DurableStreamsRoutingAdapter
   durableStreamsDispatcher: Agent
+  webhookSigner?: WebhookSigner
   electricUrl?: string
   electricSecret?: string
   ownAgentHandlerPaths?: ReadonlyArray<string>

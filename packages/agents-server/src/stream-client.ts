@@ -44,11 +44,17 @@ export interface SubscriptionResponse {
   type?: `webhook` | `pull-wake`
   pattern?: string
   streams?: Array<string | SubscriptionStreamInfo>
-  webhook?: { url?: string }
+  webhook?: {
+    url?: string
+    signing?: {
+      alg?: string
+      kid?: string
+      jwks_url?: string
+    }
+  }
   wake_stream?: string
   callback_url?: string
   callback_token?: string
-  webhook_secret?: string
 }
 
 export interface SubscriptionCreateInput {
@@ -535,14 +541,14 @@ export class StreamClient {
     subscriptionId: string,
     webhookUrl: string,
     description?: string
-  ): Promise<{ subscription_id: string; webhook_secret?: string }> {
+  ): Promise<SubscriptionResponse> {
     const res = await this.putSubscription(subscriptionId, {
       type: `webhook`,
       pattern: normalizeSubscriptionPattern(pattern),
       webhook: { url: webhookUrl },
       ...(description ? { description } : {}),
     })
-    return res as { subscription_id: string; webhook_secret?: string }
+    return res
   }
 
   async putSubscription(

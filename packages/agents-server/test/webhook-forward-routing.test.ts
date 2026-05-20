@@ -136,6 +136,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         headers: { 'content-type': `application/json` },
       })
     )
+    const webhookSigner = {
+      sign: vi.fn(() => `t=1,kid=ds_test,ed25519=test_signature`),
+      jwks: vi.fn(() => ({ keys: [] })),
+    }
 
     try {
       const response = await globalRouter.fetch(
@@ -156,6 +160,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         }),
         buildContext({
           pgDb: { select: select.select, insert: insert.insert } as any,
+          webhookSigner,
         })
       )
 
@@ -177,6 +182,10 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
           url: `/horton/demo`,
         },
       })
+      expect(webhookSigner.sign).toHaveBeenCalledWith(expect.any(Uint8Array))
+      expect(new Headers(init?.headers).get(`webhook-signature`)).toBe(
+        `t=1,kid=ds_test,ed25519=test_signature`
+      )
       expect(insert.values).toHaveBeenCalledWith({
         tenantId: `tenant-a`,
         consumerId: `wake-1`,
