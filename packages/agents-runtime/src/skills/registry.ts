@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import fsSync from 'node:fs'
 import path from 'node:path'
-import { serverLog } from '../log'
+import { runtimeLog } from '../log'
 import { extractSkillMeta } from './extract-meta'
 import type { SkillMeta, SkillsRegistry } from './types'
 
@@ -41,7 +41,7 @@ export async function createSkillsRegistry(
       continue
     }
 
-    serverLog.info(`[skills] extracting metadata for "${name}"`)
+    runtimeLog.info(`[skills]`, `extracting metadata for "${name}"`)
     const meta = await extractSkillMeta(name, content)
     const entry: SkillMeta = {
       name,

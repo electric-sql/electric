@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePreamble } from '../src/skills/preamble'
+import { parsePreamble } from '../../src/skills/preamble'
 
 describe(`parsePreamble`, () => {
   it(`extracts all fields from a complete preamble`, () => {
