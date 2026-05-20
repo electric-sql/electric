@@ -586,7 +586,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
     }
   })
 
-  describe(`claim release on done callback (regression for #4340)`, () => {
+  describe(`callback-forward done releases the durable claim independently of the in-memory write token`, () => {
     const upstreamOk = (): void => {
       vi.spyOn(globalThis, `fetch`).mockResolvedValue(
         new Response(JSON.stringify({ ok: true, next_wake: false }), {
@@ -595,7 +595,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       )
     }
 
-    it(`marks the consumer_claims row released and the entity idle on done`, async () => {
+    it(`releases the consumer_claims row and marks the entity idle when the consumer holds the in-memory write token`, async () => {
       const select = selectDb([
         {
           callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
@@ -606,7 +606,6 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       const ctx = buildContext({
         pgDb: { select: select.select } as any,
       })
-      // Simulate the runtime's claim phase having minted a token.
       ctx.runtime.claimWriteTokens.mint(
         `tenant-a`,
         `/horton/demo/main`,
@@ -649,12 +648,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       }
     })
 
-    it(`still releases the consumer_claims row when the in-memory write token is missing (e.g. server restart)`, async () => {
-      // Reproduces the production failure mode where the in-memory
-      // ClaimWriteTokenStore is empty (server restarted between dispatch and
-      // done, or another wake evicted the token) but the consumer_claims row
-      // is still active in the DB. Today the release path skips
-      // materializeReleasedClaim under this condition and the row leaks.
+    it(`releases the consumer_claims row and marks the entity idle when no in-memory write token is present for the consumer`, async () => {
       const select = selectDb([
         {
           callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
@@ -665,8 +659,6 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       const ctx = buildContext({
         pgDb: { select: select.select } as any,
       })
-      // Intentionally do NOT mint a write token — simulates the token
-      // being lost between the runtime's claim phase and its done call.
 
       try {
         const response = await globalRouter.fetch(
@@ -686,8 +678,6 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         )
 
         expect(response.status).toBe(200)
-        // The DB row identity (consumerId, epoch) is sufficient to release
-        // the claim — release must not depend on in-memory write-token state.
         expect(
           ctx.entityManager.registry.materializeReleasedClaim
         ).toHaveBeenCalledWith(
@@ -696,8 +686,6 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
             epoch: 7,
           })
         )
-        // The entity should transition back to idle so the UI no longer
-        // shows it as "running" after the agent finishes.
         expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
           `/horton/demo`,
           `idle`
@@ -707,11 +695,7 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       }
     })
 
-    it(`releases an earlier wake's claim even after a later wake evicted its in-memory token`, async () => {
-      // Same defect, different cause: two wakes for the same entity arrive
-      // close together. The second's mint evicts the first's token. The
-      // first wake's done call then finds stillOwnsClaim=false and skips
-      // the release.
+    it(`releases the consumer_claims row for the old consumer when a newer consumer has taken over the in-memory token, without disturbing the newer consumer's token or the entity status`, async () => {
       const select = selectDb([
         {
           callbackUrl: `http://durable.local/v1/stream-meta/subscriptions/horton-handler/callback?service=tenant-a`,
@@ -722,8 +706,8 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
       const ctx = buildContext({
         pgDb: { select: select.select } as any,
       })
-      // Simulate the DB state where consumer-old's row is still active but
-      // entityDispatchState's active claim is consumer-new (the later wake).
+      // The newer consumer is the active dispatch in the DB, so releasing
+      // the older consumer's row must not clear the entity's dispatch state.
       ;(
         ctx.entityManager.registry.materializeReleasedClaim as any
       ).mockResolvedValue({ claim: null, entityCleared: false })
@@ -733,8 +717,6 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
         `/horton/demo/main`,
         `wake-1`
       )
-      // A second wake arrives and re-mints for the same stream, evicting
-      // wake-1 from the in-memory store.
       ctx.runtime.claimWriteTokens.mint(
         `tenant-a`,
         `/horton/demo/main`,
@@ -758,7 +740,6 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
           ctx
         )
 
-        // The DB row for wake-1 must still be released.
         expect(
           ctx.entityManager.registry.materializeReleasedClaim
         ).toHaveBeenCalledWith(
@@ -767,9 +748,16 @@ describe(`webhook forwarding for Durable Streams subscriptions`, () => {
             epoch: 7,
           })
         )
-        // But the entity status must NOT be set to idle — wake-2 is still
-        // in flight and owns the entity's active dispatch.
+        // The newer consumer owns the entity now — its status must stay
+        // as-is and its in-memory write token must remain intact.
         expect(ctx.entityManager.registry.updateStatus).not.toHaveBeenCalled()
+        expect(
+          ctx.runtime.claimWriteTokens.owns(
+            `tenant-a`,
+            `/horton/demo/main`,
+            `wake-2`
+          )
+        ).toBe(true)
       } finally {
         vi.mocked(globalThis.fetch).mockRestore()
       }
