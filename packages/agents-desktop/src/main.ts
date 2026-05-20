@@ -232,11 +232,8 @@ const INITIAL_SERVER_URL =
   process.env.ELECTRIC_AGENTS_SERVER_URL?.trim() ||
   null
 
-// Packaged macOS apps launched via Finder / LaunchServices do not inherit
-// the user's interactive shell PATH, so Homebrew-installed tools like `gh`
-// can disappear even though they work in Terminal. Normalize PATH up front in
-// the main process so all later child-process launches see the shell-resolved
-// command path.
+// GUI-launched desktop apps don't inherit the user's shell PATH — restore it
+// so child processes can find CLI tools like `gh`.
 fixPath()
 
 if (DESKTOP_USER_DATA_DIR) {
