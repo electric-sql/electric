@@ -368,6 +368,7 @@ defmodule Electric.StatusMonitor do
   # set/cleared by the GenServer in response to waiter-set transitions; this
   # cast lets tests force the polling branch without first enqueuing the
   # threshold's worth of real waiters.
+  @doc false
   def handle_cast({:set_congested_flag_for_test, value}, state) when is_boolean(value) do
     :ets.insert(ets_table(state.stack_id), {@congested_key, value})
     {:noreply, state}
