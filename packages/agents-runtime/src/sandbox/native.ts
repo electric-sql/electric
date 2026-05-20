@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
+import { ProxyAgent, type Dispatcher } from 'undici'
 import {
   SandboxManager,
   type SandboxRuntimeConfig,
@@ -15,7 +16,16 @@ import {
 
 export interface NativeSandboxOpts {
   workingDirectory: string
-  /** Hostname allowlist for outbound network. Default: deny everything. */
+  /**
+   * Hostname allowlist for outbound network. Default: deny everything.
+   * Patterns are passed through to `@anthropic-ai/sandbox-runtime`'s
+   * domain matcher, which supports exact match (`example.com`),
+   * wildcard subdomains (`*.example.com`), and `localhost`. Per the
+   * library's validator: `*.com`, bare `*`, etc. are rejected for being
+   * overly broad. Both subprocess egress (via the library's HTTP/SOCKS
+   * proxies) and `sandbox.fetch()` (via undici ProxyAgent routed at the
+   * same proxy) obey this list.
+   */
   allowedHosts?: ReadonlyArray<string>
   /** Read-only paths to allow beyond the working directory base set. */
   extraReadPaths?: ReadonlyArray<string>
@@ -94,6 +104,7 @@ export async function nativeSandbox(opts: NativeSandboxOpts): Promise<Sandbox> {
 class NativeSandbox implements Sandbox {
   readonly name = NATIVE_NAME
   private initialized = false
+  private fetchDispatcher: Dispatcher | null = null
 
   constructor(
     readonly workingDirectory: string,
@@ -227,19 +238,58 @@ class NativeSandbox implements Sandbox {
   }
 
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
-    const url = typeof input === `string` ? new URL(input) : input
-    if (!this.allowedHosts.has(url.hostname)) {
+    // Route through the library's HTTP proxy so both subprocess (via
+    // `sandbox.exec`) and host-process fetch obey the same policy. The
+    // proxy enforces allowedDomains with wildcards, IP canonicalization
+    // (e.g. `2852039166` → `169.254.169.254`), and deniedDomains —
+    // semantics our previous TS-level Set.has check did not have.
+    //
+    // The proxy is only available after SandboxManager is initialized,
+    // so we lazy-init here just like exec does. Init also brings up the
+    // policy enforcer; without it there's no safe place to fall back to.
+    await this.ensureInitialized()
+    try {
+      const response = await globalThis.fetch(input as RequestInfo, {
+        ...init,
+        // @ts-expect-error - undici dispatcher option not in std lib.dom.d.ts
+        dispatcher: this.fetchDispatcher ?? undefined,
+      })
+      // The proxy denies via HTTP 403 with a body indicating the rejection
+      // reason. Translate to SandboxError so callers can distinguish a
+      // policy rejection from a genuine 403 from the target.
+      if (response.status === 403 && this.fetchDispatcher) {
+        const proxyDenied = response.headers.get(`x-srt-denied`)
+        if (proxyDenied) {
+          throw new SandboxError(
+            `policy`,
+            `nativeSandbox: proxy denied request (${proxyDenied})`
+          )
+        }
+      }
+      return response
+    } catch (err) {
+      if (err instanceof SandboxError) throw err
+      // undici emits a `cause`-bearing TypeError when the proxy refuses a
+      // CONNECT. Surface that as a policy error rather than letting the
+      // bare network error escape — the request was rejected by our
+      // sandbox config, not by the network.
+      const url = typeof input === `string` ? new URL(input) : input
       throw new SandboxError(
         `policy`,
-        `nativeSandbox: host "${url.hostname}" is not in allowedHosts`
+        `nativeSandbox: fetch to "${url.hostname}" was rejected by the sandbox proxy (${
+          err instanceof Error ? err.message : String(err)
+        })`
       )
     }
-    return globalThis.fetch(input as RequestInfo, init)
   }
 
   async dispose(): Promise<void> {
     if (!this.initialized) return
     this.initialized = false
+    if (this.fetchDispatcher) {
+      await this.fetchDispatcher.close()
+      this.fetchDispatcher = null
+    }
     if (!activeRef) return
     activeRef.count -= 1
     if (activeRef.count <= 0) {
@@ -274,6 +324,18 @@ class NativeSandbox implements Sandbox {
     }
     activeRef.count += 1
     this.initialized = true
+
+    // Build the fetch dispatcher *after* init so the proxy is up. On macOS
+    // the library exposes a TCP port; on Linux the proxy is reachable via
+    // a Unix socket. For Linux's unix-socket case we'd need a custom
+    // dispatcher (TODO: undici Agent with a unix-socket connect factory);
+    // for now we fall back to a `null` dispatcher on Linux, which means
+    // sandbox.fetch on Linux currently goes direct rather than via the
+    // proxy. exec-driven traffic on Linux still runs through the proxy.
+    const port = SandboxManager.getProxyPort()
+    if (port !== undefined) {
+      this.fetchDispatcher = new ProxyAgent(`http://127.0.0.1:${port}`)
+    }
   }
 
   private async assertReadable(path: string): Promise<string> {

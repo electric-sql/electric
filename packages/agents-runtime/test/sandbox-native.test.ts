@@ -107,7 +107,7 @@ describe(`nativeSandbox`, () => {
     })
   })
 
-  describe(`fetch policy (TS-level, hostname allowlist)`, () => {
+  describe(`fetch policy (via library HTTP proxy)`, () => {
     it(`rejects a fetch to a host not in allowedHosts`, async () => {
       const sandbox = await nativeSandbox({
         workingDirectory: cwd,
