@@ -1,5 +1,6 @@
 import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import { z } from 'zod'
 
 export type EntityStatus = `spawning` | `running` | `idle` | `stopped`
@@ -54,7 +55,7 @@ export function normalizeServerUrl(input: string): string {
 export async function checkServerHealth(serverUrl: string): Promise<void> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)
-  const res = await fetch(`${serverUrl}/_electric/health`, {
+  const res = await fetch(appendPathToUrl(serverUrl, `/_electric/health`), {
     signal: controller.signal,
   }).finally(() => clearTimeout(timeout))
   if (!res.ok) {
@@ -68,7 +69,7 @@ export function createEntitiesCollection(baseUrl: string) {
       id: `mobile-entities:${baseUrl}`,
       schema: entitySchema,
       shapeOptions: {
-        url: `${baseUrl}/_electric/electric/v1/shape`,
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
         params: {
           table: `entities`,
           columns: [
@@ -100,7 +101,7 @@ export function createEntityTypesCollection(baseUrl: string) {
       id: `mobile-entity-types:${baseUrl}`,
       schema: entityTypeSchema,
       shapeOptions: {
-        url: `${baseUrl}/_electric/electric/v1/shape`,
+        url: appendPathToUrl(baseUrl, `/_electric/electric/v1/shape`),
         params: { table: `entity_types` },
       },
       getKey: (item) => item.name,
@@ -119,7 +120,7 @@ export async function spawnEntity({
 }): Promise<string> {
   const name = makeEntityName()
   const entityUrl = `/${type}/${name}`
-  const spawnRes = await fetch(`${baseUrl}${entityUrl}`, {
+  const spawnRes = await fetch(appendPathToUrl(baseUrl, entityUrl), {
     method: `PUT`,
     headers: { 'content-type': `application/json` },
     body: JSON.stringify({}),
@@ -130,7 +131,7 @@ export async function spawnEntity({
 
   const text = initialMessage?.trim()
   if (text) {
-    const sendRes = await fetch(`${baseUrl}${entityUrl}/send`, {
+    const sendRes = await fetch(appendPathToUrl(baseUrl, `${entityUrl}/send`), {
       method: `POST`,
       headers: { 'content-type': `application/json` },
       body: JSON.stringify({
