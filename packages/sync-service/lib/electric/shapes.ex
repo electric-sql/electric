@@ -3,6 +3,7 @@ defmodule Electric.Shapes do
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeStatus
+  alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -22,6 +23,12 @@ defmodule Electric.Shapes do
   snapshot-failure path, where re-issuing the GenServer call would race
   against the consumer's `stop_and_clean`.
   """
+  @spec get_merged_log_stream(stack_id(), shape_handle(),
+          since: LogOffset.t(),
+          up_to: LogOffset.t(),
+          read_only?: boolean(),
+          snapshot_status: Api.Request.snapshot_status()
+        ) :: {:ok, Storage.log()} | {:error, term()}
   def get_merged_log_stream(stack_id, shape_handle, opts)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     offset = Access.get(opts, :since, LogOffset.before_all())
