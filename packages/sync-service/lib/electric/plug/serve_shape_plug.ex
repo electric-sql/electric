@@ -36,10 +36,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
   use Plug.Builder
 
-  alias Electric.Utils
-  alias Electric.Shapes.Api
+  alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeStatus
+  alias Electric.Shapes.Api
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Utils
   alias Plug.Conn
 
   require Logger
@@ -62,9 +63,9 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :validate_request
   plug :reject_subquery_shape_compaction_request
   plug :load_shape
-  # Reclassify off :initial as soon as load_shape returns so the :initial
-  # admission slot becomes available for new requests while the current
-  # handler still streams the shape response to the client.
+  plug :hold_initial_until_snapshot_started
+  # Reclassify off :initial so the :initial admission slot becomes available
+  # for new requests while the current handler streams the response.
   plug :reclassify_admission_kind
   plug :serve_shape_response
 
@@ -361,9 +362,32 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  # Runs after :load_shape. Moves the handler out of :initial so the
-  # :initial bucket can admit the next validate-and-load wave while this
-  # request is still streaming.
+  # This keeps the :initial permit held across Snapshotter PG-pool checkout so saturation of
+  # the snapshot pool turns into admission rejections at the gate rather than an unbounded
+  # Postgrex queue.
+  #
+  # The await outcome is stashed in `request.snapshot_status` and consumed by
+  # `Shapes.get_merged_log_stream` instead of being awaited again on the streaming path.
+  defp hold_initial_until_snapshot_started(
+         %Conn{assigns: %{request: %{handle: handle} = request}} = conn,
+         _
+       )
+       when is_binary(handle) do
+    case Process.get(@admission_permit_key) do
+      {stack_id, :initial} ->
+        result = ShapeCache.await_snapshot_start(handle, stack_id)
+        assign(conn, :request, %{request | snapshot_status: result})
+
+      _ ->
+        conn
+    end
+  end
+
+  defp hold_initial_until_snapshot_started(conn, _), do: conn
+
+  # Moves the handler out of :initial so the :initial bucket can admit the next
+  # validate-and-load wave while this request is still streaming the response body
+  # to the client.
   defp reclassify_admission_kind(%Conn{assigns: %{config: config}} = conn, _) do
     with {stack_id, :initial} <- Process.get(@admission_permit_key),
          max = Map.fetch!(config[:api].max_concurrent_requests, :existing),
