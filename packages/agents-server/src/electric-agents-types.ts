@@ -24,14 +24,17 @@ export type EntityStatus =
   | `stopped`
   | `killed`
 
-export type EntitySignal =
-  | `SIGINT`
-  | `SIGHUP`
-  | `SIGTERM`
-  | `SIGKILL`
-  | `SIGSTOP`
-  | `SIGCONT`
-  | `SIGUSR`
+export const ENTITY_SIGNALS = [
+  `SIGINT`,
+  `SIGHUP`,
+  `SIGTERM`,
+  `SIGKILL`,
+  `SIGSTOP`,
+  `SIGCONT`,
+  `SIGUSR`,
+] as const
+
+export type EntitySignal = (typeof ENTITY_SIGNALS)[number]
 
 const VALID_ENTITY_STATUSES = new Set<string>([
   `spawning`,
@@ -43,15 +46,7 @@ const VALID_ENTITY_STATUSES = new Set<string>([
   `killed`,
 ])
 
-const VALID_ENTITY_SIGNALS = new Set<string>([
-  `SIGINT`,
-  `SIGHUP`,
-  `SIGTERM`,
-  `SIGKILL`,
-  `SIGSTOP`,
-  `SIGCONT`,
-  `SIGUSR`,
-])
+const VALID_ENTITY_SIGNALS = new Set<string>(ENTITY_SIGNALS)
 
 export function assertEntityStatus(s: string): EntityStatus {
   if (!VALID_ENTITY_STATUSES.has(s)) {

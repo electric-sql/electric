@@ -773,11 +773,40 @@ describe(`ElectricAgentsRoutes signal endpoint`, () => {
 
     expect(manager.signal).not.toHaveBeenCalled()
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual({
-      error: {
-        code: `INVALID_SIGNAL`,
-        message: `Invalid signal: NOPE`,
+    const body = await response.json()
+    expect(body.error.code).toBe(`INVALID_REQUEST`)
+    expect(body.error.message).toBe(`Request body does not match API schema`)
+  })
+
+  it(`rejects principal entity signals before calling the manager`, async () => {
+    const manager = {
+      registry: {
+        getEntity: vi.fn().mockResolvedValue({
+          url: `/principal/user%3Aalice%40example.com`,
+          type: `principal`,
+          streams: {
+            main: `/principal/user%3Aalice%40example.com/main`,
+            error: `/principal/user%3Aalice%40example.com/error`,
+          },
+        }),
+        getEntityType: vi.fn(),
       },
+      signal: vi.fn(),
+    } as any
+
+    const response = await routeResponse(
+      manager,
+      `POST`,
+      `/_electric/entities/principal/user%3Aalice%40example.com/signal`,
+      { signal: `SIGKILL` }
+    )
+
+    expect(manager.signal).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body.error).toEqual({
+      code: `INVALID_REQUEST`,
+      message: `Principal entities are built in and cannot be signaled`,
     })
   })
 })

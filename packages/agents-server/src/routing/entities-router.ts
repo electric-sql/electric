@@ -8,8 +8,6 @@ import { apiError } from '../electric-agents-http.js'
 import { parsePrincipalKey, principalUrl } from '../principal.js'
 import { dispatchPolicySchema } from '../dispatch-policy-schema.js'
 import {
-  assertEntitySignal,
-  ErrCodeInvalidSignal,
   ErrCodeNotFound,
   ErrCodeUnknownEntityType,
   ErrCodeInvalidRequest,
@@ -136,8 +134,18 @@ const setTagBodySchema = Type.Object({
   value: Type.String(),
 })
 
+const entitySignalSchema = Type.Union([
+  Type.Literal(`SIGINT`),
+  Type.Literal(`SIGHUP`),
+  Type.Literal(`SIGTERM`),
+  Type.Literal(`SIGKILL`),
+  Type.Literal(`SIGSTOP`),
+  Type.Literal(`SIGCONT`),
+  Type.Literal(`SIGUSR`),
+])
+
 const signalBodySchema = Type.Object({
-  signal: Type.String(),
+  signal: entitySignalSchema,
   reason: Type.Optional(Type.String()),
   payload: Type.Optional(Type.Unknown()),
 })
@@ -684,20 +692,16 @@ async function signalEntity(
   request: AgentsRouteRequest,
   ctx: TenantContext
 ): Promise<Response> {
+  const principalMutationError = rejectPrincipalEntityMutation(
+    request,
+    `signaled`
+  )
+  if (principalMutationError) return principalMutationError
+
   const parsed = routeBody<SignalBody>(request)
   const { entityUrl, entity } = requireExistingEntityRoute(request)
-  let signal
-  try {
-    signal = assertEntitySignal(parsed.signal)
-  } catch {
-    return apiError(
-      400,
-      ErrCodeInvalidSignal,
-      `Invalid signal: ${parsed.signal}`
-    )
-  }
   const result = await ctx.entityManager.signal(entityUrl, {
-    signal,
+    signal: parsed.signal,
     reason: parsed.reason,
     payload: parsed.payload,
   })

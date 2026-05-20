@@ -731,30 +731,28 @@ export class PostgresRegistry {
   async updateStatusWithTxid(
     entityUrl: string,
     status: EntityStatus
-  ): Promise<number> {
+  ): Promise<number | null> {
     return await this.db.transaction(async (tx) => {
-      const whereClause = isTerminalEntityStatus(status)
-        ? this.entityWhere(entityUrl)
-        : and(
+      const rows = await tx
+        .update(entities)
+        .set({ status, updatedAt: Date.now() })
+        .where(
+          and(
             this.entityWhere(entityUrl),
             ne(entities.status, `stopped`),
             ne(entities.status, `killed`)
           )
-
-      await tx
-        .update(entities)
-        .set({ status, updatedAt: Date.now() })
-        .where(whereClause)
-      const result = await tx.execute(
-        sql`SELECT pg_current_xact_id()::xid::text AS txid`
-      )
-      return parseInt((result[0] as { txid: string }).txid)
+        )
+        .returning({
+          txid: sql<string>`pg_current_xact_id()::xid::text`,
+        })
+      return rows[0] ? parseInt(rows[0].txid) : null
     })
   }
 
-  async touchEntityWithTxid(entityUrl: string): Promise<number> {
+  async touchEntityWithTxid(entityUrl: string): Promise<number | null> {
     return await this.db.transaction(async (tx) => {
-      await tx
+      const rows = await tx
         .update(entities)
         .set({ updatedAt: Date.now() })
         .where(
@@ -764,10 +762,10 @@ export class PostgresRegistry {
             ne(entities.status, `killed`)
           )
         )
-      const result = await tx.execute(
-        sql`SELECT pg_current_xact_id()::xid::text AS txid`
-      )
-      return parseInt((result[0] as { txid: string }).txid)
+        .returning({
+          txid: sql<string>`pg_current_xact_id()::xid::text`,
+        })
+      return rows[0] ? parseInt(rows[0].txid) : null
     })
   }
 

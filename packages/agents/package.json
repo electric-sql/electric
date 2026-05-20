@@ -51,7 +51,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@350",
+    "@durable-streams/state": "https://pkg.pr.new/durable-streams/durable-streams/@durable-streams/state@5d5c217",
     "@electric-ax/agents-mcp": "workspace:*",
     "@electric-ax/agents-runtime": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",

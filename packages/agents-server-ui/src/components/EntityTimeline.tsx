@@ -7,8 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { inArray } from '@tanstack/db'
+import { inArray, useLiveQuery } from '@tanstack/react-db'
 import {
   measureElement as defaultMeasureElement,
   useVirtualizer,

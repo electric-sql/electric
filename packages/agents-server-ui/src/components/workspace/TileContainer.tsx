@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GripVertical, X } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq } from '@tanstack/db'
+import { eq, useLiveQuery } from '@tanstack/react-db'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useServerConnection } from '../../hooks/useServerConnection'
 import { listTiles, useWorkspace } from '../../hooks/useWorkspace'

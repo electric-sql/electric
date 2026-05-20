@@ -6,7 +6,7 @@ import {
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
 } from '@electric-ax/agents-runtime/client'
-import { eq } from '@tanstack/db'
+import { eq } from '@tanstack/react-db'
 import { connectEntityStream } from '../lib/entity-connection'
 import type { TimelineEntry } from '../lib/timelineEntries'
 import type {

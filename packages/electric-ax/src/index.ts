@@ -40,6 +40,30 @@ export interface SendCommandOptions {
   json?: boolean
 }
 
+export type EntitySignal =
+  | `SIGINT`
+  | `SIGHUP`
+  | `SIGTERM`
+  | `SIGKILL`
+  | `SIGSTOP`
+  | `SIGCONT`
+  | `SIGUSR`
+
+const ENTITY_SIGNALS: ReadonlyArray<EntitySignal> = [
+  `SIGINT`,
+  `SIGHUP`,
+  `SIGTERM`,
+  `SIGKILL`,
+  `SIGSTOP`,
+  `SIGCONT`,
+  `SIGUSR`,
+]
+
+export interface SignalCommandOptions {
+  reason?: string
+  payload?: string
+}
+
 export interface ObserveCommandOptions {
   from?: string
 }
@@ -73,6 +97,11 @@ export interface ElectricCliHandlers {
   observe: (url: string, options: ObserveCommandOptions) => Promise<void>
   inspect: (url: string) => Promise<void>
   ps: (options: PsCommandOptions) => Promise<void>
+  signal: (
+    url: string,
+    signal: string,
+    options: SignalCommandOptions
+  ) => Promise<void>
   kill: (url: string) => Promise<void>
   start: (options: StartCommandOptions) => Promise<StartedDevEnvironment>
   startBuiltin: (
@@ -179,6 +208,23 @@ function parsePayload(input: string, json: boolean): unknown {
     }
   }
   return { text: input }
+}
+
+function parseJsonOption(name: string, input: string): unknown {
+  try {
+    return JSON.parse(input)
+  } catch (error) {
+    fail(`${name} must be valid JSON: ${getErrorMessage(error)}`)
+  }
+}
+
+function assertEntitySignal(signal: string): EntitySignal {
+  if ((ENTITY_SIGNALS as ReadonlyArray<string>).includes(signal)) {
+    return signal as EntitySignal
+  }
+  fail(
+    `Invalid signal "${signal}". Expected one of: ${ENTITY_SIGNALS.join(`, `)}`
+  )
 }
 
 function normalizeVariadicArg(
@@ -625,6 +671,32 @@ async function killEntity(env: ElectricCliEnv, url: string): Promise<void> {
   console.log(`Killed ${url}`)
 }
 
+async function signalEntity(
+  env: ElectricCliEnv,
+  url: string,
+  rawSignal: string,
+  options: SignalCommandOptions
+): Promise<void> {
+  const signal = assertEntitySignal(rawSignal)
+  const body: Record<string, unknown> = { signal }
+  if (options.reason !== undefined) body.reason = options.reason
+  if (options.payload !== undefined) {
+    body.payload = parseJsonOption(`--payload`, options.payload)
+  }
+
+  const res = await electricAgentsFetch(env, entityApiPath(url, `/signal`), {
+    method: `POST`,
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const data = await parseJsonResponse(res)
+    failFromResponse(data, res)
+  }
+
+  console.log(`Sent ${signal} to ${url}`)
+}
+
 function printStartedEnvironment(env: StartedDevEnvironment): void {
   console.log(
     [
@@ -668,6 +740,7 @@ export function createElectricCliHandlers(
     observe: (url, options) => observeEntity(env, url, options),
     inspect: (url) => inspectEntity(env, url),
     ps: (options) => listEntities(env, options),
+    signal: (url, signal, options) => signalEntity(env, url, signal, options),
     kill: (url) => killEntity(env, url),
     start: async (options) => {
       const { startElectricAgentsDevEnvironment } = await loadStartModule()
@@ -737,6 +810,7 @@ Examples:
   $ ${agentsCommand} types
   $ ${agentsCommand} spawn /horton/onboarding
   $ ${agentsCommand} send /horton/onboarding "Help me onboard to Electric Agents"
+  $ ${agentsCommand} signal /horton/onboarding SIGINT --reason "stop current run"
   $ ${agentsCommand} observe /horton/onboarding
   $ ${agentsCommand} start
   $ ${agentsCommand} start-builtin --anthropic-api-key sk-ant-...
@@ -823,6 +897,18 @@ export function createElectricProgram({
     })
 
   agentsCommand
+    .command(`signal <url> <signal>`)
+    .description(`Send a lifecycle signal to an entity`)
+    .option(`--reason <text>`, `Human-readable signal reason`)
+    .option(`--payload <json>`, `JSON payload to attach to the signal`)
+    .action(async (...actionArgs: Array<unknown>) => {
+      const url = actionArgs[0] as string
+      const signal = actionArgs[1] as string
+      const command = getCommandActionArg(actionArgs)
+      await handlers.signal(url, signal, command.opts<SignalCommandOptions>())
+    })
+
+  agentsCommand
     .command(`inspect <url>`)
     .description(`Show entity details`)
     .action(async (url: string) => {
@@ -842,7 +928,7 @@ export function createElectricProgram({
 
   agentsCommand
     .command(`kill <url>`)
-    .description(`Delete an entity`)
+    .description(`Send SIGKILL to an entity`)
     .action(async (url: string) => {
       await handlers.kill(url)
     })

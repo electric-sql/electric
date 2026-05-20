@@ -250,7 +250,7 @@ describe(`dispatch policy routing`, () => {
       })
     )
     expect(ctx.entityManager.send).toHaveBeenCalledWith(`/chat/one`, {
-      from: `/principal/user:owner@example.com`,
+      from: `/principal/user%3Aowner%40example.com`,
       payload: `hello`,
     })
     expect(

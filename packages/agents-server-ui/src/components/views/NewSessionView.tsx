@@ -7,8 +7,7 @@ import {
   useState,
 } from 'react'
 import { ArrowUp } from 'lucide-react'
-import { useLiveQuery } from '@tanstack/react-db'
-import { eq, not } from '@tanstack/db'
+import { eq, not, useLiveQuery } from '@tanstack/react-db'
 import { nanoid } from 'nanoid'
 import { useElectricAgents } from '../../lib/ElectricAgentsProvider'
 import { useWorkspace } from '../../hooks/useWorkspace'

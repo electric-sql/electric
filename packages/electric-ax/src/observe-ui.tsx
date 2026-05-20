@@ -364,6 +364,19 @@ function WakeView({
 // Main observe component — reads from StreamDB collections
 // ============================================================================
 
+export function ObserveExitHotkey({
+  onExit,
+}: {
+  onExit: () => void
+}): React.ReactElement | null {
+  useInput((_input, key) => {
+    if (key.escape) {
+      onExit()
+    }
+  })
+  return null
+}
+
 function ObserveView({
   db,
   entityUrl,
@@ -490,12 +503,14 @@ function ObserveApp({
   identity,
   headers,
   initialOffset,
+  onExit,
 }: {
   entityUrl: string
   baseUrl: string
   identity: string
   headers?: Record<string, string>
   initialOffset?: string
+  onExit: () => void
 }): React.ReactElement {
   const [db, setDb] = useState<EntityStreamDB | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -533,6 +548,7 @@ function ObserveApp({
   if (error) {
     return (
       <Box flexDirection="column">
+        <ObserveExitHotkey onExit={onExit} />
         <Text color="red">{`Error: ${error}`}</Text>
       </Box>
     )
@@ -541,19 +557,23 @@ function ObserveApp({
   if (!db) {
     return (
       <Box>
+        <ObserveExitHotkey onExit={onExit} />
         <Text dimColor>{`Connecting to ${entityUrl}...`}</Text>
       </Box>
     )
   }
 
   return (
-    <ObserveView
-      db={db}
-      entityUrl={entityUrl}
-      baseUrl={baseUrl}
-      identity={identity}
-      headers={headers}
-    />
+    <>
+      <ObserveExitHotkey onExit={onExit} />
+      <ObserveView
+        db={db}
+        entityUrl={entityUrl}
+        baseUrl={baseUrl}
+        identity={identity}
+        headers={headers}
+      />
+    </>
   )
 }
 
@@ -570,18 +590,22 @@ export function renderObserve(opts: {
 }): void {
   const { entityUrl, baseUrl, identity, headers, initialOffset } = opts
 
-  const app = render(
+  let app: ReturnType<typeof render>
+  const exit = (): void => {
+    app.unmount()
+    process.exit(0)
+  }
+
+  app = render(
     <ObserveApp
       entityUrl={entityUrl}
       baseUrl={baseUrl}
       identity={identity}
       headers={headers}
       initialOffset={initialOffset}
+      onExit={exit}
     />
   )
 
-  process.on(`SIGINT`, () => {
-    app.unmount()
-    process.exit(0)
-  })
+  process.on(`SIGINT`, exit)
 }

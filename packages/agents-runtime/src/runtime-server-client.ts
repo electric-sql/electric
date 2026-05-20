@@ -1,6 +1,8 @@
 import type { EntityTags, TagOperation } from './tags'
 import { appendPathToUrl } from './url'
 import type { ClaimTokenHeader, HeadersProvider } from './types'
+import type { EntitySignal } from './entity-schema'
+export type { EntitySignal } from './entity-schema'
 
 const ELECTRIC_PRINCIPAL_HEADER = `electric-principal`
 
@@ -76,15 +78,6 @@ export interface RegisterWakeOptions {
   includeResponse?: boolean
   manifestKey?: string
 }
-
-export type EntitySignal =
-  | `SIGINT`
-  | `SIGHUP`
-  | `SIGTERM`
-  | `SIGKILL`
-  | `SIGSTOP`
-  | `SIGCONT`
-  | `SIGUSR`
 
 export interface SignalEntityOptions {
   entityUrl: string

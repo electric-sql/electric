@@ -258,6 +258,7 @@ export function MessageInput({
             placeholder={disabled ? `Entity stopped` : `Send a message...`}
             disabled={disabled}
             rows={1}
+            data-agent-chat-input=""
             className={styles.textarea}
           />
           <button
