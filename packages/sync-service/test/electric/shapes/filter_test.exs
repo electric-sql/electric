@@ -630,34 +630,6 @@ defmodule Electric.Shapes.FilterTest do
     end)
   end
 
-  @tag :uses_legacy_subquery_api
-  test "remove_shape/2 removes seeded subquery index state" do
-    filter = Filter.new()
-    state_before = snapshot_filter_ets(filter)
-    shape_id = "seeded-shape"
-
-    shape =
-      Shape.new!("table",
-        where: "id IN (SELECT id FROM another_table)",
-        inspector: @inspector,
-        feature_flags: ["allow_subqueries"]
-      )
-
-    Filter.add_shape(filter, shape_id, shape)
-
-    index = Filter.subquery_index(filter)
-    subquery_ref = ["$sublink", "0"]
-
-    SubqueryIndex.seed_membership(index, shape_id, subquery_ref, 0, MapSet.new([5]))
-    SubqueryIndex.mark_ready(index, shape_id)
-
-    assert snapshot_filter_ets(filter) != state_before
-
-    Filter.remove_shape(filter, shape_id)
-
-    assert snapshot_filter_ets(filter) == state_before
-  end
-
   # Captures the full state of all ETS tables in a filter for comparison
   defp snapshot_filter_ets(filter) do
     %{
@@ -933,7 +905,7 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   describe "subquery shapes routing in filter" do
-    @describetag :uses_legacy_subquery_api
+    alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
     import Support.DbSetup
     import Support.DbStructureSetup
@@ -946,6 +918,37 @@ defmodule Electric.Shapes.FilterTest do
       :with_inspector,
       :with_sql_execute
     ]
+
+    # Test helper: emulate the pre-RFC `SubqueryIndex.seed_membership/5`
+    # against the new shared-view API. Looks up the subquery_id that
+    # `Filter.add_shape` stored for the shape's dependency (handles either
+    # a real dep_handle or the `{shape_handle, dep_index}` fallback that
+    # `register_shape` falls back to when `shape_dependencies_handles`
+    # isn't populated), seeds `MultiTimeView` with the values, binds the
+    # shape's `subquery_ref` at logical time 0, and wires positive routing
+    # rows so `affected_shapes/2` can find each value.
+    defp seed_membership(filter, shape_id, _shape, subquery_ref, values) do
+      index = Filter.subquery_index(filter)
+      mtv = index.multi_time_view
+      dep_index = subquery_ref |> List.last() |> String.to_integer()
+      [{_, subquery_id}] = :ets.lookup(index.table, {:dep_handle, shape_id, dep_index})
+
+      MultiTimeView.init_subquery(mtv, subquery_id, values)
+      MultiTimeView.mark_ready(mtv, subquery_id)
+
+      :ok = SubqueryIndex.set_shape_subquery(index, shape_id, subquery_ref, subquery_id, 0)
+
+      for v <- values do
+        :ok = SubqueryIndex.add_positive_route(index, subquery_id, v)
+      end
+
+      :ok
+    end
+
+    # Test helper: emulate the pre-RFC per-value `SubqueryIndex.add_value/5`.
+    defp add_value(filter, shape_id, shape, subquery_ref, value) do
+      seed_membership(filter, shape_id, shape, subquery_ref, [value])
+    end
 
     @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS parent (id INT PRIMARY KEY)",
@@ -1131,7 +1134,7 @@ defmodule Electric.Shapes.FilterTest do
       subquery_ref = ["$sublink", "0"]
 
       for value <- [1, 2, 3] do
-        SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, value)
+        add_value(filter, "shape1", shape, subquery_ref, value)
       end
 
       SubqueryIndex.mark_ready(index, "shape1")
@@ -1190,7 +1193,7 @@ defmodule Electric.Shapes.FilterTest do
       subquery_ref = ["$sublink", "0"]
 
       for value <- [1, 2, 3] do
-        SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, value)
+        add_value(filter, "shape1", shape, subquery_ref, value)
       end
 
       SubqueryIndex.mark_ready(index, "shape1")
@@ -1268,7 +1271,7 @@ defmodule Electric.Shapes.FilterTest do
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, 1)
+      add_value(filter, "shape1", shape, subquery_ref, 1)
       SubqueryIndex.mark_ready(index, "shape1")
 
       wrong_subquery_value = %NewRecord{
@@ -1313,8 +1316,8 @@ defmodule Electric.Shapes.FilterTest do
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, 1)
-      SubqueryIndex.add_value(index, "shape2", subquery_ref, 0, 1)
+      add_value(filter, "shape1", shape1, subquery_ref, 1)
+      add_value(filter, "shape2", shape2, subquery_ref, 1)
       SubqueryIndex.mark_ready(index, "shape1")
       SubqueryIndex.mark_ready(index, "shape2")
 
@@ -1344,14 +1347,23 @@ defmodule Electric.Shapes.FilterTest do
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, 1)
+      add_value(filter, "shape1", shape, subquery_ref, 1)
       SubqueryIndex.mark_ready(index, "shape1")
 
-      assert :ets.tab2list(index) != []
+      # Before remove, the shape routes records whose value is in the
+      # subquery view, and the shape is bound to the dep's subquery_id.
+      hit = %NewRecord{relation: {"public", "child"}, record: %{"id" => "1", "par_id" => "9"}}
+      assert Filter.affected_shapes(filter, hit) == MapSet.new(["shape1"])
+      assert SubqueryIndex.has_positions?(index, "shape1")
+      assert SubqueryIndex.get_shape_subquery(index, "shape1", subquery_ref) != nil
 
       Filter.remove_shape(filter, "shape1")
 
-      assert :ets.tab2list(index) == []
+      # After remove, the shape no longer routes and its index entries
+      # are gone.
+      assert Filter.affected_shapes(filter, hit) == MapSet.new([])
+      refute SubqueryIndex.has_positions?(index, "shape1")
+      assert SubqueryIndex.get_shape_subquery(index, "shape1", subquery_ref) == nil
     end
 
     @tag with_sql: [
@@ -1373,13 +1385,7 @@ defmodule Electric.Shapes.FilterTest do
       subquery_ref = ["$sublink", "0"]
 
       # Seed membership with value 1 (parent id 1 matches the subquery "WHERE value = 'keep'")
-      SubqueryIndex.seed_membership(
-        index,
-        "shape1",
-        subquery_ref,
-        0,
-        MapSet.new([1])
-      )
+      seed_membership(filter, "shape1", shape, subquery_ref, MapSet.new([1]))
 
       SubqueryIndex.mark_ready(index, "shape1")
 
@@ -1430,13 +1436,7 @@ defmodule Electric.Shapes.FilterTest do
       subquery_ref = ["$sublink", "0"]
 
       # Seed the membership view with values {1, 2}
-      SubqueryIndex.seed_membership(
-        index,
-        "shape1",
-        subquery_ref,
-        0,
-        MapSet.new([1, 2])
-      )
+      seed_membership(filter, "shape1", shape, subquery_ref, MapSet.new([1, 2]))
 
       SubqueryIndex.mark_ready(index, "shape1")
 
@@ -1484,13 +1484,7 @@ defmodule Electric.Shapes.FilterTest do
       subquery_ref = ["$sublink", "0"]
 
       # Seed membership with a tuple value {10, 20}
-      SubqueryIndex.seed_membership(
-        index,
-        "shape1",
-        subquery_ref,
-        0,
-        MapSet.new([{10, 20}])
-      )
+      seed_membership(filter, "shape1", shape, subquery_ref, MapSet.new([{10, 20}]))
 
       SubqueryIndex.mark_ready(index, "shape1")
 
@@ -1533,13 +1527,7 @@ defmodule Electric.Shapes.FilterTest do
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.seed_membership(
-        index,
-        "shape1",
-        subquery_ref,
-        0,
-        MapSet.new([1, 2])
-      )
+      seed_membership(filter, "shape1", shape, subquery_ref, MapSet.new([1, 2]))
 
       SubqueryIndex.mark_ready(index, "shape1")
 
@@ -1600,13 +1588,7 @@ defmodule Electric.Shapes.FilterTest do
       # seeded and marked ready.
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.seed_membership(
-        index,
-        "indexed_s",
-        subquery_ref,
-        0,
-        MapSet.new([1])
-      )
+      seed_membership(filter, "indexed_s", indexed_shape, subquery_ref, MapSet.new([1]))
 
       SubqueryIndex.mark_ready(index, "indexed_s")
 

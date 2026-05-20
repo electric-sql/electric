@@ -8,7 +8,7 @@ ExUnit.configure(formatters: [JUnitFormatter, ExUnit.CLIFormatter])
 
 ExUnit.start(
   assert_receive_timeout: 400,
-  exclude: [:slow, :oracle, :performance, :uses_legacy_subquery_api],
+  exclude: [:slow, :oracle, :performance],
   capture_log: true
 )
 

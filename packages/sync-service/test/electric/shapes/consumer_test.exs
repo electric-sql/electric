@@ -2263,8 +2263,7 @@ defmodule Electric.Shapes.ConsumerTest do
              ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
     end
 
-    @tag :uses_legacy_subquery_api
-    test "consumer startup seeds the stack-scoped subquery index", ctx do
+    test "consumer startup registers with the stack-scoped subquery index", ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 
       {shape_handle, _} =
@@ -2272,31 +2271,25 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      # The consumer should have seeded the SubqueryIndex during initialization
       index = SubqueryIndex.for_stack(ctx.stack_id)
       assert index != nil
 
-      # The shape should be registered with positions (by Filter.add_shape)
+      # Filter.add_shape registers the outer shape with the index. After
+      # the consumer's initial materialisation lands, the shape is no
+      # longer in fallback (its subquery_ref is bound to the dep's
+      # subquery_id at the materializer's current logical time).
       assert SubqueryIndex.has_positions?(index, shape_handle)
+      refute SubqueryIndex.fallback?(index, shape_handle)
 
-      # The shape should be marked ready (no longer in fallback) once
-      # the consumer has seeded the index. After await_snapshot_start returns
-      # the consumer has completed initialization including subquery seeding.
-      {:ok, _shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      [dep_handle] = shape.shape_dependencies_handles
 
-      # The consumer seeds the index via SubqueryIndex.for_stack, but the
-      # index is also modified by the Filter (which runs in the
-      # ShapeLogCollector process). Check that the shape has positions
-      # and that membership entries are correct (empty views for a fresh shape).
-      positions = SubqueryIndex.positions_for_shape(index, shape_handle)
-      assert length(positions) > 0
-
-      # Verify the index is accessible and has retained node registrations.
-      assert positions == SubqueryIndex.positions_for_shape(index, shape_handle)
+      assert {^dep_handle, 0} =
+               SubqueryIndex.get_shape_subquery(index, shape_handle, ["$sublink", "0"])
     end
 
-    @tag :uses_legacy_subquery_api
-    test "consumer steady dependency move_in adds value to the subquery index", ctx do
+    test "consumer steady dependency move_in advances the shape's subquery index time",
+         ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 
       parent = self()
@@ -2321,7 +2314,8 @@ defmodule Electric.Shapes.ConsumerTest do
       index = SubqueryIndex.for_stack(ctx.stack_id)
       {:ok, _shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
 
-      # Before any dependency changes, the index has empty membership
+      # Before any dep moves: shape's subquery_ref is bound at logical
+      # time 0 and the dep view is empty, so no value is a member yet.
       refute SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
 
       # Send a new record for the dependency table to trigger a move_in
@@ -2336,14 +2330,13 @@ defmodule Electric.Shapes.ConsumerTest do
         ctx.stack_id
       )
 
-      # Wait for the consumer to process the event and request a move_in query
       assert_receive {:query_requested, consumer_pid}
 
-      # During buffering, the value should have been added to the index
-      # (union for positive dependency: before ∪ after)
-      assert SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+      # While the move-in query is buffering, the consumer's subquery
+      # time is still at 0, so the new value is not yet visible through
+      # `member?/4` (which reads at the shape's stored logical time).
+      refute SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
 
-      # Complete the move_in query to transition back to steady state
       send(consumer_pid, {:pg_snapshot_known, {100, 300, []}})
 
       shape_storage = Storage.for_shape(shape_handle, ctx.storage)
@@ -2368,12 +2361,12 @@ defmodule Electric.Shapes.ConsumerTest do
         Lsn.from_integer(100)
       )
 
-      # Allow the consumer to process the completion
       assert :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 100)
       ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
       assert_receive {^ref, :new_changes, _offset}, @receive_timeout
 
-      # After move_in completes, value should still be in the index (now steady state)
+      # After splice the shape's subquery time has advanced past the
+      # move-in, and value 1 is now visible at the shape's stored time.
       assert SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
     end
 
