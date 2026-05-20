@@ -218,6 +218,14 @@ export type {
 export { processWake } from './process-wake'
 export type { ProcessWakeConfig } from './types'
 
+// Skills loader + tools. Markdown skill packs with frontmatter for
+// triggers / when-to-use / keywords. createSkillTools mounts
+// use_skill / remove_skill on an entity so the agent loads a skill
+// body (and any sibling reference docs) on demand.
+export { createSkillsRegistry } from './skills/registry'
+export { createSkillTools } from './skills/tools'
+export type { SkillsRegistry, SkillMeta } from './skills/types'
+
 export { DEFAULT_OUTPUT_SCHEMAS } from './default-output-schemas'
 export { createContextEntriesApi } from './context-entries'
 export { assembleContext } from './context-assembly'

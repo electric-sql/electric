@@ -12,7 +12,7 @@
     "build": "pnpm --filter @electric-ax/agents build && pnpm --filter @electric-ax/agents-server-ui build:desktop && vite build",
     "dev": "pnpm run ensure:electron && concurrently -k -n ui,desktop -c cyan,green \"pnpm run dev:ui\" \"pnpm run dev:desktop\"",
     "dev:ui": "pnpm --filter @electric-ax/agents-server-ui dev:desktop",
-    "dev:desktop": "wait-on -d 200 http-get://localhost:5183 && vite",
+    "dev:desktop": "wait-on -d 200 http-get://localhost:${ELECTRIC_DESKTOP_UI_PORT:-5183} && vite",
     "build:icons": "node scripts/build-icons.mjs",
     "dist": "pnpm run build && pnpm run build:icons && pnpm run rebuild:native && electron-builder --publish never",
     "dist:linux": "pnpm run build && pnpm run build:icons && pnpm run rebuild:native && electron-builder --linux --publish never",

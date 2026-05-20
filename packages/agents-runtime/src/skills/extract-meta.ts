@@ -1,5 +1,5 @@
-import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
-import { serverLog } from '../log'
+import { completeWithLowCostModel } from '../model-runner'
+import { runtimeLog } from '../log'
 import { parsePreamble } from './preamble'
 
 interface ExtractedMeta {
@@ -35,8 +35,10 @@ export async function extractSkillMeta(
   try {
     return await llmExtract(name, content, preamble)
   } catch (err) {
-    serverLog.warn(
-      `[skills] LLM metadata extraction failed for "${name}": ${err instanceof Error ? err.message : String(err)}`
+    runtimeLog.warn(
+      `[skills]`,
+      `LLM metadata extraction failed for "${name}":`,
+      err instanceof Error ? err : new Error(String(err))
     )
   }
 
@@ -79,7 +81,7 @@ Return raw JSON, no markdown fences.`
     systemPrompt: `Extract metadata from skill documents. Return only valid JSON that matches the requested schema.`,
     prompt,
     maxTokens: 256,
-    log: (message) => serverLog.info(message),
+    log: (message) => runtimeLog.info(`[skills]`, message),
     logPrefix: `[skills]`,
   })
 

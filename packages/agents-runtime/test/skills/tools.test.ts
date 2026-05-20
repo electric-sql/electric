@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSkillTools } from '../src/skills/tools'
-import type { SkillMeta, SkillsRegistry } from '../src/skills/types'
+import { createSkillTools } from '../../src/skills/tools'
+import type { SkillMeta, SkillsRegistry } from '../../src/skills/types'
 
 function createMockRegistry(
   skills: Record<string, { meta: SkillMeta; content: string }>
