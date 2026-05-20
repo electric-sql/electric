@@ -915,31 +915,19 @@ export async function processWake(
     const entityArgs = Object.freeze(notification.entity?.spawnArgs ?? {})
 
     // ---- Send executor — ctx.send() calls this directly (no queue) ----
-    const executeSend = (send: {
+    const executeSend = async (send: {
       targetUrl: string
       payload: unknown
       type?: string
       afterMs?: number
     }): Promise<SendResult> => {
-      const promise = serverClient
-        .sendEntityMessage({
-          targetUrl: send.targetUrl,
-          payload: send.payload,
-          type: send.type,
-          afterMs: send.afterMs,
-        })
-        .then(() => ({ sent: true, targetUrl: send.targetUrl }))
-
-      // ctx.send() is intentionally fire-and-track friendly: handlers may choose
-      // not to await it, and the wake should still fail during io.drain() if the
-      // send fails. Attach a side-effect catch to mark the returned promise as
-      // handled so ignored sends don't surface as Vitest/process unhandled
-      // rejections before the wake cleanup observes the tracked failure.
-      promise.catch((err: unknown) => {
-        failBackgroundWake(err, `SEND_FAILED`)
+      await serverClient.sendEntityMessage({
+        targetUrl: send.targetUrl,
+        payload: send.payload,
+        type: send.type,
+        afterMs: send.afterMs,
       })
-
-      return promise
+      return { sent: true as const, targetUrl: send.targetUrl }
     }
 
     // ---- Wiring helpers for inline spawn/observe ----

@@ -77,7 +77,9 @@ describe(`send tool`, () => {
   })
 
   it(`rejects invalid delay values`, async () => {
-    const tool = createSendTool(vi.fn())
+    const tool = createSendTool(
+      vi.fn(async () => ({ sent: true, targetUrl: `target` }))
+    )
 
     await expect(
       tool.execute?.(`call-1`, {

@@ -257,7 +257,7 @@ export function createSetupContext(
       return executeSendFn(send)
     }
     wakeSession.enqueueSend(send)
-    return Promise.resolve({ queued: true, targetUrl: send.targetUrl })
+    return Promise.resolve({ queued: true as const, targetUrl: send.targetUrl })
   }
 
   const sendToEntity = (
