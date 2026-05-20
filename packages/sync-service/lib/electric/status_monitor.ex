@@ -65,8 +65,7 @@ defmodule Electric.StatusMonitor do
 
   Used by callers to decide between a `GenServer.call` wait (low latency
   when uncontended) and a `PollWait.until/3` wait (bounded mailbox growth
-  under burst). Cheap: one ETS read against a `read_concurrency: true`
-  table.
+  under burst). Cheap: one ETS read against the per-stack status table.
   """
   @spec congested?(String.t()) :: boolean()
   def congested?(stack_id) do

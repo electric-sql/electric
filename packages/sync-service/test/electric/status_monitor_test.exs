@@ -614,6 +614,29 @@ defmodule Electric.StatusMonitorTest do
       assert StatusMonitor.congested?(stack_id) == false
     end
 
+    test "flips back to false when waiters drain via :timeout_waiter rather than readiness",
+         %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      threshold = StatusMonitor.congested_threshold()
+      pid = GenServer.whereis(StatusMonitor.name(stack_id))
+
+      waiters =
+        for _ <- 1..threshold do
+          Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 50) end)
+        end
+
+      wait_until_waiters_count(pid, threshold)
+      assert StatusMonitor.congested?(stack_id) == true
+
+      # All waiters time out — :timeout_waiter is the drain path.
+      results = Enum.map(waiters, &Task.await(&1, 1_000))
+      assert Enum.all?(results, &match?({:error, _}, &1))
+
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+      assert StatusMonitor.congested?(stack_id) == false
+    end
+
     test "does not set the flag below the threshold", %{stack_id: stack_id} do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
 
