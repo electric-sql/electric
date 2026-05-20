@@ -1,6 +1,6 @@
 appId: com.electric-sql.agents
 productName: Electric Agents
-artifactName: Electric-Agents-${version}-${os}-${arch}.${ext}
+artifactName: Electric-Agents-${os}-${arch}.${ext}
 
 directories:
   buildResources: build
@@ -10,6 +10,7 @@ files:
   - dist/**/*
   - assets/**/*
   - package.json
+  - '!**/node_modules/@rollup/**'
 
 extraResources:
   - from: ../agents-server-ui/dist-desktop
