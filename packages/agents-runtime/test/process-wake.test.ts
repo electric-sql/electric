@@ -689,6 +689,27 @@ describe(`processWake`, () => {
     expect((body.payload as Record<string, unknown>).action).toBe(`ping`)
   })
 
+  it(`rejects invalid afterMs values before calling server send API`, async () => {
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        await ctx.send(
+          `target-entity-2`,
+          { action: `invalid` },
+          { afterMs: -1 }
+        )
+      },
+    })
+
+    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
+      `afterMs must be a non-negative finite number`
+    )
+
+    const sendCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/send`)
+    )
+    expect(sendCalls.length).toBe(0)
+  })
+
   it(`passes afterMs through to server send API`, async () => {
     defineEntity(`test-agent`, {
       handler: (ctx) => {

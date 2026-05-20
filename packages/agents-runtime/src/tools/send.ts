@@ -49,11 +49,14 @@ export function createSendTool(send: SendFn): AgentTool {
         afterMs?: number
       }
 
-      if (afterMs !== undefined && (!Number.isFinite(afterMs) || afterMs < 0)) {
-        throw new Error(`afterMs must be a non-negative finite number`)
-      }
-
       try {
+        if (
+          afterMs !== undefined &&
+          (!Number.isFinite(afterMs) || afterMs < 0)
+        ) {
+          throw new Error(`afterMs must be a non-negative finite number`)
+        }
+
         const result = await send(entityUrl, payload, { type, afterMs })
         return asToolResult({ sent: true, entityUrl, type, afterMs, result })
       } catch (err) {

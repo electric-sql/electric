@@ -76,17 +76,38 @@ describe(`send tool`, () => {
     })
   })
 
-  it(`rejects invalid delay values`, async () => {
-    const tool = createSendTool(
-      vi.fn(async () => ({ sent: true as const, targetUrl: `target` }))
-    )
+  it(`returns structured error results for invalid delay values`, async () => {
+    const send = vi.fn(async () => ({
+      sent: true as const,
+      targetUrl: `target`,
+    }))
+    const tool = createSendTool(send)
 
-    await expect(
-      tool.execute?.(`call-1`, {
-        entityUrl: `target`,
-        payload: `hello`,
-        afterMs: -1,
-      })
-    ).rejects.toThrow(`afterMs must be a non-negative finite number`)
+    const result = await tool.execute?.(`call-1`, {
+      entityUrl: `target`,
+      payload: `hello`,
+      afterMs: -1,
+    })
+
+    expect(send).not.toHaveBeenCalled()
+    expect(result).toMatchObject({
+      details: {},
+      content: [
+        {
+          type: `text`,
+          text: JSON.stringify(
+            {
+              sent: false,
+              error: true,
+              entityUrl: `target`,
+              afterMs: -1,
+              message: `Failed to send to target: afterMs must be a non-negative finite number`,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    })
   })
 })

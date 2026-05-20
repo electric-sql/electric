@@ -921,6 +921,17 @@ export async function processWake(
       type?: string
       afterMs?: number
     }): Promise<SendResult> => {
+      if (
+        send.afterMs !== undefined &&
+        (!Number.isFinite(send.afterMs) || send.afterMs < 0)
+      ) {
+        const promise = Promise.reject<SendResult>(
+          new Error(`afterMs must be a non-negative finite number`)
+        )
+        void promise.catch(() => undefined)
+        return promise
+      }
+
       const promise = serverClient
         .sendEntityMessage({
           targetUrl: send.targetUrl,
