@@ -4,7 +4,7 @@ import { eq, not, queryOnce } from '@durable-streams/state'
 import { z } from 'zod'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
-import { createSkillTools } from '../skills/tools'
+import { createSkillTools } from '@electric-ax/agents-runtime'
 import { createSpawnWorkerTool } from '../tools/spawn-worker'
 import {
   modelChoiceValues,
@@ -31,7 +31,7 @@ import {
 import { completeWithLowCostModel } from '@electric-ax/agents-runtime'
 import type { MessageReceived } from '@electric-ax/agents-runtime'
 import { mcp } from '@electric-ax/agents-mcp'
-import type { SkillsRegistry } from '../skills/types'
+import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
 export const HORTON_MODEL = `claude-sonnet-4-6`
 
