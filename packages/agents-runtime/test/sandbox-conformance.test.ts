@@ -422,10 +422,13 @@ describe(`sandbox conformance`, () => {
           if (provider.capabilities.supportsRealGetUrl) {
             const url = await sandbox.getUrl({ port: 9999 })
             expect(typeof url).toBe(`string`)
-            expect(url.length).toBeGreaterThan(0)
-            // Loopback-style providers return 127.0.0.1; tunnel providers
-            // return their own host. Either way it must include the port.
-            expect(url).toMatch(/:9999(\/|$)/)
+            expect(() => new URL(url)).not.toThrow()
+            const parsed = new URL(url)
+            // Loopback providers preserve the requested port; tunnel /
+            // Docker providers may remap to a host-side ephemeral port.
+            // The contract is "a URL that resolves to that container port",
+            // not "port equals the input".
+            expect(parsed.port.length).toBeGreaterThan(0)
           } else {
             await expect(sandbox.getUrl({ port: 9999 })).rejects.toBeInstanceOf(
               SandboxError
