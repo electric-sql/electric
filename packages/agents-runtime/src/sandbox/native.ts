@@ -55,7 +55,15 @@ export interface NativeSandboxOpts {
 function policyToAllowedDomains(policy: NetworkPolicy): Array<string> {
   switch (policy.mode) {
     case `allow-all`:
-      return [`*`]
+      // `@anthropic-ai/sandbox-runtime` validates each allowedDomains
+      // entry and rejects bare `*` as too broad (sandbox-config.js:34).
+      // So there is no library-level way to express "open the whole
+      // internet". Throw early so callers reach for unrestrictedSandbox
+      // instead of getting a confusing init failure later.
+      throw new SandboxError(
+        `unavailable`,
+        `nativeSandbox: NetworkPolicy.mode='allow-all' is not supported by the underlying library (no way to express an unconstrained allowlist). Use unrestrictedSandbox or an explicit allowlist of {mode:'allowlist', allow:[...]}.`
+      )
     case `deny-all`:
       return []
     case `allowlist`:

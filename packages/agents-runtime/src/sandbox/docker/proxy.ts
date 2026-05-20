@@ -63,13 +63,33 @@ export async function startAllowlistProxy(
           )
           return
         }
+        if (isPrivateOrLinkLocal(target.hostname)) {
+          // Block RFC1918, link-local, and cloud-metadata addresses
+          // independent of the allowlist. Allowing literal IPs would
+          // sidestep DNS-based egress controls.
+          res.writeHead(403, { 'x-sandbox-denied': `private-net` })
+          res.end(
+            `forbidden: literal private / link-local addresses are not routable through the sandbox proxy`
+          )
+          return
+        }
+        // Strip the caller-supplied Host header so the agent cannot use
+        // an allowlisted absolute URL while routing the request to a
+        // different vhost via the Host header. Reconstruct it from the
+        // target authority.
+        const headers: Record<string, string | string[] | undefined> = {
+          ...req.headers,
+          host: target.host,
+        }
+        delete headers[`proxy-authorization`]
+        delete headers[`proxy-connection`]
         const proxied = httpRequest(
           {
             host: target.hostname,
             port: target.port || 80,
             method: req.method,
             path: target.pathname + target.search,
-            headers: req.headers,
+            headers,
           },
           (origRes) => {
             res.writeHead(origRes.statusCode ?? 502, origRes.headers)
@@ -109,6 +129,12 @@ export async function startAllowlistProxy(
       if (!isAllowed(host)) {
         clientSocket.end(
           `HTTP/1.1 403 Forbidden\r\nx-sandbox-denied: policy\r\n\r\n`
+        )
+        return
+      }
+      if (isPrivateOrLinkLocal(host)) {
+        clientSocket.end(
+          `HTTP/1.1 403 Forbidden\r\nx-sandbox-denied: private-net\r\n\r\n`
         )
         return
       }
@@ -165,5 +191,39 @@ function matchesHost(host: string, pattern: string): boolean {
     const suffix = pattern.slice(2)
     return host === suffix || host.endsWith(`.` + suffix)
   }
+  return false
+}
+
+/**
+ * Block requests to RFC1918 / link-local / loopback IP literals routed
+ * through the proxy. DNS names that resolve to private space are NOT
+ * blocked here — proper egress filtering would require resolving at the
+ * proxy and rejecting based on result, which we accept as a known gap
+ * (a "rebinding"-style attack via DNS could still hit internal hosts if
+ * the allowlist is too permissive). This guard at least denies direct
+ * literal-IP egress, which is the most common LLM-attempted exfil
+ * pattern.
+ */
+function isPrivateOrLinkLocal(host: string): boolean {
+  // IPv4
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host)
+  if (v4) {
+    const [, a, b] = v4.map(Number) as unknown as [unknown, number, number]
+    if (a === 10) return true
+    if (a === 127) return true // loopback
+    if (a === 169 && b === 254) return true // link-local + AWS/GCP metadata
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    if (a === 0) return true // unspecified
+    if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
+    return false
+  }
+  // IPv6 literal (very small allowlist of dangerous ranges)
+  if (host === `::1` || host.toLowerCase().startsWith(`fe80:`)) return true
+  if (
+    host.toLowerCase().startsWith(`fc`) ||
+    host.toLowerCase().startsWith(`fd`)
+  )
+    return true
   return false
 }

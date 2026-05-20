@@ -64,6 +64,23 @@ d(`ad-hoc docker sandbox smoke — network proxy`, () => {
       console.log(`  [CONNECT anthropic.com] HTTP ${denied}`)
       // Denied: proxy rejects with 403 Forbidden.
       expect(denied).toBe(403)
+
+      // SSRF guards — literal RFC1918 + cloud metadata + loopback are
+      // refused even if (somehow) in the allowlist. We swap the policy
+      // to include the literals to prove the guard runs unconditionally.
+      await sandbox.updateNetworkPolicy({
+        mode: `allowlist`,
+        allow: [`example.com`, `169.254.169.254`, `127.0.0.1`, `10.0.0.1`],
+      })
+      const metadata = await probeConnect(`169.254.169.254`)
+      console.log(`  [CONNECT 169.254.169.254] HTTP ${metadata}`)
+      expect(metadata).toBe(403)
+      const loopback = await probeConnect(`127.0.0.1`)
+      console.log(`  [CONNECT 127.0.0.1] HTTP ${loopback}`)
+      expect(loopback).toBe(403)
+      const rfc1918 = await probeConnect(`10.0.0.1`)
+      console.log(`  [CONNECT 10.0.0.1] HTTP ${rfc1918}`)
+      expect(rfc1918).toBe(403)
     } finally {
       await sandbox.dispose()
     }

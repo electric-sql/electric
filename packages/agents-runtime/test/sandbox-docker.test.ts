@@ -135,6 +135,29 @@ d(`dockerSandbox`, () => {
     }
   }, 60_000)
 
+  it(`read-side methods enforce the working directory boundary`, async () => {
+    const sandbox = await dockerSandbox({
+      image: TEST_IMAGE,
+      labels: { [TEST_LABEL]: `1` },
+    })
+    try {
+      // readFile, readdir, stat all throw for paths outside /work; exists
+      // returns false (safe-probe semantics, matching native + unrestricted).
+      await expect(sandbox.readFile(`/etc/passwd`)).rejects.toMatchObject({
+        kind: `policy`,
+      })
+      await expect(sandbox.readdir(`/etc`)).rejects.toMatchObject({
+        kind: `policy`,
+      })
+      await expect(sandbox.stat(`/etc/passwd`)).rejects.toMatchObject({
+        kind: `policy`,
+      })
+      expect(await sandbox.exists(`/etc/passwd`)).toBe(false)
+    } finally {
+      await sandbox.dispose()
+    }
+  }, 60_000)
+
   it(`hardened defaults: cap-drop, no-new-privileges, no docker socket access`, async () => {
     const sandbox = await dockerSandbox({
       image: TEST_IMAGE,

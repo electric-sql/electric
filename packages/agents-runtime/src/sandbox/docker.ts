@@ -264,10 +264,16 @@ async function ensureImage(
 
 function makePortBindings(
   ports: ReadonlyArray<number>
-): Record<string, ReadonlyArray<{ HostPort?: string }>> {
-  const out: Record<string, ReadonlyArray<{ HostPort?: string }>> = {}
+): Record<string, ReadonlyArray<{ HostIp?: string; HostPort?: string }>> {
+  const out: Record<
+    string,
+    ReadonlyArray<{ HostIp?: string; HostPort?: string }>
+  > = {}
   for (const p of ports) {
-    out[`${p}/tcp`] = [{ HostPort: `` }]
+    // Bind to loopback only — on a dev laptop `0.0.0.0` would expose the
+    // sandboxed service across the LAN, which is unexpected for an
+    // isolation primitive.
+    out[`${p}/tcp`] = [{ HostIp: `127.0.0.1`, HostPort: `` }]
   }
   return out
 }
@@ -548,6 +554,7 @@ class DockerSandbox implements Sandbox {
 
   async readFile(path: string): Promise<Buffer> {
     this.assertLive()
+    this.assertReadable(path)
     try {
       return await getFile(this.container, this.absolute(path))
     } catch (err) {
@@ -577,6 +584,7 @@ class DockerSandbox implements Sandbox {
 
   async readdir(path: string): Promise<ReadonlyArray<DirEntry>> {
     this.assertLive()
+    this.assertReadable(path)
     try {
       return await readDir(
         (cmd) => runOneOff(this.container, cmd),
@@ -589,6 +597,10 @@ class DockerSandbox implements Sandbox {
 
   async exists(path: string): Promise<boolean> {
     this.assertLive()
+    // Safe-probe semantics: false for missing AND policy-denied paths,
+    // matching native/unrestricted. We don't expose the policy boundary
+    // through this primitive.
+    if (!this.isReadable(path)) return false
     try {
       return await pathExists(
         (cmd) => runOneOff(this.container, cmd),
@@ -615,6 +627,7 @@ class DockerSandbox implements Sandbox {
 
   async stat(path: string): Promise<FileStat> {
     this.assertLive()
+    this.assertReadable(path)
     try {
       return await statPath(
         (cmd) => runOneOff(this.container, cmd),
@@ -736,6 +749,21 @@ class DockerSandbox implements Sandbox {
     return path.startsWith(`/`)
       ? path
       : posix.resolve(this.workingDirectory, path)
+  }
+
+  private isReadable(path: string): boolean {
+    const abs = this.absolute(path)
+    const rel = posix.relative(this.workingDirectory, abs)
+    return !rel.startsWith(`..`) && rel !== `..`
+  }
+
+  private assertReadable(path: string): void {
+    if (!this.isReadable(path)) {
+      throw new SandboxError(
+        `policy`,
+        `dockerSandbox: read access to "${path}" is denied (outside working directory ${this.workingDirectory}).`
+      )
+    }
   }
 
   private assertWritable(path: string): void {
