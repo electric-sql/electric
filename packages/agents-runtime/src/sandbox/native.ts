@@ -83,6 +83,17 @@ export async function nativeSandbox(opts: NativeSandboxOpts): Promise<Sandbox> {
       `nativeSandbox is not supported on this platform (process.platform=${process.platform}). Use unrestrictedSandbox or remoteSandbox.`
     )
   }
+  // isSupportedPlatform() only checks the OS family. Runtime tools
+  // (bubblewrap on Linux, sandbox-exec on macOS) may still be missing
+  // from PATH. Surface that as `unavailable` so callers can skip
+  // cleanly instead of crashing inside SandboxManager.initialize().
+  const deps = SandboxManager.checkDependencies()
+  if (deps.errors.length > 0) {
+    throw new SandboxError(
+      `unavailable`,
+      `nativeSandbox dependency check failed: ${deps.errors.join(`; `)}`
+    )
+  }
 
   const workingDirectoryReal = await realpath(opts.workingDirectory)
 
@@ -133,6 +144,10 @@ class NativeSandbox implements Sandbox {
         env,
         shell: true,
         stdio: [opts.stdin === undefined ? `ignore` : `pipe`, `pipe`, `pipe`],
+        // Process group so we can kill the whole tree on timeout
+        // (see comment in unrestricted.ts for the Linux pipe-orphan
+        // rationale).
+        detached: true,
       })
 
       const stdoutChunks: Array<Buffer> = []
@@ -189,10 +204,18 @@ class NativeSandbox implements Sandbox {
 
       let timer: NodeJS.Timeout | undefined
       let timedOut = false
+      const killTree = (signal: NodeJS.Signals) => {
+        try {
+          if (child.pid !== undefined) process.kill(-child.pid, signal)
+        } catch {
+          /* already gone */
+        }
+      }
       if (opts.timeoutMs !== undefined) {
         timer = setTimeout(() => {
           timedOut = true
-          child.kill(`SIGTERM`)
+          killTree(`SIGTERM`)
+          setTimeout(() => killTree(`SIGKILL`), 500).unref()
         }, opts.timeoutMs)
       }
 

@@ -15,7 +15,9 @@ import { nativeSandbox } from '../src/sandbox/native'
  *
  * Skips entirely on platforms without OS sandbox support.
  */
-const supported = SandboxManager.isSupportedPlatform()
+const supported =
+  SandboxManager.isSupportedPlatform() &&
+  SandboxManager.checkDependencies().errors.length === 0
 const d = supported ? describe : describe.skip
 
 d(`nativeSandbox OS-level negative cases`, () => {

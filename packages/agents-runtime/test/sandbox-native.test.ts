@@ -6,7 +6,9 @@ import { SandboxManager } from '@anthropic-ai/sandbox-runtime'
 import { nativeSandbox } from '../src/sandbox/native'
 import { SandboxError } from '../src/sandbox/types'
 
-const supported = SandboxManager.isSupportedPlatform()
+const supported =
+  SandboxManager.isSupportedPlatform() &&
+  SandboxManager.checkDependencies().errors.length === 0
 const platformDescribe = supported ? describe : describe.skip
 
 describe(`nativeSandbox`, () => {

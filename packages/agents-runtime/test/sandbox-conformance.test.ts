@@ -33,7 +33,9 @@ interface ProviderFactory {
   create(workingDirectory: string): Promise<Sandbox>
 }
 
-const nativeSupported = SandboxManager.isSupportedPlatform()
+const nativeSupported =
+  SandboxManager.isSupportedPlatform() &&
+  SandboxManager.checkDependencies().errors.length === 0
 
 function makeFakeRemoteClient(): RemoteSandboxClient {
   const files = new Map<string, Buffer>()

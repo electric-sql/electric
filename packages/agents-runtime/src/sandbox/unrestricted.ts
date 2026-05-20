@@ -34,6 +34,12 @@ class UnrestrictedSandbox implements Sandbox {
         cwd,
         env,
         stdio: [opts.stdin === undefined ? `ignore` : `pipe`, `pipe`, `pipe`],
+        // Run in a new process group so we can signal the whole tree on
+        // timeout. Linux's default `child.kill('SIGTERM')` signals only
+        // the immediate child (sh), leaving grandchildren (like `sleep`)
+        // orphaned with the stdio pipes still held — the `close` event
+        // then doesn't fire until the grandchild exits naturally.
+        detached: true,
       })
 
       const stdoutChunks: Array<Buffer> = []
@@ -79,10 +85,21 @@ class UnrestrictedSandbox implements Sandbox {
 
       let timer: NodeJS.Timeout | undefined
       let timedOut = false
+      const killTree = (signal: NodeJS.Signals) => {
+        // Negative PID signals the entire process group. We created the
+        // group via `detached: true` above.
+        try {
+          if (child.pid !== undefined) process.kill(-child.pid, signal)
+        } catch {
+          // Process group may already be gone; ignore.
+        }
+      }
       if (opts.timeoutMs !== undefined) {
         timer = setTimeout(() => {
           timedOut = true
-          child.kill(`SIGTERM`)
+          killTree(`SIGTERM`)
+          // Escalate to SIGKILL if the tree doesn't die in 500ms.
+          setTimeout(() => killTree(`SIGKILL`), 500).unref()
         }, opts.timeoutMs)
       }
 

@@ -6,7 +6,13 @@ import type { Sandbox } from './types'
 const PANIC_TRUTHY = new Set([`1`, `true`, `yes`, `on`])
 
 export interface ChooseDefaultSandboxOpts {
-  /** Override for testing — defaults to `SandboxManager.isSupportedPlatform()`. */
+  /**
+   * Override for testing — defaults to checking both
+   * `SandboxManager.isSupportedPlatform()` AND that
+   * `checkDependencies()` reports no errors. A Linux host without
+   * `bubblewrap` installed will thus fall back to unrestricted rather
+   * than crash on first exec.
+   */
   isNativeSupported?: () => boolean
 }
 
@@ -35,7 +41,10 @@ export async function chooseDefaultSandbox(
     return unrestrictedSandbox({ workingDirectory })
   }
   const isSupported =
-    opts.isNativeSupported ?? (() => SandboxManager.isSupportedPlatform())
+    opts.isNativeSupported ??
+    (() =>
+      SandboxManager.isSupportedPlatform() &&
+      SandboxManager.checkDependencies().errors.length === 0)
   if (isSupported()) {
     return nativeSandbox({ workingDirectory })
   }

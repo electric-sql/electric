@@ -21,7 +21,9 @@ import { SandboxError } from '../src/sandbox/types'
  *
  * Skips entirely on platforms without OS sandbox support.
  */
-const supported = SandboxManager.isSupportedPlatform()
+const supported =
+  SandboxManager.isSupportedPlatform() &&
+  SandboxManager.checkDependencies().errors.length === 0
 const d = supported ? describe : describe.skip
 
 d(`nativeSandbox.fetch routes through the library proxy`, () => {

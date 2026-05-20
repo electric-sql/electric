@@ -25,7 +25,11 @@ describe(`chooseDefaultSandbox`, () => {
   })
 
   it(`returns nativeSandbox on supported platforms`, async () => {
-    if (!SandboxManager.isSupportedPlatform()) return
+    if (
+      !SandboxManager.isSupportedPlatform() ||
+      SandboxManager.checkDependencies().errors.length > 0
+    )
+      return
     const sandbox = await chooseDefaultSandbox(cwd, {})
     try {
       expect(sandbox.name).toMatch(/^native:(macos-seatbelt|linux-bwrap-only)$/)
@@ -74,7 +78,11 @@ describe(`chooseDefaultSandbox`, () => {
   })
 
   it(`ELECTRIC_AGENTS_UNRESTRICTED=0 does not trigger the panic switch`, async () => {
-    if (!SandboxManager.isSupportedPlatform()) return
+    if (
+      !SandboxManager.isSupportedPlatform() ||
+      SandboxManager.checkDependencies().errors.length > 0
+    )
+      return
     const sandbox = await chooseDefaultSandbox(cwd, {
       ELECTRIC_AGENTS_UNRESTRICTED: `0`,
     })
