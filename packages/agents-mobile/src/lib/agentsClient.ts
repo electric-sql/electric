@@ -126,31 +126,28 @@ export async function spawnEntity({
 }): Promise<string> {
   const name = makeEntityName()
   const entityUrl = `/${type}/${name}`
-  const spawnRes = await serverFetch(appendPathToUrl(baseUrl, entityUrl), {
-    method: `PUT`,
-    headers: { 'content-type': `application/json` },
-    body: JSON.stringify({}),
-  })
+  // Spawn endpoint lives under `/_electric/entities/<type>/<name>` and
+  // takes `initialMessage` in the request body — the server creates
+  // the entity, provisions its streams, and writes the first inbox
+  // row atomically. Doing this as PUT-then-POST(/send) used to race:
+  // the spawn ack could return before the streams were ready, and the
+  // immediate /send would 404 with STREAM_NOT_FOUND.
+  const body: Record<string, unknown> = {}
+  const text = initialMessage?.trim()
+  if (text) body.initialMessage = text
+  const spawnRes = await serverFetch(
+    appendPathToUrl(
+      baseUrl,
+      `/_electric/entities/${encodeURIComponent(type)}/${encodeURIComponent(name)}`
+    ),
+    {
+      method: `PUT`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify(body),
+    }
+  )
   if (!spawnRes.ok) {
     throw new Error(await responseMessage(spawnRes, `Spawn failed`))
-  }
-
-  const text = initialMessage?.trim()
-  if (text) {
-    const sendRes = await serverFetch(
-      appendPathToUrl(baseUrl, `${entityUrl}/send`),
-      {
-        method: `POST`,
-        headers: { 'content-type': `application/json` },
-        body: JSON.stringify({
-          from: `user`,
-          payload: { text },
-        }),
-      }
-    )
-    if (!sendRes.ok) {
-      throw new Error(await responseMessage(sendRes, `Send failed`))
-    }
   }
 
   return entityUrl
