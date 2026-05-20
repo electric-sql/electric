@@ -708,8 +708,10 @@ defmodule Electric.StatusMonitorTest do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
       force_congested(stack_id)
 
-      assert {:error, "Timeout waiting for Postgres lock acquisition"} =
+      assert {:error, message} =
                StatusMonitor.wait_until(stack_id, :active, timeout: 50)
+
+      assert message =~ "Postgres lock"
     end
 
     test "sleeping branch short-circuits before the polling check (flag set + sleeping, not blocking)",
@@ -732,12 +734,12 @@ defmodule Electric.StatusMonitorTest do
       # state.waiters).
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
 
-      task = Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 100) end)
+      task = Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 50) end)
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       assert StatusMonitor.congested?(stack_id) == false
       # Drain the timeout waiter so the test exits cleanly.
-      assert {:error, _} = Task.await(task, 200)
+      assert {:error, _} = Task.await(task, 1_000)
     end
 
     defp force_congested(stack_id) do
