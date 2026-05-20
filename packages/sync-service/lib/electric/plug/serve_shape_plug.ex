@@ -20,11 +20,7 @@ defmodule Electric.Plug.ServeShapePlug do
   Admission classification uses only `conn.query_params["handle"]` and a
   single ETS membership check: requests with no handle or an unknown handle
   are classified as `:initial`; requests with a known handle are `:existing`.
-  This avoids any SQLite access on the admission-control hot path. After
-  `:load_shape` completes, `:reclassify_admission_kind` atomically swaps the
-  `:initial` permit for an `:existing` permit so the `:initial` slot is freed
-  for the next request without waiting for the whole initial snapshot to finish
-  streaming to the client.
+  This avoids any SQLite access on the admission-control hot path.
 
   Using `after` (rather than `register_before_send`) is also what makes the
   streaming path correct: `before_send` fires when `send_chunked` starts
@@ -50,13 +46,9 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with
   # query params and an OTEL span.
-  #
+
   # put_resp_content_type runs first so admission rejections (503) still
   # carry `Content-Type: application/json`.
-  #
-  # check_admission then runs ahead of all per-request work. Classification
-  # depends only on the request URL and a cheap ETS lookup — never on shape
-  # ETS state or SQLite.
   plug :put_resp_content_type, "application/json"
   plug :check_admission
   plug :parse_body
