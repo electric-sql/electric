@@ -2346,6 +2346,8 @@ defmodule Electric.Plug.RouterTest do
 
         assert_receive {:admission_swap, %{stack_id: ^stack_id, from: :initial, to: :existing}},
                        1000
+
+        assert %{initial: 0, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
       after
         :telemetry.detach(handler_id)
       end
