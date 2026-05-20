@@ -27,9 +27,19 @@ import type { RemoteSandboxClient } from '../src/sandbox/remote/types'
  *   - dispose is safe to call.
  */
 
+interface ProviderCapabilities {
+  /** AbortSignal on exec terminates the subprocess; false ⇒ best-effort/no-op. */
+  supportsAbort: boolean
+  /** getUrl returns a real network URL the host can hit. */
+  supportsRealGetUrl: boolean
+  /** updateNetworkPolicy enforces denials at the sandbox boundary. */
+  enforcesNetworkPolicy: boolean
+}
+
 interface ProviderFactory {
   name: string
   enabled: boolean
+  capabilities: ProviderCapabilities
   create(workingDirectory: string): Promise<Sandbox>
 }
 
@@ -135,21 +145,40 @@ const providers: Array<ProviderFactory> = [
   {
     name: `unrestricted`,
     enabled: true,
+    capabilities: {
+      supportsAbort: true,
+      supportsRealGetUrl: true, // loopback URL, host process is the server
+      enforcesNetworkPolicy: false,
+    },
     create: (cwd) => unrestrictedSandbox({ workingDirectory: cwd }),
   },
   {
     name: `native`,
     enabled: nativeSupported,
+    capabilities: {
+      supportsAbort: true,
+      supportsRealGetUrl: true,
+      enforcesNetworkPolicy: true,
+    },
     create: (cwd) => nativeSandbox({ workingDirectory: cwd }),
   },
   {
     name: `remote (fake)`,
     enabled: true,
+    capabilities: {
+      // The in-memory fake doesn't forward signals or expose port URLs;
+      // mid-session policy updates are TS-side only and *do* enforce
+      // because the host-process fetch goes through the policy check.
+      supportsAbort: false,
+      supportsRealGetUrl: false,
+      enforcesNetworkPolicy: true,
+    },
     create: (cwd) =>
       remoteSandbox({
         provider: `e2b`,
         workingDirectory: cwd,
         client: makeFakeRemoteClient(),
+        initialNetworkPolicy: { mode: `allowlist`, allow: [`example.com`] },
       }),
   },
 ]
@@ -345,7 +374,7 @@ describe(`sandbox conformance`, () => {
         }
       })
 
-      it.skipIf(provider.name === `remote (fake)`)(
+      it.skipIf(!provider.capabilities.supportsAbort)(
         `exec honors AbortSignal mid-flight`,
         async () => {
           const sandbox = await provider.create(cwd)
@@ -367,7 +396,7 @@ describe(`sandbox conformance`, () => {
         }
       )
 
-      it.skipIf(provider.name === `remote (fake)`)(
+      it.skipIf(!provider.capabilities.supportsAbort)(
         `exec returns immediately when signal is already aborted`,
         async () => {
           const sandbox = await provider.create(cwd)
@@ -386,6 +415,50 @@ describe(`sandbox conformance`, () => {
           }
         }
       )
+
+      it(`getUrl returns a URL string for a forwarded port`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          if (provider.capabilities.supportsRealGetUrl) {
+            const url = await sandbox.getUrl({ port: 9999 })
+            expect(typeof url).toBe(`string`)
+            expect(url.length).toBeGreaterThan(0)
+            // Loopback-style providers return 127.0.0.1; tunnel providers
+            // return their own host. Either way it must include the port.
+            expect(url).toMatch(/:9999(\/|$)/)
+          } else {
+            await expect(sandbox.getUrl({ port: 9999 })).rejects.toBeInstanceOf(
+              SandboxError
+            )
+          }
+        } finally {
+          await sandbox.dispose()
+        }
+      })
+
+      it(`updateNetworkPolicy(deny-all) blocks subsequent fetches`, async () => {
+        const sandbox = await provider.create(cwd)
+        try {
+          if (!provider.capabilities.enforcesNetworkPolicy) {
+            // unrestricted: documented no-op. Verify it doesn't throw.
+            await sandbox.updateNetworkPolicy({ mode: `deny-all` })
+            return
+          }
+          await sandbox.updateNetworkPolicy({ mode: `deny-all` })
+          await expect(
+            sandbox.fetch(`https://blocked.example.invalid/`)
+          ).rejects.toMatchObject({ kind: `policy` })
+          // Loosen — verify the call itself succeeds; we don't probe the
+          // network because hosts like `.invalid` would race DNS failure
+          // against the policy gate in unpredictable ways.
+          await sandbox.updateNetworkPolicy({
+            mode: `allowlist`,
+            allow: [`allowed.example.invalid`],
+          })
+        } finally {
+          await sandbox.dispose()
+        }
+      })
     })
   }
 

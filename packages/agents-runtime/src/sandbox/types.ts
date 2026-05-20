@@ -44,9 +44,33 @@ export interface Sandbox {
 
   fetch(input: string | URL, init?: RequestInit): Promise<Response>
 
+  /**
+   * URL the caller can hit (from the host process) to reach a server the
+   * sandboxed code has bound to `port`. For host-process providers
+   * (unrestricted/native) this is just a loopback URL; for remote / Docker
+   * providers it's the externally-reachable mapping. Providers that cannot
+   * publish ports reject with `SandboxError('unavailable')`.
+   */
+  getUrl(opts: { port: number; protocol?: `http` | `https` }): Promise<string>
+
+  /**
+   * Replace the outbound network policy mid-session. Providers that cannot
+   * reconfigure egress without recreating the sandbox reject with
+   * `SandboxError('unavailable')`; providers with TS-side enforcement only
+   * (e.g. remote with no VM-side egress controls) may update their local
+   * allowlist while logging a one-time warning that egress *from inside*
+   * the workspace is not affected.
+   */
+  updateNetworkPolicy(policy: NetworkPolicy): Promise<void>
+
   /** Call once at end of lifetime. Not idempotent. */
   dispose(): Promise<void>
 }
+
+export type NetworkPolicy =
+  | { mode: `allow-all` }
+  | { mode: `deny-all` }
+  | { mode: `allowlist`; allow: ReadonlyArray<string> }
 
 export interface SandboxExecOpts {
   /** Shell command line. Sandbox decides how to run it (typically `sh -c`). */

@@ -4,6 +4,7 @@ import {
   SandboxError,
   type DirEntry,
   type FileStat,
+  type NetworkPolicy,
   type Sandbox,
   type SandboxExecOpts,
   type SandboxExecResult,
@@ -21,6 +22,12 @@ export function unrestrictedSandbox(
 
 class UnrestrictedSandbox implements Sandbox {
   readonly name = `unrestricted`
+  /**
+   * Held purely so callers that introspect the configured policy get
+   * consistent reads; `unrestricted` has no policy boundary so neither
+   * `fetch` nor `exec` consult it.
+   */
+  private currentPolicy: NetworkPolicy = { mode: `allow-all` }
 
   constructor(readonly workingDirectory: string) {}
 
@@ -216,6 +223,20 @@ class UnrestrictedSandbox implements Sandbox {
 
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     return globalThis.fetch(input as RequestInfo, init)
+  }
+
+  async getUrl(opts: {
+    port: number
+    protocol?: `http` | `https`
+  }): Promise<string> {
+    return `${opts.protocol ?? `http`}://127.0.0.1:${opts.port}`
+  }
+
+  async updateNetworkPolicy(policy: NetworkPolicy): Promise<void> {
+    // Recorded for callers that introspect; not enforced. Unrestricted is
+    // documented as "no policy boundary" — security lives in upstream
+    // tooling (e.g. resolveSafePath in src/tools).
+    this.currentPolicy = policy
   }
 
   async dispose(): Promise<void> {

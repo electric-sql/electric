@@ -19,6 +19,7 @@ import {
   SandboxError,
   type DirEntry,
   type FileStat,
+  type NetworkPolicy,
   type Sandbox,
   type SandboxExecOpts,
   type SandboxExecResult,
@@ -35,10 +36,31 @@ export interface NativeSandboxOpts {
    * overly broad. Both subprocess egress (via the library's HTTP/SOCKS
    * proxies) and `sandbox.fetch()` (via undici ProxyAgent routed at the
    * same proxy) obey this list.
+   *
+   * @deprecated prefer `initialNetworkPolicy` for forward compatibility
+   *   with `Sandbox.updateNetworkPolicy()`. When both are provided
+   *   `initialNetworkPolicy` wins.
    */
   allowedHosts?: ReadonlyArray<string>
+  /**
+   * Initial network policy. Equivalent to `allowedHosts` when the mode is
+   * `allowlist`; `deny-all` matches the legacy default. `allow-all` opens
+   * every domain (not generally recommended).
+   */
+  initialNetworkPolicy?: NetworkPolicy
   /** Read-only paths to allow beyond the working directory base set. */
   extraReadPaths?: ReadonlyArray<string>
+}
+
+function policyToAllowedDomains(policy: NetworkPolicy): Array<string> {
+  switch (policy.mode) {
+    case `allow-all`:
+      return [`*`]
+    case `deny-all`:
+      return []
+    case `allowlist`:
+      return [...policy.allow]
+  }
 }
 
 /**
@@ -114,11 +136,17 @@ export async function nativeSandbox(opts: NativeSandboxOpts): Promise<Sandbox> {
     )
   }
 
+  const initialPolicy: NetworkPolicy =
+    opts.initialNetworkPolicy ??
+    (opts.allowedHosts && opts.allowedHosts.length > 0
+      ? { mode: `allowlist`, allow: [...opts.allowedHosts] }
+      : { mode: `deny-all` })
+
   return new NativeSandbox(
     workingDirectoryReal,
     new Set(buildDenyReadList()),
     opts.extraReadPaths ?? [],
-    new Set(opts.allowedHosts ?? [])
+    initialPolicy
   )
 }
 
@@ -126,13 +154,16 @@ class NativeSandbox implements Sandbox {
   readonly name = NATIVE_NAME
   private initialized = false
   private fetchDispatcher: Dispatcher | null = null
+  private currentPolicy: NetworkPolicy
 
   constructor(
     readonly workingDirectory: string,
     private readonly denyReads: ReadonlySet<string>,
     private readonly extraReadPaths: ReadonlyArray<string>,
-    private readonly allowedHosts: ReadonlySet<string>
-  ) {}
+    initialPolicy: NetworkPolicy
+  ) {
+    this.currentPolicy = initialPolicy
+  }
 
   async exec(opts: SandboxExecOpts): Promise<SandboxExecResult> {
     await this.ensureInitialized()
@@ -395,6 +426,30 @@ class NativeSandbox implements Sandbox {
     }
   }
 
+  async getUrl(opts: {
+    port: number
+    protocol?: `http` | `https`
+  }): Promise<string> {
+    // Loopback is reachable from inside both macOS Seatbelt and Linux
+    // bwrap by default — the sandbox config does not restrict outgoing
+    // socket connections to 127.0.0.1.
+    return `${opts.protocol ?? `http`}://127.0.0.1:${opts.port}`
+  }
+
+  async updateNetworkPolicy(policy: NetworkPolicy): Promise<void> {
+    this.currentPolicy = policy
+    if (!this.initialized) return
+    const existing = SandboxManager.getConfig()
+    if (!existing) return
+    SandboxManager.updateConfig({
+      ...existing,
+      network: {
+        ...existing.network,
+        allowedDomains: policyToAllowedDomains(policy),
+      },
+    })
+  }
+
   async dispose(): Promise<void> {
     if (!this.initialized) return
     this.initialized = false
@@ -427,7 +482,7 @@ class NativeSandbox implements Sandbox {
           allowRead: [],
         },
         network: {
-          allowedDomains: [...this.allowedHosts],
+          allowedDomains: policyToAllowedDomains(this.currentPolicy),
           deniedDomains: [],
         },
       }

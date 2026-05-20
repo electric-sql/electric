@@ -3,6 +3,7 @@ import {
   SandboxError,
   type DirEntry,
   type FileStat,
+  type NetworkPolicy,
   type Sandbox,
   type SandboxExecOpts,
   type SandboxExecResult,
@@ -20,8 +21,17 @@ export interface RemoteSandboxOpts {
   apiKey?: string
   /** Provider-specific workspace template name/id. */
   template?: string
-  /** Hostname allowlist for outbound `sandbox.fetch()`. Default: deny everything. */
+  /**
+   * Hostname allowlist for outbound `sandbox.fetch()` (host process only —
+   * the remote workspace's own egress is governed by the provider).
+   * Default: deny everything.
+   *
+   * @deprecated prefer `initialNetworkPolicy` for forward compatibility
+   *   with `Sandbox.updateNetworkPolicy()`. When both are provided
+   *   `initialNetworkPolicy` wins.
+   */
   allowedHosts?: ReadonlyArray<string>
+  initialNetworkPolicy?: NetworkPolicy
   /**
    * Pre-constructed client. Bypasses provider SDK loading — used by tests
    * and by customers who want to construct the provider client themselves
@@ -44,11 +54,16 @@ export interface RemoteSandboxOpts {
 export async function remoteSandbox(opts: RemoteSandboxOpts): Promise<Sandbox> {
   const workingDirectory = opts.workingDirectory ?? `/work`
   const client = opts.client ?? (await loadClient(opts, workingDirectory))
+  const initialPolicy: NetworkPolicy =
+    opts.initialNetworkPolicy ??
+    (opts.allowedHosts && opts.allowedHosts.length > 0
+      ? { mode: `allowlist`, allow: [...opts.allowedHosts] }
+      : { mode: `deny-all` })
   return new RemoteSandbox(
     `remote:${opts.provider}`,
     workingDirectory,
     client,
-    new Set(opts.allowedHosts ?? [])
+    initialPolicy
   )
 }
 
@@ -73,13 +88,25 @@ async function loadClient(
 
 class RemoteSandbox implements Sandbox {
   private disposed = false
+  private warnedNetworkPolicyUpdate = false
 
   constructor(
     readonly name: string,
     readonly workingDirectory: string,
     private readonly client: RemoteSandboxClient,
-    private readonly allowedHosts: ReadonlySet<string>
+    private currentPolicy: NetworkPolicy
   ) {}
+
+  private hostAllowed(host: string): boolean {
+    switch (this.currentPolicy.mode) {
+      case `allow-all`:
+        return true
+      case `deny-all`:
+        return false
+      case `allowlist`:
+        return this.currentPolicy.allow.includes(host)
+    }
+  }
 
   async exec(opts: SandboxExecOpts): Promise<SandboxExecResult> {
     this.assertLive()
@@ -170,13 +197,40 @@ class RemoteSandbox implements Sandbox {
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     this.assertLive()
     const url = typeof input === `string` ? new URL(input) : input
-    if (!this.allowedHosts.has(url.hostname)) {
+    if (!this.hostAllowed(url.hostname)) {
       throw new SandboxError(
         `policy`,
-        `remoteSandbox: host "${url.hostname}" is not in allowedHosts`
+        `remoteSandbox: host "${url.hostname}" is denied by the active network policy`
       )
     }
     return globalThis.fetch(input as RequestInfo, init)
+  }
+
+  async getUrl(opts: {
+    port: number
+    protocol?: `http` | `https`
+  }): Promise<string> {
+    this.assertLive()
+    if (!this.client.getUrl) {
+      throw new SandboxError(
+        `unavailable`,
+        `remoteSandbox: provider client does not expose getUrl(); port forwarding is not configured.`
+      )
+    }
+    const raw = await this.client.getUrl(opts)
+    if (raw.includes(`://`)) return raw
+    return `${opts.protocol ?? `http`}://${raw}`
+  }
+
+  async updateNetworkPolicy(policy: NetworkPolicy): Promise<void> {
+    this.currentPolicy = policy
+    if (!this.warnedNetworkPolicyUpdate) {
+      this.warnedNetworkPolicyUpdate = true
+
+      console.warn(
+        `[remoteSandbox] updateNetworkPolicy only affects host-process sandbox.fetch(); the remote workspace's own egress is not reconfigured.`
+      )
+    }
   }
 
   async dispose(): Promise<void> {

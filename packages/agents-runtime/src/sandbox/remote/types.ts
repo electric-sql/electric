@@ -27,5 +27,12 @@ export interface RemoteSandboxClient {
   exists(path: string): Promise<boolean>
   remove(path: string, opts?: { recursive?: boolean }): Promise<void>
   stat(path: string): Promise<FileStat>
+  /**
+   * Public URL the host can hit to reach a server bound to `port` inside
+   * the remote workspace. Providers may return either a plain host:port
+   * string or a fully-qualified URL; the remote-sandbox adapter assembles
+   * the final URL with the requested protocol if the response is bare.
+   */
+  getUrl?(opts: { port: number; protocol?: `http` | `https` }): Promise<string>
   kill(): Promise<void>
 }
