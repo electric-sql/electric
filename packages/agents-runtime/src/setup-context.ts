@@ -30,6 +30,7 @@ import type {
   ObservationSource,
   ObservationStreamDB,
   PendingSend,
+  SendResult,
   SelfHandle,
   SharedStateHandle,
   SharedStateHandleInfo,
@@ -102,7 +103,7 @@ export interface SetupContextConfig {
   /** Wiring helpers for inline spawn/observe — absent in unit tests */
   wiring?: WiringConfig
   /** Direct send executor — when provided, ctx.send() calls this immediately instead of queuing */
-  executeSend?: (send: PendingSend) => void
+  executeSend?: (send: PendingSend) => Promise<SendResult>
 }
 
 export interface SetupContextResult {
@@ -128,7 +129,7 @@ export interface SetupContextResult {
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
-  ) => void
+  ) => Promise<SendResult>
   observe: (
     source: ObservationSource,
     opts?: { wake?: Wake }
@@ -251,19 +252,19 @@ export function createSetupContext(
     }
   }
 
-  const dispatchSend = (send: PendingSend): void => {
+  const dispatchSend = (send: PendingSend): Promise<SendResult> => {
     if (executeSendFn) {
-      executeSendFn(send)
-    } else {
-      wakeSession.enqueueSend(send)
+      return executeSendFn(send)
     }
+    wakeSession.enqueueSend(send)
+    return Promise.resolve({ queued: true, targetUrl: send.targetUrl })
   }
 
   const sendToEntity = (
     targetUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
-  ): void => {
+  ): Promise<SendResult> => {
     if (inSetup) {
       const manifestRows = db.collections.manifests
         .toArray as Array<ManifestEntry>
@@ -282,7 +283,7 @@ export function createSetupContext(
         )
       }
     }
-    dispatchSend({
+    return dispatchSend({
       targetUrl,
       payload,
       type: opts?.type,
@@ -800,7 +801,7 @@ export function createSetupContext(
               )
             }
             beginTrackedRun()
-            dispatchSend({ targetUrl, payload: msg })
+            return dispatchSend({ targetUrl, payload: msg })
           },
           status: () => {
             const statusEntries = db.collections.childStatus?.toArray as
@@ -836,7 +837,7 @@ export function createSetupContext(
               `[agent-runtime] send() cannot be called during setup() on observed entity handles`
             )
           }
-          dispatchSend({ targetUrl, payload: msg })
+          return dispatchSend({ targetUrl, payload: msg })
         },
         status: () => {
           const statusEntries = db.collections.childStatus?.toArray as
@@ -1043,10 +1044,14 @@ export function createSetupContext(
           if (spawnError) {
             throw spawnError
           }
-          dispatchSend({ targetUrl: realEntityUrl, payload: msg })
+          const result = dispatchSend({
+            targetUrl: realEntityUrl,
+            payload: msg,
+          })
           runPromise = new Promise<void>((resolve) => {
             runResolve = resolve
           })
+          return result
         },
         status: () => {
           const entries = db.collections.childStatus?.toArray as
@@ -1178,8 +1183,12 @@ export function createSetupContext(
       return handle
     },
 
-    send(targetUrl: string, payload: unknown, opts?: { type?: string }): void {
-      sendToEntity(targetUrl, payload, opts)
+    send(
+      targetUrl: string,
+      payload: unknown,
+      opts?: { type?: string; afterMs?: number }
+    ): Promise<SendResult> {
+      return sendToEntity(targetUrl, payload, opts)
     },
 
     async observe(

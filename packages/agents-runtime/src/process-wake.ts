@@ -24,6 +24,7 @@ import type {
   ObservationHandle,
   ObservationSource,
   ProcessWakeConfig,
+  SendResult,
   SharedStateSchemaMap,
   Wake,
   WakeEvent,
@@ -914,22 +915,19 @@ export async function processWake(
     const entityArgs = Object.freeze(notification.entity?.spawnArgs ?? {})
 
     // ---- Send executor — ctx.send() calls this directly (no queue) ----
-    const executeSend = (send: {
+    const executeSend = async (send: {
       targetUrl: string
       payload: unknown
       type?: string
       afterMs?: number
-    }): void => {
-      void serverClient
-        .sendEntityMessage({
-          targetUrl: send.targetUrl,
-          payload: send.payload,
-          type: send.type,
-          afterMs: send.afterMs,
-        })
-        .catch((err: unknown) => {
-          failBackgroundWake(err, `SEND_FAILED`)
-        })
+    }): Promise<SendResult> => {
+      await serverClient.sendEntityMessage({
+        targetUrl: send.targetUrl,
+        payload: send.payload,
+        type: send.type,
+        afterMs: send.afterMs,
+      })
+      return { sent: true, targetUrl: send.targetUrl }
     }
 
     // ---- Wiring helpers for inline spawn/observe ----
@@ -1243,7 +1241,7 @@ export async function processWake(
             return Promise.resolve([])
           },
           send: (msg: unknown) => {
-            executeSend({ targetUrl: entityUrl, payload: msg })
+            return executeSend({ targetUrl: entityUrl, payload: msg })
           },
           status: () => undefined,
         } as EntityHandle
