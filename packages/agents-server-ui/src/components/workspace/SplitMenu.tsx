@@ -65,7 +65,7 @@ const SIGNAL_OPTION_GROUPS: ReadonlyArray<
       composite: `stop-immediately`,
       shortName: `Stop immediately`,
       description: `Abort active run and pause`,
-      shortcut: `Ctrl+C`,
+      shortcut: `Shift+Esc`,
       code: `SIGSTOP+SIGINT`,
     },
   ],
