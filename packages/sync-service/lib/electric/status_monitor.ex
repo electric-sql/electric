@@ -38,7 +38,7 @@ defmodule Electric.StatusMonitor do
     Process.set_label({:status_monitor, stack_id})
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ets.new(ets_table(stack_id), [:named_table, :public])
+    :ets.new(ets_table(stack_id), [:named_table, :protected])
 
     {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
   end
@@ -361,6 +361,15 @@ defmodule Electric.StatusMonitor do
       :up -> :noop
     end
 
+    {:noreply, state}
+  end
+
+  # Test-only: writes the congestion flag directly. The flag is normally
+  # set/cleared by the GenServer in response to waiter-set transitions; this
+  # cast lets tests force the polling branch without first enqueuing the
+  # threshold's worth of real waiters.
+  def handle_cast({:set_congested_flag_for_test, value}, state) when is_boolean(value) do
+    :ets.insert(ets_table(state.stack_id), {@congested_key, value})
     {:noreply, state}
   end
 

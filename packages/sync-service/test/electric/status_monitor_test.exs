@@ -741,7 +741,10 @@ defmodule Electric.StatusMonitorTest do
     end
 
     defp force_congested(stack_id) do
-      :ets.insert(:"#{inspect(StatusMonitor)}:#{stack_id}", {:waiters_congested, true})
+      GenServer.cast(StatusMonitor.name(stack_id), {:set_congested_flag_for_test, true})
+      # Round-trip a call to ensure the cast has been processed before the
+      # caller reads the flag.
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
     end
   end
 end
