@@ -15,6 +15,7 @@ import {
 import { ThemeProvider } from '../ui/ThemeProvider'
 import { ChatLogView, ChatView } from '../components/views/ChatView'
 import { StateExplorerView } from '../components/views/StateExplorerView'
+import { registerActiveServerHeaders } from '../lib/auth-fetch'
 import styles from './EmbedApp.module.css'
 import type { OptimisticInboxMessage } from '../lib/sendMessage'
 
@@ -31,6 +32,15 @@ export function EmbedSessionRoot({
   onNavigatePathname,
   ...state
 }: EmbedSessionProps): ReactElement {
+  // Register the Cloud auth headers in THIS context's auth-fetch
+  // module before ElectricAgentsProvider creates its collections —
+  // they fetch synchronously on first render, so a later useEffect
+  // registration would race the initial 401.
+  if (state.serverHeaders) {
+    registerActiveServerHeaders(state.serverHeaders)
+  } else {
+    registerActiveServerHeaders(null)
+  }
   return (
     <ThemeProvider appearance={state.theme}>
       <ElectricAgentsProvider baseUrl={state.serverUrl}>
@@ -59,6 +69,14 @@ type EmbedState = {
   theme: EmbedTheme
   scrollToBottomSignal?: number
   inlineQueuedMessages?: Array<OptimisticInboxMessage>
+  // Forwarded across the Expo-DOM boundary so the embed's auth-fetch
+  // module instance (separate from the native side) can inject the
+  // Cloud `Authorization` + `x-electric-service` headers on every
+  // outbound request. `null` means no headers required (local server).
+  serverHeaders?: {
+    url: string
+    headers: Record<string, string>
+  } | null
 }
 
 const EmbedStateContext = createContext<EmbedState | null>(null)
