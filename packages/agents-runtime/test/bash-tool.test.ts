@@ -28,11 +28,7 @@ describe(`bash tool`, () => {
     expect(lines).toEqual([await realpath(cwd), process.env.HOME ?? homedir()])
   })
 
-  // Characterization: the bash tool currently passes `env: { ...process.env }`
-  // wholesale to spawned children (`bash.ts:23`). The two tests below capture
-  // that behavior so the env-scrubbing change planned for a follow-up PR has
-  // an explicit regression target.
-  it(`leaks the parent PATH into the child process (no env scrubbing)`, async () => {
+  it(`forwards PATH to the child process`, async () => {
     const tool = createBashTool(cwd)
     const result = await tool.execute(`call-path`, {
       command: `printf '%s' "$PATH"`,
@@ -42,7 +38,7 @@ describe(`bash tool`, () => {
     )
   })
 
-  it(`leaks an ANTHROPIC_API_KEY-style env var to the child process`, async () => {
+  it(`does NOT forward ANTHROPIC_API_KEY (or other unlisted vars)`, async () => {
     const sentinel = `sk-test-bash-leak-${Date.now()}`
     const prev = process.env.ANTHROPIC_API_KEY
     process.env.ANTHROPIC_API_KEY = sentinel
@@ -51,10 +47,39 @@ describe(`bash tool`, () => {
       const result = await tool.execute(`call-key`, {
         command: `printf '%s' "$ANTHROPIC_API_KEY"`,
       })
-      expect((result.content[0] as { text: string }).text).toBe(sentinel)
+      // Empty stdout renders as "(no output)"; check just that the secret didn't appear.
+      expect((result.content[0] as { text: string }).text).not.toContain(
+        sentinel
+      )
     } finally {
       if (prev === undefined) delete process.env.ANTHROPIC_API_KEY
       else process.env.ANTHROPIC_API_KEY = prev
     }
+  })
+
+  it(`forwards variables named in allowedEnvKeys (extending the defaults)`, async () => {
+    const sentinel = `bash-allowlist-extend-${Date.now()}`
+    const prev = process.env.MY_CUSTOM
+    process.env.MY_CUSTOM = sentinel
+    try {
+      const tool = createBashTool(cwd, { allowedEnvKeys: [`MY_CUSTOM`] })
+      const result = await tool.execute(`call-custom`, {
+        command: `printf '%s' "$MY_CUSTOM"`,
+      })
+      expect((result.content[0] as { text: string }).text).toBe(sentinel)
+    } finally {
+      if (prev === undefined) delete process.env.MY_CUSTOM
+      else process.env.MY_CUSTOM = prev
+    }
+  })
+
+  it(`allowedEnvKeys extends defaults; PATH still passes through when other keys are added`, async () => {
+    const tool = createBashTool(cwd, { allowedEnvKeys: [`MY_CUSTOM`] })
+    const result = await tool.execute(`call-extend-path`, {
+      command: `printf '%s' "$PATH"`,
+    })
+    expect((result.content[0] as { text: string }).text).toBe(
+      process.env.PATH ?? ``
+    )
   })
 })

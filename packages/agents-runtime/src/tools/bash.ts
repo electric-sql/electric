@@ -5,7 +5,61 @@ import type { AgentTool } from '@mariozechner/pi-agent-core'
 const TIMEOUT_MS = 30_000
 const MAX_OUTPUT_CHARS = 50_000
 
-export function createBashTool(workingDirectory: string): AgentTool {
+const DEFAULT_ALLOWED_ENV_KEYS: ReadonlyArray<string> = [
+  // Shell / identity
+  `PATH`,
+  `HOME`,
+  `USER`,
+  `LOGNAME`,
+  `SHELL`,
+  // Locale + terminal
+  `LANG`,
+  `LC_ALL`,
+  `LC_CTYPE`,
+  `TERM`,
+  `COLORTERM`,
+  `NO_COLOR`,
+  `FORCE_COLOR`,
+  `CI`,
+  // Temp dirs
+  `TMPDIR`,
+  `TMP`,
+  `TEMP`,
+  // XDG
+  `XDG_CONFIG_HOME`,
+  `XDG_CACHE_HOME`,
+  `XDG_DATA_HOME`,
+  // Proxies (lower + upper case — curl/git/node respect both forms)
+  `HTTP_PROXY`,
+  `HTTPS_PROXY`,
+  `NO_PROXY`,
+  `http_proxy`,
+  `https_proxy`,
+  `no_proxy`,
+  // TLS roots (corporate MITM)
+  `NODE_EXTRA_CA_CERTS`,
+  `SSL_CERT_FILE`,
+  `SSL_CERT_DIR`,
+  // Windows essentials — cmd.exe and Node lookups fail without these.
+  `SYSTEMROOT`,
+  `COMSPEC`,
+  `WINDIR`,
+  `APPDATA`,
+  `LOCALAPPDATA`,
+  `USERPROFILE`,
+]
+
+export function createBashTool(
+  workingDirectory: string,
+  opts: {
+    /** Extends the built-in safe defaults; cannot shrink them. */
+    allowedEnvKeys?: ReadonlyArray<string>
+  } = {}
+): AgentTool {
+  const allowedKeys = new Set<string>([
+    ...DEFAULT_ALLOWED_ENV_KEYS,
+    ...(opts.allowedEnvKeys ?? []),
+  ])
   return {
     name: `bash`,
     label: `Bash`,
@@ -20,7 +74,7 @@ export function createBashTool(workingDirectory: string): AgentTool {
           cwd: workingDirectory,
           timeout: TIMEOUT_MS,
           maxBuffer: 1024 * 1024,
-          env: { ...process.env },
+          env: filterEnv(process.env, allowedKeys),
         })
 
         let stdout = ``
@@ -65,4 +119,16 @@ export function createBashTool(workingDirectory: string): AgentTool {
       })
     },
   }
+}
+
+function filterEnv(
+  parentEnv: NodeJS.ProcessEnv,
+  allowedKeys: ReadonlySet<string>
+): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {}
+  for (const key of allowedKeys) {
+    const v = parentEnv[key]
+    if (v !== undefined) out[key] = v
+  }
+  return out
 }
