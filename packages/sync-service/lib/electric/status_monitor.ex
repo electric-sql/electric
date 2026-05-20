@@ -23,6 +23,8 @@ defmodule Electric.StatusMonitor do
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
 
   @db_state_key :db_state
+  @congested_key :waiters_congested
+  @congested_threshold 100
   @spin_prevention_delay 10
 
   def start_link(opts) do
@@ -56,6 +58,25 @@ defmodule Electric.StatusMonitor do
       _ -> :starting
     end
   end
+
+  @doc """
+  Returns true once the StatusMonitor's waiter set has crossed
+  `congested_threshold/0`. The flag is cleared once the set drains back to 0.
+
+  Used by callers to decide between a `GenServer.call` wait (low latency
+  when uncontended) and a `PollWait.until/3` wait (bounded mailbox growth
+  under burst). Cheap: one ETS read against a `read_concurrency: true`
+  table.
+  """
+  @spec congested?(String.t()) :: boolean()
+  def congested?(stack_id) do
+    :ets.lookup_element(ets_table(stack_id), @congested_key, 2, false)
+  rescue
+    ArgumentError -> false
+  end
+
+  @doc "Threshold at which the StatusMonitor flips its congestion flag. Exposed for tests."
+  def congested_threshold, do: @congested_threshold
 
   @spec status(String.t()) :: status()
   def status(stack_id) do
@@ -323,7 +344,10 @@ defmodule Electric.StatusMonitor do
           Process.send_after(self(), {:timeout_waiter, {from, level}}, timeout)
         end
 
-        {:noreply, %{state | waiters: MapSet.put(waiters, {from, level})}}
+        new_waiters = MapSet.put(waiters, {from, level})
+        maybe_set_congested(state.stack_id, MapSet.size(new_waiters))
+
+        {:noreply, %{state | waiters: new_waiters}}
     end
   end
 
@@ -352,7 +376,9 @@ defmodule Electric.StatusMonitor do
   def handle_info({:timeout_waiter, {from, _level} = waiter}, state) do
     if MapSet.member?(state.waiters, waiter) do
       GenServer.reply(from, {:error, timeout_message(state.stack_id)})
-      {:noreply, %{state | waiters: MapSet.delete(state.waiters, waiter)}}
+      new_waiters = MapSet.delete(state.waiters, waiter)
+      maybe_clear_congested(state.stack_id, MapSet.size(new_waiters))
+      {:noreply, %{state | waiters: new_waiters}}
     else
       {:noreply, state}
     end
@@ -375,8 +401,23 @@ defmodule Electric.StatusMonitor do
         end
       end)
 
+    maybe_clear_congested(state.stack_id, MapSet.size(waiters))
     %{state | waiters: waiters}
   end
+
+  defp maybe_set_congested(stack_id, size) when size >= @congested_threshold do
+    :ets.insert(ets_table(stack_id), {@congested_key, true})
+    :ok
+  end
+
+  defp maybe_set_congested(_stack_id, _size), do: :ok
+
+  defp maybe_clear_congested(stack_id, 0) do
+    :ets.insert(ets_table(stack_id), {@congested_key, false})
+    :ok
+  end
+
+  defp maybe_clear_congested(_stack_id, _size), do: :ok
 
   defp db_state(table) do
     :ets.lookup_element(table, @db_state_key, 2, :up)
