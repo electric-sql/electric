@@ -2,6 +2,7 @@ defmodule Electric.Shapes.WhereClause do
   alias PgInterop.Sublink
   alias Electric.Replication.Eval.Runner
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+  alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
 
   @spec includes_record_result(
           Electric.Replication.Eval.Expr.t() | nil,
@@ -55,6 +56,47 @@ defmodule Electric.Shapes.WhereClause do
   def subquery_member_from_index(index, shape_handle) do
     fn subquery_ref, typed_value ->
       SubqueryIndex.membership_or_fallback?(index, shape_handle, subquery_ref, typed_value)
+    end
+  end
+
+  @doc """
+  Build a subquery_member? callback that reads `MultiTimeView` at the
+  per-ref logical time given by `subquery_refs`. The optional
+  `time_override` lets a single ref read at a different time — used by
+  splice-plan to read the trigger ref's `from_time`/`to_time` while
+  every other ref stays at the consumer's currently-pinned time.
+
+  Replaces the pre-RFC pattern of materialising a full MapSet per ref
+  up front; membership is now checked lazily as the DNF evaluator walks
+  each record's sublinks.
+  """
+  @spec subquery_member_from_mtv(
+          MultiTimeView.t() | nil,
+          map(),
+          {term(), non_neg_integer()} | nil
+        ) ::
+          ([String.t()], term() -> boolean())
+  def subquery_member_from_mtv(mtv, subquery_refs, time_override \\ nil)
+
+  def subquery_member_from_mtv(nil, _subquery_refs, _time_override) do
+    fn _, _ -> false end
+  end
+
+  def subquery_member_from_mtv(mtv, subquery_refs, time_override) do
+    fn subquery_ref, typed_value ->
+      case Map.get(subquery_refs, subquery_ref) do
+        nil ->
+          false
+
+        %{subquery_id: id, time: pinned_time} ->
+          time =
+            case time_override do
+              {^subquery_ref, override_time} -> override_time
+              _ -> pinned_time
+            end
+
+          MultiTimeView.member?(mtv, id, typed_value, time)
+      end
     end
   end
 end

@@ -21,6 +21,15 @@ defmodule Electric.Shapes.QueryingTest do
   @stack_id "test_stack"
   @shape_handle "test_shape"
 
+  # Build a `values_for/2` resolver from two view maps, matching the pre-RFC
+  # `move_in_where_clause/5` call shape used throughout these tests.
+  defp values_for_from_views(views_before, views_after) do
+    fn
+      ref, :before -> Map.get(views_before, ref, [])
+      ref, :after -> Map.get(views_after, ref, [])
+    end
+  end
+
   describe "stream_initial_data/4" do
     test "should give information about the table and the result stream", %{db_conn: conn} do
       Postgrex.query!(
@@ -629,8 +638,7 @@ defmodule Electric.Shapes.QueryingTest do
                Querying.move_in_where_clause(
                  dnf_plan,
                  0,
-                 views_before_move,
-                 views_after_move,
+                 values_for_from_views(views_before_move, views_after_move),
                  shape.where.used_refs
                )
 
@@ -674,8 +682,7 @@ defmodule Electric.Shapes.QueryingTest do
                Querying.move_in_where_clause(
                  dnf_plan,
                  0,
-                 views_before_move,
-                 views_after_move,
+                 values_for_from_views(views_before_move, views_after_move),
                  shape.where.used_refs
                )
 
@@ -727,8 +734,7 @@ defmodule Electric.Shapes.QueryingTest do
                Querying.move_in_where_clause(
                  dnf_plan,
                  0,
-                 views_before_move,
-                 views_after_move,
+                 values_for_from_views(views_before_move, views_after_move),
                  shape.where.used_refs
                )
 
@@ -788,8 +794,7 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           dnf_plan,
           0,
-          views_before_move,
-          views_after_move,
+          values_for_from_views(views_before_move, views_after_move),
           shape.where.used_refs
         )
 
@@ -834,8 +839,7 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           dnf_plan,
           0,
-          views_before_move,
-          views_after_move,
+          values_for_from_views(views_before_move, views_after_move),
           shape.where.used_refs
         )
 
@@ -880,8 +884,7 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           dnf_plan,
           0,
-          views_before_move,
-          views_after_move,
+          values_for_from_views(views_before_move, views_after_move),
           shape.where.used_refs
         )
 
@@ -929,8 +932,7 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           plan,
           0,
-          views_before_move,
-          views_after_move,
+          values_for_from_views(views_before_move, views_after_move),
           where.used_refs
         )
 
@@ -960,8 +962,7 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           plan,
           1,
-          views_before_move,
-          views_after_move,
+          values_for_from_views(views_before_move, views_after_move),
           where.used_refs
         )
 
@@ -1002,8 +1003,7 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           plan,
           0,
-          views_before_move,
-          views_after_move,
+          values_for_from_views(views_before_move, views_after_move),
           where.used_refs
         )
 
@@ -1027,8 +1027,10 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           plan,
           0,
-          %{["$sublink", "0"] => MapSet.new([1, 2, 3])},
-          %{["$sublink", "0"] => MapSet.new([3])},
+          values_for_from_views(
+            %{["$sublink", "0"] => MapSet.new([1, 2, 3])},
+            %{["$sublink", "0"] => MapSet.new([3])}
+          ),
           where.used_refs
         )
 
@@ -1048,8 +1050,10 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           plan,
           0,
-          %{["$sublink", "0"] => MapSet.new([5, 6])},
-          %{["$sublink", "0"] => MapSet.new([6])},
+          values_for_from_views(
+            %{["$sublink", "0"] => MapSet.new([5, 6])},
+            %{["$sublink", "0"] => MapSet.new([6])}
+          ),
           where.used_refs
         )
 

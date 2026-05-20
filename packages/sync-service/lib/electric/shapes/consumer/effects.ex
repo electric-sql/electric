@@ -251,18 +251,29 @@ defmodule Electric.Shapes.Consumer.Effects do
     mtv = MultiTimeView.for_stack(consumer_state.stack_id)
     subquery_refs = consumer_state.event_handler.subquery_refs
 
-    views_before_move =
-      build_views_map(mtv, subquery_refs, request.subquery_ref, request.from_time)
+    # `values_for.(ref, :before | :after)` reads `MultiTimeView` lazily at
+    # SQL build time — for the trigger ref `:before` uses `request.from_time`
+    # and `:after` uses `request.to_time`; other refs read at the consumer's
+    # currently-pinned time so the move-in query sees a consistent view
+    # across all dependencies.
+    values_for = fn ref, when_ ->
+      %{subquery_id: id, time: pinned_time} = Map.fetch!(subquery_refs, ref)
 
-    views_after_move =
-      build_views_map(mtv, subquery_refs, request.subquery_ref, request.to_time)
+      time =
+        cond do
+          ref != request.subquery_ref -> pinned_time
+          when_ == :before -> request.from_time
+          when_ == :after -> request.to_time
+        end
+
+      MultiTimeView.values(mtv, id, time)
+    end
 
     {where, params} =
       Querying.move_in_where_clause(
         request.dnf_plan,
         request.trigger_dep_index,
-        views_before_move,
-        views_after_move,
+        values_for,
         consumer_state.shape.where.used_refs
       )
 
@@ -297,7 +308,7 @@ defmodule Electric.Shapes.Consumer.Effects do
 
             Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params},
               dnf_plan: request.dnf_plan,
-              views: views_after_move
+              values_for_ref: fn ref -> values_for.(ref, :after) end
             )
             |> Stream.transform(
               fn -> {0, 0} end,
@@ -380,20 +391,5 @@ defmodule Electric.Shapes.Consumer.Effects do
         xip_list: Enum.map(xip_list, &to_string/1)
       }
     }
-  end
-
-  # Build `%{subquery_ref => MapSet}` for every ref the consumer knows about.
-  # The trigger ref reads MTV at `trigger_time`; the others read at the
-  # consumer's currently-pinned time so the move-in query sees a consistent
-  # view across all dependencies.
-  defp build_views_map(mtv, subquery_refs, trigger_ref, trigger_time) do
-    Map.new(subquery_refs, fn {ref, %{subquery_id: id, time: time}} ->
-      effective_time = if ref == trigger_ref, do: trigger_time, else: time
-
-      {ref,
-       mtv
-       |> Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView.values(id, effective_time)
-       |> MapSet.new()}
-    end)
   end
 end

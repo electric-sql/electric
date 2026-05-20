@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.SplicePlan do
   alias Electric.Shapes.Consumer.Subqueries.ShapeInfo
   alias Electric.Shapes.Consumer.TransactionConverter
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
+  alias Electric.Shapes.WhereClause
 
   @enforce_keys [:effects]
   defstruct [:effects, :flushed_log_offset]
@@ -23,13 +24,22 @@ defmodule Electric.Shapes.Consumer.Subqueries.SplicePlan do
     {pre_txns, post_txns} = ActiveMove.split_buffer(active_move)
     mtv = MultiTimeView.for_stack(shape_info.stack_id)
 
-    views_before_move =
-      views_at(mtv, subquery_refs, active_move.subquery_ref, active_move.from_time)
+    before_member? =
+      WhereClause.subquery_member_from_mtv(
+        mtv,
+        subquery_refs,
+        {active_move.subquery_ref, active_move.from_time}
+      )
 
-    views_after_move = views_at(mtv, subquery_refs, active_move.subquery_ref, active_move.to_time)
+    after_member? =
+      WhereClause.subquery_member_from_mtv(
+        mtv,
+        subquery_refs,
+        {active_move.subquery_ref, active_move.to_time}
+      )
 
-    with {:ok, pre_ops} <- convert_txns(pre_txns, shape_info, views_before_move),
-         {:ok, post_ops} <- convert_txns(post_txns, shape_info, views_after_move) do
+    with {:ok, pre_ops} <- convert_txns(pre_txns, shape_info, before_member?),
+         {:ok, post_ops} <- convert_txns(post_txns, shape_info, after_member?) do
       effects =
         EffectList.new()
         |> EffectList.append_all(pre_ops)
@@ -46,22 +56,15 @@ defmodule Electric.Shapes.Consumer.Subqueries.SplicePlan do
     end
   end
 
-  defp convert_txns(txns, %ShapeInfo{} = shape_info, views) when is_map(views) do
+  defp convert_txns(txns, %ShapeInfo{} = shape_info, member?) when is_function(member?, 2) do
     TransactionConverter.transactions_to_effects(
       txns,
       shape_info.shape,
       stack_id: shape_info.stack_id,
       shape_handle: shape_info.shape_handle,
-      extra_refs: {views, views},
+      extra_refs: {member?, member?},
       dnf_plan: shape_info.dnf_plan
     )
-  end
-
-  defp views_at(mtv, subquery_refs, trigger_ref, trigger_time) do
-    Map.new(subquery_refs, fn {ref, %{subquery_id: id, time: time}} ->
-      effective_time = if ref == trigger_ref, do: trigger_time, else: time
-      {ref, mtv |> MultiTimeView.values(id, effective_time) |> MapSet.new()}
-    end)
   end
 
   defp move_in_snapshot_effect(%ActiveMove{} = active_move) do

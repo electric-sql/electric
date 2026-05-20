@@ -307,15 +307,15 @@ defmodule Electric.Shapes.Querying do
         tags_sqls = tags_sql(plan, stack_id, shape_handle)
 
         {active_conditions_sqls, params} =
-          case Keyword.get(opts, :views) do
+          case Keyword.get(opts, :values_for_ref) do
             nil ->
               {active_conditions_sql(plan), []}
 
-            views ->
+            resolver when is_function(resolver, 1) ->
               {sqls, params, _next_idx} =
-                active_conditions_sql_for_views(
+                active_conditions_sql_for_resolver(
                   plan,
-                  views,
+                  resolver,
                   shape.where.used_refs,
                   Keyword.get(opts, :start_param_idx, 1)
                 )
@@ -349,37 +349,41 @@ defmodule Electric.Shapes.Querying do
     end
   end
 
-  def move_in_where_clause(plan, dep_index, views_before_move, views_after_move, used_refs) do
+  @typedoc """
+  Resolver function that returns the subquery membership for a `subquery_ref`
+  at a given logical point (`:before` or `:after` the move). Replaces the
+  pre-RFC `%{subquery_ref => MapSet}` view maps; the closure can read from a
+  shared `MultiTimeView` at query build time instead of consumers carrying
+  long-lived MapSet copies.
+
+  The returned value may be a `MapSet`, list, or any enumerable; consumers in
+  this module materialise it as a list at the SQL boundary.
+  """
+  @type values_for() :: ([String.t()], :before | :after -> Enumerable.t())
+
+  @spec move_in_where_clause(
+          plan :: term(),
+          dep_index :: non_neg_integer(),
+          values_for(),
+          used_refs :: map()
+        ) :: {String.t(), [term()]}
+  def move_in_where_clause(plan, dep_index, values_for, used_refs)
+      when is_function(values_for, 2) do
     impacted = Map.get(plan.dependency_disjuncts, dep_index, [])
     all_idxs = Enum.to_list(0..(length(plan.disjuncts) - 1))
     unaffected = all_idxs -- impacted
 
+    after_resolver = fn ref -> values_for.(ref, :after) end
+    before_resolver = fn ref -> values_for.(ref, :before) end
+
     {candidate_sql, candidate_params, next_param} =
-      build_disjuncts_sql(
-        plan,
-        impacted,
-        views_after_move,
-        used_refs,
-        1
-      )
+      build_disjuncts_sql(plan, impacted, after_resolver, used_refs, 1)
 
     {impacted_before_sql, impacted_before_params, next_param} =
-      build_disjuncts_sql(
-        plan,
-        impacted,
-        views_before_move,
-        used_refs,
-        next_param
-      )
+      build_disjuncts_sql(plan, impacted, before_resolver, used_refs, next_param)
 
     {unaffected_sql, unaffected_params, _} =
-      build_disjuncts_sql(
-        plan,
-        unaffected,
-        views_before_move,
-        used_refs,
-        next_param
-      )
+      build_disjuncts_sql(plan, unaffected, before_resolver, used_refs, next_param)
 
     where =
       case join_sql(" OR ", [impacted_before_sql, unaffected_sql]) do
@@ -403,7 +407,8 @@ defmodule Electric.Shapes.Querying do
     end)
   end
 
-  def active_conditions_sql_for_views(plan, views, used_refs, start_param_idx \\ 1) do
+  def active_conditions_sql_for_resolver(plan, resolver, used_refs, start_param_idx \\ 1)
+      when is_function(resolver, 1) do
     {sqls, params, next_param_idx} =
       Enum.reduce(0..(plan.position_count - 1), {[], [], start_param_idx}, fn pos,
                                                                               {sqls, params,
@@ -411,7 +416,7 @@ defmodule Electric.Shapes.Querying do
         info = Map.fetch!(plan.positions, pos)
 
         {base_sql, sql_params, next_param_idx} =
-          position_to_sql(info, views, used_refs, param_idx)
+          position_to_sql(info, resolver, used_refs, param_idx)
 
         sql =
           if info.negated do
@@ -497,13 +502,14 @@ defmodule Electric.Shapes.Querying do
 
   defp position_to_sql(
          %{is_subquery: true} = info,
-         views,
+         resolver,
          used_refs,
          pidx
-       ) do
+       )
+       when is_function(resolver, 1) do
     lhs_sql = lhs_sql_from_ast(info.ast)
     ref_type = Map.get(used_refs, info.subquery_ref)
-    values = Map.get(views, info.subquery_ref, MapSet.new()) |> MapSet.to_list()
+    values = info.subquery_ref |> resolver.() |> Enum.to_list()
 
     case ref_type do
       {:array, {:row, col_types}} ->

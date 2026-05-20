@@ -651,9 +651,9 @@ defmodule Electric.Shapes.Shape do
          %Changes.NewRecord{record: record} = change,
          opts
        ) do
-    {_old_refs, new_refs} = opts[:extra_refs] || {%{}, %{}}
+    {_old_member?, new_member?} = normalise_extra_refs(opts[:extra_refs])
 
-    case project_row_metadata(shape, record, new_refs, opts) do
+    case project_row_metadata(shape, record, new_member?, opts) do
       {:ok, true, metadata} ->
         [change |> put_row_metadata(metadata) |> filter_change_columns(selected_columns)]
 
@@ -667,9 +667,9 @@ defmodule Electric.Shapes.Shape do
          %Changes.DeletedRecord{old_record: record} = change,
          opts
        ) do
-    {old_refs, _new_refs} = opts[:extra_refs] || {%{}, %{}}
+    {old_member?, _new_member?} = normalise_extra_refs(opts[:extra_refs])
 
-    case project_row_metadata(shape, record, old_refs, opts) do
+    case project_row_metadata(shape, record, old_member?, opts) do
       {:ok, true, metadata} ->
         [change |> put_row_metadata(metadata) |> filter_change_columns(selected_columns)]
 
@@ -683,10 +683,12 @@ defmodule Electric.Shapes.Shape do
          %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
          opts
        ) do
-    {old_refs, new_refs} = opts[:extra_refs] || {%{}, %{}}
+    {old_member?, new_member?} = normalise_extra_refs(opts[:extra_refs])
 
-    {:ok, old_included?, old_metadata} = project_row_metadata(shape, old_record, old_refs, opts)
-    {:ok, new_included?, new_metadata} = project_row_metadata(shape, record, new_refs, opts)
+    {:ok, old_included?, old_metadata} =
+      project_row_metadata(shape, old_record, old_member?, opts)
+
+    {:ok, new_included?, new_metadata} = project_row_metadata(shape, record, new_member?, opts)
 
     converted_changes =
       case {old_included?, new_included?} do
@@ -721,10 +723,11 @@ defmodule Electric.Shapes.Shape do
   defp project_row_metadata(
          %__MODULE__{where: where},
          record,
-         refs,
+         subquery_member?,
          %{dnf_plan: %DnfPlan{} = dnf_plan, stack_id: stack_id, shape_handle: shape_handle}
-       ) do
-    case get_row_metadata(dnf_plan, record, refs, where, stack_id, shape_handle) do
+       )
+       when is_function(subquery_member?, 2) do
+    case get_row_metadata(dnf_plan, record, subquery_member?, where, stack_id, shape_handle) do
       {:ok, included?, move_tags, active_conditions} ->
         {:ok, included?, %{move_tags: move_tags, active_conditions: active_conditions}}
     end
@@ -733,17 +736,37 @@ defmodule Electric.Shapes.Shape do
   defp project_row_metadata(
          %__MODULE__{where: where, tag_structure: tag_structure},
          record,
-         refs,
+         subquery_member?,
          opts
-       ) do
-    {:ok,
-     WhereClause.includes_record?(where, record, WhereClause.subquery_member_from_refs(refs)),
+       )
+       when is_function(subquery_member?, 2) do
+    {:ok, WhereClause.includes_record?(where, record, subquery_member?),
      %{
        move_tags:
          make_tags_from_pattern(tag_structure, record, opts[:stack_id], opts[:shape_handle]),
        active_conditions: make_active_conditions(tag_structure)
      }}
   end
+
+  # `extra_refs` is `{old_subquery_member?, new_subquery_member?}` — two
+  # 2-arity callbacks of shape `(subquery_ref, value) -> boolean`. Older
+  # callers (notably tests) pass `{old_views_map, new_views_map}` where
+  # each side is `%{subquery_ref => MapSet}`; we convert those to the
+  # callback shape on the fly so the underlying DNF evaluator only ever
+  # sees callbacks.
+  defp normalise_extra_refs(nil), do: {default_member_callback(), default_member_callback()}
+
+  defp normalise_extra_refs({old, new}) do
+    {coerce_member_callback(old), coerce_member_callback(new)}
+  end
+
+  defp coerce_member_callback(callback) when is_function(callback, 2), do: callback
+
+  defp coerce_member_callback(views) when is_map(views) do
+    WhereClause.subquery_member_from_refs(views)
+  end
+
+  defp default_member_callback, do: fn _, _ -> false end
 
   defp filter_change_columns(change, nil), do: change
 
@@ -826,23 +849,35 @@ defmodule Electric.Shapes.Shape do
     }
   end
 
-  def get_row_metadata(dnf_plan, record, views, where_expr, stack_id, shape_handle) do
+  def get_row_metadata(dnf_plan, record, views, where_expr, stack_id, shape_handle)
+      when is_map(views) do
+    get_row_metadata(
+      dnf_plan,
+      record,
+      WhereClause.subquery_member_from_refs(views),
+      where_expr,
+      stack_id,
+      shape_handle
+    )
+  end
+
+  def get_row_metadata(dnf_plan, record, subquery_member?, where_expr, stack_id, shape_handle)
+      when is_function(subquery_member?, 2) do
     with {:ok, ref_values} <- Runner.record_to_ref_values(where_expr.used_refs, record) do
-      refs = Map.merge(ref_values, views)
-      active_conditions = compute_active_conditions(dnf_plan, refs)
+      active_conditions = compute_active_conditions(dnf_plan, ref_values, subquery_member?)
       tags = compute_tags(dnf_plan, record, stack_id, shape_handle)
       included? = compute_inclusion(dnf_plan, active_conditions)
       {:ok, included?, tags, active_conditions}
     end
   end
 
-  defp compute_active_conditions(dnf_plan, refs) do
+  defp compute_active_conditions(dnf_plan, ref_values, subquery_member?) do
     Enum.map(0..(dnf_plan.position_count - 1), fn pos ->
       info = dnf_plan.positions[pos]
       pos_expr = Expr.wrap_parser_part(info.ast)
 
       base_result =
-        case Runner.execute(pos_expr, refs) do
+        case Runner.execute(pos_expr, ref_values, subquery_member?: subquery_member?) do
           {:ok, value} when value not in [nil, false] -> true
           _ -> false
         end

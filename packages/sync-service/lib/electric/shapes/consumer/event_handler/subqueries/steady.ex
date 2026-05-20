@@ -204,7 +204,9 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
 
   defp append_txn_effects(%Transaction{} = txn, %__MODULE__{} = state) do
     mtv = MultiTimeView.for_stack(state.shape_info.stack_id)
-    views = materialise_views(mtv, state.subquery_refs)
+
+    member? =
+      Electric.Shapes.WhereClause.subquery_member_from_mtv(mtv, state.subquery_refs)
 
     with {:ok, effects} <-
            TransactionConverter.transaction_to_effects(
@@ -212,7 +214,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
              state.shape_info.shape,
              stack_id: state.shape_info.stack_id,
              shape_handle: state.shape_info.shape_handle,
-             extra_refs: {views, views},
+             extra_refs: {member?, member?},
              dnf_plan: state.shape_info.dnf_plan
            ) do
       effects =
@@ -223,13 +225,5 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
 
       {:ok, effects}
     end
-  end
-
-  defp materialise_views(nil, _refs), do: %{}
-
-  defp materialise_views(mtv, subquery_refs) do
-    Map.new(subquery_refs, fn {ref, %{subquery_id: id, time: time}} ->
-      {ref, mtv |> MultiTimeView.values(id, time) |> MapSet.new()}
-    end)
   end
 end
