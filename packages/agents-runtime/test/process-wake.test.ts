@@ -689,6 +689,27 @@ describe(`processWake`, () => {
     expect((body.payload as Record<string, unknown>).action).toBe(`ping`)
   })
 
+  it(`rejects invalid afterMs values before calling server send API`, async () => {
+    defineEntity(`test-agent`, {
+      handler: async (ctx) => {
+        await ctx.send(
+          `target-entity-2`,
+          { action: `invalid` },
+          { afterMs: -1 }
+        )
+      },
+    })
+
+    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
+      `afterMs must be a non-negative finite number`
+    )
+
+    const sendCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/send`)
+    )
+    expect(sendCalls.length).toBe(0)
+  })
+
   it(`passes afterMs through to server send API`, async () => {
     defineEntity(`test-agent`, {
       handler: (ctx) => {
@@ -826,7 +847,7 @@ describe(`processWake`, () => {
     )
   })
 
-  it(`fails the wake when a background send fails`, async () => {
+  it(`does not fail the wake when an unawaited send fails`, async () => {
     defineEntity(`test-agent`, {
       handler: (ctx) => {
         ctx.send(`target-entity-2`, { action: `ping` })
@@ -858,9 +879,9 @@ describe(`processWake`, () => {
       )
     })
 
-    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
-      /send to target-entity-2 failed/
-    )
+    await expect(
+      processWake(makeNotification(), BASE_CONFIG)
+    ).resolves.not.toBeNull()
   })
 
   it(`heartbeat is registered with configured interval`, async () => {

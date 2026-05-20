@@ -378,6 +378,10 @@ export interface PendingSend {
   afterMs?: number
 }
 
+export type SendResult =
+  | { sent: true; targetUrl: string }
+  | { queued: true; targetUrl: string }
+
 export type EffectConfig<
   TRow extends object = Record<string, unknown>,
   TKey extends string | number = string | number,
@@ -498,13 +502,16 @@ export interface RuntimeContext {
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
-  ) => void
+  ) => Promise<SendResult>
   createEffect: (functionRef: string, key: string, config: JsonValue) => boolean
 }
 
 export interface SelfHandle {
   entityUrl: string
-  send: (payload: unknown, opts?: { type?: string }) => void
+  send: (
+    payload: unknown,
+    opts?: { type?: string; afterMs?: number }
+  ) => Promise<SendResult>
 }
 
 export interface EntityHandle extends ObservationHandle {
@@ -514,7 +521,7 @@ export interface EntityHandle extends ObservationHandle {
   events: Array<ChangeEvent>
   run: Promise<void>
   text: () => Promise<Array<string>>
-  send: (msg: unknown) => void
+  send: (msg: unknown) => Promise<SendResult>
   status: () => ChildStatus | undefined
 }
 
@@ -884,7 +891,7 @@ export interface HandlerContext<
     entityUrl: string,
     payload: unknown,
     opts?: { type?: string; afterMs?: number }
-  ) => void
+  ) => Promise<SendResult>
   /**
    * Record a non-LLM run on the entity's built-in `runs` collection.
    * Use this to bracket an external operation (CLI subprocess, HTTP

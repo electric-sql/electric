@@ -28,6 +28,7 @@ import type {
   ObservationHandle,
   ObservationSource,
   RunHandle,
+  SendResult,
   SharedStateHandle,
   SharedStateSchemaMap,
   StateProxy,
@@ -90,7 +91,7 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
     payload: unknown
     type?: string
     afterMs?: number
-  }) => void
+  }) => Promise<SendResult>
   doSetTag: (key: string, value: string) => Promise<void>
   doRemoveTag: (key: string) => Promise<void>
 }
@@ -567,8 +568,8 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
       entityUrl: string,
       payload: unknown,
       opts?: { type?: string; afterMs?: number }
-    ): void {
-      config.executeSend({
+    ): Promise<SendResult> {
+      return config.executeSend({
         targetUrl: entityUrl,
         payload,
         type: opts?.type,

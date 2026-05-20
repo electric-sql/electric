@@ -24,6 +24,7 @@ import type {
   ObservationHandle,
   ObservationSource,
   ProcessWakeConfig,
+  SendResult,
   SharedStateSchemaMap,
   Wake,
   WakeEvent,
@@ -919,17 +920,33 @@ export async function processWake(
       payload: unknown
       type?: string
       afterMs?: number
-    }): void => {
-      void serverClient
+    }): Promise<SendResult> => {
+      if (
+        send.afterMs !== undefined &&
+        (!Number.isFinite(send.afterMs) || send.afterMs < 0)
+      ) {
+        const promise = Promise.reject<SendResult>(
+          new Error(`afterMs must be a non-negative finite number`)
+        )
+        void promise.catch(() => undefined)
+        return promise
+      }
+
+      const promise = serverClient
         .sendEntityMessage({
           targetUrl: send.targetUrl,
           payload: send.payload,
           type: send.type,
           afterMs: send.afterMs,
         })
-        .catch((err: unknown) => {
-          failBackgroundWake(err, `SEND_FAILED`)
-        })
+        .then(() => ({ sent: true as const, targetUrl: send.targetUrl }))
+
+      // Handlers may intentionally fire-and-forget sends. Keep awaited sends
+      // rejectable, but mark ignored send failures as handled so they don't
+      // surface as process/Vitest unhandled rejections.
+      void promise.catch(() => undefined)
+
+      return promise
     }
 
     // ---- Wiring helpers for inline spawn/observe ----
@@ -1243,7 +1260,7 @@ export async function processWake(
             return Promise.resolve([])
           },
           send: (msg: unknown) => {
-            executeSend({ targetUrl: entityUrl, payload: msg })
+            return executeSend({ targetUrl: entityUrl, payload: msg })
           },
           status: () => undefined,
         } as EntityHandle
