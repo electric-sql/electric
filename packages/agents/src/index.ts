@@ -50,3 +50,11 @@ export {
 export type { WorkerToolName } from './tools/spawn-worker.js'
 export { createHortonDocsSupport } from './docs/knowledge-base.js'
 export { braveSearchTool } from '@electric-ax/agents-runtime/tools'
+
+// Skills loader + tools. Public so packages embedding agents-runtime
+// (e.g. discord-bot) can reuse the same `.md`-skill-directory loader
+// and mount the `use_skill`/`remove_skill` tools on their own entities
+// following the same shape Horton uses internally.
+export { createSkillsRegistry } from './skills/registry.js'
+export { createSkillTools } from './skills/tools.js'
+export type { SkillsRegistry, SkillMeta } from './skills/types.js'
