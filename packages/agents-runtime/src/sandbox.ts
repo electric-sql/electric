@@ -1,3 +1,16 @@
+/**
+ * Stable list of bundled adapter names. The conformance test suite
+ * asserts the set of providers it exercises equals this list, so adding
+ * a new adapter without registering it in the conformance suite fails CI.
+ */
+export const KNOWN_ADAPTERS = [
+  `unrestricted`,
+  `native`,
+  `remote`,
+  `docker`,
+] as const
+export type KnownAdapter = (typeof KNOWN_ADAPTERS)[number]
+
 export { unrestrictedSandbox } from './sandbox/unrestricted'
 export type { UnrestrictedSandboxOpts } from './sandbox/unrestricted'
 export { nativeSandbox } from './sandbox/native'

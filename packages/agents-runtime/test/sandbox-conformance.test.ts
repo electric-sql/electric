@@ -6,9 +6,12 @@ import { SandboxManager } from '@anthropic-ai/sandbox-runtime'
 import { nativeSandbox } from '../src/sandbox/native'
 import { remoteSandbox } from '../src/sandbox/remote'
 import { unrestrictedSandbox } from '../src/sandbox/unrestricted'
+import { dockerSandbox } from '../src/sandbox/docker'
 import { SandboxError } from '../src/sandbox/types'
+import { KNOWN_ADAPTERS } from '../src/sandbox'
 import type { Sandbox } from '../src/sandbox/types'
 import type { RemoteSandboxClient } from '../src/sandbox/remote/types'
+import { dockerAvailable, TEST_IMAGE, TEST_LABEL } from './helpers/docker-probe'
 
 /**
  * Cross-provider conformance: a single set of scenarios exercised against
@@ -38,9 +41,17 @@ interface ProviderCapabilities {
 
 interface ProviderFactory {
   name: string
+  /** The KNOWN_ADAPTERS slug this provider exercises. */
+  adapter: (typeof KNOWN_ADAPTERS)[number]
   enabled: boolean
   capabilities: ProviderCapabilities
-  create(workingDirectory: string): Promise<Sandbox>
+  /**
+   * "Outside the working directory" probe path. For host-filesystem
+   * providers (unrestricted/native) we use a host tempdir; for
+   * containerized providers we use /etc/passwd which is outside the
+   * sandbox cwd but always present in the container.
+   */
+  outsideKind: `host-tempdir` | `etc-passwd`
 }
 
 const nativeSupported =
@@ -141,29 +152,38 @@ function makeFakeRemoteClient(): RemoteSandboxClient {
   }
 }
 
-const providers: Array<ProviderFactory> = [
+const providers: Array<
+  ProviderFactory & {
+    create(workingDirectory: string): Promise<Sandbox>
+  }
+> = [
   {
     name: `unrestricted`,
+    adapter: `unrestricted`,
     enabled: true,
     capabilities: {
       supportsAbort: true,
       supportsRealGetUrl: true, // loopback URL, host process is the server
       enforcesNetworkPolicy: false,
     },
+    outsideKind: `host-tempdir`,
     create: (cwd) => unrestrictedSandbox({ workingDirectory: cwd }),
   },
   {
     name: `native`,
+    adapter: `native`,
     enabled: nativeSupported,
     capabilities: {
       supportsAbort: true,
       supportsRealGetUrl: true,
       enforcesNetworkPolicy: true,
     },
+    outsideKind: `host-tempdir`,
     create: (cwd) => nativeSandbox({ workingDirectory: cwd }),
   },
   {
     name: `remote (fake)`,
+    adapter: `remote`,
     enabled: true,
     capabilities: {
       // The in-memory fake doesn't forward signals or expose port URLs;
@@ -173,6 +193,7 @@ const providers: Array<ProviderFactory> = [
       supportsRealGetUrl: false,
       enforcesNetworkPolicy: true,
     },
+    outsideKind: `etc-passwd`,
     create: (cwd) =>
       remoteSandbox({
         provider: `e2b`,
@@ -181,9 +202,37 @@ const providers: Array<ProviderFactory> = [
         initialNetworkPolicy: { mode: `allowlist`, allow: [`example.com`] },
       }),
   },
+  {
+    name: `docker`,
+    adapter: `docker`,
+    enabled: dockerAvailable,
+    capabilities: {
+      supportsAbort: true,
+      supportsRealGetUrl: true,
+      enforcesNetworkPolicy: true,
+    },
+    outsideKind: `etc-passwd`,
+    create: () =>
+      dockerSandbox({
+        image: TEST_IMAGE,
+        // Container workdir is the implicit /work; we ignore the host
+        // tempdir argument — for containerized adapters the cwd is an
+        // in-container path.
+        workingDirectory: `/work`,
+        initialNetworkPolicy: { mode: `allowlist`, allow: [`example.com`] },
+        exposedPorts: [9999],
+        labels: { [TEST_LABEL]: `1` },
+      }),
+  },
 ]
 
 describe(`sandbox conformance`, () => {
+  it(`every KNOWN_ADAPTERS slug is exercised by exactly one provider`, () => {
+    const slugs = providers.map((p) => p.adapter).sort()
+    const expected = [...KNOWN_ADAPTERS].sort()
+    expect(slugs).toEqual(expected)
+  })
+
   for (const provider of providers) {
     const d = provider.enabled ? describe : describe.skip
     d(provider.name, () => {
@@ -212,11 +261,11 @@ describe(`sandbox conformance`, () => {
       it(`writeFile outside the working directory matches the provider's documented policy`, async () => {
         const sandbox = await provider.create(cwd)
         const outside =
-          provider.name === `remote (fake)`
+          provider.outsideKind === `etc-passwd`
             ? `/etc/passwd`
             : `/tmp/conformance-outside-${Date.now()}.txt`
         try {
-          if (provider.name === `unrestricted`) {
+          if (provider.adapter === `unrestricted`) {
             // Documented: unrestricted has no policy boundary; path
             // security is the tool layer's job (resolveSafePath in
             // src/tools). Sandbox.writeFile here delegates straight to
@@ -466,9 +515,11 @@ describe(`sandbox conformance`, () => {
   }
 
   // Symlink escape — pertinent for unrestricted and native (real host
-  // filesystem). Skip for remote since paths are VM-rooted and we don't
-  // build symlinks in the fake.
-  for (const provider of providers.filter((p) => p.name !== `remote (fake)`)) {
+  // filesystem). Skip for remote (VM-rooted, fake doesn't model symlinks)
+  // and docker (container fs, host workdir isn't mounted in).
+  for (const provider of providers.filter(
+    (p) => p.outsideKind === `host-tempdir`
+  )) {
     const d = provider.enabled ? describe : describe.skip
     d(`${provider.name} — symlink escape`, () => {
       let cwd: string
@@ -493,7 +544,7 @@ describe(`sandbox conformance`, () => {
 
         const sandbox = await provider.create(cwd)
         try {
-          if (provider.name === `unrestricted`) {
+          if (provider.adapter === `unrestricted`) {
             // Unrestricted has no policy boundary; the read succeeds.
             // Documented behavior: symlink defense lives in the tool layer
             // (resolveSafePath) for unrestricted, not in the sandbox.
