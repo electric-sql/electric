@@ -826,7 +826,7 @@ describe(`processWake`, () => {
     )
   })
 
-  it(`fails the wake when a background send fails`, async () => {
+  it(`does not fail the wake when an unawaited send fails`, async () => {
     defineEntity(`test-agent`, {
       handler: (ctx) => {
         ctx.send(`target-entity-2`, { action: `ping` })
@@ -858,9 +858,9 @@ describe(`processWake`, () => {
       )
     })
 
-    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
-      /send to target-entity-2 failed/
-    )
+    await expect(
+      processWake(makeNotification(), BASE_CONFIG)
+    ).resolves.not.toBeNull()
   })
 
   it(`heartbeat is registered with configured interval`, async () => {

@@ -915,19 +915,27 @@ export async function processWake(
     const entityArgs = Object.freeze(notification.entity?.spawnArgs ?? {})
 
     // ---- Send executor — ctx.send() calls this directly (no queue) ----
-    const executeSend = async (send: {
+    const executeSend = (send: {
       targetUrl: string
       payload: unknown
       type?: string
       afterMs?: number
     }): Promise<SendResult> => {
-      await serverClient.sendEntityMessage({
-        targetUrl: send.targetUrl,
-        payload: send.payload,
-        type: send.type,
-        afterMs: send.afterMs,
-      })
-      return { sent: true as const, targetUrl: send.targetUrl }
+      const promise = serverClient
+        .sendEntityMessage({
+          targetUrl: send.targetUrl,
+          payload: send.payload,
+          type: send.type,
+          afterMs: send.afterMs,
+        })
+        .then(() => ({ sent: true as const, targetUrl: send.targetUrl }))
+
+      // Handlers may intentionally fire-and-forget sends. Keep awaited sends
+      // rejectable, but mark ignored send failures as handled so they don't
+      // surface as process/Vitest unhandled rejections.
+      void promise.catch(() => undefined)
+
+      return promise
     }
 
     // ---- Wiring helpers for inline spawn/observe ----
