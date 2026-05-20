@@ -29,6 +29,7 @@
     "@electric-sql/client": "^1.5.18",
     "@mixmark-io/domino": "^2.2.0",
     "better-sqlite3": "^12.9.0",
+    "fix-path": "^4.0.0",
     "jsdom": "^28.1.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.0.0",

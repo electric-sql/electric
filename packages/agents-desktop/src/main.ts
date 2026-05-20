@@ -27,6 +27,7 @@ import {
   session,
   shell,
 } from 'electron'
+import fixPath from 'fix-path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -230,6 +231,13 @@ const INITIAL_SERVER_URL =
   process.env.ELECTRIC_DESKTOP_SERVER_URL?.trim() ||
   process.env.ELECTRIC_AGENTS_SERVER_URL?.trim() ||
   null
+
+// Packaged macOS apps launched via Finder / LaunchServices do not inherit
+// the user's interactive shell PATH, so Homebrew-installed tools like `gh`
+// can disappear even though they work in Terminal. Normalize PATH up front in
+// the main process so all later child-process launches see the shell-resolved
+// command path.
+fixPath()
 
 if (DESKTOP_USER_DATA_DIR) {
   app.setPath(`userData`, path.resolve(DESKTOP_USER_DATA_DIR))
