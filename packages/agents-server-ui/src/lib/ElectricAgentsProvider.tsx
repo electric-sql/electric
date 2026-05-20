@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
-import { createCollection } from '@tanstack/react-db'
+import { createCollection, createOptimisticAction } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
-import { createOptimisticAction } from '@tanstack/db'
 import { z } from 'zod'
 import { appendPathToUrl } from '@electric-ax/agents-runtime/client'
 import type { ReactNode } from 'react'
@@ -372,17 +371,23 @@ function createKillAction(
   })
 }
 
-function optimisticStatusForSignal(signal: EntitySignal): EntityStatus | null {
+function optimisticStatusForSignal(
+  status: EntityStatus,
+  signal: EntitySignal
+): EntityStatus | null {
   switch (signal) {
     case `SIGKILL`:
       return `killed`
     case `SIGINT`:
+      return null
     case `SIGTERM`:
-      return `stopping`
+      if (status === `idle` || status === `paused`) return `stopped`
+      if (status === `running`) return `stopping`
+      return null
     case `SIGSTOP`:
-      return `paused`
+      return status === `idle` || status === `running` ? `paused` : null
     case `SIGCONT`:
-      return `idle`
+      return status === `paused` ? `idle` : null
     case `SIGHUP`:
     case `SIGUSR`:
       return null
@@ -395,11 +400,12 @@ function createSignalAction(
 ) {
   return createOptimisticAction<SignalInput>({
     onMutate: ({ entityUrl, signal }) => {
-      const optimisticStatus = optimisticStatusForSignal(signal)
-      if (!optimisticStatus) return
-
       entitiesCollection.update(entityUrl, (draft) => {
-        draft.status = optimisticStatus
+        const optimisticStatus = optimisticStatusForSignal(draft.status, signal)
+        if (optimisticStatus) {
+          draft.status = optimisticStatus
+        }
+        draft.updated_at = Date.now()
       })
     },
     mutationFn: async ({ entityUrl, signal, reason, payload }) => {
