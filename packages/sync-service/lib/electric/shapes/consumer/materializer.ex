@@ -18,11 +18,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.MultiTimeView
   alias Electric.Shapes.Filter.Indexes.SubqueryIndex.ProgressMonitor
-  alias Electric.Shapes.Shape
 
   import Electric.Replication.LogOffset
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
-  import Shape, only: :macros
 
   def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
@@ -74,60 +72,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
       {:register_subquery_consumer, outer_shape_handle, pid},
       :infinity
     )
-  end
-
-  @doc """
-  Creates the per-stack ETS table that caches link values for all materializers
-  in a stack. Called by `ConsumerRegistry` during stack initialization. Idempotent —
-  safe to call when the table already exists.
-  """
-  @spec init_link_values_table(stack_id :: term()) :: :ets.table() | :undefined
-  def init_link_values_table(stack_id) do
-    :ets.new(link_values_table_name(stack_id), [
-      :named_table,
-      :public,
-      :set,
-      read_concurrency: true,
-      write_concurrency: true
-    ])
-  rescue
-    ArgumentError -> :ets.whereis(link_values_table_name(stack_id))
-  end
-
-  @doc """
-  Returns the current set of materialized link values for a shape.
-  Checks the shared ETS cache first (written after each committed transaction);
-  falls back to a synchronous GenServer call if the cache has no entry yet.
-  """
-  def get_link_values(%{stack_id: stack_id, shape_handle: shape_handle} = opts) do
-    table = link_values_table_name(stack_id)
-
-    case :ets.lookup(table, shape_handle) do
-      [{^shape_handle, values}] -> values
-      _ -> genserver_get_link_values(opts)
-    end
-  rescue
-    ArgumentError -> genserver_get_link_values(opts)
-  end
-
-  defp genserver_get_link_values(opts) do
-    GenServer.call(name(opts), :get_link_values)
-  catch
-    :exit, reason ->
-      raise "Materializer for stack #{inspect(opts.stack_id)} and handle " <>
-              "#{inspect(opts.shape_handle)} is not available: #{inspect(reason)}"
-  end
-
-  def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
-    shape.shape_dependencies_handles
-    |> Enum.with_index()
-    |> Map.new(fn {shape_handle, index} ->
-      {["$sublink", Integer.to_string(index)],
-       get_link_values(%{
-         shape_handle: shape_handle,
-         stack_id: stack_id
-       })}
-    end)
   end
 
   def subscribe(pid) when is_pid(pid), do: GenServer.call(pid, :subscribe)
@@ -204,7 +148,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
       |> decode_json_stream()
       |> apply_changes(state)
 
-    write_link_values(state)
     publish_initial_view_to_mtv(state)
 
     {:noreply, %{state | offset: offset}}
@@ -231,10 +174,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
       stream = Storage.get_log_stream(min_offset, subscribed_offset, storage)
       {:ok, subscribed_offset, stream}
     end
-  end
-
-  def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
-    {:reply, link_values_from_counts(value_counts), state}
   end
 
   def handle_call(:wait_until_ready, _from, state) do
@@ -307,52 +246,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
-  end
-
-  @spec link_values_table_name(Electric.stack_id()) :: atom()
-  def link_values_table_name(stack_id) do
-    :"Electric.Materializer.LinkValues:#{stack_id}"
-  end
-
-  @doc """
-  Removes the cached link values for `shape_handle` from the shared ETS table.
-  Safe to call even if the table does not exist (e.g. after a stack shutdown).
-  """
-  @spec delete_link_values(Electric.stack_id(), Electric.shape_handle()) :: :ok
-  def delete_link_values(stack_id, shape_handle) do
-    :ets.delete(link_values_table_name(stack_id), shape_handle)
-    :ok
-  rescue
-    ArgumentError ->
-      Logger.debug(fn ->
-        "delete_link_values: link-values table for stack #{inspect(stack_id)} " <>
-          "not found when deleting handle #{inspect(shape_handle)}"
-      end)
-
-      :ok
-  end
-
-  defp link_values_from_counts(value_counts) do
-    MapSet.new(Map.keys(value_counts))
-  end
-
-  defp write_link_values(%{
-         stack_id: stack_id,
-         shape_handle: shape_handle,
-         value_counts: value_counts
-       }) do
-    :ets.insert(
-      link_values_table_name(stack_id),
-      {shape_handle, link_values_from_counts(value_counts)}
-    )
-  rescue
-    ArgumentError ->
-      Logger.warning(
-        "write_link_values: link-values ETS table missing for stack #{inspect(stack_id)} " <>
-          "— cache will fall back to GenServer calls for handle #{inspect(shape_handle)}"
-      )
-
-      :ok
   end
 
   defp decode_json_stream(stream) do
@@ -476,8 +369,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
       else
         state
       end
-
-    write_link_values(state)
 
     %{state | pending_events: %{}}
   end
