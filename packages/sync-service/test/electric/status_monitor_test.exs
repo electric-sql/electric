@@ -573,4 +573,75 @@ defmodule Electric.StatusMonitorTest do
       assert_receive {{StatusMonitor, ^ref_active}, {:ok, :active}}, 100
     end
   end
+
+  describe "congested?/1" do
+    test "returns false before any waiters are enqueued", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      assert StatusMonitor.congested?(stack_id) == false
+    end
+
+    test "returns false when the table does not exist (status monitor not started)",
+         %{stack_id: stack_id} do
+      assert StatusMonitor.congested?(stack_id) == false
+    end
+
+    test "flips to true once the waiter set reaches the threshold and back to false on drain",
+         %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      threshold = StatusMonitor.congested_threshold()
+      pid = GenServer.whereis(StatusMonitor.name(stack_id))
+
+      # Spawn `threshold` waiters that block on :active.
+      waiters =
+        for _ <- 1..threshold do
+          Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 5_000) end)
+        end
+
+      # Wait deterministically until all `threshold` calls have landed in the
+      # StatusMonitor's state — `Task.async` doesn't guarantee the spawned task
+      # has executed its `GenServer.call`, so a simple `wait_for_messages_to_be_processed`
+      # could race ahead of the tasks.
+      wait_until_waiters_count(pid, threshold)
+
+      assert StatusMonitor.congested?(stack_id) == true
+
+      # Drive readiness to drain all waiters.
+      Support.TestUtils.set_status_to_active(%{stack_id: stack_id})
+      Enum.each(waiters, &Task.await/1)
+
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+      assert StatusMonitor.congested?(stack_id) == false
+    end
+
+    test "does not set the flag below the threshold", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      _ =
+        Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 50) end)
+
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+      assert StatusMonitor.congested?(stack_id) == false
+    end
+
+    defp wait_until_waiters_count(
+           pid,
+           expected,
+           deadline \\ System.monotonic_time(:millisecond) + 2_000
+         ) do
+      size = MapSet.size(:sys.get_state(pid).waiters)
+
+      cond do
+        size >= expected ->
+          :ok
+
+        System.monotonic_time(:millisecond) > deadline ->
+          flunk("Timed out waiting for #{expected} waiters; saw #{size}")
+
+        true ->
+          Process.sleep(5)
+          wait_until_waiters_count(pid, expected, deadline)
+      end
+    end
+  end
 end
