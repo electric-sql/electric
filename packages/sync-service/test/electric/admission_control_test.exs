@@ -413,16 +413,7 @@ defmodule Electric.AdmissionControlTest do
       assert %{initial: 5, existing: 5} = AdmissionControl.get_current("s", table_name: t)
     end
 
-    # Regression for a race introduced by an earlier implementation that used
-    # a threshold-clamped increment for the destination counter. When the
-    # destination was already at cap, every concurrent racer captured the same
-    # clamped post-increment value `cap + 1` even though only the first racer's
-    # increment actually moved the row. All racers then ran the rollback path
-    # and each decremented the destination by 1 — net effect: the destination
-    # counter dropped *below* its true in-flight count, breaking cap
-    # enforcement for subsequent acquires.
-    test "concurrent rejected swaps preserve the destination counter",
-         %{table_name: t} do
+    test "concurrent rejected swaps preserve the destination counter", %{table_name: t} do
       # Pre-saturate :existing at cap=5 via direct acquires.
       for _ <- 1..5 do
         :ok =
@@ -452,20 +443,11 @@ defmodule Electric.AdmissionControlTest do
 
       assert Enum.all?(results, &(&1 == {:error, :overloaded}))
 
-      # The buggy implementation would leave :existing below 5 (real permits
-      # decremented during rollback) and/or :initial below 10. With the
-      # rollback restricted to each racer's own increment, both columns are
-      # exactly back to their starting values.
+      # Both buckets are exactly back to their starting values.
       assert %{initial: 10, existing: 5} = AdmissionControl.get_current("s", table_name: t)
     end
 
-    # Regression for a related race: an earlier implementation decremented
-    # from_kind in the same atomic op that incremented to_kind, creating a
-    # window where a concurrent try_acquire(from_kind) could observe an
-    # under-count, succeed, and push from_kind above its cap when the swap
-    # was later rolled back.
-    test "from_kind cap is preserved against concurrent try_acquire during swap",
-         %{table_name: t} do
+    test "from_kind cap is preserved against concurrent try_acquire during swap", %{table_name: t} do
       # Saturate :initial at cap=2.
       :ok =
         AdmissionControl.try_acquire("s", :initial, table_name: t, max_concurrent: 2)

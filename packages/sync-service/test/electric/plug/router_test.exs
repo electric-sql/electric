@@ -2105,9 +2105,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 503} = conn3
 
-      # Content-Type must be set on rejection responses so clients/CDNs
-      # parse the JSON body. Regression test: check_admission used to run
-      # before put_resp_content_type and the header was lost on 503.
+      # Content-Type must be set on rejection responses.
       assert ["application/json" <> _] = Plug.Conn.get_resp_header(conn3, "content-type")
 
       body = Jason.decode!(conn3.resp_body)
