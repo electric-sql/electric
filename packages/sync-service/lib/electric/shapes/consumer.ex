@@ -260,6 +260,7 @@ defmodule Electric.Shapes.Consumer do
             shape: shape,
             shape_handle: shape_handle,
             storage: storage,
+            is_subquery_shape?: Map.get(opts, :is_subquery_shape?, false),
             otel_ctx: Map.get(opts, :otel_ctx, nil)
           }
         )

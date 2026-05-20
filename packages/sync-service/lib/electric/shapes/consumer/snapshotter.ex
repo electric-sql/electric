@@ -42,6 +42,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       storage: storage
     } = state
 
+    is_subquery_shape? = Map.get(state, :is_subquery_shape?, false)
+
     ctx_token = if not is_nil(state.otel_ctx), do: :otel_ctx.attach(state.otel_ctx)
 
     result =
@@ -49,13 +51,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         consumer when is_pid(consumer) ->
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
-            telemetry_shape_attrs(shape_handle, shape),
+            telemetry_shape_attrs(shape_handle, shape, is_subquery_shape?),
             stack_id,
             fn ->
               try do
                 OpenTelemetry.with_span(
                   "shape_snapshot.prepare_tables",
-                  telemetry_shape_attrs(shape_handle, shape),
+                  telemetry_shape_attrs(shape_handle, shape, is_subquery_shape?),
                   stack_id,
                   fn ->
                     Electric.Replication.PublicationManager.add_shape(
@@ -69,7 +71,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                 if not Storage.snapshot_started?(state.storage) do
                   start_streaming_snapshot_from_db(consumer, shape_handle, shape, %{
                     stack_id: stack_id,
-                    storage: storage
+                    storage: storage,
+                    is_subquery_shape?: is_subquery_shape?
                   })
                 else
                   # Let the shape cache know that the snapshot is available. When the
@@ -211,9 +214,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         consumer,
         shape_handle,
         shape,
-        %{storage: storage, stack_id: stack_id, db_pool: db_pool}
+        %{storage: storage, stack_id: stack_id, db_pool: db_pool} = ctx
       ) do
     chunk_bytes_threshold = Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold)
+    is_subquery_shape? = Map.get(ctx, :is_subquery_shape?, false)
 
     Electric.Postgres.SnapshotQuery.execute_for_shape(db_pool, shape_handle, shape,
       stack_id: stack_id,
@@ -264,13 +268,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           end
         )
         |> Stream.concat([finishing_control_message])
-        |> record_snapshot_metrics(stack_id, shape_handle, shape)
+        |> record_snapshot_metrics(stack_id, shape_handle, shape, is_subquery_shape?)
         |> Electric.Shapes.make_new_snapshot!(storage, stack_id, shape_handle)
       end
     )
   end
 
-  defp record_snapshot_metrics(stream, stack_id, shape_handle, shape) do
+  defp record_snapshot_metrics(stream, stack_id, shape_handle, shape, is_subquery_shape?) do
     Stream.transform(
       stream,
       fn -> {System.monotonic_time(:microsecond), 0, 0} end,
@@ -290,17 +294,20 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             count: 1,
             operations: ops
           },
-          Map.merge(Map.new(telemetry_shape_attrs(shape_handle, shape)), %{stack_id: stack_id})
+          Map.merge(Map.new(telemetry_shape_attrs(shape_handle, shape, is_subquery_shape?)), %{
+            stack_id: stack_id
+          })
         )
       end
     )
   end
 
-  defp telemetry_shape_attrs(shape_handle, shape) do
+  defp telemetry_shape_attrs(shape_handle, shape, is_subquery_shape?) do
     [
       "shape.handle": shape_handle,
       "shape.root_table": shape.root_table,
-      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil)
+      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
+      "shape.is_subquery": is_subquery_shape?
     ]
   end
 
