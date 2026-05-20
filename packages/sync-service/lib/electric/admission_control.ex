@@ -159,13 +159,11 @@ defmodule Electric.AdmissionControl do
     default = {stack_id, 0, 0}
 
     # Plain increment, no threshold clamp. Returns the post-increment value.
-    new_to = :ets.update_counter(table_name, stack_id, {to_pos, 1}, default)
+    new_to = incr(table_name, stack_id, to_kind)
 
     if new_to > cap do
-      # Rollback: simple unclamped decrement. We just added 1 atomically,
-      # so subtracting our own contribution cannot drive the column below
-      # the value other racers (if any) brought it to.
-      :ets.update_counter(table_name, stack_id, {to_pos, -1}, default)
+      # Rollback the claimed permit since the bucket is already at capacity.
+      decr(table_name, stack_id, to_kind)
 
       :telemetry.execute(
         [:electric, :admission_control, :swap_rejected],
@@ -176,9 +174,8 @@ defmodule Electric.AdmissionControl do
       {:error, :overloaded}
     else
       # Success: drop the from_kind permit. Clamp at 0 to be defensive
-      # against callers who lied about holding a from_kind permit
-      # (documented above as a phantom-permit footgun, not a crash).
-      :ets.update_counter(table_name, stack_id, {from_pos, -1, 0, 0}, default)
+      # against callers who lied about holding a from_kind permit.
+      decr(table_name, stack_id, from_kind)
 
       :telemetry.execute(
         [:electric, :admission_control, :swap],
