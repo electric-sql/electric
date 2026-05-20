@@ -51,4 +51,25 @@ describe(`zero-config default path`, () => {
     expect(capturedMessages).toHaveLength(1)
     expect(capturedMessages[0]).toEqual(timelineToMessages(db))
   })
+
+  it(`agent.run includes prior signals in the adapter history`, async () => {
+    const db = buildStreamFixture([
+      { kind: `inbox`, at: 1, value: { payload: `start` } },
+      { kind: `signal`, at: 2, value: { outcome: `aborted` } },
+      { kind: `inbox`, at: 3, value: { payload: `continue` } },
+    ])
+    const { ctx } = createTestHandlerContext({ db })
+
+    ctx.useAgent({ systemPrompt: `t`, model: `t`, tools: [] })
+    await ctx.agent.run()
+
+    expect(capturedMessages).toHaveLength(1)
+    expect(capturedMessages[0]).toEqual(timelineToMessages(db))
+    expect(capturedMessages[0]).toContainEqual(
+      expect.objectContaining({
+        role: `user`,
+        content: expect.stringContaining(`<agent_signal signal="SIGINT"`),
+      })
+    )
+  })
 })

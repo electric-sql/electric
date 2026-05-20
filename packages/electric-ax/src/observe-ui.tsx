@@ -403,6 +403,9 @@ function ObserveView({
       runs: [],
       inbox: [],
       wakes: [],
+      signals: [],
+      contextInserted: [],
+      contextRemoved: [],
       entities: [],
     }
   )

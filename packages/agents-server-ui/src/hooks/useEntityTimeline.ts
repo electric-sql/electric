@@ -105,6 +105,7 @@ export function useEntityTimeline(
           runs: [],
           inbox: [],
           wakes: [],
+          signals: [],
           contextInserted: [],
           contextRemoved: [],
           entities: [],

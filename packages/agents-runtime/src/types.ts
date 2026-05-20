@@ -46,6 +46,7 @@ import type {
   ManifestFutureSendScheduleEntry as EntityManifestFutureSendScheduleEntry,
   ManifestSharedStateEntry as EntityManifestSharedStateEntry,
   ManifestSourceEntry as EntityManifestSourceEntry,
+  Signal as EntitySignalEntry,
   WakeEntry,
 } from './entity-schema'
 import type { EntityTags, TagOperation } from './tags'
@@ -320,6 +321,7 @@ export interface ContextEntry extends ContextEntryInput {
 export type TimelineItem =
   | { kind: `inbox`; at: number; payload: unknown }
   | { kind: `wake`; at: number; payload: unknown }
+  | { kind: `signal`; at: number; signal: EntitySignalEntry }
   | {
       kind: `run`
       at: number

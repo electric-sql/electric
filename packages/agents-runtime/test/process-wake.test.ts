@@ -128,6 +128,7 @@ vi.mock(`../src/entity-stream-db`, () => ({
       const steps = createLocalOnlyTestCollection<Record<string, unknown>>([])
       const inbox = createLocalOnlyTestCollection<Record<string, unknown>>([])
       const wakes = createLocalOnlyTestCollection<Record<string, unknown>>([])
+      const signals = createLocalOnlyTestCollection<Record<string, unknown>>([])
       const childStatus = createLocalOnlyTestCollection<
         Record<string, unknown>
       >([])
@@ -150,7 +151,9 @@ vi.mock(`../src/entity-stream-db`, () => ({
             ? manifests
             : event.type === `error`
               ? errors
-              : undefined
+              : event.type === `signal`
+                ? signals
+                : undefined
         if (!collection) {
           return
         }
@@ -265,6 +268,7 @@ vi.mock(`../src/entity-stream-db`, () => ({
           errors,
           inbox,
           wakes,
+          signals,
           childStatus,
           contextInserted,
           contextRemoved,

@@ -27,6 +27,7 @@ type FixtureKind =
   | `tool_call`
   | `inbox`
   | `wake`
+  | `signal`
   | `context_inserted`
   | `context_removed`
 
@@ -101,6 +102,18 @@ function rowForFixture(item: FixtureEvent): {
           source: `/child/test`,
           timeout: false,
           changes: [],
+          ...item.value,
+        },
+      }
+    case `signal`:
+      return {
+        collection: `signals`,
+        key,
+        row: {
+          key,
+          signal: `SIGINT`,
+          status: `handled`,
+          timestamp: `2026-04-13T00:00:00.000Z`,
           ...item.value,
         },
       }

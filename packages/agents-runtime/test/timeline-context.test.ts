@@ -7,6 +7,7 @@ import type { EntityStreamDB } from '../src/entity-stream-db'
 import type {
   IncludesInboxMessage,
   IncludesRun,
+  IncludesSignal,
   IncludesWakeMessage,
 } from '../src/entity-timeline'
 
@@ -225,6 +226,74 @@ describe(`timeline context`, () => {
     ])
   })
 
+  it(`projects handled signals into model history in timeline order`, () => {
+    const signals: Array<IncludesSignal> = [
+      {
+        key: `sig-1`,
+        order: order(3),
+        signal: `SIGINT`,
+        status: `handled`,
+        sender: `server`,
+        reason: `user pressed escape`,
+        timestamp: `2026-03-28T00:00:02.000Z`,
+        handled_at: `2026-03-28T00:00:02.100Z`,
+        handled_by: `runtime`,
+        outcome: `aborted`,
+        previous_state: `running`,
+        new_state: `running`,
+      },
+    ]
+
+    expect(
+      buildTimelineMessages({
+        inbox: [
+          {
+            key: `msg-1`,
+            order: order(1),
+            from: `user`,
+            payload: `start`,
+            timestamp: `2026-03-28T00:00:00.000Z`,
+          },
+          {
+            key: `msg-2`,
+            order: order(4),
+            from: `user`,
+            payload: `continue`,
+            timestamp: `2026-03-28T00:00:03.000Z`,
+          },
+        ],
+        runs: [
+          {
+            key: `run-1`,
+            order: order(2),
+            status: `completed`,
+            texts: [
+              {
+                key: `text-1`,
+                run_id: `run-1`,
+                order: order(2),
+                status: `streaming`,
+                text: `partial response`,
+              },
+            ],
+            toolCalls: [],
+            steps: [],
+            errors: [],
+          },
+        ],
+        signals,
+      })
+    ).toEqual([
+      { role: `user`, content: `start` },
+      { role: `assistant`, content: `partial response` },
+      {
+        role: `user`,
+        content: `<agent_signal signal="SIGINT" status="handled" timestamp="2026-03-28T00:00:02.000Z" outcome="aborted" sender="server" handled_at="2026-03-28T00:00:02.100Z" handled_by="runtime" previous_state="running" new_state="running">The active handler invocation was interrupted.\nReason: user pressed escape</agent_signal>`,
+      },
+      { role: `user`, content: `continue` },
+    ])
+  })
+
   it(`timelineToMessages reads the shared entity timeline shape from the db`, () => {
     const db = {
       collections: {
@@ -310,6 +379,7 @@ describe(`timeline context`, () => {
           ],
           __electricRowOffsets: new Map([[`wake-1`, offset(7)]]),
         },
+        signals: { toArray: [], __electricRowOffsets: new Map() },
         contextInserted: { toArray: [], __electricRowOffsets: new Map() },
         contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
         manifests: { toArray: [], __electricRowOffsets: new Map() },
@@ -351,6 +421,7 @@ describe(`timeline context`, () => {
         errors: { toArray: [] },
         inbox: { toArray: [] },
         wakes: { toArray: [] },
+        signals: { toArray: [] },
         contextInserted: { toArray: [] },
         contextRemoved: { toArray: [] },
         manifests: { toArray: [] },

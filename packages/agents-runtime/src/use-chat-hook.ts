@@ -42,6 +42,7 @@ export function useChat(db: EntityStreamDB | null): UseChatResult {
       runs: [],
       inbox: [],
       wakes: [],
+      signals: [],
       contextInserted: [],
       contextRemoved: [],
       entities: [],
