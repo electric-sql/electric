@@ -1380,7 +1380,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return true
   }
 
-  async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
+  async #onMessages(
+    batch: Array<Message<T>>,
+    isSseMessage = false,
+    opts: { allowReentrantPublishBypass?: boolean } = {}
+  ) {
     if (!Array.isArray(batch)) {
       console.warn(
         `[Electric] #onMessages called with non-array argument (${typeof batch}). ` +
@@ -1432,7 +1436,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return true // Always process control messages
     })
 
-    await this.#publish(messagesToProcess)
+    await this.#publish(messagesToProcess, {
+      allowReentrantBypass: opts.allowReentrantPublishBypass,
+    })
   }
 
   /**
@@ -1724,7 +1730,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
-  async #publish(messages: Message<T>[]): Promise<void[]> {
+  async #publish(
+    messages: Message<T>[],
+    opts: { allowReentrantBypass?: boolean } = {}
+  ): Promise<void[]> {
     const deliver = () =>
       Promise.all(
         Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
@@ -1740,11 +1749,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     // We process messages asynchronously but SSE's `onmessage` handler is
     // synchronous. Use a promise chain to ensure handlers execute sequentially
-    // in the order messages were received. If a subscriber reentrantly requests
-    // a snapshot, deliver that nested batch immediately instead of appending it
-    // behind the currently-running subscriber callback, which would deadlock
-    // when requestSnapshot awaits publication.
-    if (this.#isPublishing) {
+    // in the order messages were received. Only requestSnapshot's injected
+    // snapshot batch is allowed to bypass the queue reentrantly; ordinary
+    // stream batches (including SSE batches) must remain serialized.
+    if (this.#isPublishing && opts.allowReentrantBypass) {
       return deliver()
     }
 
@@ -1921,7 +1929,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         metadata,
         new Set(data.map((message) => message.key))
       )
-      await this.#onMessages(dataWithEndBoundary, false)
+      await this.#onMessages(dataWithEndBoundary, false, {
+        allowReentrantPublishBypass: true,
+      })
 
       // On cold start the stream's offset is still at "now". Advance it
       // to the snapshot's position so no updates are missed in between.
