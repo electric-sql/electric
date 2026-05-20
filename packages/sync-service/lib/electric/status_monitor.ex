@@ -4,6 +4,8 @@ defmodule Electric.StatusMonitor do
 
   require Logger
 
+  alias Electric.PollWait
+
   @type status() :: %{
           conn: :waiting_on_lock | :starting | :up | :sleeping,
           shape: :starting | :read_only | :up
@@ -36,7 +38,7 @@ defmodule Electric.StatusMonitor do
     Process.set_label({:status_monitor, stack_id})
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ets.new(ets_table(stack_id), [:named_table, :protected])
+    :ets.new(ets_table(stack_id), [:named_table, :public])
 
     {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
   end
@@ -205,13 +207,21 @@ defmodule Electric.StatusMonitor do
 
       :sleeping ->
         if Keyword.get(opts, :block_on_conn_sleeping, false) do
-          do_wait_until(stack_id, level, opts)
+          dispatch_wait(stack_id, level, opts)
         else
           :conn_sleeping
         end
 
       _ ->
-        do_wait_until(stack_id, level, opts)
+        dispatch_wait(stack_id, level, opts)
+    end
+  end
+
+  defp dispatch_wait(stack_id, level, opts) do
+    if congested?(stack_id) do
+      poll_wait(stack_id, level, opts)
+    else
+      do_wait_until(stack_id, level, opts)
     end
   end
 
@@ -250,6 +260,27 @@ defmodule Electric.StatusMonitor do
           timeout,
           "Stack #{inspect(stack_id)} has terminated"
         )
+    end
+  end
+
+  defp poll_wait(stack_id, level, opts) do
+    timeout = Keyword.fetch!(opts, :timeout)
+
+    # Mirror check_level/2: only :active and :waiting-for-:read_only count
+    # as ready. Sleeping is handled by the outer case in wait_until/3 before
+    # dispatch; once we're polling we treat it as not-ready so the loop
+    # behaves identically to a parked GenServer waiter.
+    check = fn ->
+      case service_status(stack_id) do
+        :active -> {:ready, {:ok, :active}}
+        :waiting when level == :read_only -> {:ready, {:ok, :read_only}}
+        _ -> :not_ready
+      end
+    end
+
+    case PollWait.until(check, timeout) do
+      {:ready, value} -> value
+      :timeout -> {:error, timeout_message(stack_id)}
     end
   end
 

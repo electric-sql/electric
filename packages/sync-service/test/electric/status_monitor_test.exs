@@ -667,4 +667,81 @@ defmodule Electric.StatusMonitorTest do
       end
     end
   end
+
+  describe "wait_until/3 under congestion" do
+    test "polling path returns {:ok, :active} when readiness flips", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      # Force the flag on so the next caller takes the polling path.
+      force_congested(stack_id)
+
+      test_process = self()
+
+      Task.async(fn ->
+        result = StatusMonitor.wait_until(stack_id, :active, timeout: 1_000)
+        send(test_process, {:result, result})
+      end)
+
+      refute_receive {:result, _}, 50
+      Support.TestUtils.set_status_to_active(%{stack_id: stack_id})
+      assert_receive {:result, {:ok, :active}}, 1_000
+    end
+
+    test "polling path returns {:ok, :read_only} when only metadata becomes ready",
+         %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      force_congested(stack_id)
+
+      test_process = self()
+
+      Task.async(fn ->
+        result = StatusMonitor.wait_until(stack_id, :read_only, timeout: 1_000)
+        send(test_process, {:result, result})
+      end)
+
+      refute_receive {:result, _}, 50
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
+      assert_receive {:result, {:ok, :read_only}}, 1_000
+    end
+
+    test "polling path returns {:error, _} on timeout", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      force_congested(stack_id)
+
+      assert {:error, "Timeout waiting for Postgres lock acquisition"} =
+               StatusMonitor.wait_until(stack_id, :active, timeout: 50)
+    end
+
+    test "sleeping branch short-circuits before the polling check (flag set + sleeping, not blocking)",
+         %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      force_congested(stack_id)
+
+      StatusMonitor.database_connections_going_to_sleep(stack_id)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      # The outer case in wait_until/3 handles sleeping before consulting
+      # congested?/1, so :conn_sleeping is returned regardless of the flag.
+      assert StatusMonitor.wait_until(stack_id, :active, timeout: 50) == :conn_sleeping
+    end
+
+    test "uncongested callers continue to use the GenServer.call path", %{stack_id: stack_id} do
+      # Indirect check: the GenServer.call path enqueues into state.waiters. We
+      # confirm a single uncongested caller doesn't flip the flag — proving it
+      # took the call path, not the polling path (polling never touches
+      # state.waiters).
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+
+      task = Task.async(fn -> StatusMonitor.wait_until(stack_id, :active, timeout: 100) end)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      assert StatusMonitor.congested?(stack_id) == false
+      # Drain the timeout waiter so the test exits cleanly.
+      assert {:error, _} = Task.await(task, 200)
+    end
+
+    defp force_congested(stack_id) do
+      :ets.insert(:"#{inspect(StatusMonitor)}:#{stack_id}", {:waiters_congested, true})
+    end
+  end
 end
