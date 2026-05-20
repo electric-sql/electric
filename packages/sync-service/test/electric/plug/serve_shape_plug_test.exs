@@ -323,6 +323,30 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
     end
 
+    test "returns 503 when await_snapshot_start fails with SnapshotError", ctx do
+      snapshot_error = Electric.SnapshotError.slow_snapshot_start()
+
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> {:error, snapshot_error} end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
+
+      patch_storage(get_chunk_end_log_offset: fn @before_all_offset, _ -> @first_offset end)
+
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 503
+      assert %{"message" => message} = Jason.decode!(conn.resp_body)
+      assert message == snapshot_error.message
+    end
+
     test "snapshot has correct cache control headers", ctx do
       expect_shape_cache(
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
