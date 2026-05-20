@@ -72,7 +72,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   start_streaming_snapshot_from_db(consumer, shape_handle, shape, %{
                     stack_id: stack_id,
                     storage: storage,
-                    is_subquery_shape?: is_subquery_shape?
+                    is_subquery_shape?: is_subquery_shape?,
+                    parent_otel_ctx: OpenTelemetry.get_current_context()
                   })
                 else
                   # Let the shape cache know that the snapshot is available. When the
@@ -138,8 +139,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     # Once we have the first message, we set a timeout to wait for the task to send us a message when it sees any data.
     # If the task doesn't send us a message within the timeout, we consider the query "bad" and exit the task.
 
+    parent_otel_ctx = Map.get(ctx, :parent_otel_ctx)
+
     task =
       Task.Supervisor.async_nolink(supervisor, fn ->
+        if not is_nil(parent_otel_ctx), do: OpenTelemetry.set_current_context(parent_otel_ctx)
+
         snapshot_fun =
           Electric.StackConfig.lookup(stack_id, :create_snapshot_fn, &stream_snapshot_from_db/5)
 
@@ -286,6 +291,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           {[item], {start_time, bytes + IO.iodata_length(item), ops + 1}}
       end,
       fn {start_time, bytes, ops} ->
+        OpenTelemetry.add_span_attributes(%{
+          "snapshot.rows": ops,
+          "snapshot.bytes": bytes
+        })
+
         OpenTelemetry.execute(
           [:electric, :storage, :snapshot_stored],
           %{
