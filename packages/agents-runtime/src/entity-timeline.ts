@@ -1199,7 +1199,7 @@ function buildEntityTimelineQuery(
     }))
 
   const runItemsSource = q
-    .from({
+    .unionAll({
       text: db.collections.texts,
       toolCall: db.collections.toolCalls,
     })
@@ -1280,7 +1280,7 @@ function buildEntityTimelineQuery(
   }))
 
   return q
-    .from({
+    .unionAll({
       inbox: inboxSource,
       run: runSource,
       wake: wakeSource,
