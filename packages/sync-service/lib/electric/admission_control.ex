@@ -154,9 +154,6 @@ defmodule Electric.AdmissionControl do
       when from_kind in @allowed_kinds and to_kind in @allowed_kinds do
     table_name = Keyword.get(opts, :table_name, @table_name)
     cap = Keyword.fetch!(opts, :max_concurrent)
-    to_pos = tuple_pos(to_kind)
-    from_pos = tuple_pos(from_kind)
-    default = {stack_id, 0, 0}
 
     # Plain increment, no threshold clamp. Returns the post-increment value.
     new_to = incr(table_name, stack_id, to_kind)
